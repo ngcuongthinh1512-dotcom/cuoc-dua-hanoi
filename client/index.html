@@ -15,6 +15,13 @@
       }
       #help { top: 16px; }
       #ime { bottom: 24px; background: rgba(150, 80, 0, 0.92); }
+      #edge { top: 38%; font-size: 20px; font-weight: 600; background: rgba(150, 30, 20, 0.85); }
+      #nodata { bottom: 80px; background: rgba(150, 80, 0, 0.92); }
+      #loading { top: 50%; }
+      #credits {
+        position: fixed; right: 6px; bottom: 4px; font-size: 11px; color: rgba(255, 255, 255, 0.85);
+        text-shadow: 0 0 3px #000; pointer-events: none;
+      }
       #error { top: 50%; transform: translate(-50%, -50%); white-space: pre-line; pointer-events: auto; border: 1px solid #c8412f; }
       kbd {
         display: inline-block; min-width: 1.2em; padding: 0 5px; border: 1px solid #8a93a3; border-bottom-width: 2px;
@@ -33,7 +40,15 @@
     <div id="ime" class="panel" hidden>
       Có vẻ bộ gõ tiếng Việt (Unikey, EVKey…) đang bật. Hãy chuyển sang chế độ gõ tiếng Anh để điều khiển chính xác.
     </div>
+    <div id="edge" class="panel" hidden>Bạn đang rời khu vực đua</div>
+    <div id="nodata" class="panel" hidden>
+      Không tải được dữ liệu bản đồ (data/chunks/index.json), nên chỉ hiển thị địa hình. Hãy tải lại trang.
+    </div>
+    <div id="loading" class="panel">Đang tải bản đồ…</div>
     <div id="error" class="panel" hidden></div>
+    <div id="credits">
+      Bản đồ © OpenStreetMap contributors (ODbL) · Độ cao: Terrain Tiles (Mapzen / AWS Open Data): EU-DEM (Copernicus), SRTM (NASA / USGS)
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

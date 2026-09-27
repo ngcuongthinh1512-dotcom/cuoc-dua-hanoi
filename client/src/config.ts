@@ -12,16 +12,17 @@ export const render = {
   shadowRadius: 3, // PCF blur
   shadowBias: -0.0005,
   shadowNormalBias: 0.02,
-  shadowHalfExtent: 80, // m around the origin (one fixed shadow box, see DevScene)
+  shadowHalfExtent: 80, // m around the camera (world/Sky.ts: the shadow box follows it)
   shadowFar: 1200, // m from the sun position
   exposure: 1,
   fov: 70, // vertical, degrees
   near: 0.5, // m
-  far: 12_000, // m; the race area is ~5.5 × 3.7 km
-  background: 0xbfd3e6, // sky; also the fog colour so the horizon blends
-  // Clear up to 4.5 km so a top-down view from ~4 km shows the ground. Phase 2 retunes for real streets.
-  fogNear: 4_500,
-  fogFar: 11_000,
+  far: 12_000, // m; initial value, the game sets camera.far = fog far (world/Sky.ts); the preview keeps it
+  background: 0xbfd3e6, // clear colour (preview; the game draws the sky texture)
+  sky: { zenith: '#6f9fd8', horizon: '#c9d9e6', clouds: 60, cloudAlpha: 0.35 }, // horizon = fog colour
+  // Haze (STYLE_GUIDE): hides chunk edges (loadRadius 800). near/far grow by altitudeFactor × height above ground,
+  // so the topdown view (3.8 km up) stays clear.
+  fog: { near: 250, far: 700, altitudeFactor: 1.3 }, // m, m, per m
 };
 
 export const physics = {
