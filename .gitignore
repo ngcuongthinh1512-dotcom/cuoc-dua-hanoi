@@ -13,3 +13,6 @@ coverage
 
 # Git worktree tạm của agent (workflow)
 .claude/worktrees/
+
+# Ảnh tham khảo có bản quyền (chỉ để trên máy, không commit)
+docs/reference/*.jpg

@@ -13,7 +13,7 @@ client/   Vite app (game + Host screen at /host) → client/dist = static assets
 worker/   Worker (src/index.ts) + Durable Object RaceRoom (src/RaceRoom.ts), wrangler.toml, legs/*.json (server-only leg content)
 shared/   @race/shared, TS source only (no build): constants, projection; later protocol + zod schema
 scripts/  screenshot.ts; later fetch-osm, fetch-dem, build-graph, sim
-docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese); DEPLOY.md in Phase 12
+docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese), STYLE_GUIDE.md (GTA V look: camera, light, streets, HUD — read before Phases 2–5); DEPLOY.md in Phase 12
 ```
 
 ## Coordinates
