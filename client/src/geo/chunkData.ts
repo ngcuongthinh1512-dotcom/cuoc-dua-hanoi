@@ -103,4 +103,7 @@ export interface ChunkIndex {
 export interface WaterData {
   v: 1;
   polygons: { river: boolean; outer: XZ; holes?: XZ[] }[];
+  /** Open polylines of barrier=retaining_wall / man_made=embankment|quay within 50 m of the Seine (quay walls
+   *  the DEM cannot resolve; closed rings repeat their first point). Optional, added by build-chunks. */
+  quays?: XZ[];
 } // clipped to RACE_BBOX + 200 m
