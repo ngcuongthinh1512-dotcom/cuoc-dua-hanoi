@@ -7,3 +7,6 @@ screenshots/
 coverage
 .DS_Store
 *.log
+
+# Dữ liệu thô OSM/DEM tải về (tải lại được bằng npm run fetch-map)
+.cache/

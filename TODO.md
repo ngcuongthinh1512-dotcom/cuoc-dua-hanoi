@@ -9,7 +9,9 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Thêm preset camera (top-down, người chơi) vào `scripts/screenshot.ts` qua query string; xác nhận canvas WebGL render được trong Chrome headless (cờ swiftshader đã bật sẵn).
 
 ## Phase 2 – Bản đồ
-- `scripts/fetch-osm.ts`, `scripts/fetch-dem.ts` và lệnh `npm run fetch-map`.
+- Bước xử lý dữ liệu: đọc OSM thô trong `.cache/osm/` (ô 500 m + `global.json`), gộp trùng theo id (way cắt mép ô có mặt ở nhiều ô), cắt thành chunk 250 × 250 m gọn nhẹ trong `client/public/data/chunks/` + `index.json`, mỗi file ≤ 25 MB. Lệch SPEC §4.3 (SPEC ghi lưu thẳng vào `chunks/`): JSON Overpass thô quá lớn, chưa xử lý, không hợp làm static asset.
+- DEM AWS terrarium (~30 m) chỉ thấy lòng sông là một rãnh thoải (mặt nước ~28,5 m, bờ ~33–36 m tại cầu Alexandre III), không có tường kè và đường dạo ven sông thấp hơn 6–8 m (SPEC §4.3). Phải khoét lòng sông và bậc kè từ hình học OSM (`natural=water`, `barrier=retaining_wall`, `man_made=embankment|quay`, đường `Port …` / `Voie Georges-Pompidou` ở tầng thấp).
+- Cân nhắc DEM IGN RGE ALTI 1 m / 5 m (Pháp, giấy phép mở Etalab) thay AWS terrarium nếu cần địa hình chính xác hơn. Chưa đổi nguồn: chờ quyết định.
 - Kiểm tra tọa độ các điểm của chặng demo bằng centroid polygon OSM (SPEC §10.1), ưu tiên OSM nếu lệch.
 
 ## Phase 4 – Di chuyển
