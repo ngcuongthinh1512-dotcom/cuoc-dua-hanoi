@@ -116,6 +116,15 @@ export const buildings = {
   mansardInset: 1.2, // m, clamped per vertex to half the shortest edge
   balconyFloors: [2, 5],
   balconyMinEdge: 3, // m; shorter outer-ring edges get no balcony
+  balconyDepth: 0.7, // m
+  railingHeight: 1, // m
+  bayWidth: 3, // m, one window bay (window ≈ 1.4 m); each wall edge gets a whole number of bays
+  canopyHeight: 4, // m, building=roof (courtyard glass roofs, market halls) without height
+  canopyThickness: 0.3, // m, building=roof without min_height
+  smallArea: 40, // m²: untagged footprints smaller than this (kiosks, vents, toilets) get smallHeight, not defaultHeight
+  smallHeight: 4, // m
+  chimneyChance: 0.35, // per inset roof corner
+  chimneySize: [1.1, 0.6, 1.5], // m: along the edge, across, above the roof
   colours: { limestone: '#e3d5b8', zinc: '#6f7c85', iron: '#2a2d30' },
 };
 
