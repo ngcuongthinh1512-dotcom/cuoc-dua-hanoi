@@ -22,18 +22,29 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 | `npm run dev:worker` | Build client rồi chạy `wrangler dev` tại http://localhost:8787 (trang web + API + Durable Object + SQLite + R2 giả lập). |
 | `npm run build` | Kiểm tra kiểu toàn bộ, build client, kiểm tra bundle Worker (`wrangler deploy --dry-run`). |
 | `npm test` | Chạy toàn bộ unit test (Vitest). |
-| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `player`, `debug`). |
+| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
+| `npm run fetch-map` | Tải dữ liệu OSM thô (Overpass) vào `.cache/osm/` và độ cao (AWS Terrain Tiles) → `client/public/data/elevation.*`. Chỉ cần chạy một lần. |
+| `npm run build-chunks` | Cắt dữ liệu OSM thô thành các ô 250 m: `client/public/data/chunks/*.json` + `index.json` + `water.json`. |
 
 Thử nhanh khi `npm run dev:worker` đang chạy: `curl localhost:8787/api/health`, `curl localhost:8787/api/room/ping`.
 
-Tham số URL của game (tiện khi thử): `?cam=x,y,z,yaw,pitch` đặt vị trí và hướng camera (mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``).
+Tham số URL của game (tiện khi thử): `?cam=x,y,z,yaw,pitch` đặt vị trí và hướng camera (mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`).
+
+## Dựng lại dữ liệu bản đồ
+Dữ liệu đã dựng sẵn và commit trong `client/public/data/` nên thường không cần làm gì. Khi cần dựng lại (đổi cách trích dữ liệu OSM):
+```sh
+npm run fetch-map      # tải lại OSM + độ cao (các request cách nhau ≥ 2 s; bị ngắt thì chạy lại để tiếp tục)
+npm run build-chunks   # .cache/osm → client/public/data/chunks/ + water.json
+npm test               # kiểm tra dữ liệu thật (12 đại lộ ở Étoile, Champs-Élysées, cầu…) và dựng thử mọi ô
+```
+Kích thước chiều cao, bề rộng đường… chỉnh trong `client/src/config.ts`, không cần dựng lại dữ liệu.
 
 ## Cấu trúc thư mục
 ```
 client/   game + màn hình Host (Vite + TypeScript)
 worker/   Cloudflare Worker + Durable Object RaceRoom, wrangler.toml, legs/ (nội dung chặng, chỉ nằm trên server)
 shared/   hằng số, phép chiếu tọa độ (sau này: protocol, schema chặng)
-scripts/  công cụ: chụp ảnh kiểm tra (sau này: tải bản đồ, dựng đồ thị đường, bot mô phỏng)
+scripts/  công cụ: chụp ảnh kiểm tra, tải bản đồ, cắt ô bản đồ (sau này: dựng đồ thị đường, bot mô phỏng)
 docs/     đặc tả, luật đua
 ```
 
@@ -42,7 +53,7 @@ docs/     đặc tả, luật đua
 |---|---|---|
 | 0 | Chuẩn bị: khung monorepo, `wrangler.toml`, `wrangler dev` chạy được | Xong |
 | 1 | Khung client: Three.js + Rapier, game loop, input, camera bay tự do | Xong |
-| 2 | Bản đồ Paris từ OpenStreetMap | Chưa làm |
+| 2 | Bản đồ Paris từ OpenStreetMap: ô 250 m tải dần, nhà Haussmann, đường, sông Seine + kè, cầu, cây, biển tên đường, địa danh tạm | Xong |
 | 3 | Nhân vật & camera | Chưa làm |
 | 4 | Di chuyển: đi bộ, xe đạp | Chưa làm |
 | 5 | HUD cơ bản | Chưa làm |
@@ -59,4 +70,4 @@ Game được deploy lên Cloudflare Workers (mục tiêu: gói Free đủ cho m
 
 ---
 
-Dữ liệu bản đồ © OpenStreetMap contributors.
+Dữ liệu bản đồ © OpenStreetMap contributors (ODbL). Độ cao: Terrain Tiles (Mapzen / AWS Open Data): EU-DEM (Copernicus), SRTM (NASA / USGS).

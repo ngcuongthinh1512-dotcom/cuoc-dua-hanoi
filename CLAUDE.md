@@ -9,16 +9,17 @@ Browser 3D race game (1 leg in central Paris) + Host screen. Full spec: `docs/SP
 
 ## Folders
 ```
-client/   Vite app (game + Host screen at /host) → client/dist = static assets
+client/   Vite app (game + Host screen at /host) → client/dist = static assets; world/ = chunk builders (pure, run in workers/chunkBuilder.worker.ts), ChunkManager streams them
 worker/   Worker (src/index.ts) + Durable Object RaceRoom (src/RaceRoom.ts), wrangler.toml, legs/*.json (server-only leg content)
 shared/   @race/shared, TS source only (no build): constants, projection; later protocol + zod schema
-scripts/  screenshot.ts, fetch-osm.ts, fetch-dem.ts, geo.ts (tile/grid math, tested); later build-graph, sim
+scripts/  screenshot.ts, fetch-osm.ts, fetch-dem.ts, geo.ts (tile/grid math, tested), build-chunks.ts; later build-graph, sim
 docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese), plans/phase2.md (parallel build plan), STYLE_GUIDE.md (GTA V look: camera, light, streets, HUD — read before Phases 2–5); DEPLOY.md in Phase 12
 ```
 
 ## Coordinates
 - 1 unit = 1 m. Origin (0,0,0) = Concorde obelisk 48.86548, 2.32115. X = East, Z = −North, Y = up.
 - Use only `latLonToWorld` / `worldToLatLon` from `shared/src/projection.ts`; `RACE_BBOX` / `ORIGIN` in `shared/src/constants.ts`.
+- Y is relative: y = DEM − DEM(ORIGIN) (obelisk base y = 0). `carveRiver` then drops the Seine to ≈ −5.5 m (bed −8.5) and lifts the quays to ≈ +1.5 m; always read heights from the carved grid (`heightAt`).
 
 ## Server principles
 - The Durable Object is authoritative (clues, answers, timing, penalties, ranking, bike claims).
@@ -45,9 +46,11 @@ docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese), plans/phase2.md (pa
 - `npm run build` – typecheck everything + client build + `wrangler deploy --dry-run` bundle check. Run it from the root: the worker build needs `client/dist`.
 - `npm test` – Vitest in `scripts/` + every workspace.
 - `npm run fetch-map` – run once: `fetch-osm` (Overpass, 500 m tiles + one global query for relations / water / parks / arrondissements, resumable, ≥ 2 s between requests; `--out <dir>`) → raw JSON in `.cache/osm/` (gitignored: `tiles/<ix>_<iz>.json`, `global.json`, `index.json`); then `fetch-dem` (AWS terrarium z14, PNGs cached in `.cache/dem/`) → `client/public/data/elevation.bin` + `elevation.json` (committed). Tile (ix, iz) covers world x ∈ [500·ix, 500·ix + 500), z ∈ [500·iz, 500·iz + 500).
-- `npm run screenshot [preset]` – headless Chrome → `screenshots/<preset>.png`; fails on console errors. Pages set `window.__READY__ = true` once rendered and settled (game: a few frames drawn, physics boxes at rest); presets live in `scripts/screenshot.ts`.
-- Client URL overrides: `?cam=x,y,z,yawDeg,pitchDeg` (camera pose, yaw 0 = north / −Z), `?debug=1` (F3 overlay on).
-- Later: OSM → 250 m chunks processing step (Phase 2), `build-graph` (Phase 4), `sim` (Phase 11), `deploy` (Phase 12).
+- `npm run build-chunks` – `.cache/osm` → `client/public/data/chunks/<i>_<j>.json` (250 m, parsed OSM facts only, no names except road names) + `index.json` + `water.json`. Deterministic; the output IS committed (the build needs it), rerun only when the extraction changes. Defaults/tuning live in the builders + `config.ts`, not in the data.
+- `npm run screenshot [preset]` – headless Chrome → `screenshots/<preset>.png`; fails on console errors; logs `__STATS__` {calls, triangles, chunks, colliders, geometries}. Pages set `window.__READY__ = true` once rendered and settled (game: ChunkManager idle + ≥ 3 frames); presets (topdown, etoile, champs, eiffel, street, seine, edge, player, debug) live in `scripts/screenshot.ts`. `SCREENSHOT_PORT=<n>` picks the Vite port (default 5174); any page: `-- --path "/preview.html?…" --name <file>`.
+- Preview harness `/preview.html` (dev server only): builds a few chunks on the main thread without streaming/fog. `at=<lat>,<lon>&r=<m>` or `chunks=<key>,…` or `fixture=1`; `only=terrain,buildings,roads,bridges,vegetation,props,landmarks`; `carve=1`, `water=1`, `cam=…`.
+- Client URL overrides: `?cam=x,y,z,yawDeg,pitchDeg` (camera pose, yaw 0 = north / −Z), `?debug=1` (F3 overlay on). DEV only: `window.__GAME__.fly.setPose(...)` for scripts.
+- Later: `build-graph` (Phase 4), `sim` (Phase 11), `deploy` (Phase 12).
 
 ## Workflow
 - Before each phase: read `docs/SPEC.md` + this file, write a short plan, list packages to install.

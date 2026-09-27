@@ -13,20 +13,15 @@ import {
   SphereGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { props as P, roads as R } from '../config.ts';
-import { type ChunkData, type ChunkKey, chunkKey, type RoadRec } from '../geo/chunkData.ts';
+import { props as P } from '../config.ts';
+import { type ChunkData, type ChunkKey, chunkKey } from '../geo/chunkData.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind } from './buildTypes.ts';
 import { hash01, MeshBuffer } from './geom.ts';
 import { quadOut } from './Landmarks.ts';
+import { roadWidth } from './RoadBuilder.ts';
 
 const CAR = new Set(P.carKinds);
 const STREET = new Set([...P.carKinds, ...P.streetKinds]);
-
-/** Half carriageway width, same precedence as package C's road ribbons (config.roads). */
-// ponytail: duplicates RoadBuilder's width rule; import C's helper if it exports one.
-export function roadHalfWidth(r: RoadRec): number {
-  return (R.widthByName[r.name ?? ''] ?? r.width ?? (r.lanes ? r.lanes * R.laneWidth : undefined) ?? R.widthByKind[r.kind] ?? R.defaultWidth) / 2;
-}
 
 /** Instance matrix (column-major): scale s, yaw about +Y (local +Z → (sin yaw, cos yaw)), then translate. */
 export function pushMatrix(out: number[], x: number, y: number, z: number, yaw: number, s = 1) {
@@ -46,7 +41,7 @@ export function findJunctions(chunk: ChunkData, key: ChunkKey) {
   for (const r of chunk.roads) {
     if (!STREET.has(r.kind)) continue;
     const n = r.pts.length / 2;
-    const hw = roadHalfWidth(r);
+    const hw = roadWidth(r) / 2;
     const pt = (i: number) => (i === -1 ? r.before : i === n ? r.after : i >= 0 && i < n ? [r.pts[2 * i]!, r.pts[2 * i + 1]!] : undefined);
     for (const i of r.junctions) {
       const x = r.pts[2 * i]!;
@@ -106,7 +101,7 @@ export function placeLamps(chunk: ChunkData, junctionPts: { x: number; z: number
   const out: { x: number; z: number; yaw: number }[] = [];
   for (const r of chunk.roads) {
     if (!CAR.has(r.kind)) continue;
-    const off = roadHalfWidth(r) + P.lampCurbOffset;
+    const off = roadWidth(r) / 2 + P.lampCurbOffset;
     let next = P.lampSpacing / 2; // arc length of the next lamp along this piece
     let s = 0;
     for (let i = 0; i + 1 < r.pts.length / 2; i++) {

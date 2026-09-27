@@ -51,6 +51,7 @@ export function attachBuildOut(out: BuildOut, materials: Materials, propMeshes: 
     const map = new THREE.Texture(image);
     map.colorSpace = THREE.SRGBColorSpace;
     map.flipY = false;
+    map.anisotropy = 8; // plaques stay readable at grazing angles
     map.needsUpdate = true;
     mats[material] = Object.assign(materials[material].clone(), { map });
     owned.push(mats[material], { dispose: () => (map.dispose(), image.close()) });

@@ -47,6 +47,7 @@ describe('ChunkManager', () => {
     m.update(125, 2, 125, Infinity);
     expect(sent).toEqual(near.slice(0, C.maxInFlight)); // nearest first, capped in flight
     reply({ type: 'failed', key: sent.shift()!, error: 'HTTP 503' }); // requeued, built on a later try
+    expect(sent).toHaveLength(C.maxInFlight); // a reply dispatches the next build at once, not on the next frame
     for (let guard = 0; guard < 100 && !m.idle; guard++) {
       for (const k of sent.splice(0)) reply(built(k));
       m.update(125, 2, 125, Infinity);

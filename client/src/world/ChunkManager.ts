@@ -62,17 +62,22 @@ export class ChunkManager {
       const keep = r + C.unloadRadius - C.loadRadius;
       for (const [k] of this.loaded) if (chunkDistance(k, x, z) > keep) this.unload(k);
     }
-    while (this.inFlight.size < C.maxInFlight && this.queue.length) {
-      const key = this.queue.shift()!;
-      if (this.loaded.has(key) || this.inFlight.has(key)) continue;
-      this.inFlight.add(key);
-      this.worker.postMessage({ type: 'build', key } satisfies ToWorker);
-    }
+    this.pump();
     const t0 = performance.now();
     while (this.ready.length && performance.now() - t0 < budgetMs) {
       const { key, out } = this.ready.shift()!;
       if (this.wanted.has(key) && !this.loaded.has(key)) this.attach(key, out);
       else for (const t of out.textures ?? []) t.image.close();
+    }
+  }
+
+  /** Keeps maxInFlight builds going; also called on every worker reply, so slow frames don't starve the worker. */
+  private pump() {
+    while (this.inFlight.size < C.maxInFlight && this.queue.length) {
+      const key = this.queue.shift()!;
+      if (this.loaded.has(key) || this.inFlight.has(key)) continue;
+      this.inFlight.add(key);
+      this.worker.postMessage({ type: 'build', key } satisfies ToWorker);
     }
   }
 
@@ -90,12 +95,13 @@ export class ChunkManager {
     if (msg.type === 'built') {
       this.failures.delete(msg.key);
       this.ready.push({ key: msg.key, out: msg.out });
-      return;
+      return this.pump();
     }
     const n = (this.failures.get(msg.key) ?? 0) + 1;
     this.failures.set(msg.key, n);
     console.warn(`chunk ${msg.key}: build failed (${n}/${C.fetchRetries + 1}): ${msg.error}`);
     if (n <= C.fetchRetries && this.wanted.has(msg.key)) this.queue.push(msg.key);
+    this.pump();
   }
 
   private attach(key: ChunkKey, out: BuildOut) {

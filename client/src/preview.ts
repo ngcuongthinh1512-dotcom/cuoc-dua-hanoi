@@ -7,34 +7,23 @@
 //   carve=1   carveRiver(grid, water) before building · water=1   createWater(scene, water, grid)
 import { latLonToWorld } from '@race/shared';
 import * as THREE from 'three';
-import { preview as P, render as R, terrain as T } from './config.ts';
+import { preview as P, render as R } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkData, type ChunkKey, chunkBounds, type WaterData } from './geo/chunkData.ts';
 import { fixture } from './geo/fixture.ts';
-import { type HeightGrid, heightAt, loadHeightGrid } from './geo/heightGrid.ts';
+import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { attachBuildOut, withFallbacks } from './world/attach.ts';
-import { buildBridges } from './world/BridgeBuilder.ts';
-import { buildBuildings, createBuildingMaterials } from './world/BuildingBuilder.ts';
-import type { BuildCtx, Builder, BuildOut, MeshBucket } from './world/buildTypes.ts';
-import { mergeBuckets, MeshBuffer } from './world/geom.ts';
-import { buildLandmarks, createLandmarkMaterials } from './world/Landmarks.ts';
-import { buildRoads, createRoadMaterials } from './world/RoadBuilder.ts';
-import { buildStreetProps, createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
-import { buildTerrain, carveRiver, createTerrainMaterials } from './world/Terrain.ts';
-import { buildVegetation } from './world/Vegetation.ts';
+import { createBuildingMaterials } from './world/BuildingBuilder.ts';
+import { BUILDERS, fallbackTerrain } from './world/chunkBuild.ts';
+import type { BuildCtx, BuildOut } from './world/buildTypes.ts';
+import { mergeBuckets } from './world/geom.ts';
+import { createLandmarkMaterials } from './world/Landmarks.ts';
+import { createRoadMaterials } from './world/RoadBuilder.ts';
+import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
+import { carveRiver, createTerrainMaterials } from './world/Terrain.ts';
 import { createWater } from './world/Water.ts';
-
-const BUILDERS: Record<string, Builder> = {
-  terrain: buildTerrain,
-  buildings: buildBuildings,
-  roads: buildRoads,
-  bridges: buildBridges,
-  vegetation: buildVegetation,
-  props: buildStreetProps,
-  landmarks: buildLandmarks,
-};
 
 const q = new URLSearchParams(location.search);
 const list = (name: string) => q.get(name)?.split(',').filter(Boolean);
@@ -80,34 +69,6 @@ function selectedKeys(): ChunkKey[] | undefined {
     }
   }
   return out;
-}
-
-/** Grey heightfield for one chunk while buildTerrain is still a stub (package D replaces it). */
-function fallbackTerrain(grid: HeightGrid, b: ReturnType<typeof chunkBounds>): MeshBucket {
-  const m = new MeshBuffer('terrain');
-  const c = new THREE.Color(T.colours.pavement); // sRGB hex → linear
-  m.color = [c.r, c.g, c.b];
-  const n = T.chunkRes;
-  const s = CHUNK_SIZE / (n - 1);
-  const h = (x: number, z: number) => heightAt(grid, x, z);
-  for (let r = 0; r < n; r++) {
-    for (let k = 0; k < n; k++) {
-      const x = b.minX + k * s;
-      const z = b.minZ + r * s;
-      const nx = h(x - s, z) - h(x + s, z);
-      const nz = h(x, z - s) - h(x, z + s);
-      const l = Math.hypot(nx, 2 * s, nz);
-      m.vertex(x, h(x, z), z, nx / l, (2 * s) / l, nz / l, x, z);
-    }
-  }
-  for (let r = 0; r < n - 1; r++) {
-    for (let k = 0; k < n - 1; k++) {
-      const i = r * n + k;
-      m.face(i, i + n, i + 1);
-      m.face(i + 1, i + n, i + n + 1);
-    }
-  }
-  return m.bucket();
 }
 
 async function start() {
