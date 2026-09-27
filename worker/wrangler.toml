@@ -1,0 +1,20 @@
+name = "cuoc-dua-paris"
+main = "src/index.ts"
+compatibility_date = "2026-09-25"
+
+# Client build (Vite) served by Workers Static Assets; unmatched paths fall through to the Worker.
+[assets]
+directory = "../client/dist"
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+name = "RACE_ROOM"
+class_name = "RaceRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RaceRoom"]
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "cuoc-dua-paris-media"
