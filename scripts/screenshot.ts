@@ -3,9 +3,16 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
+import { flyCamera } from '../client/src/config.ts';
 
-// Phase 1 adds camera presets here as query strings (e.g. top-down, player).
-const PRESETS: Record<string, string> = { home: '/' };
+// Camera presets as client URL overrides: ?cam=x,y,z,yawDeg,pitchDeg and ?debug=1.
+const { x, z, yawDeg } = flyCamera.spawn;
+const eye = 35 / Math.hypot(x, z); // 35 m behind the obelisk on the spawn line, facing the Arc de Triomphe
+const PRESETS: Record<string, string> = {
+  topdown: '/?cam=0,3800,0,0,-90', // north up; 3.8 km fits the whole bbox at 16:9 (south edge is 2.3 km away)
+  player: `/?cam=${(x * eye).toFixed(2)},1.7,${(z * eye).toFixed(2)},${yawDeg.toFixed(2)},8`,
+  debug: '/?debug=1', // default spawn view
+};
 const PORT = 5174; // not Vite's default 5173, so it can run next to `npm run dev`
 const READY_TIMEOUT_MS = 15_000;
 

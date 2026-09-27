@@ -44,7 +44,8 @@ docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese); DEPLOY.md in Phase 
 - `npm run dev:worker` – builds client, then `wrangler dev` on :8787 (static assets + API + DO + SQLite + R2 locally). Copy `worker/.dev.vars.example` → `worker/.dev.vars`.
 - `npm run build` – typecheck everything + client build + `wrangler deploy --dry-run` bundle check. Run it from the root: the worker build needs `client/dist`.
 - `npm test` – Vitest in every workspace.
-- `npm run screenshot [preset]` – headless Chrome → `screenshots/<preset>.png`; fails on console errors. Pages set `window.__READY__ = true` when rendered; presets live in `scripts/screenshot.ts`.
+- `npm run screenshot [preset]` – headless Chrome → `screenshots/<preset>.png`; fails on console errors. Pages set `window.__READY__ = true` once rendered and settled (game: a few frames drawn, physics boxes at rest); presets live in `scripts/screenshot.ts`.
+- Client URL overrides: `?cam=x,y,z,yawDeg,pitchDeg` (camera pose, yaw 0 = north / −Z), `?debug=1` (F3 overlay on).
 - Later: `fetch-map` (Phase 2), `build-graph` (Phase 4), `sim` (Phase 11), `deploy` (Phase 12).
 
 ## Workflow

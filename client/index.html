@@ -5,9 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cuộc đua Paris</title>
     <link rel="icon" href="data:," />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f16; }
+      body { font: 15px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fff; }
+      canvas { display: block; }
+      .panel {
+        position: fixed; left: 50%; transform: translateX(-50%); max-width: min(34em, calc(100% - 32px));
+        padding: 10px 18px; border-radius: 10px; background: rgba(10, 14, 22, 0.72); text-align: center; pointer-events: none;
+      }
+      #help { top: 16px; }
+      #ime { bottom: 24px; background: rgba(150, 80, 0, 0.92); }
+      #error { top: 50%; transform: translate(-50%, -50%); white-space: pre-line; pointer-events: auto; border: 1px solid #c8412f; }
+      kbd {
+        display: inline-block; min-width: 1.2em; padding: 0 5px; border: 1px solid #8a93a3; border-bottom-width: 2px;
+        border-radius: 4px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace;
+      }
+    </style>
   </head>
   <body>
-    <main id="app"></main>
+    <!-- pointer-events: none on panels, so a click anywhere reaches the canvas and locks the pointer -->
+    <div id="help" class="panel" hidden>
+      <strong>Nhấp chuột để điều khiển</strong><br />
+      <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> di chuyển · <kbd>Space</kbd>/<kbd>E</kbd> lên · <kbd>Q</kbd> xuống<br />
+      giữ <kbd>Shift</kbd> bay nhanh · lăn chuột đổi tốc độ<br />
+      <kbd>F3</kbd> hoặc <kbd>`</kbd> bảng debug · <kbd>Esc</kbd> nhả chuột
+    </div>
+    <div id="ime" class="panel" hidden>
+      Có vẻ bộ gõ tiếng Việt (Unikey, EVKey…) đang bật. Hãy chuyển sang chế độ gõ tiếng Anh để điều khiển chính xác.
+    </div>
+    <div id="error" class="panel" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

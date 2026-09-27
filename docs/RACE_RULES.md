@@ -46,7 +46,8 @@ Game chỉ dùng những phím có trên cả bàn phím Windows lẫn Mac. Game
 - `C`: đổi góc camera
 - `B`: ống nhòm (chỉ dùng được khi thử thách cho phép)
 - `Esc`: mở Menu
-- Vẫy tay chào, bấm còi: xem phím trong mục Điều khiển của Menu
+- `G`: vẫy tay chào
+- `R`: bấm còi (chuông xe đạp)
 
 ### Chuột
 - **Nhấp vào màn hình game** để khóa con trỏ, sau đó di chuột để nhìn quanh.

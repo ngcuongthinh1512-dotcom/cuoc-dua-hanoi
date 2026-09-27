@@ -22,9 +22,11 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 | `npm run dev:worker` | Build client rồi chạy `wrangler dev` tại http://localhost:8787 (trang web + API + Durable Object + SQLite + R2 giả lập). |
 | `npm run build` | Kiểm tra kiểu toàn bộ, build client, kiểm tra bundle Worker (`wrangler deploy --dry-run`). |
 | `npm test` | Chạy toàn bộ unit test (Vitest). |
-| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/`. |
+| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `player`, `debug`). |
 
 Thử nhanh khi `npm run dev:worker` đang chạy: `curl localhost:8787/api/health`, `curl localhost:8787/api/room/ping`.
+
+Tham số URL của game (tiện khi thử): `?cam=x,y,z,yaw,pitch` đặt vị trí và hướng camera (mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``).
 
 ## Cấu trúc thư mục
 ```
@@ -39,7 +41,7 @@ docs/     đặc tả, luật đua
 | Phase | Nội dung | Trạng thái |
 |---|---|---|
 | 0 | Chuẩn bị: khung monorepo, `wrangler.toml`, `wrangler dev` chạy được | Xong |
-| 1 | Khung client: Three.js + Rapier, game loop, input, camera bay tự do | Chưa làm |
+| 1 | Khung client: Three.js + Rapier, game loop, input, camera bay tự do | Xong |
 | 2 | Bản đồ Paris từ OpenStreetMap | Chưa làm |
 | 3 | Nhân vật & camera | Chưa làm |
 | 4 | Di chuyển: đi bộ, xe đạp | Chưa làm |
