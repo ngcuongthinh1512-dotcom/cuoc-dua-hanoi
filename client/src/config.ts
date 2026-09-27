@@ -145,7 +145,12 @@ export const terrain = {
   riverDepth: 3, // m; river cells are carved to waterLevel − this
   quayHeight: 7, // m; cells within quayBand outside the river are raised to ≥ waterLevel + this (SPEC §4.3: 6–8 m)
   quayBand: 8, // m
-  colours: { pavement: '#9a9892', grass: '#6f8f4e' },
+  copingWidth: 12, // m of stone slab behind the quay wall (covers the carved one-cell slope)
+  copingLift: 0.1, // m above waterLevel + quayHeight
+  parapet: 1, // m of quay wall above the coping
+  quayGrade: 0.04, // beyond the band the raised floor falls off this steeply until it meets the (smeared) DEM
+  stoneSlope: 1, // |gradient| above this is coloured stone (quay walls: the band drop is ~2)
+  colours: { pavement: '#9a9892', park: '#b9a987', grass: '#6f8f4e', stone: '#b3a78f' }, // park = gravel paths
 };
 
 export const water = {
@@ -153,7 +158,11 @@ export const water = {
   otherLift: 0.1, // m above local terrain for non-river water (not carved)
   normalScroll: 0.02, // UV units per second
   colour: '#3d5a66',
-};
+  normalTile: 24, // m per normal-map repeat
+  normalScale: 0.35,
+  sky: { zenith: '#5d8fc9', horizon: '#dfe9f2' }, // procedural environment the water reflects
+  wallColour: '#b8ab90', // Terrain.quayMesh: quay walls + coping
+}; // ponytail: no planar reflection, add Reflector / Water.js if it looks flat and FPS allows
 
 // ── E · vegetation, street props, signs, landmarks (world/Vegetation.ts, world/StreetProps.ts, world/Landmarks.ts) ──
 export const props = {
