@@ -131,18 +131,36 @@ export const buildings = {
 // ── C · roads + bridges (world/RoadBuilder.ts, world/BridgeBuilder.ts) ──
 export const roads = {
   sidewalkWidth: 3.5, // m each side (SPEC §4.4: 3–4 m)
+  sidewalkByName: { 'Avenue des Champs-Élysées': 21, 'Pont Alexandre III': 10 } as Record<string, number>, // m each side (Champs 70 m ≈ 21 + 28 + 21, Pont Alexandre III 40 m)
   curbHeight: 0.15, // m (STYLE_GUIDE)
   laneWidth: 3.25, // m; width = lanes × this when there is no width tag
   widthByKind: {
     motorway: 14, trunk: 14, primary: 12, secondary: 10, tertiary: 9, unclassified: 7, residential: 7,
     living_street: 6, service: 4.5, pedestrian: 6, footway: 3, path: 2, cycleway: 2, steps: 3, track: 3,
-  } as Record<string, number>, // m, per highway=* when neither width nor lanes is tagged
-  defaultWidth: 6, // m, highway=* missing from widthByKind
-  widthByName: { 'Place Charles de Gaulle': 36 } as Record<string, number>, // m, overrides everything
-  maxSegment: 10, // m; ribbons are subdivided so they drape on the terrain
-  lift: 0.05, // m above the terrain
-  centreLine: { width: 0.15, dash: 3, gap: 5, junctionCut: 8 }, // m; white dashes on two-way roads with 2+ lanes
-  bridge: { deckThickness: 1, railingHeight: 1.1, endSample: 5, railLayerStep: 6 }, // m
+    primary_link: 7, secondary_link: 7, tertiary_link: 6, subway: 4.5, rail: 4.5, light_rail: 4.5, tram: 4.5, // rail: 1 track
+  } as Record<string, number>, // m, per highway=* / railway=* when neither width nor lanes is tagged
+  defaultWidth: 6, // m, kind missing from widthByKind
+  // m carriageway; overrides everything except on a oneway half of a dual carriageway (the Concorde end of the Champs)
+  widthByName: { 'Place Charles de Gaulle': 36, 'Avenue des Champs-Élysées': 28 } as Record<string, number>,
+  sidewalkKinds: [
+    'motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential',
+    'primary_link', 'secondary_link', 'tertiary_link',
+  ] as string[], // raised sidewalks on both sides; other car kinds (service, living_street, cycleway…) get none
+  footKinds: ['footway', 'pedestrian', 'path', 'steps', 'bridleway', 'track'] as string[], // stone ribbon, no sidewalk
+  paveSurfaces: ['sett', 'cobblestone', 'unhewn_cobblestone', 'cobblestone:flattened'] as string[], // → 'pave'
+  railKinds: ['subway', 'rail', 'light_rail', 'tram', 'narrow_gauge'] as string[], // bridge deck without road surface
+  minCutWidth: 3, // m; narrower crossing ways (cycleways) don't cut the sidewalks
+  minCrossSin: 0.35, // |sin| of the meeting angle below which a way is the road's continuation (no cut)
+  maxSegment: 5, // m (= terrain cell); ribbons are subdivided along and across so overlapping ones drape alike
+  lift: 0.05, // m above the terrain: sidewalk curb base (top = lift + curbHeight)
+  // m above the terrain per surface: overlaps resolve by height as well as polygonOffset (which is ~0 up close)
+  surfaceLift: { sidewalk: 0.03, asphalt: 0.05, pave: 0.07 } as Record<string, number>,
+  markingLift: 0.02, // m above the carriageway
+  centreLine: { width: 0.15, dash: 3, gap: 5, junctionCut: 8 }, // m; white dashes between lanes, cut before junctions
+  bridge: { deckThickness: 1, railingHeight: 1.1, railingThickness: 0.3, endSample: 5, railLayerStep: 6 }, // m
+  colours: { asphalt: '#3b3c40', sidewalk: '#bab5aa', pave: '#7f756a', marking: '#f0f0ec', bridge: '#b7aa8f', railing: '#26292c' },
+  textureTile: { asphalt: 4, sidewalk: 3, pave: 1.2 }, // m covered by one canvas texture (uv = world metres)
+  polygonOffset: { sidewalk: -1, asphalt: -2, pave: -3, marking: -4 }, // factor = units; terrain (0) < … < marking
 };
 
 // ── D · terrain + water (geo/heightGrid.ts reads cell/margin; world/Terrain.ts, world/Water.ts) ──
