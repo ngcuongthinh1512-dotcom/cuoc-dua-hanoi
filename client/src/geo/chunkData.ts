@@ -33,7 +33,7 @@ export function ringArea(r: XZ): number {
 }
 
 /** Landmarks get dedicated placeholder models (world/Landmarks.ts) instead of an extruded footprint (SPEC §17.4). */
-export type LandmarkId = 'eiffel' | 'arc' | 'pyramid';
+export type LandmarkId = 'eiffel' | 'arc' | 'pyramid' | 'obelisk';
 
 export interface BuildingRec {
   outer: XZ;
