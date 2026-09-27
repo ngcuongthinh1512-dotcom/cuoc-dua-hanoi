@@ -1,0 +1,243 @@
+// DEV PREVIEW HARNESS (docs/plans/phase2.md step 0): runs the chunk builders on the main thread for a few chunks and
+// renders them through world/attach.ts, so each package can screenshot its own output before streaming exists.
+// Dev server only: vite's build input stays index.html. URL params (/preview.html?…):
+//   fixture=1 (default) | chunks=<key>,<key>… | at=<lat>,<lon>&r=<m>   chunks to build (at: every chunk touching the circle)
+//   only=terrain,buildings,roads,bridges,vegetation,props,landmarks   builders to run (default all)
+//   cam=x,y,z,yawDeg,pitchDeg   camera (default: oblique view from the south framing the selection)
+//   carve=1   carveRiver(grid, water) before building · water=1   createWater(scene, water, grid)
+import { latLonToWorld } from '@race/shared';
+import * as THREE from 'three';
+import { preview as P, render as R, terrain as T } from './config.ts';
+import { GameLoop } from './core/GameLoop.ts';
+import { Input } from './core/Input.ts';
+import { CHUNK_SIZE, type ChunkData, type ChunkKey, chunkBounds, type WaterData } from './geo/chunkData.ts';
+import { fixture } from './geo/fixture.ts';
+import { type HeightGrid, heightAt, loadHeightGrid } from './geo/heightGrid.ts';
+import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
+import { attachBuildOut, withFallbacks } from './world/attach.ts';
+import { buildBridges } from './world/BridgeBuilder.ts';
+import { buildBuildings, createBuildingMaterials } from './world/BuildingBuilder.ts';
+import type { BuildCtx, Builder, BuildOut, MeshBucket } from './world/buildTypes.ts';
+import { mergeBuckets, MeshBuffer } from './world/geom.ts';
+import { buildLandmarks, createLandmarkMaterials } from './world/Landmarks.ts';
+import { buildRoads, createRoadMaterials } from './world/RoadBuilder.ts';
+import { buildStreetProps, createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
+import { buildTerrain, carveRiver, createTerrainMaterials } from './world/Terrain.ts';
+import { buildVegetation } from './world/Vegetation.ts';
+import { createWater } from './world/Water.ts';
+
+const BUILDERS: Record<string, Builder> = {
+  terrain: buildTerrain,
+  buildings: buildBuildings,
+  roads: buildRoads,
+  bridges: buildBridges,
+  vegetation: buildVegetation,
+  props: buildStreetProps,
+  landmarks: buildLandmarks,
+};
+
+const q = new URLSearchParams(location.search);
+const list = (name: string) => q.get(name)?.split(',').filter(Boolean);
+const caption = document.getElementById('caption')!;
+
+/** Runs f; on failure warns (never console.error: the screenshot run would fail) and returns undefined. */
+function attempt<T>(label: string, f: () => T): T | undefined {
+  try {
+    return f();
+  } catch (err) {
+    console.warn(`preview: ${label} failed:`, err);
+    return undefined;
+  }
+}
+
+async function getJson<T>(url: string): Promise<T | undefined> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as T;
+  } catch (err) {
+    console.warn(`preview: ${url} missing or unreadable (${String(err)})`);
+    return undefined;
+  }
+}
+
+/** Keys from chunks=… or at=…&r=…; undefined → the fixture. */
+function selectedKeys(): ChunkKey[] | undefined {
+  const keys = list('chunks');
+  if (keys?.length) return keys;
+  const at = list('at')?.map(Number);
+  if (at?.length !== 2 || !at.every(Number.isFinite)) return undefined;
+  const c = latLonToWorld(at[0]!, at[1]!);
+  const r = Number(q.get('r') ?? CHUNK_SIZE);
+  const out: ChunkKey[] = [];
+  const cell = (v: number) => Math.floor(v / CHUNK_SIZE);
+  for (let i = cell(c.x - r); i <= cell(c.x + r); i++) {
+    for (let j = cell(c.z - r); j <= cell(c.z + r); j++) {
+      const b = chunkBounds(`${i}_${j}`);
+      const dx = Math.max(b.minX - c.x, 0, c.x - b.maxX);
+      const dz = Math.max(b.minZ - c.z, 0, c.z - b.maxZ);
+      if (dx * dx + dz * dz <= r * r) out.push(`${i}_${j}`);
+    }
+  }
+  return out;
+}
+
+/** Grey heightfield for one chunk while buildTerrain is still a stub (package D replaces it). */
+function fallbackTerrain(grid: HeightGrid, b: ReturnType<typeof chunkBounds>): MeshBucket {
+  const m = new MeshBuffer('terrain');
+  const c = new THREE.Color(T.colours.pavement); // sRGB hex → linear
+  m.color = [c.r, c.g, c.b];
+  const n = T.chunkRes;
+  const s = CHUNK_SIZE / (n - 1);
+  const h = (x: number, z: number) => heightAt(grid, x, z);
+  for (let r = 0; r < n; r++) {
+    for (let k = 0; k < n; k++) {
+      const x = b.minX + k * s;
+      const z = b.minZ + r * s;
+      const nx = h(x - s, z) - h(x + s, z);
+      const nz = h(x, z - s) - h(x, z + s);
+      const l = Math.hypot(nx, 2 * s, nz);
+      m.vertex(x, h(x, z), z, nx / l, (2 * s) / l, nz / l, x, z);
+    }
+  }
+  for (let r = 0; r < n - 1; r++) {
+    for (let k = 0; k < n - 1; k++) {
+      const i = r * n + k;
+      m.face(i, i + n, i + 1);
+      m.face(i + 1, i + n, i + n + 1);
+    }
+  }
+  return m.bucket();
+}
+
+async function start() {
+  const keys = selectedKeys();
+  const only = list('only') ?? Object.keys(BUILDERS);
+  for (const name of only) if (!BUILDERS[name]) console.warn(`preview: unknown builder "${name}" in only=`);
+  const wantWater = q.get('water') === '1';
+  const wantCarve = q.get('carve') === '1';
+
+  const [grid, water, loaded] = await Promise.all([
+    loadHeightGrid('data/'),
+    wantWater || wantCarve ? getJson<WaterData>('data/water.json') : undefined,
+    keys && Promise.all(keys.map((k) => getJson<ChunkData>(`data/chunks/${k}.json`))),
+  ]);
+  // A missing chunk still gets the terrain: built as an empty chunk.
+  const empty = (key: ChunkKey): ChunkData => ({ v: 1, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
+  const chunks = keys ? keys.map((key, i) => (loaded?.[i]?.v === 1 ? loaded[i] : empty(key))) : [fixture];
+  const missing = keys ? keys.length - (loaded?.filter((c) => c?.v === 1).length ?? 0) : 0;
+  if (wantCarve && water) attempt('carveRiver', () => carveRiver(grid, water));
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = R.exposure;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  document.body.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(R.background); // no fog: the preview shows everything it built
+  const camera = new THREE.PerspectiveCamera(R.fov, 1, R.near, R.far);
+  const resize = () => {
+    renderer.setPixelRatio(Math.min(devicePixelRatio, R.maxPixelRatio));
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  };
+  resize();
+  addEventListener('resize', resize);
+
+  const materials = withFallbacks(
+    Object.assign(
+      {},
+      ...[createTerrainMaterials, createBuildingMaterials, createRoadMaterials, createPropMaterials, createLandmarkMaterials].map(
+        (f) => attempt(f.name, f) ?? {},
+      ),
+    ),
+  );
+  const propMeshes = createPropMeshes();
+
+  const perBuilder: Record<string, { triangles: number; drawCalls: number; ms: number }> = {};
+  for (const chunk of chunks) {
+    const bounds = chunkBounds(chunk.key);
+    const ctx: BuildCtx = { key: chunk.key, bounds, height: (x, z) => heightAt(grid, x, z) };
+    for (const name of only.filter((n) => BUILDERS[n])) {
+      const t0 = performance.now();
+      let out: BuildOut | undefined = attempt(`${name} @ ${chunk.key}`, () => BUILDERS[name]!(chunk, ctx));
+      const ms = performance.now() - t0;
+      if (name === 'terrain' && !out?.meshes.length) out = { meshes: [fallbackTerrain(grid, bounds)], instances: [], colliders: [] };
+      const built = out && attempt(`attach ${name} @ ${chunk.key}`, () => attachBuildOut({ ...out, meshes: mergeBuckets(out.meshes) }, materials, propMeshes));
+      if (!built) continue;
+      scene.add(built.object);
+      const s = (perBuilder[name] ??= { triangles: 0, drawCalls: 0, ms: 0 });
+      s.triangles += built.triangles;
+      s.drawCalls += built.drawCalls;
+      s.ms += ms;
+    }
+  }
+  const waterObj = wantWater && water ? attempt('createWater', () => createWater(scene, water, grid)) : undefined;
+
+  // Frame the requested chunks: centre, half-diagonal; Phase 1 sun + hemisphere light, shadow box around them.
+  const b = (keys ?? [fixture.key]).map(chunkBounds);
+  const minX = Math.min(...b.map((v) => v.minX));
+  const minZ = Math.min(...b.map((v) => v.minZ));
+  const maxX = Math.max(...b.map((v) => v.maxX));
+  const maxZ = Math.max(...b.map((v) => v.maxZ));
+  const [cx, cz] = [(minX + maxX) / 2, (minZ + maxZ) / 2];
+  const centre = new THREE.Vector3(cx, heightAt(grid, cx, cz), cz);
+  const radius = Math.hypot(maxX - minX, maxZ - minZ) / 2;
+
+  scene.add(new THREE.HemisphereLight(R.hemiLight.sky, R.hemiLight.ground, R.hemiLight.intensity));
+  const sun = new THREE.DirectionalLight(R.sun.color, R.sun.intensity);
+  sun.position.copy(centre).add(R.sun.position);
+  sun.target.position.copy(centre);
+  sun.castShadow = true;
+  sun.shadow.mapSize.setScalar(R.shadowMapSize);
+  sun.shadow.radius = R.shadowRadius;
+  sun.shadow.bias = R.shadowBias;
+  sun.shadow.normalBias = R.shadowNormalBias;
+  Object.assign(sun.shadow.camera, { left: -radius, right: radius, bottom: -radius, top: radius, near: 1, far: R.shadowFar });
+  sun.shadow.camera.updateProjectionMatrix();
+  scene.add(sun, sun.target);
+
+  const fly = new FreeFlyCamera(camera);
+  const cam = list('cam')?.map(Number);
+  if (cam?.length === 5 && cam.every(Number.isFinite)) fly.setPose(cam[0]!, cam[1]!, cam[2]!, cam[3]!, cam[4]!);
+  else {
+    const d = radius * P.viewDistance;
+    const p = (-P.viewPitchDeg * Math.PI) / 180;
+    fly.setPose(cx, centre.y + d * Math.sin(p), cz + d * Math.cos(p), 0, P.viewPitchDeg);
+  }
+  const input = new Input(renderer.domElement);
+
+  const total = { triangles: 0, drawCalls: 0 };
+  for (const s of Object.values(perBuilder)) (total.triangles += s.triangles), (total.drawCalls += s.drawCalls);
+  const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN');
+  caption.textContent = [
+    `Xem trước: ${keys ? `${keys.length} chunk${missing ? ` (${missing} chưa có dữ liệu)` : ''}` : 'fixture'} · ${chunks.map((c) => c.key).join(' ')}`,
+    `Tổng: ${fmt(total.triangles)} tam giác · ${fmt(total.drawCalls)} lệnh vẽ`,
+    ...Object.entries(perBuilder).map(([n, s]) => `${n}: ${fmt(s.triangles)} tam giác · ${s.drawCalls} lệnh vẽ · ${s.ms.toFixed(1)} ms`),
+    'Nhấp chuột rồi bay bằng W A S D / Space / Q',
+  ].join('\n');
+  Object.assign(window, { __STATS__: { ...total, perBuilder } });
+
+  const loop = new GameLoop({
+    fixedUpdate: () => {},
+    update: (dt) => {
+      input.poll();
+      fly.update(dt, input);
+      waterObj?.update(dt);
+      input.endFrame();
+    },
+    render: () => {
+      renderer.render(scene, camera);
+      if (loop.frames >= 3) Object.assign(window, { __READY__: true }); // read by scripts/screenshot.ts
+    },
+  });
+  loop.start();
+}
+
+start().catch((err: unknown) => {
+  caption.textContent = `Xem trước bị lỗi: ${String(err)}`;
+  console.error(err);
+});

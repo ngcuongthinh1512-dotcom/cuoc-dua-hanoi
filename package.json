@@ -16,7 +16,8 @@
     "dev": "npm run dev -w client",
     "dev:worker": "npm run dev -w worker",
     "screenshot": "tsx scripts/screenshot.ts",
-    "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts"
+    "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts",
+    "build-chunks": "tsx scripts/build-chunks.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",

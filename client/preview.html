@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xem trước chunk – Cuộc đua Paris</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f16; }
+      canvas { display: block; }
+      #caption {
+        position: fixed; left: 12px; top: 12px; max-width: calc(100% - 48px); padding: 8px 12px; border-radius: 6px;
+        background: rgba(0, 0, 0, 0.65); color: #fff; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace;
+        white-space: pre-wrap; pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Dev-only harness (not in the production build: vite builds index.html only). Params: see src/preview.ts -->
+    <div id="caption">Đang tải…</div>
+    <script type="module" src="/src/preview.ts"></script>
+  </body>
+</html>
