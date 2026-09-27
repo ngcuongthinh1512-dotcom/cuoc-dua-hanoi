@@ -12,8 +12,8 @@ Browser 3D race game (1 leg in central Paris) + Host screen. Full spec: `docs/SP
 client/   Vite app (game + Host screen at /host) → client/dist = static assets
 worker/   Worker (src/index.ts) + Durable Object RaceRoom (src/RaceRoom.ts), wrangler.toml, legs/*.json (server-only leg content)
 shared/   @race/shared, TS source only (no build): constants, projection; later protocol + zod schema
-scripts/  screenshot.ts; later fetch-osm, fetch-dem, build-graph, sim
-docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese), STYLE_GUIDE.md (GTA V look: camera, light, streets, HUD — read before Phases 2–5); DEPLOY.md in Phase 12
+scripts/  screenshot.ts, fetch-osm.ts, fetch-dem.ts, geo.ts (tile/grid math, tested); later build-graph, sim
+docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese), plans/phase2.md (parallel build plan), STYLE_GUIDE.md (GTA V look: camera, light, streets, HUD — read before Phases 2–5); DEPLOY.md in Phase 12
 ```
 
 ## Coordinates
@@ -43,10 +43,11 @@ docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese), STYLE_GUIDE.md (GTA
 - `npm run dev` – client Vite dev server.
 - `npm run dev:worker` – builds client, then `wrangler dev` on :8787 (static assets + API + DO + SQLite + R2 locally). Copy `worker/.dev.vars.example` → `worker/.dev.vars`.
 - `npm run build` – typecheck everything + client build + `wrangler deploy --dry-run` bundle check. Run it from the root: the worker build needs `client/dist`.
-- `npm test` – Vitest in every workspace.
+- `npm test` – Vitest in `scripts/` + every workspace.
+- `npm run fetch-map` – run once: `fetch-osm` (Overpass, 500 m tiles + one global query for relations / water / parks / arrondissements, resumable, ≥ 2 s between requests; `--out <dir>`) → raw JSON in `.cache/osm/` (gitignored: `tiles/<ix>_<iz>.json`, `global.json`, `index.json`); then `fetch-dem` (AWS terrarium z14, PNGs cached in `.cache/dem/`) → `client/public/data/elevation.bin` + `elevation.json` (committed). Tile (ix, iz) covers world x ∈ [500·ix, 500·ix + 500), z ∈ [500·iz, 500·iz + 500).
 - `npm run screenshot [preset]` – headless Chrome → `screenshots/<preset>.png`; fails on console errors. Pages set `window.__READY__ = true` once rendered and settled (game: a few frames drawn, physics boxes at rest); presets live in `scripts/screenshot.ts`.
 - Client URL overrides: `?cam=x,y,z,yawDeg,pitchDeg` (camera pose, yaw 0 = north / −Z), `?debug=1` (F3 overlay on).
-- Later: `fetch-map` (Phase 2), `build-graph` (Phase 4), `sim` (Phase 11), `deploy` (Phase 12).
+- Later: OSM → 250 m chunks processing step (Phase 2), `build-graph` (Phase 4), `sim` (Phase 11), `deploy` (Phase 12).
 
 ## Workflow
 - Before each phase: read `docs/SPEC.md` + this file, write a short plan, list packages to install.

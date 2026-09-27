@@ -12,13 +12,15 @@
   ],
   "scripts": {
     "build": "tsc -p scripts && npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "vitest run --dir scripts && npm run test --workspaces --if-present",
     "dev": "npm run dev -w client",
     "dev:worker": "npm run dev -w worker",
-    "screenshot": "tsx scripts/screenshot.ts"
+    "screenshot": "tsx scripts/screenshot.ts",
+    "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
+    "fast-png": "^8.0.0",
     "playwright-core": "^1.63.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
