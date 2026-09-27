@@ -76,8 +76,8 @@
       },
       "destination": {
         "name": "Khải Hoàn Môn – đầu đại lộ Champs-Élysées",
-        "lat": 48.8734,
-        "lon": 2.2966,
+        "lat": 48.87348,
+        "lon": 2.29666,
         "radius": 30
       }
     },
@@ -90,9 +90,9 @@
         "allowed": "any"
       },
       "destination": {
-        "name": "Quảng trường Trocadéro",
-        "lat": 48.8621,
-        "lon": 2.2876,
+        "name": "Quảng trường Trocadéro – sân trước Palais de Chaillot",
+        "lat": 48.86215,
+        "lon": 2.28843,
         "radius": 35
       }
     },
@@ -193,9 +193,9 @@
       },
       "destination": {
         "name": "Quảng trường trước bảo tàng Orsay",
-        "lat": 48.8598,
-        "lon": 2.3258,
-        "radius": 35
+        "lat": 48.86027,
+        "lon": 2.32506,
+        "radius": 30
       }
     },
     {
@@ -225,8 +225,8 @@
       },
       "destination": {
         "name": "Kim tự tháp kính – Bảo tàng Louvre",
-        "lat": 48.861,
-        "lon": 2.3358,
+        "lat": 48.86111,
+        "lon": 2.33547,
         "radius": 20
       }
     },
@@ -236,8 +236,8 @@
       "label": "Về đích",
       "destination": {
         "name": "Kim tự tháp kính – Bảo tàng Louvre",
-        "lat": 48.861,
-        "lon": 2.3358,
+        "lat": 48.86111,
+        "lon": 2.33547,
         "radius": 20
       }
     }

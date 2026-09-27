@@ -452,6 +452,8 @@ Chặng demo gồm **10 bước theo đúng thứ tự: 6 lộ trình, 1 Lựa c
 
 Claude Code tạo file `worker/legs/paris-demo.json` với **đúng nội dung sau** (tọa độ lấy xấp xỉ, kiểm tra lại bằng centroid OSM, ưu tiên OSM nếu lệch):
 
+> **Đã chỉnh sau khi kiểm tra OSM – xem §17.4.** File `worker/legs/paris-demo.json` là bản chuẩn; không đổi nó về khối JSON dưới đây.
+
 ```json
 {
   "id": "paris-demo",
@@ -905,3 +907,19 @@ Các cột cuối: **Tổng phạt**, **Bù giờ chờ duyệt**, **Giờ về 
 ### 17.3 HUD theo phong cách GTA V (thay cho một phần mục 12)
 - **Minimap hình chữ nhật** ở góc dưới trái (thay cho "minimap tròn" ở mục 12), có chữ N chỉ hướng Bắc, xoay theo camera, tự zoom ra khi đi nhanh, vẽ đường GPS.
 - Bố cục và phong cách HUD còn lại theo `docs/STYLE_GUIDE.md` (rút ra từ ảnh tham khảo GTA V).
+
+### 17.4 Tọa độ chặng demo đã kiểm tra bằng OSM (ghi đè §8.2, §10.1, §4.5)
+Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đồng ý các chỉnh sửa sau; `worker/legs/paris-demo.json` đã cập nhật theo:
+
+| Bước | Trước | Sau | Lý do |
+|---|---|---|---|
+| L1 | 48.8734, 2.2966 | **48.87348, 2.29666** | điểm cũ nằm trên lòng đường, ngay vạch qua đường; dời 10 m lên vỉa hè phía bắc |
+| L2 | 48.8621, 2.2876 | **48.86215, 2.28843**, tên "Quảng trường Trocadéro – sân trước Palais de Chaillot" | điểm cũ nằm trong cánh tây Palais de Chaillot; điểm mới giữa sân Parvis, nơi ngắm tháp Eiffel |
+| L5 | 48.8598, 2.3258, r 35 | **48.86027, 2.32506, r 30** | điểm cũ nằm trong tòa nhà Orsay; điểm mới trên sân Esplanade trước mặt tây bảo tàng |
+| L6, PS | 48.8610, 2.3358 | **48.86111, 2.33547** | điểm cũ nằm trong kim tự tháp kính; điểm mới cách 27 m, trước mặt tây-tây bắc kim tự tháp (thảm về đích + NPC đặt ở đây) |
+
+- Giữ nguyên: điểm xuất phát (obelisk, lệch 1,5 m), L3 (chân tháp Eiffel), L4 (giữa cầu Alexandre III).
+- **Bán kính geofence: 15–40 m** (thay cho "15–30 m" ở §8.2), vì chặng demo dùng 35–40 m và các vòng đó đã được kiểm tra là đi bộ tới được.
+- Điểm xuất phát nằm trong hàng rào quanh obelisk: khi xuất phát, đặt các đội bên ngoài hàng rào, cách obelisk ≥ 8–10 m.
+- §4.5: dựng địa danh theo polygon OSM, không theo bảng tọa độ. Lệch đáng kể so với bảng: Palais de Chaillot 34 m (OSM 48.86220, 2.28835), cầu Alexandre III 29 m (OSM 48.86365, 2.31354), tháp Eiffel 15 m (OSM 48.85826, 2.29450). Test khoảng cách §4.2 giữ tọa độ gốc của bảng.
+- Khi dựng bản đồ: footprint `building=tower` của tháp Eiffel không đùn thành khối đặc (chỉ dựng 4 chân, sân dưới tháp đi bộ được); kim tự tháp kính dựng thành hình chóp, không phải khối hộp.

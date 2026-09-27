@@ -15,6 +15,8 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Nội suy vị trí giữa hai bước vật lý khi render (alpha = accumulator / fixedDt) nếu nhân vật bị giật; hiện render trạng thái vật lý mới nhất.
 - Gamepad: gán nút cho nhảy, tương tác, menu, sổ mật thư…; hiện chỉ có stick và LT/RT/LB/RB cho camera bay (chưa có bay nhanh / đổi tốc độ bằng tay cầm). Tay cầm không có mapping `standard` (một số tay trên Firefox) hiện bị bỏ qua.
 
+- Dựng footprint tháp Eiffel (`building=tower`) thành 4 chân, không đùn khối đặc; kim tự tháp Louvre dựng hình chóp (SPEC §17.4).
+
 ## Phase 4 – Di chuyển
 - `npm run build-graph` → `shared/data/roadgraph.json`.
 
@@ -30,6 +32,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Bảng debug F3: thêm ping và số người chơi đang thấy (SPEC §14).
 
 ## Phase 7 – Race engine lõi
+- Xuất phát: đặt các đội bên ngoài hàng rào obelisk, cách ≥ 8–10 m (SPEC §17.4). Geofence cho phép bán kính 15–40 m.
 - Schema zod cho file chặng trong `/shared`; Worker import `worker/legs/paris-demo.json` để nạp lần đầu vào SQLite (hiện mới chỉ test import file này).
 - Quyết định thời gian Host tạm dừng có bị trừ khỏi thời gian chính thức không (SPEC §13.3 nói đồng hồ dừng, công thức §13.8 không trừ), rồi cập nhật `docs/RACE_RULES.md` mục 11.
 
