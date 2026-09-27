@@ -158,12 +158,29 @@ export const water = {
 // ── E · vegetation, street props, signs, landmarks (world/Vegetation.ts, world/StreetProps.ts, world/Landmarks.ts) ──
 export const props = {
   treeScale: [0.8, 1.2], // hashed per tree
+  treeHeight: 15, // m, plane tree (platane) at scale 1
   lampSpacing: 30, // m along both sidewalks of car roads
   lampJunctionGap: 10, // m; no lamp this close to a junction
+  lampCurbOffset: 0.6, // m from the road edge onto the sidewalk
+  carKinds: ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street',
+    'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link'], // highway=* that get lamps
+  streetKinds: ['pedestrian'], // + carKinds: roads whose junctions get signs / Morris columns
   morrisOneIn: 6, // a Morris column at 1 in N junctions (hashed)
+  cornerInset: { sign: 0.7, morris: 2.2 }, // m from the curb line into the corner sidewalk
   maxTriangles: 300, // per prop mesh
-  signs: { cellW: 256, cellH: 64, dedupe: 15, enamel: '#1d4f9c', border: '#2f7d4a', text: '#ffffff' }, // px, px, m
-  landmarks: { eiffelHeight: 330, arcHeight: 50, pyramidHeight: 21.6, obeliskHeight: 23 }, // m, used when OSM has no height
+  signs: {
+    cellW: 256, cellH: 64, dedupe: 15, // px, px (max cell, sized to content), m (same name)
+    atlasW: 512, // px, per-chunk atlas width (height grows with rows)
+    plaqueHeight: 0.42, postHeight: 2.6, // m; plaque top at the post top
+    enamel: '#1d4f9c', border: '#2f7d4a', text: '#ffffff', post: '#2a2d30',
+  },
+  landmarks: {
+    eiffelHeight: 330, arcHeight: 50, pyramidHeight: 21.6, obeliskHeight: 23, // m, used when OSM has no height
+    obeliskShaft: 23, // m, shaft + pyramidion; the rest of the tagged height is the pedestal
+    latticeTile: 5, // m per Eiffel lattice panel (iron alpha texture)
+    glassTile: 3, // m per pyramid pane
+    sink: 0.5, // m below the lowest footprint vertex
+  },
 };
 
 // ── Step 0 · dev preview harness (preview.html, src/preview.ts; dev server only) ──
