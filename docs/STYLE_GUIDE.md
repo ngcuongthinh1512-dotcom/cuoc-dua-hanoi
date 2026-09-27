@@ -24,4 +24,4 @@
 - **Góc dưới phải:** tên đường bằng font viết tay, bên dưới là các khối "NHÃN · giá trị" canh phải (như POSITION 5/11 · TIME 00:37.46 trong ảnh đua).
 - **Bảng tên đội khác:** chữ màu đội nổi phía trên đầu, không khung.
 - Không có thanh máu/giáp, vì game không có máu.
-- **Minimap – cần chốt:** SPEC §12 ghi "tròn", ảnh GTA V là hình chữ nhật. Cả hai đều có chữ N chỉ hướng Bắc, xoay theo camera và vẽ đường GPS màu.
+- **Minimap hình chữ nhật** như GTA V (đã chốt, SPEC §17.3): góc dưới trái, chữ N chỉ hướng Bắc, xoay theo camera, đường GPS màu, tự zoom ra khi đi nhanh.

@@ -900,4 +900,8 @@ Các cột cuối: **Tổng phạt**, **Bù giờ chờ duyệt**, **Giờ về 
 | Camera bay tự do (khán giả / debug) | `W` `A` `S` `D`, `Space` hoặc `E` bay lên, `Q` hạ xuống, giữ `Shift` bay nhanh, lăn chuột đổi tốc độ |
 
 - Hỗ trợ gamepad như mục 5.
-- Phím cho các thao tác chưa gán (chào/vẫy tay, bấm còi – mục 7) chọn trong các chữ cái chưa dùng, theo quy tắc 17.1.
+- Phím cho các thao tác chưa gán (chào/vẫy tay, bấm còi – mục 7) chọn trong các chữ cái chưa dùng, theo quy tắc 17.1. Đã chốt: `G` chào/vẫy tay, `R` bấm chuông/còi xe đạp.
+
+### 17.3 HUD theo phong cách GTA V (thay cho một phần mục 12)
+- **Minimap hình chữ nhật** ở góc dưới trái (thay cho "minimap tròn" ở mục 12), có chữ N chỉ hướng Bắc, xoay theo camera, tự zoom ra khi đi nhanh, vẽ đường GPS.
+- Bố cục và phong cách HUD còn lại theo `docs/STYLE_GUIDE.md` (rút ra từ ảnh tham khảo GTA V).

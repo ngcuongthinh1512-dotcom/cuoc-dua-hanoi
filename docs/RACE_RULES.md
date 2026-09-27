@@ -27,7 +27,7 @@ Chúc các bạn một chặng đua thật may mắn!
 
 ### Bản đồ
 - Bản đồ khớp với vị trí thật của trung tâm Paris. Biển tên đường ở các góc phố cũng là tên thật. Hãy để ý, chúng có thể giúp bạn trong thử thách!
-- Minimap tròn nằm ở góc dưới bên trái. Bấm `M` để mở bản đồ lớn: kéo, phóng to, đặt điểm đánh dấu và xem đường đi GPS tới điểm đó.
+- Minimap hình chữ nhật nằm ở góc dưới bên trái. Bấm `M` để mở bản đồ lớn: kéo, phóng to, đặt điểm đánh dấu và xem đường đi GPS tới điểm đó.
 - Theo mặc định, bản đồ **chỉ hiện tên đường, không hiện tên địa danh**. Mật thư thường là câu đố về địa điểm, nên bạn phải tự suy luận ra nơi cần tới.
 - Hộp mật thư và xe đạp **không hiện trên bản đồ**.
 - Góc dưới bên phải hiện tên quận và tên đường mỗi khi bạn sang khu vực mới.

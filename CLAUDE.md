@@ -1,6 +1,6 @@
 # CLAUDE.md – Cuộc đua Paris
 
-Browser 3D race game (1 leg in central Paris) + Host screen. Full spec: `docs/SPEC.md` (§17 overrides earlier sections). Never edit `docs/SPEC.md`.
+Browser 3D race game (1 leg in central Paris) + Host screen. Full spec: `docs/SPEC.md` (§17 overrides earlier sections). Never edit `docs/SPEC.md` (only the orchestrator appends user decisions to §17).
 
 ## Stack
 - Everything on Cloudflare: Workers Static Assets (client build) + Worker (API) + one SQLite-backed Durable Object `RaceRoom` per race + R2 bucket `MEDIA` + secret `HOST_PASSWORD`. No Node server, no Colyseus, no VPS.
