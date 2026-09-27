@@ -8,10 +8,11 @@ type DebugStats = {
   renderer: WebGLRenderer;
   position: Vector3;
   speed: number;
-  bodies: number;
+  chunks: { loaded: number; pending: number };
+  colliders: number;
 };
 
-/** F3 / ` panel (SPEC §14). Chunks, ping and visible players: TODO.md (Phase 2, 6). */
+/** F3 / ` panel (SPEC §14). Ping and visible players: TODO.md (Phase 6). */
 export function createDebugOverlay(visible: boolean) {
   const el = document.createElement('pre');
   el.style.cssText =
@@ -40,7 +41,8 @@ export function createDebugOverlay(visible: boolean) {
         `Camera X / Y / Z: ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)} m`,
         `Vĩ độ, kinh độ: ${g.lat.toFixed(6)}, ${g.lon.toFixed(6)}`,
         `Tốc độ bay: ${s.speed.toFixed(1)} m/s`,
-        `Vật thể vật lý: ${s.bodies}`,
+        `Chunk: ${s.chunks.loaded} đã tải · ${s.chunks.pending} đang chờ`,
+        `Collider vật lý: ${s.colliders}`,
       ].join('\n');
     },
   };

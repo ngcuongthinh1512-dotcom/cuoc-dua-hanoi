@@ -1,11 +1,23 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { flyCamera, render as R, ui } from './config.ts';
+import { bounds, chunks as chunkCfg, flyCamera, physics, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
+import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type WaterData } from './geo/chunkData.ts';
+import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { createDebugOverlay } from './ui/DebugOverlay.ts';
-import { createDevScene } from './world/DevScene.ts';
+import { withFallbacks } from './world/attach.ts';
+import { bboxCorners, createBoundsWalls, edgeDistance } from './world/Bounds.ts';
+import { createBuildingMaterials } from './world/BuildingBuilder.ts';
+import type { ToWorker } from './world/buildTypes.ts';
+import { ChunkManager } from './world/ChunkManager.ts';
+import { createLandmarkMaterials } from './world/Landmarks.ts';
+import { createRoadMaterials } from './world/RoadBuilder.ts';
+import { createSky } from './world/Sky.ts';
+import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
+import { carveRiver, createTerrainCollider, createTerrainMaterials } from './world/Terrain.ts';
+import { createWater } from './world/Water.ts';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -14,6 +26,37 @@ function fail(message: string, cause?: unknown) {
   const box = $('error');
   box.textContent = message + (cause === undefined ? '' : `\n\nChi tiết: ${String(cause)}`);
   box.hidden = false;
+}
+
+/** Runs f; a failure is warned (never console.error: the screenshot run would fail) and yields undefined. */
+function attempt<T>(label: string, f: () => T): T | undefined {
+  try {
+    return f();
+  } catch (err) {
+    console.warn(`${label} failed:`, err);
+    return undefined;
+  }
+}
+
+async function getJson<T>(url: string): Promise<T | undefined> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as T;
+  } catch (err) {
+    console.warn(`${url} missing or unreadable (${String(err)})`);
+    return undefined;
+  }
+}
+
+/** Every chunk touching RACE_BBOX, for when chunks/index.json is missing (terrain-only world). */
+function bboxKeys(): ChunkKey[] {
+  const c = bboxCorners();
+  const cell = (v: number) => Math.floor(v / CHUNK_SIZE);
+  const [xs, zs] = [c.map((p) => cell(p[0])), c.map((p) => cell(p[1]))];
+  const keys: ChunkKey[] = [];
+  for (let i = Math.min(...xs); i <= Math.max(...xs); i++) for (let j = Math.min(...zs); j <= Math.max(...zs); j++) keys.push(`${i}_${j}`);
+  return keys;
 }
 
 async function start() {
@@ -35,8 +78,6 @@ async function start() {
   document.body.prepend(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(R.background);
-  scene.fog = new THREE.Fog(R.background, R.fogNear, R.fogFar);
   const camera = new THREE.PerspectiveCamera(R.fov, 1, R.near, R.far);
   const resize = () => {
     renderer.setPixelRatio(Math.min(devicePixelRatio, R.maxPixelRatio));
@@ -47,9 +88,40 @@ async function start() {
   resize();
   addEventListener('resize', resize);
 
-  const world = createDevScene(scene);
+  // 1. Height grid + water, then the river carve (before the grid goes to the worker and the collider).
+  const [grid, water, index] = await Promise.all([
+    loadHeightGrid('data/'),
+    getJson<WaterData>('data/water.json'),
+    getJson<ChunkIndex>('data/chunks/index.json'),
+  ]);
+  if (water) attempt('carveRiver', () => carveRiver(grid, water));
+
+  // 2. Physics: terrain heightfield + invisible bbox walls (chunk trimeshes come with the chunks).
+  const world = new RAPIER.World(physics.gravity);
+  world.timestep = physics.fixedDt;
+  attempt('createTerrainCollider', () => createTerrainCollider(world, grid));
+  createBoundsWalls(world);
+
+  // 3. Sky, lights, fog · 4. water · 5. streamed chunks.
+  const sky = createSky(scene, camera, (x, z) => heightAt(grid, x, z));
+  const waterObj = water && attempt('createWater', () => createWater(scene, water, grid));
+  const materials = withFallbacks(
+    Object.assign(
+      {},
+      ...[createTerrainMaterials, createBuildingMaterials, createRoadMaterials, createPropMaterials, createLandmarkMaterials].map(
+        (f) => attempt(f.name, f) ?? {},
+      ),
+    ),
+  );
+  const hasIndex = index?.v === 1 && Array.isArray(index.keys);
+  if (!hasIndex) $('nodata').hidden = false;
+  const worker = new Worker(new URL('./workers/chunkBuilder.worker.ts', import.meta.url), { type: 'module' });
+  worker.postMessage({ type: 'init', grid, dataUrl: hasIndex ? new URL('data/', location.href).href : '' } satisfies ToWorker);
+  const chunks = new ChunkManager(worker, hasIndex ? index.keys : bboxKeys(), scene, world, materials, createPropMeshes());
+
   const input = new Input(renderer.domElement);
-  const fly = new FreeFlyCamera(camera);
+  const fly = new FreeFlyCamera(camera); // spectator: flies through everything, no collider
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly } }); // for scratch test scripts
 
   // Deterministic views for screenshots: ?cam=x,y,z,yawDeg,pitchDeg and ?debug=1
   const query = new URLSearchParams(location.search);
@@ -68,6 +140,8 @@ async function start() {
     notice.hidden = false;
     setTimeout(() => void (notice.hidden = true), ui.imeNoticeMs);
   };
+  const edge = $('edge');
+  const loading = $('loading');
 
   let ready = false;
   const loop = new GameLoop({
@@ -77,20 +151,24 @@ async function start() {
       if (input.wasPressed('debug')) debug.toggle();
       fly.update(dt, input);
       input.endFrame();
+      const p = camera.position;
+      sky.update();
+      waterObj?.update(dt);
+      chunks.update(p.x, p.y, p.z, ready ? chunkCfg.attachBudgetMs : Infinity); // the first view loads unbudgeted
+      edge.hidden = edgeDistance(p.x, p.z) >= bounds.warnDistance;
     },
     render: () => {
       renderer.render(scene, camera);
-      debug.update({
-        fps: loop.fps,
-        workMs: loop.workMs,
-        renderer,
-        position: camera.position,
-        speed: fly.speed,
-        bodies: world.bodyCount,
-      });
-      // Signal for scripts/screenshot.ts: a few frames drawn and the dropped boxes at rest.
-      if (!ready && loop.frames >= 3 && world.settled) {
+      const cs = chunks.stats;
+      const colliders = world.colliders.len();
+      debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders });
+      const { calls, triangles } = renderer.info.render;
+      Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries } });
+      // Signal for scripts/screenshot.ts: every chunk around the camera attached and a few frames drawn.
+      if (!ready) loading.textContent = `Đang tải bản đồ… còn ${cs.pending} ô`;
+      if (!ready && loop.frames >= 3 && chunks.idle) {
         ready = true;
+        loading.hidden = true;
         Object.assign(window, { __READY__: true });
       }
     },
