@@ -260,6 +260,56 @@ export const landmarks = {
       // Tomb of the Unknown Soldier (approximate sizes, near LOD): m, sRGB
       tomb: { halfWidth: 0.8, halfLength: 1.5, height: 0.12, rosette: 0.55, granite: '#8a857c' } },
   },
+  // g2 Seine bridges (world/landmarks/g2.ts). m unless noted; published figures are cited in g2.ts.
+  g2: {
+    topGap: 0.25, // m: bridge bodies stop this far under BridgeBuilder's deck line (estimated here with its formula, ± 0.2 m)
+    slabGrip: 0.3, // m the Bir-Hakeim viaduct columns reach up into the metro slab
+    springAbove: 0.6, // m above the water: arch springing / pier caps
+    pierDepth: 0.5, // m below the carved bed
+    minChannel: 8, // m: shorter runs of river bed under the axis are ignored
+    archSegments: 16,
+    postStep: 3, // m between spandrel posts of the steel arches (LOD near)
+    colours: {
+      birHakeim: '#4f5d57', alexandre: '#7a817c', arts: '#3b4448', alma: '#77808a', pier: '#cfc2a6',
+      granite: '#8e8a83', black: '#1d1e21', globe: '#f1ede0', planks: ['#8b6b4a', '#7a5c3e', '#93724f'],
+    },
+    birHakeim: {
+      spans: 3, // steel arches per river arm (fr.wikipedia.org/wiki/Pont_de_Bir-Hakeim)
+      pierWidth: 5, ribs: 6, ribWidth: 0.5, ribDepth: 1.2,
+      viaductHalf: 3.4, // m from the axis to each column line of the metro viaduct
+      columnSpacing: 8, columnRadius: 0.32, braceDrop: 1.8, // cast-iron columns + the arched braces between them
+      island: 14, // m: stone massif under the viaduct over the Île aux Cygnes (its arch lets the promenade through)
+      statueHeight: 4.5, plinth: 2, // La France renaissante (proxy)
+      // node/3610838785, not attached to the record (> landmarks `near`); used when rec.points has no statue
+      statueAt: [48.8557606, 2.2878413] as [number, number],
+    },
+    alexandre: {
+      rise: 6.28, // m, single 107.5 m steel arch (en.wikipedia.org/wiki/Pont_Alexandre_III); clamped to the carved river
+      ribs: 15, ribWidth: 0.45, ribDepth: 1.3, crownDepth: 0.5, abutment: 6,
+      spandrelInset: 0.3, // m the outer spandrel plates sit behind the face rib
+      pylon: 17, // m, the 4 granite pylons (OSM height=17), gilded Renommée + Pegasus group on each
+      statueHeight: 4.5, // gilded group (proxy)
+      lampHeight: 6, figureHeight: 3.2, sculptureHeight: 2.2, plinth: 1.3,
+      balusterStep: 0.5, // m (LOD near)
+    },
+    pontNeuf: {
+      arches: { long: 7, short: 5 }, // right-bank arm 7, left-bank arm 5 (fr.wikipedia.org/wiki/Pont_Neuf)
+      longArm: 100, // m of river under an arm above which it is the long one
+      pierWidth: 5, bayBump: 1.2, voussoir: 0.9, cutwaterTop: 1.5, parapet: 1, parapetThickness: 0.45,
+      mascaronStep: 1.6, // 381 mascarons along both cornices (fr.wikipedia.org/wiki/Pont_Neuf)
+      lampHeight: 4.5,
+      // Henri IV: pedestal way/200452259 (drawn by BuildingBuilder, buildings.smallHeight tall) centre; dir = rad from
+      // east toward south along its long axis, facing the Place Dauphine
+      henri: { at: [48.857136, 2.340968] as [number, number], dir: 0.5, statueHeight: 4 },
+    },
+    arts: {
+      spans: 7, // 7 arches since the 1984 rebuild, 155 m × 11 m (en.wikipedia.org/wiki/Pont_des_Arts)
+      pierWidth: 3.4, ribs: 5, ribWidth: 0.35, ribDepth: 0.7, deckLift: 0.08, plank: 0.6,
+      railing: 1.1, railPostStep: 1.5, lampHeight: 3.2,
+    },
+    alma: { pierWidth: 4, girderDepth: 2, haunchDepth: 4.5, haunchLength: 45, zouaveHeight: 5.2, zouaveBase: 1 },
+    flamme: { flame: 3.5, pedestal: 3, pedestalSize: 1.6, step: 0.3, segments: 20, rings: 12 }, // flame 3.5 m (fr.wikipedia.org/wiki/Flamme_de_la_Liberté)
+  },
 };
 
 // ── Step 0 · dev preview harness (preview.html, src/preview.ts; dev server only) ──
