@@ -115,7 +115,9 @@ function riverLeft(r: XZ, hole: boolean): XZ {
 
 /** Stone quays along every river ring: a vertical wall on the polygon edge from the carved bed up to a parapet above
  *  the street, and a coping slab from the edge copingWidth outward just above street level (it covers the one-cell
- *  slope carveRiver leaves behind the wall). Flat quads, 4 vertices each. Rendered by Water.ts; also a collider. */
+ *  slope carveRiver leaves behind the wall). Flat quads, 4 vertices each. Rendered by Water.ts; also a collider.
+ *  Edges on the water extent (where build-chunks clipped the river to the chunk grid) and edges two river polygons share
+ *  get no quay: no dam across the river. */
 export function quayMesh(water: WaterData, level: number): TriMesh {
   const v: number[] = [];
   const idx: number[] = [];
@@ -127,6 +129,26 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
   const bed = level - T.riverDepth;
   const top = level + T.quayHeight + T.copingLift;
   const cap = top + T.parapet;
+  const ext = [Infinity, -Infinity, Infinity, -Infinity]; // min x, max x, min z, max z over all water
+  for (const r of water.polygons.flatMap((p) => [p.outer, ...(p.holes ?? [])])) {
+    for (let k = 0; k < r.length; k++) {
+      const e = (k % 2) * 2;
+      [ext[e], ext[e + 1]] = [Math.min(ext[e]!, r[k]!), Math.max(ext[e + 1]!, r[k]!)];
+    }
+  }
+  const rivers = water.polygons.filter((p) => p.river).flatMap((p) => [p.outer, ...(p.holes ?? [])]);
+  const edge = (ax: number, az: number, bx: number, bz: number) =>
+    ax < bx || (ax === bx && az < bz) ? `${ax},${az},${bx},${bz}` : `${bx},${bz},${ax},${az}`;
+  const uses = new Map<string, number>();
+  for (const r of rivers) {
+    for (let i = 0, n = r.length; i < n; i += 2) {
+      const k = edge(r[i]!, r[i + 1]!, r[(i + 2) % n]!, r[(i + 3) % n]!);
+      uses.set(k, (uses.get(k) ?? 0) + 1);
+    }
+  }
+  const on = (a: number, b: number, e: number) => Math.abs(a - e) < 0.05 && Math.abs(b - e) < 0.05;
+  const onExtent = (ax: number, az: number, bx: number, bz: number) =>
+    on(ax, bx, ext[0]!) || on(ax, bx, ext[1]!) || on(az, bz, ext[2]!) || on(az, bz, ext[3]!);
   for (const p of water.polygons) {
     if (!p.river) continue;
     for (const ring of [riverLeft(p.outer, false), ...(p.holes ?? []).map((h) => riverLeft(h, true))]) {
@@ -135,6 +157,7 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n;
         const [ax, az, bx, bz] = [ring[2 * i]!, ring[2 * i + 1]!, ring[2 * j]!, ring[2 * j + 1]!];
+        if (onExtent(ax, az, bx, bz) || uses.get(edge(ax, az, bx, bz))! > 1) continue;
         quad([bx, bed, bz], [ax, bed, az], [ax, cap, az], [bx, cap, bz]); // wall seen from the river: bottom-left = b
         quad([ax, top, az], [out[2 * i]!, top, out[2 * i + 1]!], [out[2 * j]!, top, out[2 * j + 1]!], [bx, top, bz]); // coping (+Y)
       }
@@ -164,12 +187,15 @@ export const buildTerrain: Builder = (chunk, ctx) => {
   }
   const colours = [linear(T.colours.pavement), linear(T.colours.park), linear(T.colours.grass)];
   const stone = linear(T.colours.stone);
+  // Border vertices use their inside half-step sample in place of the outside / on-edge ones (areas are clipped to the
+  // chunk, so those read as pavement and would draw pale lines along the chunk grid across parks).
+  const inner = (k: number) => Math.min(Math.max(k, 2), f - 3);
   const mix = (r: number, c: number): V3 => {
     const out: [number, number, number] = [0, 0, 0];
     for (let dr = 0; dr < 3; dr++) {
       for (let dc = 0; dc < 3; dc++) {
         const w = ((dr === 1 ? 2 : 1) * (dc === 1 ? 2 : 1)) / 16; // tent filter
-        const col = colours[surface[(2 * r + dr) * f + 2 * c + dc]!]!;
+        const col = colours[surface[inner(2 * r + dr) * f + inner(2 * c + dc)]!]!;
         for (let i = 0; i < 3; i++) out[i] = out[i]! + w * col[i]!;
       }
     }

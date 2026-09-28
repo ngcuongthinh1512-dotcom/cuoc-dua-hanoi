@@ -20,8 +20,8 @@ export const render = {
   far: 12_000, // m; initial value, the game sets camera.far = fog far (world/Sky.ts); the preview keeps it
   background: 0xbfd3e6, // clear colour (preview; the game draws the sky texture)
   sky: { zenith: '#6f9fd8', horizon: '#c9d9e6', clouds: 60, cloudAlpha: 0.35 }, // horizon = fog colour
-  // Haze (STYLE_GUIDE): hides chunk edges (loadRadius 800). near/far grow by altitudeFactor × height above ground,
-  // so the topdown view (3.8 km up) stays clear.
+  // Haze (STYLE_GUIDE): hides chunk edges (the load radius follows fog far, world/ChunkManager.ts). near/far grow by
+  // altitudeFactor × height above ground, so the topdown view (3.8 km up) stays clear.
   fog: { near: 250, far: 700, altitudeFactor: 1.3 }, // m, m, per m
 };
 
@@ -94,7 +94,9 @@ export const keys: Readonly<Record<Action, readonly string[]>> = keyTable;
 export const chunks = {
   loadRadius: 800, // m around the camera (SPEC §4.4); 600 on integrated GPUs, together with fog
   unloadRadius: 1000, // m; > loadRadius so chunks at the edge don't thrash
-  altitudeFactor: 1.5, // radius = max(loadRadius, cameraY × this): a high camera (topdown) loads everything
+  fogMargin: 100, // m; radius = max(loadRadius, fog far at the camera height + this): the loaded edge stays in the fog
+  colliderRadius: 150, // m; loaded chunks this close get their Rapier colliders (created one per frame, budgeted)
+  colliderHysteresis: 100, // m beyond colliderRadius before they are removed again
   maxInFlight: 2, // worker builds at once
   attachBudgetMs: 4, // main-thread attach time per frame (unbudgeted until the first __READY__)
   fetchRetries: 3,
@@ -110,6 +112,7 @@ export const buildings = {
   levelHeight: 3.2, // m per building:levels (SPEC §4.4)
   defaultHeight: 20, // m when neither height nor building:levels is tagged
   baseSink: 0.5, // m: walls start this far below the lowest ring vertex, so slopes show no gap
+  groundSpan: 3, // m: the ground a building's height counts from is at most this far below its highest ring vertex
   haussmannKinds: ['yes', 'apartments', 'residential', 'commercial', 'retail', 'office', 'hotel'],
   haussmannHeight: [12, 35], // m, min/max height for the Haussmann style
   shopfrontHeight: 4.5, // m, ground floor
@@ -152,13 +155,15 @@ export const roads = {
   railKinds: ['subway', 'rail', 'light_rail', 'tram', 'narrow_gauge'] as string[], // bridge deck without road surface
   minCutWidth: 3, // m; narrower crossing ways (cycleways) don't cut the sidewalks
   minCrossSin: 0.35, // |sin| of the meeting angle below which a way is the road's continuation (no cut)
+  minTwinCos: 0.9, // |cos| between a oneway half and its same-name twin (dual carriageway) / two parallel bridge decks
   maxSegment: 5, // m (= terrain cell); ribbons are subdivided along and across so overlapping ones drape alike
   lift: 0.05, // m above the terrain: sidewalk curb base (top = lift + curbHeight)
   // m above the terrain per surface: overlaps resolve by height as well as polygonOffset (which is ~0 up close)
   surfaceLift: { sidewalk: 0.03, asphalt: 0.05, pave: 0.07 } as Record<string, number>,
   markingLift: 0.02, // m above the carriageway
   centreLine: { width: 0.15, dash: 3, gap: 5, junctionCut: 8 }, // m; white dashes between lanes, cut before junctions
-  bridge: { deckThickness: 1, railingHeight: 1.1, railingThickness: 0.3, endSample: 5, railLayerStep: 6 }, // m
+  // m; mergeGap: parallel same-layer road decks closer than this (centre lines) are joined into one deck, no inner parapets
+  bridge: { deckThickness: 1, railingHeight: 1.1, railingThickness: 0.3, endSample: 5, railLayerStep: 6, mergeGap: 30 },
   colours: { asphalt: '#3b3c40', sidewalk: '#bab5aa', pave: '#7f756a', marking: '#f0f0ec', bridge: '#b7aa8f', railing: '#26292c' },
   textureTile: { asphalt: 4, sidewalk: 3, pave: 1.2 }, // m covered by one canvas texture (uv = world metres)
   polygonOffset: { sidewalk: -1, asphalt: -2, pave: -3, marking: -4 }, // factor = units; terrain (0) < … < marking

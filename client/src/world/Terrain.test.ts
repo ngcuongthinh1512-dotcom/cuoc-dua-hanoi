@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Color, Mesh, Scene } from 'three';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { terrain as T } from '../config.ts';
 import { chunkBounds, type WaterData } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
@@ -35,7 +35,9 @@ describe('carveRiver', () => {
   });
 
   it('quayMesh: walls face the river, coping faces up, all finite', () => {
-    const m = quayMesh(square, 0);
+    // A pond widens the water extent in x, so only the river's ends (z = 0, 300) lie on it: clip edges, no quay there.
+    const pond = { river: false, outer: [0, 150, 250, 150, 250, 155, 0, 155] };
+    const m = quayMesh({ ...square, polygons: [...square.polygons, pond] }, 0);
     expect(m.vertices.every(Number.isFinite)).toBe(true);
     const v = (i: number) => [m.vertices[3 * i]!, m.vertices[3 * i + 1]!, m.vertices[3 * i + 2]!];
     const normal = (t: number) => {
@@ -52,9 +54,7 @@ describe('carveRiver', () => {
       if (q % 2) expect(n[1]).toBeGreaterThan(0); // coping
       else if (ax === bx) expect(Math.sign(n[0]!)).toBe({ 100: 1, 130: -1, 170: 1, 200: -1 }[ax!]); // walls look at the water
     }
-    expect(quads).toBe(2 * 8); // 4 outer + 4 island edges, wall + coping each
-    {
-    }
+    expect(quads).toBe(2 * 6); // 2 banks + 4 island edges, wall + coping each
   });
 
   it('warns and leaves the grid alone when no node is in a river', () => {
@@ -87,11 +87,15 @@ describe('buildTerrain', () => {
   });
 });
 
-describe('real data', () => {
-  const d = join(__dirname, '../../public/data/');
-  const grid = parseHeightGrid(JSON.parse(readFileSync(d + 'elevation.json', 'utf8')), readFileSync(d + 'elevation.bin'));
-  const water = JSON.parse(readFileSync(d + 'water.json', 'utf8')) as WaterData;
-  carveRiver(grid, water);
+const d = join(__dirname, '../../public/data/');
+describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => existsSync(d + f)))('real data', () => {
+  let grid: HeightGrid;
+  let water: WaterData;
+  beforeAll(() => {
+    grid = parseHeightGrid(JSON.parse(readFileSync(d + 'elevation.json', 'utf8')), readFileSync(d + 'elevation.bin'));
+    water = JSON.parse(readFileSync(d + 'water.json', 'utf8')) as WaterData;
+    carveRiver(grid, water);
+  });
 
   it('carved grid has no NaN and a Seine below its quays', () => {
     expect(grid.h.every(Number.isFinite)).toBe(true);

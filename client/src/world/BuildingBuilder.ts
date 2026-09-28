@@ -1,7 +1,8 @@
 // Package B: Haussmann buildings from BuildingRecs (skips recs with .landmark, see Landmarks.ts).
 // Module top level must not touch the DOM: the worker imports build*(); canvas textures only inside create*().
 //
-// Per building: ground g = min terrain over the outer ring, walls from g − baseSink to top = g + height.
+// Per building: ground g = min terrain over the outer ring, but at most groundSpan below its max (a footprint reaching
+// into the carved Seine or over a DEM bump, e.g. the Louvre, is not buried); walls from min − baseSink to top = g + height.
 // Haussmann (SPEC §4.4): shopfront band 0–4.5 m, window-grid walls, zinc mansard (top 4 m, inset ≈ 1.2 m) with dormers
 // painted on the slope + chimneys, iron balconies on floors 2 and 5. Other kinds: plain stone walls, flat roof.
 // Party walls (an edge shared with another building of the chunk): no shopfront, balcony or mansard slope, and only
@@ -109,13 +110,18 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
     .map(clean)
     .filter((h) => h.length >= 6 && Math.abs(ringArea(h)) >= 1)
     .map((h) => (ringArea(h) > 0 ? reversed(h) : h));
-  let g = Infinity;
-  for (let i = 0; i < outer.length; i += 2) g = Math.min(g, height(outer[i]!, outer[i + 1]!));
-  if (!Number.isFinite(g)) return undefined;
+  let gMin = Infinity;
+  let gMax = -Infinity;
+  for (let i = 0; i < outer.length; i += 2) {
+    const y = height(outer[i]!, outer[i + 1]!);
+    [gMin, gMax] = [Math.min(gMin, y), Math.max(gMax, y)];
+  }
+  if (!Number.isFinite(gMin) || !Number.isFinite(gMax)) return undefined;
+  const g = Math.max(gMin, gMax - B.groundSpan);
   const h = buildingHeight(b);
   const minH = b.minHeight ?? (b.kind === 'roof' ? Math.max(0, h - B.canopyThickness) : 0);
   const top = g + h;
-  const bottom = minH > 0 ? g + minH : g - B.baseSink;
+  const bottom = minH > 0 ? g + minH : gMin - B.baseSink;
   if (!(top > bottom + 0.1)) return undefined;
   const [x0, z0] = [outer[0]!, outer[1]!];
   const k = hash01(x0, z0, 1);
@@ -234,9 +240,11 @@ export const buildBuildings: Builder = (chunk, ctx) => {
         if (ri === 0 && len >= B.balconyMinEdge) {
           const ox = ((bz - az) / len) * -B.balconyDepth; // right of travel = outside
           const oz = ((ax - bx) / len) * -B.balconyDepth;
-          for (const f of B.balconyFloors) {
+          // the upper balcony drops to the last floor whose railing fits under the mansard (20 m default: floor 4)
+          const fTop = Math.floor((wallTop - B.railingHeight - shopTop) / B.levelHeight) + 1;
+          for (const f of new Set(B.balconyFloors.map((f) => Math.min(f, fTop)))) {
+            if (f < B.balconyFloors[0]!) continue;
             const y = shopTop + (f - 1) * B.levelHeight;
-            if (y + B.railingHeight > wallTop) continue;
             const [s, t] = SLAB_UV;
             balc.quad([ax, y, az], [ax + ox, y, az + oz], [bx + ox, y, bz + oz], [bx, y, bz], s, t, s, t);
             const y1 = y + B.railingHeight;

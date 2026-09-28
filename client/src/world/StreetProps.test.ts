@@ -31,6 +31,9 @@ describe('street props placement', () => {
     expect(lamps.length).toBe(2 * 8); // arc length 15, 45, …, 225
     const north = lamps.filter((l) => l.z < 100).map((l) => l.x);
     expect(north.slice(1).map((x, i) => x - north[i]!)).toEqual(Array(7).fill(P.lampSpacing));
+    const gapped = placeLamps(straight, [{ x: 45, z: 100 }]); // a junction exactly where a lamp pair would stand
+    expect(gapped.length).toBe(2 * 7);
+    expect(gapped.every((l) => Math.abs(l.x - 45) >= P.lampJunctionGap)).toBe(true);
     const { points } = findJunctions(fixture, '0_0');
     for (const l of placeLamps(fixture, points)) {
       expect(Math.hypot(l.x - 125, l.z - 100)).toBeGreaterThanOrEqual(P.lampJunctionGap);

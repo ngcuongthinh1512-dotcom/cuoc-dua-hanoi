@@ -33,7 +33,6 @@ const LANDMARKS: Record<string, LandmarkId> = {
 const MIN_RING_AREA = 2; // m²
 const TREE_ROW_STEP = 8; // m between expanded tree_row trees
 const TREE_MIN_GAP = 4; // m: tree_row points closer than this to an existing tree are skipped
-const WATER_MARGIN = 200; // m around RACE_BBOX kept in water.json
 const QUAY_NEAR_RIVER = 50; // m: quay lines farther than this from the Seine are not written
 const WARN_BYTES = 250 * 1024;
 const FAIL_BYTES = 2 * 1024 * 1024;
@@ -50,8 +49,10 @@ const bbox: Rect = {
   minX: Math.min(...corners.map((c) => c.x)), maxX: Math.max(...corners.map((c) => c.x)),
   minZ: Math.min(...corners.map((c) => c.z)), maxZ: Math.max(...corners.map((c) => c.z)),
 };
+// water.json is clipped to the chunk grid: beyond it there is no terrain for the water to lie in.
 const waterRect: Rect = {
-  minX: bbox.minX - WATER_MARGIN, maxX: bbox.maxX + WATER_MARGIN, minZ: bbox.minZ - WATER_MARGIN, maxZ: bbox.maxZ + WATER_MARGIN,
+  minX: Math.floor(bbox.minX / CHUNK_SIZE) * CHUNK_SIZE, maxX: Math.ceil(bbox.maxX / CHUNK_SIZE) * CHUNK_SIZE,
+  minZ: Math.floor(bbox.minZ / CHUNK_SIZE) * CHUNK_SIZE, maxZ: Math.ceil(bbox.maxZ / CHUNK_SIZE) * CHUNK_SIZE,
 };
 const chunks = new Map<ChunkKey, ChunkData>();
 for (let i = Math.floor(bbox.minX / CHUNK_SIZE); i * CHUNK_SIZE < bbox.maxX; i++) {
@@ -218,6 +219,23 @@ for (const { geometry: g, p } of features) {
   }
 }
 for (const id of Object.values(LANDMARKS)) if (!seenLandmarks.has(id)) console.warn(`[build-chunks] landmark ${id} not found in the OSM cache`);
+
+// --- buildings whose centroid is on the Seine (boats, houseboats, floating restaurants) are dropped (TODO.md) ---
+const inRing = (x: number, z: number, r: XZ) => {
+  let inside = false;
+  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+    const [xi, zi, xj, zj] = [r[i]!, r[i + 1]!, r[j]!, r[j + 1]!];
+    if (zi > z !== zj > z && x < xi + ((z - zi) / (zj - zi)) * (xj - xi)) inside = !inside;
+  }
+  return inside;
+};
+const onRiver = (x: number, z: number) =>
+  water.some((w) => w.river && inRing(x, z, w.outer) && !(w.holes ?? []).some((h) => inRing(x, z, h)));
+for (const c of chunks.values()) {
+  const n = c.buildings.length;
+  c.buildings = c.buildings.filter((b) => b.landmark || !onRiver(...ringCentroid(b.outer)));
+  bump('dropped.buildingOnRiver', n - c.buildings.length);
+}
 
 // --- roads: junctions = rounded vertices shared by ≥ 2 road ways (bridges carrying roads included) ---
 const useCount = new Map<string, number>();

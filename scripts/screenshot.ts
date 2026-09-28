@@ -39,7 +39,7 @@ const PRESETS: Record<string, string> = {
   etoile: cam(48.8738, 2.295, 600, 0, -90),
   champs: cam(48.8697, 2.308, 1100, 0, -90),
   eiffel: cam(48.853, 2.301, 250, 45, -25), // NW toward Trocadéro, the tower in front
-  street: cam(48.87, 2.306, 1.7, yawTo(48.87, 2.306, 48.8738, 2.295), 1), // Champs-Élysées, facing the Arc
+  street: cam(48.8703, 2.306, 1.7, yawTo(48.8703, 2.306, 48.8738, 2.295), 1), // Champs-Élysées centre line, facing the Arc
   seine: cam(48.86365, 2.31354, 12, -90, -5), // Pont Alexandre III, facing east (river DEM + 12 m ≈ above the deck)
   edge: cam(48.86, 2.2855, 20, 90, -10), // ~37 m inside the west bbox edge, facing out
 };

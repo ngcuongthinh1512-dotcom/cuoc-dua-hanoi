@@ -5,7 +5,7 @@
 import { roads as C } from '../config.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
 import { MeshBuffer, mergeTriMeshes } from './geom.ts';
-import { cap, markings, Path, roadWidth, sidewalkWidth, strip, surfaceOf, wall, type YFn } from './RoadBuilder.ts';
+import { cap, markings, Path, roadWidth, sideGaps, sidewalkWidth, strip, surfaceOf, wall, type YFn } from './RoadBuilder.ts';
 
 export const buildBridges: Builder = (chunk, ctx) => {
   const bufs = new Map<MaterialId, MeshBuffer>();
@@ -31,32 +31,43 @@ export const buildBridges: Builder = (chunk, ctx) => {
     const sw = sidewalkWidth(way);
     const H = hc + sw;
     const rail = C.railKinds.includes(b.kind);
+    // Parallel road decks of one bridge (dual carriageways: Pont d'Iéna, Concorde) are joined: each deck reaches the
+    // midline to its neighbour and has no parapet on that side. ponytail: neighbours in this chunk only (parallel
+    // chains of one bridge share their midpoint chunk).
+    const decks = rail ? [] : chunk.bridges.filter((o) => o !== b && o.layer === b.layer && !C.railKinds.includes(o.kind));
+    const gaps = decks.length ? sideGaps(p, decks, C.minTwinCos).map((d) => (d <= C.bridge.mergeGap ? d : Infinity)) : [Infinity, Infinity];
+    const [EL, ER] = gaps.map((d) => (d < Infinity ? Math.max(H, d / 2) : H)) as [number, number]; // edges +EL, −ER
+    const surfY = C.surfaceLift[surfaceOf(way)]!;
 
-    // Slab: underside, sides, ends.
+    // Slab: underside, sides (up to the sidewalk top where no parapet covers it), ends.
     const slab = buf('bridge');
-    strip(slab, p, 0, L, -H, H, y, -T, max, true);
-    wall(slab, p, 0, L, H, y, -T, 0, 1, max);
-    wall(slab, p, 0, L, -H, y, -T, 0, -1, max);
-    cap(slab, p, 0, -H, H, y, -T, 0, -1);
-    cap(slab, p, L, -H, H, y, -T, 0, 1);
+    const top = C.curbHeight + C.lift;
+    strip(slab, p, 0, L, -ER, EL, y, -T, max, true);
+    wall(slab, p, 0, L, EL, y, -T, sw && gaps[0]! < Infinity ? top : 0, 1, max);
+    wall(slab, p, 0, L, -ER, y, -T, sw && gaps[1]! < Infinity ? top : 0, -1, max);
+    cap(slab, p, 0, -ER, EL, y, -T, 0, -1);
+    cap(slab, p, L, -ER, EL, y, -T, 0, 1);
 
     // Surface.
     if (rail) strip(slab, p, 0, L, -H, H, y, 0, max);
-    else strip(buf(surfaceOf(way)), p, 0, L, -hc, hc, y, C.surfaceLift[surfaceOf(way)]!, max);
+    else strip(buf(surfaceOf(way)), p, 0, L, -hc, hc, y, surfY, max);
     if (sw) {
-      const top = C.curbHeight + C.lift;
       const walk = buf('sidewalk');
-      strip(walk, p, 0, L, hc, H, y, top, max);
-      strip(walk, p, 0, L, -H, -hc, y, top, max);
+      strip(walk, p, 0, L, hc, EL, y, top, max);
+      strip(walk, p, 0, L, -ER, -hc, y, top, max);
       wall(walk, p, 0, L, hc, y, 0, top, -1, max);
       wall(walk, p, 0, L, -hc, y, 0, top, 1, max);
+    } else if (!rail) {
+      strip(slab, p, 0, L, hc, EL, y, surfY, max); // joint to a neighbour deck (empty without one)
+      strip(slab, p, 0, L, -ER, -hc, y, surfY, max);
     }
     const lanes = b.lanes ?? Math.max(1, Math.floor((2 * hc) / C.laneWidth));
-    if (!rail && !C.footKinds.includes(b.kind) && lanes >= 2) markings(buf('marking'), p, hc, lanes, [], y, C.surfaceLift[surfaceOf(way)]! + C.markingLift);
+    if (!rail && !C.footKinds.includes(b.kind) && lanes >= 2) markings(buf('marking'), p, hc, lanes, [], y, surfY + C.markingLift);
 
-    // Railings (parapets) on both edges.
+    // Railings (parapets) on the outer edges.
     const r = buf('railing');
     for (const side of [1, -1] as const) {
+      if (gaps[side === 1 ? 0 : 1]! < Infinity) continue;
       const [o, i] = [side * H, side * (H - RT)];
       wall(r, p, 0, L, o, y, 0, RH, side, max);
       wall(r, p, 0, L, i, y, 0, RH, side === 1 ? -1 : 1, max);

@@ -1,11 +1,12 @@
 // Chunk streaming (SPEC §4.4): builds chunks around the camera in the worker, attaches them on the main thread within a
-// per-frame budget, unloads far ones (geometry, sign textures, colliders).
+// per-frame budget, unloads far ones (geometry, sign textures, colliders). Rapier colliders exist only for loaded chunks
+// within colliderRadius (one dense chunk's trimesh takes ~5 ms), created one per frame within the same budget.
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Object3D } from 'three';
-import { chunks as C } from '../config.ts';
+import { chunks as C, render as R } from '../config.ts';
 import { type ChunkKey, chunkBounds } from '../geo/chunkData.ts';
 import { attachBuildOut, type Materials, type PropMeshes } from './attach.ts';
-import type { BuildOut, FromWorker, ToWorker } from './buildTypes.ts';
+import type { BuildOut, FromWorker, ToWorker, TriMesh } from './buildTypes.ts';
 
 /** Distance from (x, z) to the chunk's square (0 inside). */
 export function chunkDistance(key: ChunkKey, x: number, z: number): number {
@@ -22,21 +23,25 @@ export function chunksInRadius(keys: readonly ChunkKey[], x: number, z: number, 
     .map(([k]) => k);
 }
 
-/** Load radius for a camera at height y: a high camera (topdown) sees, and loads, everything. */
-export const loadRadius = (y: number) => Math.max(C.loadRadius, y * C.altitudeFactor);
+/** Load radius for a camera at height y: at least as far as the fog (world/Sky.ts: far grows with height), so the edge
+ *  of the loaded world is never seen; a high camera (topdown) loads everything. */
+export const loadRadius = (y: number) => Math.max(C.loadRadius, R.fog.far + Math.max(0, y) * R.fog.altitudeFactor + C.fogMargin);
 
-type Loaded = { dispose(): void; colliders: RAPIER.Collider[] };
+// ponytail: one worker (maxInFlight builds at once), a worker pool if the first load is slow.
+type Loaded = { dispose(): void; shapes: TriMesh[]; colliders?: RAPIER.Collider[] };
 
 export class ChunkManager {
   private readonly loaded = new Map<ChunkKey, Loaded>();
   private readonly inFlight = new Set<ChunkKey>();
   private readonly ready: { key: ChunkKey; out: BuildOut }[] = [];
+  private readonly built = new Set<ChunkKey>(); // keys in ready
   private readonly failures = new Map<ChunkKey, number>();
   private wanted = new Set<ChunkKey>();
   private queue: ChunkKey[] = [];
   private lastX = NaN;
   private lastZ = NaN;
   private lastR = NaN;
+  private dead = false; // the worker failed to start: nothing more can be built
 
   constructor(
     private readonly worker: Worker,
@@ -47,7 +52,12 @@ export class ChunkManager {
     private readonly propMeshes: PropMeshes,
   ) {
     worker.onmessage = (e: MessageEvent<FromWorker>) => this.receive(e.data);
-    worker.onerror = (e) => console.warn('chunk worker error:', e.message);
+    worker.onerror = (e) => {
+      console.warn('chunk worker error, streaming stops:', e.message);
+      this.dead = true;
+      this.queue = [];
+      this.inFlight.clear();
+    };
   }
 
   /** Once per frame. budgetMs = attach time allowed this frame (Infinity before the first __READY__). */
@@ -58,7 +68,7 @@ export class ChunkManager {
       [this.lastX, this.lastZ, this.lastR] = [x, z, r];
       const near = chunksInRadius(this.keys, x, z, r);
       this.wanted = new Set(near);
-      this.queue = near.filter((k) => !this.loaded.has(k) && !this.inFlight.has(k) && (this.failures.get(k) ?? 0) <= C.fetchRetries);
+      this.queue = this.dead ? [] : near.filter((k) => !this.busy(k) && (this.failures.get(k) ?? 0) <= C.fetchRetries);
       const keep = r + C.unloadRadius - C.loadRadius;
       for (const [k] of this.loaded) if (chunkDistance(k, x, z) > keep) this.unload(k);
     }
@@ -66,16 +76,29 @@ export class ChunkManager {
     const t0 = performance.now();
     while (this.ready.length && performance.now() - t0 < budgetMs) {
       const { key, out } = this.ready.shift()!;
+      this.built.delete(key);
       if (this.wanted.has(key) && !this.loaded.has(key)) this.attach(key, out);
       else for (const t of out.textures ?? []) t.image.close();
     }
+    for (const [k, c] of this.loaded) {
+      const d = chunkDistance(k, x, z);
+      if (c.colliders && d > C.colliderRadius + C.colliderHysteresis) this.dropColliders(c);
+      else if (!c.colliders && d <= C.colliderRadius && performance.now() - t0 < budgetMs) {
+        c.colliders = c.shapes.map((m) => this.physics.createCollider(RAPIER.ColliderDesc.trimesh(m.vertices, m.indices)));
+      }
+    }
+  }
+
+  /** Loaded, building or built and waiting to attach. */
+  private busy(k: ChunkKey) {
+    return this.loaded.has(k) || this.inFlight.has(k) || this.built.has(k);
   }
 
   /** Keeps maxInFlight builds going; also called on every worker reply, so slow frames don't starve the worker. */
   private pump() {
     while (this.inFlight.size < C.maxInFlight && this.queue.length) {
       const key = this.queue.shift()!;
-      if (this.loaded.has(key) || this.inFlight.has(key)) continue;
+      if (this.busy(key)) continue;
       this.inFlight.add(key);
       this.worker.postMessage({ type: 'build', key } satisfies ToWorker);
     }
@@ -95,6 +118,7 @@ export class ChunkManager {
     if (msg.type === 'built') {
       this.failures.delete(msg.key);
       this.ready.push({ key: msg.key, out: msg.out });
+      this.built.add(msg.key);
       return this.pump();
     }
     const n = (this.failures.get(msg.key) ?? 0) + 1;
@@ -108,14 +132,18 @@ export class ChunkManager {
     const a = attachBuildOut(out, this.materials, this.propMeshes);
     a.object.name = `chunk ${key}`;
     this.parent.add(a.object);
-    const colliders = out.colliders.map((c) => this.physics.createCollider(RAPIER.ColliderDesc.trimesh(c.vertices, c.indices)));
-    this.loaded.set(key, { dispose: a.dispose, colliders });
+    this.loaded.set(key, { dispose: a.dispose, shapes: out.colliders });
+  }
+
+  private dropColliders(c: Loaded) {
+    for (const col of c.colliders ?? []) this.physics.removeCollider(col, false);
+    c.colliders = undefined;
   }
 
   private unload(key: ChunkKey) {
     const c = this.loaded.get(key)!;
     c.dispose();
-    for (const col of c.colliders) this.physics.removeCollider(col, false);
+    this.dropColliders(c);
     this.loaded.delete(key);
   }
 }

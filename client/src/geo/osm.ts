@@ -28,6 +28,7 @@ export function classify(tags: Tags, shape: 'point' | 'line' | 'area'): Category
     if (tags.natural === 'tree') return 'tree';
     return tags.railway === 'subway_entrance' ? 'subway_entrance' : undefined; // entrances often carry layer=-1
   }
+  // ponytail: tunnels and underground ways are not rendered (Voie Georges-Pompidou, metro); a tunnel builder if a route needs one.
   if (yes(tags.tunnel)) return { drop: 'tunnel' };
   if ((parseNumber(tags.layer) ?? 0) < 0) return { drop: 'underground' };
   if (yes(tags.indoor) || tags.location === 'underground' || tags.location === 'indoor') return { drop: 'indoor' };

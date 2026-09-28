@@ -38,6 +38,8 @@ export function withFallbacks(provided: Partial<Materials>): Materials {
 
 const GROUND: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'sidewalk', 'asphalt', 'pave', 'marking']); // receive only
 
+// ponytail: per-chunk InstancedMeshes and CPU copies of every geometry are kept (no LOD, no dispose-after-upload);
+// global instancing, LOD and freeing CPU arrays in Phase 12.
 /** One Mesh per bucket (shared materials), one InstancedMesh per InstanceSet (shared prop meshes). Each
  *  BuildOut.textures entry replaces its material, for this BuildOut only, by a clone with `map` = that image
  *  (flipY = false: v = 0 is the image's TOP row). dispose() frees only what was created here. */

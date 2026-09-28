@@ -18,10 +18,32 @@ export function roadWidth(r: WayLike): number {
   return r.width ?? (r.lanes ? r.lanes * C.laneWidth : (C.widthByKind[r.kind] ?? C.defaultWidth));
 }
 
-/** Raised sidewalk width (m) on each side; 0 for kinds without sidewalks. */
+/** Raised sidewalk width (m) on each side; 0 for kinds without sidewalks. Like roadWidth, a oneway half of a dual
+ *  carriageway ignores sidewalkByName (the Champs' 21 m sidewalks would cover the other half). */
 export function sidewalkWidth(r: WayLike): number {
   if (!C.sidewalkKinds.includes(r.kind)) return 0;
-  return (r.name === undefined ? undefined : C.sidewalkByName[r.name]) ?? C.sidewalkWidth;
+  const byName = r.name === undefined ? undefined : C.sidewalkByName[r.name];
+  return byName !== undefined && (!r.oneway || r.roundabout) ? byName : C.sidewalkWidth;
+}
+
+/** Centre-line distance from the middle of p to the nearest roughly parallel (|cos| ≥ minCos) way of `others` on its
+ *  left and right, Infinity if none; only segments the middle projects onto count. Dual carriageways, parallel decks. */
+export function sideGaps(p: Path, others: readonly { pts: XZ }[], minCos: number): [number, number] {
+  const out: [number, number] = [Infinity, Infinity];
+  const [mx, mz] = p.at(0, p.length / 2);
+  const [dx, dz] = p.dir(p.length / 2);
+  for (const o of others) {
+    for (let i = 0; i + 3 < o.pts.length; i += 2) {
+      const [ax, az, ux, uz] = [o.pts[i]!, o.pts[i + 1]!, o.pts[i + 2]! - o.pts[i]!, o.pts[i + 3]! - o.pts[i + 1]!];
+      const l2 = ux * ux + uz * uz;
+      const t = ((mx - ax) * ux + (mz - az) * uz) / l2;
+      if (!(t >= 0 && t <= 1) || Math.abs(ux * dx + uz * dz) < minCos * Math.sqrt(l2)) continue;
+      const [qx, qz] = [ax + t * ux - mx, az + t * uz - mz];
+      const side = qx * dz - qz * dx > 0 ? 0 : 1; // left normal (dz, −dx)
+      out[side] = Math.min(out[side], Math.hypot(qx, qz));
+    }
+  }
+  return out;
 }
 
 /** Top surface material of a way. */
@@ -263,8 +285,12 @@ export const buildRoads: Builder = (chunk, ctx) => {
     if (sw) {
       const seamA = r.before !== undefined;
       const seamB = r.after !== undefined;
-      sidewalk(buf('sidewalk'), p, subtract(0, L, cuts[0]), h, h + sw, true, y, seamA, seamB);
-      sidewalk(buf('sidewalk'), p, subtract(0, L, cuts[1]), -h - sw, -h, false, y, seamA, seamB);
+      // A oneway half gets no sidewalk on the side where its twin (same name) is too close for one (≈ symmetric halves).
+      // ponytail: twins of this chunk only, measured at the piece's middle.
+      const twins = r.oneway && !r.roundabout ? chunk.roads.filter((o) => o !== r && o.oneway && o.name === r.name && r.name) : [];
+      const [gl, gr] = twins.length ? sideGaps(p, twins, C.minTwinCos) : [Infinity, Infinity];
+      if (gl >= 2 * h + sw) sidewalk(buf('sidewalk'), p, subtract(0, L, cuts[0]), h, h + sw, true, y, seamA, seamB);
+      if (gr >= 2 * h + sw) sidewalk(buf('sidewalk'), p, subtract(0, L, cuts[1]), -h - sw, -h, false, y, seamA, seamB);
     }
     const n = laneCount(r, w);
     if (!C.footKinds.includes(r.kind) && !r.roundabout && n >= 2) {
@@ -273,6 +299,8 @@ export const buildRoads: Builder = (chunk, ctx) => {
   }
   return { meshes: [...bufs.values()].map((b) => b.bucket()).filter((b) => b.index.length), instances: [], colliders: [] };
 };
+
+// ponytail: no crosswalks, stop lines or lowered curbs (STYLE_GUIDE); junction paint once Phase 4 has the road graph.
 
 /** Canvas texture tiling `tile` metres (uv = world metres): base colour with deterministic speckle, plus `paint`. */
 function canvasTexture(base: string, tile: number, speckle: number, paint?: (g: CanvasRenderingContext2D, n: number) => void) {
