@@ -36,6 +36,11 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Ngoài bbox chỉ có dải chunk sát biên, đứng gần biên nhìn ra ngoài sẽ thấy mép thế giới (cảnh báo + tường vẫn chặn); có thể thêm địa hình/sương xa hơn. Mây vẽ tĩnh trong texture bầu trời.
 - Photorealistic 3D Tiles: hoãn (cần API key, ghi công, không được cache).
 
+## Phase 2B – Địa danh chính xác (SPEC §17.6)
+- Tìm mô hình 3D miễn phí (CC0 / CC-BY, ≤ 25 MB, không cần tạo tài khoản) cho các công trình biểu tượng; lập danh sách tên file, nguồn, dung lượng, giấy phép để anh duyệt TRƯỚC khi tải.
+- Dựng khoảng 33 địa danh theo §17.6: dữ liệu 3D OSM (`building:part`, `roof:shape`…) + dựng chi tiết bằng code + mô hình đã duyệt; thay mô hình tạm Eiffel / Khải Hoàn Môn / kim tự tháp / obelisk; có LOD + collider; ghi nguồn mô hình trong game.
+- Bóng các công trình ngoài bản đồ ở đường chân trời: Sacré-Cœur, tháp Montparnasse, La Défense.
+
 ## Phase 3 – Nhân vật & camera
 - Tạo `client/src/core/EventBus.ts` khi có module thật sự cần (Phase 1 chưa có nên chưa tạo).
 - `core/Time` (SPEC §3) hiện nằm trong `GameLoop` (delta khung hình đã kẹp, FPS); tách `client/src/core/Time.ts` khi có module khác cần đồng hồ game.
@@ -48,6 +53,11 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 ## Phase 4 – Di chuyển
 - `npm run build-graph` → `shared/data/roadgraph.json`.
 - Giao lộ sát ranh chunk có thể bị bỏ sót khi đặt biển tên đường / cột đèn (nhánh đường nằm ở chunk bên cạnh); dùng danh sách giao lộ toàn cục của `build-graph`.
+
+## Phase 4B – Xe cộ & người đi đường NPC (SPEC §17.5)
+- Xe NPC theo `roadgraph.json` (đúng chiều, dừng ở giao lộ, vòng xuyến Étoile) + người đi đường trên vỉa hè; chỉ chạy ở client, không đồng bộ server; người chơi không lái được xe NPC.
+- Va chạm: xe phanh trước người chơi, tông khi đạp xe → ngã xe (§6.3); tránh vùng hộp mật thư / thảm về đích; mật độ trong `config.ts`, tự giảm khi FPS thấp.
+- Model xe / người: bộ asset CC0 (Quaternius, Kenney…) — lập danh sách để anh duyệt trước khi tải.
 
 ## Phase 5 – HUD
 - Menu thật (SPEC §17.2: tự mở khi chuột bị nhả, `Esc`); hiện chỉ hiện bảng hướng dẫn phím.

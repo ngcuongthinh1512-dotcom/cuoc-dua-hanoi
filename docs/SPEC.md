@@ -923,3 +923,24 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - Điểm xuất phát nằm trong hàng rào quanh obelisk: khi xuất phát, đặt các đội bên ngoài hàng rào, cách obelisk ≥ 8–10 m.
 - §4.5: dựng địa danh theo polygon OSM, không theo bảng tọa độ. Lệch đáng kể so với bảng: Palais de Chaillot 34 m (OSM 48.86220, 2.28835), cầu Alexandre III 29 m (OSM 48.86365, 2.31354), tháp Eiffel 15 m (OSM 48.85826, 2.29450). Test khoảng cách §4.2 giữ tọa độ gốc của bảng.
 - Khi dựng bản đồ: footprint `building=tower` của tháp Eiffel không đùn thành khối đặc (chỉ dựng 4 chân, sân dưới tháp đi bộ được); kim tự tháp kính dựng thành hình chóp, không phải khối hộp.
+
+### 17.5 Xe cộ & người đi đường NPC (bắt buộc; thay cho "NPC người đi đường và xe cộ" tùy chọn ở Phase 13)
+- Làm ở **Phase 4B** (sau Phase 4): dùng lại nhân vật + animation của Phase 3 và đồ thị đường `shared/data/roadgraph.json` của Phase 4.
+- **Chỉ để tạo không khí.** Xe NPC: ô tô, xe buýt, xe tải giao hàng, xe máy (không logo/tên hãng thật), chạy theo đồ thị đường OSM đúng chiều (`oneway`), dừng ở giao lộ (đèn tín hiệu đơn giản), đi vòng xuyến Étoile. Người đi đường: đi trên vỉa hè, qua đường ở vạch, đứng/ngồi ở quảng trường, công viên.
+- **Người chơi không lên/lái xe NPC được.** Luật §6 giữ nguyên: phương tiện duy nhất của người chơi là xe đạp.
+- **Mô phỏng riêng trên từng máy (client), không đồng bộ qua server**, để không tốn hạn mức Cloudflare (§3). Mỗi đội thấy dòng xe/người khác nhau; không ảnh hưởng luật đua.
+- **Va chạm:** xe NPC phanh/dừng khi người chơi đứng phía trước; nếu vẫn chạm thì đẩy nhẹ, không "chết". Đạp xe tông xe NPC → ngã xe như §6.3. Người đi đường tránh người chơi, bị va thì lảo đảo.
+- NPC không đứng chặn vùng hộp mật thư / thảm về đích (tránh bán kính geofence).
+- Mật độ cấu hình được trong `config.ts` (số xe / người mỗi km đường, bán kính sinh/xóa quanh người chơi), tự giảm khi FPS thấp; người đi đường ở xa dùng LOD/instancing.
+- Không hiện trên minimap người chơi.
+- Model xe/người: ưu tiên bộ asset miễn phí CC0 (ví dụ Quaternius, Kenney) — kiểm tra giấy phép, ghi nguồn; tải về chỉ sau khi anh duyệt danh sách file (tên, nguồn, dung lượng, giấy phép).
+
+### 17.6 Địa danh Paris dựng chính xác (mở rộng §4.5; thay cho "placeholder tới Phase 11")
+- Mọi địa danh nổi tiếng **trong khu vực bản đồ** được dựng chính xác về hình khối, tỉ lệ, mái/vòm/tháp chuông, vật liệu và màu, **kể cả không nằm trên lộ trình**. Làm ở **Phase 2B**, ngay sau Phase 2.
+- Danh sách: 12 địa danh §4.5 (Eiffel, Palais de Chaillot, cầu Bir-Hakeim, Khải Hoàn Môn, Concorde + obelisk, Grand Palais, cầu Alexandre III, vòm Invalides, Orsay, Louvre + kim tự tháp, Nhà thờ Đức Bà) + Petit Palais, Madeleine, Opéra Garnier, cột Vendôme, Arc du Carrousel, Palais Bourbon, Pont Neuf, Pont des Arts, Sainte-Chapelle, Conciergerie, Hôtel de Ville, Centre Pompidou, tháp Saint-Jacques, Palais-Royal, cầu Alma + Ngọn lửa Tự do, Palais de Tokyo, bảo tàng Rodin, École Militaire, Saint-Sulpice, Panthéon, Palais du Luxembourg.
+- **Cách dựng (anh chọn phương án b):**
+  1. Dùng dữ liệu 3D của OSM (`building:part`, `roof:shape`, `roof:height`, `height`, `min_height`, `building:colour`, `roof:colour`…) cho hình khối chính xác.
+  2. Dựng chi tiết bằng code cho phần OSM không đủ (khung lưới tháp Eiffel, Khải Hoàn Môn, kim tự tháp kính, obelisk, tượng mạ vàng cầu Alexandre III, mái kính Grand Palais, vòm vàng Invalides, tháp chuông + mái nhọn Nhà thờ Đức Bà…).
+  3. **Mô hình 3D miễn phí trên mạng** cho các công trình biểu tượng khi đẹp hơn rõ rệt: chỉ dùng giấy phép cho phép dùng trong game (CC0 / CC-BY, ghi nguồn trong game), mỗi file ≤ 25 MB sau nén (Draco/Meshopt, KTX2); không dùng nguồn bắt tạo tài khoản; **tải về chỉ sau khi anh duyệt danh sách** (tên file, nguồn, dung lượng, giấy phép). Nếu không có mô hình phù hợp thì dùng cách 1 + 2.
+- Mỗi địa danh: đúng tọa độ/hướng theo polygon OSM, có LOD và collider; tháp Eiffel mở 4 chân (sân dưới tháp đi bộ được), kim tự tháp hình chóp (§17.4).
+- **Đường chân trời:** dựng bóng/silhouette đơn giản các công trình nổi bật ngoài bản đồ nhìn thấy từ xa (Sacré-Cœur, tháp Montparnasse, cụm La Défense), không tới gần được.

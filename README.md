@@ -54,8 +54,10 @@ docs/     đặc tả, luật đua
 | 0 | Chuẩn bị: khung monorepo, `wrangler.toml`, `wrangler dev` chạy được | Xong |
 | 1 | Khung client: Three.js + Rapier, game loop, input, camera bay tự do | Xong |
 | 2 | Bản đồ Paris từ OpenStreetMap: ô 250 m tải dần, nhà Haussmann, đường, sông Seine + kè, cầu, cây, biển tên đường, địa danh tạm | Xong |
+| 2B | Địa danh Paris dựng chính xác (khoảng 33 công trình, kể cả ngoài lộ trình) + bóng công trình ở đường chân trời (SPEC §17.6) | Chưa làm |
 | 3 | Nhân vật & camera | Chưa làm |
 | 4 | Di chuyển: đi bộ, xe đạp | Chưa làm |
+| 4B | Xe cộ & người đi đường NPC, chỉ chạy trên máy người chơi (SPEC §17.5) | Chưa làm |
 | 5 | HUD cơ bản | Chưa làm |
 | 6 | Server & presence (Durable Object, WebSocket, vào lại) | Chưa làm |
 | 7 | Race engine lõi | Chưa làm |
