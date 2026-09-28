@@ -49,7 +49,7 @@ const finite = (o: BuildOut) =>
   o.meshes.every((m) => [m.position, m.normal, m.uv].every((a) => a.every(Number.isFinite))) &&
   o.colliders.every((c) => c.vertices.every(Number.isFinite));
 
-describe('landmark placeholders (g1 Eiffel / Arc, g3 pyramid / obelisk)', () => {
+describe('landmark placeholders (g1 Eiffel / Arc; g3 has its own g3.test.ts)', () => {
   it('footprintFrame recovers centre, long axis and half sizes of a rotated rectangle', () => {
     const f = footprintFrame(rect(100, -50, 22.5, 11, 30));
     expect(f.cx).toBeCloseTo(100, 5);
@@ -88,17 +88,6 @@ describe('landmark placeholders (g1 Eiffel / Arc, g3 pyramid / obelisk)', () => 
     expect(hits(o, [-f.ux * 30, 6, -f.uz * 30], [f.ux * 30, 6, f.uz * 30], true)).toBe(false);
     expect(hits(o, [-f.ux * 30, 35, -f.uz * 30], [f.ux * 30, 35, f.uz * 30], true)).toBe(true); // attic
     expect(hits(o, [-wx * 20 + f.ux * 15, 10, -wz * 20 + f.uz * 15], [wx * 20 + f.ux * 15, 10, wz * 20 + f.uz * 15], true)).toBe(true); // pier
-  });
-
-  it('pyramid: apex at 21.6 m over the footprint centre; obelisk: tagged height, stone only', () => {
-    const p = build('pyramid', rect(10, 10, 17.5, 17.5, 10));
-    expect(finite(p)).toBe(true);
-    expect(maxY(p) - y0).toBeCloseTo(LM.pyramidHeight, 3);
-    expect(p.meshes.map((m) => m.material)).toEqual(['glass']);
-    expect(hits(p, [10, 1, -40], [10, 1, 60], true)).toBe(true);
-    const ob = build('obelisk', rect(0, 0, 2.2, 2.2, 0), 33.37);
-    expect(maxY(ob) - y0).toBeCloseTo(33.37, 3);
-    expect(ob.meshes.map((m) => m.material)).toEqual(['stone']);
   });
 
   it('ignores ordinary buildings and is deterministic', () => {
