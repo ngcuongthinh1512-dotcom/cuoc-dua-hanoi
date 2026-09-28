@@ -58,6 +58,9 @@ export class ChunkManager {
     private readonly physics: RAPIER.World,
     private readonly materials: Materials,
     private readonly propMeshes: PropMeshes,
+    /** Called with each attached chunk's group (world/landmarks/models.ts adds the GLB landmark models to it, so they
+     *  are removed with the chunk on unload). */
+    private readonly onAttach?: (key: ChunkKey, group: THREE.Object3D) => void,
   ) {
     worker.onmessage = (e: MessageEvent<FromWorker>) => this.receive(e.data);
     worker.onerror = (e) => {
@@ -141,6 +144,7 @@ export class ChunkManager {
     const a = attachBuildOut(out, this.materials, this.propMeshes);
     a.object.name = `chunk ${key}`;
     this.parent.add(a.object);
+    this.onAttach?.(key, a.object);
     this.loaded.set(key, { dispose: a.dispose, shapes: out.colliders, near: a.near });
   }
 

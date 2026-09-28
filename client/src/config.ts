@@ -241,6 +241,25 @@ export const landmarks = {
     tiles: '#a0603f', brick: '#9b5a44', concrete: '#b9b5ad', gold: '#d4a53c', bronze: '#5a4a32', glass: '#bcd0da',
     waterJet: '#e8f2f8',
   },
+  // g1: Eiffel + Arc = downloaded GLB (scripts/process-assets.ts → public/models, placed by world/landmarks/models.ts)
+  g1: {
+    sink: 0.3, // m the models sit below the lowest footprint vertex (terrain undulation)
+    // Eiffel (fr.wikipedia.org/wiki/Tour_Eiffel): platforms 57.63 / 115.73 / 276.13 m, top 330 m, base 124.9 m square
+    eiffel: { platforms: [57.63, 115.73, 276.13], height: 330, halfBase: 62.45, colour: '#806a50', // ≈ "brun Tour Eiffel"
+      // process-assets: xz widening [y, factor] of the model (its 2nd / 3rd floors are ≈ 26 / 10 m wide; real ≈ 38–41 m
+      // (1,430 m²) and ≈ 18.7 m (350 m²), fr.wikipedia); constant above the last knot
+      widen: [[57.63, 1], [115.73, 1.4], [276.13, 1.6]] },
+    // Eiffel collider: 4 legs up to the 1st platform, [y, outer half-size, leg width] (the area under the tower stays open)
+    eiffelLegs: [[0, 62.45, 26], [28, 47, 20], [57.63, 36, 15]],
+    // Arc (fr.wikipedia.org/wiki/Arc_de_triomphe_de_l'Étoile): 49.54 m high, 44.82 × 22.21 m; main arch 29.19 × 14.62 m,
+    // transverse arches 18.68 × 8.44 m
+    arc: { height: 49.54, halfWidth: 22.41, halfDepth: 11.1, mainArch: [29.19, 7.31], sideArch: [18.68, 4.22], roofY: 48.9, roofInset: 0.8,
+      coreY0: 31, roofColour: [0.5, 0.45, 0.38], // process-assets: stone core/terrace box (linear RGB) in the GLB
+      // process-assets: photogrammetry texture (grey, overcast photos) → warm limestone: brightness × per-channel gain
+      texture: { brightness: 1.3, gain: [1.06, 1, 0.9] },
+      // Tomb of the Unknown Soldier (approximate sizes, near LOD): m, sRGB
+      tomb: { halfWidth: 0.8, halfLength: 1.5, height: 0.12, rosette: 0.55, granite: '#8a857c' } },
+  },
 };
 
 // ── Step 0 · dev preview harness (preview.html, src/preview.ts; dev server only) ──
