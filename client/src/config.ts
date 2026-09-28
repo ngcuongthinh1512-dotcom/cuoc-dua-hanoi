@@ -241,6 +241,29 @@ export const landmarks = {
     tiles: '#a0603f', brick: '#9b5a44', concrete: '#b9b5ad', gold: '#d4a53c', bronze: '#5a4a32', glass: '#bcd0da',
     waterJet: '#e8f2f8',
   },
+  // g5 (world/landmarks/g5.ts): Notre-Dame … Luxembourg + skyline. Colours sRGB (vertex colours of 'masonry').
+  g5: {
+    colours: {
+      stone: '#d9ccb0', stoneDark: '#b8ab8d', tracery: '#e2d7bd', recess: '#39342e', window: '#2c3237',
+      stainedGlass: '#2e3061', spire: '#5e6368', lead: '#8e959b', ndRoof: '#aab0b5', slate: '#4b545e', clockBlue: '#1d3776',
+      saintJacques: '#cac6ba', statue: '#e6e1d3', frame: '#efefeb', floor: '#8f9293', deck: '#c9c9c4',
+      ducts: ['#2d6bb3', '#3b9a4b', '#2d6bb3', '#e2bd20', '#3b9a4b', '#c5382e'], // air, water, air, electricity, water, lifts
+      sacreCoeur: '#f2efe6', montmartre: '#9a9c92', montparnasse: '#2b2c30', defense: ['#7e8b9a', '#5f6a77', '#9aa5b1', '#4a535e'], arche: '#e6e8ea',
+    },
+    decalOffset: 0.06, // m in front of the wall: flat decals (portals, roses, windows, clocks) without z-fighting
+    flyerWidth: 0.9, // m, Notre-Dame flying buttress thickness
+    window: { spacing: 4.3, width: 1.8 }, // m, façade window rows (Hôtel de Ville, Luxembourg, Conciergerie quai)
+    clockHeight: 10.5, // m above ground, centre of the Tour de l'Horloge dial
+    hdv: { cornice: 19, pavilion: 23, pavilionRoof: 13, roofRise: 7, roofInset: 5, simplify: 0.6 }, // m (Hôtel de Ville)
+    skyline: {
+      originAsl: 34, // m above sea level of DEM(ORIGIN) (client/public/data/elevation.bin): Sacré-Cœur's groundAsl → y
+      hazeDistance: 3500, // m: haze = 1 − exp(−d / this), capped at maxHaze (own haze: the scene fog ends at ~0.7 km)
+      maxHaze: 0.85,
+      shell: 0.8, // share of camera.far beyond which the silhouettes are drawn depth-compressed (they lie beyond far)
+      baseDrop: 60, // m below the city datum: bases continue under the horizon (no terrain is drawn beyond the map)
+      fadeHeight: 70, // m: haze is total at y ≤ 0 and fades out up to this height (silhouettes rise out of the fog)
+    },
+  },
 };
 
 // ── Step 0 · dev preview harness (preview.html, src/preview.ts; dev server only) ──
