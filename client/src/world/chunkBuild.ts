@@ -8,7 +8,7 @@ import { buildBridges } from './BridgeBuilder.ts';
 import { buildBuildings } from './BuildingBuilder.ts';
 import { type BuildCtx, type Builder, type BuildOut, type MeshBucket, VERTEX_COLOR } from './buildTypes.ts';
 import { mergeBuckets, mergeTriMeshes, MeshBuffer } from './geom.ts';
-import { buildLandmarks } from './Landmarks.ts';
+import { buildLandmarks } from './landmarks/index.ts';
 import { buildRoads } from './RoadBuilder.ts';
 import { buildStreetProps } from './StreetProps.ts';
 import { buildTerrain } from './Terrain.ts';
@@ -24,7 +24,7 @@ export const BUILDERS: Record<string, Builder> = {
   landmarks: buildLandmarks,
 };
 
-export const emptyChunk = (key: ChunkKey): ChunkData => ({ v: 1, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
+export const emptyChunk = (key: ChunkKey): ChunkData => ({ v: 2, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
 
 /** Grey heightfield for one chunk when buildTerrain returns no mesh (stub or failure), so the ground always shows. */
 export function fallbackTerrain(grid: HeightGrid, b: ReturnType<typeof chunkBounds>): MeshBucket {

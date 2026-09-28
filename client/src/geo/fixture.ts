@@ -12,7 +12,7 @@ const rect = (x0: number, z0: number, x1: number, z1: number, hole = false): XZ 
   hole ? [x0, z0, x1, z0, x1, z1, x0, z1] : [x0, z1, x1, z1, x1, z0, x0, z0];
 
 export const fixture: ChunkData = {
-  v: 1,
+  v: 2,
   key: '0_0',
   buildings: [
     { outer: rect(10, 10, 50, 50), holes: [rect(25, 25, 35, 35, true)], kind: 'apartments', height: 24, roofShape: 'mansard' },

@@ -197,7 +197,7 @@ export const water = {
   wallColour: '#b8ab90', // Terrain.quayMesh: quay walls + coping
 }; // ponytail: no planar reflection, add Reflector / Water.js if it looks flat and FPS allows
 
-// ── E · vegetation, street props, signs, landmarks (world/Vegetation.ts, world/StreetProps.ts, world/Landmarks.ts) ──
+// ── E · vegetation, street props, signs (world/Vegetation.ts, world/StreetProps.ts) ──
 export const props = {
   treeScale: [0.8, 1.2], // hashed per tree
   treeHeight: 15, // m, plane tree (platane) at scale 1
@@ -216,12 +216,30 @@ export const props = {
     plaqueHeight: 0.42, postHeight: 2.6, // m; plaque top at the post top
     enamel: '#1d4f9c', border: '#2f7d4a', text: '#ffffff', post: '#2a2d30',
   },
-  landmarks: {
-    eiffelHeight: 330, arcHeight: 50, pyramidHeight: 21.6, obeliskHeight: 23, // m, used when OSM has no height
-    obeliskShaft: 23, // m, shaft + pyramidion; the rest of the tagged height is the pedestal
-    latticeTile: 5, // m per Eiffel lattice panel (iron alpha texture)
-    glassTile: 3, // m per pyramid pane
-    sink: 0.5, // m below the lowest footprint vertex
+};
+
+// ── Phase 2B · landmarks (geo/landmarks.ts registry, world/landmarks/: index + parts renderer + g1…g5 details) ──
+export const landmarks = {
+  // Phase 2 placeholders (g1 Eiffel / Arc, g3 pyramid / obelisk) until the groups replace them
+  eiffelHeight: 330, arcHeight: 50, pyramidHeight: 21.6, obeliskHeight: 23, // m, used when OSM has no height
+  obeliskShaft: 23, // m, shaft + pyramidion; the rest of the tagged height is the pedestal
+  latticeTile: 5, // m per Eiffel lattice panel (iron alpha texture)
+  glassTile: 3, // m per glass pane (uv unit of the 'glass' material)
+  sink: 0.5, // m below the lowest footprint vertex (placeholders)
+  detailDistance: 600, // m: buckets with lod 'near' are hidden beyond this (ChunkManager, per mesh bounding sphere)
+  // Generic Simple-3D-Buildings part renderer (world/landmarks/parts.ts)
+  partCoverage: 0.9, // outline area share covered by its parts (sampled) below which the outline is extruded as well
+  coverageSamples: 1500, // max sample points per outline
+  roofPitch: 30, // deg: roof height of an untagged pitched roof = half its short side × tan(pitch)
+  maxRoofShare: 0.5, // an untagged roof height is at most this share of the part height
+  mansard: { inset: 0.3, lower: 0.7 }, // steep lower slope: inset share of the half-width, share of the roof height
+  gambrel: { inset: 0.25, lower: 0.6 },
+  domeSegments: 24, domeRings: 8, columnSegments: 12, barrelSegments: 8,
+  // sRGB; vertex colours of 'masonry' / 'metal', material colours of 'gold' / 'bronze' / 'glass'
+  colours: {
+    stone: '#d9ccb0', slate: '#4b525a', lead: '#9ba2a8', zinc: '#7c878f', copper: '#6e9f8b', metal: '#5d656c',
+    tiles: '#a0603f', brick: '#9b5a44', concrete: '#b9b5ad', gold: '#d4a53c', bronze: '#5a4a32', glass: '#bcd0da',
+    waterJet: '#e8f2f8',
   },
 };
 

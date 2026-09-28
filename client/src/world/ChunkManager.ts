@@ -2,8 +2,8 @@
 // per-frame budget, unloads far ones (geometry, sign textures, colliders). Rapier colliders exist only for loaded chunks
 // within colliderRadius (one dense chunk's trimesh takes ~5 ms), created one per frame within the same budget.
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { Object3D } from 'three';
-import { chunks as C, render as R } from '../config.ts';
+import type * as THREE from 'three';
+import { chunks as C, landmarks as LM, render as R } from '../config.ts';
 import { type ChunkKey, chunkBounds } from '../geo/chunkData.ts';
 import { attachBuildOut, type Materials, type PropMeshes } from './attach.ts';
 import type { BuildOut, FromWorker, ToWorker, TriMesh } from './buildTypes.ts';
@@ -28,7 +28,15 @@ export function chunksInRadius(keys: readonly ChunkKey[], x: number, z: number, 
 export const loadRadius = (y: number) => Math.max(C.loadRadius, R.fog.far + Math.max(0, y) * R.fog.altitudeFactor + C.fogMargin);
 
 // ponytail: one worker (maxInFlight builds at once), a worker pool if the first load is slow.
-type Loaded = { dispose(): void; shapes: TriMesh[]; colliders?: RAPIER.Collider[] };
+type Loaded = { dispose(): void; shapes: TriMesh[]; colliders?: RAPIER.Collider[]; near: THREE.Mesh[] };
+
+/** Landmark detail LOD: meshes of lod 'near' buckets are visible only within detailDistance of (x, y, z). */
+export function updateNear(meshes: readonly THREE.Mesh[], x: number, y: number, z: number, distance = LM.detailDistance) {
+  for (const m of meshes) {
+    const s = m.geometry.boundingSphere;
+    m.visible = !s || Math.hypot(s.center.x - x, s.center.y - y, s.center.z - z) - s.radius <= distance;
+  }
+}
 
 export class ChunkManager {
   private readonly loaded = new Map<ChunkKey, Loaded>();
@@ -46,7 +54,7 @@ export class ChunkManager {
   constructor(
     private readonly worker: Worker,
     private readonly keys: readonly ChunkKey[],
-    private readonly parent: Object3D,
+    private readonly parent: THREE.Object3D,
     private readonly physics: RAPIER.World,
     private readonly materials: Materials,
     private readonly propMeshes: PropMeshes,
@@ -81,6 +89,7 @@ export class ChunkManager {
       else for (const t of out.textures ?? []) t.image.close();
     }
     for (const [k, c] of this.loaded) {
+      updateNear(c.near, x, y, z);
       const d = chunkDistance(k, x, z);
       if (c.colliders && d > C.colliderRadius + C.colliderHysteresis) this.dropColliders(c);
       else if (!c.colliders && d <= C.colliderRadius && performance.now() - t0 < budgetMs) {
@@ -132,7 +141,7 @@ export class ChunkManager {
     const a = attachBuildOut(out, this.materials, this.propMeshes);
     a.object.name = `chunk ${key}`;
     this.parent.add(a.object);
-    this.loaded.set(key, { dispose: a.dispose, shapes: out.colliders });
+    this.loaded.set(key, { dispose: a.dispose, shapes: out.colliders, near: a.near });
   }
 
   private dropColliders(c: Loaded) {

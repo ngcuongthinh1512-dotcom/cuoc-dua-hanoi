@@ -60,8 +60,9 @@ export class MeshBuffer {
     this.face(k, k + 2, k + 3);
   }
 
-  bucket(): MeshBucket {
+  bucket(lod?: 'near'): MeshBucket {
     return {
+      ...(lod && { lod }),
       material: this.material,
       position: new Float32Array(this.p),
       normal: new Float32Array(this.n),
@@ -83,21 +84,23 @@ function unitNormal(a: V3, b: V3): V3 {
   return l > 1e-12 ? [x / l, y / l, z / l] : [0, 1, 0];
 }
 
-/** One bucket per material (first-seen order); empty buckets dropped. Throws if buckets of one material disagree on
+/** One bucket per material and lod (first-seen order); empty buckets dropped. Throws if buckets of one material disagree on
  *  having `color`, or if a bucket's attribute lengths don't match its vertex count. */
 export function mergeBuckets(buckets: MeshBucket[]): MeshBucket[] {
-  const groups = new Map<MaterialId, MeshBucket[]>();
+  const groups = new Map<string, MeshBucket[]>();
   for (const b of buckets) {
     const n = b.position.length / 3;
     if (b.normal.length !== n * 3 || b.uv.length !== n * 2 || (b.color && b.color.length !== n * 3)) {
       throw new Error(`mergeBuckets: '${b.material}' attribute lengths don't match ${n} vertices`);
     }
     if (!b.index.length) continue;
-    const list = groups.get(b.material);
+    const key = `${b.material}|${b.lod ?? ''}`;
+    const list = groups.get(key);
     if (list) list.push(b);
-    else groups.set(b.material, [b]);
+    else groups.set(key, [b]);
   }
-  return [...groups].map(([material, list]) => {
+  return [...groups.values()].map((list) => {
+    const { material, lod } = list[0]!;
     const withColor = list[0]!.color !== undefined;
     if (list.some((b) => (b.color !== undefined) !== withColor)) {
       throw new Error(`mergeBuckets: '${material}' buckets mix with and without color`);
@@ -123,6 +126,7 @@ export function mergeBuckets(buckets: MeshBucket[]): MeshBucket[] {
       uv: cat((b) => b.uv),
       ...(withColor ? { color: cat((b) => b.color!) } : {}),
       index,
+      ...(lod && { lod }),
     };
   });
 }

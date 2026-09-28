@@ -1,8 +1,10 @@
-// Raw OSM cache (.cache/osm, see fetch-osm.ts) → client/public/data/chunks/<key>.json + index.json + water.json.
+// Raw OSM cache (.cache/osm, see fetch-osm.ts) → client/public/data/chunks/<key>.json + index.json + water.json
+// (+ skyline.json from .cache/osm/skyline.json). Landmarks (geo/landmarks.ts registry, docs/plans/phase2b-assets.md §5):
+// outlines tagged, building:part kept inside them, zone nodes (artwork, lamps, clocks, fountains) attached to them.
 // docs/plans/phase2.md "A — Data pipeline" + "Chunk data decisions": parsed OSM facts only (no defaults), world metres
 // rounded to 0.1 m, sorted by OSM id, compact JSON → deterministic output that is committed to git.
 // Usage: npx tsx scripts/build-chunks.ts [--cache <dir with tiles/ + global.json>] [--out <client/public/data>]
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -10,13 +12,14 @@ import type { MultiPolygon, Polygon, Position } from 'geojson';
 import osmtogeojson from 'osmtogeojson';
 import { RACE_BBOX, latLonToWorld } from '@race/shared';
 import {
-  type BuildingRec, CHUNK_SIZE, type ChunkData, type ChunkIndex, type ChunkKey, type LandmarkId, type WaterData, type XZ,
-  chunkBounds, chunkKey, ringArea,
+  type BuildingRec, CHUNK_SIZE, type ChunkData, type ChunkIndex, type ChunkKey, type LandmarkPoint, type PartRec, type SkylineData,
+  type WaterData, type XZ, chunkBounds, chunkKey, ringArea,
 } from '../client/src/geo/chunkData.ts';
 import {
-  type Rect, clipRing, dedupe, mergeChains, midpoint, r1, resample, reversePts, ringCentroid, splitPolyline,
+  type Rect, clipRing, dedupe, mergeChains, midpoint, polylineLength, r1, resample, reversePts, ringCentroid, splitPolyline,
 } from '../client/src/geo/clip.ts';
-import { type Tags, bridgeFacts, buildingFacts, classify, roadFacts } from '../client/src/geo/osm.ts';
+import { LANDMARK_NEAR, LANDMARKS, type LandmarkDef } from '../client/src/geo/landmarks.ts';
+import { type Tags, bridgeFacts, buildingFacts, classify, parseNumber, partFacts, pointFacts, roadFacts } from '../client/src/geo/osm.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const { values: args } = parseArgs({
@@ -27,10 +30,11 @@ const { values: args } = parseArgs({
 });
 
 // Build-time policy (not runtime tunables: changing these needs a rebuild + commit of the data).
-const LANDMARKS: Record<string, LandmarkId> = {
-  'way/5013364': 'eiffel', 'way/226413508': 'arc', 'way/375076234': 'pyramid', 'way/72937686': 'obelisk',
-};
+const OUTLINES = new Map(LANDMARKS.flatMap((d) => d.osm.map((k) => [k, d] as const)));
+const SPLIT_BRIDGE = CHUNK_SIZE; // m: longer bridge chains are split per chunk (the 2.4 km Line 6 viaduct)
+const SKYLINE_MIN_HEIGHT = 60; // m, La Défense towers kept in skyline.json
 const MIN_RING_AREA = 2; // m²
+const MIN_PART_AREA = 0.1; // m²: landmark parts (column drums, pinnacles) are small
 const TREE_ROW_STEP = 8; // m between expanded tree_row trees
 const TREE_MIN_GAP = 4; // m: tree_row points closer than this to an existing tree are skipped
 const QUAY_NEAR_RIVER = 50; // m: quay lines farther than this from the Seine are not written
@@ -58,7 +62,7 @@ const chunks = new Map<ChunkKey, ChunkData>();
 for (let i = Math.floor(bbox.minX / CHUNK_SIZE); i * CHUNK_SIZE < bbox.maxX; i++) {
   for (let j = Math.floor(bbox.minZ / CHUNK_SIZE); j * CHUNK_SIZE < bbox.maxZ; j++) {
     const key = `${i}_${j}`;
-    chunks.set(key, { v: 1, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
+    chunks.set(key, { v: 2, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
   }
 }
 /** Chunk at a point, or undefined (counted as dropped.outside) when it lies outside the grid. */
@@ -72,7 +76,8 @@ for (const file of files) {
   for (const e of (JSON.parse(readFileSync(join(args.cache, file), 'utf8')) as { elements: OsmElement[] }).elements) {
     const k = `${e.type}/${e.id}`;
     if (elements.has(k)) continue;
-    if (e.type === 'relation' && (e.tags?.type !== 'multipolygon' || classify(e.tags, 'area') === undefined)) continue;
+    const used = classify(e.tags ?? {}, 'area') !== undefined || OUTLINES.has(k) || LANDMARKS.some((d) => d.zone === k);
+    if (e.type === 'relation' && (e.tags?.type !== 'multipolygon' || !used)) continue;
     elements.set(k, e);
   }
 }
@@ -91,10 +96,10 @@ const project = ([lon, lat]: Position) => {
 };
 const line = (c: Position[]) => dedupe(c.flatMap(project));
 /** Closed ring → oriented (sign 1 = outer, area > 0; −1 = hole), or undefined if < 3 points / < 2 m². */
-function ring(c: Position[], sign: 1 | -1): XZ | undefined {
+function ring(c: Position[], sign: 1 | -1, minArea = MIN_RING_AREA): XZ | undefined {
   const r = dedupe(c.flatMap(project), true);
   const a = ringArea(r);
-  if (r.length < 6 || Math.abs(a) < MIN_RING_AREA) return undefined;
+  if (r.length < 6 || Math.abs(a) < minArea) return undefined;
   return a * sign > 0 ? r : reversePts(r);
 }
 type Poly = { outer: XZ; holes?: XZ[] };
@@ -102,11 +107,11 @@ const withHoles = (outer: XZ, holes: (XZ | undefined)[]): Poly => {
   const hs = holes.filter((h) => h !== undefined);
   return hs.length ? { outer, holes: hs } : { outer };
 };
-function polygons(g: Polygon | MultiPolygon): Poly[] {
+function polygons(g: Polygon | MultiPolygon, minArea = MIN_RING_AREA): Poly[] {
   const out: Poly[] = [];
   for (const [o, ...hs] of g.type === 'Polygon' ? [g.coordinates] : g.coordinates) {
-    const outer = ring(o!, 1);
-    if (outer) out.push(withHoles(outer, hs.map((h) => ring(h, -1))));
+    const outer = ring(o!, 1, minArea);
+    if (outer) out.push(withHoles(outer, hs.map((h) => ring(h, -1, minArea))));
     else bump('dropped.tinyRing');
   }
   return out;
@@ -118,6 +123,28 @@ function clipPoly(p: Poly, r: Rect): Poly | undefined {
   return withHoles(outer, (p.holes ?? []).map((h) => clipRing(h, r)).filter((h) => valid(h, -1)));
 }
 const vkeys = (p: XZ) => Array.from({ length: p.length / 2 }, (_, k) => `${p[2 * k]},${p[2 * k + 1]}`);
+
+const inRing = (x: number, z: number, r: XZ) => {
+  let inside = false;
+  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+    const [xi, zi, xj, zj] = [r[i]!, r[i + 1]!, r[j]!, r[j + 1]!];
+    if (zi > z !== zj > z && x < xi + ((z - zi) / (zj - zi)) * (xj - xi)) inside = !inside;
+  }
+  return inside;
+};
+const segDist = (px: number, pz: number, r: XZ, i: number, j: number) => {
+  const [ax, az, dx, dz] = [r[i]!, r[i + 1]!, r[j]! - r[i]!, r[j + 1]! - r[i + 1]!];
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz || 1)));
+  return Math.hypot(px - ax - t * dx, pz - az - t * dz);
+};
+const inPoly = (x: number, z: number, p: Poly) => inRing(x, z, p.outer) && !(p.holes ?? []).some((h) => inRing(x, z, h));
+
+// Landmark zones (areas whose buildings all belong to one landmark), resolved before the main pass.
+const zones = LANDMARKS.filter((d) => d.zone).map((def) => {
+  const f = features.find((q) => `${q.p.type}/${q.p.id}` === def.zone);
+  if (!f || (f.geometry.type !== 'Polygon' && f.geometry.type !== 'MultiPolygon')) console.warn(`[build-chunks] zone ${def.zone} of ${def.id} not found`);
+  return { def, polys: f && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') ? polygons(f.geometry) : [] };
+});
 
 // Tree spatial hash (cells of TREE_MIN_GAP) for the tree_row de-duplication.
 const treeCells = new Map<string, number[]>();
@@ -146,13 +173,22 @@ const bridgeWays: BridgeWay[] = [];
 const water: WaterData['polygons'] = [];
 const quayLines: XZ[] = [];
 const seenLandmarks = new Set<string>();
+type LmRec = { rec: BuildingRec; def: LandmarkDef; area: number; box: Rect };
+const lmRecs: LmRec[] = [];
+const partCands: { poly: Poly; facts: ReturnType<typeof partFacts> }[] = [];
+const pointCands: LandmarkPoint[] = [];
+const box = (r: XZ): Rect => {
+  const xs = r.filter((_, k) => k % 2 === 0);
+  const zs = r.filter((_, k) => k % 2 === 1);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) };
+};
 
 for (const { geometry: g, p } of features) {
   const tags = p.tags ?? {};
   const shape = g.type === 'Point' ? 'point' : g.type === 'LineString' ? 'line' : g.type === 'Polygon' || g.type === 'MultiPolygon' ? 'area' : undefined;
   if (!shape) continue; // MultiLineString / GeometryCollection: routes, not used
-  const landmark = LANDMARKS[`${p.type}/${p.id}`];
-  const cat = landmark ? 'building' : classify(tags, shape);
+  const def = OUTLINES.get(`${p.type}/${p.id}`);
+  const cat = def ? 'building' : classify(tags, shape);
   if (cat === undefined) continue;
   if (typeof cat === 'object') {
     bump(`dropped.${cat.drop}`);
@@ -161,7 +197,11 @@ for (const { geometry: g, p } of features) {
   if (g.type === 'Point') {
     const [x, z] = project(g.coordinates);
     if (cat === 'tree') addTree(x!, z!);
-    else chunkAt(x!, z!)?.points.push({ kind: 'subway_entrance', x: x!, z: z! });
+    else if (cat === 'subway_entrance') chunkAt(x!, z!)?.points.push({ kind: 'subway_entrance', x: x!, z: z! });
+    else if (cat === 'artwork' || cat === 'street_lamp' || cat === 'clock' || cat === 'fountain') {
+      pointCands.push({ kind: cat, x: x!, z: z!, ...pointFacts(tags) });
+      continue;
+    } else continue;
     bump(cat === 'tree' ? 'points.tree' : 'points.subwayEntrance');
     continue;
   }
@@ -194,13 +234,36 @@ for (const { geometry: g, p } of features) {
     for (const { outer } of polygons(g)) quayLines.push([...outer, outer[0]!, outer[1]!]);
     continue;
   }
+  if (cat === 'part') {
+    for (const poly of polygons(g, MIN_PART_AREA)) partCands.push({ poly, facts: partFacts(tags) });
+    continue;
+  }
+  if (cat === 'artwork') {
+    for (const { outer } of polygons(g)) {
+      const [x, z] = ringCentroid(outer);
+      pointCands.push({ kind: 'artwork', x: r1(x), z: r1(z), ...pointFacts(tags), r: r1(Math.sqrt(ringArea(outer) / Math.PI)) });
+    }
+    continue;
+  }
+  // Concorde fountains are landmark outlines AND water basins.
+  if (def && classify(tags, 'area') === 'water') for (const poly of polygons(g)) {
+    const clipped = clipPoly(poly, waterRect);
+    if (clipped) water.push({ river: false, ...clipped });
+  }
   for (const poly of polygons(g)) {
     if (cat === 'building') {
-      const rec: BuildingRec = { ...poly, ...buildingFacts(tags), ...(landmark && { landmark }) };
-      if (landmark) seenLandmarks.add(landmark);
-      if (landmark === 'obelisk') rec.kind = 'obelisk'; // OSM: building=yes + man_made=obelisk
+      const [cx, cz] = ringCentroid(poly.outer);
+      const lm = def ?? zones.find((zn) => zn.polys.some((zp) => inPoly(cx, cz, zp)))?.def;
+      const rec: BuildingRec = { ...poly, ...buildingFacts(tags), ...(lm && { landmark: lm.id }) };
+      // Landmark outlines that are not buildings (bridge decks, fountains, artworks) keep what they are.
+      if (lm && !tags.building) rec.kind = tags.man_made === 'bridge' ? 'bridge' : tags.amenity === 'fountain' ? 'fountain' : 'artwork';
+      if (lm?.id === 'obelisk') rec.kind = 'obelisk'; // OSM: building=yes + man_made=obelisk
+      if (lm) {
+        seenLandmarks.add(lm.id);
+        lmRecs.push({ rec, def: lm, area: ringArea(poly.outer), box: box(poly.outer) });
+      }
       if (rec.height === undefined && rec.levels === undefined) bump('missing.building.heightAndLevels');
-      chunkAt(...ringCentroid(poly.outer))?.buildings.push(rec);
+      chunkAt(cx, cz)?.buildings.push(rec);
     } else if (cat === 'park' || cat === 'grass') {
       const xs = poly.outer.filter((_, k) => k % 2 === 0);
       const zs = poly.outer.filter((_, k) => k % 2 === 1);
@@ -218,19 +281,48 @@ for (const { geometry: g, p } of features) {
     }
   }
 }
-for (const id of Object.values(LANDMARKS)) if (!seenLandmarks.has(id)) console.warn(`[build-chunks] landmark ${id} not found in the OSM cache`);
+for (const d of LANDMARKS) if ((d.osm.length || d.zone) && !seenLandmarks.has(d.id)) console.warn(`[build-chunks] landmark ${d.id} not found in the OSM cache`);
+
+// --- landmark parts: building:part whose centroid lies inside a landmark outline → that outline (smallest wins) ---
+const within = (b: Rect, x: number, z: number, m = 0) => x >= b.minX - m && x <= b.maxX + m && z >= b.minZ - m && z <= b.maxZ + m;
+for (const { poly, facts } of partCands) {
+  const [x, z] = ringCentroid(poly.outer);
+  const owner = lmRecs.filter((l) => within(l.box, x, z) && inPoly(x, z, l.rec)).sort((a, b) => a.area - b.area)[0];
+  if (!owner) {
+    bump('dropped.buildingPart');
+    continue;
+  }
+  const part: PartRec = { ...poly, ...facts };
+  (owner.rec.parts ??= []).push(part);
+  bump('landmarks.parts');
+}
+
+// --- landmark points: zone nodes → the nearest landmark outline whose box + near contains them ---
+const ringDist = (x: number, z: number, r: XZ) => {
+  let d = Infinity;
+  for (let i = 0; i < r.length; i += 2) d = Math.min(d, segDist(x, z, r, i, (i + 2) % r.length));
+  return d;
+};
+for (const pt of pointCands) {
+  let best: LmRec | undefined;
+  let bestD = Infinity;
+  for (const l of lmRecs) {
+    if (!within(l.box, pt.x, pt.z, l.def.near ?? LANDMARK_NEAR)) continue;
+    const d = inPoly(pt.x, pt.z, l.rec) ? 0 : ringDist(pt.x, pt.z, l.rec.outer);
+    if (d < bestD) [best, bestD] = [l, d];
+  }
+  if (!best) continue;
+  (best.rec.points ??= []).push(Object.fromEntries(Object.entries(pt).filter(([, v]) => v !== undefined)) as unknown as LandmarkPoint);
+  bump(`landmarks.points.${pt.kind}`);
+}
+for (const l of lmRecs) {
+  bump(`lm.${l.def.id}`);
+  bump(`lm.${l.def.id}.parts`, l.rec.parts?.length ?? 0);
+  bump(`lm.${l.def.id}.points`, l.rec.points?.length ?? 0);
+}
 
 // --- buildings whose centroid is on the Seine (boats, houseboats, floating restaurants) are dropped (TODO.md) ---
-const inRing = (x: number, z: number, r: XZ) => {
-  let inside = false;
-  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
-    const [xi, zi, xj, zj] = [r[i]!, r[i + 1]!, r[j]!, r[j + 1]!];
-    if (zi > z !== zj > z && x < xi + ((z - zi) / (zj - zi)) * (xj - xi)) inside = !inside;
-  }
-  return inside;
-};
-const onRiver = (x: number, z: number) =>
-  water.some((w) => w.river && inRing(x, z, w.outer) && !(w.holes ?? []).some((h) => inRing(x, z, h)));
+const onRiver = (x: number, z: number) => water.some((w) => w.river && inPoly(x, z, w));
 for (const c of chunks.values()) {
   const n = c.buildings.length;
   c.buildings = c.buildings.filter((b) => b.landmark || !onRiver(...ringCentroid(b.outer)));
@@ -254,18 +346,29 @@ for (const w of roadWays) {
   }
 }
 
-// --- bridges: ways merged into bank-to-bank chains, whole chain in the chunk of its midpoint ---
+// --- bridges: ways merged into bank-to-bank chains, whole chain in the chunk of its midpoint; chains longer than
+// SPLIT_BRIDGE are split per chunk like roads, each piece knowing the whole chain (deck heights, end caps) ---
 for (const { pts, members } of mergeChains(bridgeWays)) {
   bump('bridges.ways', members.length);
-  chunkAt(...midpoint(pts))?.bridges.push({ pts, ...bridgeWays[members[0]!]!.facts });
+  const facts = bridgeWays[members[0]!]!.facts;
+  const length = polylineLength(pts);
+  if (length <= SPLIT_BRIDGE) {
+    chunkAt(...midpoint(pts))?.bridges.push({ pts, ...facts });
+    continue;
+  }
+  const n = pts.length;
+  const ends = [...pts.slice(0, 4), ...pts.slice(n - 4)];
+  let s0 = 0;
+  for (const piece of splitPolyline(pts, [])) {
+    const c = chunks.get(piece.key);
+    if (c) c.bridges.push({ pts: piece.pts, ...facts, chain: { ends, length: r1(length), s0: r1(s0) } });
+    else bump('dropped.outside');
+    s0 += polylineLength(piece.pts);
+    bump('bridges.splitPieces');
+  }
 }
 
 // --- quays: keep lines near the Seine, inside the water rect ---
-const segDist = (px: number, pz: number, r: XZ, i: number, j: number) => {
-  const [ax, az, dx, dz] = [r[i]!, r[i + 1]!, r[j]! - r[i]!, r[j + 1]! - r[i + 1]!];
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz || 1)));
-  return Math.hypot(px - ax - t * dx, pz - az - t * dz);
-};
 const riverRings = water.filter((w) => w.river).flatMap((w) => [w.outer, ...(w.holes ?? [])]);
 // ponytail: brute force point × river edge (~1 s), a segment grid if the map or the quay count grows.
 const nearRiver = (x: number, z: number) =>
@@ -289,6 +392,7 @@ for (const c of chunks.values()) {
   if (bytes > largest.bytes) largest = { key: c.key, bytes };
   bump('buildings', c.buildings.length);
   bump('buildings.landmark', c.buildings.filter((b) => b.landmark).length);
+  if (c.buildings.some((b) => b.landmark)) bump('chunks.landmark');
   bump('roads.pieces', c.roads.length);
   bump('bridges.chains', c.bridges.length);
   for (const a of c.areas) bump(`areas.${a.kind}`);
@@ -302,8 +406,25 @@ const waterBytes = Buffer.byteLength(waterJson);
 if (waterBytes > WATER_FAIL_BYTES) throw new Error(`[build-chunks] water.json is ${waterBytes} B > 1 MB`);
 writeFileSync(join(args.out, 'water.json'), waterJson);
 Object.assign(stats, { chunks: chunks.size, 'bytes.chunks': total, 'bytes.largestChunk': largest.bytes, 'bytes.water': waterBytes });
+// --- skyline (SPEC §17.6): La Défense towers from .cache/osm/skyline.json (fetch-osm), extruded by the client ---
+const skyFile = join(args.cache, 'skyline.json');
+if (existsSync(skyFile)) {
+  const sky = osmtogeojson(JSON.parse(readFileSync(skyFile, 'utf8')), { flatProperties: false }).features
+    .map((f) => ({ geometry: f.geometry, p: f.properties as Props }))
+    .sort((a, b) => TYPE_ORDER[a.p.type] - TYPE_ORDER[b.p.type] || a.p.id - b.p.id);
+  const towers: SkylineData['towers'] = [];
+  for (const { geometry: g, p } of sky) {
+    const height = parseNumber(p.tags?.height);
+    if (height === undefined || height < SKYLINE_MIN_HEIGHT || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) continue;
+    const minHeight = parseNumber(p.tags?.min_height);
+    for (const { outer } of polygons(g)) towers.push({ outer, height, ...(minHeight !== undefined && { minHeight }) });
+  }
+  writeFileSync(join(args.out, 'skyline.json'), JSON.stringify({ v: 1, towers } satisfies SkylineData));
+  bump('skyline.towers', towers.length);
+} else console.warn(`[build-chunks] ${skyFile} missing (npm run fetch-map fetches it): skyline.json not written`);
+
 const index: ChunkIndex = {
-  v: 1, chunkSize: CHUNK_SIZE, keys: [...chunks.keys()],
+  v: 2, chunkSize: CHUNK_SIZE, keys: [...chunks.keys()],
   stats: Object.fromEntries(Object.entries(stats).sort(([a], [b]) => a.localeCompare(b))),
 };
 writeFileSync(join(args.out, 'chunks', 'index.json'), JSON.stringify(index));

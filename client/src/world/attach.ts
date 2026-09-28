@@ -23,6 +23,11 @@ const FALLBACK_COLOUR: Record<MaterialId, number> = {
   stone: 0xd2bf94,
   iron: 0x6b4f3a,
   glass: 0x9cc8dc,
+  masonry: 0xffffff, // × vertex colour
+  metal: 0xffffff, // × vertex colour
+  gold: 0xd4a53c,
+  bronze: 0x5a4a32,
+  waterJet: 0xe8f2f8,
 };
 
 /** Flat-coloured stand-in for a material no package provides yet (vertexColors iff VERTEX_COLOR has it). */
@@ -38,15 +43,17 @@ export function withFallbacks(provided: Partial<Materials>): Materials {
 
 const GROUND: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'sidewalk', 'asphalt', 'pave', 'marking']); // receive only
 
-// ponytail: per-chunk InstancedMeshes and CPU copies of every geometry are kept (no LOD, no dispose-after-upload);
-// global instancing, LOD and freeing CPU arrays in Phase 12.
-/** One Mesh per bucket (shared materials), one InstancedMesh per InstanceSet (shared prop meshes). Each
+// ponytail: per-chunk InstancedMeshes and CPU copies of every geometry are kept (no dispose-after-upload); global
+// instancing and freeing CPU arrays in Phase 12. LOD: only the landmark 'near' buckets (ChunkManager hides them far away).
+/** One Mesh per bucket (shared materials), one InstancedMesh per InstanceSet (shared prop meshes); `near` = the meshes
+ *  of lod 'near' buckets (bounding spheres computed). Each
  *  BuildOut.textures entry replaces its material, for this BuildOut only, by a clone with `map` = that image
  *  (flipY = false: v = 0 is the image's TOP row). dispose() frees only what was created here. */
 export function attachBuildOut(out: BuildOut, materials: Materials, propMeshes: PropMeshes) {
   const object = new THREE.Group();
   const owned: { dispose(): void }[] = [];
   const mats = { ...materials };
+  const near: THREE.Mesh[] = [];
   let triangles = 0;
 
   for (const { material, image } of out.textures ?? []) {
@@ -70,6 +77,10 @@ export function attachBuildOut(out: BuildOut, materials: Materials, propMeshes: 
     const mesh = new THREE.Mesh(g, mats[b.material]);
     mesh.castShadow = !GROUND.has(b.material);
     mesh.receiveShadow = true;
+    if (b.lod === 'near') {
+      g.computeBoundingSphere();
+      near.push(mesh);
+    }
     object.add(mesh);
     owned.push(g);
     triangles += b.index.length / 3;
@@ -90,6 +101,7 @@ export function attachBuildOut(out: BuildOut, materials: Materials, propMeshes: 
 
   return {
     object,
+    near,
     triangles,
     drawCalls: object.children.length,
     dispose() {

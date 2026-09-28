@@ -2,6 +2,7 @@
 // Module top level must not touch the DOM: the worker imports build*(); canvas textures only inside create*().
 // Deck height: linear along arc length between the terrain 5 m beyond each chain end (the quays once the river is
 // carved), never below the terrain under it, + (layer − 1) × railLayerStep for upper decks (Bir-Hakeim metro).
+// A piece of a split chain (BridgeRec.chain) uses the whole chain's ends and arc length, and caps only real chain ends.
 import { roads as C } from '../config.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
 import { MeshBuffer, mergeTriMeshes } from './geom.ts';
@@ -18,13 +19,15 @@ export const buildBridges: Builder = (chunk, ctx) => {
     const p = new Path(b.pts);
     const L = p.length;
     if (L < 0.5) continue;
-    const [ax, az] = p.dir(0);
-    const [bx, bz] = p.dir(L);
-    const n = b.pts.length;
-    const y0 = ctx.height(b.pts[0]! - ax * endSample, b.pts[1]! - az * endSample);
-    const y1 = ctx.height(b.pts[n - 2]! + bx * endSample, b.pts[n - 1]! + bz * endSample);
+    const e = b.chain?.ends ?? [...b.pts.slice(0, 4), ...b.pts.slice(-4)];
+    const unit = (dx: number, dz: number) => [dx / (Math.hypot(dx, dz) || 1), dz / (Math.hypot(dx, dz) || 1)] as const;
+    const [ax, az] = unit(e[2]! - e[0]!, e[3]! - e[1]!);
+    const [bx, bz] = unit(e[6]! - e[4]!, e[7]! - e[5]!);
+    const y0 = ctx.height(e[0]! - ax * endSample, e[1]! - az * endSample);
+    const y1 = ctx.height(e[6]! + bx * endSample, e[7]! + bz * endSample);
+    const [s0, CL] = b.chain ? [b.chain.s0, b.chain.length] : [0, L];
     const up = Math.max(0, b.layer - 1) * railLayerStep;
-    const y: YFn = (x, z, s) => Math.max(y0 + ((y1 - y0) * s) / L, ctx.height(x, z)) + up;
+    const y: YFn = (x, z, s) => Math.max(y0 + ((y1 - y0) * (s0 + s)) / CL, ctx.height(x, z)) + up;
 
     const way = { ...b, oneway: false };
     const hc = roadWidth(way) / 2;
@@ -45,8 +48,8 @@ export const buildBridges: Builder = (chunk, ctx) => {
     strip(slab, p, 0, L, -ER, EL, y, -T, max, true);
     wall(slab, p, 0, L, EL, y, -T, sw && gaps[0]! < Infinity ? top : 0, 1, max);
     wall(slab, p, 0, L, -ER, y, -T, sw && gaps[1]! < Infinity ? top : 0, -1, max);
-    cap(slab, p, 0, -ER, EL, y, -T, 0, -1);
-    cap(slab, p, L, -ER, EL, y, -T, 0, 1);
+    if (s0 < 0.3) cap(slab, p, 0, -ER, EL, y, -T, 0, -1);
+    if (s0 + L > CL - 0.3) cap(slab, p, L, -ER, EL, y, -T, 0, 1);
 
     // Surface.
     if (rail) strip(slab, p, 0, L, -H, H, y, 0, max);

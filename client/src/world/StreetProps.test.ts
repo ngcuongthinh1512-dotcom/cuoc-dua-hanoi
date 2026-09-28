@@ -7,7 +7,7 @@ import { buildStreetProps, createPropMeshes, findJunctions, placeLamps, placeSig
 import { buildVegetation } from './Vegetation.ts';
 
 const ctx: BuildCtx = { key: '0_0', bounds: chunkBounds('0_0'), height: () => 0 };
-const chunk = (roads: RoadRec[]): ChunkData => ({ v: 1, key: '0_0', buildings: [], roads, bridges: [], areas: [], points: [] });
+const chunk = (roads: RoadRec[]): ChunkData => ({ v: 2, key: '0_0', buildings: [], roads, bridges: [], areas: [], points: [] });
 
 /** n × n street grid over the chunk, every crossing a junction vertex; horizontal "Rue Hi", vertical "Avenue Vj". */
 function grid(n: number, step: number): ChunkData {

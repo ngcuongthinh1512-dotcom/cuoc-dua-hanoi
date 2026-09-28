@@ -39,7 +39,11 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 ## Phase 2B – Địa danh chính xác (SPEC §17.6)
 - Tìm mô hình 3D miễn phí (CC0 / CC-BY, ≤ 25 MB, không cần tạo tài khoản) cho các công trình biểu tượng; lập danh sách tên file, nguồn, dung lượng, giấy phép để anh duyệt TRƯỚC khi tải.
 - Dựng khoảng 33 địa danh theo §17.6: dữ liệu 3D OSM (`building:part`, `roof:shape`…) + dựng chi tiết bằng code + mô hình đã duyệt; thay mô hình tạm Eiffel / Khải Hoàn Môn / kim tự tháp / obelisk; có LOD + collider; ghi nguồn mô hình trong game.
-- Bóng các công trình ngoài bản đồ ở đường chân trời: Sacré-Cœur, tháp Montparnasse, La Défense.
+  - Đã xong phần nền (pipeline): danh sách địa danh `client/src/geo/landmarks.ts`, giữ `building:part` trong outline địa danh (chunk v2), bộ dựng part S3DB chung (`world/landmarks/parts.ts`: mọi kiểu mái, cột tròn, vật liệu), LOD `near`, collider hộp, preset chụp `lm-<id>` + `leg-L1…L6`. Còn lại: chi tiết từng nhóm g1…g5 (`world/landmarks/g1.ts`…`g5.ts`).
+  - Thiếu chiều cao công bố: Louvre (OSM chỉ có 3 tầng → cao 9,6 m), Petit Palais, Hôtel des Invalides, Palais Bourbon, Palais de Justice (dùng mặc định 20 m khi phần part không phủ hết outline).
+  - Outline có part nhưng part phủ < 90 % (Louvre, Chaillot, Hôtel des Invalides, Palais Bourbon, Conciergerie, Tokyo…) thì đùn cả outline lẫn part: tường trùng nhau có thể nhấp nháy (z-fighting); nhóm phụ trách sửa trong DetailFn của mình.
+  - Mái kiểu khung (gabled, hipped…) dựng theo hình chữ nhật bao nhỏ nhất: footprint chữ L / không đều có đỉnh mái thấp hơn `height`.
+- Bóng các công trình ngoài bản đồ ở đường chân trời: Sacré-Cœur, tháp Montparnasse, La Défense (dữ liệu đã có: `client/public/data/skyline.json` 89 tháp ≥ 60 m + tọa độ trong `landmarks.ts`; chưa dựng).
 
 ## Phase 3 – Nhân vật & camera
 - Tạo `client/src/core/EventBus.ts` khi có module thật sự cần (Phase 1 chưa có nên chưa tạo).
@@ -79,7 +83,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 ## Phase 11 – Test toàn trình
 - `npm run sim` (bot mô phỏng), `worker/legs/test/paris-demo.filled.json`, `worker/legs/test/specials.json`.
 - Thay địa danh tạm (Eiffel, Khải Hoàn Môn, kim tự tháp Louvre, obelisk) bằng model thật; Eiffel chưa có các vòm trang trí dưới tầng 1, obelisk chưa có chóp vàng; Eiffel nhìn từ xa hơi tối (tự đổ bóng + lưới alpha).
-- Địa danh SPEC §4.5 / đường chân trời còn là khối nhà một chiều cao (bỏ qua `building:part`): Notre-Dame (tấm 10 m, thật: gian giữa ~33 m, tháp 69 m), Sainte-Chapelle (hộp 75 m), Opéra Garnier (hộp 70 m), mái vòm Invalides, Grand Palais, Orsay, Palais de Chaillot (tường trơn không cửa sổ), cầu Bir-Hakeim hai tầng có cột sắt. Làm cùng model địa danh (Phase 2B hoặc Phase 11).
+- Địa danh chỉ có `building:part` chung (Phase 2B pipeline): tường trơn không cửa sổ, chưa có chi tiết (Orsay, Petit Palais, Pompidou, Saint-Jacques, Rodin chưa có part nên chỉ là khối đùn); cầu Bir-Hakeim tầng trên còn là dải mỏng, chưa có cột sắt. Làm trong các nhóm g1…g5 (Phase 2B).
 
 ## Phase 12 – Deploy
 - Bundle client ~4,9 MB (gzip ~1,8 MB), phần lớn là WASM nhúng base64 của `@dimforge/rapier3d-compat` (`chunkSizeWarningLimit` trong `client/vite.config.ts`). Khi tối ưu tải trang: dùng `@dimforge/rapier3d` (file `.wasm` riêng) hoặc tách chunk vendor để cache.

@@ -12,7 +12,7 @@ import { bboxCorners, createBoundsWalls, edgeDistance } from './world/Bounds.ts'
 import { createBuildingMaterials } from './world/BuildingBuilder.ts';
 import type { ToWorker } from './world/buildTypes.ts';
 import { ChunkManager } from './world/ChunkManager.ts';
-import { createLandmarkMaterials } from './world/Landmarks.ts';
+import { createLandmarkMaterials } from './world/landmarks/index.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
 import { createSky } from './world/Sky.ts';
 import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
@@ -113,7 +113,7 @@ async function start() {
       ),
     ),
   );
-  const hasIndex = index?.v === 1 && Array.isArray(index.keys);
+  const hasIndex = index?.v === 2 && Array.isArray(index.keys);
   if (!hasIndex) $('nodata').hidden = false;
   const worker = new Worker(new URL('./workers/chunkBuilder.worker.ts', import.meta.url), { type: 'module' });
   worker.postMessage({ type: 'init', grid, dataUrl: hasIndex ? new URL('data/', location.href).href : '' } satisfies ToWorker);

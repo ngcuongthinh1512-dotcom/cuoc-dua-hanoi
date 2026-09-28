@@ -17,7 +17,7 @@ import { props as P } from '../config.ts';
 import { type ChunkData, type ChunkKey, chunkKey } from '../geo/chunkData.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind } from './buildTypes.ts';
 import { hash01, MeshBuffer } from './geom.ts';
-import { quadOut } from './Landmarks.ts';
+import { quadOut } from './landmarks/kit.ts';
 import { roadWidth } from './RoadBuilder.ts';
 
 const CAR = new Set(P.carKinds);

@@ -32,20 +32,62 @@ export function ringArea(r: XZ): number {
   return a / 2;
 }
 
-/** Landmarks get dedicated placeholder models (world/Landmarks.ts) instead of an extruded footprint (SPEC §17.4). */
-export type LandmarkId = 'eiffel' | 'arc' | 'pyramid' | 'obelisk';
+/** Landmark ids: the registry in geo/landmarks.ts (SPEC §17.6, docs/plans/phase2b-assets.md §1). */
+export type LandmarkId =
+  | 'eiffel' | 'arc'
+  | 'bir-hakeim' | 'alexandre-iii' | 'pont-neuf' | 'pont-des-arts' | 'alma' | 'flamme'
+  | 'louvre' | 'pyramid' | 'carrousel' | 'palais-royal' | 'obelisk' | 'concorde-fountains' | 'vendome' | 'madeleine' | 'opera'
+  | 'grand-palais' | 'petit-palais' | 'orsay' | 'palais-bourbon' | 'invalides' | 'hotel-invalides' | 'ecole-militaire'
+  | 'rodin' | 'chaillot' | 'palais-de-tokyo'
+  | 'notre-dame' | 'sainte-chapelle' | 'conciergerie' | 'hotel-de-ville' | 'pompidou' | 'tour-saint-jacques'
+  | 'saint-sulpice' | 'pantheon' | 'luxembourg'
+  | 'sacre-coeur' | 'montparnasse' | 'la-defense';
 
-export interface BuildingRec {
+/** Simple 3D Buildings tags (wiki.openstreetmap.org/wiki/Simple_3D_Buildings), parsed, no defaults. Heights in m. */
+export interface S3dFacts {
+  height?: number; // top of the roof above ground
+  minHeight?: number; // bottom of the walls above ground
+  levels?: number; // building:levels (walls, roof levels excluded)
+  minLevel?: number; // building:min_level
+  roofLevels?: number;
+  roofShape?: string;
+  roofHeight?: number;
+  roofDirection?: number; // compass degrees the slope faces (0 = north), letters converted
+  roofOrientation?: 'along' | 'across';
+  roofMaterial?: string;
+  roofColour?: string;
+  colour?: string; // building:colour
+  material?: string; // building:material
+}
+
+/** building:part inside a landmark outline (kept only there, see build-chunks). */
+export interface PartRec extends S3dFacts {
   outer: XZ;
   holes?: XZ[];
-  kind: string; // building=*
+  kind: string; // building:part=* (yes, column, roof, steps…); isColumn = kind === 'column'
+}
+
+/** Landmark-zone node (or artwork area centroid): tourism=artwork, highway=street_lamp, amenity=clock|fountain. */
+export interface LandmarkPoint {
+  kind: 'artwork' | 'street_lamp' | 'clock' | 'fountain';
+  x: number;
+  z: number;
+  sub?: string; // artwork_type / support / fountain:type
   height?: number;
-  levels?: number;
   minHeight?: number;
-  roofShape?: string;
+  r?: number; // m, equivalent radius of an artwork area (plinth)
   colour?: string;
-  roofColour?: string;
-  landmark?: LandmarkId; // set by build-chunks for the known OSM ids; BuildingBuilder skips these
+  material?: string;
+  direction?: number; // compass degrees
+}
+
+export interface BuildingRec extends S3dFacts {
+  outer: XZ;
+  holes?: XZ[];
+  kind: string; // building=*; landmark outlines that are not buildings: 'bridge' | 'fountain' | 'artwork'
+  landmark?: LandmarkId; // set by build-chunks from the registry; BuildingBuilder skips these
+  parts?: PartRec[]; // landmark only: building:part whose centroid lies inside this outline (smallest one wins)
+  points?: LandmarkPoint[]; // landmark only: zone nodes whose nearest landmark outline is this one
 }
 
 export interface RoadRec {
@@ -69,6 +111,9 @@ export interface BridgeRec {
   width?: number;
   lanes?: number;
   name?: string;
+  /** A chain longer than one chunk is split per chunk like roads; every piece carries the whole chain's first two and
+   *  last two points [x0, z0, x1, z1, xn-1, zn-1, xn, zn], its length and this piece's start offset along it. */
+  chain?: { ends: number[]; length: number; s0: number };
 }
 
 export interface AreaRec {
@@ -84,7 +129,7 @@ export interface PointRec {
 } // tree_row pre-expanded to trees
 
 export interface ChunkData {
-  v: 1;
+  v: 2;
   key: ChunkKey;
   buildings: BuildingRec[];
   roads: RoadRec[];
@@ -94,7 +139,7 @@ export interface ChunkData {
 }
 
 export interface ChunkIndex {
-  v: 1;
+  v: 2;
   chunkSize: 250;
   keys: ChunkKey[]; // every chunk touching RACE_BBOX, even empty ones
   stats: Record<string, number>;
@@ -107,3 +152,9 @@ export interface WaterData {
    *  the DEM cannot resolve; closed rings repeat their first point). Optional, added by build-chunks. */
   quays?: XZ[];
 } // clipped to RACE_BBOX + 200 m
+
+/** Skyline outside the map (SPEC §17.6): La Défense towers from one small Overpass query (fetch-osm skyline.json). */
+export interface SkylineData {
+  v: 1;
+  towers: { outer: XZ; height: number; minHeight?: number }[];
+}

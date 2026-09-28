@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { props as P } from '../config.ts';
-import { type BuildingRec, chunkBounds, type LandmarkId, type XZ } from '../geo/chunkData.ts';
-import { fixture } from '../geo/fixture.ts';
-import type { BuildCtx, BuildOut } from './buildTypes.ts';
-import { buildLandmarks, footprintFrame } from './Landmarks.ts';
+import { landmarks as LM } from '../../config.ts';
+import { type BuildingRec, chunkBounds, type LandmarkId, type XZ } from '../../geo/chunkData.ts';
+import { fixture } from '../../geo/fixture.ts';
+import type { BuildCtx, BuildOut } from '../buildTypes.ts';
+import { buildLandmarks } from './index.ts';
+import { footprintFrame } from './kit.ts';
 
 const ctx: BuildCtx = { key: '0_0', bounds: chunkBounds('0_0'), height: () => 0 };
-const y0 = -P.landmarks.sink;
+const y0 = -LM.sink;
 
 /** Rectangle 2a × 2b centred at (cx, cz), long side rotated `deg` from +X. */
 function rect(cx: number, cz: number, a: number, b: number, deg: number): XZ {
@@ -48,7 +49,7 @@ const finite = (o: BuildOut) =>
   o.meshes.every((m) => [m.position, m.normal, m.uv].every((a) => a.every(Number.isFinite))) &&
   o.colliders.every((c) => c.vertices.every(Number.isFinite));
 
-describe('landmark placeholders', () => {
+describe('landmark placeholders (g1 Eiffel / Arc, g3 pyramid / obelisk)', () => {
   it('footprintFrame recovers centre, long axis and half sizes of a rotated rectangle', () => {
     const f = footprintFrame(rect(100, -50, 22.5, 11, 30));
     expect(f.cx).toBeCloseTo(100, 5);
@@ -92,7 +93,7 @@ describe('landmark placeholders', () => {
   it('pyramid: apex at 21.6 m over the footprint centre; obelisk: tagged height, stone only', () => {
     const p = build('pyramid', rect(10, 10, 17.5, 17.5, 10));
     expect(finite(p)).toBe(true);
-    expect(maxY(p) - y0).toBeCloseTo(P.landmarks.pyramidHeight, 3);
+    expect(maxY(p) - y0).toBeCloseTo(LM.pyramidHeight, 3);
     expect(p.meshes.map((m) => m.material)).toEqual(['glass']);
     expect(hits(p, [10, 1, -40], [10, 1, 60], true)).toBe(true);
     const ob = build('obelisk', rect(0, 0, 2.2, 2.2, 0), 33.37);

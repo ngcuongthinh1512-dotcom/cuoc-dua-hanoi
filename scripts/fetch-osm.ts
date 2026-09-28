@@ -1,6 +1,6 @@
 // SPEC §4.3: raw OpenStreetMap data via Overpass, one 500 × 500 m tile at a time.
 //   npm run fetch-map   (or: tsx scripts/fetch-osm.ts [--out <dir>])
-// Writes <out>/tiles/<ix>_<iz>.json, <out>/global.json, <out>/index.json (default <repo>/.cache/osm, gitignored).
+// Writes <out>/tiles/<ix>_<iz>.json, <out>/global.json, <out>/skyline.json, <out>/index.json (default <repo>/.cache/osm, gitignored).
 // Deviation from SPEC §4.3 (which says client/public/data/chunks): raw Overpass JSON is too big and
 // unprocessed to ship as static assets; a later Phase 2 step turns it into compact 250 m chunks there.
 // Re-runs skip files already on disk; delete a file to refetch it.
@@ -60,6 +60,18 @@ const globalQuery = (b: Bbox) => {
   rel[man_made=bridge]${B}; rel[bridge]${B}; rel[tunnel]${B};
   rel[amenity~"^(fountain|bicycle_parking)$"]${B}; rel[natural=tree_row]${B};
   rel[tourism]${B}; rel[historic][type!=route]${B}; rel[place]${B};
+);
+out geom;`;
+};
+
+// Skyline (SPEC §17.6, phase2b-assets.md §5.7): La Défense towers ≥ 60 m, outside RACE_BBOX; one small query.
+const SKYLINE_BBOX: Bbox = { south: 48.884, west: 2.224, north: 48.898, east: 2.256 };
+const skylineQuery = () => {
+  const B = bb(SKYLINE_BBOX);
+  const tall = '["height"~"^([6-9][0-9]|[1-9][0-9][0-9])([.,][0-9]+)?( ?m)?$"]';
+  return `[out:json][timeout:60][maxsize:67108864];
+(
+  wr[building]${tall}${B}; wr["building:part"]${tall}${B};
 );
 out geom;`;
 };
@@ -173,11 +185,12 @@ async function summarize(file: string) {
 const t0 = Date.now();
 const tiles = tileGrid(RACE_BBOX, TILE_SIZE);
 await mkdir(join(outDir, 'tiles'), { recursive: true });
-console.log(`fetch-osm → ${outDir}: 1 global query + ${tiles.length} tiles of ${TILE_SIZE} m`);
+console.log(`fetch-osm → ${outDir}: 1 global query + 1 skyline query + ${tiles.length} tiles of ${TILE_SIZE} m`);
 
 const pending: string[] = [];
 const jobs = [
   { file: join(outDir, 'global.json'), query: globalQuery(RACE_BBOX), label: 'global' },
+  { file: join(outDir, 'skyline.json'), query: skylineQuery(), label: 'skyline' },
   ...tiles.map((t) => ({ file: join(outDir, 'tiles', `${t.ix}_${t.iz}.json`), query: tileQuery(t.latLon), label: `tile ${t.ix}_${t.iz}` })),
 ];
 for (const [n, job] of jobs.entries()) {

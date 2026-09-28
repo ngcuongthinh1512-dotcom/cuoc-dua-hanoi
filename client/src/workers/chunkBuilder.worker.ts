@@ -22,7 +22,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       const res = await fetch(`${dataUrl}chunks/${key}.json`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       chunk = (await res.json()) as ChunkData;
-      if (chunk.v !== 1) throw new Error(`unsupported chunk version ${String(chunk.v)}`);
+      if (chunk.v !== 2) throw new Error(`unsupported chunk version ${String(chunk.v)}`);
     }
     const out = buildChunk(chunk, grid);
     reply({ type: 'built', key, out, ms: performance.now() - t0 }, transferables(out));

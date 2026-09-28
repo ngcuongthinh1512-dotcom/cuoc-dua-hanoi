@@ -4,7 +4,9 @@
 import type { ChunkData, ChunkKey, chunkBounds } from '../geo/chunkData.ts';
 import type { HeightGrid } from '../geo/heightGrid.ts';
 
-/** 'stone' | 'iron' | 'glass' are for the landmark placeholders (world/Landmarks.ts). */
+/** Landmarks (world/landmarks/): 'stone' plain limestone, 'iron' Eiffel lattice (alpha), 'glass' transparent panes,
+ *  'masonry' / 'metal' vertex-coloured stone|slate|lead|zinc|verdigris / painted steel, 'gold' gilding, 'bronze' statues,
+ *  'waterJet' fountain spray. */
 export type MaterialId =
   | 'terrain'
   | 'wall'
@@ -20,11 +22,16 @@ export type MaterialId =
   | 'sign'
   | 'stone'
   | 'iron'
-  | 'glass';
+  | 'glass'
+  | 'masonry'
+  | 'metal'
+  | 'gold'
+  | 'bronze'
+  | 'waterJet';
 
 /** Buckets of these materials MUST carry a `color` attribute (linear RGB: per-building tint, park green) and their
  *  materials use vertexColors; buckets of every other material MUST NOT. geom.MeshBuffer applies this rule itself. */
-export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'wall', 'shopfront', 'roof']);
+export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'wall', 'shopfront', 'roof', 'masonry', 'metal']);
 
 export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro';
 
@@ -36,6 +43,7 @@ export interface MeshBucket {
   uv: Float32Array; // uv
   color?: Float32Array; // rgb, iff VERTEX_COLOR.has(material)
   index: Uint32Array;
+  lod?: 'near'; // shown only within landmarks.detailDistance of the camera (ChunkManager); kept apart by mergeBuckets
 }
 
 /** Instanced prop placements; the mesh comes from StreetProps.createPropMeshes()[kind]. */

@@ -12,6 +12,9 @@ const data = join(import.meta.dirname, '../../public/data');
 const has = ['chunks/index.json', 'water.json', 'elevation.json', 'elevation.bin'].every((f) => existsSync(join(data, f)));
 const MAX_BUCKETS = 16; // draw calls per chunk (docs/plans/phase2.md performance budget)
 const MAX_TRIANGLES = 60_000; // mesh triangles per chunk (instanced props not counted)
+// Chunks holding a landmark (phase2b-assets.md §5): its materials (masonry, metal, gold, glass…) and LOD 'near' buckets.
+const MAX_BUCKETS_LANDMARK = 28;
+const MAX_TRIANGLES_LANDMARK = 250_000;
 
 describe.skipIf(!has)('all real chunks', () => {
   it('build without errors, NaN or budget overruns', () => {
@@ -25,8 +28,9 @@ describe.skipIf(!has)('all real chunks', () => {
       const out = buildChunk(chunk, grid, (builder, k, err) => problems.push(`${k} ${builder}: ${String(err)}`));
       const buckets = out.meshes.length + out.instances.length;
       const triangles = out.meshes.reduce((s, b) => s + b.index.length / 3, 0);
-      if (buckets > MAX_BUCKETS) problems.push(`${key}: ${buckets} draw buckets`);
-      if (triangles > MAX_TRIANGLES) problems.push(`${key}: ${triangles} triangles`);
+      const lm = chunk.buildings.some((b) => b.landmark);
+      if (buckets > (lm ? MAX_BUCKETS_LANDMARK : MAX_BUCKETS)) problems.push(`${key}: ${buckets} draw buckets`);
+      if (triangles > (lm ? MAX_TRIANGLES_LANDMARK : MAX_TRIANGLES)) problems.push(`${key}: ${triangles} triangles`);
       for (const b of out.meshes) {
         if (![b.position, b.normal, b.uv, b.color].every(finite)) problems.push(`${key} ${b.material}: NaN/Infinity`);
         if (b.index.some((i) => i >= b.position.length / 3)) problems.push(`${key} ${b.material}: index out of range`);

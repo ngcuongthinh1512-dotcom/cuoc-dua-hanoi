@@ -1,6 +1,6 @@
 // OSM tag parsing for scripts/build-chunks.ts (docs/plans/phase2.md "A — Data pipeline").
 // DOM-free and three-free. Extracts raw facts only; defaults (heights, widths…) live in the builders.
-import type { BridgeRec, BuildingRec, RoadRec } from './chunkData.ts';
+import type { BridgeRec, BuildingRec, LandmarkPoint, PartRec, RoadRec, S3dFacts } from './chunkData.ts';
 
 export type Tags = Record<string, string | undefined>;
 
@@ -12,11 +12,14 @@ export function parseNumber(v: string | undefined): number | undefined {
 
 const yes = (v: string | undefined) => v !== undefined && v !== 'no';
 
+/** Landmark-zone point kinds (kept only near a landmark, see build-chunks). */
+export type PointKind = LandmarkPoint['kind'];
 export type Category =
-  | 'building' | 'road' | 'bridge' | 'park' | 'grass' | 'water' | 'quay' | 'tree' | 'tree_row' | 'subway_entrance';
+  | 'building' | 'part' | 'road' | 'bridge' | 'park' | 'grass' | 'water' | 'quay' | 'tree' | 'tree_row' | 'subway_entrance'
+  | PointKind;
 /** Counted in index.json stats as `dropped.<reason>`. */
 export type DropReason =
-  | 'tunnel' | 'underground' | 'indoor' | 'buildingPart' | 'highwayArea' | 'sidewalk' | 'crossing' | 'notRoad';
+  | 'tunnel' | 'underground' | 'indoor' | 'highwayArea' | 'sidewalk' | 'crossing' | 'notRoad';
 
 // Indoor / non-surface highway values (lifts, station corridors, bus-stop platforms, unbuilt roads).
 const NOT_ROADS = new Set(['corridor', 'elevator', 'bus_stop', 'platform', 'proposed', 'construction']);
@@ -26,14 +29,17 @@ const TRACKS = new Set(['rail', 'subway', 'light_rail', 'tram', 'narrow_gauge'])
 export function classify(tags: Tags, shape: 'point' | 'line' | 'area'): Category | { drop: DropReason } | undefined {
   if (shape === 'point') {
     if (tags.natural === 'tree') return 'tree';
-    return tags.railway === 'subway_entrance' ? 'subway_entrance' : undefined; // entrances often carry layer=-1
+    if (tags.railway === 'subway_entrance') return 'subway_entrance'; // entrances often carry layer=-1
+    if (tags.tourism === 'artwork') return 'artwork';
+    if (tags.highway === 'street_lamp') return 'street_lamp';
+    return tags.amenity === 'clock' || tags.amenity === 'fountain' ? tags.amenity : undefined;
   }
   // ponytail: tunnels and underground ways are not rendered (Voie Georges-Pompidou, metro); a tunnel builder if a route needs one.
   if (yes(tags.tunnel)) return { drop: 'tunnel' };
   if ((parseNumber(tags.layer) ?? 0) < 0) return { drop: 'underground' };
   if (yes(tags.indoor) || tags.location === 'underground' || tags.location === 'indoor') return { drop: 'indoor' };
   if (yes(tags.building)) return shape === 'area' ? 'building' : undefined;
-  if (yes(tags['building:part'])) return { drop: 'buildingPart' };
+  if (yes(tags['building:part'])) return shape === 'area' ? 'part' : undefined; // dropped unless inside a landmark
   if (tags.highway) {
     if (shape === 'area') return { drop: 'highwayArea' };
     if (tags.footway === 'sidewalk' || tags.footway === 'crossing') return { drop: tags.footway };
@@ -41,6 +47,7 @@ export function classify(tags: Tags, shape: 'point' | 'line' | 'area'): Category
     return yes(tags.bridge) ? 'bridge' : 'road';
   }
   if (shape === 'line' && TRACKS.has(tags.railway ?? '') && yes(tags.bridge)) return 'bridge';
+  if (shape === 'area' && tags.tourism === 'artwork') return 'artwork'; // statue plinths (Concorde cities) → centroid
   if (tags.barrier === 'retaining_wall' || tags.man_made === 'embankment' || tags.man_made === 'quay') return 'quay';
   if (shape === 'line') return tags.natural === 'tree_row' ? 'tree_row' : undefined;
   if (tags.leisure === 'park' || tags.leisure === 'garden') return 'park';
@@ -48,14 +55,43 @@ export function classify(tags: Tags, shape: 'point' | 'line' | 'area'): Category
   return tags.natural === 'water' || tags.waterway === 'riverbank' ? 'water' : undefined;
 }
 
-export const buildingFacts = (t: Tags): Omit<BuildingRec, 'outer' | 'holes'> => ({
-  kind: t.building!,
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+/** roof:direction / direction → compass degrees: "135", "SE" → 135, "nnw" → 337.5; else undefined. */
+export function parseDirection(v: string | undefined): number | undefined {
+  const k = COMPASS.indexOf(v?.trim().toUpperCase() ?? '');
+  if (k >= 0) return k * 22.5;
+  const n = parseNumber(v);
+  return n === undefined ? undefined : ((n % 360) + 360) % 360;
+}
+
+/** Simple 3D Buildings tags shared by outlines and parts (no defaults). */
+export const s3dFacts = (t: Tags): S3dFacts => ({
   height: parseNumber(t.height),
-  levels: parseNumber(t['building:levels']),
   minHeight: parseNumber(t.min_height),
+  levels: parseNumber(t['building:levels']),
+  minLevel: parseNumber(t['building:min_level']),
+  roofLevels: parseNumber(t['roof:levels']),
   roofShape: t['roof:shape'],
-  colour: t['building:colour'],
+  roofHeight: parseNumber(t['roof:height']),
+  roofDirection: parseDirection(t['roof:direction']),
+  roofOrientation: t['roof:orientation'] === 'along' || t['roof:orientation'] === 'across' ? t['roof:orientation'] : undefined,
+  roofMaterial: t['roof:material'],
   roofColour: t['roof:colour'],
+  colour: t['building:colour'],
+  material: t['building:material'],
+});
+
+export const buildingFacts = (t: Tags): Omit<BuildingRec, 'outer' | 'holes'> => ({ kind: t.building!, ...s3dFacts(t) });
+
+export const partFacts = (t: Tags): Omit<PartRec, 'outer' | 'holes'> => ({ kind: t['building:part']!, ...s3dFacts(t) });
+
+export const pointFacts = (t: Tags): Omit<LandmarkPoint, 'kind' | 'x' | 'z'> => ({
+  sub: t.artwork_type ?? t.support ?? t['fountain:type'],
+  height: parseNumber(t.height),
+  minHeight: parseNumber(t.min_height),
+  colour: t.colour,
+  material: t.material,
+  direction: parseDirection(t.direction),
 });
 
 const ROUND = new Set(['roundabout', 'circular']);

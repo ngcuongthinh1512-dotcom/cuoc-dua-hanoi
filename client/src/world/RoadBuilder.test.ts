@@ -8,7 +8,7 @@ import type { BuildCtx, BuildOut, MeshBucket } from './buildTypes.ts';
 import { buildRoads, roadWidth } from './RoadBuilder.ts';
 
 const ctx = (height: (x: number, z: number) => number = () => 0, key = '0_0'): BuildCtx => ({ key, bounds: chunkBounds(key), height });
-const chunk = (roads: RoadRec[], bridges: ChunkData['bridges'] = []): ChunkData => ({ v: 1, key: '0_0', buildings: [], roads, bridges, areas: [], points: [] });
+const chunk = (roads: RoadRec[], bridges: ChunkData['bridges'] = []): ChunkData => ({ v: 2, key: '0_0', buildings: [], roads, bridges, areas: [], points: [] });
 const get = (out: BuildOut, m: string) => out.meshes.find((b) => b.material === m);
 const pts = (b: MeshBucket) => Array.from({ length: b.position.length / 3 }, (_, k) => [...b.position.subarray(3 * k, 3 * k + 3)] as number[]);
 const road = (r: Partial<RoadRec> & { pts: number[] }): RoadRec => ({ kind: 'secondary', oneway: false, roundabout: false, junctions: [], ...r });

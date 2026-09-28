@@ -19,7 +19,7 @@ import { createBuildingMaterials } from './world/BuildingBuilder.ts';
 import { BUILDERS, fallbackTerrain } from './world/chunkBuild.ts';
 import type { BuildCtx, BuildOut } from './world/buildTypes.ts';
 import { mergeBuckets } from './world/geom.ts';
-import { createLandmarkMaterials } from './world/Landmarks.ts';
+import { createLandmarkMaterials } from './world/landmarks/index.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
 import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
 import { carveRiver, createTerrainMaterials } from './world/Terrain.ts';
@@ -84,9 +84,9 @@ async function start() {
     keys && Promise.all(keys.map((k) => getJson<ChunkData>(`data/chunks/${k}.json`))),
   ]);
   // A missing chunk still gets the terrain: built as an empty chunk.
-  const empty = (key: ChunkKey): ChunkData => ({ v: 1, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
-  const chunks = keys ? keys.map((key, i) => (loaded?.[i]?.v === 1 ? loaded[i] : empty(key))) : [fixture];
-  const missing = keys ? keys.length - (loaded?.filter((c) => c?.v === 1).length ?? 0) : 0;
+  const empty = (key: ChunkKey): ChunkData => ({ v: 2, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
+  const chunks = keys ? keys.map((key, i) => (loaded?.[i]?.v === 2 ? loaded[i] : empty(key))) : [fixture];
+  const missing = keys ? keys.length - (loaded?.filter((c) => c?.v === 2).length ?? 0) : 0;
   if (wantCarve && water) attempt('carveRiver', () => carveRiver(grid, water));
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
