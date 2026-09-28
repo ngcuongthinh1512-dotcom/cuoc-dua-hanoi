@@ -17,11 +17,16 @@
     "dev:worker": "npm run dev -w worker",
     "screenshot": "tsx scripts/screenshot.ts",
     "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts",
-    "build-chunks": "tsx scripts/build-chunks.ts"
+    "build-chunks": "tsx scripts/build-chunks.ts",
+    "process-assets": "tsx scripts/process-assets.ts"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.5.0",
+    "@gltf-transform/core": "^4.5.0",
+    "@gltf-transform/functions": "^4.5.0",
     "@types/node": "^26.6.3",
     "fast-png": "^8.0.0",
+    "meshoptimizer": "^1.3.0",
     "osmtogeojson": "^3.0.0-beta.5",
     "playwright-core": "^1.63.0",
     "tsx": "^4.23.15",

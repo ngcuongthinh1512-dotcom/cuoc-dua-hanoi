@@ -59,37 +59,6 @@ describe('landmark placeholders (g1 Eiffel / Arc, g3 pyramid / obelisk)', () => 
     expect(Math.abs(f.ux * Math.cos(Math.PI / 6) + f.uz * Math.sin(Math.PI / 6))).toBeCloseTo(1, 5);
   });
 
-  it('Eiffel: 330 m, 4 legs, open and walkable under the centre, colliders only on the legs', () => {
-    const o = build('eiffel', rect(0, 0, 62.5, 62.5, 20), 330);
-    expect(finite(o)).toBe(true);
-    expect(maxY(o) - y0).toBeGreaterThan(325);
-    expect(maxY(o) - y0).toBeLessThan(335);
-    expect(hits(o, [0, 0, 0], [0, 50, 0])).toBe(false); // vertical under the centre
-    for (const deg of [20, 65, 110, 155]) {
-      const [c, s] = [Math.cos((deg * Math.PI) / 180) * 30, Math.sin((deg * Math.PI) / 180) * 30];
-      expect(hits(o, [-c, 3, -s], [c, 3, s])).toBe(false); // walking across under the tower
-    }
-    expect(hits(o, [0, 0, 0], [0, 200, 0])).toBe(true); // platforms/shaft above
-    expect(o.colliders.length).toBe(1);
-    expect(Math.max(...o.colliders[0]!.vertices.filter((_, i) => i % 3 === 1))).toBeLessThanOrEqual(116);
-    expect(hits(o, [0, 3, 0], [38, 3, 81.6], true)).toBe(true); // a leg blocks the diagonal (20° + 45°)
-    // The fixture's (smaller) footprint still gives the full height.
-    expect(maxY(buildLandmarks(fixture, ctx)) - y0).toBeCloseTo(330, -1);
-  });
-
-  it('Arc: 50 m high, main arch open along its short axis, transverse arch along the long axis', () => {
-    const outer = rect(0, 0, 22.5, 11, -35);
-    const o = build('arc', outer, 50);
-    expect(finite(o)).toBe(true);
-    expect(maxY(o) - y0).toBeCloseTo(50, 0);
-    const f = footprintFrame(outer);
-    const [wx, wz] = [-f.uz, f.ux];
-    expect(hits(o, [-wx * 20, 10, -wz * 20], [wx * 20, 10, wz * 20], true)).toBe(false);
-    expect(hits(o, [-f.ux * 30, 6, -f.uz * 30], [f.ux * 30, 6, f.uz * 30], true)).toBe(false);
-    expect(hits(o, [-f.ux * 30, 35, -f.uz * 30], [f.ux * 30, 35, f.uz * 30], true)).toBe(true); // attic
-    expect(hits(o, [-wx * 20 + f.ux * 15, 10, -wz * 20 + f.uz * 15], [wx * 20 + f.ux * 15, 10, wz * 20 + f.uz * 15], true)).toBe(true); // pier
-  });
-
   it('pyramid: apex at 21.6 m over the footprint centre; obelisk: tagged height, stone only', () => {
     const p = build('pyramid', rect(10, 10, 17.5, 17.5, 10));
     expect(finite(p)).toBe(true);

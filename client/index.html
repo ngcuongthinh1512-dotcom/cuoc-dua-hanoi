@@ -22,6 +22,10 @@
         position: fixed; right: 6px; bottom: 4px; font-size: 11px; color: rgba(255, 255, 255, 0.85);
         text-shadow: 0 0 3px #000; pointer-events: none;
       }
+      #credits button { pointer-events: auto; font: inherit; color: inherit; background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+      #credits-panel { top: 50%; transform: translate(-50%, -50%); max-height: 80%; overflow-y: auto; text-align: left; pointer-events: auto; font-size: 13px; background: rgba(10, 14, 22, 0.96); z-index: 1; }
+      #credits-panel a { color: #9cc7ff; }
+      #credits-panel li { margin-bottom: 6px; }
       #error { top: 50%; transform: translate(-50%, -50%); white-space: pre-line; pointer-events: auto; border: 1px solid #c8412f; }
       kbd {
         display: inline-block; min-width: 1.2em; padding: 0 5px; border: 1px solid #8a93a3; border-bottom-width: 2px;
@@ -47,7 +51,12 @@
     <div id="loading" class="panel">Đang tải bản đồ…</div>
     <div id="error" class="panel" hidden></div>
     <div id="credits">
-      Bản đồ © OpenStreetMap contributors (ODbL) · Độ cao: Terrain Tiles (Mapzen / AWS Open Data): EU-DEM (Copernicus), SRTM (NASA / USGS)
+      Bản đồ © OpenStreetMap contributors (ODbL) · Độ cao: Terrain Tiles (Mapzen / AWS Open Data): EU-DEM (Copernicus), SRTM (NASA / USGS) · <button id="credits-open" type="button">Ghi nguồn</button>
+    </div>
+    <div id="credits-panel" class="panel" hidden>
+      <strong>Ghi nguồn</strong> (dữ liệu và mô hình 3D dùng trong game)
+      <ul id="credits-list"></ul>
+      <button id="credits-close" type="button">Đóng</button>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -1,62 +1,71 @@
-// Group g1: Eiffel Tower, Arc de Triomphe (docs/plans/phase2b-assets.md §1 #1, #4). Owned by the g1 agent.
-// Phase 2 placeholders until then (moved from world/Landmarks.ts): Eiffel = 4 open legs (walkable under the tower,
-// SPEC §17.4; its OSM parts are only read for numbers, never extruded), Arc = two crossed barrel arches.
+// Group g1: Eiffel Tower, Arc de Triomphe (docs/plans/phase2b-assets.md §1 #1, #4). Both are downloaded models
+// (scripts/process-assets.ts → public/models/*.glb) placed on the main thread by models.ts when their chunk attaches;
+// the chunk builder only adds their simplified colliders (SPEC §5.9) in the same pose (modelPose), plus the Arc's
+// Tomb of the Unknown Soldier (near LOD):
+//   Eiffel: the 4 legs up to the 1st platform (the area under the tower stays walkable, SPEC §17.4); its OSM parts are
+//           never extruded (they would close the space under the tower), only its numbers are used (config g1.eiffel).
+//   Arc:    4 piers + attic + transverse lintels, both arch passages open.
 import { landmarks as L } from '../../config.ts';
 import type { BuildingRec, LandmarkId } from '../../geo/chunkData.ts';
+import type { BuildOut, MaterialId } from '../buildTypes.ts';
 import { MeshBuffer, type V3 } from '../geom.ts';
 import type { DetailFn } from './index.ts';
-import { arch, box, collider, extrude, footprintFrame, loft, place, square } from './kit.ts';
+import { box, collider, footprintFrame, loft, place, square } from './kit.ts';
+import { parseColour } from './parts.ts';
 
-// Eiffel profile at 330 m, 125 m base: legs (y, outer half-size, leg width) converge and merge at the 2nd platform.
-const EIFFEL_LEGS = [[0, 62.5, 26], [28, 47, 20], [57, 36, 15], [86, 27.5, 16.5], [115, 20, 20]];
-const EIFFEL_SHAFT = [[115, 20], [180, 11], [240, 7], [276, 5]];
-const EIFFEL_SPIRE = [[280, 3], [312, 1.5], [330, 0.25]];
+const G = L.g1;
 
-function eiffel(rec: BuildingRec, y0: number) {
+/** Model pose on its OSM outline: centre, ground y, yaw (THREE rotation.y: local +x → frame u), xz scale; the frame's
+ *  u flipped when needed so local +z points toward the Concorde (Arc: the east face looks down the Champs-Élysées). */
+export function modelPose(rec: BuildingRec, minGround: number, id: 'eiffel' | 'arc') {
   const f = footprintFrame(rec.outer);
-  const sxz = f.b / 62.5; // square tower: the shorter side
-  const sy = (rec.height ?? L.eiffelHeight) / 330;
-  const tile = L.latticeTile / sxz;
-  const legs = new MeshBuffer('iron');
-  for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]] as const) {
-    const rings = EIFFEL_LEGS.map(([y, s, w]): V3[] => {
-      const m = s! - w! / 2; // leg centre (half-size w/2) on the diagonal
-      return square(w! / 2, y!, sx * m, sz * m);
-    });
-    loft(legs, rings, tile);
-  }
-  const top = new MeshBuffer('iron');
-  loft(top, EIFFEL_SHAFT.map(([y, s]) => square(s!, y!)), tile);
-  loft(top, EIFFEL_SPIRE.map(([y, s]) => square(s!, y!)), tile);
-  // 1st platform: hollow square ring (open above the walkable centre); 2nd and 3rd: solid slabs.
-  for (const [x0, x1, z0, z1] of [[-39, 39, 22, 39], [-39, 39, -39, -22], [22, 39, -22, 22], [-39, -22, -22, 22]]) {
-    box(top, x0!, x1!, 55, 59.5, z0!, z1!, tile);
-  }
-  box(top, -23, 23, 113, 117.5, -23, 23, tile);
-  box(top, -8.5, 8.5, 274, 281, -8.5, 8.5, tile);
-  const legBucket = place(legs.bucket(), f, y0, sxz, sy, sxz);
-  return { meshes: [legBucket, place(top.bucket(), f, y0, sxz, sy, sxz)], instances: [], colliders: [collider(legBucket)] }; // legs only (§5.9)
+  const flip = id === 'arc' && -f.uz * -f.cx + f.ux * -f.cz < 0;
+  const [ux, uz] = flip ? [-f.ux, -f.uz] : [f.ux, f.uz];
+  const scale = id === 'eiffel' ? (f.a + f.b) / 2 / G.eiffel.halfBase : 1; // Arc: real size (the OSM outline is ~10 % larger)
+  return { frame: { ...f, ux, uz }, x: f.cx, y: minGround - G.sink, z: f.cz, yaw: Math.atan2(-uz, ux), scale };
 }
 
-// Arc de Triomphe at 45 (x) × 50 (y) × 22 (z) m: main arch through z, transverse arch through x.
-function arc(rec: BuildingRec, y0: number) {
-  const f = footprintFrame(rec.outer);
-  const [W, D, H] = [22.5, 11, 50]; // half width, half depth, height
-  const [m, ms, t, ts] = [7.3, 21.9, 4.2, 14.5]; // main arch half-width / springing, transverse arch half-width / springing
-  const buf = new MeshBuffer('stone');
-  const front = [-W, 0, -m, 0, ...arch(m, ms), m, 0, W, 0, W, H, -W, H];
-  extrude(buf, front, 'z', -D, -t);
-  extrude(buf, front, 'z', t, D);
-  extrude(buf, [...arch(m, ms), m, H, -m, H], 'z', -t, t);
-  const pier = [...arch(t, ts), t, H, -t, H];
-  extrude(buf, pier, 'x', m, W);
-  extrude(buf, pier, 'x', -W, -m);
-  box(buf, -W - 0.8, W + 0.8, 38.5, 40.5, -D - 0.8, D + 0.8); // cornice under the attic
-  const b = place(buf.bucket(), f, y0, f.a / W, (rec.height ?? L.arcHeight) / H, f.b / D);
-  return { meshes: [b], instances: [], colliders: [collider(b)] }; // ponytail: placeholder = its own collider
+const empty = (): BuildOut => ({ meshes: [], instances: [], colliders: [] });
+
+/** The 4 Eiffel legs from the ground to the 1st platform, placed (collider; with 'metal', the fallback's visible legs). */
+export function eiffelLegs(rec: BuildingRec, minGround: number, material: MaterialId = 'stone') {
+  const p = modelPose(rec, minGround, 'eiffel');
+  const legs = new MeshBuffer(material);
+  legs.color = parseColour(G.eiffel.colour)!;
+  for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]] as const) {
+    loft(legs, G.eiffelLegs.map(([y, s, w]): V3[] => square(w! / 2, y!, sx * (s! - w! / 2), sz * (s! - w! / 2))));
+  }
+  return place(legs.bucket(), p.frame, p.y, p.scale, 1, p.scale);
+}
+
+function arc(rec: BuildingRec, minGround: number, height: (x: number, z: number) => number): BuildOut {
+  const p = modelPose(rec, minGround, 'arc');
+  const A = G.arc;
+  const [W, D, H] = [A.halfWidth, A.halfDepth, A.height];
+  const [[mainH, m], [sideH, t]] = [A.mainArch, A.sideArch] as [[number, number], [number, number]];
+  const b = new MeshBuffer('stone');
+  for (const sx of [-1, 1]) {
+    const [x0, x1] = sx > 0 ? [m, W] : [-W, -m];
+    box(b, x0, x1, 0, H, t, D);
+    box(b, x0, x1, 0, H, -D, -t);
+    box(b, x0, x1, sideH, mainH, -t, t); // over the transverse passage
+  }
+  box(b, -W, W, mainH, H, -D, D); // attic over the main arch
+  // Tomb of the Unknown Soldier (1921) in the middle of the main passage: granite slab, bronze rosette at its
+  // Champs-Élysées end. ponytail: no flame (needs an emissive / animated material), add with the Phase 5 effects.
+  const T = A.tomb;
+  const y0 = height(p.x, p.z) - p.y; // terrain under the arch, in the model frame
+  const slab = new MeshBuffer('masonry');
+  slab.color = parseColour(T.granite)!;
+  box(slab, -T.halfWidth, T.halfWidth, y0, y0 + T.height, -T.halfLength, T.halfLength);
+  const bronze = new MeshBuffer('bronze');
+  const rz = T.halfLength + T.rosette;
+  box(bronze, -T.rosette, T.rosette, y0, y0 + T.height, rz - T.rosette, rz + T.rosette);
+  const near = [slab, bronze].map((q) => place(q.bucket('near'), p.frame, p.y));
+  return { ...empty(), meshes: near, colliders: [collider(place(b.bucket(), p.frame, p.y))] };
 }
 
 export const details: Partial<Record<LandmarkId, DetailFn>> = {
-  eiffel: (rec, _parts, ctx) => eiffel(rec, ctx.minGround - L.sink),
-  arc: (rec, _parts, ctx) => arc(rec, ctx.minGround - L.sink),
+  eiffel: (rec, _parts, ctx) => ({ ...empty(), colliders: [collider(eiffelLegs(rec, ctx.minGround))] }),
+  arc: (rec, _parts, ctx) => arc(rec, ctx.minGround, ctx.height),
 };

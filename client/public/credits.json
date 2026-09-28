@@ -1,0 +1,161 @@
+[
+ {
+  "title": "Bản đồ",
+  "text": "Bản đồ: © OpenStreetMap contributors",
+  "licence": "ODbL 1.0",
+  "url": "https://www.openstreetmap.org/copyright"
+ },
+ {
+  "title": "Độ cao địa hình",
+  "text": "Độ cao địa hình: Terrain Tiles (Mapzen / AWS Open Data): EU-DEM (Copernicus), SRTM (NASA / USGS)",
+  "licence": "xem trang nguồn",
+  "url": "https://github.com/tilezen/joerd/blob/master/docs/attribution.md"
+ },
+ {
+  "title": "eiffel_scott-marshall",
+  "text": "Tháp Eiffel: \"SM - EIffel Tower\" – Scott Marshall, CC BY 3.0, qua Poly Pizza (đã chỉnh sửa)",
+  "licence": "CC BY 3.0",
+  "url": "https://poly.pizza/m/aIpJchqtRTg",
+  "author": "Scott Marshall"
+ },
+ {
+  "title": "arc-triomphe_hoanghiepvu",
+  "text": "Khải Hoàn Môn: \"Arc de Triomphe, Paris (with texture)\" – HoangHiepVu, CC BY 4.0 (đã chỉnh sửa)",
+  "licence": "CC BY 4.0",
+  "url": "https://zenodo.org/records/10229368",
+  "author": "HoangHiepVu"
+ },
+ {
+  "title": "free_low_poly_vehicles_pack_by_rgsdev",
+  "text": "Xe NPC: \"Free Low Poly Vehicles Pack\" – rgsdev (Raphael Gonçalves), qua OpenGameArt (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0",
+  "url": "https://opengameart.org/content/free-low-poly-vehicles-pack",
+  "author": "rgsdev (Raphael Gonçalves)"
+ },
+ {
+  "title": "car-sedan-1_quaternius",
+  "text": "Xe NPC: \"Car\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/unqqkULtRU",
+  "author": "Quaternius"
+ },
+ {
+  "title": "car-sedan-2_quaternius",
+  "text": "Xe NPC: \"Car\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/Cz6yDaUcM9",
+  "author": "Quaternius"
+ },
+ {
+  "title": "suv_quaternius",
+  "text": "Xe NPC: \"SUV\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/xsMtZhBkxL",
+  "author": "Quaternius"
+ },
+ {
+  "title": "taxi_quaternius",
+  "text": "Xe NPC: \"Taxi\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/x43lOScTpN",
+  "author": "Quaternius"
+ },
+ {
+  "title": "truck-delivery_quaternius",
+  "text": "Xe NPC: \"Truck\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/cXw6oiFtZ8",
+  "author": "Quaternius"
+ },
+ {
+  "title": "scooter_poly-by-google",
+  "text": "\"Scooter\" – Poly by Google, CC BY 3.0, qua Poly Pizza (đã chỉnh sửa)",
+  "licence": "CC BY 3.0",
+  "url": "https://poly.pizza/m/fPLXByG4Vx5",
+  "author": "Poly by Google"
+ },
+ {
+  "title": "motorcycle_jeremy",
+  "text": "\"Motorcycle\" – jeremy, CC BY 3.0, qua Poly Pizza (đã chỉnh sửa)",
+  "licence": "CC BY 3.0",
+  "url": "https://poly.pizza/m/0lBe-ApqJs4",
+  "author": "jeremy"
+ },
+ {
+  "title": "ped-man-casual_quaternius",
+  "text": "Người đi đường: \"Casual Character\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/kZ3DmIoGip",
+  "author": "Quaternius"
+ },
+ {
+  "title": "ped-man-hoodie_quaternius",
+  "text": "Người đi đường: \"Hoodie Character\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/gKLBoRsyKe",
+  "author": "Quaternius"
+ },
+ {
+  "title": "ped-man-business_quaternius",
+  "text": "Người đi đường: \"Business Man\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/JFrLIKqvCH",
+  "author": "Quaternius"
+ },
+ {
+  "title": "ped-man-punk_quaternius",
+  "text": "Người đi đường: \"Punk\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/BTALZymknF",
+  "author": "Quaternius"
+ },
+ {
+  "title": "ped-woman-casual_quaternius",
+  "text": "Người đi đường: \"Animated Woman\" (Casual) – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/qJ2gsTUBHL",
+  "author": "Quaternius"
+ },
+ {
+  "title": "ped-woman-dress_quaternius",
+  "text": "Người đi đường: \"Animated Woman\" (Dress) – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/nIItLV9nxS",
+  "author": "Quaternius"
+ },
+ {
+  "title": "ped-woman-punk_quaternius",
+  "text": "Người đi đường: \"Punk\" (Woman) – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://poly.pizza/m/djXoqejw6w",
+  "author": "Quaternius"
+ },
+ {
+  "title": "ped-woman-suit_quaternius",
+  "text": "\"Suit\" – Quaternius, CC BY 3.0, qua Poly Pizza (đã chỉnh sửa)",
+  "licence": "CC BY 3.0",
+  "url": "https://poly.pizza/m/sOUciDsoVV",
+  "author": "Quaternius"
+ },
+ {
+  "title": "universal_animation_librarystandard",
+  "text": "\"Universal Animation Library\" – Quaternius, qua OpenGameArt (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://opengameart.org/content/universal-animation-library",
+  "author": "Quaternius"
+ },
+ {
+  "title": "Universal Base Characters[Standard]",
+  "text": "\"Universal Base Characters\" – Quaternius, qua itch.io (CC0, ghi nguồn cho lịch sự)",
+  "licence": "CC0 1.0",
+  "url": "https://quaternius.itch.io/universal-base-characters",
+  "author": "Quaternius"
+ },
+ {
+  "title": "bicycle_poly-by-google",
+  "text": "\"Bicycle\" – Poly by Google, CC BY 3.0, qua Poly Pizza (đã chỉnh sửa)",
+  "licence": "CC BY 3.0",
+  "url": "https://poly.pizza/m/5pBoRkAPQk6",
+  "author": "Poly by Google"
+ }
+]

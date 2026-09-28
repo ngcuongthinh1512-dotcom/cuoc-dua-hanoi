@@ -6,6 +6,7 @@ import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type WaterData } from './geo/chunkData.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
+import { initCredits } from './ui/Credits.ts';
 import { createDebugOverlay } from './ui/DebugOverlay.ts';
 import { withFallbacks } from './world/attach.ts';
 import { bboxCorners, createBoundsWalls, edgeDistance } from './world/Bounds.ts';
@@ -13,6 +14,7 @@ import { createBuildingMaterials } from './world/BuildingBuilder.ts';
 import type { ToWorker } from './world/buildTypes.ts';
 import { ChunkManager } from './world/ChunkManager.ts';
 import { createLandmarkMaterials } from './world/landmarks/index.ts';
+import { createLandmarkModels } from './world/landmarks/models.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
 import { createSky } from './world/Sky.ts';
 import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
@@ -117,7 +119,9 @@ async function start() {
   if (!hasIndex) $('nodata').hidden = false;
   const worker = new Worker(new URL('./workers/chunkBuilder.worker.ts', import.meta.url), { type: 'module' });
   worker.postMessage({ type: 'init', grid, dataUrl: hasIndex ? new URL('data/', location.href).href : '' } satisfies ToWorker);
-  const chunks = new ChunkManager(worker, hasIndex ? index.keys : bboxKeys(), scene, world, materials, createPropMeshes());
+  const propMeshes = createPropMeshes();
+  const models = createLandmarkModels(new URL('data/', location.href).href, (x, z) => heightAt(grid, x, z), materials, propMeshes);
+  const chunks = new ChunkManager(worker, hasIndex ? index.keys : bboxKeys(), scene, world, materials, propMeshes, hasIndex ? models.attach : undefined);
 
   const input = new Input(renderer.domElement);
   const fly = new FreeFlyCamera(camera); // spectator: flies through everything, no collider
@@ -140,6 +144,7 @@ async function start() {
     notice.hidden = false;
     setTimeout(() => void (notice.hidden = true), ui.imeNoticeMs);
   };
+  initCredits();
   const edge = $('edge');
   const loading = $('loading');
 
@@ -166,7 +171,7 @@ async function start() {
       Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries } });
       // Signal for scripts/screenshot.ts: every chunk around the camera attached and a few frames drawn.
       if (!ready) loading.textContent = `Đang tải bản đồ… còn ${cs.pending} ô`;
-      if (!ready && loop.frames >= 3 && chunks.idle) {
+      if (!ready && loop.frames >= 3 && chunks.idle && models.idle) {
         ready = true;
         loading.hidden = true;
         Object.assign(window, { __READY__: true });
