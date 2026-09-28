@@ -241,6 +241,70 @@ export const landmarks = {
     tiles: '#a0603f', brick: '#9b5a44', concrete: '#b9b5ad', gold: '#d4a53c', bronze: '#5a4a32', glass: '#bcd0da',
     waterJet: '#e8f2f8',
   },
+  // Group g4 details (world/landmarks/g4.ts). Heights in m above each landmark's reference ground; sources inline.
+  g4: {
+    colours: {
+      window: '#232a31', slate: '#4d555f', lead: '#8b939b', zinc: '#7e8a92', clock: '#f1ede2', hands: '#1d1f22',
+      reseda: '#7f9c86', // Grand Palais steelwork, "vert réséda" (repainted 2024)
+      verdigris: '#5f8f7b', paving: '#d6cfc0',
+      glazing: '#a3b5bb', portico: '#7a7264', // back wall in a portico's shade // walls of glass-roofed parts (vault gable ends)
+    },
+    stone: { // limestone tints per building (sRGB)
+      chaillot: '#e6dfcf', tokyo: '#e9e4d8', grandPalais: '#e1d6bd', petitPalais: '#e8dfc9', orsay: '#dccdae',
+      bourbon: '#e2d9c4', invalides: '#d9ccb0', ecole: '#e4dbc6', rodin: '#e9e1d0',
+    },
+    lodSmall: 3, // m: statues / figures shorter than this are near-only
+    columnSegs: 8, // sides of a round column
+    // Palais de Chaillot (1937): OSM wing height=30 counts from the lowest (garden) ground, i.e. the head pavilions
+    // stand ≈ 22 m above the Parvis; the curved gallery arms and end pavilions are lower (estimated from photographs).
+    chaillot: {
+      height: 30, headAbove: 21, armAbove: 13.5, endAbove: 15.5, headLen: 42, endLen: 24,
+      pillarPitch: 5, pillarSize: 1.3, pillarOff: 3.4, // garden colonnade of square pillars on the concave side
+      parvisFront: 14, // m the Parvis terrace runs past the pavilions toward the gardens
+      stairWidth: 32, stairRun: 22, // central stairs down to the gardens
+      statue: 4.6, statuePlinth: 2.2, jet: 5.5, jetIsolated: 9,
+    },
+    // Palais de Tokyo (1937): OSM height=14 (above the avenue du Président-Wilson side), colonnade between the wings.
+    // court = centre (world x, z) of the terraced court between this (west) wing and the east wing (Musée d'Art
+    // moderne, an ordinary OSM building at x −1711): ponytail: fixed point, derive from both outlines if the data moves.
+    tokyo: {
+      height: 14, skylight: 1.8, pillarPitch: 4.4, pillarSize: 1.1, colonnadeH: 12.5,
+      court: [-1757, 138] as [number, number], stairRun: 14, stairWidth: 20,
+    },
+    // Grand Palais (1900): OSM building:part heights (stone 19–25 m, barrel vaults 25–42 m, glass dome 25–50 m).
+    grandPalais: {
+      dome: 50, ribPitch: 8.5, domeRibs: 16, lantern: 4.5, flagpole: 9,
+      colonnade: { y0: 5, y1: 19, r: 0.7, pitch: 5.2, off: 3.2 },
+      // Récipon's 2 quadrigas (1900) on the corner attics of the main façade (fr.wikipedia « Grand Palais »); the plan's
+      // "4" would add 2 that do not exist. quadriga = fallback attic height, inset = m from the façade corner.
+      quadriga: 25, quadrigaInset: 8,
+      porchArches: [[-16, 4.5, 11], [0, 6.5, 13], [16, 4.5, 11]] as [number, number, number][], // [u, half-width, springing]
+    },
+    // Petit Palais (1900, Girault): no published height; cornice ≈ 2 storeys on a 4 m base (plan §1 #12 ≈ 20 m),
+    // dome over the portal ≈ 1.8 × the cornice (estimated from photographs).
+    petitPalais: {
+      cornice: 18.5, roofTop: 21, dome: 34, domeR: 8.5, porchW: 26, porchOut: 4, porchTop: 25,
+      colonnade: { y0: 4.5, y1: 15.5, r: 0.55, pitch: 3.8, off: 2.4 },
+    },
+    // Musée d'Orsay (Gare d'Orsay 1900, Laloux): OSM height=35 (clock pavilions); nave 138 m long, 40 m wide, 32 m
+    // high inside (musee-orsay.fr, histoire du bâtiment). Heights count from the quay (Seine façade).
+    orsay: {
+      height: 35, cornice: 21, mansard: [[1.6, 25], [4.2, 26.5]] as [number, number][], naveHalf: 20, naveLen: 138,
+      vaultSpring: 25, vaultTop: 34, pavilion: 22, pavilionWall: 23.5, arches: 7, clockR: 2.6,
+      westSill: 8, // the west arch's glazing starts above the entrance canopy
+    },
+    // Palais Bourbon: OSM parts (peristyle 18.4 m, pediment 27.4 m); the uncovered outline gaps are filled this high.
+    bourbon: { height: 27.4, fill: 11 },
+    // Dôme des Invalides: 107 m to the cross (fr.wikipedia « Dôme des Invalides »); OSM parts reach 100 m.
+    invalides: { height: 107, ribs: 12, spireBase: 84, globe: 104.5 },
+    // Hôtel des Invalides: façade 196 m (fr.wikipedia); no published height → 4 storeys ≈ 16 m cornice + slate roof.
+    hotelInvalides: { cornice: 16, mansard: [[2.2, 22.5], [4, 24]] as [number, number][], dormerPitch: 5.5 },
+    // École Militaire: OSM parts (quadrangular dome to 22 m); colour tags 'brown' are its slate roofs.
+    ecole: { clockR: 1.6, fillMax: 12, clockBearing: 314, domeTop: 22 }, // clock on the Champ-de-Mars façade (bearing to the Eiffel Tower)
+    // Musée Rodin (Hôtel Biron, 1730): no published height → 3 levels × 4.2 m + hipped slate roof (estimate).
+    rodin: { cornice: 12.6, height: 19, plinth: 1.3, windowRows: [[0.8, 3.2], [5, 3.2], [9.4, 2]] as [number, number][] },
+    dormer: { w: 1.5, h: 2.2 },
+  },
 };
 
 // ── Step 0 · dev preview harness (preview.html, src/preview.ts; dev server only) ──
