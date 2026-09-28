@@ -944,3 +944,13 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
   3. **Mô hình 3D miễn phí trên mạng** cho các công trình biểu tượng khi đẹp hơn rõ rệt: chỉ dùng giấy phép cho phép dùng trong game (CC0 / CC-BY, ghi nguồn trong game), mỗi file ≤ 25 MB sau nén (Draco/Meshopt, KTX2); không dùng nguồn bắt tạo tài khoản; **tải về chỉ sau khi anh duyệt danh sách** (tên file, nguồn, dung lượng, giấy phép). Nếu không có mô hình phù hợp thì dùng cách 1 + 2.
 - Mỗi địa danh: đúng tọa độ/hướng theo polygon OSM, có LOD và collider; tháp Eiffel mở 4 chân (sân dưới tháp đi bộ được), kim tự tháp hình chóp (§17.4).
 - **Đường chân trời:** dựng bóng/silhouette đơn giản các công trình nổi bật ngoài bản đồ nhìn thấy từ xa (Sacré-Cœur, tháp Montparnasse, cụm La Défense), không tới gần được.
+
+### 17.7 Asset bên ngoài & giấy phép (chốt 2026-09-28)
+- Game **chỉ dùng nội bộ** (sự kiện), không phát hành thương mại. Vì vậy bản quyền kiến trúc (kim tự tháp Louvre, ánh đèn tháp Eiffel về đêm) không phải trở ngại.
+- Giấy phép được dùng: CC0 / public domain, CC-BY 3.0/4.0, **MIT** (giữ ghi chú giấy phép). Không dùng NC, ND, SA, "editorial only" hay nguồn không rõ giấy phép.
+- Được dùng **bản sao không cần tài khoản** (Zenodo, Hugging Face Objaverse) của mô hình CC-BY từ Sketchfab, ghi công tác giả gốc.
+- **Danh sách tải bắt buộc** trong `docs/plans/phase2b-assets.md` (21 file, mục 2 và 3) đã được duyệt. Các file tùy chọn chưa duyệt.
+- Thân nhân vật người chơi: **Universal Base Characters** (Quaternius, CC0), dùng cùng Universal Animation Library.
+- **Microsoft Rocketbox** (MIT) được phép: đánh giá cho nhân vật người chơi / người đi đường chân thực hơn. Muốn tải file Rocketbox thì lập danh sách (tên, nguồn, dung lượng) để duyệt riêng.
+- File gốc lưu ở `.cache/assets/` (không commit); chỉ commit bản đã xử lý ở `client/public/models/` (mỗi file ≤ 25 MB). Mọi asset có ghi nguồn trong game (`credits.json` + màn hình "Ghi nguồn").
+- Chiều cao bổ sung cho địa danh lấy từ số liệu công bố (Wikipedia, trang chính thức), ghi nguồn trong code. Không tải dữ liệu LiDAR nếu chưa được duyệt.
