@@ -310,6 +310,60 @@ export const landmarks = {
     alma: { pierWidth: 4, girderDepth: 2, haunchDepth: 4.5, haunchLength: 45, zouaveHeight: 5.2, zouaveBase: 1 },
     flamme: { flame: 3.5, pedestal: 3, pedestalSize: 1.6, step: 0.3, segments: 20, rings: 12 }, // flame 3.5 m (fr.wikipedia.org/wiki/Flamme_de_la_Liberté)
   },
+  // g3 (world/landmarks/g3.ts): Louvre–Concorde–Opéra. Published figures are cited in g3.ts; "est." = estimate
+  // (no published figure found on fr/en.wikipedia, 2026-09-28: proportions from photos / storey counts).
+  g3: {
+    // Roof height field of the Louvre / Palais-Royal outlines: mansard = steep slope k1 up to hm, then k2 to the ridge.
+    cell: 2, // m, field grid step
+    k1: 3, // rise per m inward of the lower (steep) slope (≈ 72°)
+    dmax: 14, // m, distance-to-facade cap
+    blend: 3, // m, zone transitions
+    bay: 4.2, winW: 1.5, winH: 3, storey: 5.5, winFrom: 2, // facade window rhythm (m)
+    arcade: 10, // m, walls up to this high get one tall opening per bay (colonnades) instead of window rows
+    colours: {
+      stone: '#dccdab', slate: '#535b63', window: '#262c33', granite: '#8e8a84', pinkGranite: '#b99a84',
+      basin: '#34383d', water: '#223441', steel: '#c9ced3', frame: '#6d747b', marble: '#b8706a', black: '#1b1b1b',
+      white: '#ececec', statue: '#e4ddd0', recess: '#3a3632', gilt: '#c9a24a', patina: '#6f6b5c',
+      verdigris: '#4a6552', // painted cast iron "vert bronze" of Hittorff's fountains and rostral columns
+    },
+    // Louvre frame: origin = pyramid centre, u = unit vector pyramid → Pavillon de l'Horloge (both from OSM), w = south.
+    louvre: {
+      frame: { ox: 1079, oz: 496.7, ux: 0.939, uz: 0.343 },
+      // [cornice, mansard lower height, upper slope, max top] m above ground, est. (3 storeys + attic).
+      base: [20.5, 7.5, 0.3, 29] as const,
+      // zones [u0, u1, w0, w1, cornice, hm, k2, top]: Cour Carrée N/S/E wings (low roofs behind the balustrade),
+      // its west (Lescot / Lemercier) wing with the high slate roof.
+      zones: [
+        [150, 320, -110, 110, 25, 3.5, 0.2, 29],
+        [118, 152, -110, 110, 24, 8, 0.3, 32],
+      ] as const,
+      // pavilions [u, w, half u, half w, cornice, roof height, 1 = square dome (Horloge) | 0 = "à l'impériale"], est.
+      pavilions: [
+        [143, 0.7, 12, 13, 27, 17, 1], // Horloge (Sully)
+        [0, -73, 13, 12, 25, 16, 0], [0, 73, 13, 12, 25, 16, 0], // Richelieu, Denon
+        [77, -72, 9, 11, 24, 13, 0], [77, 72, 9, 11, 24, 13, 0], // Colbert, Daru
+        [-80, -72, 9, 11, 24, 13, 0], [-80, 72, 9, 11, 24, 13, 0], // Turgot, Mollien
+        [-364, 135, 14, 15.5, 27, 15, 0], [-338, -160, 12, 14, 27, 15, 0], // Flore, Marsan
+        [-222, 125, 16, 16, 24, 12, 0], // Sessions
+        [-97, -139, 11, 11, 23, 10, 0], [-99, 126, 10, 15, 23, 10, 0], // Rohan, La Trémoille
+        [140, 74, 11, 12, 25, 11, 0], // Pavillon du Roi
+      ] as const,
+      courtGlass: 3, // m, glass roofs of the Cour Marly / Puget above the cornice
+    },
+    palaisRoyal: {
+      base: [19.5, 6.5, 0.35, 30] as const,
+      // zones in the outline's footprintFrame (u ≈ ENE, w ≈ SSE): the Galerie d'Orléans, both colonnades, 7 m est.
+      zones: [[-18, 43, -63, -33.5, 7, 0, 0, 7]] as const,
+      burenSpacing: 3.19, burenR: 0.35, burenMax: 3.5,
+    },
+    pyramid: { height: 21.6, small: 5, smallAt: 32, basin: [20, 46, 6, 32] as const, basinH: 0.55, beam: 0.18 },
+    obelisk: { shaft: 22.83, base: 1.21, top: 0.8, cap: 3.6, total: 33.37 },
+    concorde: { statuePlinth: 4.6, statue: 3.2, rostral: 8.5 },
+    fountain: { height: 9, basin: 0.8 },
+    vendome: { total: 44.3, pedestal: 7.3, shaftR: 1.8, shaftTop: 36.2, turns: 22, statue: 3.3 },
+    carrousel: { quadriga: 4.2, soldier: 2.4 },
+    opera: { apollo: 7.5, groups: 7, columnR: 0.55 },
+  },
 };
 
 // ── Step 0 · dev preview harness (preview.html, src/preview.ts; dev server only) ──
