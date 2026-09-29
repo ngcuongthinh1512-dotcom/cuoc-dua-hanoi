@@ -1028,7 +1028,8 @@ export function createSkyline(sky: SkylineData | undefined, groundAt: (x: number
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, fog: false });
   m.onBeforeCompile = (s) => {
     s.uniforms.skyHaze = { value: new THREE.Vector4(S.hazeDistance, S.maxHaze, S.shell, S.fadeHeight) };
-    s.uniforms.skyHazeColor = { value: new THREE.Color(R.sky.horizon) };
+    // mixed after colorspace_fragment (output is sRGB already), like three's own fogColor: sRGB components
+    s.uniforms.skyHazeColor = { value: new THREE.Color(R.sky.horizon).convertLinearToSRGB() };
     s.vertexShader = `uniform vec4 skyHaze;\nvarying float vSkyHaze;\n${s.vertexShader.replace(
       '#include <project_vertex>',
       `vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );

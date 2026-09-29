@@ -9,6 +9,7 @@ import { landmarks as L } from '../../config.ts';
 import type { BuildingRec, LandmarkId, PartRec } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID, type LandmarkDef } from '../../geo/landmarks.ts';
 import { buildingHeight } from '../BuildingBuilder.ts';
+import { skyEnvironment } from '../Water.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId } from '../buildTypes.ts';
 import { mergeBuckets } from '../geom.ts';
 import { details as g1 } from './g1.ts';
@@ -122,16 +123,7 @@ function canvasTexture(draw: (g: CanvasRenderingContext2D) => void) {
 
 export function createLandmarkMaterials(): Partial<Record<MaterialId, Material>> {
   const C = L.colours;
-  // Lattice: white frame + X bracing on transparent; alphaTest low enough that far mip levels stay solid.
-  const lattice = canvasTexture((g) => {
-    g.strokeStyle = '#fff';
-    g.lineWidth = 8;
-    g.strokeRect(4, 4, 56, 56);
-    g.lineWidth = 5;
-    g.beginPath();
-    g.moveTo(0, 0), g.lineTo(64, 64), g.moveTo(64, 0), g.lineTo(0, 64);
-    g.stroke();
-  });
+  const envMap = skyEnvironment(); // shared: one PMREM for all three metals
   const panes = canvasTexture((g) => {
     g.fillStyle = 'rgba(255,255,255,0.55)';
     g.fillRect(0, 0, 64, 64);
@@ -144,12 +136,11 @@ export function createLandmarkMaterials(): Partial<Record<MaterialId, Material>>
   });
   return {
     stone: new MeshStandardMaterial({ color: '#d8c8a2', roughness: 0.85 }),
-    iron: new MeshStandardMaterial({ color: '#8c6a4d', roughness: 0.7, metalness: 0.1, map: lattice, alphaTest: 0.35, side: DoubleSide }),
     glass: new MeshStandardMaterial({ color: C.glass, roughness: 0.12, metalness: 0.25, map: panes, transparent: true, opacity: 0.85, side: DoubleSide }),
     masonry: new MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }),
-    metal: new MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.6 }),
-    gold: new MeshStandardMaterial({ color: C.gold, roughness: 0.3, metalness: 1 }),
-    bronze: new MeshStandardMaterial({ color: C.bronze, roughness: 0.5, metalness: 0.8 }),
+    metal: new MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.6, envMap }),
+    gold: new MeshStandardMaterial({ color: C.gold, roughness: 0.3, metalness: 1, envMap }),
+    bronze: new MeshStandardMaterial({ color: C.bronze, roughness: 0.5, metalness: 0.8, envMap }),
     waterJet: new MeshStandardMaterial({ color: C.waterJet, roughness: 0.2, transparent: true, opacity: 0.6, depthWrite: false }),
   };
 }

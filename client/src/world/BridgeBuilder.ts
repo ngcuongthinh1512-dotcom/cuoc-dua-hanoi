@@ -1,9 +1,14 @@
 // Package C: bridge decks + railings (+ trimesh colliders) from BridgeRecs; materials come from createRoadMaterials().
 // Module top level must not touch the DOM: the worker imports build*(); canvas textures only inside create*().
 // Deck height: linear along arc length between the terrain 5 m beyond each chain end (the quays once the river is
-// carved), never below the terrain under it, + (layer − 1) × railLayerStep for upper decks (Bir-Hakeim metro).
+// carved), never below the terrain under it, + (layer − 1) × railLayerStep for upper decks. Upper RAIL decks (the
+// 2.5 km Line 6 viaduct over Bir-Hakeim) instead sit railLayerStep × (layer − 1) above the road deck under them, or
+// above the terrain where there is none (a straight line between its far ends floated ≈ 21 m over the river).
+// ponytail: road decks of this chunk only; over the river without one the floor is bridge.riverDeck, a cross-chunk
+// deck lookup if another elevated line crosses water.
 // A piece of a split chain (BridgeRec.chain) uses the whole chain's ends and arc length, and caps only real chain ends.
 import { roads as C } from '../config.ts';
+import type { BridgeRec } from '../geo/chunkData.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
 import { MeshBuffer, mergeTriMeshes } from './geom.ts';
 import { cap, markings, Path, roadWidth, sideGaps, sidewalkWidth, strip, surfaceOf, wall, type YFn } from './RoadBuilder.ts';
@@ -11,23 +16,49 @@ import { cap, markings, Path, roadWidth, sideGaps, sidewalkWidth, strip, surface
 export const buildBridges: Builder = (chunk, ctx) => {
   const bufs = new Map<MaterialId, MeshBuffer>();
   const buf = (m: MaterialId) => bufs.get(m) ?? (bufs.set(m, new MeshBuffer(m)), bufs.get(m)!);
-  const { deckThickness: T, railingHeight: RH, railingThickness: RT, endSample, railLayerStep } = C.bridge;
+  const { deckThickness: T, railingHeight: RH, railingThickness: RT, endSample, railLayerStep, riverDeck } = C.bridge;
   const max = C.maxSegment;
+
+  const unit = (dx: number, dz: number) => [dx / (Math.hypot(dx, dz) || 1), dz / (Math.hypot(dx, dz) || 1)] as const;
+  /** Deck line without the layer step: linear between the terrain beyond the chain ends, never below the terrain. */
+  const deckY = (b: BridgeRec, L: number): YFn => {
+    const e = b.chain?.ends ?? [...b.pts.slice(0, 4), ...b.pts.slice(-4)];
+    const [ax, az] = unit(e[2]! - e[0]!, e[3]! - e[1]!);
+    const [bx, bz] = unit(e[6]! - e[4]!, e[7]! - e[5]!);
+    const y0 = ctx.height(e[0]! - ax * endSample, e[1]! - az * endSample);
+    const y1 = ctx.height(e[6]! + bx * endSample, e[7]! + bz * endSample);
+    const [s0, CL] = b.chain ? [b.chain.s0, b.chain.length] : [0, L];
+    return (x, z, s) => Math.max(y0 + ((y1 - y0) * (s0 + s)) / CL, ctx.height(x, z));
+  };
+  const lower = chunk.bridges.filter((o) => o.layer <= 1 && o.pts.length >= 4).map((o) => ({ o, y: deckY(o, new Path(o.pts).length) }));
+  /** Road deck height under (x, z): nearest point of a layer ≤ 1 deck of this chunk within its half width + 3 m. */
+  const lowerAt = (x: number, z: number) => {
+    let best: number | undefined;
+    let bestD = Infinity;
+    for (const { o, y } of lower) {
+      let s = 0;
+      for (let i = 2; i < o.pts.length; i += 2) {
+        const [px, pz, qx, qz] = [o.pts[i - 2]!, o.pts[i - 1]!, o.pts[i]!, o.pts[i + 1]!];
+        const len = Math.hypot(qx - px, qz - pz) || 1e-9;
+        const t = Math.min(1, Math.max(0, ((x - px) * (qx - px) + (z - pz) * (qz - pz)) / len ** 2));
+        const d = Math.hypot(px + t * (qx - px) - x, pz + t * (qz - pz) - z);
+        if (d < bestD && d < roadWidth({ ...o, oneway: false }) / 2 + 3) [bestD, best] = [d, y(x, z, s + t * len)];
+        s += len;
+      }
+    }
+    return best;
+  };
 
   for (const b of chunk.bridges) {
     if (b.pts.length < 4) continue;
     const p = new Path(b.pts);
     const L = p.length;
     if (L < 0.5) continue;
-    const e = b.chain?.ends ?? [...b.pts.slice(0, 4), ...b.pts.slice(-4)];
-    const unit = (dx: number, dz: number) => [dx / (Math.hypot(dx, dz) || 1), dz / (Math.hypot(dx, dz) || 1)] as const;
-    const [ax, az] = unit(e[2]! - e[0]!, e[3]! - e[1]!);
-    const [bx, bz] = unit(e[6]! - e[4]!, e[7]! - e[5]!);
-    const y0 = ctx.height(e[0]! - ax * endSample, e[1]! - az * endSample);
-    const y1 = ctx.height(e[6]! + bx * endSample, e[7]! + bz * endSample);
     const [s0, CL] = b.chain ? [b.chain.s0, b.chain.length] : [0, L];
     const up = Math.max(0, b.layer - 1) * railLayerStep;
-    const y: YFn = (x, z, s) => Math.max(y0 + ((y1 - y0) * (s0 + s)) / CL, ctx.height(x, z)) + up;
+    const base = deckY(b, L);
+    const y: YFn =
+      up && C.railKinds.includes(b.kind) ? (x, z) => (lowerAt(x, z) ?? Math.max(ctx.height(x, z), riverDeck)) + up : (x, z, s) => base(x, z, s) + up;
 
     const way = { ...b, oneway: false };
     const hc = roadWidth(way) / 2;
@@ -70,7 +101,7 @@ export const buildBridges: Builder = (chunk, ctx) => {
     // Railings (parapets) on the outer edges.
     const r = buf('railing');
     for (const side of [1, -1] as const) {
-      if (gaps[side === 1 ? 0 : 1]! < Infinity) continue;
+      if (gaps[side === 1 ? 0 : 1]! < Infinity || C.bridge.bare.includes(b.name ?? '')) continue;
       const [o, i] = [side * H, side * (H - RT)];
       wall(r, p, 0, L, o, y, 0, RH, side, max);
       wall(r, p, 0, L, i, y, 0, RH, side === 1 ? -1 : 1, max);

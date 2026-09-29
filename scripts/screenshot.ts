@@ -9,7 +9,7 @@ import { parseArgs } from 'node:util';
 import { latLonToWorld } from '@race/shared';
 import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
-import { flyCamera } from '../client/src/config.ts';
+import { flyCamera, roads } from '../client/src/config.ts';
 import { type ChunkData, type ChunkIndex, ringArea } from '../client/src/geo/chunkData.ts';
 import { ringCentroid } from '../client/src/geo/clip.ts';
 import { LANDMARKS } from '../client/src/geo/landmarks.ts';
@@ -95,7 +95,8 @@ if (existsSync(join(dataDir, 'index.json'))) {
     if (!s.destination || !f || !t) continue;
     const p = latLonToWorld(s.destination.lat, s.destination.lon);
     const yaw = (Math.atan2(p.x - t.x / t.w, p.z - t.z / t.w) * 180) / Math.PI;
-    PRESETS[`leg-${s.id}`] = `/?cam=${[p.x, ground(p.x, p.z) + 1.7, p.z, yaw, f[1]].map((v) => +v.toFixed(2)).join(',')}`;
+    const y = Math.max(ground(p.x, p.z), roads.bridge.riverDeck) + 1.7; // L4 is on a Seine bridge: DEM there < deck
+    PRESETS[`leg-${s.id}`] = `/?cam=${[p.x, y, p.z, yaw, f[1]].map((v) => +v.toFixed(2)).join(',')}`;
   }
 }
 const TIMEOUT_MS: Record<string, number> = { topdown: 90_000 };

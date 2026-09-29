@@ -21,7 +21,6 @@ const FALLBACK_COLOUR: Record<MaterialId, number> = {
   railing: 0x1c2024,
   sign: 0x1d4f9c,
   stone: 0xd2bf94,
-  iron: 0x6b4f3a,
   glass: 0x9cc8dc,
   masonry: 0xffffff, // × vertex colour
   metal: 0xffffff, // × vertex colour

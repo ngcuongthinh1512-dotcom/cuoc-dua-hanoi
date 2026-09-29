@@ -4,7 +4,7 @@
 import type { ChunkData, ChunkKey, chunkBounds } from '../geo/chunkData.ts';
 import type { HeightGrid } from '../geo/heightGrid.ts';
 
-/** Landmarks (world/landmarks/): 'stone' plain limestone, 'iron' Eiffel lattice (alpha), 'glass' transparent panes,
+/** Landmarks (world/landmarks/): 'stone' plain limestone, 'glass' transparent panes,
  *  'masonry' / 'metal' vertex-coloured stone|slate|lead|zinc|verdigris / painted steel, 'gold' gilding, 'bronze' statues,
  *  'waterJet' fountain spray. */
 export type MaterialId =
@@ -21,7 +21,6 @@ export type MaterialId =
   | 'railing'
   | 'sign'
   | 'stone'
-  | 'iron'
   | 'glass'
   | 'masonry'
   | 'metal'

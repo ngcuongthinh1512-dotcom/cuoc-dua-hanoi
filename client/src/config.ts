@@ -135,7 +135,7 @@ export const buildings = {
 // ── C · roads + bridges (world/RoadBuilder.ts, world/BridgeBuilder.ts) ──
 export const roads = {
   sidewalkWidth: 3.5, // m each side (SPEC §4.4: 3–4 m)
-  sidewalkByName: { 'Avenue des Champs-Élysées': 21, 'Pont Alexandre III': 10 } as Record<string, number>, // m each side (Champs 70 m ≈ 21 + 28 + 21, Pont Alexandre III 40 m)
+  sidewalkByName: { 'Avenue des Champs-Élysées': 21, 'Pont Alexandre III': 10, 'Pont Neuf': 4.5 } as Record<string, number>, // m each side (Champs 70 m ≈ 21 + 28 + 21, Pont Alexandre III 40 m)
   curbHeight: 0.15, // m (STYLE_GUIDE)
   laneWidth: 3.25, // m; width = lanes × this when there is no width tag
   widthByKind: {
@@ -145,7 +145,8 @@ export const roads = {
   } as Record<string, number>, // m, per highway=* / railway=* when neither width nor lanes is tagged
   defaultWidth: 6, // m, kind missing from widthByKind
   // m carriageway; overrides everything except on a oneway half of a dual carriageway (the Concorde end of the Champs)
-  widthByName: { 'Place Charles de Gaulle': 36, 'Avenue des Champs-Élysées': 28 } as Record<string, number>,
+  // Pont Neuf 20.5 m = 11.5 + 2 × 4.5, Pont des Arts 11 m incl. railings (fr/en.wikipedia) — the landmark decks g2 details
+  widthByName: { 'Place Charles de Gaulle': 36, 'Avenue des Champs-Élysées': 28, 'Pont Neuf': 11.5, 'Pont des Arts': 10.2 } as Record<string, number>,
   sidewalkKinds: [
     'motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential',
     'primary_link', 'secondary_link', 'tertiary_link',
@@ -163,7 +164,9 @@ export const roads = {
   markingLift: 0.02, // m above the carriageway
   centreLine: { width: 0.15, dash: 3, gap: 5, junctionCut: 8 }, // m; white dashes between lanes, cut before junctions
   // m; mergeGap: parallel same-layer road decks closer than this (centre lines) are joined into one deck, no inner parapets
-  bridge: { deckThickness: 1, railingHeight: 1.1, railingThickness: 0.3, endSample: 5, railLayerStep: 6, mergeGap: 30 },
+  bridge: { deckThickness: 1, railingHeight: 1.1, railingThickness: 0.3, endSample: 5, railLayerStep: 6, mergeGap: 30,
+    riverDeck: 1.3,
+    bare: ['Pont Neuf', 'Pont des Arts'] as string[] }, // named decks without railings: world/landmarks/g2.ts draws their parapets // m: road deck under an upper rail deck over the river when none is in its chunk (Bir-Hakeim ≈ 1.1–1.5)
   colours: { asphalt: '#3b3c40', sidewalk: '#bab5aa', pave: '#7f756a', marking: '#f0f0ec', bridge: '#b7aa8f', railing: '#26292c' },
   textureTile: { asphalt: 4, sidewalk: 3, pave: 1.2 }, // m covered by one canvas texture (uv = world metres)
   polygonOffset: { sidewalk: -1, asphalt: -2, pave: -3, marking: -4 }, // factor = units; terrain (0) < … < marking
@@ -220,10 +223,6 @@ export const props = {
 
 // ── Phase 2B · landmarks (geo/landmarks.ts registry, world/landmarks/: index + parts renderer + g1…g5 details) ──
 export const landmarks = {
-  // Phase 2 placeholders (g1 Eiffel / Arc, g3 pyramid / obelisk) until the groups replace them
-  eiffelHeight: 330, arcHeight: 50, pyramidHeight: 21.6, obeliskHeight: 23, // m, used when OSM has no height
-  obeliskShaft: 23, // m, shaft + pyramidion; the rest of the tagged height is the pedestal
-  latticeTile: 5, // m per Eiffel lattice panel (iron alpha texture)
   glassTile: 3, // m per glass pane (uv unit of the 'glass' material)
   sink: 0.5, // m below the lowest footprint vertex (placeholders)
   detailDistance: 600, // m: buckets with lod 'near' are hidden beyond this (ChunkManager, per mesh bounding sphere)
@@ -304,7 +303,8 @@ export const landmarks = {
     },
     arts: {
       spans: 7, // 7 arches since the 1984 rebuild, 155 m × 11 m (en.wikipedia.org/wiki/Pont_des_Arts)
-      pierWidth: 3.4, ribs: 5, ribWidth: 0.35, ribDepth: 0.7, deckLift: 0.08, plank: 0.6,
+      pierWidth: 3.4, ribs: 5, ribWidth: 0.35, ribDepth: 0.7, plank: 0.6,
+      deckLift: 0.3, // m: planks above the estimated deck line (± 0.2 m), so they always cover BridgeBuilder's stone surface
       railing: 1.1, railPostStep: 1.5, lampHeight: 3.2,
     },
     alma: { pierWidth: 4, girderDepth: 2, haunchDepth: 4.5, haunchLength: 45, zouaveHeight: 5.2, zouaveBase: 1 },

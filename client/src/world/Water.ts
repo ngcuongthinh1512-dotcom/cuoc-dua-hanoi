@@ -54,8 +54,9 @@ function rippleNormals(size = 128): Texture {
   return t;
 }
 
-/** Equirect sky gradient; three converts it to a PMREM cube-UV map for the standard material on first use. */
-function skyEnvironment(w = 64, h = 32): Texture {
+/** Equirect sky gradient; three converts it to a PMREM cube-UV map for the standard material on first use.
+ *  Also the reflection of the landmark metals (gold / bronze / metal), which render black without one. */
+export function skyEnvironment(w = 64, h = 32): Texture {
   const zenith = new Color(W.sky.zenith);
   const horizon = new Color(W.sky.horizon);
   const data = new Uint8Array(w * h * 4);

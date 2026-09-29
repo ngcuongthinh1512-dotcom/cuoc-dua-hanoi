@@ -941,8 +941,8 @@ const rodin: DetailFn = (rec, _parts, ctx) => {
 };
 
 /** Palais de Tokyo wing: marble mass (height from the Wilson side), skylights on the flat roof (OSM parts), windows,
- *  cornice, peristyle of square pillars on the court side, steps from the court down toward the quay, statues.
- *  A building=roof record (the peristyle canopy between the wings, way/79219265, not yet in the registry) becomes an
+ *  cornice, steps from the court down toward the quay, statues.
+ *  The building=roof record (the peristyle canopy between the wings, way/79219265) becomes an
  *  entablature on square pillars. */
 const tokyo: DetailFn = (rec, parts, ctx) => {
   const s = new Paint();
@@ -975,14 +975,7 @@ const tokyo: DetailFn = (rec, parts, ctx) => {
   cornice(s, rings, g + roof + 0.9, 1.4, 0.5, stone);
   windows(s, rings, [[g - 9, 4.5], [g - 3.5, 4.5], [g + 2, 6]], 4.4, 2.2, ctx.height);
   const f = footprintFrame(rings[0]!);
-  const [cx, cz] = [G.tokyo.court[0], G.tokyo.court[1]];
-  const court = edges(rings).filter((e) => {
-    const [mx, mz] = [(e.ax + e.bx) / 2, (e.az + e.bz) / 2];
-    const [dx, dz] = [cx - mx, cz - mz];
-    return e.len > 2 && e.nx * dx + e.nz * dz > 0.5 * Math.hypot(dx, dz) && Math.hypot(dx, dz) < f.a * 2.5;
-  });
-  const top = g + P.colonnadeH;
-  colonnade(s, court, { off: 3, r: P.pillarSize / 2, pitch: P.pillarPitch, y0: g, y1: top, square: true, ent: 1.8 }, stone, ctx.height);
+  const [cx, cz] = [G.tokyo.court[0], G.tokyo.court[1]]; // the court-side peristyle is the building=roof record
   // steps: from the court centre toward the quay (the frame's long axis end nearest the Seine = lower terrain)
   const [ax, az] = at(f, f.a, 0);
   const [bx, bz] = at(f, -f.a, 0);

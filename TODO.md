@@ -36,14 +36,19 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Ngoài bbox chỉ có dải chunk sát biên, đứng gần biên nhìn ra ngoài sẽ thấy mép thế giới (cảnh báo + tường vẫn chặn); có thể thêm địa hình/sương xa hơn. Mây vẽ tĩnh trong texture bầu trời.
 - Photorealistic 3D Tiles: hoãn (cần API key, ghi công, không được cache).
 
-## Phase 2B – Địa danh chính xác (SPEC §17.6)
-- Tìm mô hình 3D miễn phí (CC0 / CC-BY, ≤ 25 MB, không cần tạo tài khoản) cho các công trình biểu tượng; lập danh sách tên file, nguồn, dung lượng, giấy phép để anh duyệt TRƯỚC khi tải.
-- Dựng khoảng 33 địa danh theo §17.6: dữ liệu 3D OSM (`building:part`, `roof:shape`…) + dựng chi tiết bằng code + mô hình đã duyệt; thay mô hình tạm Eiffel / Khải Hoàn Môn / kim tự tháp / obelisk; có LOD + collider; ghi nguồn mô hình trong game.
-  - Đã xong phần nền (pipeline): danh sách địa danh `client/src/geo/landmarks.ts`, giữ `building:part` trong outline địa danh (chunk v2), bộ dựng part S3DB chung (`world/landmarks/parts.ts`: mọi kiểu mái, cột tròn, vật liệu), LOD `near`, collider hộp, preset chụp `lm-<id>` + `leg-L1…L6`. Còn lại: chi tiết từng nhóm g1…g5 (`world/landmarks/g1.ts`…`g5.ts`).
-  - Thiếu chiều cao công bố: Louvre (OSM chỉ có 3 tầng → cao 9,6 m), Petit Palais, Hôtel des Invalides, Palais Bourbon, Palais de Justice (dùng mặc định 20 m khi phần part không phủ hết outline).
-  - Outline có part nhưng part phủ < 90 % (Louvre, Chaillot, Hôtel des Invalides, Palais Bourbon, Conciergerie, Tokyo…) thì đùn cả outline lẫn part: tường trùng nhau có thể nhấp nháy (z-fighting); nhóm phụ trách sửa trong DetailFn của mình.
-  - Mái kiểu khung (gabled, hipped…) dựng theo hình chữ nhật bao nhỏ nhất: footprint chữ L / không đều có đỉnh mái thấp hơn `height`.
-- Bóng các công trình ngoài bản đồ ở đường chân trời: Sacré-Cœur, tháp Montparnasse, La Défense (dữ liệu đã có: `client/public/data/skyline.json` 89 tháp ≥ 60 m + tọa độ trong `landmarks.ts`; chưa dựng).
+## Phase 2B – Địa danh chính xác (SPEC §17.6) – phần còn lại
+- Ngọn lửa Mộ Chiến sĩ Vô danh (Khải Hoàn Môn): cần vật liệu phát sáng / hoạt ảnh (Phase 5); hiện chỉ có phiến đá và hoa hồng đồng.
+- Thang máy tháp Eiffel lên tầng 2 (SPEC §4.5) chưa dựng (gameplay + hình, phase sau).
+- Mô hình Eiffel chất lượng 3/5 (khung SketchUp, 57k tam giác): thô khi nhìn gần dưới tháp; mô hình tốt hơn cần duyệt riêng. Chưa nén texture KTX2 (máy chưa có `toktx`), Khải Hoàn Môn dùng WebP.
+- Cột Vendôme: phù điêu xoắn dựng bằng hình học, chưa có normal map (cần thêm vật liệu có normal map trong `landmarks/index.ts`).
+- Palais-Royal: các dãy hành lang quanh vườn (Valois, Montpensier, Beaujolais) là nhà OSM thường, không có tên trong OSM để thêm vào danh sách địa danh; collider một khối chặn lối Galerie d'Orléans từ Cour d'honneur sang vườn (tách collider nếu chặng đua cần lối này).
+- Pont Neuf: các vòm đều nhau (thực tế khác nhau); tượng trên trụ cầu Bir-Hakeim, tượng Zouave / Henri IV / Renommée hiện là khối thô.
+- Cầu Bir-Hakeim: sàn metro tầng trên nằm trên sàn đường + `railLayerStep`; đoạn dốc lên đồi Passy khá gắt (theo địa hình DEM).
+- Grand Palais: dựng 2 cỗ xe tứ mã (đúng thực tế, kế hoạch ghi 4).
+- Chiều cao ước lượng (không có số công bố, ghi `est.` / ponytail trong code): mái từng cánh Louvre, Petit Palais (vòm 34 m), Hôtel Biron (19 m), gờ mái Hôtel des Invalides, cánh Chaillot, chuông Tòa thị chính (50 m), sân thượng + tượng tháp Saint-Jacques, hướng tháp Montparnasse (115°), dáng đồi Montmartre; mái vòm École Militaire dùng 22 m của OSM (có vẻ thấp).
+- Các nhóm g5 phụ thuộc giá trị OSM hiện tại (Notre-Dame 69 / 96 m, Sainte-Chapelle 75 / 30 m, chóp Conciergerie 30 m): nếu `build-chunks` đổi, DetailFn rơi về dựng chung và `g5.test.ts` báo lỗi.
+- `parts.ts` vẽ đầu hồi của part mái kính bằng vật liệu tường (g4 tự xử lý bằng màu kính nhạt).
+- Nhìn thấy khi kiểm tra: một khối nâu lơ lửng gần tháp Saint-Jacques (≈ 1990, 45, 900) và khối xám hình lều trên kè trước Conciergerie (part OSM có `min_height`, không thuộc g5).
 
 ## Phase 3 – Nhân vật & camera
 - Tạo `client/src/core/EventBus.ts` khi có module thật sự cần (Phase 1 chưa có nên chưa tạo).
@@ -82,8 +87,6 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 
 ## Phase 11 – Test toàn trình
 - `npm run sim` (bot mô phỏng), `worker/legs/test/paris-demo.filled.json`, `worker/legs/test/specials.json`.
-- Thay địa danh tạm (Eiffel, Khải Hoàn Môn, kim tự tháp Louvre, obelisk) bằng model thật; Eiffel chưa có các vòm trang trí dưới tầng 1, obelisk chưa có chóp vàng; Eiffel nhìn từ xa hơi tối (tự đổ bóng + lưới alpha).
-- Địa danh chỉ có `building:part` chung (Phase 2B pipeline): tường trơn không cửa sổ, chưa có chi tiết (Orsay, Petit Palais, Pompidou, Saint-Jacques, Rodin chưa có part nên chỉ là khối đùn); cầu Bir-Hakeim tầng trên còn là dải mỏng, chưa có cột sắt. Làm trong các nhóm g1…g5 (Phase 2B).
 
 ## Phase 12 – Deploy
 - Bundle client ~4,9 MB (gzip ~1,8 MB), phần lớn là WASM nhúng base64 của `@dimforge/rapier3d-compat` (`chunkSizeWarningLimit` trong `client/vite.config.ts`). Khi tối ưu tải trang: dùng `@dimforge/rapier3d` (file `.wasm` riêng) hoặc tách chunk vendor để cache.

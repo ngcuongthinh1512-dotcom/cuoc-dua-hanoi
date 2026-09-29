@@ -69,7 +69,7 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   { id: 'rodin', name: 'Bảo tàng Rodin (Hôtel Biron)', group: 'g4', osm: ['way/68568682'], near: 60, view: [90, 200] },
   // near 300: the Trocadéro gardens down to the Seine (58 fountain jets of the Fontaine de Varsovie, gilded statues).
   { id: 'chaillot', name: 'Palais de Chaillot / Trocadéro', group: 'g4', osm: ['relation/6826569'], near: 300, view: [135, 350] },
-  { id: 'palais-de-tokyo', name: 'Palais de Tokyo', group: 'g4', osm: ['way/79219351'], view: [180, 250] },
+  { id: 'palais-de-tokyo', name: 'Palais de Tokyo', group: 'g4', osm: ['way/79219351', 'way/79219308', 'way/79219265'], view: [180, 250] }, // west wing, east wing (MAM), peristyle canopy
   // ── g5 ──
   { id: 'notre-dame', name: 'Nhà thờ Đức Bà Paris', group: 'g5', osm: ['way/201611261'], view: [250, 300] },
   { id: 'sainte-chapelle', name: 'Sainte-Chapelle', group: 'g5', osm: ['relation/3344870'], view: [200, 200] },

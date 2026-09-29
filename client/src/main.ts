@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { bounds, chunks as chunkCfg, flyCamera, physics, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
-import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type WaterData } from './geo/chunkData.ts';
+import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { initCredits } from './ui/Credits.ts';
@@ -13,6 +13,7 @@ import { bboxCorners, createBoundsWalls, edgeDistance } from './world/Bounds.ts'
 import { createBuildingMaterials } from './world/BuildingBuilder.ts';
 import type { ToWorker } from './world/buildTypes.ts';
 import { ChunkManager } from './world/ChunkManager.ts';
+import { createSkyline } from './world/landmarks/g5.ts';
 import { createLandmarkMaterials } from './world/landmarks/index.ts';
 import { createLandmarkModels } from './world/landmarks/models.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
@@ -91,10 +92,11 @@ async function start() {
   addEventListener('resize', resize);
 
   // 1. Height grid + water, then the river carve (before the grid goes to the worker and the collider).
-  const [grid, water, index] = await Promise.all([
+  const [grid, water, index, skyline] = await Promise.all([
     loadHeightGrid('data/'),
     getJson<WaterData>('data/water.json'),
     getJson<ChunkIndex>('data/chunks/index.json'),
+    getJson<SkylineData>('data/skyline.json'),
   ]);
   if (water) attempt('carveRiver', () => carveRiver(grid, water));
 
@@ -107,6 +109,7 @@ async function start() {
   // 3. Sky, lights, fog · 4. water · 5. streamed chunks.
   const sky = createSky(scene, camera, (x, z) => heightAt(grid, x, z));
   const waterObj = water && attempt('createWater', () => createWater(scene, water, grid));
+  attempt('createSkyline', () => scene.add(createSkyline(skyline, (x, z) => heightAt(grid, x, z)))); // Sacré-Cœur, Montparnasse, La Défense
   const materials = withFallbacks(
     Object.assign(
       {},

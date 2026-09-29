@@ -112,11 +112,13 @@ describe('buildBridges', () => {
     expect(out.colliders[0]!.indices.length).toBe(out.meshes.reduce((s, b) => s + b.index.length, 0));
   });
 
-  it('layer 2 sits railLayerStep higher; interpolates between different quay heights', () => {
-    const out = buildBridges(bridge(2, 'subway'), ctx((x) => (Math.abs(x) < 40 ? -8 : x > 0 ? 2 : 0)));
-    const mid = pts(get(out, 'bridge')!).filter((p) => Math.abs(p[0]!) < 1).map((p) => p[1]!);
-    expect(Math.max(...mid)).toBeCloseTo(1 + C.bridge.railLayerStep); // midpoint of quays 0 → 2, + one layer
-    expect(Math.min(...mid)).toBeCloseTo(1 + C.bridge.railLayerStep - C.bridge.deckThickness);
-    expect(get(out, 'asphalt')).toBeUndefined(); // rail deck: no road surface
+  it('an upper rail deck sits railLayerStep above the road deck under it, else above terrain / riverDeck', () => {
+    const h = ctx((x) => (Math.abs(x) < 40 ? -8 : x > 0 ? 2 : 0));
+    const both = chunk([], [bridge(1).bridges[0]!, { pts: [-50, 1, 0, 1, 50, 1], kind: 'subway', layer: 2 }]);
+    const top = (out: BuildOut) => Math.max(...pts(get(out, 'bridge')!).filter((p) => Math.abs(p[0]!) < 1 && p[2]! > 0.5).map((p) => p[1]!));
+    expect(top(buildBridges(both, h))).toBeCloseTo(1 + C.bridge.railLayerStep); // road deck: midpoint of quays 0 → 2
+    const alone = buildBridges(bridge(2, 'subway'), h);
+    expect(top(alone)).toBeCloseTo(C.bridge.riverDeck + C.bridge.railLayerStep); // over the channel, no road deck
+    expect(get(alone, 'asphalt')).toBeUndefined(); // rail deck: no road surface
   });
 });
