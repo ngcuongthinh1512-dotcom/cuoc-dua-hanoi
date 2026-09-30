@@ -957,3 +957,7 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 
 ### 17.8 Thêm địa danh Crazy Horse Paris (chốt 2026-09-30)
 - **Crazy Horse Paris** (12 avenue George V, 8e) vào danh sách §17.6, nhóm g4: mặt tiền tầng trệt của tòa nhà Haussmann (mái hiên, cửa vào, biển hiệu chữ đỏ/hồng + đèn neon tự vẽ, không dùng logo thật); dựng bằng dữ liệu OSM + code, không tải mô hình.
+
+### 17.9 Nội dung chặng chưa chốt (2026-09-30)
+- Các điểm lộ trình và thử thách của từng chặng **chưa chốt**; anh sẽ gửi sau.
+- Chặng demo `worker/legs/paris-demo.json` (L1–L6 ở §17.4) chỉ dùng làm điểm kiểm thử (preset chụp ảnh, test đi bộ tới được). Không gắn cứng code gameplay hay địa danh vào các điểm này; nội dung chặng luôn đọc từ file chặng (Phase 7) và soạn được trên màn hình Host (Phase 10).

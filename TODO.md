@@ -102,6 +102,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Bỏ qua các tham số URL thử nghiệm của Phase 3 (`?player=x,z,…`, `action`, `autoMove`, `jump`, `?cam=` = khán giả) khi đã vào cuộc đua (dịch chuyển tức thời = gian lận).
 
 ## Phase 7 – Race engine lõi
+- Nội dung chặng thật (điểm lộ trình, thử thách) chưa chốt, anh sẽ gửi sau (SPEC §17.9); L1–L6 trong `paris-demo.json` chỉ là điểm kiểm thử. Khi có: thay file chặng, kiểm tra lại bán kính geofence 15–40 m.
 - Xuất phát: đặt các đội bên ngoài hàng rào obelisk, cách ≥ 8–10 m (SPEC §17.4). Geofence cho phép bán kính 15–40 m. (Phase 3 đã spawn một người chơi thử ở `playerSetup.spawn`, cách obelisk 14 m về phía Khải Hoàn Môn.)
 - `F` mở hộp mật thư (`openBox`), `celebrate` ở Pit Stop; `pickUp` (`PickUp_Table`) và `talk` (`Idle_Talking_Loop`) đã có clip nhưng chưa dùng (Phase 7–8).
 - Schema zod cho file chặng trong `/shared`; Worker import `worker/legs/paris-demo.json` để nạp lần đầu vào SQLite (hiện mới chỉ test import file này).
