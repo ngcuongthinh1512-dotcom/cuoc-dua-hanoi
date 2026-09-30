@@ -954,3 +954,6 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - **Microsoft Rocketbox** (MIT) được phép: đánh giá cho nhân vật người chơi / người đi đường chân thực hơn. Muốn tải file Rocketbox thì lập danh sách (tên, nguồn, dung lượng) để duyệt riêng.
 - File gốc lưu ở `.cache/assets/` (không commit); chỉ commit bản đã xử lý ở `client/public/models/` (mỗi file ≤ 25 MB). Mọi asset có ghi nguồn trong game (`credits.json` + màn hình "Ghi nguồn").
 - Chiều cao bổ sung cho địa danh lấy từ số liệu công bố (Wikipedia, trang chính thức), ghi nguồn trong code. Không tải dữ liệu LiDAR nếu chưa được duyệt.
+
+### 17.8 Thêm địa danh Crazy Horse Paris (chốt 2026-09-30)
+- **Crazy Horse Paris** (12 avenue George V, 8e) vào danh sách §17.6, nhóm g4: mặt tiền tầng trệt của tòa nhà Haussmann (mái hiên, cửa vào, biển hiệu chữ đỏ/hồng + đèn neon tự vẽ, không dùng logo thật); dựng bằng dữ liệu OSM + code, không tải mô hình.
