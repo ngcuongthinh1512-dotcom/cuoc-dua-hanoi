@@ -5,7 +5,7 @@ import { type AnimationClip, type Object3D, Vector3 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { describe, expect, it } from 'vitest';
-import { character as C, playerSetup } from '../config.ts';
+import { character as C, playerSetup, swim } from '../config.ts';
 import { type AnimState, armWeight, CharacterAnimator, crashPose, locomotionScale, pickState, UAL_CLIPS, UAL_CRASH_FALL } from './Animation.ts';
 import { CharacterModel, prepareAsset } from './CharacterModel.ts';
 import type { MoveMode, PlayerAction, PlayerState } from './types.ts';
@@ -147,5 +147,20 @@ describe('player-anims.glb', async () => {
     for (let t = 0; t < playerSetup.actions.crash.seconds; t += 1 / 30) anim.update(state({ action: 'crash', t }), 1 / 30);
     expect(anim.state).toBe('crash');
     model.root.traverse((o) => expect([...o.quaternion.toArray(), ...o.position.toArray()].every(Number.isFinite)).toBe(true));
+  });
+
+  it('swimming forward: the horizontal crawl is lifted (character.clipLift) so the head reaches the surface; idle swim is not', async () => {
+    const rig = await loadGlb('player-anims.glb');
+    const model = new CharacterModel(prepareAsset(rig.scene, rig.animations), { shirt: '#d8342c' });
+    const anim = new CharacterAnimator(model);
+    const head = () => (model.root.updateMatrixWorld(true), model.root.getObjectByName('Head')!.getWorldPosition(new Vector3()).y);
+    for (let i = 0; i < 30; i++) anim.update(state({ mode: 'swim', speed: 1.8 }), 1 / 30);
+    expect(anim.state).toBe('swimFwd');
+    expect(model.body.position.y).toBeCloseTo(C.clipLift.Swim_Fwd_Loop!, 3);
+    expect(head()).toBeGreaterThan(swim.floatDepth - 0.2); // feet at 0, surface at floatDepth
+    for (let i = 0; i < 30; i++) anim.update(state({ mode: 'swim' }), 1 / 30);
+    expect(anim.state).toBe('swimIdle');
+    expect(model.body.position.y).toBe(0);
+    expect(head()).toBeGreaterThan(swim.floatDepth);
   });
 });

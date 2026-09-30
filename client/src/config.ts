@@ -546,6 +546,9 @@ export const character = {
   // stance-foot speed measured on the clip × the hip-height ratio (1.035); swim: one stroke cycle ≈ 2.4 m.
   clipSpeed: { Walk_Loop: 1.09, Jog_Fwd_Loop: 6.1, Swim_Fwd_Loop: 1.8 } as Readonly<Record<string, number>>,
   timeScale: { min: 0.4, max: 1.6 },
+  // m the body is raised while a clip plays, × its blend weight: Swim_Fwd_Loop lies horizontally at the pelvis height of
+  // an upright swimmer (swim.floatDepth keeps the head of Swim_Idle_Loop out), which would sink the whole crawl.
+  clipLift: { Swim_Fwd_Loop: 0.3 } as Readonly<Record<string, number>>,
   moveThreshold: 0.25, // m/s horizontal: below = idle / swimIdle / land
   jump: { startAt: 0.07, startSeconds: 0.45 }, // s into Jump_Start (push-off, after its crouch); s before Jump_Loop
   land: { seconds: 0.45, speed: 1.5 }, // Jump_Land (only when landing nearly still): s shown, playback speed

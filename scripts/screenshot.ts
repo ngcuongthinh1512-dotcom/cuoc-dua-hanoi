@@ -68,11 +68,19 @@ Object.assign(PRESETS, {
   'p3-first': '/?player&camMode=first', // [C]
   'p3-wall': playerAt(48.868171, 2.322384, -24.1), // [C] back 1.2 m from a Rue Royale facade: arm shortened, no clipping
   'p3-swim': playerAt(48.8637, 2.3155, 90, '&wait=2'), // [B, A] in the Seine ~95 m east of Pont Alexandre III, facing it
+  'p3-swimfwd': playerAt(48.8637, 2.3155, 90, '&autoMove=walk&wait=3'), // [integration] Swim_Fwd_Loop lifted to the surface
   'p3-wave': '/?player&orbit=160&action=wave&wait=1.2', // [A]
   'p3-openbox': '/?player&orbit=120&action=openBox&wait=1', // [A]
   'p3-celebrate': '/?player&orbit=160&action=celebrate&wait=1.5', // [A]
   'p3-crash': '/?player&orbit=110&action=crash&wait=1.5', // [A] on the ground
   'p3-debug': '/?player&debug=1', // [integration] F3 player line
+  // Integration views (world x/z taken from the chunk road lines / measured in the game): walking up Rue Royale toward
+  // the Madeleine; the climb-out half-way (swimming south to the Quai d'Orsay wall 3 m ahead with Space held); Rue de la
+  // Huchette (≈ 6 m wide) with the camera swung toward a facade (arm shortened); the dev-only character turntable.
+  'p3-street': '/?player=87.8,-184.5,-25.97&autoMove=walk&wait=4',
+  'p3-climb': '/?player=-414.5,248,180&autoMove=walk&jump&wait=1.3',
+  'p3-narrow': '/?player=1778.45,1381.35,-109.3&orbit=70',
+  'p3-turntable': '/character.html',
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
@@ -124,6 +132,7 @@ if (existsSync(join(dataDir, 'index.json'))) {
     const y = Math.max(ground(p.x, p.z), roads.bridge.riverDeck) + 1.7; // L4 is on a Seine bridge: DEM there < deck
     PRESETS[`leg-${s.id}`] = `/?cam=${[p.x, y, p.z, yaw, f[1]].map((v) => +v.toFixed(2)).join(',')}`;
     if (s.id === 'L4') PRESETS['p3-bridge'] = playerAt(s.destination.lat, s.destination.lon, 0, '&wait=1.5'); // [B] on the deck
+    if (s.id === 'L3') PRESETS['p3-eiffel'] = `/?player=${[p.x, p.z, yaw].map((v) => +v.toFixed(2)).join(',')}&camMode=far`; // under the tower
   }
 }
 const TIMEOUT_MS: Record<string, number> = { topdown: 90_000 };

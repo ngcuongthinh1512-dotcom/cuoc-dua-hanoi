@@ -22,31 +22,29 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 | `npm run dev:worker` | Build client rồi chạy `wrangler dev` tại http://localhost:8787 (trang web + API + Durable Object + SQLite + R2 giả lập). |
 | `npm run build` | Kiểm tra kiểu toàn bộ, build client, kiểm tra bundle Worker (`wrangler deploy --dry-run`). |
 | `npm test` | Chạy toàn bộ unit test (Vitest). |
-| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
+| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`; gọi theo tên: `lm-<địa danh>`, `leg-L1`…`leg-L6`, nhóm nhân vật `p3` hoặc từng cái như `p3-swim`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
 | `npm run fetch-map` | Tải dữ liệu OSM thô (Overpass) vào `.cache/osm/` và độ cao (AWS Terrain Tiles) → `client/public/data/elevation.*`. Chỉ cần chạy một lần. |
+| `npm run process-assets` | Xử lý asset gốc đã duyệt trong `.cache/assets/` → `client/public/models/*.glb` (kể cả nhân vật `player.glb` + `player-anims.glb`) và `client/public/credits.json`. |
 | `npm run build-chunks` | Cắt dữ liệu OSM thô thành các ô 250 m: `client/public/data/chunks/*.json` + `index.json` + `water.json`. |
 
 Thử nhanh khi `npm run dev:worker` đang chạy: `curl localhost:8787/api/health`, `curl localhost:8787/api/room/ping`.
 
-Tham số URL của game (tiện khi thử): `?cam=x,y,z,yaw,pitch` đặt vị trí và hướng camera (mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`).
+Tham số URL của game (tiện khi thử): mặc định vào chế độ nhân vật ở Place de la Concorde. `?cam=x,y,z,yaw,pitch` = chế độ khán giả (chỉ bay camera tự do, mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``), `?player=x,z,yaw` đặt chỗ xuất hiện của nhân vật (thêm `camMode=near|far|first`, `orbit=<độ>`, `action=wave|openBox|celebrate|crash`, `autoMove=walk|slow`, `jump`, `wait=<giây>` – xem `docs/plans/phase3.md` §7). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`) và `/character.html` xem nhân vật với các tư thế.
 
-## Dựng lại dữ liệu bản đồ
-Dữ liệu đã dựng sẵn và commit trong `client/public/data/` nên thường không cần làm gì. Khi cần dựng lại (đổi cách trích dữ liệu OSM):
-```sh
-npm run fetch-map      # tải lại OSM + độ cao (các request cách nhau ≥ 2 s; bị ngắt thì chạy lại để tiếp tục)
-npm run build-chunks   # .cache/osm → client/public/data/chunks/ + water.json
-npm test               # kiểm tra dữ liệu thật (12 đại lộ ở Étoile, Champs-Élysées, cầu…) và dựng thử mọi ô
-```
-Kích thước chiều cao, bề rộng đường… chỉnh trong `client/src/config.ts`, không cần dựng lại dữ liệu.
+## Điều khiển
+| Thao tác | Bàn phím / chuột | Tay cầm |
+|---|---|---|
+| Đi (tốc độ chuẩn, theo hướng camera) | `W` `A` `S` `D` | stick trái |
+| Đi chậm (giữ) | `Shift` | `LB` |
+| Nhảy; khi đang bơi sát tường kè: leo lên bờ | `Space` | `A` |
+| Nhìn quanh | chuột (nhấp vào game để khóa con trỏ) | stick phải |
+| Đổi camera: gần → xa → góc nhìn thứ nhất | `C` | `View` |
+| Vẫy tay chào | `G` | D-pad ← |
+| Bảng debug | `F3` hoặc `` ` `` | – |
+| Camera bay tự do (khi bảng debug đang mở) | `V` | – |
+| Nhả chuột (menu ở Phase 5) | `Esc` | – |
 
-## Cấu trúc thư mục
-```
-client/   game + màn hình Host (Vite + TypeScript)
-worker/   Cloudflare Worker + Durable Object RaceRoom, wrangler.toml, legs/ (nội dung chặng, chỉ nằm trên server)
-shared/   hằng số, phép chiếu tọa độ (sau này: protocol, schema chặng)
-scripts/  công cụ: chụp ảnh kiểm tra, tải bản đồ, cắt ô bản đồ (sau này: dựng đồ thị đường, bot mô phỏng)
-docs/     đặc tả, luật đua
-```
+Camera bay tự do: `W` `A` `S` `D` bay, `Space` hoặc `E` lên, `Q` xuống, giữ `Shift` bay nhanh, lăn chuột đổi tốc độ (tay cầm: `RT`/`RB` lên, `LT`/`LB` xuống, bấm stick trái bay nhanh). Đã gán nhưng chưa có tác dụng: `F` tương tác, `Tab` Sổ mật thư, `M` bản đồ, `B` ống nhòm, `R` chuông xe.
 
 ## Tiến độ
 | Phase | Nội dung | Trạng thái |
@@ -55,7 +53,7 @@ docs/     đặc tả, luật đua
 | 1 | Khung client: Three.js + Rapier, game loop, input, camera bay tự do | Xong |
 | 2 | Bản đồ Paris từ OpenStreetMap: ô 250 m tải dần, nhà Haussmann, đường, sông Seine + kè, cầu, cây, biển tên đường, địa danh tạm | Xong |
 | 2B | Địa danh Paris dựng chính xác (39 công trình, kể cả ngoài lộ trình: OSM 3D + chi tiết dựng bằng code + mô hình Eiffel / Khải Hoàn Môn) + bóng công trình ở đường chân trời; bảng "Ghi nguồn" trong game (SPEC §17.6) | Xong |
-| 3 | Nhân vật & camera | Chưa làm |
+| 3 | Nhân vật & camera: nhân vật có xương (áo màu đội, bảng tên), hoạt ảnh, Rapier character controller (bậc ≤ 0,4 m, dốc ≤ 45°, nhảy, rơi), bơi sông Seine + leo kè, camera góc thứ ba kiểu GTA | Xong |
 | 4 | Di chuyển: đi bộ, xe đạp | Chưa làm |
 | 4B | Xe cộ & người đi đường NPC, chỉ chạy trên máy người chơi (SPEC §17.5) | Chưa làm |
 | 5 | HUD cơ bản | Chưa làm |

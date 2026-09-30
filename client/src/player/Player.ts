@@ -21,12 +21,14 @@ export interface PlayerOverrides {
   action?: Gesture;
   /** Holds forward (screenshots of the locomotion). */
   autoMove?: 'walk' | 'slow';
+  /** Holds Space (screenshot of the quay climb-out: swim at the wall with Space held). */
+  holdJump?: boolean;
 }
 
 const GESTURES = Object.keys(playerSetup.actions) as Gesture[];
 const oneOf = <T extends string>(v: string | null, allowed: readonly T[]) => (allowed as readonly string[]).includes(v ?? '') ? (v as T) : undefined;
 
-/** ?player[=x,z,yawDeg]&camMode=near|far|first&orbit=deg&action=<gesture>&autoMove=walk|slow; invalid fields ignored. */
+/** ?player[=x,z,yawDeg]&camMode=near|far|first&orbit=deg&action=<gesture>&autoMove=walk|slow&jump; invalid fields ignored. */
 export function parseOverrides(q: URLSearchParams): PlayerOverrides {
   const p = q.get('player')?.split(',').map(Number);
   const orbit = Number(q.get('orbit'));
@@ -36,6 +38,7 @@ export function parseOverrides(q: URLSearchParams): PlayerOverrides {
     camMode: oneOf(q.get('camMode'), thirdPersonCamera.modes),
     action: oneOf(q.get('action'), GESTURES),
     autoMove: oneOf(q.get('autoMove'), ['walk', 'slow'] as const),
+    ...(q.has('jump') ? { holdJump: true } : {}),
   };
 }
 
@@ -106,6 +109,7 @@ export class Player {
       if (input.wasPressed('camera')) this.camera.cycleMode();
       readMoveIntent(input, this.camera.yaw, this.intent);
       if (this.o.autoMove) [this.intent.forward, this.intent.right, this.intent.slow] = [1, 0, this.o.autoMove === 'slow'];
+      if (this.o.holdJump) this.intent.jump = true;
       if (input.wasPressed('wave')) this.controller.startAction('wave');
     }
     const s = this.controller.state;

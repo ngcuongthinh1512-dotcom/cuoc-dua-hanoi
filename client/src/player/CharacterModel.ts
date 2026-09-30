@@ -108,27 +108,25 @@ function outfitShader(this: Material, shader: WebGLProgramParametersWithUniforms
   );
 }
 
-/** Canvas sprite, constant size on screen (character.nameTag), hidden beyond maxDistance by an LOD. */
-function nameTag(text: string, y: number) {
+/** Canvas sprite, constant size on screen (character.nameTag), hidden beyond maxDistance by an LOD. STYLE_GUIDE:
+ *  team-coloured text, no frame: white text × material.color (= the shirt uniform, so setShirt recolours it). */
+function nameTag(text: string, y: number, colour: Color) {
   const T = C.nameTag;
-  const font = `600 ${T.fontPx}px system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`; // Vietnamese glyphs
+  const font = `700 ${T.fontPx}px system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`; // Vietnamese glyphs
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
   ctx.font = font;
   canvas.width = Math.ceil(ctx.measureText(text).width + T.fontPx);
   canvas.height = Math.ceil(T.fontPx * 1.6); // room for stacked diacritics (ộ, ử)
-  ctx.font = font; // reset by the resize
-  ctx.fillStyle = 'rgba(12, 14, 18, 0.6)';
-  ctx.beginPath();
-  ctx.roundRect(0, 0, canvas.width, canvas.height, canvas.height / 2);
-  ctx.fill();
+  Object.assign(ctx, { font, textAlign: 'center', textBaseline: 'middle', lineJoin: 'round', lineWidth: T.fontPx / 6 }); // reset by the resize
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)'; // dark outline: readable over sky and stone
+  ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
   ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
   ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   const map = new CanvasTexture(canvas);
   map.colorSpace = SRGBColorSpace;
   const sprite = new Sprite(new SpriteMaterial({ map, sizeAttenuation: false, depthWrite: false }));
+  sprite.material.color = colour;
   sprite.center.set(0.5, 0);
   sprite.scale.set((T.scale * canvas.width) / canvas.height, T.scale, 1);
   const lod = new LOD();
@@ -141,6 +139,8 @@ function nameTag(text: string, y: number) {
 /** One character instance (local player, Phase 6 remote players, Phase 4B pedestrians). Origin at the feet. */
 export class CharacterModel {
   readonly root = new Group();
+  /** The cloned asset under root (turned π); the animator lifts it for clips posed off the feet (character.clipLift). */
+  readonly body: Object3D;
   /** Bound to the cloned skeleton; the animator drives it. */
   readonly mixer: AnimationMixer;
   readonly clips: readonly AnimationClip[];
@@ -154,7 +154,7 @@ export class CharacterModel {
   private tag: ReturnType<typeof nameTag> | undefined;
 
   constructor(asset: CharacterAsset, opts: CharacterOptions) {
-    const body = cloneSkinned(asset.scene);
+    const body = (this.body = cloneSkinned(asset.scene));
     body.rotation.y = Math.PI; // glTF faces +Z; PlayerState yaw 0 faces −Z
     body.traverse((o) => {
       if (!(o instanceof Mesh)) return;
@@ -188,7 +188,7 @@ export class CharacterModel {
       this.tag.sprite.material.map?.dispose();
       this.tag.sprite.material.dispose();
     }
-    this.tag = text ? nameTag(text, this.height + C.nameTag.lift) : undefined;
+    this.tag = text ? nameTag(text, this.height + C.nameTag.lift, this.outfit.uShirt.value) : undefined;
     if (this.tag) this.root.add(this.tag.lod);
   }
 

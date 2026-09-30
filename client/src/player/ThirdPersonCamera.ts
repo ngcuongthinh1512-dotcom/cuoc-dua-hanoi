@@ -72,7 +72,13 @@ export class ThirdPersonCamera {
 
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw), sp = Math.sin(this.pitch), cp = Math.cos(this.pitch);
     const bike = t.vehicle === 'bike';
-    const side = arm?.shoulder ?? 0;
+    let side = arm?.shoulder ?? 0;
+    // Rubbing along a wall on the right: over the left shoulder instead (GTA). Else the back cast starts against that
+    // wall and grazes it as soon as the view is a degree off parallel (arm ≈ 0, the lens in the head).
+    if (arm && side > 0) {
+      axis.set(t.position.x, t.position.y + arm.pivot + (bike ? C.bike.pivotAdd : 0), t.position.z);
+      if (this.cast(axis, dir.set(cy, 0, -sy), side, t.collider) < side) side = -side;
+    }
     const ahead = first ? C.first.forward : 0;
     // right = (cos y, 0, −sin y), horizontal forward = (−sin y, 0, −cos y)
     goal.set(
@@ -92,7 +98,8 @@ export class ThirdPersonCamera {
     } else {
       // Capsule axis → shoulder (a wall at the right shoulder pulls the pivot in), then shoulder → back along the view.
       axis.set(this.pivot.x - cy * side, this.pivot.y, this.pivot.z + sy * side);
-      const toShoulder = side > 0 ? this.cast(axis, dir.set(cy, 0, -sy), side, t.collider) : 0;
+      const k = Math.sign(side);
+      const toShoulder = side ? this.cast(axis, dir.set(cy * k, 0, -sy * k), Math.abs(side), t.collider) : 0;
       axis.addScaledVector(dir, toShoulder);
       dir.set(sy * cp, -sp, cy * cp); // = −(view direction)
       const free = this.cast(axis, dir, arm.distance * (bike ? C.bike.distanceScale : 1), t.collider);

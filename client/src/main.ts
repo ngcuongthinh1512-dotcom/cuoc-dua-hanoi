@@ -131,20 +131,19 @@ async function start() {
   const input = new Input(renderer.domElement);
   const fly = new FreeFlyCamera(camera); // spectator: flies through everything, no collider
   const query = new URLSearchParams(location.search);
-  // Phase 3: ?player[=x,z,yawDeg] walks (docs/plans/phase3.md); without it the free-fly camera as before. The integrator
-  // flips the default at the end of Phase 3 (fly only with ?cam= or V in the debug panel).
+  // ?cam=x,y,z,yawDeg,pitchDeg = spectator (free-fly only, no body; landmark / topdown screenshots). Otherwise the player
+  // walks from the spawn (?player[=x,z,yawDeg] overrides it, Player.parseOverrides) and V in the debug panel flies.
+  const cam = query.get('cam')?.split(',').filter(Boolean).map(Number); // empty fields → not 5 numbers → spawn
+  const spectator = cam?.length === 5 && cam.every(Number.isFinite);
+  const s = flyCamera.spawn;
+  const [x, y, z, yawDeg, pitchDeg] = spectator ? cam : [s.x, s.y, s.z, s.yawDeg, s.pitchDeg];
+  fly.setPose(x, y, z, yawDeg, pitchDeg);
   const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water };
-  const player = query.has('player') ? await Player.create(scene, world, camera, env, parseOverrides(query)) : undefined;
+  const player = spectator ? undefined : await Player.create(scene, world, camera, env, parseOverrides(query));
   let flying = !player;
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
   if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player } }); // for scratch test scripts
-
-  // Deterministic views for screenshots: ?cam=x,y,z,yawDeg,pitchDeg and ?debug=1
-  const cam = query.get('cam')?.split(',').filter(Boolean).map(Number); // empty fields → not 5 numbers → spawn
-  const s = flyCamera.spawn;
-  const [x, y, z, yawDeg, pitchDeg] = cam?.length === 5 && cam.every(Number.isFinite) ? cam : [s.x, s.y, s.z, s.yawDeg, s.pitchDeg];
-  fly.setPose(x, y, z, yawDeg, pitchDeg);
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing.
@@ -197,8 +196,9 @@ async function start() {
       const ps = player?.controller.state;
       const playerLine =
         ps &&
-        `Nhân vật: ${ps.moveMode}${ps.grounded ? ' · trên đất' : ''}${ps.inWater ? ' · dưới nước' : ''} · ` +
-          `${Math.hypot(ps.velocity.x, ps.velocity.z).toFixed(1)} m/s · camera ${flying ? 'bay tự do (V)' : player.camera.mode}`;
+        `Nhân vật: ${ps.moveMode}${ps.action === 'none' ? '' : ` (${ps.action})`} · ${ps.grounded ? 'chạm đất' : 'không chạm đất'}` +
+          `${ps.inWater ? ' · dưới nước' : ''} · ${Math.hypot(ps.velocity.x, ps.velocity.z).toFixed(2)} m/s · ` +
+          `chân y ${ps.position.y.toFixed(2)} · camera ${flying ? 'bay tự do (V)' : player.camera.mode}`;
       debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine });
       const { calls, triangles } = renderer.info.render;
       Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries } });

@@ -39,11 +39,11 @@ Game chỉ dùng những phím có trên cả bàn phím Windows lẫn Mac. Game
 ### Bàn phím
 - `W` `A` `S` `D`: di chuyển
 - Giữ `Shift`: đi chậm, khi cần di chuyển thật chính xác trong thử thách
-- `Space`: nhảy
+- `Space`: nhảy; khi đang bơi sát tường kè sông Seine: leo lên bờ
 - `F`: tương tác (mở hộp mật thư, lấy xe, lên/xuống xe, nhặt đồ vật)
 - `Tab`: mở Sổ mật thư
 - `M`: bản đồ lớn
-- `C`: đổi góc camera
+- `C`: đổi góc camera (gần → xa → góc nhìn thứ nhất)
 - `B`: ống nhòm (chỉ dùng được khi thử thách cho phép)
 - `Esc`: mở Menu
 - `G`: vẫy tay chào
@@ -54,7 +54,7 @@ Game chỉ dùng những phím có trên cả bàn phím Windows lẫn Mac. Game
 - Bấm `Esc` để nhả chuột và mở Menu. Menu cũng tự mở mỗi khi chuột bị nhả khỏi game.
 
 ### Tay cầm
-- Game có hỗ trợ tay cầm chơi game (gamepad).
+- Game có hỗ trợ tay cầm chơi game (gamepad): stick trái đi, stick phải nhìn quanh, `A` nhảy, giữ `LB` đi chậm, `View` đổi camera.
 
 ### Camera khán giả
 Sau khi về đích, bạn được bay camera tự do để xem các đội còn lại:
@@ -66,7 +66,7 @@ Sau khi về đích, bạn được bay camera tự do để xem các đội cò
 
 ### Đi bộ là mặc định
 - Mọi đội bắt đầu bằng **đôi chân**. Nhân vật di chuyển ở **tốc độ đi bộ chuẩn** (kiểu chạy bộ nhẹ), và đó cũng là tốc độ nhanh nhất khi đi bộ: **không có chạy nước rút**.
-- Lỡ rơi xuống sông Seine? Hãy bơi vào bờ, hoặc bạn sẽ được đưa lên bậc thang gần nhất.
+- Lỡ rơi xuống sông Seine? Hãy bơi tới sát tường kè rồi bấm `Space` để leo lên bờ, hoặc bạn sẽ được đưa lên bậc thang gần nhất.
 
 ### Xe đạp, phương tiện duy nhất
 - Trong cuộc đua **chỉ có xe đạp**, nhanh hơn đi bộ **đúng 1,3 lần**.

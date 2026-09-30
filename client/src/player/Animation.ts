@@ -152,6 +152,9 @@ export class CharacterAnimator {
       if (a && own) a.timeScale = locomotionScale(hSpeed(p), own);
     }
     this.model.mixer.update(dt);
+    let lift = 0;
+    for (const [name, m] of Object.entries(C.clipLift)) lift += m * (this.actions.get(name)?.getEffectiveWeight() ?? 0);
+    this.model.body.position.y = lift;
     const w = armWeight(p.action, p.actionTime);
     if (w > 0 && armGesture(p.action)) {
       for (const s of ARM_SIDES[p.action]) this.raiseArm(this.arms.get(s), C.arms[p.action], w, p.actionTime);

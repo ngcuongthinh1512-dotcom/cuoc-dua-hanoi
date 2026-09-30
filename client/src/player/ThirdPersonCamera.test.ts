@@ -70,12 +70,17 @@ describe('ThirdPersonCamera', () => {
     expect(cam.arm).toBeCloseTo(C.near.distance, 2);
   });
 
-  it('a wall at the right shoulder pulls the pivot toward the spine', () => {
-    const world = worldWith([0.5, 5, 5, 0.5 + 0.3, 0, 0]); // wall face 0.3 m right of the axis
-    const cam = new ThirdPersonCamera(new PerspectiveCamera(), world);
-    cam.update(DT, target());
-    expect(cam.camera.position.x).toBeLessThanOrEqual(0.3 - C.collisionRadius + 1e-3);
-    expect(cam.arm).toBeCloseTo(C.near.distance, 6); // the back cast slides along that wall
+  it('a wall at the right shoulder (parallel, or closing in 2° behind): over the left shoulder, full arm', () => {
+    for (const deg of [0, -2]) {
+      const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 }); // wall face 0.3 m right of the axis, turned toward the back
+      const q = { x: 0, y: Math.sin((deg * DEG) / 2), z: 0, w: Math.cos((deg * DEG) / 2) };
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.5, 5, 5).setTranslation(0.8, 0, 0).setRotation(q));
+      world.step();
+      const cam = new ThirdPersonCamera(new PerspectiveCamera(), world);
+      cam.update(DT, target());
+      expect(cam.camera.position.x, `${deg}°`).toBeCloseTo(-C.near.shoulder, 6);
+      expect(cam.arm, `${deg}°`).toBeCloseTo(C.near.distance, 6);
+    }
   });
 
   it('nextArm: shorter at once, longer smoothly', () => {

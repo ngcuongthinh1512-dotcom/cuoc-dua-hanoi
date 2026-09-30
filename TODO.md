@@ -55,22 +55,24 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Sương che địa danh cao ở các góc nhìn chính (sương 250–700 m, `render.fog`): từ parvis Trocadéro (đích L2, cách tháp ~630 m) tháp Eiffel gần như trắng; vòm Invalides cuối esplanade bị mờ; bay 250 m trên Louvre nhìn về tây không thấy Eiffel trong khi La Défense (8 km, bóng chân trời) vẫn thấy. Chưa sửa: `camera.far` và bán kính tải chunk đều theo sương, giảm sương riêng cho vật liệu địa danh sẽ làm tháp bị cắt ở mặt phẳng xa / hiện đột ngột khi chunk tải. Nâng cấp (Phase 12): vẽ Eiffel, vòm Invalides, Notre-Dame, Panthéon thành bóng chân trời (như `createSkyline`, sương riêng) khi chunk của chúng bị sương che hoặc chưa tải, và giảm sương cho chính mô hình khi ở gần.
 - Ghi nguồn: các model xe / người / xe đạp đã tải nhưng chưa xử lý, chưa dùng (Phase 3 / 4B); khi xử lý thì thêm tên file vào `MODIFIED` trong `scripts/process-assets.ts` để dòng ghi nguồn có "(đã chỉnh sửa)", rồi chạy lại `npm run process-assets`.
 
-## Phase 3 – Nhân vật & camera
-Kế hoạch và phân việc: `docs/plans/phase3.md`. Các track không sửa file này; ghi việc còn lại vào báo cáo để người tích hợp cập nhật.
-- (A) Model người chơi + hoạt ảnh: hiện là khối capsule tạm màu áo đội (stub), chưa có GLB, bảng tên, hoạt ảnh.
-- (B) Character controller: stub trượt trên lưới địa hình, chưa có Rapier, nhảy, rơi, bơi, va chạm nhà.
-- (B) Nội suy vị trí giữa hai bước vật lý khi render: `GameLoop.alpha` đã có, `CharacterController.renderPosition` (stub) vẫn trả trạng thái mới nhất.
-- (B) Đèn, cột Morris, lối vào metro, biển tên đường chưa có collider; thêm trụ mỏng nếu người chơi đi xuyên qua.
-- (B) Tia raycast thẳng đứng của Rapier có thể trượt qua heightfield nếu nằm đúng trên đường lưới 5 m; spawn/respawn cộng lệch 1 mm hoặc dùng shape cast.
-- (B) Bơi dưới sông Seine. Kè cao 7 m và chưa khoét bến thấp, nên cầu thang OSM không xuống tới nước: lên bờ bằng cách leo ở tường kè (`Space` khi sát tường).
-- (C) Camera góc thứ ba: stub là cần cứng sau lưng, chưa lệch vai, chưa chống xuyên tường, chưa mượt, chưa tăng FOV.
-- (tích hợp) Cuối Phase 3: mặc định vào chế độ nhân vật; camera bay tự do chỉ khi có `?cam=` hoặc bấm `V` lúc bảng debug đang mở.
+## Phase 3 – Nhân vật & camera (phần còn lại)
+Đã xong: nhân vật UBC + clip UAL, áo màu đội, bảng tên, controller Rapier, bơi, camera góc thứ ba (`docs/plans/phase3.md`).
+- Lên bờ sông Seine: leo tường kè ở mọi chỗ (`Space` khi bơi sát tường, ponytail trong `CharacterController.tryClimb`) vì bến thấp chưa khoét; khi khoét bến thấp thì chỉ cho lên ở cầu thang / dốc OSM. Xuống sông chỉ bằng cách nhảy qua lan can kè (1 m) hoặc rơi từ cầu; rơi từ trên cao xuống nước thì dừng đột ngột ở độ sâu bơi (chưa có bọt nước, chưa lặn).
+- `openBox` dùng clip UAL `Interact` (một tay với ra, khá nhẹ); clip mở hộp thật cần asset mới (chưa duyệt). `wave` và `celebrate` là lớp tay dựng bằng code (+ `Dance_Loop`) vì clip Wave / Celebration của UAL nằm trong bản trả phí.
+- `clipSpeed.Swim_Fwd_Loop` (1,8 m/s) là ước lượng; chỉnh nếu thấy tay chân "trượt" khi bơi.
+- Bảng tên cố định ở độ cao đầu khi đứng, nên lúc ngã xe (nằm) nó vẫn lơ lửng ở trên; bảng tên của các nhân vật đứng sát nhau (< 2 m) chồng lên nhau khi nhìn từ xa (kích thước cố định trên màn hình), xếp lại ở Phase 6.
+- Collider: biển tên đường (cột 4 cm) chưa có collider; lối vào metro là khối đặc 1,1 m (chưa có bậc xuống); điểm spawn nằm trong nhà rỗng không bị phát hiện (chỉ bắt được khi tường chạm capsule), hiện spawn chọn tay nên chưa sao.
+- Camera: collider mỏng (đèn, cột Morris, metro) làm cần camera co lại một chút khi quét qua; GTA bỏ qua đồ mỏng. Hướng sửa: collider đồ đường phố tách khỏi trimesh của chunk, gán collision group riêng và truyền `filterGroups` trong `ThirdPersonCamera.cast`.
+- Camera: chỉ giữ trên mặt nước khi `moveMode === 'swim'`; lúc đang rơi xuống sông mà ngẩng camera có thể chìm dưới nước một chút (đưa `waterLevel` vào `CameraTarget`).
+- Camera ngôi thứ nhất chưa có va chạm và chưa làm mượt theo chiều dọc (bước lên bậc hơi giật). Camera sát tường: chưa làm mờ / ẩn thân khi cần < ~0,5 m như GTA.
 - Gamepad: đã gán nút (`padButtons` trong `config.ts`). Tay cầm không có mapping `standard` (một số tay trên Firefox) vẫn bị bỏ qua; chưa đổi tốc độ bay bằng tay cầm.
 - Tạo `client/src/core/EventBus.ts` khi có module thật sự cần (Phase 3 gọi hàm trực tiếp nên chưa tạo).
 - `core/Time` (SPEC §3) hiện nằm trong `GameLoop` (delta khung hình đã kẹp, FPS, alpha); tách `client/src/core/Time.ts` khi có module khác cần đồng hồ game.
 
 ## Phase 4 – Di chuyển
 - `npm run build-graph` → `shared/data/roadgraph.json`.
+- Xe đạp: vật lý, lên / xuống xe (`F`), clip `cycle` (UAL `Driving_Loop`) + IK chân, `moveMode 'bike'`, camera `vehicle: 'bike'` (hook `thirdPersonCamera.bike` đã có, chỉnh lại số khi có xe thật), ngã xe gọi `startAction('crash')` khi va chạm mạnh, test tốc độ xe = footSpeed × 1,3.
+- Bậc thang OSM hiện chỉ là mặt đường phẳng; dựng bậc thật (và lối xuống metro).
 - Giao lộ sát ranh chunk có thể bị bỏ sót khi đặt biển tên đường / cột đèn (nhánh đường nằm ở chunk bên cạnh); dùng danh sách giao lộ toàn cục của `build-graph`.
 
 ## Phase 4B – Xe cộ & người đi đường NPC (SPEC §17.5)
@@ -79,7 +81,7 @@ Kế hoạch và phân việc: `docs/plans/phase3.md`. Các track không sửa f
 - Model xe / người: bộ asset CC0 (Quaternius, Kenney…) — lập danh sách để anh duyệt trước khi tải.
 
 ## Phase 5 – HUD
-- Menu thật (SPEC §17.2: tự mở khi chuột bị nhả, `Esc`); hiện chỉ hiện bảng hướng dẫn phím.
+- Menu thật (SPEC §17.2: tự mở khi chuột bị nhả, `Esc`); hiện chỉ hiện bảng hướng dẫn phím. Nút "Kẹt? Về chỗ an toàn" gọi `CharacterController.respawn()` (hiện về chỗ đứng an toàn gần nhất; khi đang ở dưới sông, SPEC §4.4 muốn đưa lên bậc thang gần nhất); tùy chọn đảo trục Y, độ nhạy chuột.
 - Biển tên đường: thêm dòng quận (vd. "8e Arrt") khi có dữ liệu quận.
 
 ## Phase 6 – Server & presence
@@ -87,13 +89,15 @@ Kế hoạch và phân việc: `docs/plans/phase3.md`. Các track không sửa f
 - Đăng nhập mã đội / Host, token ký HMAC bằng `HOST_PASSWORD`.
 - Test Durable Object bằng `@cloudflare/vitest-pool-workers` (kiểm tra tương thích với Vitest 5 trước khi cài; hiện `worker/src/legs.test.ts` chạy trong môi trường Node vì chỉ kiểm tra dữ liệu).
 - Kết hợp Vite HMR với Worker/DO khi dev. Hai hướng: Vite proxy `/api` (và WebSocket) sang `wrangler dev`, hoặc dùng `@cloudflare/vite-plugin` 1.60.2. Hiện tại `npm run dev:worker` phải build lại client mỗi lần chạy.
-- Phím `G` (vẫy tay) và `R` (bấm còi) đã có trong `config.ts` nhưng chưa có tác dụng; làm cùng presence.
+- `G` vẫy tay đã chạy trên máy mình (Phase 3); gửi `action` qua mạng cùng presence. `R` (bấm còi) chưa có tác dụng.
+- Người chơi khác: dựng `PlayerState` từ snapshot (nội suy) rồi dùng lại `CharacterModel` + `CharacterAnimator` + bảng tên; `movement` lấy từ file chặng.
 - Bảng debug F3: thêm ping và số người chơi đang thấy (SPEC §14).
 - Camera bay tự do (`V` khi mở bảng debug): trong cuộc đua thật chỉ cho Host / khán giả / đội đã về đích; hiện ai mở bảng debug cũng bật được.
-- Bỏ qua các tham số URL thử nghiệm của Phase 3 (`?player=x,z,…`, `action`, `autoMove`) khi đã vào cuộc đua (dịch chuyển tức thời = gian lận).
+- Bỏ qua các tham số URL thử nghiệm của Phase 3 (`?player=x,z,…`, `action`, `autoMove`, `jump`, `?cam=` = khán giả) khi đã vào cuộc đua (dịch chuyển tức thời = gian lận).
 
 ## Phase 7 – Race engine lõi
-- Xuất phát: đặt các đội bên ngoài hàng rào obelisk, cách ≥ 8–10 m (SPEC §17.4). Geofence cho phép bán kính 15–40 m.
+- Xuất phát: đặt các đội bên ngoài hàng rào obelisk, cách ≥ 8–10 m (SPEC §17.4). Geofence cho phép bán kính 15–40 m. (Phase 3 đã spawn một người chơi thử ở `playerSetup.spawn`, cách obelisk 14 m về phía Khải Hoàn Môn.)
+- `F` mở hộp mật thư (`openBox`), `celebrate` ở Pit Stop; `pickUp` (`PickUp_Table`) và `talk` (`Idle_Talking_Loop`) đã có clip nhưng chưa dùng (Phase 7–8).
 - Schema zod cho file chặng trong `/shared`; Worker import `worker/legs/paris-demo.json` để nạp lần đầu vào SQLite (hiện mới chỉ test import file này).
 - Quyết định thời gian Host tạm dừng có bị trừ khỏi thời gian chính thức không (SPEC §13.3 nói đồng hồ dừng, công thức §13.8 không trừ), rồi cập nhật `docs/RACE_RULES.md` mục 11.
 
@@ -105,6 +109,7 @@ Kế hoạch và phân việc: `docs/plans/phase3.md`. Các track không sửa f
 - Đồ họa SPEC §14: cascaded shadow map (hiện 1 hộp bóng 160 m đi theo camera, chưa snap theo texel nên mép bóng hơi rung), mặt trời thật + ngày–đêm (hiện cố định buổi chiều), bầu trời động, bloom, SMAA, cài đặt đồ họa. SPEC không gán phase riêng; làm cùng phase này.
 - LOD cho nhà (ban công, ống khói dựng ở mọi khoảng cách; cửa sổ chỉ vẽ trên texture), cây (140 tam giác/cây) và đồ phố; lượng tử hóa + Meshopt.
 - Giải phóng bản sao geometry trên CPU sau khi upload lên GPU.
+- Nhân vật: LOD / instancing cho nhân vật ở xa, thân nữ, texture KTX2.
 - `docs/DEPLOY.md` (hướng dẫn cho người không chuyên) + `npm run deploy`.
 - Đo số request / dòng ghi SQLite thực tế so với ngân sách ở SPEC §3.
 
