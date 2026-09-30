@@ -183,6 +183,19 @@ describe('CharacterController on a real Rapier world', () => {
     expect(c.renderPosition(1, new Vector3()).distanceTo(c.state.position)).toBeLessThan(1e-6);
   });
 
+  it('renderYaw blends the heading the short way across ±π; teleport resets it', () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 0, 0, 3);
+    run(world, c, DT, walk(1, false, -3)); // turns 3 → 3 + turnRate·DT, wrapped below −π
+    expect(c.state.yaw).toBeLessThan(0);
+    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    expect(wrap(c.renderYaw(0) - 3)).toBeCloseTo(0, 6);
+    expect(wrap(c.renderYaw(0.5) - (3 + (P.turnRate * DT) / 2))).toBeCloseTo(0, 6);
+    expect(wrap(c.renderYaw(1) - c.state.yaw)).toBeCloseTo(0, 6);
+    c.respawn();
+    expect(c.renderYaw(0)).toBe(c.state.yaw);
+  });
+
   it('spawn: highest walkable surface (bridge deck), spiral out of an overlapping pillar, frozen with no ground', () => {
     const bridge = setup((w) => (ground(w), cuboid(w, 0, 4.5, 0, 3, 0.5, 20))); // deck top y = 5
     spawned(bridge.world, bridge.c, 0.3, 0.2);

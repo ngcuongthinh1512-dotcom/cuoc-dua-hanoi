@@ -54,6 +54,7 @@ describe('pickState', () => {
     ['crash', state({ action: 'crash', mode: 'air' }), 'crash'],
     ['climb out', state({ action: 'climbOut', mode: 'swim' }), 'climbOut'],
     ['wave while jogging = jog (arm layer)', state({ action: 'wave', speed: 4 }), 'jog'],
+    ['standard mode below jogFrom (part-tilted stick, sliding) = walk', state({ speed: C.jogFrom[1] - 0.1 }), 'walk'],
   ])('%s', (_, p, want) => expect(pickState(p, 'idle', 1, false)).toBe(want));
 
   it('jump: jumpStart, then air; fall: air at once; landing still → land → idle, moving → locomotion', () => {
@@ -66,6 +67,14 @@ describe('pickState', () => {
     expect(pickState(state(), 'land', C.land.seconds / 2, false)).toBe('land');
     expect(pickState(state(), 'land', C.land.seconds + 0.01, false)).toBe('idle');
     expect(pickState(state({ speed: 4 }), 'air', 0.5, false)).toBe('jog');
+  });
+
+  it('walk ⇄ jog by speed with hysteresis (jogFrom)', () => {
+    const mid = state({ speed: (C.jogFrom[0] + C.jogFrom[1]) / 2 });
+    expect(pickState(mid, 'walk', 1, false)).toBe('walk');
+    expect(pickState(mid, 'jog', 1, false)).toBe('jog');
+    expect(pickState(state({ speed: C.jogFrom[0] - 0.01 }), 'jog', 1, false)).toBe('walk');
+    expect(pickState(state({ mode: 'slow', speed: 4 }), 'jog', 1, false)).toBe('walk');
   });
 });
 
@@ -110,7 +119,7 @@ describe('player-anims.glb', async () => {
   it('15 clips: every state of UAL_CLIPS + the crash fall', () => {
     expect(new Set(names)).toEqual(new Set([...Object.values(UAL_CLIPS), UAL_CRASH_FALL]));
     expect(names).toHaveLength(15);
-    const all: AnimState[] = ['idle', 'walk', 'jog', 'jumpStart', 'air', 'land', 'swimIdle', 'swimFwd', 'openBox', 'pickUp', 'celebrate', 'wave', 'crash', 'climbOut', 'talk', 'cycle'];
+    const all: AnimState[] = ['idle', 'walk', 'jog', 'jumpStart', 'air', 'land', 'swimIdle', 'swimFwd', 'openBox', 'pickUp', 'celebrate', 'crash', 'climbOut', 'talk', 'cycle'];
     for (const s of all) expect(UAL_CLIPS[s], s).toBeDefined();
   });
 
@@ -144,7 +153,13 @@ describe('player-anims.glb', async () => {
     model.root.updateMatrixWorld(true);
     expect(anim.state).toBe('celebrate');
     expect(Math.min(at('hand_l').y, at('hand_r').y)).toBeGreaterThan(at('Head').y);
-    for (let t = 0; t < playerSetup.actions.crash.seconds; t += 1 / 30) anim.update(state({ action: 'crash', t }), 1 / 30);
+    const lying = 1.5; // crashPose: Death01 held at fall[1]
+    for (let t = 0; t < lying; t += 1 / 30) anim.update(state({ action: 'crash', t }), 1 / 30);
+    anim.update(state({ action: 'crash', t: lying }), 1 / 30);
+    const fall = model.mixer.existingAction(model.clips.find((c) => c.name === UAL_CRASH_FALL)!)!;
+    expect(fall.isScheduled() && fall.getEffectiveWeight()).toBe(1);
+    expect(fall.time).toBeCloseTo(C.crash.fall[1], 3);
+    for (let t = lying; t < playerSetup.actions.crash.seconds; t += 1 / 30) anim.update(state({ action: 'crash', t }), 1 / 30);
     expect(anim.state).toBe('crash');
     model.root.traverse((o) => expect([...o.quaternion.toArray(), ...o.position.toArray()].every(Number.isFinite)).toBe(true));
   });
@@ -154,6 +169,10 @@ describe('player-anims.glb', async () => {
     const model = new CharacterModel(prepareAsset(rig.scene, rig.animations), { shirt: '#d8342c' });
     const anim = new CharacterAnimator(model);
     const head = () => (model.root.updateMatrixWorld(true), model.root.getObjectByName('Head')!.getWorldPosition(new Vector3()).y);
+    for (const speed of [0, 4]) {
+      anim.update(state({ speed }), 1 / 30); // Swim_Fwd_Loop never played yet: no lift (feet on the ground)
+      expect(model.body.position.y, `speed ${speed}`).toBe(0);
+    }
     for (let i = 0; i < 30; i++) anim.update(state({ mode: 'swim', speed: 1.8 }), 1 / 30);
     expect(anim.state).toBe('swimFwd');
     expect(model.body.position.y).toBeCloseTo(C.clipLift.Swim_Fwd_Loop!, 3);

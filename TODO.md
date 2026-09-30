@@ -66,6 +66,11 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Camera: chỉ giữ trên mặt nước khi `moveMode === 'swim'`; lúc đang rơi xuống sông mà ngẩng camera có thể chìm dưới nước một chút (đưa `waterLevel` vào `CameraTarget`).
 - Camera ngôi thứ nhất chưa có va chạm và chưa làm mượt theo chiều dọc (bước lên bậc hơi giật). Camera sát tường: chưa làm mờ / ẩn thân khi cần < ~0,5 m như GTA.
 - Gamepad: đã gán nút (`padButtons` trong `config.ts`). Tay cầm không có mapping `standard` (một số tay trên Firefox) vẫn bị bỏ qua; chưa đổi tốc độ bay bằng tay cầm.
+- Ao, hồ, bồn phun nước (nước không phải sông Seine trong `water.json`): chưa có va chạm, chưa lội / bơi, nên người chơi chạy trên mặt nước. Ở bể Louvre, các khối bể của g3 (thành 0,55 m) không trùng đa giác OSM: chạy trên nước rồi kẹt vào khối giữa bể. Hướng sửa: thêm thành thấp làm collider cho đa giác không phải sông, hoặc bỏ đa giác OSM ở chỗ địa danh đã tự dựng bể (g3), hoặc căn khối bể g3 theo vòng OSM.
+- Leo lên kè: dùng tư thế ngồi thụp `Jump_Land` trong lúc thân được nâng khoảng 8,5 m dọc tường trong khoảng 0,66 s, nên trông như bay lên. Cần clip leo (asset mới, chưa duyệt), hoặc nâng chậm và ngắn hơn khi đã khoét bến thấp. Preset `p3-climb` chỉ thấy tường và nhân vật; không đặt `orbit` được vì `autoMove` đi theo hướng camera.
+- Nhịp chạy: `Jog_Fwd_Loop` thực ra là chạy nhanh (khoảng 6,3 m/s ở tốc độ 1×). Ở 4 m/s clip phát 0,66×: chân khớp mặt đất nhưng bước trông chậm, "bồng bềnh" (khoảng 85 bước/phút). Cần xem trực tiếp ở 60 fps rồi chọn: tăng timeScale lên khoảng 0,8–0,9× (chấp nhận chân trượt nhẹ) hoặc thu ngắn sải bước.
+- Đi ⇄ chạy chọn theo tốc độ (`character.jogFrom`), chưa trộn trọng số hai clip; trong khoảng 1,74–2,44 m/s cả hai clip đều trượt chân một chút.
+- Nội suy theo khung hình: vị trí và hướng thân đã nội suy; các động tác tua theo `actionTime` (openBox, crash, climbOut) vẫn đổi tư thế theo bước vật lý 60 Hz trên màn 120 / 144 Hz.
 - Tạo `client/src/core/EventBus.ts` khi có module thật sự cần (Phase 3 gọi hàm trực tiếp nên chưa tạo).
 - `core/Time` (SPEC §3) hiện nằm trong `GameLoop` (delta khung hình đã kẹp, FPS, alpha); tách `client/src/core/Time.ts` khi có module khác cần đồng hồ game.
 
@@ -91,6 +96,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Kết hợp Vite HMR với Worker/DO khi dev. Hai hướng: Vite proxy `/api` (và WebSocket) sang `wrangler dev`, hoặc dùng `@cloudflare/vite-plugin` 1.60.2. Hiện tại `npm run dev:worker` phải build lại client mỗi lần chạy.
 - `G` vẫy tay đã chạy trên máy mình (Phase 3); gửi `action` qua mạng cùng presence. `R` (bấm còi) chưa có tác dụng.
 - Người chơi khác: dựng `PlayerState` từ snapshot (nội suy) rồi dùng lại `CharacterModel` + `CharacterAnimator` + bảng tên; `movement` lấy từ file chặng.
+- Kiểm tra tốc độ phía server: khi trượt dọc collider góc cạnh (bể Louvre), controller Rapier có vài bước lẻ tới khoảng 4,8 m/s (footSpeed 4). Đo trên cửa sổ vài giây và cho dư khoảng 25 %, đừng kiểm từng bước.
 - Bảng debug F3: thêm ping và số người chơi đang thấy (SPEC §14).
 - Camera bay tự do (`V` khi mở bảng debug): trong cuộc đua thật chỉ cho Host / khán giả / đội đã về đích; hiện ai mở bảng debug cũng bật được.
 - Bỏ qua các tham số URL thử nghiệm của Phase 3 (`?player=x,z,…`, `action`, `autoMove`, `jump`, `?cam=` = khán giả) khi đã vào cuộc đua (dịch chuyển tức thời = gian lận).

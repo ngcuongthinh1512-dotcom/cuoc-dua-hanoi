@@ -86,8 +86,9 @@ export class CharacterController {
   private readonly body: RAPIER.RigidBody;
   private readonly kcc: RAPIER.KinematicCharacterController;
   private readonly shape = new RAPIER.Capsule(HALF - P.radius, P.radius);
-  /** Feet at the previous step (renderPosition lerps from it). */
+  /** Feet and heading at the previous step (renderPosition / renderYaw blend from them). */
   private readonly prev = new Vector3();
+  private prevYaw = 0;
   private readonly lastSafe = new Vector3();
   /** Intended horizontal velocity (accelerates toward the input; a wall doesn't reset it) and vertical velocity. */
   private vx = 0;
@@ -139,6 +140,7 @@ export class CharacterController {
     const jump = intent.jump;
     intent.jump = false;
     this.prev.copy(s.position);
+    this.prevYaw = s.yaw;
     if (this.pending) {
       if (this.pending.wait-- <= 0 && this.place(this.pending.x, this.pending.z)) this.pending = null;
       return;
@@ -205,6 +207,12 @@ export class CharacterController {
     return out.lerpVectors(this.prev, this.state.position, alpha);
   }
 
+  /** Heading at the render time (shortest way): the body turns smoothly on a 120 / 144 Hz screen too. */
+  renderYaw(alpha: number): number {
+    const d = this.state.yaw - this.prevYaw;
+    return this.prevYaw + Math.atan2(Math.sin(d), Math.cos(d)) * alpha;
+  }
+
   /** Starts a gesture unless one is running; false if refused. */
   startAction(a: Gesture): boolean {
     if (this.state.action !== 'none') return false;
@@ -261,6 +269,7 @@ export class CharacterController {
     this.state.position.set(x, y, z);
     this.state.velocity.set(0, 0, 0);
     this.prev.copy(this.state.position);
+    this.prevYaw = this.state.yaw;
     this.vx = this.vz = this.vy = this.airTime = 0;
     this.jumped = false;
   }

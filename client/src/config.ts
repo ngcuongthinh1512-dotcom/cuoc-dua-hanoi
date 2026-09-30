@@ -539,6 +539,9 @@ export const character = {
   // hair: tint × the grey UBC hair texture (T_Hair_1 is untinted, mean ≈ 0.56) → dark brown hair and eyebrows
   outfit: { pants: '#2d3342', shoes: '#1d1d20', hair: '#8a6446', edge: [0.35, 0.65] as const },
   fade: 0.2, // s crossfade between clips
+  // m: fixed frustum-culling sphere per skinned mesh, centre y above the feet; bones reach 2.06 m from it lying in the
+  // crash (Death01 moves the pelvis back), 1.3 m swimming / celebrating; + mesh and hair around the bones
+  cullSphere: { y: 0.9, radius: 2.4 },
   // Canvas sprite, constant size on screen: scale 0.05 ≈ 3.6 % of the view height at fov 70 (≈ 39 px at 1080p, the
   // same at 3 m and 20 m); m above the head; hidden beyond maxDistance (m); canvas font px (texture resolution)
   nameTag: { lift: 0.2, scale: 0.05, maxDistance: 80, fontPx: 48 },
@@ -550,6 +553,9 @@ export const character = {
   // an upright swimmer (swim.floatDepth keeps the head of Swim_Idle_Loop out), which would sink the whole crawl.
   clipLift: { Swim_Fwd_Loop: 0.3 } as Readonly<Record<string, number>>,
   moveThreshold: 0.25, // m/s horizontal: below = idle / swimIdle / land
+  // m/s: on foot (not slow walk) Jog_Fwd_Loop from jogFrom[1], back to Walk_Loop below jogFrom[0]; in between both
+  // clips slide a little (Walk_Loop tops out at 1.09 × 1.6 = 1.74 m/s, Jog_Fwd_Loop starts at 6.1 × 0.4 = 2.44 m/s)
+  jogFrom: [1.8, 2.1] as const,
   jump: { startAt: 0.07, startSeconds: 0.45 }, // s into Jump_Start (push-off, after its crouch); s before Jump_Loop
   land: { seconds: 0.45, speed: 1.5 }, // Jump_Land (only when landing nearly still): s shown, playback speed
   // Crash (playerSetup.actions.crash 3.5 s): Hit_Chest for `hit` s, Death01 from fall[0] to fall[1] (lying) in
@@ -564,7 +570,7 @@ export const character = {
   },
 };
 
-// ── B · character controller + swimming (player/CharacterController.ts, player/Swim.ts, world/StreetProps.ts colliders) ──
+// ── B · character controller + swimming (player/CharacterController.ts, world/StreetProps.ts colliders) ──
 export const player = {
   radius: 0.3, // m, capsule
   height: 1.8, // m, capsule total (UBC male is 1.81 m)
@@ -598,11 +604,13 @@ export const swim = {
 
 // ── C · third-person camera (player/ThirdPersonCamera.ts) ──
 // STYLE_GUIDE "Camera": 3–4 m behind, a bit above the head, slightly looking down; horizon at 40–45 % of the height.
-// Near defaults: camera 2.0 m up, 3.4 m back, pitch −6° at fov 70 → horizon 42.5 % from the top, body ≈ 36 % of the
-// frame height, feet ≈ 17 % from the bottom, character ≈ 4 % of the width left of centre (shoulder offset).
+// Near defaults: camera 1.9 m up (just above the head), 3.8 m back, pitch −6° at fov 70 → horizon 42.5 % from the top;
+// measured on p3-idle (720p): body ≈ 35 % of the frame height, feet ≈ 20 % from the bottom (in the lower third),
+// character ≈ 4 % of the width left of centre (shoulder offset). "Giữa màn hình" is read as horizontally centred: a
+// camera above the head at a 40–45 % horizon cannot also centre the body vertically.
 export const thirdPersonCamera = {
   modes: ['near', 'far', 'first'] as const, // C cycles
-  near: { distance: 3.4, pivot: 1.65, shoulder: 0.35 }, // m behind the pivot, pivot above the feet, right of the spine
+  near: { distance: 3.8, pivot: 1.5, shoulder: 0.35 }, // m behind the pivot, pivot above the feet, right of the spine
   far: { distance: 5.5, pivot: 1.8, shoulder: 0.2 },
   first: { eye: 1.66, forward: 0.1 }, // m above the feet, m ahead of the capsule axis (0.2 m from a wall ≥ near-plane corner)
   bike: { distanceScale: 1.35, pivotAdd: 0.5 }, // Phase 4 hook: further + higher on the bike
@@ -613,6 +621,9 @@ export const thirdPersonCamera = {
   // nearPlane 0.1, 16:9, fov 76°), so the near plane never pokes through either
   collisionRadius: 0.2,
   collisionSkin: 0.02, // m kept free beyond the ball: the back cast after a shoulder hit then slides along that wall
+  // A wall closer than the shoulder on the right → over the left shoulder; back to the right once that side is clear
+  // by shoulder + margin (m) for hold (s), so a facade with small jogs doesn't flip it back and forth
+  shoulderSwap: { margin: 0.3, hold: 1 },
   armReturn: 4, // 1/s, exponential lengthening once the obstacle is gone (shortening is instant)
   followSharpness: 12, // 1/s, exponential smoothing of the pivot (lag = speed / 12 ≈ 0.33 m at 4 m/s)
   snapDistance: 4, // m: a pivot jump longer than this (spawn, respawn) is not smoothed

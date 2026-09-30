@@ -62,8 +62,16 @@ describe('CharacterModel', () => {
     a.setPose(new THREE.Vector3(1, 2, 3), 0.5);
     expect(a.root.children[0]!.rotation.y).toBeCloseTo(Math.PI);
     expect(a.root.rotation.y).toBe(0.5);
+    const skins: THREE.SkinnedMesh[] = [];
+    a.root.traverse((o) => o instanceof THREE.SkinnedMesh && skins.push(o));
+    for (const m of skins) {
+      expect(m.frustumCulled).toBe(true);
+      expect(m.boundingSphere).toEqual(new THREE.Sphere(new THREE.Vector3(0, C.cullSphere.y, 0), C.cullSphere.radius));
+    }
+    const freed = skins.map((m) => vi.spyOn(m.skeleton, 'dispose'));
     a.dispose();
     expect(a.root.parent).toBeNull();
+    for (const f of freed) expect(f).toHaveBeenCalledOnce();
   });
 
   it('name tag: the Vietnamese text drawn once, above the head, shown within nameTag.maxDistance only', () => {

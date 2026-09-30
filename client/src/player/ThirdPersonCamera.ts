@@ -22,7 +22,7 @@ export const nextArm = (arm: number, free: number, dt: number) => (free < arm ? 
 
 const NO_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
 const goal = new Vector3();
-const axis = new Vector3();
+const shoulderAt = new Vector3();
 const dir = new Vector3();
 
 export class ThirdPersonCamera {
@@ -32,9 +32,13 @@ export class ThirdPersonCamera {
   mode: CameraMode = C.modes[0];
   /** Current arm length (m) after collision; 0 in first person. */
   arm = 0;
-  /** Smoothed pivot (above the feet, right of the spine). */
+  /** Pivot (smoothed axis + smoothed shoulder offset: above the feet, right of the spine). */
   readonly pivot = new Vector3();
-  private placed = false; // the first update snaps pivot, arm and FOV
+  private readonly axis = new Vector3(); // smoothed capsule-axis point at pivot height
+  private side = 0; // smoothed shoulder offset, m (+ = right)
+  private left = false; // over the left shoulder (wall on the right)
+  private clearFor = 0; // s the right side has been clear while `left`
+  private placed = false; // the first update (and a mode change) snaps pivot, arm and FOV
   private sinceLook = Infinity; // s since the last mouse / stick look
   private readonly ball: RAPIER.Ball;
 
@@ -57,6 +61,7 @@ export class ThirdPersonCamera {
   /** C / View button: near → far → first person → near. */
   cycleMode() {
     this.mode = C.modes[(C.modes.indexOf(this.mode) + 1) % C.modes.length]!;
+    this.placed = false; // first → near must not grow the arm out of the head
   }
 
   /** Places the camera for this frame (after the render pose of the target is known). */
@@ -72,39 +77,45 @@ export class ThirdPersonCamera {
 
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw), sp = Math.sin(this.pitch), cp = Math.cos(this.pitch);
     const bike = t.vehicle === 'bike';
-    let side = arm?.shoulder ?? 0;
-    // Rubbing along a wall on the right: over the left shoulder instead (GTA). Else the back cast starts against that
-    // wall and grazes it as soon as the view is a degree off parallel (arm ≈ 0, the lens in the head).
-    if (arm && side > 0) {
-      axis.set(t.position.x, t.position.y + arm.pivot + (bike ? C.bike.pivotAdd : 0), t.position.z);
-      if (this.cast(axis, dir.set(cy, 0, -sy), side, t.collider) < side) side = -side;
+    const lift = arm ? arm.pivot + (bike ? C.bike.pivotAdd : 0) : C.first.eye;
+    goal.set(t.position.x, t.position.y + lift, t.position.z); // on the capsule axis
+    const shoulder = arm?.shoulder ?? 0;
+    // Rubbing along a wall on the right: over the left shoulder instead (GTA), else the back cast starts against that
+    // wall and grazes it as soon as the view is a degree off parallel (arm ≈ 0, the lens in the head). Back to the
+    // right only once that side has been clear by shoulderSwap.margin for shoulderSwap.hold s (no flip-flop on jogs).
+    if (shoulder > 0) {
+      const m = C.shoulderSwap.margin;
+      const clear = this.cast(goal, dir.set(cy, 0, -sy), shoulder + m, t.collider); // = shoulder + m: nothing hit
+      if (clear < shoulder) [this.left, this.clearFor] = [true, 0];
+      else if (clear < shoulder + m) this.clearFor = 0;
+      else if (this.left && (this.clearFor += dt) >= C.shoulderSwap.hold) this.left = false;
     }
+    const sideGoal = this.left ? -shoulder : shoulder;
+    // First person follows the head exactly: pivot lag with the body hidden is what makes people sick.
+    const snap = !this.placed || first || this.axis.distanceToSquared(goal) > C.snapDistance ** 2;
+    const k = snap ? 1 : follow(C.followSharpness, dt);
+    // Axis point and shoulder offset are smoothed apart, so the casts below always start on the capsule (the old
+    // "smoothed pivot − the new shoulder" sat up to 2 × shoulder off it, inside the wall, while a swap glided over).
+    this.axis.lerp(goal, k);
+    this.side += (sideGoal - this.side) * k;
     const ahead = first ? C.first.forward : 0;
     // right = (cos y, 0, −sin y), horizontal forward = (−sin y, 0, −cos y)
-    goal.set(
-      t.position.x + cy * side - sy * ahead,
-      t.position.y + (arm ? arm.pivot + (bike ? C.bike.pivotAdd : 0) : C.first.eye),
-      t.position.z - sy * side - cy * ahead,
-    );
-    // First person follows the head exactly: pivot lag with the body hidden is what makes people sick.
-    const snap = !this.placed || first || this.pivot.distanceToSquared(goal) > C.snapDistance ** 2;
-    if (snap) this.pivot.copy(goal);
-    else this.pivot.lerp(goal, follow(C.followSharpness, dt));
+    const a = this.axis;
+    this.pivot.set(a.x + cy * this.side - sy * ahead, a.y, a.z - sy * this.side - cy * ahead);
 
     const cam = this.camera;
     if (!arm) {
       this.arm = 0;
       cam.position.copy(this.pivot);
     } else {
-      // Capsule axis → shoulder (a wall at the right shoulder pulls the pivot in), then shoulder → back along the view.
-      axis.set(this.pivot.x - cy * side, this.pivot.y, this.pivot.z + sy * side);
-      const k = Math.sign(side);
-      const toShoulder = side ? this.cast(axis, dir.set(cy * k, 0, -sy * k), Math.abs(side), t.collider) : 0;
-      axis.addScaledVector(dir, toShoulder);
+      // Capsule axis → shoulder (a wall at the shoulder pulls the pivot in), then shoulder → back along the view.
+      const r = Math.sign(this.side);
+      const toShoulder = this.side ? this.cast(a, dir.set(cy * r, 0, -sy * r), Math.abs(this.side), t.collider) : 0;
+      shoulderAt.copy(a).addScaledVector(dir, toShoulder);
       dir.set(sy * cp, -sp, cy * cp); // = −(view direction)
-      const free = this.cast(axis, dir, arm.distance * (bike ? C.bike.distanceScale : 1), t.collider);
+      const free = this.cast(shoulderAt, dir, arm.distance * (bike ? C.bike.distanceScale : 1), t.collider);
       this.arm = snap ? free : nextArm(this.arm, free, dt);
-      cam.position.copy(axis).addScaledVector(dir, this.arm);
+      cam.position.copy(shoulderAt).addScaledVector(dir, this.arm);
     }
     // The Seine has no underwater look: keep the lens above the surface (swimming feet sit swim.floatDepth below it).
     if (t.moveMode === 'swim') cam.position.y = Math.max(cam.position.y, t.position.y + swim.floatDepth + C.waterClearance);

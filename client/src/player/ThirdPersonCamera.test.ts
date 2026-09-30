@@ -83,6 +83,58 @@ describe('ThirdPersonCamera', () => {
     }
   });
 
+  it('turning the view so a +X wall comes to the right shoulder: the lens never enters it, on any frame', () => {
+    const face = 0.3;
+    for (const frames of [1, 6, 15]) {
+      const world = worldWith([0.5, 5, 5, face + 0.5, 0, 0]);
+      const cam = new ThirdPersonCamera(new PerspectiveCamera(), world);
+      cam.yaw = 90 * DEG; // looking west: the wall behind the camera
+      for (let i = 0; i <= frames + 60; i++) {
+        if (i > 0) cam.yaw = Math.max(0, 90 * DEG * (1 - i / frames));
+        cam.update(DT, target());
+        expect(cam.camera.position.x, `${frames} frames, frame ${i}`).toBeLessThanOrEqual(face - C.collisionRadius + 1e-3);
+      }
+      expect(cam.pivot.x, `${frames}`).toBeCloseTo(-C.near.shoulder, 2); // settled over the left shoulder
+    }
+  });
+
+  it('shoulder swap hysteresis: back to the right only after shoulderSwap.hold s clear; a facade with jogs never flips it', () => {
+    const world = worldWith([0.5, 5, 5, 0.8, 0, 0]);
+    const cam = new ThirdPersonCamera(new PerspectiveCamera(), world);
+    cam.update(DT, target());
+    world.forEachCollider((c) => world.removeCollider(c, false));
+    world.step();
+    run(cam, target(), C.shoulderSwap.hold - 0.1);
+    expect(cam.pivot.x).toBeLessThan(0);
+    run(cam, target(), 1);
+    expect(cam.pivot.x).toBeCloseTo(C.near.shoulder, 2);
+
+    // Walking north at 4 m/s along a facade 0.35 / 0.75 m right of the walking line, alternating every 3 m.
+    const jogs = worldWith(...Array.from({ length: 20 }, (_, i) => [0.5, 5, 1.5, (i % 2 ? 0.75 : 0.35) + 0.5, 0, -3 * i - 1.5] as [number, number, number, number, number, number]));
+    const walker = new ThirdPersonCamera(new PerspectiveCamera(), jogs);
+    const t = target({ speed: 4 });
+    let flips = 0;
+    let was = 0;
+    for (let z = 0; z > -55; z -= 4 * DT) {
+      t.position.set(0, 0, z);
+      walker.update(DT, t);
+      const side = Math.sign(walker.pivot.x);
+      if (was && side !== was) flips++;
+      was = side;
+    }
+    expect(flips).toBe(0); // over the left shoulder from the first frame (0.35 m face) to the end
+  });
+
+  it('first person → near: the arm snaps out (no frames from inside the head)', () => {
+    const cam = new ThirdPersonCamera(new PerspectiveCamera(), worldWith());
+    cam.mode = 'first';
+    cam.update(DT, target());
+    cam.cycleMode();
+    expect(cam.mode).toBe('near');
+    cam.update(DT, target());
+    expect(cam.arm).toBeCloseTo(C.near.distance, 6);
+  });
+
   it('nextArm: shorter at once, longer smoothly', () => {
     expect(nextArm(3, 1, DT)).toBe(1);
     const grown = nextArm(1, 3, DT);

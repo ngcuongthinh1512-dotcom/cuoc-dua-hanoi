@@ -20,10 +20,11 @@ import {
   MeshStandardMaterial,
   Object3D,
   SkinnedMesh,
+  Sphere,
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
-  type Vector3,
+  Vector3,
   type WebGLProgramParametersWithUniforms,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -156,10 +157,17 @@ export class CharacterModel {
   constructor(asset: CharacterAsset, opts: CharacterOptions) {
     const body = (this.body = cloneSkinned(asset.scene));
     body.rotation.y = Math.PI; // glTF faces +Z; PlayerState yaw 0 faces −Z
+    body.updateMatrixWorld(true);
+    const { y, radius } = C.cullSphere;
     body.traverse((o) => {
       if (!(o instanceof Mesh)) return;
       o.castShadow = o.receiveShadow = true;
-      if (o instanceof SkinnedMesh) o.frustumCulled = false; // bind-pose bounds miss the animated pose
+      // Fixed culling sphere (mesh-local; the bind-pose bounds miss the animated pose): still culled off screen, which
+      // Phase 4B pedestrians / Phase 6 remote players need.
+      if (o instanceof SkinnedMesh) {
+        const s = o.matrixWorld.getMaxScaleOnAxis();
+        o.boundingSphere = new Sphere(new Vector3(0, y, 0).applyMatrix4(o.matrixWorld.clone().invert()), radius / s);
+      }
       if (!o.geometry.hasAttribute('outfit')) return;
       const m = (o.material as Material).clone();
       m.userData.outfit = this.outfit;
@@ -198,8 +206,11 @@ export class CharacterModel {
     this.root.rotation.y = yaw;
   }
 
-  /** Frees what this instance owns (materials, tag texture), not the shared asset. */
+  /** Frees what this instance owns (materials, tag texture, the cloned skeletons' bone textures), not the shared asset.
+   *  ponytail: SkeletonUtils.clone gives each of the 4 meshes its own Skeleton (4 bone textures per character); bind them
+   *  to one if Phase 4B crowds show bone uploads (player.glb's 4 skins have separate inverse-bind accessors). */
   dispose() {
+    this.body.traverse((o) => o instanceof SkinnedMesh && o.skeleton.dispose());
     this.root.removeFromParent();
     this.setName(null);
     this.mixer.stopAllAction();

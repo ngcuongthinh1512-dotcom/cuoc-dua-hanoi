@@ -113,11 +113,13 @@ export class Player {
       if (input.wasPressed('wave')) this.controller.startAction('wave');
     }
     const s = this.controller.state;
-    this.controller.renderPosition(alpha, this.position);
-    this.model.setPose(this.position, s.yaw);
+    const a = input ? alpha : 1; // free-fly: fixedUpdate is frozen, so prev stays put; don't blend toward it
+    const yaw = this.controller.renderYaw(a);
+    this.controller.renderPosition(a, this.position);
+    this.model.setPose(this.position, yaw);
     this.model.root.visible = this.camera.mode !== 'first';
     this.animator.update(s, dt);
-    Object.assign(this.target, { yaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z), moveMode: s.moveMode });
+    Object.assign(this.target, { yaw, speed: Math.hypot(s.velocity.x, s.velocity.z), moveMode: s.moveMode });
     if (input) this.camera.update(dt, this.target);
   }
 }

@@ -18,7 +18,6 @@ export type AnimState =
   | 'openBox'
   | 'pickUp'
   | 'celebrate'
-  | 'wave'
   | 'crash'
   | 'climbOut'
   | 'talk' // Phase 7 Pit Stop host NPC
@@ -37,7 +36,6 @@ export const UAL_CLIPS: Readonly<Partial<Record<AnimState, string>>> = {
   openBox: 'Interact',
   pickUp: 'PickUp_Table',
   celebrate: 'Dance_Loop', // + both arms raised (ARM_SIDES); UAL's Celebration clip is the paid pack
-  wave: 'Idle_Talking_Loop', // fallback; the wave itself is a procedural right-arm layer (ARM_SIDES)
   crash: 'Hit_Chest', // then Death01, then back up
   climbOut: 'Jump_Land',
   talk: 'Idle_Talking_Loop',
@@ -46,19 +44,20 @@ export const UAL_CLIPS: Readonly<Partial<Record<AnimState, string>>> = {
 /** Second half of the crash (character.crash): falls backwards, held lying, played backwards to stand up. */
 export const UAL_CRASH_FALL = 'Death01';
 
-const LOOPED = new Set<AnimState>(['idle', 'walk', 'jog', 'air', 'swimIdle', 'swimFwd', 'celebrate', 'wave', 'talk', 'cycle']);
+const LOOPED = new Set<AnimState>(['idle', 'walk', 'jog', 'air', 'swimIdle', 'swimFwd', 'celebrate', 'talk', 'cycle']);
 const hSpeed = (p: Readonly<PlayerState>) => Math.hypot(p.velocity.x, p.velocity.z);
 
 /** Next state. `prev` / `prevTime` = current state and s spent in it; `jumped` = PlayerState.jumps changed this frame. */
 export function pickState(p: Readonly<PlayerState>, prev: AnimState, prevTime: number, jumped: boolean): AnimState {
-  if (p.action !== 'none' && p.action !== 'wave') return p.action; // openBox / celebrate / crash / climbOut
+  if (p.action !== 'none' && p.action !== 'wave') return p.action; // openBox / celebrate / crash / climbOut (wave = arm layer)
   const moving = hSpeed(p) >= C.moveThreshold;
   if (p.moveMode === 'swim') return moving ? 'swimFwd' : 'swimIdle';
   if (jumped) return 'jumpStart';
   if (p.moveMode === 'air') return prev === 'jumpStart' && prevTime < C.jump.startSeconds ? 'jumpStart' : 'air'; // air without a jump = fall
   const landing = prev === 'air' || prev === 'jumpStart' || (prev === 'land' && prevTime < C.land.seconds);
   if (!moving) return landing ? 'land' : 'idle';
-  return p.moveMode === 'slow' ? 'walk' : 'jog';
+  // By speed too: a part-tilted stick or sliding along a wall must not skate a running stride (C.jogFrom).
+  return p.moveMode !== 'slow' && hSpeed(p) >= C.jogFrom[prev === 'jog' ? 0 : 1] ? 'jog' : 'walk';
 }
 
 /** Locomotion playback speed: proportional to the ground speed, 1 at the clip's own speed, clamped. */
@@ -153,7 +152,10 @@ export class CharacterAnimator {
     }
     this.model.mixer.update(dt);
     let lift = 0;
-    for (const [name, m] of Object.entries(C.clipLift)) lift += m * (this.actions.get(name)?.getEffectiveWeight() ?? 0);
+    for (const [name, m] of Object.entries(C.clipLift)) {
+      const a = this.actions.get(name); // a never-played action reports weight 1: count only what the mixer applies
+      lift += m * (a?.isScheduled() ? a.getEffectiveWeight() : 0);
+    }
     this.model.body.position.y = lift;
     const w = armWeight(p.action, p.actionTime);
     if (w > 0 && armGesture(p.action)) {
