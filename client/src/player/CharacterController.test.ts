@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { latLonToWorld } from '@race/shared';
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { bike as B, bikeTopSpeed, movement, physics, player as P, playerSetup, swim as S, terrain as T } from '../config.ts';
+import { bike as B, bikeTopSpeed, movement, physics, player as P, playerSetup, respawnRules as RR, swim as S, terrain as T } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import { type ChunkData, chunkKey, type WaterData } from '../geo/chunkData.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
@@ -13,7 +13,7 @@ import { buildChunk } from '../world/chunkBuild.ts';
 import { newBike } from '../vehicle/Bikes.ts';
 import { stairColliders } from '../world/stairs.ts';
 import { carveRiver, createTerrainCollider, riverLevel } from '../world/Terrain.ts';
-import { CharacterController, moveDirection, newIntent, readMoveIntent, spiral, tickAction, turnToward, yawOf } from './CharacterController.ts';
+import { CharacterController, moveDirection, newIntent, quayStairNear, readMoveIntent, spiral, tickAction, turnToward, yawOf } from './CharacterController.ts';
 import type { MoveIntent, PlayerEnv, PlayerState } from './types.ts';
 
 const fakeInput = (held: string[], pad = { moveX: 0, moveY: 0 }, pressed: string[] = []) =>
@@ -233,10 +233,10 @@ describe('swimming (carved grid + quay mesh, like the game)', () => {
   // The pond widens the water extent in x, so only the river's ends lie on it (no quay across the river there).
   const pond = { river: false, outer: [0, 280, 250, 280, 250, 285, 0, 285] };
   const water: WaterData = { v: 1, polygons: [{ river: true, outer: [100, 0, 200, 0, 200, 300, 100, 300] }, pond] };
-  function river(build: (w: RAPIER.World) => void = () => {}) {
+  function river(build: (w: RAPIER.World) => void = () => {}, wd: WaterData = water) {
     const g: HeightGrid = { minX: 0, minZ: 0, cell: 5, cols: 61, rows: 61, h: new Float32Array(61 * 61) };
-    carveRiver(g, water);
-    const env: PlayerEnv = { heightAt: (x, z) => heightAt(g, x, z), waterLevel: riverLevel(g, water), water };
+    carveRiver(g, wd);
+    const env: PlayerEnv = { heightAt: (x, z) => heightAt(g, x, z), waterLevel: riverLevel(g, wd), water: wd };
     return setup((w) => (createTerrainCollider(w, g), build(w)), env);
   }
   const coping = T.quayHeight + T.copingLift;
@@ -275,6 +275,105 @@ describe('swimming (carved grid + quay mesh, like the game)', () => {
     run(world, c, 1);
     expect(c.state.moveMode).toBe('swim');
     expect(c.state.position.y).toBeCloseTo(-S.floatDepth, 1);
+  });
+
+  // Phase 5 track C (SPEC §4.4): "Kẹt? Về chỗ an toàn" in the river → the nearest quay flight. Two flights: west bank (foot in
+  // the water at x 101.2, parapet gap on the wall at x 100) and east bank; water.stairs = feet, water.stairGaps = gaps.
+  const withStairs: WaterData = { ...water, stairs: [101.2, 80, 198.8, 220], stairGaps: [100, 70, 200, 230] };
+
+  it('respawn in the river: on the coping at the gap of the nearest flight, facing inland, no longer swimming', () => {
+    const { world, c } = river(undefined, withStairs);
+    for (const [from, bank, inland, yaw] of [[[150, 100], 100, -1, Math.PI / 2], [[150, 200], 200, 1, -Math.PI / 2]] as const) {
+      spawned(world, c, from[0], from[1]);
+      run(world, c, 1.5);
+      expect(c.state.moveMode).toBe('swim');
+      expect(c.respawn()).toBe('stairs');
+      expect([c.state.inWater, c.state.moveMode]).toEqual([false, 'walk']); // at once, before the next step
+      expect(c.state.yaw).toBeCloseTo(yaw);
+      expect(c.renderYaw(0)).toBeCloseTo(yaw); // no blend from the old heading on the first frame
+      run(world, c, 1);
+      const p = c.state.position;
+      expect(Math.sign(p.x - bank)).toBe(inland); // on the land side of the wall
+      expect(Math.hypot(p.x - bank, p.z - (bank === 100 ? 70 : 230))).toBeLessThan(1.5); // at the flight's gap, not the other one
+      expect(p.y).toBeCloseTo(coping, 1);
+      expect([c.state.inWater, c.state.moveMode, c.state.grounded]).toEqual([false, 'walk', true]);
+    }
+    world.free();
+  });
+
+  it('respawn in the river without quay stairs falls back to the safe spot', () => {
+    const { world, c } = river();
+    spawned(world, c, 150, 100);
+    run(world, c, 1.5);
+    expect(c.respawn()).toBe('safe');
+    world.free();
+  });
+});
+
+describe('quayStairNear (Phase 5): where a swimmer is put', () => {
+  const ring = (x0: number, z0: number, x1: number, z1: number) => [x0, z0, x1, z0, x1, z1, x0, z1];
+  // A river square 0…1000 with an island (a hole) 400…600: land is outside the square and inside the hole.
+  const water: WaterData = {
+    v: 1,
+    polygons: [{ river: true, outer: ring(0, 0, 1000, 1000), holes: [ring(400, 400, 600, 600)] }],
+    stairs: [2, 500, 500, 398], // feet in the water, [x, z, …]
+    stairGaps: [0, 500, 500, 400], // on the wall line: the west bank, the north shore of the island
+  };
+  it('nearest foot → its gap; the normal points at the land: outwards on the bank, into the hole on the island', () => {
+    const at = (x: number, z: number) => Object.values(quayStairNear(water, x, z)!).map((v) => +v.toFixed(6) + 0); // x, z, nx, nz
+    expect(at(30, 480)).toEqual([0, 500, -1, 0]); // bank (west edge): land is west
+    expect(at(500, 380)).toEqual([500, 400, 0, 1]); // island (north edge of the hole): land is south
+    expect(at(900, 900)).toEqual([500, 400, 0, 1]); // nearest foot wins, whichever shore it is on
+  });
+  it('null without quay stairs or without water data; ponds are not quays', () => {
+    expect(quayStairNear(undefined, 0, 0)).toBeNull();
+    expect(quayStairNear({ ...water, stairs: undefined }, 0, 0)).toBeNull();
+    expect(quayStairNear({ ...water, stairs: [], stairGaps: [] }, 0, 0)).toBeNull();
+    expect(quayStairNear({ ...water, polygons: [{ river: false, outer: ring(0, 0, 1000, 1000) }] }, 0, 0)).toBeNull();
+  });
+});
+
+describe('respawn on land (Phase 5 track C)', () => {
+  it("'safe': back to a dry spot minAge s old (not the stuck one), a second press stays put", () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 0, 0);
+    run(world, c, 9, walk());
+    const here = c.state.position.clone();
+    expect(c.respawn()).toBe('safe');
+    const back = c.state.position.z - here.z; // walked north (−z), so back in +z
+    expect(back).toBeGreaterThan((RR.minAge - 1.6) * movement.footSpeed);
+    expect(back).toBeLessThan((RR.minAge + 1.6) * movement.footSpeed);
+    expect(c.state.position.y).toBeCloseTo(0, 1);
+    const at = c.state.position.clone();
+    c.respawn();
+    expect(c.state.position.distanceTo(at)).toBeLessThan(0.05);
+    world.free();
+  });
+
+  it('just spawned: back to the spawn spot', () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 3, -4);
+    run(world, c, 2, walk());
+    c.respawn();
+    expect(Math.hypot(c.state.position.x - 3, c.state.position.z + 4)).toBeLessThan(1);
+    world.free();
+  });
+
+  it('riding: the bike stays on the ground where it was, the rider is on foot (onDismount, not crashed)', () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 0, 0);
+    const b = newBike('b', 0, c.state.position.y, 0, 0);
+    const drops: boolean[] = [];
+    c.onDismount = (_b, crashed) => void drops.push(crashed);
+    c.ride(b);
+    run(world, c, 3, walk());
+    const at = c.state.position.clone();
+    expect(b.speed).toBeGreaterThan(3);
+    c.respawn();
+    expect([c.riding, c.state.moveMode, drops, b.speed]).toEqual([null, 'walk', [false], 0]);
+    expect(Math.abs(b.position.z - at.z)).toBeLessThan(1); // where its wheels last stood (bikeSafe), not below the world
+    expect(b.position.y).toBeCloseTo(0, 1);
+    world.free();
   });
 });
 
@@ -336,6 +435,46 @@ describe.skipIf(!has)('real Seine', () => {
       expect(c.state.grounded).toBe(true);
       expect(c.state.position.y).toBeCloseTo(level + T.quayHeight + T.copingLift, 1); // on the quay coping
     }
+    world.free();
+  });
+
+  // Phase 5 track C (SPEC §4.4): the real 81 quay flights. From 8 m out in the water off each flight, "Kẹt?" puts the swimmer on
+  // the quay coping at the parapet gap of the flight nearest to him, facing inland, and he stands there (terrain + quay wall
+  // colliders only: buildings and props are not built here).
+  it('respawn from the water at every quay flight: onto the coping at its gap, facing inland, standing', () => {
+    const world = new RAPIER.World(physics.gravity);
+    world.timestep = DT;
+    createTerrainCollider(world, grid);
+    const c = new CharacterController(world, env);
+    const feet = water.stairs!;
+    expect(feet.length / 2).toBeGreaterThan(50);
+    const bad: string[] = [];
+    let farthest = 0;
+    for (let i = 0; i < feet.length; i += 2) {
+      const q0 = quayStairNear(water, feet[i]!, feet[i + 1]!)!;
+      const [sx, sz] = [feet[i]! - q0.nx * 8, feet[i + 1]! - q0.nz * 8];
+      const q = quayStairNear(water, sx, sz)!; // the flight nearest to where he swims (usually the same)
+      spawned(world, c, sx, sz);
+      run(world, c, 1);
+      const tag = `flight ${i / 2} (${sx.toFixed(0)}, ${sz.toFixed(0)})`;
+      if (c.state.moveMode !== 'swim') {
+        bad.push(`${tag}: not swimming`);
+        continue;
+      }
+      const r = c.respawn();
+      run(world, c, 1);
+      const p = c.state.position;
+      const mode: string = c.state.moveMode;
+      const d = Math.hypot(p.x - q.x, p.z - q.z);
+      farthest = Math.max(farthest, d);
+      if (r !== 'stairs') bad.push(`${tag}: ${r}`);
+      else if (d > 1.5) bad.push(`${tag}: ${d.toFixed(1)} m from the gap`);
+      else if (Math.abs(p.y - (level + T.quayHeight + T.copingLift)) > 0.35) bad.push(`${tag}: y ${p.y.toFixed(2)}`);
+      else if (c.state.inWater || !c.state.grounded || mode !== 'walk') bad.push(`${tag}: ${mode}, inWater ${c.state.inWater}`);
+      else if (Math.cos(c.state.yaw - yawOf(q.nx, q.nz)) < 0.99) bad.push(`${tag}: not facing inland`);
+    }
+    console.log(`respawn: ${feet.length / 2} flights, farthest landing ${farthest.toFixed(2)} m from the gap, ${bad.length} failed`);
+    expect(bad).toEqual([]);
     world.free();
   });
 });
@@ -430,6 +569,8 @@ describe('CharacterController riding a bike (Phase 4 track B)', () => {
       handle = w.createCollider(RAPIER.ColliderDesc.trimesh(v, new Uint32Array([0, 1, 2, 0, 2, 3]))).handle;
       stairColliders.add(handle);
     });
+    let toasts = 0;
+    c.onStairs = () => void toasts++; // Phase 5: the toast "Không đi xe trên bậc thang"
     run(world, c, 4, walk());
     stairColliders.delete(handle);
     expect(drops).toEqual([]);
@@ -437,6 +578,7 @@ describe('CharacterController riding a bike (Phase 4 track B)', () => {
     expect(b.speed).toBe(0);
     expect(c.state.position.y).toBeCloseTo(0, 1);
     expect(c.state.position.z).toBeGreaterThan(-8);
+    expect(toasts).toBeGreaterThan(0);
     world.free();
   });
 
@@ -448,7 +590,10 @@ describe('CharacterController riding a bike (Phase 4 track B)', () => {
     };
     for (const behind of [(w: RAPIER.World) => cuboid(w, 0, 1, 2.5, 5, 1, 0.5), stairs]) { // wall face at z = 2
       const { world, c, b, drops } = mounted((w) => (ground(w), behind(w)));
+      let toasts = 0;
+      c.onStairs = () => void toasts++;
       run(world, c, 4, walk(-1));
+      expect(toasts > 0).toBe(behind === stairs); // the toast for stairs behind, not for a wall
       expect(drops).toEqual([]);
       expect(c.riding).toBe(b);
       expect(b.speed).toBe(0);
@@ -467,8 +612,11 @@ describe('CharacterController riding a bike (Phase 4 track B)', () => {
       const v = new Float32Array([-2, 0, -8, 2, 0, -8, 2, 1, -8 - L, -2, 1, -8 - L, -2, 1, -30, 2, 1, -30]);
       w.createCollider(RAPIER.ColliderDesc.trimesh(v, new Uint32Array([0, 1, 2, 0, 2, 3, 3, 2, 5, 3, 5, 4])));
     });
+    let toasts = 0;
+    c.onStairs = () => void toasts++;
     run(world, c, 5, walk());
     expect(c.state.position.y).toBeCloseTo(1, 1);
+    expect(toasts).toBe(0);
     world.free();
   });
 

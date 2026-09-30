@@ -941,6 +941,11 @@ export const toasts = {
 export const notices = {
   farReach: 6, // m: a takeable bike this close but beyond bikeRules.interactRadius → "tooFar" (else F stays silent)
 };
+export const respawnRules = {
+  history: 12, // dry spots remembered (one per player.safeEvery s, newest last)
+  minAge: 5, // s: "Kẹt? Về chỗ an toàn" goes back to a spot at least this old, so never to the place the player is stuck in
+  stairsInland: 0.8, // m inland of the parapet gap at the top of the quay flight the swimmer is put on (swim.climbLand = 0.6 lands on the coping)
+};
 
 // ── D · HUD widgets + integration (ui/HUD.ts, main.ts, player/Player.ts, ui/DebugOverlay.ts, world/StreetProps.ts
 //        district line on the street signs) ──

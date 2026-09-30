@@ -6,6 +6,7 @@ import { type PerspectiveCamera, Vector3 } from 'three';
 import { render, swim, thirdPersonCamera as C } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import { IGNORE_NPC } from '../npc/types.ts';
+import { settings } from '../ui/settings.ts';
 import type { CameraTarget } from './types.ts';
 
 const DEG = Math.PI / 180;
@@ -50,10 +51,12 @@ export class ThirdPersonCamera {
     this.ball = new RAPIER.Ball(C.collisionRadius);
   }
 
-  /** Mouse / right stick → yaw, pitch. Call before readMoveIntent (movement is relative to this yaw). */
+  /** Mouse / right stick → yaw, pitch, scaled by the menu's settings (sensitivity; invert Y flips the vertical axis).
+   *  Call before readMoveIntent (movement is relative to this yaw). */
   look(input: Input, dt: number) {
-    const dYaw = input.mouseDX * C.mouseSensitivity + input.pad.lookX * C.gamepadLookSpeed * dt;
-    const dPitch = input.mouseDY * C.mouseSensitivity + input.pad.lookY * C.gamepadLookSpeed * dt;
+    const k = settings.mouseSensitivity;
+    const dYaw = k * (input.mouseDX * C.mouseSensitivity + input.pad.lookX * C.gamepadLookSpeed * dt);
+    const dPitch = k * (settings.invertY ? -1 : 1) * (input.mouseDY * C.mouseSensitivity + input.pad.lookY * C.gamepadLookSpeed * dt);
     if (dYaw || dPitch) this.sinceLook = 0;
     this.yaw -= dYaw;
     this.pitch = clampPitch(this.pitch - dPitch);
@@ -76,10 +79,12 @@ export class ThirdPersonCamera {
       this.yaw += Math.sign(d) * Math.min(Math.abs(d), C.recenter.rate * Math.max(0, Math.cos(d)) * dt);
     }
 
-    const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw), sp = Math.sin(this.pitch), cp = Math.cos(this.pitch);
     const bike = t.vehicle === 'bike';
     const lift = arm ? arm.pivot + (bike ? C.bike.pivotAdd : 0) : C.first.eye;
     goal.set(t.position.x, t.position.y + lift, t.position.z); // on the capsule axis
+    const jumped = this.axis.distanceToSquared(goal) > C.snapDistance ** 2;
+    if (jumped && this.placed) this.yaw = t.yaw; // teleported (Phase 5 respawn): look along the body again
+    const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw), sp = Math.sin(this.pitch), cp = Math.cos(this.pitch);
     const shoulder = arm?.shoulder ?? 0;
     // Rubbing along a wall on the right: over the left shoulder instead (GTA), else the back cast starts against that
     // wall and grazes it as soon as the view is a degree off parallel (arm ≈ 0, the lens in the head). Back to the
@@ -93,7 +98,7 @@ export class ThirdPersonCamera {
     }
     const sideGoal = this.left ? -shoulder : shoulder;
     // First person follows the head exactly: pivot lag with the body hidden is what makes people sick.
-    const snap = !this.placed || first || this.axis.distanceToSquared(goal) > C.snapDistance ** 2;
+    const snap = !this.placed || first || jumped;
     const k = snap ? 1 : follow(C.followSharpness, dt);
     // Axis point and shoulder offset are smoothed apart, so the casts below always start on the capsule (the old
     // "smoothed pivot − the new shoulder" sat up to 2 × shoulder off it, inside the wall, while a swap glided over).

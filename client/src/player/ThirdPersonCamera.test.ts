@@ -1,9 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PerspectiveCamera, Vector3 } from 'three';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { render, swim, thirdPersonCamera as C } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import { NPC_GROUPS } from '../npc/types.ts';
+import { settings } from '../ui/settings.ts';
 import { fovFor, nextArm, ThirdPersonCamera } from './ThirdPersonCamera.ts';
 import type { CameraTarget } from './types.ts';
 
@@ -231,5 +232,55 @@ describe('ThirdPersonCamera', () => {
     t.position.set(50, 0, 0);
     cam.update(DT, t);
     expect(cam.pivot.x).toBeCloseTo(50 + C.near.shoulder);
+  });
+});
+
+describe('ThirdPersonCamera: respawn view + settings (Phase 5)', () => {
+  it('a teleport turns the view along the body (respawn: facing inland), a normal step does not', () => {
+    const cam = new ThirdPersonCamera(new PerspectiveCamera(), worldWith());
+    const t = target({ yaw: 1 });
+    cam.yaw = -0.4;
+    cam.update(DT, t);
+    expect(cam.yaw).toBeCloseTo(-0.4); // placed on the first update: the view is the player's
+    t.position.set(0.3, 0, 0);
+    cam.update(DT, t);
+    expect(cam.yaw).toBeCloseTo(-0.4);
+    t.position.set(60, 9, -40);
+    cam.update(DT, t);
+    expect(cam.yaw).toBeCloseTo(1);
+    expect(cam.pivot.x).toBeCloseTo(60 + C.near.shoulder * Math.cos(1)); // and the pivot was already placed for that view
+  });
+
+  const padInput = (lookX: number, lookY: number) =>
+    ({ mouseDX: 0, mouseDY: 0, pad: { moveX: 0, moveY: 0, lookX, lookY, rise: 0 } }) as unknown as Input;
+  const look = (i: Input) => {
+    const cam = new ThirdPersonCamera(new PerspectiveCamera(), worldWith());
+    cam.look(i, DT);
+    return [cam.yaw, cam.pitch - C.pitchDeg.initial * DEG] as const;
+  };
+
+  afterEach(() => Object.assign(settings, { invertY: false, mouseSensitivity: 1 }));
+
+  it('invertY flips the vertical look only, mouse and stick', () => {
+    for (const i of [lookInput(10, 10), padInput(1, 1)]) {
+      settings.invertY = false;
+      const [yaw, pitch] = look(i);
+      settings.invertY = true;
+      const [yawI, pitchI] = look(i);
+      expect(pitch).toBeLessThan(0); // mouse down / stick down looks down
+      expect(pitchI).toBeCloseTo(-pitch, 9);
+      expect(yawI).toBeCloseTo(yaw, 9);
+    }
+  });
+
+  it('sensitivity 2 × turns twice as far, mouse and stick', () => {
+    for (const i of [lookInput(10, 10), padInput(0.5, 0.5)]) {
+      settings.mouseSensitivity = 1;
+      const [yaw, pitch] = look(i);
+      settings.mouseSensitivity = 2;
+      const [yaw2, pitch2] = look(i);
+      expect(yaw2).toBeCloseTo(2 * yaw, 9);
+      expect(pitch2).toBeCloseTo(2 * pitch, 9);
+    }
   });
 });

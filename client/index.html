@@ -23,7 +23,7 @@
         text-shadow: 0 0 3px #000; pointer-events: none;
       }
       #credits button { pointer-events: auto; font: inherit; color: inherit; background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
-      #credits-panel { top: 50%; transform: translate(-50%, -50%); max-height: 80%; overflow-y: auto; text-align: left; pointer-events: auto; font-size: 13px; background: rgba(10, 14, 22, 0.96); z-index: 1; }
+      #credits-panel { top: 50%; transform: translate(-50%, -50%); max-height: 80%; overflow-y: auto; text-align: left; pointer-events: auto; font-size: 13px; background: rgba(10, 14, 22, 0.96); z-index: 2; /* above the menu (ui/menu.css, z-index 1) */ }
       #credits-panel a { color: #9cc7ff; }
       #credits-panel li { margin-bottom: 6px; }
       #error { top: 50%; transform: translate(-50%, -50%); white-space: pre-line; pointer-events: auto; border: 1px solid #c8412f; }
@@ -36,18 +36,23 @@
   <body>
     <!-- pointer-events: none on panels, so a click anywhere reaches the canvas and locks the pointer -->
     <div id="help" class="panel" hidden>
-      <strong>Nhấp chuột để điều khiển</strong><br />
-      <span id="help-player" hidden>
+      <strong>Nhấp chuột để chơi</strong> · <kbd>Esc</kbd> menu
+    </div>
+    <!-- The key table: ui/Menu.ts moves it into the menu ("Phím điều khiển") when it is first opened; main.ts toggles
+         #help-player / #help-fly by id (player vs spectator). -->
+    <div id="keys-src" hidden>
+      <p id="help-player" hidden>
         <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> đi · giữ <kbd>Shift</kbd> đi chậm · <kbd>Space</kbd> nhảy<br />
-        chuột nhìn quanh · <kbd>F</kbd> tương tác / lên, xuống xe đạp · <kbd>C</kbd> đổi camera · <kbd>G</kbd> vẫy tay<br />
+        chuột nhìn quanh · <kbd>F</kbd> tương tác / lên, xuống xe · <kbd>C</kbd> đổi camera · <kbd>G</kbd> vẫy tay<br />
         trên xe: <kbd>W</kbd> đạp · <kbd>S</kbd> phanh · <kbd>A</kbd> <kbd>D</kbd> rẽ · <kbd>R</kbd> chuông<br />
-        khi bảng debug đang mở: <kbd>V</kbd> camera bay tự do · <kbd>N</kbd> hiện đồ thị đường<br />
-      </span>
-      <span id="help-fly">
+        <kbd>M</kbd> bản đồ lớn · <kbd>Esc</kbd> menu<br />
+        khi bảng debug đang mở: <kbd>V</kbd> camera bay tự do · <kbd>N</kbd> hiện đồ thị đường
+      </p>
+      <p id="help-fly">
         <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> di chuyển · <kbd>Space</kbd>/<kbd>E</kbd> lên · <kbd>Q</kbd> xuống<br />
-        giữ <kbd>Shift</kbd> bay nhanh · lăn chuột đổi tốc độ<br />
-      </span>
-      <kbd>F3</kbd> hoặc <kbd>`</kbd> bảng debug · <kbd>Esc</kbd> nhả chuột
+        giữ <kbd>Shift</kbd> bay nhanh · lăn chuột đổi tốc độ
+      </p>
+      <p><kbd>F3</kbd> hoặc <kbd>`</kbd> bảng debug</p>
     </div>
     <div id="ime" class="panel" hidden>
       Có vẻ bộ gõ tiếng Việt (Unikey, EVKey…) đang bật. Hãy chuyển sang chế độ gõ tiếng Anh để điều khiển chính xác.
