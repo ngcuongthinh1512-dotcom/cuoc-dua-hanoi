@@ -1,26 +1,28 @@
 // Downloaded landmark models (docs/plans/phase2b-assets.md §2, §5.8) → client/public/models/*.glb + client/public/credits.json.
-// Run once after the downloads: npm run process-assets [-- --assets <dir with the originals>] (default .cache/assets).
+// Run once after the downloads: npm run process-assets [-- --assets <dir with the originals>] [eiffel arc player player-anims]
+// (default .cache/assets, every model).
 // Each model is baked into its local frame in metres (x = long axis, y up from the ground, z = short axis), every mesh of
 // one material merged into one primitive, meshopt-compressed; client/src/world/landmarks/models.ts places it on the OSM
 // footprint. Deterministic for the same inputs.
 // DOM lib: kit.ts → buildTypes.ts mentions ImageBitmap (type only).
 /// <reference lib="dom" />
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { Document, type Material, NodeIO, type Texture } from '@gltf-transform/core';
+import { type Accessor, Document, type GLTF, type Material, type Mesh, NodeIO, type Texture } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { meshopt, prune, simplify, textureCompress, weld } from '@gltf-transform/functions';
+import { copyToDocument, meshopt, prune, resample, simplify, textureCompress, unpartition, weld } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 // ponytail: @gltf-transform/extensions and sharp are dependencies of the approved @gltf-transform/{functions,cli}
 // (hoisted), not direct ones; add them to devDependencies if npm ever stops hoisting them.
 import sharp from 'sharp';
 import { landmarks } from '../client/src/config.ts';
+import { UAL_CLIPS } from '../client/src/player/Animation.ts';
 import { footprintFrame } from '../client/src/world/landmarks/kit.ts';
 
 const G = landmarks.g1;
 const root = join(import.meta.dirname, '..');
-const { values: opt } = parseArgs({ options: { assets: { type: 'string' } } });
+const { values: opt, positionals: only } = parseArgs({ options: { assets: { type: 'string' } }, allowPositionals: true }); // [names]: only those
 const src = opt.assets ?? join(root, '.cache/assets');
 const out = join(root, 'client/public/models');
 const MAX_BYTES = 25 * 2 ** 20; // Cloudflare static asset limit (CLAUDE.md)
@@ -254,8 +256,104 @@ async function arc() {
   return doc;
 }
 
+// ── Player (docs/plans/phase3.md §2): UBC Superhero_Male + Hair_SimpleParted on one skin, and 15 UAL clips renamed to
+// its UE bone names (same tree and bone axes: no retargeting, only the pelvis translation scaled to the UBC hips).
+const UBC = join(src, 'Universal Base Characters[Standard]/Universal Base Characters[Standard]');
+const UAL = join(src, 'universal_animation_librarystandard/Animation Library[Standard]/Godot/AnimationLibrary_Godot_Standard.glb');
+const PLAYER_CLIPS = [...new Set([...Object.values(UAL_CLIPS), 'Death01'])]; // Death01: second half of the crash
+
+/** The body glTF, its two broken normal-map uris (`*_png.png`, not shipped) pointed at the real files. */
+async function readBody() {
+  const dir = join(UBC, 'Base Characters/Godot - UE');
+  const json = JSON.parse(readFileSync(join(dir, 'Superhero_Male_FullBody.gltf'), 'utf8')) as GLTF.IGLTF & { buffers: { uri: string }[]; images: { uri: string }[] };
+  for (const img of json.images) if (!existsSync(join(dir, img.uri))) img.uri = img.uri.replace(/_png\.png$/, '.png');
+  const resources = Object.fromEntries([...json.buffers, ...json.images].map(({ uri }) => [uri, new Uint8Array(readFileSync(join(dir, uri)))]));
+  return io.readJSON({ json, resources });
+}
+
+async function player() {
+  const doc = await readBody();
+  const r = doc.getRoot();
+  const skin = r.listSkins()[0]!;
+  const armature = r.listNodes().find((n) => n.getName() === 'Armature')!;
+  const hairMat = r.listMaterials().find((m) => m.getName() === 'MI_Hair_1')!; // the eyebrows' material = the hair's
+  const hairDoc = await io.read(join(UBC, 'Hairstyles/Rigged to Head Bone/glTF (Godot -Unreal)/Hair_SimpleParted.gltf'));
+  const hairSkin = hairDoc.getRoot().listSkins()[0]!;
+  const hairNode = hairDoc.getRoot().listNodes().find((n) => n.getMesh())!;
+  // Same joint list; the hair skin is the generic one of every body, so only the joints it weights (Head) must bind alike.
+  const [hj, bj] = [hairSkin.listJoints(), skin.listJoints()];
+  const [hi, bi] = [hairSkin.getInverseBindMatrices()!.getArray()!, skin.getInverseBindMatrices()!.getArray()!];
+  const used = new Set<number>();
+  for (const p of hairNode.getMesh()!.listPrimitives()) {
+    const [J, W] = [p.getAttribute('JOINTS_0')!, p.getAttribute('WEIGHTS_0')!];
+    for (let i = 0; i < J.getCount(); i++) W.getElement(i, [0, 0, 0, 0]).forEach((w, c) => w > 0 && used.add(J.getElement(i, [0, 0, 0, 0])[c]!));
+  }
+  const bad = [...used].filter((j) => hj[j]!.getName() !== bj[j]?.getName() || [...Array(16).keys()].some((k) => Math.abs(hi[j * 16 + k]! - bi[j * 16 + k]!) > 1e-4));
+  if (bad.length) throw new Error(`player: hair joints ${bad.map((j) => hj[j]!.getName())} differ from the body skin`);
+  const hair = copyToDocument(doc, hairDoc, [hairNode.getMesh()!]).get(hairNode.getMesh()!) as Mesh;
+  for (const p of hair.listPrimitives()) p.setMaterial(hairMat);
+  armature.addChild(doc.createNode('Hair').setMesh(hair).setSkin(skin));
+  for (const p of r.listMeshes().flatMap((m) => m.listPrimitives())) {
+    for (const s of p.listSemantics()) if (/^COLOR_|^TEXCOORD_[1-9]/.test(s)) p.setAttribute(s, null); // white / unused
+  }
+  const body = r.listMaterials().find((m) => m.getName() === 'MI_Superhero_Male')!;
+  const rough = await sharp(body.getMetallicRoughnessTexture()!.getImage()!).stats();
+  body.setMetallicRoughnessTexture(null).setRoughnessFactor(rough.channels[1]!.mean / 255).setDoubleSided(false); // closed mesh
+  await doc.transform(
+    unpartition(),
+    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [256, 256], quality: 85, pattern: /Eye/ }),
+    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [1024, 1024], quality: 85, pattern: /^(?!.*Eye)/ }),
+  );
+  return doc;
+}
+
+async function playerAnims() {
+  const ubcSkin = (await readBody()).getRoot().listSkins()[0]!;
+  const ubc = ubcSkin.listJoints().filter((j) => !j.getName().includes('_leaf'));
+  const doc = await io.read(UAL);
+  const r = doc.getRoot();
+  const ual = r.listSkins()[0]!.listJoints();
+  if (ual.length !== ubc.length) throw new Error(`playerAnims: ${ual.length} UAL joints vs ${ubc.length} UBC`);
+  const name = new Map(ual.map((j, i) => [j, ubc[i]!.getName()]));
+  ual.forEach((j, i) => {
+    const [a, b] = [j.getParentNode(), ubc[i]!.getParentNode()];
+    if (i > 0 && name.get(a!) !== b?.getName()) throw new Error(`playerAnims: ${j.getName()} parent ${a?.getName()} ≠ ${b?.getName()}`);
+  });
+  const [root, hips] = [ual[0]!, ual[1]!];
+  const k = ubc[1]!.getTranslation()[2] / hips.getTranslation()[2]; // hip height at rest (root frame is z-up): legs longer
+  for (const n of r.listNodes()) if (n.getMesh()) n.dispose();
+  r.listSkins()[0]!.dispose();
+  for (const [j, n] of name) j.setName(n);
+  const scaled = new Set<Accessor>();
+  for (const a of r.listAnimations()) {
+    if (!PLAYER_CLIPS.includes(a.getName())) {
+      for (const s of a.listSamplers()) s.dispose(); // orphan samplers would keep their accessors from prune()
+      a.dispose();
+      continue;
+    }
+    for (const ch of a.listChannels()) {
+      const [node, path, s] = [ch.getTargetNode(), ch.getTargetPath(), ch.getSampler()!];
+      if (node === hips && path === 'translation') {
+        const o = s.getOutput()!;
+        if (!scaled.has(o)) o.setArray(Float32Array.from(o.getArray()!, (v) => v * k));
+        scaled.add(o);
+      } else if (path !== 'rotation' || node === root) {
+        ch.dispose();
+        s.dispose();
+      }
+    }
+  }
+  const clips = r.listAnimations().map((a) => a.getName());
+  if (clips.length !== PLAYER_CLIPS.length) throw new Error(`playerAnims: clips ${clips} ≠ ${PLAYER_CLIPS}`);
+  if (r.listNodes().some((n) => n.getName().startsWith('DEF-'))) throw new Error('playerAnims: DEF- bone left');
+  console.log(`player-anims: ${clips.length} clip, hông × ${k.toFixed(4)}`);
+  await doc.transform(resample());
+  return doc;
+}
+
 mkdirSync(out, { recursive: true });
-for (const [name, build] of [['eiffel', eiffel], ['arc', arc]] as const) {
+const BUILDS = [['eiffel', eiffel], ['arc', arc], ['player', player], ['player-anims', playerAnims]] as const;
+for (const [name, build] of BUILDS.filter(([n]) => !only.length || only.includes(n))) {
   const doc = await build();
   await doc.transform(weld(), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const file = join(out, `${name}.glb`);
@@ -264,13 +362,16 @@ for (const [name, build] of [['eiffel', eiffel], ['arc', arc]] as const) {
   console.log(`${file}: ${tris(doc).toLocaleString()} tam giác, ${(bytes / 2 ** 20).toFixed(2)} MB`);
   if (bytes > MAX_BYTES) throw new Error(`${file} > 25 MB`);
 }
+const playerBytes = ['player', 'player-anims'].reduce((s, n) => s + (existsSync(join(out, `${n}.glb`)) ? statSync(join(out, `${n}.glb`)).size : 0), 0);
+if (playerBytes > 2 * 2 ** 20) throw new Error(`player*.glb ${(playerBytes / 2 ** 20).toFixed(2)} MB > 2 MB (docs/plans/phase3.md §8)`);
 
 // credits.json: every downloaded asset (manifest.json written by the download step) + the map data. Each line = a
 // Vietnamese usage label + the manifest attribution (its own label prefix dropped); "(đã chỉnh sửa)" only on the files
 // this script modifies (the others are not processed or used yet: Phase 3 / 4B re-run this with their files added).
 type Entry = { name: string; pageUrl: string; licence: string; author: string; attribution: string; usedFor: string };
 const manifest = JSON.parse(readFileSync(join(src, 'manifest.json'), 'utf8')) as Entry[];
-const MODIFIED = new Set(['eiffel_scott-marshall.glb', 'arc-triomphe_hoanghiepvu.glb']); // read by eiffel() / arc() above
+// read by eiffel() / arc() / player() / playerAnims() above (the CC0 attributions carry no "(đã chỉnh sửa)" to keep)
+const MODIFIED = new Set(['eiffel_scott-marshall.glb', 'arc-triomphe_hoanghiepvu.glb', 'Universal Base Characters[Standard].zip', 'universal_animation_librarystandard.zip']);
 const LABELS: [RegExp, string][] = [
   [/^eiffel_/, 'Tháp Eiffel'],
   [/^arc-triomphe_/, 'Khải Hoàn Môn'],
