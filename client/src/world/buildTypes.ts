@@ -35,7 +35,9 @@ export type MaterialId =
  *  materials use vertexColors; buckets of every other material MUST NOT. geom.MeshBuffer applies this rule itself. */
 export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'wall', 'shopfront', 'roof', 'masonry', 'metal', 'neon']);
 
-export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro';
+/** metro = Guimard railings + the stairwell under them, metroMask = the depth-only lid that cuts the ground open over it
+ *  (StreetProps.createPropMeshes). */
+export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro' | 'metroMask';
 
 /** One indexed triangle list for one material. uv in metres unless the material says otherwise. */
 export interface MeshBucket {
@@ -58,6 +60,7 @@ export interface InstanceSet {
 export interface TriMesh {
   vertices: Float32Array; // xyz
   indices: Uint32Array;
+  stairs?: true; // a stair flight: its Rapier handle goes into world/stairs.ts stairColliders
 }
 
 export interface BuildOut {

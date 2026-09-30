@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { type BuildOut, type MaterialId, type PropKind, VERTEX_COLOR } from './buildTypes.ts';
 
 export type Materials = Record<MaterialId, THREE.Material>;
-export type PropMeshes = Record<PropKind, { geometry: THREE.BufferGeometry; material: THREE.Material }>;
+/** renderOrder / castShadow: the metro well and its depth-only lid draw before everything else (StreetProps). */
+export type PropMeshes = Record<PropKind, { geometry: THREE.BufferGeometry; material: THREE.Material; renderOrder?: number; castShadow?: boolean }>;
 
 // Distinct flat colours, so a bucket whose package has no material yet is easy to spot in a screenshot.
 const FALLBACK_COLOUR: Record<MaterialId, number> = {
@@ -90,11 +91,13 @@ export function attachBuildOut(out: BuildOut, materials: Materials, propMeshes: 
   for (const set of out.instances) {
     const count = set.matrices.length / 16;
     if (!count) continue;
-    const { geometry, material } = propMeshes[set.kind];
+    const { geometry, material, renderOrder = 0, castShadow = true } = propMeshes[set.kind];
     const mesh = new THREE.InstancedMesh(geometry, material, count);
     mesh.instanceMatrix.array.set(set.matrices);
     mesh.computeBoundingSphere();
-    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.renderOrder = renderOrder;
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = true;
     object.add(mesh);
     owned.push(mesh);
     triangles += (count * (geometry.index?.count ?? geometry.getAttribute('position').count)) / 3;

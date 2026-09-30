@@ -119,9 +119,9 @@ describe('street props placement', () => {
   });
 
   it(`prop meshes stay within ${P.maxTriangles} triangles`, () => {
-    for (const { geometry } of Object.values(createPropMeshes())) {
+    for (const [kind, { geometry }] of Object.entries(createPropMeshes())) {
       expect(geometry.index!.count / 3).toBeLessThanOrEqual(P.maxTriangles);
-      expect(geometry.getAttribute('color')).toBeDefined();
+      if (kind !== 'metroMask') expect(geometry.getAttribute('color')).toBeDefined(); // the lid writes depth only
     }
   });
 });

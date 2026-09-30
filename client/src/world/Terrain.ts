@@ -3,7 +3,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'; // sideEffects: false → tree-shaken out of the worker bundle
 import { latLonToWorld } from '@race/shared';
 import { Color, type Material, MeshStandardMaterial } from 'three';
-import { terrain as T } from '../config.ts';
+import { stairs as ST, terrain as T } from '../config.ts';
 import { CHUNK_SIZE, ringArea, type WaterData, type XZ } from '../geo/chunkData.ts';
 import type { HeightGrid } from '../geo/heightGrid.ts';
 import { PADS } from '../geo/landmarks.ts';
@@ -194,6 +194,20 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
       uses.set(k, (uses.get(k) ?? 0) + 1);
     }
   }
+  // Parapet gaps over the quay stair landings (WaterData.stairGaps): [t0, t1] intervals of the edge a → b.
+  const gaps = water.stairGaps ?? [];
+  const gapHalf = ST.quay.landing / 2 + 0.2;
+  const openings = (ax: number, az: number, bx: number, bz: number): [number, number][] => {
+    const [dx, dz] = [bx - ax, bz - az];
+    const len = Math.hypot(dx, dz) || 1;
+    const out: [number, number][] = [];
+    for (let g = 0; g < gaps.length; g += 2) {
+      const [px, pz] = [gaps[g]! - ax, gaps[g + 1]! - az];
+      const t = (px * dx + pz * dz) / len;
+      if (Math.abs(px * dz - pz * dx) / len < 0.5 && t > -gapHalf && t < len + gapHalf) out.push([(t - gapHalf) / len, (t + gapHalf) / len]);
+    }
+    return out;
+  };
   const on = (a: number, b: number, e: number) => Math.abs(a - e) < 0.05 && Math.abs(b - e) < 0.05;
   const onExtent = (ax: number, az: number, bx: number, bz: number) =>
     on(ax, bx, ext[0]!) || on(ax, bx, ext[1]!) || on(az, bz, ext[2]!) || on(az, bz, ext[3]!);
@@ -206,7 +220,18 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
         const j = (i + 1) % n;
         const [ax, az, bx, bz] = [ring[2 * i]!, ring[2 * i + 1]!, ring[2 * j]!, ring[2 * j + 1]!];
         if (onExtent(ax, az, bx, bz) || uses.get(edge(ax, az, bx, bz))! > 1) continue;
-        quad([bx, bed, bz], [ax, bed, az], [ax, cap, az], [bx, cap, bz]); // wall seen from the river: bottom-left = b
+        const open = openings(ax, az, bx, bz);
+        quad([bx, bed, bz], [ax, bed, az], [ax, open.length ? top : cap, az], [bx, open.length ? top : cap, bz]); // wall seen from the river: bottom-left = b
+        let from = 0; // parapet above the coping, left open over the stair landings
+        const lerp = (u: number): V3 => [ax + (bx - ax) * u, 0, az + (bz - az) * u];
+        for (const [t0, t1] of open.length ? [...open.sort((p, q) => p[0] - q[0]), [1, 1] as [number, number]] : []) {
+          const u = Math.min(Math.max(t0, 0), 1);
+          if (u > from) {
+            const [p, q] = [lerp(from), lerp(u)];
+            quad([q[0], top, q[2]], [p[0], top, p[2]], [p[0], cap, p[2]], [q[0], cap, q[2]]);
+          }
+          from = Math.max(from, Math.min(t1, 1));
+        }
         quad([ax, top, az], [out[2 * i]!, top, out[2 * i + 1]!], [out[2 * j]!, top, out[2 * j + 1]!], [bx, top, bz]); // coping (+Y)
       }
     }

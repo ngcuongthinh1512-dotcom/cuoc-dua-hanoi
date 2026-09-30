@@ -128,6 +128,34 @@ export interface PointRec {
   z: number;
 } // tree_row pre-expanded to trees
 
+/** highway=steps (not in `roads`), whole way in the chunk of its midpoint. `quay`: a flight build-chunks laid along the
+ *  Seine wall (pts = centre line, top landing first); the builder takes its heights from the river level, not the ends. */
+export interface StairRec {
+  pts: XZ;
+  width?: number;
+  steps?: number; // step_count
+  quay?: true;
+}
+
+/** Street way meeting a junction: its next vertex from the junction + the facts roadWidth() needs. */
+export interface JunctionArm {
+  to: [number, number];
+  kind: string;
+  name?: string;
+  width?: number;
+  lanes?: number;
+  oneway?: true;
+  roundabout?: true;
+}
+
+/** Street junction vertex (build-chunks, over the whole map: arms in the neighbour chunk included). With arms in the
+ *  chunk that holds it; arms absent = a neighbour's junction within props.lampJunctionGap (lamp gap only). */
+export interface JunctionRec {
+  x: number;
+  z: number;
+  arms?: JunctionArm[];
+}
+
 export interface ChunkData {
   v: 2;
   key: ChunkKey;
@@ -136,6 +164,8 @@ export interface ChunkData {
   bridges: BridgeRec[];
   areas: AreaRec[];
   points: PointRec[];
+  stairs?: StairRec[];
+  junctions?: JunctionRec[];
 }
 
 export interface ChunkIndex {
@@ -151,6 +181,10 @@ export interface WaterData {
   /** Open polylines of barrier=retaining_wall / man_made=embankment|quay within 50 m of the Seine (quay walls
    *  the DEM cannot resolve; closed rings repeat their first point). Optional, added by build-chunks. */
   quays?: XZ[];
+  /** Quay stair flights (StairRec.quay): feet [x, z, …] (respawn, Phase 5) and the parapet gaps [x, z, …] on the wall
+   *  line at their top landings (quayMesh leaves the parapet out there). */
+  stairs?: number[];
+  stairGaps?: number[];
 } // clipped to RACE_BBOX + 200 m
 
 /** Skyline outside the map (SPEC §17.6): La Défense towers from one small Overpass query (fetch-osm skyline.json). */

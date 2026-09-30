@@ -31,6 +31,9 @@ const cam = (lat: number, lon: number, up: number, yawDeg: number, pitchDeg: num
   const p = latLonToWorld(lat, lon);
   return `/?cam=${[p.x, heightAt(grid, p.x, p.z) + up, p.z, yawDeg, pitchDeg].map((v) => +v.toFixed(2)).join(',')}`;
 };
+/** Same at world (x, z). */
+const camAt = (x: number, z: number, up: number, yawDeg: number, pitchDeg: number) =>
+  `/?cam=${[x, heightAt(grid, x, z) + up, z, yawDeg, pitchDeg].map((v) => +v.toFixed(2)).join(',')}`;
 const yawTo = (lat: number, lon: number, lat2: number, lon2: number) => {
   const a = latLonToWorld(lat, lon);
   const b = latLonToWorld(lat2, lon2);
@@ -87,7 +90,14 @@ Object.assign(PRESETS, {
 Object.assign(PRESETS, {
   // [A] bike model + rider
   // [B] physics + interaction
-  // [D] stairs + junctions
+  // [D] stairs + junctions: a 3 m Trocadéro garden flight (jardins du Trocadéro) from the side; a quay flight on the north bank east of
+  // Pont Alexandre III seen from the water; a swimmer 7 m past its foot swimming in and up; the Concorde Guimard well;
+  // Rue du Louvre × Rue Berger, a junction ON the 6_1 border (its west arm lies in 5_1: sign + lamp gap now).
+  'p4-steps': camAt(-2424.7, 433.7, 8, 135.7, -38),
+  'p4-quay-stairs': '/?cam=-326,-2.5,168,0,4',
+  'p4-swim-exit': '/?player=-342,127.1,-90&autoMove=walk&wait=8&orbit=60',
+  'p4-metro': camAt(111.1 - 5 * 0.895, 15 - 5 * 0.446, 5.5, -116.5, -45), // entrance yaw −116.5° (arch toward the road)
+  'p4-border-junction': '/?player=1512,352,46',
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
