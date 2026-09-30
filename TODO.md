@@ -53,7 +53,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Khối nâu lơ lửng gần tháp Saint-Jacques (≈ 1990, 45, 900): không có nhà / part / mái (`building=roof`) nào có `min_height` quanh đó trong dữ liệu chunk, và ảnh chụp từ (1880, 55, 1010) nhìn về đó không thấy khối nào; nguyên nhân chưa rõ, chưa tái hiện được.
 - Mặt bằng quảng trường (`PADS` trong `geo/landmarks.ts`, `Terrain.flattenPads`): mới san 3 chỗ vẽ tay – Cour Napoléon (theo trung vị ≈ 13 m, vì Louvre xung quanh đứng trên DEM gồ), parvis Notre-Dame cùng nhà thờ (≈ +1 m, ngang kè) và dải Quai de l'Horloge. Place du Carrousel, Concorde (gốc obelisk là y = 0, chỉ dốc ~2 m) và các quảng trường khác vẫn theo DEM; mép pad dốc lại về DEM trong 25 m (`terrain.padBlend`), nên Rue de Rivoli / nhà quanh Hôtel-Dieu có chân tường cao hơn.
 - Sương che địa danh cao ở các góc nhìn chính (sương 250–700 m, `render.fog`): từ parvis Trocadéro (đích L2, cách tháp ~630 m) tháp Eiffel gần như trắng; vòm Invalides cuối esplanade bị mờ; bay 250 m trên Louvre nhìn về tây không thấy Eiffel trong khi La Défense (8 km, bóng chân trời) vẫn thấy. Chưa sửa: `camera.far` và bán kính tải chunk đều theo sương, giảm sương riêng cho vật liệu địa danh sẽ làm tháp bị cắt ở mặt phẳng xa / hiện đột ngột khi chunk tải. Nâng cấp (Phase 12): vẽ Eiffel, vòm Invalides, Notre-Dame, Panthéon thành bóng chân trời (như `createSkyline`, sương riêng) khi chunk của chúng bị sương che hoặc chưa tải, và giảm sương cho chính mô hình khi ở gần.
-- Ghi nguồn: các model xe / người đi đường đã tải nhưng chưa xử lý, chưa dùng (Phase 4B; xe đạp đã xử lý ở Phase 4); khi xử lý thì thêm tên file vào `MODIFIED` trong `scripts/process-assets.ts` để dòng ghi nguồn có "(đã chỉnh sửa)", rồi chạy lại `npm run process-assets`.
+- Ghi nguồn: model xe / người đi đường NPC đã xử lý ở Phase 4B (`npc-*.glb`, `credits.json`, `LICENSE-rocketbox.md`); thêm model mới thì thêm tên file vào `MODIFIED` trong `scripts/process-assets.ts` rồi chạy lại `npm run process-assets`.
 
 ## Phase 3 – Nhân vật & camera (phần còn lại)
 Đã xong: nhân vật UBC + clip UAL, áo màu đội, bảng tên, controller Rapier, bơi, camera góc thứ ba (`docs/plans/phase3.md`).
@@ -83,10 +83,16 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Bậc thang: không đọc `incline`, chiều lên / xuống theo DEM ở hai đầu; bậc OSM ngắn trên DEM phẳng thành bậc thấp. Chỉ đọc `incline` thì chưa sửa được gì: hai đầu bậc phải chạm mặt đất DEM, nên chiều và độ cao vẫn phải theo DEM. Muốn theo `incline` / `step_count` thì phải nắn địa hình quanh hai đầu bậc (như `PADS`) rồi build lại toàn bộ chunk. Bậc dốc hơn ~50° (lỗi DEM) không leo được bằng collider hộp (ponytail trong `StairBuilder.ts`).
 - Giếng metro chỉ là hình (bậc, chiếu nghỉ, cửa đóng); không có ga / đường hầm.
 
-## Phase 4B – Xe cộ & người đi đường NPC (SPEC §17.5)
-- Xe NPC theo `roadgraph.json` (đúng chiều, dừng ở giao lộ, vòng xuyến Étoile) + người đi đường trên vỉa hè; chỉ chạy ở client, không đồng bộ server; người chơi không lái được xe NPC.
-- Va chạm: xe phanh trước người chơi, tông khi đạp xe → ngã xe (§6.3); tránh vùng hộp mật thư / thảm về đích; mật độ trong `config.ts`, tự giảm khi FPS thấp.
-- Model đã duyệt và tải, chưa xử lý: xe Quaternius / rgsdev / Poly by Google / jeremy (Phase 2B); người đi đường Microsoft Rocketbox (MIT, 31 file duyệt và tải ngày 2026-09-30 vào `.cache/assets/rocketbox/`: 4 avatar, 14 clip, SPEC §17.11). Đang làm theo `docs/plans/phase4b.md`: đã có nền (`client/src/npc/`: kiểu, `NpcRoads`, bản tạm của `traffic` / `crowd` / `NpcAssets`), còn 4 track A–D.
+## Phase 4B – Xe cộ & người đi đường NPC (phần còn lại)
+Đã xong: xe NPC (10 loại, instanced) chạy theo `roadgraph.json` (làn phải, `oneway`, đèn 2 pha, nhường ở giao lộ, vòng xuyến Étoile nhường ngược luật thật theo SPEC §17.11), người đi đường Rocketbox (4 avatar, áo / quần đổi màu theo id, đi vỉa hè, qua đường, ngồi ghế, vẫy khi bấm `G`), va chạm (xe chặn người chơi, đạp xe tông xe / người → ngã xe), vùng cấm `setExclusionZones` (Phase 7 gọi), mật độ tự giảm khi FPS thấp, kiểm bằng `p4b-*`, test và `ride-check` (`npc=0`). Kế hoạch `docs/plans/phase4b.md`; báo cáo review / sửa ở `docs/reports/phase4b-*.md`.
+- Xe: rẽ trái chưa nhường xe đối diện; góc cua của hai nút giao sát nhau (Concorde, Marais, Rivoli / Saint-Florentin) cắt nhau nên xe vẫn có lúc chồng lên nhau (Opéra: rẽ phải + đi thẳng cùng lối ra); xe dài trên cạnh 4–7 m luôn đứng trong hộp giao lộ; không đổi làn; bánh chưa đánh lái; bánh xe máy không quay. Một lần nhảy 1,86 m ở Étoile chưa truy.
+- Mật độ: đại lộ (Concorde, Champs-Élysées) vẫn thưa (~8 xe / 100 m); nâng `traffic.perKm` hoặc `max` làm vùng Concorde tắc cứng. Cải thiện thông lượng nút giao (lệch pha cặp đèn gần nhau, nút ngang quyền, đổi làn) rồi mới tăng. Test "xe đi được" đã nới: gộp seed 1–4 ≥ 75 % xe đi ≥ 50 m và ≤ 10 % xe đứng > 30 s (không còn ≥ 80 % từng seed).
+- Đèn giao thông chưa có collider; đèn của cặp nút cách 13 m không đồng pha nên chưa cấm xe vào hộp giao lộ khi đèn xanh.
+- Người đi đường: tránh xe theo đường làn thẳng, không theo đường cong góc cua (xe đang rẽ vẫn có thể lấn vào người); chưa qua đường ở vạch `highway=crossing` gần giao lộ (đang qua ở miệng giao lộ); qua đường mà bị chặn lần thứ hai giữa đường thì sau `giveUp` đi xuyên xe (chưa gặp trong đo đạc); người skinned tối đa 40, độ đa dạng áo / quần chưa xem ở cự ly gần.
+- Camera: xe NPC trong 1 m quanh camera bị ẩn hẳn (không mờ dần).
+- Preset `p4b-dodge` (chưa thấy ai lảo đảo), `p4b-crossing` (chưa có người trên vạch), `p4b-park` (ghế trống, người ngồi bị cây che) chưa thấy rõ chủ thể; `p4-cobbles`: xe trắng ở Concorde trông hơi chìm (chưa kiểm).
+- Thân moto / scooter > 2 000 tam giác (trần riêng `npcAssets.maxTris.twoWheeler` = 2 100).
+- `ride-check` phần 3 (vào bậc kè từ mặt bên) thỉnh thoảng hỏng khi máy tải nặng: lái lại hướng mỗi bước như `walkToBike`.
 
 ## Phase 5 – HUD
 - Menu thật (SPEC §17.2: tự mở khi chuột bị nhả, `Esc`); hiện chỉ hiện bảng hướng dẫn phím. Nút "Kẹt? Về chỗ an toàn" gọi `CharacterController.respawn()` (hiện về chỗ đứng an toàn gần nhất; khi đang ở dưới sông, SPEC §4.4 muốn đưa lên bậc thang gần nhất); tùy chọn đảo trục Y, độ nhạy chuột.
@@ -107,6 +113,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Bỏ qua các tham số URL thử nghiệm của Phase 3 (`?player=x,z,…`, `action`, `autoMove`, `jump`, `?cam=` = khán giả) khi đã vào cuộc đua (dịch chuyển tức thời = gian lận).
 
 ## Phase 7 – Race engine lõi
+- Gọi `npc.setExclusionZones(...)` với geofence hộp mật thư + thảm về đích (Phase 4B đã có hàm). Hộp mật thư hiện dần theo từng bước (SPEC §17.10): server chỉ gửi hộp ≤ bước hiện tại cho từng đội, không gửi tọa độ hộp chưa tới.
 - Nội dung chặng thật (điểm lộ trình, thử thách) chưa chốt, anh sẽ gửi sau (SPEC §17.9); L1–L6 trong `paris-demo.json` chỉ là điểm kiểm thử. Khi có: thay file chặng, kiểm tra lại bán kính geofence 15–40 m.
 - Xuất phát: đặt các đội bên ngoài hàng rào obelisk, cách ≥ 8–10 m (SPEC §17.4). Geofence cho phép bán kính 15–40 m. (Phase 3 đã spawn một người chơi thử ở `playerSetup.spawn`, cách obelisk 14 m về phía Khải Hoàn Môn.)
 - `F` mở hộp mật thư (`openBox`), `celebrate` ở Pit Stop; `pickUp` (`PickUp_Table`) và `talk` (`Idle_Talking_Loop`) đã có clip nhưng chưa dùng (Phase 7–8).

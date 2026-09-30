@@ -11,7 +11,7 @@ Ký hiệu: **A** = dữ liệu 3D của OSM (`building:part`, `height`, `min_he
 3. **Thân nhân vật người chơi:**
    - **(a)** Universal Base Characters (khoảng 122 MB zip, rig khớp sẵn thư viện animation). Đề xuất chọn cách này.
    - **(b)** Nhân vật Modular "Casual" (đã có trong danh sách NPC, không phải tải thêm, nhưng phải retarget animation).
-4. **Microsoft Rocketbox** (người rất chân thực, 417 animation) dùng giấy phép MIT, không thuộc CC0/CC-BY, nên em **không đề xuất**, trừ khi anh cho phép thêm MIT.
+4. **Microsoft Rocketbox** (người rất chân thực, 417 animation) dùng giấy phép MIT, không thuộc CC0/CC-BY, nên em **không đề xuất**, trừ khi anh cho phép thêm MIT. *(Cập nhật 2026-09-30: anh đã duyệt Rocketbox cho người đi đường NPC, xem SPEC §17.11.)*
 
 ## 1. Bảng quyết định từng địa danh
 
