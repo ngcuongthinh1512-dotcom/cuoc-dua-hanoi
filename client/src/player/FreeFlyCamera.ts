@@ -1,5 +1,5 @@
 import { type PerspectiveCamera, Vector3 } from 'three';
-import { type Action, flyCamera as C } from '../config.ts';
+import { type Action, flyCamera as C, render } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 
 const DEG = Math.PI / 180;
@@ -18,6 +18,8 @@ export class FreeFlyCamera {
   constructor(readonly camera: PerspectiveCamera) {}
 
   setPose(x: number, y: number, z: number, yawDeg: number, pitchDeg: number) {
+    // Back from the player camera (V): drop its speed FOV and 0.1 m near plane (depth precision when flying high).
+    Object.assign(this.camera, { fov: render.fov, near: render.near }).updateProjectionMatrix();
     this.camera.position.set(x, y, z);
     this.yaw = yawDeg * DEG;
     this.pitch = pitchDeg * DEG;

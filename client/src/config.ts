@@ -559,18 +559,28 @@ export const swim = {
 
 // ── C · third-person camera (player/ThirdPersonCamera.ts) ──
 // STYLE_GUIDE "Camera": 3–4 m behind, a bit above the head, slightly looking down; horizon at 40–45 % of the height.
+// Near defaults: camera 2.0 m up, 3.4 m back, pitch −6° at fov 70 → horizon 42.5 % from the top, body ≈ 36 % of the
+// frame height, feet ≈ 17 % from the bottom, character ≈ 4 % of the width left of centre (shoulder offset).
 export const thirdPersonCamera = {
   modes: ['near', 'far', 'first'] as const, // C cycles
   near: { distance: 3.4, pivot: 1.65, shoulder: 0.35 }, // m behind the pivot, pivot above the feet, right of the spine
   far: { distance: 5.5, pivot: 1.8, shoulder: 0.2 },
-  first: { eye: 1.66, forward: 0.12 }, // m above the feet, m ahead of the capsule axis
+  first: { eye: 1.66, forward: 0.1 }, // m above the feet, m ahead of the capsule axis (0.2 m from a wall ≥ near-plane corner)
   bike: { distanceScale: 1.35, pivotAdd: 0.5 }, // Phase 4 hook: further + higher on the bike
-  pitchDeg: { initial: -10, min: -70, max: 45 },
+  pitchDeg: { initial: -6, min: -70, max: 45 },
   mouseSensitivity: 0.002, // rad per pixel
   gamepadLookSpeed: 2.5, // rad/s at full stick
-  collisionRadius: 0.2, // m, shape cast from the pivot so the camera never enters a wall
-  followSharpness: 12, // 1/s, exponential smoothing of the pivot
-  recenter: { delay: 1.5, rate: 2 }, // s without look input while moving, then rad/s back behind the body
-  fovBoost: { perMps: 0.8, max: 6 }, // ° over render.fov per m/s of speed, capped
+  // m, ball shape cast (axis → shoulder → back) so the camera never enters a wall; ≥ the near-plane corner (0.19 m at
+  // nearPlane 0.1, 16:9, fov 76°), so the near plane never pokes through either
+  collisionRadius: 0.2,
+  collisionSkin: 0.02, // m kept free beyond the ball: the back cast after a shoulder hit then slides along that wall
+  armReturn: 4, // 1/s, exponential lengthening once the obstacle is gone (shortening is instant)
+  followSharpness: 12, // 1/s, exponential smoothing of the pivot (lag = speed / 12 ≈ 0.33 m at 4 m/s)
+  snapDistance: 4, // m: a pivot jump longer than this (spawn, respawn) is not smoothed
+  // Without look input for `delay` s while moving faster than minSpeed (m/s): yaw back behind the body at up to rate
+  // rad/s, × cos(angle to the body) so strafing (90°) or walking toward the camera never swings it round.
+  recenter: { delay: 1.5, rate: 2, minSpeed: 0.5 },
+  fovBoost: { perMps: 0.8, max: 6, sharpness: 3 }, // ° over render.fov per m/s of speed, capped; 1/s smoothing
+  waterClearance: 0.3, // m: while swimming the camera stays this far above the Seine surface (feet + swim.floatDepth)
   nearPlane: 0.1, // m, camera near plane in player mode (render.near 0.5 would cut the head when the arm is short)
 };
