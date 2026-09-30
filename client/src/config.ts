@@ -535,9 +535,30 @@ export const playerSetup = {
 export const character = {
   modelUrl: 'models/player.glb', // UBC Superhero_Male + Hair_SimpleParted, one skin (npm run process-assets)
   clipsUrl: 'models/player-anims.glb', // 15 UAL clips, bones renamed to the UBC (UE) names
-  outfit: { pants: '#2d3342', shoes: '#1d1d20' }, // shirt = team colour (bone-weight mask, docs/plans/phase3.md)
+  // shirt = team colour; bone-weight mask (docs/plans/phase3.md §2), colour where the mask passes smoothstep(edge)
+  // hair: tint × the grey UBC hair texture (T_Hair_1 is untinted, mean ≈ 0.56) → dark brown hair and eyebrows
+  outfit: { pants: '#2d3342', shoes: '#1d1d20', hair: '#8a6446', edge: [0.35, 0.65] as const },
   fade: 0.2, // s crossfade between clips
-  nameTag: { lift: 0.3, height: 0.28, maxDistance: 80 }, // m above the head, m tall, hidden beyond (m)
+  // Canvas sprite, constant size on screen: scale 0.05 ≈ 3.6 % of the view height at fov 70 (≈ 39 px at 1080p, the
+  // same at 3 m and 20 m); m above the head; hidden beyond maxDistance (m); canvas font px (texture resolution)
+  nameTag: { lift: 0.2, scale: 0.05, maxDistance: 80, fontPx: 48 },
+  // Locomotion playback = ground speed / the clip's own speed (m/s at timeScale 1), clamped: feet don't slide. Walk / jog:
+  // stance-foot speed measured on the clip × the hip-height ratio (1.035); swim: one stroke cycle ≈ 2.4 m.
+  clipSpeed: { Walk_Loop: 1.09, Jog_Fwd_Loop: 6.1, Swim_Fwd_Loop: 1.8 } as Readonly<Record<string, number>>,
+  timeScale: { min: 0.4, max: 1.6 },
+  moveThreshold: 0.25, // m/s horizontal: below = idle / swimIdle / land
+  jump: { startAt: 0.07, startSeconds: 0.45 }, // s into Jump_Start (push-off, after its crouch); s before Jump_Loop
+  land: { seconds: 0.45, speed: 1.5 }, // Jump_Land (only when landing nearly still): s shown, playback speed
+  // Crash (playerSetup.actions.crash 3.5 s): Hit_Chest for `hit` s, Death01 from fall[0] to fall[1] (lying) in
+  // fallSeconds, lying ≈ 2 s (SPEC §6.3), then Death01 backwards to 0 in standSeconds (stands up).
+  crash: { hit: 0.33, fall: [0.55, 1.45] as const, fallSeconds: 0.6, standSeconds: 0.6 },
+  // Procedural arm layers over any clip (UAL has no wave / free celebration clip): wave (G) = right arm, celebrate = both
+  // arms over Dance_Loop. Upper arm raised raiseDeg above horizontal, forearm swings sideways (± swing × up) at hz;
+  // fade s in and out of the gesture.
+  arms: {
+    wave: { raiseDeg: 55, swing: 0.45, hz: 1.6, fade: 0.3 },
+    celebrate: { raiseDeg: 70, swing: 0.3, hz: 2.2, fade: 0.3 },
+  },
 };
 
 // ── B · character controller + swimming (player/CharacterController.ts, player/Swim.ts, world/StreetProps.ts colliders) ──
