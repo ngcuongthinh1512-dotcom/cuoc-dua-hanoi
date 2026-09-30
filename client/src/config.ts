@@ -658,6 +658,19 @@ export const bikeModel = {
   gearRatio: 2.2, // wheel turns per crank turn
   mountBlend: 0.35, // s: sit / stand crossfade + IK weight ramp on mount / dismount
   sparkle: { count: 12, size: 0.08, height: 1.2, hz: 1.5 }, // points around the bike, m, blink rate
+  // Baked by scripts/process-assets.ts (rerun `npm run process-assets bike` after a change; colours above too): saddle
+  // top height (m, the source post lowered), handlebar moved back / up (m: upright city reach), crank + pedals widened
+  // × crankWidth (source Q-factor ≈ 11 cm), front basket box (m, bike frame: z forward of the pivot, y up).
+  build: { saddle: 0.95, barBack: 0.17, barUp: 0.09, crankWidth: 1.8, basket: { z: [0.53, 0.85], y: [0.77, 1.0], width: 0.38 } },
+  standLeanDeg: 9, // parked: leaning left on its kickstand (also baked: the stand tip touches the ground at this roll)
+  // |BikeState.lean| ≥ 30° while parked = lying on its side (after a crash, track B sets ±this): resting on a grip and a
+  // pedal, the body lifted fallenLift × sin²(roll) m off its ground line
+  fallenLeanDeg: 80,
+  fallenLift: 0.093,
+  // Rider (player/Animation.ts setRider): pelvis bone this far above the saddle top, ball of the foot above the pedal
+  // axle (m, bike up); extra forward pitch of spine_01 over the Driving_Loop seat pose, neck pitched back (°)
+  rider: { pelvis: 0.1, foot: 0.05, spineDeg: 35, neckDeg: 20 },
+  lock: { size: 0.22, lift: 0.28 }, // team lock sprite (m) above the saddle, shown while owned (ownerColour)
 };
 
 // ── B · bike physics + interaction (vehicle/BikeController.ts, vehicle/Bikes.ts, audio/sfx.ts, player/*) ──

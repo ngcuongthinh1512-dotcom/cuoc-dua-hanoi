@@ -85,7 +85,16 @@ Object.assign(PRESETS, {
 
 // Phase 4 (docs/plans/phase4.md §8): p4-* presets. ?bike = start mounted on a dev bike, autoTurn=left|right holds A / D.
 Object.assign(PRESETS, {
-  // [A] bike model + rider
+  // [A] bike model + rider. Turntable (/bike.html, params in client/src/vehicle/bikePreview.ts): side, three-quarter,
+  // rear; parked on the kickstand with a lock marker / ridden at 5 m/s / crank sweep / leaning / fallen after a crash.
+  'p4-bike-model': '/bike.html?items=90,145,0&owner=%232c6bd8&sparkle=1',
+  'p4-bike-rider': '/bike.html?items=90,145,0&rider=1&speed=5&t=2',
+  'p4-bike-crank': '/bike.html?items=90@0,90@90,90@180,90@270&rider=1',
+  'p4-bike-lean': '/bike.html?items=180,145&rider=1&lean=20&steer=-8&speed=5&t=2',
+  'p4-bike-crash': '/bike.html?items=60&crash=1&t=1.6',
+  // In game (need track B's ?bike): side view, feet on the pedals; leaning into a left turn
+  'p4-ride-side': '/?bike&autoMove=walk&orbit=90&wait=2',
+  'p4-ride-lean': '/?bike&autoMove=walk&autoTurn=left&wait=2',
   // [B] physics + interaction
   // [D] stairs + junctions
 });

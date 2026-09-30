@@ -2,7 +2,7 @@
 // (feet don't slide), gestures are scrubbed by PlayerState.actionTime (deterministic, so Phase 6 remote players look the
 // same from a snapshot), wave / celebrate arms are procedural layers applied after the mixer.
 import { type AnimationAction, LoopOnce, LoopRepeat, MathUtils, type Object3D, Quaternion, Vector3 } from 'three';
-import { character as C, playerSetup } from '../config.ts';
+import { bikeModel, character as C, playerSetup } from '../config.ts';
 import type { CharacterModel } from './CharacterModel.ts';
 import type { RiderTargets } from '../vehicle/types.ts';
 import type { Gesture, PlayerState } from './types.ts';
@@ -88,6 +88,9 @@ export function armWeight(action: PlayerState['action'], t: number) {
 
 const [_a, _b, _c, _up, _t] = [new Vector3(), new Vector3(), new Vector3(), new Vector3(0, 1, 0), new Vector3()];
 const [_q, _p, _pi] = [new Quaternion(), new Quaternion(), new Quaternion()];
+const [_A, _K, _G, _d, _n, _f, _r, _u] = Array.from({ length: 8 }, () => new Vector3());
+const [_end, _cur, _pitch] = [new Quaternion(), new Quaternion(), new Quaternion()];
+const RIDER_KEYS = ['saddle', 'pedalL', 'pedalR', 'gripL', 'gripR'] as const;
 
 /** Rotates `bone` (in world space, by `w` of the full turn) so that bone → child points along `dir`. */
 function aim(bone: Object3D, child: Object3D, dir: Vector3, w: number) {
@@ -95,6 +98,33 @@ function aim(bone: Object3D, child: Object3D, dir: Vector3, w: number) {
   _q.identity().slerp(_p.setFromUnitVectors(from, dir), w);
   bone.parent!.getWorldQuaternion(_p);
   bone.quaternion.premultiply(_q.premultiply(_pi.copy(_p).invert()).multiply(_p)); // local = (P⁻¹ q P) · local
+}
+
+/** Turns `bone` by the world-space rotation `q` (local = P⁻¹ q P · local). */
+function turnWorld(bone: Object3D, q: Quaternion) {
+  bone.parent!.getWorldQuaternion(_p);
+  bone.quaternion.premultiply(_q.copy(_pi.copy(_p).invert()).multiply(q).multiply(_p));
+}
+
+/** 2-bone IK (world space): a → b → c with the joint b bent toward `pole`, so that `tip` (a child of c: ball of the
+ *  foot, knuckles) lands on `target`; c keeps its world orientation. By weight w (0 = the clip's pose). */
+export function reach(chain: readonly Object3D[], target: Vector3, pole: Vector3, w: number) {
+  const [a, b, c, tip] = chain as [Object3D, Object3D, Object3D, Object3D];
+  c.getWorldQuaternion(_end);
+  const goal = _G.copy(target).sub(tip.getWorldPosition(_t).sub(c.getWorldPosition(_c)));
+  a.getWorldPosition(_A);
+  const [lab, lbc] = [b.getWorldPosition(_b).distanceTo(_A), _c.distanceTo(_b)];
+  const d = _d.copy(goal).sub(_A);
+  const dist = MathUtils.clamp(d.length(), 1e-4, (lab + lbc) * 0.999); // never straight: the knee / elbow stays bent
+  d.normalize();
+  const cos = MathUtils.clamp((lab * lab + dist * dist - lbc * lbc) / (2 * lab * dist), -1, 1);
+  const n = _n.copy(pole).addScaledVector(d, -pole.dot(d)).normalize();
+  const knee = _K.copy(_A).addScaledVector(d, lab * cos).addScaledVector(n, lab * Math.sqrt(1 - cos * cos));
+  aim(a, b, knee.sub(_A).normalize(), w);
+  aim(b, c, goal.sub(b.getWorldPosition(_b)).normalize(), w);
+  c.getWorldQuaternion(_cur).slerp(_end, w);
+  c.parent!.getWorldQuaternion(_p);
+  c.quaternion.copy(_p.invert().multiply(_cur));
 }
 
 /** Picks the clip for a PlayerState, crossfades, matches playback speed to the ground speed. Call once per frame. */
@@ -105,6 +135,19 @@ export class CharacterAnimator {
   private current: AnimationAction | undefined;
   private readonly actions = new Map<string, AnimationAction>();
   private readonly arms = new Map<string, Object3D[]>(); // side → spine_03, upperarm, lowerarm, hand
+  private readonly limbs: Object3D[][] = []; // rider IK: leg l, leg r, arm l, arm r (+ the tip child)
+  private readonly trunk: (Object3D | undefined)[]; // pelvis, spine_01, neck_01
+  /** Clip-pose rotations of the bones the rider IK turned last frame: put back before the mixer runs, since bones the
+   *  clips don't animate (spine_01 has no track) would otherwise keep, and accumulate, the procedural turn. */
+  private readonly unposed = new Map<Object3D, Quaternion>();
+  private readonly lookRest = new Map<Object3D, Quaternion>();
+  private readonly rider = {
+    on: false,
+    w: 0, // IK weight, ramps over bikeModel.mountBlend
+    lean: 0,
+    world: Object.fromEntries(RIDER_KEYS.map((k) => [k, new Vector3()])) as Record<(typeof RIDER_KEYS)[number], Vector3>,
+    local: Object.fromEntries(RIDER_KEYS.map((k) => [k, new Vector3()])) as Record<(typeof RIDER_KEYS)[number], Vector3>, // root frame: kept for the dismount fade
+  };
 
   constructor(
     private readonly model: CharacterModel,
@@ -114,6 +157,16 @@ export class CharacterAnimator {
     for (const s of ['l', 'r']) {
       const arm = ['spine_03', `upperarm_${s}`, `lowerarm_${s}`, `hand_${s}`].map((n) => model.root.getObjectByName(n));
       if (arm.every(Boolean)) this.arms.set(s, arm as Object3D[]); // ponytail: UBC bone names; Phase 4B rigs map theirs
+    }
+    const bone = (n: string) => model.root.getObjectByName(n);
+    for (const names of [['thigh', 'calf', 'foot', 'ball'], ['upperarm', 'lowerarm', 'hand', 'middle_01']]) {
+      for (const s of ['l', 'r']) this.limbs.push(names.map((n) => bone(`${n}_${s}`)).filter((o) => o !== undefined));
+    }
+    this.trunk = ['pelvis', 'spine_01', 'neck_01'].map(bone);
+    // Rest pose (as loaded, before the mixer): Driving_Loop glances sideways (mirror checks); a rider looks ahead.
+    for (const n of ['neck_01', 'Head']) {
+      const b = bone(n);
+      if (b) this.lookRest.set(b, b.quaternion.clone());
     }
     this.play(this.actions.get(clipMap.idle ?? ''), true);
   }
@@ -126,11 +179,18 @@ export class CharacterAnimator {
     this.current = a;
   }
 
-  /** Phase 4 track A: IK targets on the bike being ridden (null = on foot) and its lean, set before update().
-   *  FOUNDATION STUB: ignored until track A adds the leg / arm IK and the mount blend. */
-  setRider(_t: RiderTargets | null, _lean: number) {}
+  /** Phase 4: world IK targets on the bike being ridden (BikeModel.riderTargets, after its update) and its lean (rad,
+   *  + = right), every frame before update(); null = on foot. The pose blends in / out over bikeModel.mountBlend. */
+  setRider(t: RiderTargets | null, lean: number) {
+    const R = this.rider;
+    R.on = t !== null;
+    if (!t) return;
+    R.lean = lean;
+    for (const k of RIDER_KEYS) R.world[k].copy(t[k]);
+  }
 
   update(p: Readonly<PlayerState>, dt: number) {
+    for (const [bone, q] of this.unposed) bone.quaternion.copy(q);
     const jumped = this.jumps !== undefined && p.jumps !== this.jumps;
     this.jumps = p.jumps;
     const next = pickState(p, this.state, this.time, jumped);
@@ -162,11 +222,47 @@ export class CharacterAnimator {
       const a = this.actions.get(name); // a never-played action reports weight 1: count only what the mixer applies
       lift += m * (a?.isScheduled() ? a.getEffectiveWeight() : 0);
     }
-    this.model.body.position.y = lift;
+    this.model.body.position.set(0, lift, 0);
+    this.model.body.rotation.z = 0;
     const w = armWeight(p.action, p.actionTime);
     if (w > 0 && armGesture(p.action)) {
       for (const s of ARM_SIDES[p.action]) this.raiseArm(this.arms.get(s), C.arms[p.action], w, p.actionTime);
     }
+    const R = this.rider;
+    R.w = MathUtils.clamp(R.w + (R.on ? dt : -dt) / bikeModel.mountBlend, 0, 1);
+    if (R.w > 0) this.ride(MathUtils.smoothstep(R.w, 0, 1));
+  }
+
+  /** On the bike (weight w): body rolled by the lean, pelvis moved onto the saddle, spine pitched forward, feet on the
+   *  pedals, hands on the grips (the Driving_Loop seat pose underneath). */
+  private ride(w: number) {
+    const [R, { root, body }] = [this.rider, this.model];
+    root.updateMatrixWorld(true);
+    if (R.on) for (const k of RIDER_KEYS) root.worldToLocal(R.local[k].copy(R.world[k]));
+    const t = Object.fromEntries(RIDER_KEYS.map((k) => [k, root.localToWorld(R.world[k].copy(R.local[k]))])) as typeof R.world;
+    body.rotation.z = R.lean * w; // body faces +Z inside root: + roll = top to its right, like the bike
+    const [pelvis, spine, neck] = this.trunk;
+    for (const bone of [spine, ...this.lookRest.keys(), ...this.limbs.flatMap((l) => l.slice(0, 3))]) {
+      if (bone) this.unposed.set(bone, (this.unposed.get(bone) ?? new Quaternion()).copy(bone.quaternion));
+    }
+    if (pelvis) {
+      const d = t.saddle.clone().sub(pelvis.getWorldPosition(_a)).multiplyScalar(w);
+      body.position.add(d.applyQuaternion(root.getWorldQuaternion(_q).invert()));
+    }
+    body.updateMatrixWorld(true);
+    body.getWorldQuaternion(_pi);
+    const [fwd, up, right] = [_f.set(0, 0, 1).applyQuaternion(_pi), _u.set(0, 1, 0).applyQuaternion(_pi), _r.set(-1, 0, 0).applyQuaternion(_pi)];
+    const Rd = bikeModel.rider;
+    for (const [b, q] of this.lookRest) b.quaternion.slerp(q, w);
+    if (spine) turnWorld(spine, _pitch.setFromAxisAngle(right, -MathUtils.degToRad(Rd.spineDeg) * w));
+    if (neck) turnWorld(neck, _pitch.setFromAxisAngle(right, MathUtils.degToRad(Rd.neckDeg) * w));
+    const [legL, legR, armL, armR] = this.limbs;
+    const knee = fwd.clone().addScaledVector(up, 0.3);
+    const elbow = (side: number) => up.clone().negate().addScaledVector(right, 0.6 * side).addScaledVector(fwd, -0.3);
+    if (legL?.length === 4) reach(legL, t.pedalL, knee, w);
+    if (legR?.length === 4) reach(legR, t.pedalR, knee, w);
+    if (armL?.length === 4) reach(armL, t.gripL, elbow(-1), w);
+    if (armR?.length === 4) reach(armR, t.gripR, elbow(1), w);
   }
 
   /** Arm raised to its side, forearm swinging (world-space aims, so any clip underneath works). */
