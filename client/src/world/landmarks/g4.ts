@@ -1168,7 +1168,7 @@ export function facadeRun(rec: BuildingRec, px: number, pz: number, minLen: numb
 
 /** Crazy Horse Paris: the Haussmann block as any other (BuildingBuilder: shopfronts, window grid, mansard, balconies,
  *  its collider) + the cabaret frontage on its Avenue George V run (facadeRun toward the OSM node): dark ground floor,
- *  door, red marquise with a black valance, "CRAZY HORSE / PARIS" board (canvas lettering, 'neonSign'), pink neon strips and
+ *  door, red marquise with a black valance, "CRAZY HORSE PARIS" board (canvas lettering, 'neonSign'), pink neon strips and
  *  warm globes ('neon', near only). The 1-level retail box in front of the block's north end (way/69486351, 1.4 m deep)
  *  is the dark showcase the marquise rests on. ponytail: built alone, so its party walls get façades + mansard insets (hidden
  *  inside the neighbours, a 1.2 m roof gap); pass the chunk's neighbours to buildBuildings if it shows from above. */

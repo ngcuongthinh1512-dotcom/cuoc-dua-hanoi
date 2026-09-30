@@ -438,7 +438,7 @@ export const landmarks = {
       frontH: 4.4, frontOut: 0.06, // dark ground-floor frontage over the shopfront band (4.5 m)
       door: { w: 2.6, h: 2.9, frame: 0.18 },
       canopy: { w: 7.5, depth: 2.4, y: 3.1, thick: 0.3, valance: 0.4 }, // marquise: red slab, black valance
-      sign: { w: 9, h: 1.5, y: 4.75, out: 0.25 }, // board with the canvas lettering (world/landmarks/index.ts)
+      sign: { w: 11, h: 1.5, y: 4.75, out: 0.25 }, // board with the canvas lettering (world/landmarks/index.ts)
       neon: 0.08, // strip section
       lamps: 4, lampSize: 0.22, // globes under the canopy
       colours: { front: '#141115', canopy: '#a3111d', valance: '#0c0b0d', frame: '#5c0d14', neon: '#ff2f78', lamp: '#ffe4b0', board: '#0a0a0c' },

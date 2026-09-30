@@ -147,9 +147,9 @@ export function createLandmarkMaterials(): Partial<Record<MaterialId, Material>>
   };
 }
 
-/** Crazy Horse board: self-drawn "CRAZY HORSE" / "PARIS" in red / pink neon tubes on black (no real logo, SPEC §17.8). */
+/** Crazy Horse board: self-drawn "CRAZY HORSE PARIS" in red / pink neon tubes on black (no real logo, SPEC §17.8). */
 function signTexture() {
-  const [W, H] = [1024, 176];
+  const [W, H] = [1280, 176]; // aspect ≈ board w / h (config g4.crazyHorse.sign)
   const c = document.createElement('canvas');
   [c.width, c.height] = [W, H];
   const g = c.getContext('2d')!;
@@ -163,21 +163,17 @@ function signTexture() {
   g.strokeRect(14, 14, W - 28, H - 28); // tube frame
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  // red letters with a pink glow and a pale core line (the lit tube); "PARIS" small under "CRAZY HORSE"
-  const line = (text: string, px: number, y: number, maxW: number) => {
-    g.font = `italic 900 ${px}px "Arial Black", Impact, "Helvetica Neue", sans-serif`;
-    const k = Math.min(1, maxW / g.measureText(text).width);
-    g.setTransform(k, 0, 0, 1, W / 2, y);
-    g.shadowBlur = 28;
-    g.fillStyle = '#ff1a2e';
-    g.fillText(text, 0, 0);
-    g.shadowBlur = 0;
-    g.lineWidth = px / 40;
-    g.strokeStyle = '#ffc2d8';
-    g.strokeText(text, 0, 0);
-  };
-  line('CRAZY HORSE', 96, 72, W - 90);
-  line('PARIS', 40, 138, W / 3);
+  g.font = 'italic 900 104px "Arial Black", Impact, "Helvetica Neue", sans-serif';
+  const text = 'CRAZY HORSE PARIS'; // one line (user choice)
+  const k = Math.min(1, (W - 90) / g.measureText(text).width);
+  g.setTransform(k, 0, 0, 1, W / 2, H / 2 + 6);
+  g.shadowBlur = 28;
+  g.fillStyle = '#ff1a2e'; // red letters with a pink glow and a pale core line (the lit tube)
+  g.fillText(text, 0, 0);
+  g.shadowBlur = 0;
+  g.lineWidth = 3;
+  g.strokeStyle = '#ffc2d8';
+  g.strokeText(text, 0, 0);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
   t.anisotropy = 8;
