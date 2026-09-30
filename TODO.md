@@ -77,13 +77,10 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 ## Phase 4 – Di chuyển (phần còn lại)
 Đã xong: xe đạp Vélib' (model, IK người đạp, vật lý 1,3 × footSpeed, `F` lên / xuống, ngã xe, chuông `R`, camera xe), bậc thang OSM + bậc kè sông + giếng metro, giao lộ toàn cục, `npm run build-graph` → `shared/data/roadgraph.json` + A* / hành lang / `surfaceAt` (`docs/plans/phase4.md`). Kiểm bằng `npm run ride-check`.
 - Xe hiện chỉ có ở máy mình: 3 xe thử đặt quanh điểm spawn (`Player.placeBikes`). Đồng bộ server, sinh xe chung ở bãi (`bicycle_parking` đã có trong đồ thị: 2 718 bãi), giành xe, đỗ xe, xe bị bỏ: Phase 6 / 7.
-- Lùi xe (`S` khi đã dừng, 1 m/s) chỉ có capsule chặn, không dò bánh sau.
 - Âm thanh chuông / lốp / đá lát / ngã xe là âm tổng hợp WebAudio tạm (`audio/sfx.ts`); thay bằng bản ghi thật ở Phase 12.
-- Bàn đạp là xương cứng xoay ngược đùi đĩa để luôn nằm ngang; cổ chân chưa gập theo vòng đạp.
 - Đồ thị đường: vùng `highway` dạng multipolygon (≈ 240 quan hệ) và phần bên trong quảng trường đi bộ chưa có, chỉ có đường viền; lối có mái (hành lang Louvre, arcade) bị bỏ cho khớp khối nhà đặc, nên Louvre → Notre-Dame dài 1,78 × đường chim bay.
 - `roadGraph.snapRadius` (80 m) chưa ai đọc; GPS ở Phase 5 dùng nó.
-- Bậc thang: không đọc `incline`, chiều lên / xuống theo DEM ở hai đầu; bậc OSM ngắn trên DEM phẳng thành bậc thấp. Bậc dốc hơn ~50° (lỗi DEM) không leo được bằng collider hộp (ponytail trong `StairBuilder.ts`).
-- Bậc kè: mặt bên của bậc có tường ẩn tới dưới nước, nên người bơi phải vào từ chân bậc (bơi dọc tường kè từ phía mặt bên thì bị chặn); leo tường kè ở chỗ khác vẫn dùng `tryClimb`.
+- Bậc thang: không đọc `incline`, chiều lên / xuống theo DEM ở hai đầu; bậc OSM ngắn trên DEM phẳng thành bậc thấp. Chỉ đọc `incline` thì chưa sửa được gì: hai đầu bậc phải chạm mặt đất DEM, nên chiều và độ cao vẫn phải theo DEM. Muốn theo `incline` / `step_count` thì phải nắn địa hình quanh hai đầu bậc (như `PADS`) rồi build lại toàn bộ chunk. Bậc dốc hơn ~50° (lỗi DEM) không leo được bằng collider hộp (ponytail trong `StairBuilder.ts`).
 - Giếng metro chỉ là hình (bậc, chiếu nghỉ, cửa đóng); không có ga / đường hầm.
 
 ## Phase 4B – Xe cộ & người đi đường NPC (SPEC §17.5)

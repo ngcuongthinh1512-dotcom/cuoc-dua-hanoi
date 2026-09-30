@@ -2,7 +2,8 @@
 // 1. Concorde spawn: F out of reach (refused), walk to the dev bike, F, ride ~300 m of the car route toward the Arc
 //    (A* on roadgraph.json, steering with A / D, Concorde setts on the way), R, S until stopped, F off, walk 5 s.
 // 2. Rue Royale facade (p4-crash): ride into it at speed → crash, stand up, walk back to the bike, F on, F off.
-// 3. North quay flight east of Pont Alexandre III: walk onto the landing, down the steps into the Seine, swim, climb out.
+// 3. North quay flight east of Pont Alexandre III: walk onto the landing, down the steps into the Seine, swim, back onto
+//    the lower steps from the river side, up to the quay.
 // Mouse look is emulated by setting the orbit camera yaw. Prints the measured numbers; fails on console errors.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -253,8 +254,15 @@ try {
       const stepsDown = r.log.slice(down).filter((s) => s.mode === 'walk');
       const topY = stepsDown[0]?.y ?? 0;
       await r.hold(['KeyW'], 2);
-      await r.face(-343, 126.3); // back onto the flight's axis: its side walls reach into the water
-      await r.hold(['KeyW'], 3, (s) => Math.abs(s.z - 126.3) < 0.3);
+      // Back from the river side (south): out, east beside the flight, then north onto its lower steps (open over an apron).
+      for (const [x, z] of [[-343, 133], [-334.5, 133]] as const) {
+        await r.face(x, z);
+        await r.hold(['KeyW'], 10, (s) => Math.hypot(s.x - x, s.z - z) < 0.8);
+      }
+      await r.face(-334.5, 120);
+      await r.hold(['KeyW'], 8, (s) => s.mode === 'walk' && s.z < 127.4);
+      const side = r.log.at(-1)!;
+      const sideIn = side.mode === 'walk' && side.z < 127.4;
       await r.face(-320, 126.3);
       const back = r.log.length;
       await r.hold(['KeyW'], 20, (s) => s.mode === 'walk' && s.water !== null && s.y > s.water + 0.5);
@@ -264,9 +272,9 @@ try {
           console.log(s.t.toFixed(1), s.x.toFixed(1), s.z.toFixed(1), s.y.toFixed(2), s.mode, s.speed.toFixed(2));
       const out = r.log.slice(back).some((s) => s.mode === 'walk');
       console.log(
-        `Xuống bậc kè: từ y ${topY.toFixed(2)} tới nước (${swam ? 'bơi' : 'KHÔNG xuống nước'}) · leo lên: ${out ? `có, y ${outS.y.toFixed(2)} (mặt nước ${outS.water?.toFixed(2)})` : 'KHÔNG'}`,
+        `Xuống bậc kè: từ y ${topY.toFixed(2)} tới nước (${swam ? 'bơi' : 'KHÔNG xuống nước'}) · vào bậc từ mặt bên: ${sideIn ? 'có' : `KHÔNG (${side.x.toFixed(1)}, ${side.z.toFixed(1)}, ${side.mode})`} · leo lên: ${out ? `có, y ${outS.y.toFixed(2)} (mặt nước ${outS.water?.toFixed(2)})` : 'KHÔNG'}`,
       );
-      check(swam && out, 'quay stairs / swim / climb out');
+      check(swam && sideIn && out, 'quay stairs / swim / side entry / climb out');
     }
   } finally {
     await browser.close();

@@ -669,8 +669,9 @@ export const bikeModel = {
   fallenLeanDeg: 80,
   fallenLift: 0.093,
   // Rider (player/Animation.ts setRider): pelvis bone this far above the saddle top, ball of the foot above the pedal
-  // axle (m, bike up); extra forward pitch of spine_01 over the Driving_Loop seat pose, neck pitched back (°)
-  rider: { pelvis: 0.1, foot: 0.05, spineDeg: 35, neckDeg: 20 },
+  // axle (m, bike up); extra forward pitch of spine_01 over the Driving_Loop seat pose, neck pitched back (°); ankling:
+  // foot + pedal pitch ± ankleDeg around the crank (heel down with the pedal in front, toes down behind)
+  rider: { pelvis: 0.1, foot: 0.05, spineDeg: 35, neckDeg: 20, ankleDeg: 12 },
   lock: { size: 0.22, lift: 0.28 }, // team lock sprite (m) above the saddle, shown while owned (ownerColour)
 };
 
@@ -692,6 +693,7 @@ export const bike = {
   wallKeep: 0.5, // share of speed kept after grazing an obstacle (SPEC §6.1: collisions slow down)
   crashImpact: 3.2, // m/s of speed lost against an obstacle in one step → crash (SPEC §6.3: strong impact at speed)
   wheelBase: 1.1, // m, front-wheel probe ahead of the pivot (nose doesn't enter walls)
+  rearReach: 0.8, // m, rear-wheel probe behind the pivot while reversing (rear tyre edge 0.77 m back)
   dismountSide: 0.7, // m to the left of the bike where the rider lands
   dismountMaxSpeed: 2.5, // m/s: F gets off only at or below this (brake first)
   noseHeight: 0.6, // m above the feet of the front-wheel probe ball: its bottom = player.maxStep, so curbs pass under it
@@ -728,5 +730,9 @@ export const stairs = {
     landing: 2.2, // m of flat top landing (the parapet gap)
     under: 0.5, // m the bottom step lies below the water surface
     rampDepth: 2, // m below the surface the hidden ramp collider reaches (under a swimmer's feet, swim.floatDepth)
+    // Steps within sideOpen m of the surface have an open river side over a stone apron reaching `apron` m out and down
+    // to rampDepth (≤ 45° up to the steps), so a swimmer coming from the side gets onto them (world/StairBuilder.ts)
+    sideOpen: 0.5,
+    apron: 3.5,
   },
 };

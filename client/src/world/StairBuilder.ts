@@ -7,7 +7,7 @@ import { player as PL, roads as RC, stairs as S, terrain as T } from '../config.
 import type { StairRec } from '../geo/chunkData.ts';
 import type { BuildCtx, Builder, TriMesh } from './buildTypes.ts';
 import { MeshBuffer, type V3 } from './geom.ts';
-import { quadOut } from './landmarks/kit.ts';
+import { quadOut, triOut } from './landmarks/kit.ts';
 import { Path } from './RoadBuilder.ts';
 
 /** A flight along `pts`: flat `landing` m at y0 from the start, then n equal treads to y1 at the end. Step k top =
@@ -85,8 +85,23 @@ export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBu
     const [x, z] = p.at(d, s);
     return [x, y, z];
   };
+  /** P, continued straight past the end (s > L: the quay ramp under the water). */
+  const Q = (d: number, s: number, y = ramp(s)): V3 => {
+    const [x, , z] = P(d, Math.min(s, L), 0);
+    const [dx, dz] = p.dir(L);
+    const e = Math.max(0, s - L);
+    return [x + dx * e, y, z + dz * e];
+  };
   const [dx0, dz0] = p.dir(0);
   const back: V3 = [-dx0, 0, -dz0];
+  // Quay flight (SPEC §4.4): from the first step within quay.sideOpen of the water on, the river side is open (no
+  // stringer, rail or side wall) over a stone apron sloping out to quay.rampDepth under the surface, so a swimmer coming
+  // from the side walks up onto the steps; above that the stringer's collider reaches down below a swimmer's feet.
+  const level = f.y1 + S.quay.under;
+  const low = f.wall ? level - S.quay.rampDepth : Infinity;
+  let open = 0;
+  while (f.wall && open < f.n && stepTop(f, open) > level + S.quay.sideOpen) open++;
+  const end = f.wall ? sOf(open) : L; // the stringers, rails and side walls stop here
 
   // Landing + treads (+Y) and risers (facing the start when the flight goes down from it, else the end).
   if (f.landing > 0) quadOut(stone, P(-hw, 0, f.y0), P(hw, 0, f.y0), P(hw, f.landing, f.y0), P(-hw, f.landing, f.y0), [0, 1, 0]);
@@ -100,7 +115,7 @@ export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBu
   }
   // Stringers (both sides) from under the ground to stringer.height above the nosing line, with end caps.
   const sw = S.stringer.width;
-  const st = [...new Set([...p.stations(0, L, 4), f.landing].sort((a, b) => a - b))];
+  const st = [...new Set([...p.stations(0, end, 4), f.landing].sort((a, b) => a - b))];
   const top = (s: number) => nose(s) + S.stringer.height;
   const base = (d: number, s: number) => {
     const [x, z] = p.at(d, s);
@@ -119,7 +134,7 @@ export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBu
       quadOut(stone, P(do_, s0, base(do_, s0)), P(do_, s1, base(do_, s1)), P(do_, s1, y1), P(do_, s0, y0), out);
       quadOut(stone, P(di, s0, base(di, s0)), P(di, s1, base(di, s1)), P(di, s1, y1), P(di, s0, y0), inn);
     }
-    for (const [s, dir] of [[0, back], [L, [-back[0], 0, -back[2]] as V3]] as const) {
+    for (const [s, dir] of [[0, back], [end, [-back[0], 0, -back[2]] as V3]] as const) {
       quadOut(stone, P(di, s, base(di, s)), P(do_, s, base(do_, s)), P(do_, s, top(s)), P(di, s, top(s)), dir);
     }
     // Handrail: a square tube on posts above the stringer middle.
@@ -141,9 +156,9 @@ export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBu
       }
     };
     for (let k = 1; k < st.length; k++) tube(st[k - 1]!, st[k]!, railY(st[k - 1]!), railY(st[k]!), false);
-    const posts = Math.max(1, Math.ceil(L / S.handrail.postEvery));
+    const posts = Math.max(1, Math.ceil(end / S.handrail.postEvery));
     for (let k = 0; k <= posts; k++) {
-      const s = Math.min(Math.max((L * k) / posts, 2 * r), L - 2 * r);
+      const s = Math.min(Math.max((end * k) / posts, 2 * r), end - 2 * r);
       tube(s, s, top(s), railY(s), true);
     }
   }
@@ -161,13 +176,24 @@ export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBu
     const ss = [0, f.landing, ...Array.from({ length: f.n + 1 }, (_, k) => sOf(k)).map((s) => Math.min(s, L))].filter(
       (s, k, a) => k === 0 || s > a[k - 1]! + 1e-6,
     );
-    const pt = (d: number, s: number): V3 => (s <= L ? P(d, s, ramp(s)) : (() => {
-      const [x, , z] = P(d, L, 0);
-      const [dx, dz] = p.dir(L);
-      return [x + dx * (s - L), ramp(s), z + dz * (s - L)] as V3;
-    })());
     if (f.ext > 0) ss.push(L + f.ext);
-    for (let k = 1; k < ss.length; k++) quad(pt(-hw, ss[k - 1]!), pt(hw, ss[k - 1]!), pt(hw, ss[k]!), pt(-hw, ss[k]!));
+    for (let k = 1; k < ss.length; k++) quad(Q(-hw, ss[k - 1]!), Q(hw, ss[k - 1]!), Q(hw, ss[k]!), Q(-hw, ss[k]!));
+    if (f.wall) {
+      // The apron (collider + stone), from the steps' open river side out and down to `low`, and a wedge back along the
+      // stringer's foot (2 × apron long) so a swimmer sliding along it is lifted onto the apron too; both ≤ 45°.
+      const [di, de] = [-f.wall * hw, -f.wall * (hw + S.quay.apron)];
+      const as = [end, ...ss.filter((s) => s > end + 1e-6)];
+      for (let k = 1; k < as.length; k++) {
+        const [s0, s1] = [as[k - 1]!, as[k]!];
+        const q: [V3, V3, V3, V3] = [Q(di, s0), Q(di, s1), Q(de, s1, low), Q(de, s0, low)];
+        quad(...q);
+        quadOut(stone, ...q, [0, 1, 0], s0, 0, s1, S.quay.apron);
+      }
+      const w: [V3, V3, V3] = [P(-f.wall * (hw + sw), Math.max(0, end - 2 * S.quay.apron), low), Q(di, end), Q(de, end, low)];
+      idx.push(v.length / 3, v.length / 3 + 1, v.length / 3 + 2);
+      v.push(...w.flat());
+      triOut(stone, ...w, [0, 1, 0]);
+    }
   } else {
     // One closed box per step (and the landing), from under the ground to its top.
     const box = (s0: number, s1: number, y: number) => {
@@ -189,12 +215,14 @@ export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBu
       box(f.landing + k * tb, f.landing + (k + 1) * tb, f.y0 + ((f.y1 - f.y0) * (k + 1)) / nb + lift);
     }
   }
-  // Side walls up to the handrail (the flight's edges are not walked off; the rails are not colliders themselves).
+  // Side walls up to the handrail (the flight's edges are not walked off; the rails are not colliders themselves). Quay:
+  // below them the stringer's outer face down to `low` (a swimmer slides along the stone, never under the steps).
   for (const side of sides) {
     for (let k = 1; k < st.length; k++) {
       const [s0, s1] = [st[k - 1]!, st[k]!];
-      const d = side * hw;
+      const [d, e] = [side * hw, side * (hw + sw)];
       quad(P(d, s0, ramp(s0) - 0.2), P(d, s1, ramp(s1) - 0.2), P(d, s1, nose(s1) + S.handrail.height), P(d, s0, nose(s0) + S.handrail.height));
+      if (f.wall) quad(P(e, s0, low), P(e, s1, low), P(e, s1, ramp(s1) - 0.2), P(e, s0, ramp(s0) - 0.2));
     }
   }
   colliders.push({ vertices: new Float32Array(v), indices: new Uint32Array(idx), stairs: true });

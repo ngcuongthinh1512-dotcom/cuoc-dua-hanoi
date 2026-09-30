@@ -259,8 +259,16 @@ export class CharacterAnimator {
     const [legL, legR, armL, armR] = this.limbs;
     const knee = fwd.clone().addScaledVector(up, 0.3);
     const elbow = (side: number) => up.clone().negate().addScaledVector(right, 0.6 * side).addScaledVector(fwd, -0.3);
-    if (legL?.length === 4) reach(legL, t.pedalL, knee, w);
-    if (legR?.length === 4) reach(legR, t.pedalR, knee, w);
+    // Ankling (BikeModel tilts the pedals alike): heel down with the pedal in front of the axle, toes down behind it; the
+    // foot turns before the IK so the ball still lands on the pedal. Pedal L − pedal R, less its spread along the axle,
+    // points along the left crank.
+    const crank = _t.subVectors(t.pedalL, t.pedalR);
+    const ankle = MathUtils.degToRad(Rd.ankleDeg) * w * crank.addScaledVector(right, -crank.dot(right)).normalize().dot(fwd);
+    for (const [leg, pedal, a] of [[legL, t.pedalL, ankle], [legR, t.pedalR, -ankle]] as const) {
+      if (leg?.length !== 4) continue;
+      turnWorld(leg[2]!, _pitch.setFromAxisAngle(right, a));
+      reach(leg, pedal, knee, w);
+    }
     if (armL?.length === 4) reach(armL, t.gripL, elbow(-1), w);
     if (armR?.length === 4) reach(armR, t.gripR, elbow(1), w);
   }

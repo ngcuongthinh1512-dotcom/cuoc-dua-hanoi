@@ -157,7 +157,13 @@ export class BikeModel {
     if (B.wheelF) B.wheelF.rotation.x = b.wheelAngle;
     if (B.wheelR) B.wheelR.rotation.x = b.wheelAngle;
     if (B.crank) B.crank.rotation.x = b.crankAngle;
-    for (const p of [B.pedalL, B.pedalR]) if (p) p.rotation.x = -b.crankAngle; // pedals stay level
+    // Pedals level, then tilted with the rider's ankle (Animation.ts): heel down in front of the axle, toes down behind
+    const [cos, sin] = [Math.cos(b.crankAngle), Math.sin(b.crankAngle)];
+    for (const p of [B.pedalL, B.pedalR]) {
+      if (!p) continue;
+      const { y, z } = p.position; // from the axle, crank frame
+      p.rotation.x = -b.crankAngle - (C.rider.ankleDeg * DEG * (y * sin + z * cos)) / Math.hypot(y, z);
+    }
     B.fork?.quaternion.setFromAxisAngle(this.steerAxis, b.steer);
     B.stand?.quaternion.copy(b.rider === null && Math.abs(target) < 30 * DEG ? IDENTITY : this.fold);
     this.lock.visible = b.ownerColour !== null && b.rider === null;

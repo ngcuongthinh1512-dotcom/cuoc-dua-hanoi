@@ -439,6 +439,26 @@ describe('CharacterController riding a bike (Phase 4 track B)', () => {
     world.free();
   });
 
+  it('reversing (S once stopped): the rear wheel stops at a wall or at stairs behind, no crash', () => {
+    const L = 3 / Math.tan((25 * Math.PI) / 180);
+    const stairs = (w: RAPIER.World) => { // 3 m flight going south from z = 2
+      const v = new Float32Array([-2, 0, 2, 2, 0, 2, 2, 3, 2 + L, -2, 3, 2 + L]);
+      stairColliders.add(w.createCollider(RAPIER.ColliderDesc.trimesh(v, new Uint32Array([0, 1, 2, 0, 2, 3]))).handle);
+    };
+    for (const behind of [(w: RAPIER.World) => cuboid(w, 0, 1, 2.5, 5, 1, 0.5), stairs]) { // wall face at z = 2
+      const { world, c, b, drops } = mounted((w) => (ground(w), behind(w)));
+      run(world, c, 4, walk(-1));
+      expect(drops).toEqual([]);
+      expect(c.riding).toBe(b);
+      expect(b.speed).toBe(0);
+      expect(c.state.position.y).toBeCloseTo(0, 1);
+      expect(c.state.position.z).toBeGreaterThan(0.5); // it did reverse
+      expect(c.state.position.z).toBeLessThan(2 - B.rearReach + B.noseRadius + 0.05); // the rear wheel stays out
+      world.free();
+    }
+    stairColliders.clear();
+  });
+
   it('the same ramp without the stairs tag is ridden up', () => {
     const { world, c } = mounted((w) => {
       ground(w);

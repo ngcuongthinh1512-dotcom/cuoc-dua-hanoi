@@ -251,16 +251,20 @@ export class CharacterController {
 
   /** One riding step: stepBike → velocity along the heading through the KCC. The front-wheel probe finds what the nose
    *  would hit this step: its head-on share of the speed is the impact (≥ bike.crashImpact → crash, SPEC §6.3), below
-   *  that the bike turns along the obstacle and loses (1 − wallKeep) of the head-on share (SPEC §6.1). */
+   *  that the bike turns along the obstacle and loses (1 − wallKeep) of the head-on share (SPEC §6.1). Reversing, the
+   *  rear-wheel probe stops the bike at an obstacle (reverseSpeed never crashes). */
   private rideStep(dt: number, intent: MoveIntent, b: BikeState) {
     const s = this.state;
     const p = s.position;
     stepBike(b, { throttle: Math.max(0, intent.forward), brake: intent.forward < -0.1, turn: -intent.right }, this.surfaceAt(p.x, p.z), dt);
     const [fx, fz] = [-Math.sin(b.yaw), -Math.cos(b.yaw)];
     let d = b.speed * dt;
-    const hit = d > 0 ? this.noseProbe(fx, fz, d) : undefined;
-    if (hit === null) b.speed = d = 0; // stairs ahead: stop like at a wall, no crash (SPEC §6.6)
-    else if (hit) {
+    const hit = d > 0 ? this.wheelProbe(fx, fz, d, B.wheelBase) : d < 0 ? this.wheelProbe(-fx, -fz, -d, B.rearReach) : undefined;
+    if (hit === null) b.speed = d = 0; // stairs ahead / behind: stop like at a wall, no crash (SPEC §6.6)
+    else if (hit && d < 0) {
+      b.speed = 0;
+      d = -hit.free;
+    } else if (hit) {
       const into = -(fx * hit.nx + fz * hit.nz); // cos of the angle between the heading and the obstacle's normal
       const impact = b.speed * into;
       if (impact >= B.crashImpact) return this.crash(b);
@@ -311,18 +315,18 @@ export class CharacterController {
     this.onDismount(b, true);
   }
 
-  /** What the front wheel (bike.wheelBase ahead of the pivot, a bike.noseRadius ball at bike.noseHeight) would hit
-   *  moving `want` m: how far the pivot may go (`free`) and the obstacle's horizontal normal; undefined if nothing;
-   *  null when that, or the ground under the front wheel, is a stair collider (world/stairs.ts). Obstacles the heading
-   *  is parallel to or moving away from are ignored. */
-  private noseProbe(fx: number, fz: number, want: number): { free: number; nx: number; nz: number } | null | undefined {
+  /** What the wheel `base` m from the pivot along (fx, fz) (a bike.noseRadius ball at bike.noseHeight) would hit
+   *  moving `want` m that way: how far the pivot may go (`free`) and the obstacle's horizontal normal; undefined if
+   *  nothing; null when that, or the ground under the wheel, is a stair collider (world/stairs.ts). Obstacles the
+   *  direction is parallel to or moving away from are ignored. */
+  private wheelProbe(fx: number, fz: number, want: number, base: number): { free: number; nx: number; nz: number } | null | undefined {
     const p = this.state.position;
     const top = p.y + P.maxStep + 0.5;
-    const ahead = B.wheelBase + want;
+    const ahead = base + want;
     const ray = new RAPIER.Ray({ x: p.x + fx * ahead, y: top, z: p.z + fz * ahead }, DOWN);
     const under = this.world.castRay(ray, top - p.y + 1.5, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.collider);
     if (under && stairColliders.has(under.collider.handle)) return null;
-    const reach = B.wheelBase - B.noseRadius;
+    const reach = base - B.noseRadius;
     const from = { x: p.x, y: p.y + B.noseHeight, z: p.z };
     const hit = this.world.castShape(from, NO_ROT, { x: fx, y: 0, z: fz }, this.nose, 0, reach + want, true,
       RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.collider);

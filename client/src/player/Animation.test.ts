@@ -1,7 +1,7 @@
 // Animation state machine (pure pickState), playback speed, crash timeline, and the committed clip file
 // (public/models/player-anims.glb from scripts/process-assets.ts) against the body (player.glb).
 import { readFileSync } from 'node:fs';
-import { type AnimationClip, type Object3D, Vector3 } from 'three';
+import { type AnimationClip, type Object3D, Quaternion, Vector3 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { describe, expect, it } from 'vitest';
@@ -217,6 +217,28 @@ describe('rider IK (player-anims.glb rig on bike.glb)', async () => {
         expect(at(`middle_01_${s}`).distanceTo(grip), `hand ${s} ${k}`).toBeLessThan(0.03);
       }
     }
+  });
+
+  it('ankling: pedal and foot pitch together, toes down behind the axle, heel down in front (± rider.ankleDeg)', () => {
+    const [frame, pedal] = [bike.root.getObjectByName('frame')!, bike.root.getObjectByName('pedalL')!];
+    const DEG = Math.PI / 180;
+    const [tilt, rel, fwd]: number[][] = [[], [], []];
+    for (let k = 0; k < 16; k++) {
+      ride((k * Math.PI) / 8, 1 / 30);
+      const inv = frame.getWorldQuaternion(new Quaternion()).invert(); // bike frame: +Z forward, +Y up, X the crank axis
+      const q = inv.clone().multiply(pedal.getWorldQuaternion(new Quaternion())); // pedal: about X only
+      const toes = at('ball_l').sub(at('foot_l')).applyQuaternion(inv);
+      const T = bike.riderTargets();
+      tilt.push((2 * Math.atan2(q.x, q.w)) / DEG); // + = toes down
+      rel.push(Math.atan2(-toes.y, toes.z) / DEG - tilt.at(-1)!); // foot pitch on the pedal
+      fwd.push(T.pedalL.clone().sub(T.pedalR).applyQuaternion(inv).normalize().z); // where the left crank points
+    }
+    const range = (a: number[]) => Math.max(...a) - Math.min(...a);
+    expect(range(tilt)).toBeGreaterThan(1.9 * bikeModel.rider.ankleDeg);
+    expect(range(tilt)).toBeLessThan(2.1 * bikeModel.rider.ankleDeg);
+    expect(tilt[fwd.indexOf(Math.min(...fwd))]!).toBeGreaterThan(0.9 * bikeModel.rider.ankleDeg); // behind: toes down
+    expect(tilt[fwd.indexOf(Math.max(...fwd))]!).toBeLessThan(-0.9 * bikeModel.rider.ankleDeg); // in front: heel down
+    expect(range(rel)).toBeLessThan(0.3 * bikeModel.rider.ankleDeg); // the foot follows the pedal
   });
 
   it('dismount: the IK fades out over mountBlend (body back on its feet), no NaN', () => {

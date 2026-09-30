@@ -106,31 +106,62 @@ describe('CharacterController on stairs', () => {
     });
   }
 
-  it('a swimmer swims to a quay flight and walks out of the Seine up to the quay', () => {
-    const level = 0;
-    // River z ≥ 0 (bed level − riverDepth), quay z < 0 at level + quayHeight; the flight hugs the wall on the river side.
-    const height = (_x: number, z: number) => (z < 0 ? level + T.quayHeight : level - T.riverDepth);
-    const off = S.quay.width / 2 + 0.02; // as build-chunks
-    const len = S.quay.landing + Math.ceil((T.quayHeight + T.copingLift + S.quay.under) / S.riser) * S.tread;
+  // River z ≥ 0 (bed level − riverDepth), quay z < 0 at level + quayHeight; the flight hugs the wall on the river side.
+  const level = 0;
+  const quayH = (_x: number, z: number) => (z < 0 ? level + T.quayHeight : level - T.riverDepth);
+  const off = S.quay.width / 2 + 0.02; // as build-chunks
+  const len = S.quay.landing + Math.ceil((T.quayHeight + T.copingLift + S.quay.under) / S.riser) * S.tread;
+  /** Swimmer spawned at (x, z) in front of a quay flight (top landing at x = 0, foot at x = len). */
+  function quay(x: number, z: number, yaw: number) {
     const rec: StairRec = { pts: [0, off, len, off], width: S.quay.width, quay: true };
     const w = world((w) => {
       box(w, 0, level - T.riverDepth - 0.5, 25, 60, 0.5, 25); // bed
       box(w, 0, (level + T.quayHeight + T.copingLift) / 2, -25, 60, (level + T.quayHeight + T.copingLift) / 2, 25); // quay
-      trimesh(w, colliderOf(rec, height));
+      trimesh(w, colliderOf(rec, quayH));
     });
-    const c = new CharacterController(w, { heightAt: height, waterLevel: level, water: undefined });
-    c.spawn(len + 5, off, Math.PI / 2);
+    const c = new CharacterController(w, { heightAt: quayH, waterLevel: level, water: undefined });
+    c.spawn(x, z, yaw);
     run(w, c, 0.5);
     expect(c.state.moveMode).toBe('swim');
-    let walked = false;
-    for (let i = 0; i < 20 * 60 && c.state.position.x > S.quay.landing / 2; i++) {
-      run(w, c, DT, go(Math.PI / 2)); // west along the wall, up to the top landing
-      walked ||= c.state.moveMode === 'walk' && !c.state.inWater;
-    }
-    run(w, c, 2, go(0)); // north through the parapet gap onto the quay
-    expect(walked).toBe(true);
+    return { w, c };
+  }
+  /** West up the flight to the top landing, then north through the parapet gap onto the quay. */
+  function upAndOut(w: RAPIER.World, c: CharacterController) {
+    for (let i = 0; i < 20 * 60 && c.state.position.x > S.quay.landing / 2; i++) run(w, c, DT, go(Math.PI / 2));
+    run(w, c, 2, go(0));
     expect(c.state.moveMode).toBe('walk');
     expect(c.state.position.y).toBeCloseTo(level + T.quayHeight + T.copingLift, 1);
     expect(c.state.position.z).toBeLessThan(-0.5);
+  }
+
+  it('a swimmer swims to a quay flight and walks out of the Seine up to the quay', () => {
+    const { w, c } = quay(len + 5, off, Math.PI / 2);
+    let walked = false;
+    for (let i = 0; i < 20 * 60 && c.state.position.x > len - 2; i++) {
+      run(w, c, DT, go(Math.PI / 2)); // west along the wall onto the foot of the flight
+      walked ||= c.state.moveMode === 'walk' && !c.state.inWater;
+    }
+    expect(walked).toBe(true);
+    upAndOut(w, c);
+  });
+
+  it('from the river side: the high part is a wall down into the water; slide along it onto the steps near the water', () => {
+    const high = quay(len / 2, 6, 0); // north into the middle of the flight's river side: blocked, not under the steps
+    run(high.w, high.c, 6, go(0));
+    expect(high.c.state.moveMode).toBe('swim');
+    expect(high.c.state.position.z - PL.radius).toBeGreaterThan(off + S.quay.width / 2 + S.stringer.width - 0.03); // outside the stone
+    for (let i = 0; i < 20 * 60 && high.c.state.position.x < len - 2; i++) run(high.w, high.c, DT, go(-Math.PI / 4)); // NE
+    run(high.w, high.c, 4, go(0));
+    expect(high.c.state.moveMode).toBe('walk');
+    expect(high.c.state.position.z).toBeLessThan(off);
+    upAndOut(high.w, high.c);
+  });
+
+  it('from the river side near the water: straight onto the steps', () => {
+    const low = quay(len - 1, 6, 0); // north toward the steps at the water line: onto them, then up and out
+    run(low.w, low.c, 4, go(0));
+    expect(low.c.state.moveMode).toBe('walk');
+    expect(low.c.state.position.z).toBeLessThan(off); // on the steps against the quay wall
+    upAndOut(low.w, low.c);
   });
 });
