@@ -1,7 +1,7 @@
 // Foundation (docs/plans/phase4b.md §4, §5.2): the road graph as the NPC sims see it. Widths / sidewalks are RoadBuilder's,
 // so cars and pedestrians sit on the drawn ribbons, not on the graph's own RoadGraph widths. Pure: no three, no Rapier.
-// Track B adds the bridge decks to heightOn.
-import { type RoadGraph, WayFlag } from '@race/shared/graph';
+// heightOn = carved terrain, or the bridge deck (BridgeBuilder.deckY line) on bridge edges.
+import { type RoadGraph, WAY_HEADER, WayFlag } from '@race/shared/graph';
 import { roads, traffic } from '../config.ts';
 import { roadWidth, sidewalkWidth } from '../world/RoadBuilder.ts';
 
@@ -13,6 +13,9 @@ export class NpcRoads {
   readonly crossing: Uint8Array;
   private readonly half: Float32Array; // per way, m
   private readonly walkSide: Float32Array; // per way, m
+  // Bridge decks: one line per bridge (ways of one name / kind / layer touching each other).
+  private readonly deckOf: Int32Array; // per edge, −1 = not on a bridge
+  private readonly decks: { ax: number; az: number; bx: number; bz: number; y0: number; y1: number }[] = [];
 
   constructor(
     readonly graph: RoadGraph,
@@ -47,6 +50,53 @@ export class NpcRoads {
     for (let e = 0; e < m; e++) if (usable(e) && inMain[graph.edgeA[e]!] && inMain[graph.edgeB[e]!]) this.car[e] = 1;
     this.crossing = new Uint8Array(n);
     for (const c of file.crossings) if (graph.edgesOf(c).some((e) => this.car[e])) this.crossing[c] = 1;
+
+    this.deckOf = new Int32Array(m).fill(-1);
+    this.buildDecks();
+  }
+
+  /** Bridge decks, like BridgeBuilder.deckY: a straight line between the terrain roads.bridge.endSample m beyond the two
+   *  farthest free ends of the bridge (bridge ways of the same name / kind / layer that touch), never below the terrain.
+   *  ponytail: straight line in plan (a curved bridge follows its chord), upper decks (layer > 1) get no extra lift. */
+  private buildDecks(): void {
+    const g = this.graph, { ways } = g.file;
+    const bridge = ways.flatMap((w, k) => (w[1]! & WayFlag.bridge ? [k] : []));
+    const parent = new Map(bridge.map((k) => [k, k]));
+    const find = (k: number): number => (parent.get(k) === k ? k : (parent.set(k, find(parent.get(k)!)), parent.get(k)!));
+    const ends = new Map<number, number[]>(); // node → bridge ways ending there
+    for (const k of bridge) for (const nd of [ways[k]![WAY_HEADER]!, ways[k]![ways[k]!.length - 1]!]) (ends.get(nd) ?? ends.set(nd, []).get(nd)!).push(k);
+    const same = (a: number, b: number) => ways[a]![5] === ways[b]![5] && (ways[a]![3]! >= 0 ? ways[a]![3] === ways[b]![3] : ways[a]![0] === ways[b]![0]);
+    for (const l of ends.values()) for (const k of l) if (same(k, l[0]!)) parent.set(find(k), find(l[0]!));
+    const comps = new Map<number, number[]>();
+    for (const k of bridge) (comps.get(find(k)) ?? comps.set(find(k), []).get(find(k))!).push(k);
+    const firstEdge = new Int32Array(ways.length).fill(-1);
+    for (let e = 0; e < g.edgeWay.length; e++) if (firstEdge[g.edgeWay[e]!] < 0) firstEdge[g.edgeWay[e]!] = e;
+    const es = roads.bridge.endSample;
+    for (const ks of comps.values()) {
+      // free ends: way end nodes no other way of the bridge touches, with the direction pointing out of the bridge
+      const free: { x: number; z: number; dx: number; dz: number }[] = [];
+      for (const k of ks) {
+        const nds = ways[k]!.slice(WAY_HEADER);
+        for (const [nd, inner] of [[nds[0]!, nds[1]!], [nds[nds.length - 1]!, nds[nds.length - 2]!]] as const) {
+          if ((ends.get(nd) ?? []).some((o) => o !== k && find(o) === find(k))) continue;
+          const l = Math.hypot(g.x[nd]! - g.x[inner]!, g.z[nd]! - g.z[inner]!) || 1;
+          free.push({ x: g.x[nd]!, z: g.z[nd]!, dx: (g.x[nd]! - g.x[inner]!) / l, dz: (g.z[nd]! - g.z[inner]!) / l });
+        }
+      }
+      let best: [number, number] = [0, Math.min(1, free.length - 1)], far = -1;
+      for (let i = 0; i < free.length; i++)
+        for (let j = i + 1; j < free.length; j++) {
+          const d = Math.hypot(free[i]!.x - free[j]!.x, free[i]!.z - free[j]!.z);
+          if (d > far) (far = d), (best = [i, j]);
+        }
+      const [p, q] = [free[best[0]] ?? { x: 0, z: 0, dx: 0, dz: 0 }, free[best[1]] ?? { x: 0, z: 0, dx: 0, dz: 0 }];
+      const id = this.decks.length;
+      this.decks.push({
+        ax: p.x, az: p.z, bx: q.x, bz: q.z,
+        y0: this.heightAt(p.x + p.dx * es, p.z + p.dz * es), y1: this.heightAt(q.x + q.dx * es, q.z + q.dz * es),
+      });
+      for (const k of ks) for (let i = 0; i < ways[k]!.length - WAY_HEADER - 1; i++) this.deckOf[firstEdge[k]! + i] = id;
+    }
   }
 
   /** highway=* of way k. */
@@ -84,11 +134,17 @@ export class NpcRoads {
     return h - (Math.min(Math.max(lane, 0), n - 1) + 0.5) * (span / n);
   }
 
-  /** Ground y at s m along edge e from edgeA: the carved terrain. ponytail: no bridge decks yet (track B). */
+  /** Ground y at s m along edge e from edgeA: the carved terrain, or the bridge deck on a bridge edge. */
   heightOn(e: number, s: number): number {
     const g = this.graph, a = g.edgeA[e]!, b = g.edgeB[e]!;
     const t = s / (g.edgeLength[e] || 1);
-    return this.heightAt(g.x[a]! + (g.x[b]! - g.x[a]!) * t, g.z[a]! + (g.z[b]! - g.z[a]!) * t);
+    const x = g.x[a]! + (g.x[b]! - g.x[a]!) * t, z = g.z[a]! + (g.z[b]! - g.z[a]!) * t;
+    const y = this.heightAt(x, z);
+    const c = this.deckOf[e]!;
+    if (c < 0) return y;
+    const d = this.decks[c]!, vx = d.bx - d.ax, vz = d.bz - d.az;
+    const u = Math.min(1, Math.max(0, ((x - d.ax) * vx + (z - d.az) * vz) / (vx * vx + vz * vz || 1)));
+    return Math.max(y, d.y0 + (d.y1 - d.y0) * u);
   }
 }
 

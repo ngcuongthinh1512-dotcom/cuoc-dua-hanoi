@@ -801,7 +801,12 @@ export const traffic = {
   obstacleMargin: 0.5, // m beside the car's half width: a body this close to the lane is an obstacle
   yieldLook: 30, // m up the major road a minor-road car checks at a junction without lights
   roundaboutGap: 18, // m of free ring before the entry point (cars entering yield, §17.11)
-  lights: { reach: 30, green: 18, amber: 3, allRed: 2, pedGreen: 8, pedCycle: 40 }, // m; s (2 phases, 46 s cycle)
+  lights: { reach: 30, green: 18, amber: 3, allRed: 2, pedGreen: 8, pedCycle: 40, midStop: 3 }, // m; s (2 phases, 46 s cycle); midStop = m before a lone signal node
+  bodyRadius: 0.4, // m: the player's body as an obstacle (beside the pedestrians' crowd.bodyRadius)
+  wheelRatio: 0.2, // wheel radius = vehicle height × this (CarPose.wheel, no per-model radius in the sim)
+  stopMargin: 0.3, // m short of a stop line the front bumper halts
+  spawnEvery: 0.25, // s between spawns once filled
+  rank: { primary: 5, secondary: 4, tertiary: 3, unclassified: 2, residential: 2, living_street: 1, primary_link: 3, secondary_link: 3, tertiary_link: 3 } as Record<string, number>, // junction priority
 };
 
 // ── C · pedestrian sim (npc/crowd.ts) ──

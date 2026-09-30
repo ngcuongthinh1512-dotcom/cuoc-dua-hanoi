@@ -3,7 +3,9 @@ import { join } from 'node:path';
 import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, WayFlag } from '@race/shared/graph';
 import { describe, expect, it } from 'vitest';
 import { traffic } from '../config.ts';
-import type { ChunkData } from '../geo/chunkData.ts';
+import { heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
+import { carveRiver, riverLevel } from '../world/Terrain.ts';
+import type { ChunkData, WaterData } from '../geo/chunkData.ts';
 import { roadWidth, sidewalkWidth } from '../world/RoadBuilder.ts';
 import { NpcRoads } from './roads.ts';
 
@@ -140,5 +142,44 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(chunkDir))('NpcRoads (road
     expect(kept.length).toBeGreaterThan(4000);
     expect(kept.filter((c) => Math.hypot(g.x[c]!, g.z[c]!) < 120).length).toBeGreaterThanOrEqual(10); // around the obelisk
     expect(r.crossing.reduce((s, c) => s + c, 0)).toBe(kept.length);
+  });
+});
+
+describe.skipIf(!existsSync(graphFile) || !existsSync(join(root, 'client/public/data/elevation.bin')))('NpcRoads bridges (carved grid)', () => {
+  const data = join(root, 'client/public/data');
+  const grid = parseHeightGrid(JSON.parse(readFileSync(join(data, 'elevation.json'), 'utf8')), readFileSync(join(data, 'elevation.bin')));
+  const water = JSON.parse(readFileSync(join(data, 'water.json'), 'utf8')) as WaterData;
+  carveRiver(grid, water);
+  const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
+  const r = new NpcRoads(g, (x, z) => heightAt(grid, x, z));
+
+  it('Pont Alexandre III: the deck stays > 5 m above the river, the approach is on the ground', () => {
+    const name = g.file.names.indexOf('Pont Alexandre III');
+    const edges = [...g.edgeWay.keys()].filter((e) => g.file.ways[g.edgeWay[e]!]![3] === name && g.flags(e) & WayFlag.bridge && r.car[e]);
+    expect(edges.length).toBeGreaterThan(0);
+    const level = riverLevel(grid, water);
+    for (const e of edges) {
+      const mid = r.heightOn(e, g.edgeLength[e]! / 2);
+      expect(mid, `edge ${e}`).toBeGreaterThan(level + 5);
+      // the terrain under the middle is the river bed: the deck is what lifts the car
+      const a = g.edgeA[e]!, b = g.edgeB[e]!;
+      const ground = heightAt(grid, (g.x[a]! + g.x[b]!) / 2, (g.z[a]! + g.z[b]!) / 2);
+      console.log(`Pont Alexandre III edge ${e}: deck ${mid.toFixed(2)} m, terrain ${ground.toFixed(2)} m, river ${level.toFixed(2)} m`);
+    }
+  });
+
+  it('every car bridge edge keeps its deck continuous with its neighbours (no step > 0.5 m)', () => {
+    let worst = 0, n = 0;
+    for (let e = 0; e < g.edgeA.length; e++) {
+      if (!(r.car[e] && g.flags(e) & WayFlag.bridge)) continue;
+      n++;
+      for (const v of [g.edgeA[e]!, g.edgeB[e]!]) {
+        const at = (x: number) => (v === g.edgeA[e] ? r.heightOn(x, 0) : r.heightOn(x, g.edgeLength[x]!));
+        for (const o of g.edgesOf(v)) if (o !== e && r.car[o] && g.flags(o) & WayFlag.bridge) worst = Math.max(worst, Math.abs(at(e) - (g.edgeA[o] === v ? r.heightOn(o, 0) : r.heightOn(o, g.edgeLength[o]!))));
+      }
+    }
+    console.log(`bridge car edges: ${n}, worst deck step at a joint ${worst.toFixed(2)} m`);
+    expect(n).toBeGreaterThan(20);
+    expect(worst).toBeLessThan(0.5);
   });
 });

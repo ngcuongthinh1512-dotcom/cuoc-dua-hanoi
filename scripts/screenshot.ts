@@ -130,7 +130,11 @@ Object.assign(PRESETS, {
 Object.assign(PRESETS, {
   // [A] NPC assets on the dev-only turntable /npc.html: p4b-cars, p4b-peds, p4b-peds-idle
 
-  // [B] traffic, spectator views after the warm-up: p4b-etoile, p4b-red, p4b-bridge, p4b-concorde
+  // [B] traffic, spectator views after the warm-up (coordinates only: drawn once track D wires the cars in)
+  'p4b-etoile': camAt(-1806, -812, 110, 45, -38) + '&npcDensity=1.5', // 160 m oblique over the Étoile ring (centre −1916, −922), looking NW
+  'p4b-red': camAt(-307.8, -148.8, 1.7, 64.2, 2), // Champs-Élysées 45 m before the lit junction at (−349, −167), behind the queue
+  'p4b-bridge': cam(48.8637, 2.3155, 8, 90, -3), // river 95 m east of Pont Alexandre III, looking at the deck
+  'p4b-concorde': camAt(70, 90, 40, 38, -30), // Place de la Concorde from the south-east, looking at the obelisk and the Champs-Élysées
 
   // [C] pedestrians: p4b-sidewalk, p4b-crossing, p4b-park
 
