@@ -86,7 +86,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 ## Phase 4B – Xe cộ & người đi đường NPC (SPEC §17.5)
 - Xe NPC theo `roadgraph.json` (đúng chiều, dừng ở giao lộ, vòng xuyến Étoile) + người đi đường trên vỉa hè; chỉ chạy ở client, không đồng bộ server; người chơi không lái được xe NPC.
 - Va chạm: xe phanh trước người chơi, tông khi đạp xe → ngã xe (§6.3); tránh vùng hộp mật thư / thảm về đích; mật độ trong `config.ts`, tự giảm khi FPS thấp.
-- Model xe / người: bộ asset CC0 (Quaternius, Kenney…) — lập danh sách để anh duyệt trước khi tải.
+- Model đã duyệt và tải, chưa xử lý: xe Quaternius / rgsdev / Poly by Google / jeremy (Phase 2B); người đi đường Microsoft Rocketbox (MIT, 31 file duyệt và tải ngày 2026-09-30 vào `.cache/assets/rocketbox/`: 4 avatar, 14 clip, SPEC §17.11). Đang làm theo `docs/plans/phase4b.md`: đã có nền (`client/src/npc/`: kiểu, `NpcRoads`, bản tạm của `traffic` / `crowd` / `NpcAssets`), còn 4 track A–D.
 
 ## Phase 5 – HUD
 - Menu thật (SPEC §17.2: tự mở khi chuột bị nhả, `Esc`); hiện chỉ hiện bảng hướng dẫn phím. Nút "Kẹt? Về chỗ an toàn" gọi `CharacterController.respawn()` (hiện về chỗ đứng an toàn gần nhất; khi đang ở dưới sông, SPEC §4.4 muốn đưa lên bậc thang gần nhất); tùy chọn đảo trục Y, độ nhạy chuột.

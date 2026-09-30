@@ -125,6 +125,18 @@ Object.assign(PRESETS, {
   'p4-ride-rear': '/?player&bike&autoMove=walk&autoTurn=right&wait=1.5',
 });
 
+// Phase 4B (docs/plans/phase4b.md §6–7): p4b-* presets, NPCs on (the spectator ?cam= has them too; &npc=0 turns them
+// off). Each track adds its presets under its own line only.
+Object.assign(PRESETS, {
+  // [A] NPC assets on the dev-only turntable /npc.html: p4b-cars, p4b-peds, p4b-peds-idle
+
+  // [B] traffic, spectator views after the warm-up: p4b-etoile, p4b-red, p4b-bridge, p4b-concorde
+
+  // [C] pedestrians: p4b-sidewalk, p4b-crossing, p4b-park
+
+  // [D] in game: p4b-street, p4b-bike-car, p4b-dodge, p4b-zone, p4b-density
+});
+
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
 // point, camera `view` = [azimuth seen from the landmark, distance], raised ~ 0.35 × distance and looking at it.
 const worldCam = (x: number, y: number, z: number, tx: number, ty: number, tz: number) => {

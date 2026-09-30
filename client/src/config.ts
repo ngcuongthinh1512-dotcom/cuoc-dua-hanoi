@@ -736,3 +736,114 @@ export const stairs = {
     apron: 3.5,
   },
 };
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// Phase 4B (docs/plans/phase4b.md §5.3): NPC traffic + pedestrians, client only (SPEC §17.5, §17.11). Each track edits
+// ONLY its own block and adds no imports; the foundation block belongs to the integrator.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+
+// ── Foundation · shared NPC settings (npc/types.ts, npc/roads.ts) ──
+/** dims: m width × height × length the models are baked to (process-assets) and the sims use; share of the fleet
+ *  (sums to 1); paint: own sRGB paints (else npc.paints); roads: highway kinds it may drive on (else traffic.kinds). */
+type NpcVehicle = { dims: readonly [number, number, number]; share: number; paint?: readonly string[]; roads?: readonly string[] };
+const npcVehicles = {
+  city: { dims: [1.7, 1.5, 3.6], share: 0.14 },
+  hatchback: { dims: [1.75, 1.45, 4.0], share: 0.16 },
+  sedan: { dims: [1.8, 1.45, 4.6], share: 0.14 },
+  suv: { dims: [1.9, 1.7, 4.6], share: 0.08 },
+  taxi: { dims: [1.8, 1.5, 4.6], share: 0.12, paint: ['#1d1f22'] }, // Paris taxis are dark, white "TAXI" roof light
+  van: { dims: [2.0, 2.3, 5.4], share: 0.08 },
+  truck: { dims: [2.3, 3.0, 6.5], share: 0.05 },
+  bus: { dims: [2.55, 3.1, 12], share: 0.05, roads: ['primary', 'secondary'], paint: ['#e8ebe6'] },
+  scooter: { dims: [0.7, 1.4, 1.8], share: 0.1 },
+  moto: { dims: [0.8, 1.4, 2.1], share: 0.08 },
+} satisfies Record<string, NpcVehicle>;
+export const npc = {
+  enabled: true, // URL ?npc=0 turns NPCs off (ride-check, physics presets); the spectator ?cam= has them too (§17.11)
+  seed: 1, // each sim xors its own constant into it; URL ?npcSeed= overrides
+  density: 1, // × traffic.perKm / crowd.perKm, then × the automatic factor (npcRender.autoDensity); URL ?npcDensity=
+  zoneMargin: 3, // m added to every ExclusionZone radius
+  vehicles: npcVehicles as Readonly<Record<keyof typeof npcVehicles, NpcVehicle>>,
+  paints: ['#f2f2ef', '#1d1f22', '#8d9296', '#c3c7ca', '#1f3350', '#7a1f22', '#35503a'], // sRGB body paints
+};
+
+// ── A · NPC asset pipeline (scripts/process-assets.ts, scripts/fbx.ts, npc/NpcAssets.ts) ──
+export const npcAssets = {
+  vehiclesUrl: 'models/npc-vehicles.glb', // 1 node per CarKind, vertex colours + _PAINT, wheels in extras
+  pedsUrl: 'models/npc-peds.glb', // 4 Rocketbox avatars, LOD0 + LOD1, 1 material (atlas) each
+  clipsUrl: 'models/npc-ped-anims.glb', // 14 clips m_* / f_*
+  atlas: 2048, // px, per-avatar texture atlas (body | head | opacity)
+  lod1Ratio: 0.3, // triangle share kept by the LOD1 simplification
+  maxTris: { car: 2000, big: 2500, rider: 1500, ped: 9000, pedLod1: 2500 }, // per template (big = bus, truck)
+  clipSpeed: { m_walk: 1.01, m_stroll: 0.69, f_walk: 1.21, f_stroll: 0.93 } as Readonly<Record<string, number>>, // m/s root motion (phase4b.md §2.3)
+};
+
+// ── B · traffic sim (npc/traffic.ts, npc/lights.ts, npc/roads.ts bridges) ──
+export const traffic = {
+  // highway=* kinds cars drive on (no service: parking entrances, courtyards); npc/roads.ts keeps the largest strongly
+  // connected part of them, so no car ever gets stuck in a dead end
+  kinds: ['primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'primary_link', 'secondary_link', 'tertiary_link'] as string[],
+  perKm: 10, // cars per km of NPC road within radius (× density)
+  max: 60,
+  radius: 250, // m around the anchor
+  despawnMargin: 50, // m beyond radius
+  viewConeDeg: 50, // ± around the anchor's viewYaw: no spawning inside it (closer than render.fog.near)
+  stuckSeconds: 60, // standing still this long outside the view cone → despawn
+  speed: { default: 8.3, primary: 12.5, living_street: 5.5, roundabout: 9 } as Record<string, number>, // m/s per highway kind (Paris 30 km/h)
+  speedJitter: [0.85, 1.1] as const, // per-car factor
+  accel: 2, // m/s²
+  brake: 4, // m/s²
+  minGap: 2, // m bumper to bumper
+  latAccel: 2.5, // m/s²: corner speed ≤ √(latAccel × R)
+  cornerCut: 6, // m (≤ half the edge) of quadratic Bézier at every node
+  maxLanes: 4, // per direction (npc/roads.ts lanes(): Étoile's 12 → 4)
+  lookAhead: 60, // m of route searched for the nearest obstacle
+  obstacleMargin: 0.5, // m beside the car's half width: a body this close to the lane is an obstacle
+  yieldLook: 30, // m up the major road a minor-road car checks at a junction without lights
+  roundaboutGap: 18, // m of free ring before the entry point (cars entering yield, §17.11)
+  lights: { reach: 30, green: 18, amber: 3, allRed: 2, pedGreen: 8, pedCycle: 40 }, // m; s (2 phases, 46 s cycle)
+};
+
+// ── C · pedestrian sim (npc/crowd.ts) ──
+export const crowd = {
+  perKm: 12, // pedestrians per km of walking band within radius (× density)
+  max: 40,
+  radius: 120, // m around the anchor
+  despawnMargin: 30, // m beyond radius
+  bodyRadius: 0.3, // m
+  walkSpeed: [1.1, 1.45] as const, // m/s
+  strollSpeed: [0.8, 1.0] as const, // m/s
+  strollShare: 0.3,
+  band: [0.3, 0.8] as const, // share of the sidewalk width out from the kerb, per pedestrian
+  inset: 0.8, // m inside the carriageway edge on a living_street
+  crossChance: 0.3, // at a mid-block crossing node
+  crossReach: 15, // m along the branch to look for a crossing node
+  crossGap: 4, // s: no car reaches the crossing within this before stepping out
+  idle: { per100m: 0.15, seconds: [5, 25] as const }, // stops per 100 m walked; s standing / looking / phoning
+  seatEvery: 20, // m along park paths
+  seatChance: 0.5,
+  seatOffset: 1.5, // m beside the path
+  seatRoadClear: 15, // m from any car road
+  sitShare: 0.15, // of spawned pedestrians sit on a free seat nearby
+  avoid: { ahead: 3, side: 1, shift: 1 }, // m
+  stagger: { seconds: 1.2, push: 0.8 }, // s, m (knocked by the player / the bike nose)
+  waveBack: 10, // m: G within this and facing the player → waves back
+};
+
+// ── D · rendering, colliders, integration (npc/Npc.ts, npc/NpcRenderer.ts, npc/PedRenderer.ts, main.ts, player/*) ──
+// Riding into a pedestrian (crowd.step → knocked > 0) crashes the player like riding into an NPC car (§17.11): the
+// existing crash when the bike speed ≥ bike.crashImpact (a car collider stops the bike dead, so the same threshold), below
+// it only the pedestrian staggers.
+export const npcRender = {
+  pedLod0: 30, // m: full mesh, shadows, mixer every frame; beyond: LOD1, no shadow
+  farAnimEvery: 3, // frames between mixer updates of LOD1 pedestrians
+  colliderRadius: 40, // m from the player: cars within get a kinematic cuboid
+  maxColliders: 16,
+  push: { maxSpeed: 1 }, // m/s: a car overlapping the player shoves it through the KCC
+  warmUp: 20, // s simulated after the initial fill (queues at red lights on the first frame)
+  // FPS mean over `window` s < minFps → density × down; ≥ okFps for upAfter s → + up; floor min (nextDensity)
+  autoDensity: { minFps: 45, okFps: 57, window: 2, upAfter: 5, down: 0.8, up: 0.1, min: 0.25 },
+  lights: { pole: 3.2, kerb: 0.5, radius: 200 }, // m
+  zebra: { depth: 3, stripe: 0.5, radius: 200 }, // m
+  chair: { colour: '#3f6b3a', radius: 60 }, // Paris park chair green, m
+};
