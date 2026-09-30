@@ -134,9 +134,14 @@ Object.assign(PRESETS, {
   'p4b-peds-idle': '/npc.html?show=peds&clip=sit,phone,wave', // seated (stand-in chair), phone, wave
 
   // [B] traffic, spectator views after the warm-up (coordinates only: drawn once track D wires the cars in)
-  'p4b-etoile': camAt(-1806, -812, 110, 45, -38) + '&npcDensity=1.5', // 160 m oblique over the Étoile ring (centre −1916, −922), looking NW
-  'p4b-red': camAt(-307.8, -148.8, 1.7, 64.2, 2), // Champs-Élysées 45 m before the lit junction at (−349, −167), behind the queue
-  'p4b-bridge': cam(48.8637, 2.3155, 8, 90, -3), // river 95 m east of Pont Alexandre III, looking at the deck
+  // Anchored near the ring centre (−1916, −922; the NPCs fill around the camera): 85 m SE of it, 150 m up, looking NW
+  // down at the ring.
+  'p4b-etoile': camAt(-1856, -862, 150, 45, -58) + '&npcDensity=1.5',
+  // 12 m behind a queue of 4 cars stopped at a red light (graph node 103 at ≈ (916, −20), found by simulating the game's
+  // fill + warm-up at this camera: the light phases are deterministic, offset hash01(node) × cycle), 3.5 m up, −8°.
+  // Traffic / light changes move the queue: re-find it the same way.
+  'p4b-red': camAt(924.4, -7.1, 3.5, 22.9, -8) + '&npcDensity=1',
+  'p4b-bridge': '/?cam=-500,26,215,74,-25', // 26 m over the river east of Pont Alexandre III, looking down at the deck
   'p4b-concorde': camAt(70, 90, 40, 38, -30), // Place de la Concorde from the south-east, looking at the obelisk and the Champs-Élysées
 
   // [C] pedestrians (shown once track D's renderer is merged): standing on the east Rue Royale sidewalk (kerb + 1.75 m, edge 21480)

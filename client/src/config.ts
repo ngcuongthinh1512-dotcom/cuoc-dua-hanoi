@@ -774,7 +774,9 @@ export const npcAssets = {
   clipsUrl: 'models/npc-ped-anims.glb', // 14 clips m_* / f_*
   atlas: 2048, // px, per-avatar texture atlas (body | head | opacity)
   lod1Ratio: 0.3, // triangle share kept by the LOD1 simplification
-  maxTris: { car: 2000, big: 2500, rider: 1500, ped: 9000, pedLod1: 2500 }, // per template (big = bus, truck)
+  // per template (big = bus, truck). twoWheeler = scooter / moto body: the moto source has 2 092 and meshopt stops at
+  // 2 060 (review m5), so its own ceiling, not the car's 2 000; the GLB merges body + rider (tests check the sum).
+  maxTris: { car: 2000, big: 2500, twoWheeler: 2100, rider: 1500, ped: 9000, pedLod1: 2500 },
   clipSpeed: { m_walk: 1.01, m_stroll: 0.69, f_walk: 1.21, f_stroll: 0.93 } as Readonly<Record<string, number>>, // m/s root motion (phase4b.md §2.3)
 };
 
@@ -873,5 +875,14 @@ export const npcRender = {
   chair: { colour: '#3f6b3a', radius: 60 }, // Paris park chair green, m
   pedFade: 0.3, // s crossfade between pedestrian clips
   stagger: { tiltDeg: 18, rise: 0.12 }, // root lean toward the push, reached in `rise` s, fading out over crowd.stagger.seconds
+  // SPEC §17.11: per-pedestrian clothes (pedOutfit, by PedPose.id). Top = spine / arm bones, bottom = pelvis / leg bones
+  // of the atlas' body tile; skin-coloured texels and shoes keep the texture. The texture's lightness (0…1) shades the
+  // colour: × (shade[0] + shade[1] · lightness) → folds stay, a black suit becomes any colour. keep = share untinted.
+  pedOutfit: {
+    top: ['#1f2a44', '#3a3d42', '#7d8189', '#c9b79c', '#a0764a', '#5b6b3a', '#6e2a31', '#e6e1d6', '#8fb0d0', '#15161a', '#2f5a4a', '#b8912f', '#4a5f8a', '#9a4a3a'],
+    bottom: ['#15161a', '#2e3035', '#1f2a44', '#3c5a80', '#b9a584', '#6f6f72', '#4b3a2c', '#556046'],
+    shade: [0.5, 1.0],
+    keep: 0.15,
+  },
   zoneRing: '#ff3b30', // ?npcZone / setExclusionZones rings (radius + npc.zoneMargin) while the F3 panel is open
 };

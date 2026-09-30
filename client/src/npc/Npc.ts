@@ -123,6 +123,7 @@ export class Npc {
   private readonly prevCars = new Map<number, Snap>();
   private readonly prevPeds = new Map<number, Snap>();
   private readonly auto = newAutoDensity();
+  private readonly ringMaterial = new LineBasicMaterial({ color: R.zoneRing, depthTest: false }); // shared by every zone ring
   private readonly at = { x: 0, z: 0 }; // anchor of the last step
   private readonly setAt = { x: Infinity, z: Infinity }; // anchor the static sets were gathered at
   private steps = 0;
@@ -200,7 +201,7 @@ export class Npc {
     this.traffic.zones = this.crowd.zones = zones;
     for (const o of this.zoneRings.children) (o as LineLoop).geometry.dispose();
     this.zoneRings.clear();
-    const material = new LineBasicMaterial({ color: R.zoneRing, depthTest: false });
+    const material = this.ringMaterial;
     for (const { x, z, r } of zones) {
       const pts: number[] = [];
       for (let i = 0; i < 64; i++) {

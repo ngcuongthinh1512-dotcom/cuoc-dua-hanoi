@@ -214,6 +214,7 @@ async function start() {
   const euler = new THREE.Euler();
   let worldReady = false; // first view loaded: player spawns, chunk attach gets budgeted
   let ready = false; // window.__READY__
+  let npcFrames = 0; // frames through npcs.update
   const loop = new GameLoop({
     fixedUpdate: (dt) => {
       // Before the player (docs/plans/phase4b.md §5.2): cars → pedestrians → car colliders → shove / crash the body.
@@ -237,6 +238,7 @@ async function start() {
       player?.update(dt, flying ? null : input, loop.alpha);
       if (npcs?.started) {
         npcs.update(dt, loop.alpha, camera);
+        npcFrames++;
         npcs.zoneRings.visible = debug.visible;
       }
       input.endFrame();
@@ -281,7 +283,8 @@ async function start() {
         npcs.start(npcAnchor()); // fill + warm-up (npcRender.warmUp s)
         npcReady = true;
       }
-      if (!ready && worldReady && npcReady && (!player || player.simTime >= wait)) {
+      // NPCs: ≥ 2 frames through npcs.update (drawn, and in __STATS__ above) — the spectator has no `wait` to cover it.
+      if (!ready && worldReady && npcReady && (!npcs || npcFrames >= 2) && (!player || player.simTime >= wait)) {
         ready = true;
         Object.assign(window, { __READY__: true });
       }

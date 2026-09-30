@@ -53,7 +53,9 @@ describe('npc-vehicles.glb', async () => {
     expect(front[2]).toBeGreaterThan(TWO_WHEELERS.includes(kind) ? 0 : 0.5 * (l / 2));
     const tris = t.geometry.index!.count / 3;
     const big = kind === 'bus' || kind === 'truck';
-    expect(tris).toBeLessThanOrEqual(TWO_WHEELERS.includes(kind) ? C.maxTris.car + C.maxTris.rider : big ? C.maxTris.big : C.maxTris.car);
+    // Two-wheelers: body + rider in one primitive → the sum; the body's own ceiling is twoWheeler (moto 2 060 > car 2 000:
+    // meshopt can't simplify its 2 092-triangle source further, review m5), the rider's `rider`.
+    expect(tris).toBeLessThanOrEqual(TWO_WHEELERS.includes(kind) ? C.maxTris.twoWheeler + C.maxTris.rider : big ? C.maxTris.big : C.maxTris.car);
   });
 
   it.each(KINDS.filter((k) => !TWO_WHEELERS.includes(k)))('%s: 4 axles with a radius, wheels inside the track', (kind) => {

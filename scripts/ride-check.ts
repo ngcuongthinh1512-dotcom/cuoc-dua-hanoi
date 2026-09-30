@@ -15,6 +15,7 @@ import { bikeTopSpeed, movement } from '../client/src/config.ts';
 
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174);
 const DEG = Math.PI / 180;
+const PRESS_SIM = 0.3; // s simulated after a key press before reading the state
 type Sample = {
   t: number;
   x: number;
@@ -92,9 +93,16 @@ async function run(page: Page, path: string) {
     }
     for (const k of keys) await page.keyboard.up(k);
   };
+  /** Presses `k`, then waits for PRESS_SIM s of simulated time (not a fixed real-time wait: a loaded machine's
+   *  SwiftShader may not run one frame in 300 ms, review m10), at most 60 s. */
   const press = async (k: string) => {
+    const t0 = (await sample()).t;
     await page.keyboard.press(k);
-    await page.waitForTimeout(300);
+    for (const end = Date.now() + 60_000; Date.now() < end; ) {
+      await page.waitForTimeout(40);
+      const s = await sample();
+      if (s.t >= t0 + PRESS_SIM) return s;
+    }
     return sample();
   };
   /** Walk (camera faced each step) to the first bike until within 1.8 m. */

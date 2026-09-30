@@ -1,8 +1,8 @@
-import { Vector3 } from 'three';
+import { Bone, BufferGeometry, Color, Float32BufferAttribute, Group, MeshStandardMaterial, Skeleton, SkinnedMesh, Uint16BufferAttribute, Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { crowd, npcAssets, npcRender as R } from '../config.ts';
 import { loadNpcAssets, type NpcAssets } from './NpcAssets.ts';
-import { PedRenderer, pedClip, staggerTilt } from './PedRenderer.ts';
+import { PedRenderer, pedClip, pedOutfit, pedOutfitMask, staggerTilt } from './PedRenderer.ts';
 import type { PedPose } from './types.ts';
 
 let assets: NpcAssets;
@@ -40,6 +40,76 @@ describe('staggerTilt', () => {
     expect(peak).toBeGreaterThan((0.6 * R.stagger.tiltDeg * Math.PI) / 180);
     const after = ts.filter((t) => t >= R.stagger.rise).map(staggerTilt);
     expect(after.every((v, i) => i === 0 || v <= after[i - 1]!)).toBe(true);
+  });
+});
+
+describe('pedOutfit / pedOutfitMask (SPEC §17.11: 4 avatars, clothes recoloured)', () => {
+  it('deterministic by id, spread over the palette, a few keep the texture', () => {
+    const ids = Array.from({ length: 400 }, (_, i) => i * 7 + 3);
+    expect(ids.map(pedOutfit)).toEqual(ids.map(pedOutfit));
+    const outfits = ids.map(pedOutfit);
+    const kept = outfits.filter((o) => !o).length / ids.length;
+    expect(kept).toBeGreaterThan(R.pedOutfit.keep / 2);
+    expect(kept).toBeLessThan(R.pedOutfit.keep * 2);
+    const tops = new Set(outfits.map((o) => o?.top)), bottoms = new Set(outfits.map((o) => o?.bottom));
+    expect(tops.size).toBe(R.pedOutfit.top.length + 1);
+    expect(bottoms.size).toBe(R.pedOutfit.bottom.length + 1);
+    // 40 consecutive ids (one crowd): ≥ 20 distinct top + bottom pairs
+    expect(new Set(Array.from({ length: 40 }, (_, i) => JSON.stringify(pedOutfit(i)))).size).toBeGreaterThanOrEqual(20);
+  });
+
+  it('mask = spine / arm → top, pelvis / leg → bottom, only inside the body tile; hands, head, feet 0', () => {
+    const names = ['Bip01_Spine1', 'Bip01_L_Forearm', 'Bip01_Pelvis', 'Bip01_R_Calf', 'Bip01_L_Hand', 'Bip01_Head', 'Bip01_R_Foot'];
+    const bones = names.map((n) => Object.assign(new Bone(), { name: n }));
+    const n = names.length + 1;
+    const g = new BufferGeometry();
+    g.setAttribute('position', new Float32BufferAttribute(new Float32Array(n * 3), 3));
+    g.setAttribute('skinIndex', new Uint16BufferAttribute([...names.flatMap((_, i) => [i, 0, 0, 0]), 0, 0, 0, 0], 4));
+    g.setAttribute('skinWeight', new Float32BufferAttribute([...names.flatMap(() => [1, 0, 0, 0]), 1, 0, 0, 0], 4));
+    g.setAttribute('uv', new Float32BufferAttribute([...names.flatMap(() => [0.2, 0.3]), 0.7, 0.2], 2)); // last: head tile
+    const mesh = new SkinnedMesh(g, new MeshStandardMaterial());
+    mesh.bind(new Skeleton(bones));
+    expect([...pedOutfitMask(mesh)]).toEqual([1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('renderer: each clone its own outfit uniforms (one shader function), set from the id, again when pooled', () => {
+    const bones = [Object.assign(new Bone(), { name: 'Bip01_Spine' })];
+    const g = new BufferGeometry();
+    g.setAttribute('position', new Float32BufferAttribute([0, 1, 0], 3));
+    g.setAttribute('skinIndex', new Uint16BufferAttribute([0, 0, 0, 0], 4));
+    g.setAttribute('skinWeight', new Float32BufferAttribute([1, 0, 0, 0], 4));
+    const mesh = new SkinnedMesh(g, new MeshStandardMaterial());
+    mesh.add(bones[0]!);
+    mesh.bind(new Skeleton(bones));
+    const fake: NpcAssets = { vehicles: new Map(), peds: [{ scene: new Group().add(mesh), gender: 'm', height: 1.8 }], clips: new Map() };
+    const r = new PedRenderer(fake);
+    const colours = () => {
+      const out: { mat: MeshStandardMaterial; on: number; top: string; bottom: string }[] = [];
+      r.root.traverse((o) => {
+        if (!(o instanceof SkinnedMesh) || !o.parent?.parent?.visible) return;
+        const u = o.material.userData.outfit;
+        out.push({ mat: o.material, on: u.uOn.value, top: u.uTop.value.getHexString(), bottom: u.uBottom.value.getHexString() });
+      });
+      return out;
+    };
+    const want = (id: number) => {
+      const o = pedOutfit(id);
+      const hex = (s: string) => new Color(s).getHexString();
+      return o ? { on: 1, top: hex(R.pedOutfit.top[o.top]!), bottom: hex(R.pedOutfit.bottom[o.bottom]!) } : { on: 0 };
+    };
+    const ids = [1, 2, 3, 4, 5, 6].filter((id) => pedOutfit(id)).slice(0, 2);
+    r.update(ids.map((id) => ped(id, 0, 5)), new Map(), 1, new Vector3(), 1 / 60);
+    const [a, b] = colours();
+    expect(a!.mat).not.toBe(b!.mat);
+    expect(a!.mat.onBeforeCompile).toBe(b!.mat.onBeforeCompile); // one program
+    expect(a!.mat).not.toBe(mesh.material); // the template keeps its own
+    expect(g.getAttribute('pedOutfit').getX(0)).toBe(1);
+    expect(colours().map(({ mat: _, ...c }) => c)).toEqual(ids.map(want).map((w) => expect.objectContaining(w)));
+    r.update([ped(ids[1]!, 0, 5)], new Map(), 1, new Vector3(), 1 / 60);
+    const next = [7, 8, 9, 10, 11].find((id) => pedOutfit(id) && JSON.stringify(pedOutfit(id)) !== JSON.stringify(pedOutfit(ids[0]!)))!;
+    r.update([ped(ids[1]!, 0, 5), ped(next, 0, 5)], new Map(), 1, new Vector3(), 1 / 60);
+    expect(r.stats.clones).toBe(2); // pooled clone, recoloured
+    expect(colours().map(({ mat: _, ...c }) => c)).toEqual(expect.arrayContaining([expect.objectContaining(want(next))]));
   });
 });
 
