@@ -826,15 +826,21 @@ export const crowd = {
   band: [0.3, 0.8] as const, // share of the sidewalk width out from the kerb, per pedestrian
   inset: 0.8, // m inside the carriageway edge on a living_street
   crossChance: 0.3, // at a mid-block crossing node
-  crossReach: 15, // m along the branch to look for a crossing node
   crossGap: 4, // s: no car reaches the crossing within this before stepping out
+  // crossing gate: a car below `still` m/s is only its body; a moving one is stretched speed × crossGap + lead m forward; the
+  // crossing segment must be ≥ clear m from that rectangle (npc.vehicles dims)
+  cross: { still: 0.3, lead: 1.5, clear: 1 },
+  carAhead: 1.5, // m: a walker stops when the next this-many metres would touch a car body (living streets, cars on corners)
+  pathLat: 0.6, // ± share of a footway's half width a walker keeps to (its own lateral place)
   idle: { per100m: 0.15, seconds: [5, 25] as const }, // stops per 100 m walked; s standing / looking / phoning
   seatEvery: 20, // m along park paths
   seatChance: 0.5,
   seatOffset: 1.5, // m beside the path
   seatRoadClear: 15, // m from any car road
   sitShare: 0.15, // of spawned pedestrians sit on a free seat nearby
-  avoid: { ahead: 3, side: 1, shift: 1 }, // m
+  // m: sidestep a player within ahead × side by shift at rate m/s; stand still when the body would touch (holdAhead × holdSide);
+  // held longer than holdMax s (a player who does not move, a car waiting for us) → turn back
+  avoid: { ahead: 3, side: 1, shift: 1, rate: 2, holdAhead: 1.2, holdSide: 0.45, holdMax: 3 },
   stagger: { seconds: 1.2, push: 0.8 }, // s, m (knocked by the player / the bike nose)
   waveBack: 10, // m: G within this and facing the player → waves back
   avatars: 4, // npc-peds.glb avatar count (PedPose.avatar)
