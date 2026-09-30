@@ -3,7 +3,7 @@ import { props as P } from '../config.ts';
 import { type ChunkData, chunkBounds, type RoadRec } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import type { BuildCtx } from './buildTypes.ts';
-import { buildStreetProps, createPropMeshes, findJunctions, placeLamps, placeSigns, splitName } from './StreetProps.ts';
+import { buildStreetProps, createPropMeshes, findJunctions, placeLamps, placeSigns, propColliders, splitName } from './StreetProps.ts';
 import { buildVegetation } from './Vegetation.ts';
 
 const ctx: BuildCtx = { key: '0_0', bounds: chunkBounds('0_0'), height: () => 0 };
@@ -85,6 +85,25 @@ describe('street props placement', () => {
     expect(metro[8]).toBeCloseTo(0, 5);
     expect(metro[10]).toBeCloseTo(1, 5);
     for (const s of [...out.instances, ...f.instances]) expect(s.matrices.every(Number.isFinite)).toBe(true);
+  });
+
+  it('prop colliders: a hexagonal prism per lamp / Morris column, a box per metro entrance, in the chunk trimesh', () => {
+    const out = buildStreetProps(fixture, ctx);
+    const n = (k: string) => (out.instances.find((s) => s.kind === k)?.matrices.length ?? 0) / 16;
+    const [col] = out.colliders;
+    expect(n('lamp') + n('metro')).toBeGreaterThan(0);
+    // lamp / Morris: 6 sides × 2 + 4 cap triangles, 12 vertices; metro: 4 × 2 + 2, 8 vertices
+    expect(col!.indices.length / 3).toBe(16 * (n('lamp') + n('morris')) + 10 * n('metro'));
+    expect(col!.vertices.length / 3).toBe(12 * (n('lamp') + n('morris')) + 8 * n('metro'));
+    expect(col!.vertices.every(Number.isFinite)).toBe(true);
+    // One metro entrance at (100, 95) facing +Z: its box spans x ± halfWidth, z from 95 − length to 95 + front.
+    const m = propColliders([{ kind: 'metro', matrices: out.instances.find((s) => s.kind === 'metro')!.matrices }]);
+    const xs = m.vertices.filter((_, i) => i % 3 === 0);
+    const zs = m.vertices.filter((_, i) => i % 3 === 2);
+    const C = P.colliders.metro;
+    expect([Math.min(...xs), Math.max(...xs)]).toEqual([expect.closeTo(100 - C.halfWidth, 4), expect.closeTo(100 + C.halfWidth, 4)]);
+    expect([Math.min(...zs), Math.max(...zs)]).toEqual([expect.closeTo(95 - C.length, 4), expect.closeTo(95 + C.front, 4)]);
+    expect(Math.max(...m.vertices.filter((_, i) => i % 3 === 1))).toBeCloseTo(C.height, 4);
   });
 
   it('trees: one instance per tree point, scale in treeScale, deterministic', () => {

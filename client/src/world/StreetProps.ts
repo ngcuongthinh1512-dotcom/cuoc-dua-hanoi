@@ -15,7 +15,7 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { props as P } from '../config.ts';
 import { type ChunkData, type ChunkKey, chunkKey } from '../geo/chunkData.ts';
-import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind } from './buildTypes.ts';
+import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind, TriMesh } from './buildTypes.ts';
 import { hash01, MeshBuffer } from './geom.ts';
 import { quadOut } from './landmarks/kit.ts';
 import { roadWidth } from './RoadBuilder.ts';
@@ -280,13 +280,50 @@ export const buildStreetProps: Builder = (chunk, ctx) => {
 
   const signs = buildSigns(spots, ctx);
   const sets: [PropKind, number[]][] = [['lamp', lamps], ['morris', morris], ['metro', metro]];
+  const instances = sets.filter(([, m]) => m.length).map(([kind, m]) => ({ kind, matrices: new Float32Array(m) }));
+  const col = propColliders(instances);
   return {
     meshes: signs?.meshes ?? [],
-    instances: sets.filter(([, m]) => m.length).map(([kind, m]) => ({ kind, matrices: new Float32Array(m) })),
-    colliders: [], // ponytail: props have no colliders; add thin cylinders in Phase 3 if players clip through lamps
+    instances,
+    colliders: col.indices.length ? [col] : [], // street-name sign posts (4 cm) have none
     ...(signs?.textures ? { textures: signs.textures } : {}),
   };
 };
+
+type XZ2 = [number, number];
+const hexagon = (r: number) => Array.from({ length: 6 }, (_, k): XZ2 => [r * Math.cos((k * Math.PI) / 3), r * Math.sin((k * Math.PI) / 3)]);
+
+/** One trimesh of vertical prisms (sides + top cap) for the lamp / Morris / metro instances, placed by their matrices:
+ *  a hexagon around lamps and Morris columns, a box around the metro stairwell (there is no hole to walk into). */
+export function propColliders(sets: { kind: PropKind; matrices: Float32Array }[]): TriMesh {
+  const C = P.colliders;
+  const { halfWidth: w, length: l, front: f } = C.metro;
+  const ring: Partial<Record<PropKind, [XZ2[], number]>> = {
+    lamp: [hexagon(C.lamp.radius), C.lamp.height],
+    morris: [hexagon(C.morris.radius), C.morris.height],
+    metro: [[[-w, -l], [-w, f], [w, f], [w, -l]], C.metro.height],
+  };
+  const v: number[] = [];
+  const idx: number[] = [];
+  for (const { kind, matrices: m } of sets) {
+    const [poly, h] = ring[kind] ?? [];
+    if (!poly) continue;
+    for (let o = 0; o < m.length; o += 16) {
+      const k = v.length / 3;
+      const n = poly.length;
+      for (const [lx, lz] of poly) {
+        const [x, z] = [m[o]! * lx + m[o + 8]! * lz + m[o + 12]!, m[o + 2]! * lx + m[o + 10]! * lz + m[o + 14]!];
+        v.push(x, m[o + 13]! - C.sink, z, x, m[o + 13]! + h!, z); // bottom 2i, top 2i + 1
+      }
+      for (let i = 0; i < n; i++) {
+        const [b0, t0, b1, t1] = [k + 2 * i, k + 2 * i + 1, k + 2 * ((i + 1) % n), k + 2 * ((i + 1) % n) + 1];
+        idx.push(b0, t0, t1, b0, t1, b1);
+      }
+      for (let i = 1; i < n - 1; i++) idx.push(k + 1, k + 2 * i + 1, k + 2 * i + 3); // top fan
+    }
+  }
+  return { vertices: new Float32Array(v), indices: new Uint32Array(idx) };
+}
 
 /** The 'sign' material (its per-chunk atlas arrives as BuildOut.textures and is set on a clone, see attach.ts). */
 export function createPropMaterials(): Partial<Record<MaterialId, Material>> {

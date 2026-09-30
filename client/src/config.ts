@@ -238,6 +238,14 @@ export const props = {
     plaqueHeight: 0.42, postHeight: 2.6, // m; plaque top at the post top
     enamel: '#1d4f9c', border: '#2f7d4a', text: '#ffffff', post: '#2a2d30',
   },
+  // Phase 3 · B: prism colliders (StreetProps.propColliders), merged into the chunk trimesh. Lamp / Morris = hexagon of
+  // this radius; metro = the railed stairwell box (local x ∈ ±halfWidth, z ∈ [−length, front]). m; sink below the foot.
+  colliders: {
+    lamp: { radius: 0.2, height: 4 },
+    morris: { radius: 0.76, height: 3.6 },
+    metro: { halfWidth: 1.15, length: 5.1, front: 0.1, height: 1.1 },
+    sink: 0.3,
+  },
 };
 
 // ── Phase 2B · landmarks (geo/landmarks.ts registry, world/landmarks/: index + parts renderer + g1…g5 details) ──
@@ -547,6 +555,10 @@ export const player = {
   jumpSpeed: 4.4, // m/s up → ≈ 1 m jump
   fallDelay: 0.25, // s airborne without a jump before moveMode 'air' counts as a fall (small drops stay 'walk')
   respawnBelow: -40, // m: below this y (fell through the world) → back to the last safe ground
+  fellThrough: 2, // m: feet this far below the terrain grid = fell through it → back to the last safe ground
+  safeEvery: 1, // s between lastSafe updates (on the ground, out of the water)
+  spawnCastHeight: 12, // m above max(terrain, Seine) the spawn ray starts (highest walkable surface wins: bridge deck)
+  spawnSearch: 20, // m: spiral search radius when the capsule overlaps something at the spawn point
 };
 
 export const swim = {
@@ -555,6 +567,9 @@ export const swim = {
   floatDepth: 1.35, // m: feet below the surface while swimming (head out of the water)
   buoyancy: 4, // 1/s: vertical spring toward the float height
   climbReach: 0.9, // m from a quay wall: Space climbs out (docs/plans/phase3.md: no stairs down to the water)
+  climbLand: 0.6, // m past the wall face where the feet land (behind the parapet)
+  climbHeight: 10, // m above the feet the landing ray starts (quay coping ≈ 8.5 m above a swimmer's feet)
+  climbClear: 1.2, // m above the landing the body passes (over the 1 m parapet) before it steps down
 };
 
 // ── C · third-person camera (player/ThirdPersonCamera.ts) ──
