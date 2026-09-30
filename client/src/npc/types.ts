@@ -21,7 +21,7 @@ export interface CarPose {
   readonly id: number; readonly kind: CarKind; readonly paint: number; // sRGB 0xRRGGBB
   x: number; y: number; z: number; // ground under the middle of the wheelbase
   yaw: number; pitch: number;      // 0 = north (−Z), + = left; + = nose up
-  speed: number; wheel: number;    // m/s; rad rolled (distance / its wheel radius)
+  speed: number; wheel: number;    // m/s; m rolled (the renderer divides by the model's wheelRadius: one radius for sim + draw)
   braking: boolean;
 }
 
@@ -34,6 +34,10 @@ export interface PedPose {
 }
 
 export type LightColour = 'green' | 'amber' | 'red';
+/** One signal head per arriving edge of a lit node. (x, z) = the pole foot, already on the right kerb OUTSIDE the
+ *  carriageway (centre line + halfWidth + traffic.lights.kerb, level with the stop line); yaw = where the lamps look
+ *  (PlayerState convention, 0 = north / −Z, + = left) = TOWARD the oncoming cars, i.e. against their travel direction.
+ *  The renderer places the pole exactly at (x, z), no extra offset. */
 export interface SignalHead { readonly x: number; readonly z: number; readonly yaw: number; readonly junction: number; readonly edge: number }
 export interface LightQuery {
   car(junction: number, edge: number): LightColour;       // cars arriving at `junction` along `edge`

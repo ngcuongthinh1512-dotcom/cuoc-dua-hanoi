@@ -1,7 +1,10 @@
-import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, WayFlag } from '@race/shared/graph';
-import { Color, Matrix4, Vector3 } from 'three';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, segPoint, WayFlag } from '@race/shared/graph';
+import { Color, Matrix4, Quaternion, Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { npcRender as R } from '../config.ts';
+import { TrafficLights } from './lights.ts';
 import { loadNpcAssets, type NpcAssets } from './NpcAssets.ts';
 import { carQuaternion, lerpPose, NpcRenderer, type Snap } from './NpcRenderer.ts';
 import { NpcRoads } from './roads.ts';
@@ -73,5 +76,32 @@ describe('NpcRenderer (asset stub)', () => {
     expect((r.bulbs.getColorAt(1, c), c.getHexString())).toBe(new Color(R.lights.bulbs.green).getHexString());
     r.setChairs([{ x: 1, z: 2, yaw: 0 }], () => 0);
     expect(r.chairs.count).toBe(1);
+  });
+});
+
+const graphFile = join(import.meta.dirname, '../../../shared/data/roadgraph.json');
+describe.skipIf(!existsSync(graphFile))('NpcRenderer lights (real TrafficLights, roadgraph.json)', () => {
+  it('pole foot = SignalHead (x, z) (the right kerb, off the carriageway); housing and lit bulb look along yaw, at the oncoming cars', () => {
+    const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
+    const roads = new NpcRoads(g, () => 0);
+    const lights = new TrafficLights(roads);
+    const heads = lights.headsNear(0, 0, 300);
+    expect(heads.length).toBeGreaterThan(10);
+    const r = new NpcRenderer(assets);
+    r.setLights(heads, roads);
+    r.lightColours(lights);
+    const m = new Matrix4(), p = new Vector3(), q = new Quaternion(), b = new Vector3();
+    heads.forEach((h, i) => {
+      r.poles.getMatrixAt(i, m);
+      m.decompose(p, q, new Vector3());
+      expect(Math.hypot(p.x - h.x, p.z - h.z)).toBeLessThan(1e-3); // float32 instance matrix
+      const e = h.edge, [ax, az, bx, bz] = [g.x[g.edgeA[e]!]!, g.z[g.edgeA[e]!]!, g.x[g.edgeB[e]!]!, g.z[g.edgeB[e]!]!];
+      expect(segPoint(p.x, p.z, ax, az, bx, bz)[1]).toBeGreaterThanOrEqual(roads.halfWidth(g.edgeWay[e]!) - 1e-6);
+      const look = new Vector3(0, 0, 1).applyQuaternion(q); // the housing's lamps
+      expect(look.x * -Math.sin(h.yaw) + look.z * -Math.cos(h.yaw)).toBeCloseTo(1, 6);
+      r.bulbs.getMatrixAt(i, m);
+      b.setFromMatrixPosition(m).sub(p);
+      expect(b.x * -Math.sin(h.yaw) + b.z * -Math.cos(h.yaw)).toBeCloseTo(R.lights.bulbOut, 4);
+    });
   });
 });

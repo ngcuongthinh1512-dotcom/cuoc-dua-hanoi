@@ -124,7 +124,7 @@ export class NpcRenderer {
     this.root.add(this.wheels, this.poles, this.bulbs, this.zebras, this.chairs);
   }
 
-  /** Every car at its render pose; wheels roll by CarPose.wheel. */
+  /** Every car at its render pose; wheels roll by CarPose.wheel (m) / the template's wheel radius. */
   cars(cars: readonly CarPose[], prev: ReadonlyMap<number, Snap>, alpha: number) {
     for (const mesh of this.carMeshes.values()) mesh.count = 0;
     let w = 0;
@@ -139,7 +139,7 @@ export class NpcRenderer {
       mesh.setColorAt(i, col.setHex(c.paint));
       for (const [ax, ay, az] of t.axles) {
         if (w >= MAX_WHEELS) break;
-        r4.makeRotationX(p.wheel).scale(scl.set(R.wheelWidth, t.wheelRadius, t.wheelRadius)).setPosition(ax, ay, az);
+        r4.makeRotationX(p.wheel / (t.wheelRadius || 1)).scale(scl.set(R.wheelWidth, t.wheelRadius, t.wheelRadius)).setPosition(ax, ay, az);
         this.wheels.setMatrixAt(w++, w4.multiplyMatrices(m4, r4));
       }
     }
@@ -147,17 +147,16 @@ export class NpcRenderer {
     done(this.wheels, w);
   }
 
-  /** Signal heads near the anchor (gathered again every npcRender.refresh m): pole foot on the right of the arriving cars. */
+  /** Signal heads near the anchor (gathered again every npcRender.refresh m): the pole foot is SignalHead (x, z) itself
+   *  (already on the right kerb, types.ts); its lamps (+Z of the housing) look along SignalHead.yaw = (−sin, −cos). */
   setLights(heads: readonly SignalHead[], roads: NpcRoads) {
     this.heads = heads.slice(0, MAX_HEADS);
     this.headAt.length = 0;
     this.heads.forEach((h, i) => {
       const way = roads.graph.edgeWay[h.edge]!;
-      const side = roads.halfWidth(way) + R.lights.kerb;
-      const [x, z] = [h.x + Math.cos(h.yaw) * side, h.z - Math.sin(h.yaw) * side]; // right of heading (cos, −sin)
-      const y = roads.heightAt(x, z) + (roads.sidewalk(way) > 0 ? RC.lift + RC.curbHeight : 0);
-      this.headAt.push(new Vector3(x, y, z));
-      this.poles.setMatrixAt(i, m4.compose(pos.set(x, y, z), quat.setFromAxisAngle(UP, h.yaw), scl.set(1, 1, 1)));
+      const y = roads.heightAt(h.x, h.z) + (roads.sidewalk(way) > 0 ? RC.lift + RC.curbHeight : 0);
+      this.headAt.push(new Vector3(h.x, y, h.z));
+      this.poles.setMatrixAt(i, m4.compose(pos.set(h.x, y, h.z), quat.setFromAxisAngle(UP, h.yaw + Math.PI), scl.set(1, 1, 1)));
     });
     done(this.poles, this.heads.length);
   }
@@ -167,7 +166,7 @@ export class NpcRenderer {
     this.heads.forEach((h, i) => {
       const c = q.car(h.junction, h.edge);
       const f = this.headAt[i]!;
-      const [fx, fz] = [Math.sin(h.yaw) * 0.25, Math.cos(h.yaw) * 0.25]; // toward the cars (+Z of the housing)
+      const [fx, fz] = [-Math.sin(h.yaw) * R.lights.bulbOut, -Math.cos(h.yaw) * R.lights.bulbOut]; // where the lamps look
       this.bulbs.setMatrixAt(i, m4.makeTranslation(f.x + fx, f.y + R.lights.pole + BULB_Y[c], f.z + fz));
       this.bulbs.setColorAt(i, col.set(R.lights.bulbs[c]));
     });

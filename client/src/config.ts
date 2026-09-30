@@ -796,17 +796,21 @@ export const traffic = {
   minGap: 2, // m bumper to bumper
   latAccel: 2.5, // m/s²: corner speed ≤ √(latAccel × R)
   cornerCut: 6, // m (≤ half the edge) of quadratic Bézier at every node
+  cornerAhead: 2, // m: the corner's end must lie this far ahead of its start along both roads (the cut grows when the lane offsets say otherwise: ring joins / exits)
   maxLanes: 4, // per direction (npc/roads.ts lanes(): Étoile's 12 → 4)
   lookAhead: 60, // m of route searched for the nearest obstacle
   obstacleMargin: 0.5, // m beside the car's half width: a body this close to the lane is an obstacle
   yieldLook: 30, // m up the major road a minor-road car checks at a junction without lights
   roundaboutGap: 18, // m of free ring before the entry point (cars entering yield, §17.11)
-  lights: { reach: 30, green: 18, amber: 3, allRed: 2, pedGreen: 8, pedCycle: 40, midStop: 3 }, // m; s (2 phases, 46 s cycle); midStop = m before a lone signal node
+  ringJoin: { speed: 4, maxSeconds: 6 }, // an entering car reaches the ring at ≈ speed m/s: the ring must stay clear that long (capped)
+  queued: 8, // m before a node: a standing car this close still counts as approaching it (yield / ring checks)
+  lights: { reach: 30, green: 18, amber: 3, allRed: 2, pedGreen: 8, pedCycle: 40, midStop: 3, kerb: 0.5 }, // m; s (2 phases, 46 s cycle); midStop = m before a lone signal node; kerb = m outside the carriageway the signal pole stands
   bodyRadius: 0.4, // m: the player's body as an obstacle (beside the pedestrians' crowd.bodyRadius)
-  wheelRatio: 0.2, // wheel radius = vehicle height × this (CarPose.wheel, no per-model radius in the sim)
   stopMargin: 0.3, // m short of a stop line the front bumper halts
+  decide: { factor: 1.3, margin: 3 }, // a junction line is judged within braking distance × factor + margin m
   spawnEvery: 0.25, // s between spawns once filled
   rank: { primary: 5, secondary: 4, tertiary: 3, unclassified: 2, residential: 2, living_street: 1, primary_link: 3, secondary_link: 3, tertiary_link: 3 } as Record<string, number>, // junction priority
+  turn: { ring: 3, straight: 3, side: 1, back: 0.4, rankFactor: 0.25, straightRad: 0.5, backRad: 1.75 }, // route choice weights at a node × (1 + rankFactor × rank); < straightRad = straight, > backRad = U-turn; ring = stay on the roundabout (≈ 5 exits passed on average)
 };
 
 // ── C · pedestrian sim (npc/crowd.ts) ──
@@ -855,10 +859,10 @@ export const npcRender = {
   // Off with URL ?npcDensity= (fixed density: screenshots don't depend on the machine's frame rate).
   autoDensity: { minFps: 45, okFps: 57, window: 2, upAfter: 5, down: 0.8, up: 0.1, min: 0.25 },
   refresh: 10, // m the anchor moves before the static sets (zebras, chairs, light heads) are gathered again
-  wheelWidth: 0.22, // m, the shared unit wheel (radius per template)
-  // m; SignalHead (x, z) = stop line on the way's centre line, yaw = heading of the arriving cars: the pole stands
-  // kerb m onto the sidewalk on their right, the lit bulb faces them (not tone mapped)
-  lights: { pole: 3.2, kerb: 0.5, radius: 200, colour: '#2f3833', bulbs: { red: '#ff2a1a', amber: '#ffae00', green: '#22ff77' } },
+  wheelWidth: 0.22, // m, the shared unit wheel (radius per template; wheel angle = CarPose.wheel m / that radius)
+  // m; the pole stands exactly at SignalHead (x, z) (already on the right kerb, npc/types.ts) and its lamps look along
+  // SignalHead.yaw, toward the arriving cars; the lit bulb sits bulbOut m in front of the housing (not tone mapped)
+  lights: { pole: 3.2, bulbOut: 0.25, radius: 200, colour: '#2f3833', bulbs: { red: '#ff2a1a', amber: '#ffae00', green: '#22ff77' } },
   zebra: { depth: 3, stripe: 0.5, radius: 200 }, // m: stripes parallel to the road, stripe wide, stripe apart, depth long
   chair: { colour: '#3f6b3a', radius: 60 }, // Paris park chair green, m
   pedFade: 0.3, // s crossfade between pedestrian clips

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, WayFlag } from '@race/shared/graph';
+import { latLonToWorld } from '@race/shared';
+import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, segPoint, WayFlag } from '@race/shared/graph';
 import { describe, expect, it } from 'vitest';
 import { traffic } from '../config.ts';
 import type { WaterData } from '../geo/chunkData.ts';
@@ -13,7 +14,7 @@ import type { NpcAnchor, PedPose } from './types.ts';
 
 const CAR = WayFlag.walk | WayFlag.bike | WayFlag.car;
 const ONE = CAR | WayFlag.oneway;
-const DT = 1 / 20;
+const HZ = 60, DT = 1 / HZ; // the game's fixed step
 const anchor = (x = 0, z = 0, o: Partial<NpcAnchor> = {}): NpcAnchor => ({ x, z, viewYaw: 0, body: false, vx: 0, vz: 0, nose: null, waving: false, ...o });
 const NOPEDS: PedPose[] = [];
 
@@ -98,12 +99,12 @@ describe('Traffic (fixture)', () => {
       const c = tr.lights.car(0, e);
       if (c === 'red' && prev !== 'red') break;
       prev = c;
-      expect(t).toBeLessThan(20 * 200);
+      expect(t).toBeLessThan(HZ * 200);
     }
     const car = tr.addCar('hatchback', e, g.edgeA[e] === 1, 40, 0, 8, [2 * cont + (g.edgeA[cont] === 0 ? 0 : 1)]);
     const line = 100 - (tr.lights as TrafficLights).stop(0, e)!;
     let stopped = -1, went = -1;
-    for (let k = 0; k < 20 * 120; k++) {
+    for (let k = 0; k < HZ * 120; k++) {
       tr.step(DT, anchor(), 0, NOPEDS);
       const front = car.s + car.len / 2;
       if (car.route[0] === 2 * e + (g.edgeA[e] === 1 ? 0 : 1) && tr.lights.car(0, e) === 'red' && car.speed < 0.05) {
@@ -129,7 +130,7 @@ describe('Traffic (fixture)', () => {
     const minor = tr.addCar('city', eS, g.edgeA[eS] === 3, 80, 0, 5, [deE]);
     const line = 100 - 2 - roads.halfWidth(g.edgeWay[eW]!) - 0; // stop line ≈ major half width + 2 m before the node
     let waited = false, crossed = false;
-    for (let k = 0; k < 20 * 30 && !crossed; k++) {
+    for (let k = 0; k < HZ * 30 && !crossed; k++) {
       tr.step(DT, anchor(), 0, NOPEDS);
       if (minor.route[0] === deS && minor.speed < 0.05 && minor.s + minor.len / 2 < line + 1) waited = true;
       if (minor.s + minor.len / 2 > line + 1.5 || minor.route[0] !== deS) {
@@ -147,20 +148,20 @@ describe('Traffic (fixture)', () => {
     const tr = new Traffic(roads, 1);
     const car = tr.addCar('van', e, east, 50, 0, 8, []);
     const z = roads.laneOffset(0, true, 0); // right lane of eastbound
-    for (let k = 0; k < 20 * 40; k++) tr.step(DT, anchor(250, 0, { body: true, x: 250, z }), 0, NOPEDS);
+    for (let k = 0; k < HZ * 40; k++) tr.step(DT, anchor(250, 0, { body: true, x: 250, z }), 0, NOPEDS);
     expect(250 - (car.x + car.len / 2)).toBeGreaterThanOrEqual(1);
     expect(car.speed).toBeLessThan(0.05);
 
     const tr2 = new Traffic(roads, 1);
     const c2 = tr2.addCar('van', e, east, 100, 0, 0, []);
     const [x0, z0] = [c2.x, c2.z];
-    for (let k = 0; k < 20 * 5; k++) tr2.step(DT, anchor(x0, z0, { body: true }), 0, NOPEDS);
+    for (let k = 0; k < HZ * 5; k++) tr2.step(DT, anchor(x0, z0, { body: true }), 0, NOPEDS);
     expect([c2.x, c2.z]).toEqual([x0, z0]);
     // a pedestrian is an obstacle too
     const tr3 = new Traffic(roads, 1);
     const c3 = tr3.addCar('van', e, east, 50, 0, 8, []);
     const ped = { id: 0, avatar: 0, x: 300, y: 0, z, yaw: 0, speed: 0, activity: 'stand', activityTime: 0, stagger: -1, staggerYaw: 0 } as PedPose;
-    for (let k = 0; k < 20 * 40; k++) tr3.step(DT, anchor(250, 0), 0, [ped]);
+    for (let k = 0; k < HZ * 40; k++) tr3.step(DT, anchor(250, 0), 0, [ped]);
     expect(300 - (c3.x + c3.len / 2)).toBeGreaterThanOrEqual(1);
   });
 
@@ -171,7 +172,7 @@ describe('Traffic (fixture)', () => {
     const cars = [50, 90, 130, 170].map((s, i) => tr.addCar(i % 2 ? 'suv' : 'city', 0, east, s, 0, 9));
     tr.park('van', 400, roads.laneOffset(0, true, 0), 0);
     let worst = Infinity;
-    for (let k = 0; k < 20 * 90; k++) {
+    for (let k = 0; k < HZ * 90; k++) {
       tr.step(DT, anchor(300, 0, { viewYaw: -Math.PI / 2 }), 0, NOPEDS);
       for (let i = 1; i < cars.length; i++) worst = Math.min(worst, cars[i]!.s - cars[i - 1]!.s - (cars[i - 1]!.len + cars[i]!.len) / 2);
     }
@@ -191,7 +192,7 @@ describe('Traffic (fixture)', () => {
     expect(g.edgeA[ringIn]).toBe(5);
     expect(ringCar.route[0]).toBe(deIn);
     let crossed = false, waited = false;
-    for (let k = 0; k < 20 * 30 && !crossed; k++) {
+    for (let k = 0; k < HZ * 30 && !crossed; k++) {
       tr.step(DT, anchor(), 0, NOPEDS);
       if (enter.route[0] === deArm && enter.speed < 0.05) waited = true;
       if (enter.route[0] !== deArm) {
@@ -255,7 +256,7 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(n0).toBeGreaterThan(15);
     let bad = 0, gapBad = 0, worst = Infinity, steps = 0;
     const t0 = performance.now();
-    for (let k = 0; k < 20 * 300; k++) {
+    for (let k = 0; k < HZ * 300; k++) {
       tr.step(DT, concorde, 1, NOPEDS);
       steps++;
       const byEdge = new Map<number, typeof tr.cars>();
@@ -271,7 +272,7 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
             if (a === b || a.s >= b.s || Math.min(a.lane, nl - 1) !== Math.min(b.lane, nl - 1)) continue;
             const gap = b.s - a.s - (a.len + b.len) / 2;
             worst = Math.min(worst, gap);
-            if (gap < traffic.minGap - 1e-3 && gap > -0.5) gapBad++; // gap < −0.5: a merge / spawn overlap seen as "ahead" from the wrong side
+            if (gap < traffic.minGap - 1e-3) gapBad++; // any closer (incl. overlapping) is a bug
           }
       }
     }
@@ -282,14 +283,14 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(tr.cars.length).toBeGreaterThan(10);
   }, 120_000);
 
-  it('10 min at density 1: ≥ 80 % of the cars drive ≥ 50 m in the last minute (no gridlock)', () => {
-    const tr = new Traffic(roads, 4);
+  it.each([1, 2])('10 min at density 1, seed %i: ≥ 80 % of the cars drive ≥ 50 m in the last minute (no gridlock)', (seed) => {
+    const tr = new Traffic(roads, seed);
     tr.step(DT, concorde, 1, NOPEDS, true);
     const track = new Map<number, { x: number; z: number; len: number; dist: number }>();
-    for (let k = 0; k < 20 * 600; k++) {
+    for (let k = 0; k < HZ * 600; k++) {
       tr.step(DT, concorde, 1, NOPEDS);
-      if (k === 20 * 540) for (const c of tr.cars) track.set(c.id, { x: c.x, z: c.z, len: 0, dist: 0 });
-      if (k > 20 * 540)
+      if (k === HZ * 540) for (const c of tr.cars) track.set(c.id, { x: c.x, z: c.z, len: 0, dist: 0 });
+      if (k > HZ * 540)
         for (const c of tr.cars) {
           const t = track.get(c.id);
           if (t) (t.len += Math.hypot(c.x - t.x, c.z - t.z)), (t.x = c.x), (t.z = c.z), (t.dist = Math.hypot(c.x, c.z));
@@ -298,7 +299,7 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     // a car that is gone left the area (drove away) unless it vanished well inside the radius (stuck → removed)
     const moved = [...track.entries()].filter(([id, t]) => (tr.cars.some((c) => c.id === id) ? t.len >= 50 : t.dist > traffic.radius - 40 || t.len >= 50)).length;
     const still30 = tr.cars.filter((c) => (c as { still: number }).still > 30).length;
-    console.log(`Gridlock check: ${moved}/${track.size} cars moved ≥ 50 m (or drove out of the area) in the last minute, ${still30}/${tr.cars.length} standing > 30 s`);
+    console.log(`Gridlock check seed ${seed}: ${moved}/${track.size} cars moved ≥ 50 m (or drove out of the area) in the last minute, ${still30}/${tr.cars.length} standing > 30 s`);
     expect(track.size).toBeGreaterThan(15);
     expect(moved / track.size).toBeGreaterThanOrEqual(0.8);
     expect(still30 / tr.cars.length).toBeLessThanOrEqual(0.2);
@@ -313,7 +314,7 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     const enteredAt = new Map<number, number>();
     const prevRing = new Map<number, boolean>();
     let entries = 0, exits = 0, worst = Infinity, late = 0, wrong = 0;
-    for (let k = 0; k < 20 * 300; k++) {
+    for (let k = 0; k < HZ * 300; k++) {
       tr.step(DT, a, 2, NOPEDS);
       for (const c of tr.cars) {
         const on = isRing(c.route[0]!);
@@ -353,11 +354,30 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     for (const h of heads.slice(0, 200)) expect(lights.stop(h.junction, h.edge)).toBeGreaterThan(0);
   });
 
+  it('SignalHead contract: every head around Concorde, Opéra and Rue Royale stands off the carriageway on the right kerb and looks at the oncoming cars', () => {
+    const lights = new TrafficLights(roads);
+    const opera = latLonToWorld(48.8706, 2.332), royale = latLonToWorld(48.8676, 2.3236);
+    const heads = [[0, 0], [opera.x, opera.z], [royale.x, royale.z]].flatMap(([x, z]) => lights.headsNear(x!, z!, 300));
+    expect(heads.length).toBeGreaterThan(30);
+    let offRoad = 0, rightSide = 0, facing = 0;
+    for (const h of heads) {
+      const e = h.edge, a = g.edgeA[e]!, b = g.edgeB[e]!, far = g.edgeA[e] === h.junction ? b : a, n = h.junction;
+      const [, dist] = segPoint(h.x, h.z, g.x[a]!, g.z[a]!, g.x[b]!, g.z[b]!);
+      if (dist >= roads.halfWidth(g.edgeWay[e]!) - 1e-6) offRoad++;
+      // travel direction u = far → junction; right of it = (−uz, ux); the lamps look along (−sin yaw, −cos yaw) = −u
+      const l = Math.hypot(g.x[n]! - g.x[far]!, g.z[n]! - g.z[far]!), ux = (g.x[n]! - g.x[far]!) / l, uz = (g.z[n]! - g.z[far]!) / l;
+      const rx = h.x - g.x[n]!, rz = h.z - g.z[n]!;
+      if (-rx * uz + rz * ux > 0) rightSide++;
+      if (-Math.sin(h.yaw) * -ux + -Math.cos(h.yaw) * -uz > 0.99) facing++;
+    }
+    expect([offRoad, rightSide, facing]).toEqual([heads.length, heads.length, heads.length]);
+  });
+
   it('deterministic: same seed → same state, other seed → different', () => {
     const run = (seed: number) => {
       const tr = new Traffic(roads, seed);
       tr.step(DT, concorde, 1, NOPEDS, true);
-      for (let k = 0; k < 20 * 60; k++) tr.step(DT, concorde, 1, NOPEDS);
+      for (let k = 0; k < HZ * 60; k++) tr.step(DT, concorde, 1, NOPEDS);
       return tr.cars.map((c) => `${c.id}:${c.kind}:${c.x.toFixed(4)},${c.z.toFixed(4)},${c.speed.toFixed(4)}`).join('|');
     };
     const a = run(1);

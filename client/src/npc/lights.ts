@@ -120,9 +120,10 @@ export class TrafficLights implements LightQuery {
       const far = farNode(this.roads, e, n);
       const l = g.edgeLength[e]! || 1;
       const ux = (g.x[n]! - g.x[far]!) / l, uz = (g.z[n]! - g.z[far]!) / l; // travel direction
-      const side = this.roads.halfWidth(g.edgeWay[e]!) + 0.5; // right kerb
+      const side = this.roads.halfWidth(g.edgeWay[e]!) + traffic.lights.kerb; // right kerb, outside the carriageway
+      // SignalHead contract (types.ts): pole foot at the stop line on the right kerb; yaw looks against the travel direction
       this.heads.push({
-        x: g.x[n]! - ux * d - uz * side, z: g.z[n]! - uz * d + ux * side, yaw: Math.atan2(ux, uz), // faces the oncoming car
+        x: g.x[n]! - ux * d - uz * side, z: g.z[n]! - uz * d + ux * side, yaw: Math.atan2(ux, uz),
         junction: n, edge: e,
       });
     }
