@@ -4,8 +4,10 @@
 // front-wheel probe keeps the nose out of walls and off stairs, a strong impact is a crash (SPEC §6.3).
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Vector3 } from 'three';
-import { type Action, bike as B, movement, physics, player as P, playerSetup, swim as S } from '../config.ts';
+import { type Action, bike as B, movement, physics, player as P, playerSetup, respawnRules as RR, swim as S } from '../config.ts';
 import type { Input } from '../core/Input.ts';
+import type { WaterData } from '../geo/chunkData.ts';
+import { inRing } from '../geo/districts.ts';
 import { stepBike } from '../vehicle/BikeController.ts';
 import type { BikeState, RoadSurface } from '../vehicle/types.ts';
 import { IGNORE_NPC } from '../npc/types.ts';
@@ -65,6 +67,37 @@ export function* spiral(x: number, z: number, maxR: number, step = 1): Generator
   }
 }
 
+/** Phase 5 (SPEC §4.4): the quay flight whose foot is nearest (x, z), as where to put a swimmer: the parapet gap at the top
+ *  of the flight (on the wall line) and the unit normal there pointing inland (perpendicular to the nearest river edge, the
+ *  side that is not water). null without quay stairs. ponytail: linear scans of the 81 feet and ~1.8k river edges, only when
+ *  the player asks ("Kẹt?"); a grid if it ever runs per frame. */
+export function quayStairNear(water: WaterData | undefined, x: number, z: number): { x: number; z: number; nx: number; nz: number } | null {
+  const feet = water?.stairs, gaps = water?.stairGaps;
+  if (!water || !feet?.length || !gaps) return null;
+  let at = 0;
+  for (let i = 2, best = Math.hypot(feet[0]! - x, feet[1]! - z); i < feet.length; i += 2) {
+    const d = Math.hypot(feet[i]! - x, feet[i + 1]! - z);
+    if (d < best) [at, best] = [i, d];
+  }
+  const [gx, gz] = [gaps[at]!, gaps[at + 1]!];
+  let [nx, nz, best] = [0, 0, Infinity];
+  for (const p of water.polygons) {
+    if (!p.river) continue;
+    for (const r of [p.outer, ...(p.holes ?? [])]) {
+      for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+        const [ex, ez] = [r[i]! - r[j]!, r[i + 1]! - r[j + 1]!];
+        const len = Math.hypot(ex, ez) || 1;
+        const t = Math.min(len, Math.max(0, ((gx - r[j]!) * ex + (gz - r[j + 1]!) * ez) / len));
+        const d = Math.hypot(gx - (r[j]! + (ex / len) * t), gz - (r[j + 1]! + (ez / len) * t));
+        if (d < best) [nx, nz, best] = [-ez / len, ex / len, d];
+      }
+    }
+  }
+  if (!isFinite(best)) return null;
+  const wet = (px: number, pz: number) => water.polygons.some((p) => p.river && inRing(px, pz, p.outer) && !(p.holes ?? []).some((h) => inRing(px, pz, h)));
+  return wet(gx + nx, gz + nz) ? { x: gx, z: gz, nx: -nx, nz: -nz } : { x: gx, z: gz, nx, nz };
+}
+
 const DOWN = { x: 0, y: -1, z: 0 };
 const NO_ROT = { x: 0, y: 0, z: 0, w: 1 };
 const HALF = P.height / 2; // capsule centre above its bottom
@@ -106,7 +139,9 @@ export class CharacterController {
   /** Feet and heading at the previous step (renderPosition / renderYaw blend from them). */
   private readonly prev = new Vector3();
   private prevYaw = 0;
-  private readonly lastSafe = new Vector3();
+  /** Dry ground the body stood on, one spot per player.safeEvery s (newest last, ≤ respawnRules.history): respawn goes back
+   *  to one that is respawnRules.minAge s old. */
+  private readonly safe: Vector3[] = [];
   /** Intended horizontal velocity (accelerates toward the input; a wall doesn't reset it) and vertical velocity. */
   private vx = 0;
   private vz = 0;
@@ -154,7 +189,7 @@ export class CharacterController {
     Object.assign(this.state, { yaw, action: 'none', actionTime: 0, grounded: true, inWater: false, moveMode: 'walk' });
     this.climb = null;
     this.teleport(x, this.env.heightAt(x, z), z);
-    this.lastSafe.copy(this.state.position);
+    this.safe.splice(0, this.safe.length, this.state.position.clone());
     this.pending = { x, z, wait: 1 };
   }
 
@@ -191,13 +226,26 @@ export class CharacterController {
     if (!this.place(x, z)) this.teleport(s.position.x, s.position.y, s.position.z);
   }
 
-  /** Back to the last safe ground (fell through the world; Phase 5 menu "Kẹt? Về chỗ an toàn"). Where it went:
-   *  'safe' = lastSafe; Phase 5 track C adds 'stairs' = out of the Seine onto the nearest quay flight (SPEC §4.4). */
+  /** Back to safe ground (fell through the world; the menu's "Kẹt? Về chỗ an toàn"): from the Seine onto the parapet gap at
+   *  the top of the nearest quay flight, facing inland ('stairs', SPEC §4.4); otherwise to a dry spot respawnRules.minAge s
+   *  ago ('safe'), so not to the place one is stuck in. Riding: the bike stays where its wheels last stood on dry ground. */
   respawn(): 'safe' | 'stairs' {
+    const s = this.state;
     this.climb = null;
-    const { x, y, z } = this.lastSafe;
-    if (!this.place(x, z)) this.teleport(x, y, z);
-    return 'safe';
+    if (s.action === 'climbOut') [s.action, s.actionTime] = ['none', 0];
+    this.dropBike();
+    let result: 'safe' | 'stairs' = 'safe';
+    const q = s.inWater || s.moveMode === 'swim' ? quayStairNear(this.env.water, s.position.x, s.position.z) : null;
+    if (q && this.placeExact(q.x + q.nx * RR.stairsInland, q.z + q.nz * RR.stairsInland)) {
+      s.yaw = this.prevYaw = yawOf(q.nx, q.nz); // renderYaw must not blend from the old heading
+      result = 'stairs';
+    } else {
+      const { x, y, z } = this.safe[Math.max(0, this.safe.length - 1 - Math.ceil(RR.minAge / P.safeEvery))] ?? s.position;
+      if (!this.place(x, z)) this.teleport(x, y, z);
+    }
+    Object.assign(s, { inWater: false, grounded: true, moveMode: 'walk' });
+    this.safe.splice(0, this.safe.length, s.position.clone()); // pressed again at once: stay here, not back to the old spot
+    return result;
   }
 
   /** Phase 4B: moves the body (dx, dz) m at the next fixedUpdate, through the KCC (walls still stop it). Accumulates. */
@@ -216,7 +264,10 @@ export class CharacterController {
     this.prev.copy(s.position);
     this.prevYaw = s.yaw;
     if (this.pending) {
-      if (this.pending.wait-- <= 0 && this.place(this.pending.x, this.pending.z)) this.pending = null;
+      if (this.pending.wait-- <= 0 && this.place(this.pending.x, this.pending.z)) {
+        this.pending = null;
+        this.safe.splice(0, this.safe.length, s.position.clone()); // the spawn found its real ground
+      }
       return;
     }
     const locked = tickAction(s, dt);
@@ -274,7 +325,7 @@ export class CharacterController {
     if (p.y < P.respawnBelow || p.y < this.env.heightAt(p.x, p.z) - P.fellThrough) return this.respawn();
     if ((this.safeTime += dt) >= P.safeEvery && s.grounded && !s.inWater) {
       this.safeTime = 0;
-      this.lastSafe.copy(p);
+      if (this.safe.push(p.clone()) > RR.history) this.safe.shift();
     }
   }
 
@@ -289,8 +340,10 @@ export class CharacterController {
     const [fx, fz] = [-Math.sin(b.yaw), -Math.cos(b.yaw)];
     let d = b.speed * dt;
     const hit = d > 0 ? this.wheelProbe(fx, fz, d, B.wheelBase) : d < 0 ? this.wheelProbe(-fx, -fz, -d, B.rearReach) : undefined;
-    if (hit === null) b.speed = d = 0; // stairs ahead / behind: stop like at a wall, no crash (SPEC §6.6)
-    else if (hit && d < 0) {
+    if (hit === null) {
+      b.speed = d = 0; // stairs ahead / behind: stop like at a wall, no crash (SPEC §6.6)
+      this.onStairs();
+    } else if (hit && d < 0) {
       b.speed = 0;
       d = -hit.free;
     } else if (hit) {
@@ -321,11 +374,9 @@ export class CharacterController {
     if (p.y < P.respawnBelow || p.y < this.env.heightAt(p.x, p.z) - P.fellThrough) return this.respawn();
     if (s.inWater) {
       // Rode into the Seine: the bike stays on the last dry ground, the rider swims (next step).
-      this.bike = null;
-      Object.assign(b, { speed: 0, lean: 0, steer: 0 });
-      b.position.copy(this.bikeSafe);
+      this.dropBike();
       s.moveMode = 'swim';
-      return this.onDismount(b, false);
+      return;
     }
     if (s.grounded) this.bikeSafe.copy(p);
     // The capsule's side against a wall the probe missed: keep only the speed actually made. Ground contacts don't
@@ -337,6 +388,17 @@ export class CharacterController {
         break;
       }
     }
+  }
+
+  /** The rider is off without a dismount (into the Seine, respawn): the bike stays on the last dry ground its wheels stood
+   *  on, onDismount(b, false). No-op on foot. */
+  private dropBike() {
+    const b = this.bike;
+    if (!b) return;
+    this.bike = null;
+    Object.assign(b, { speed: 0, lean: 0, steer: 0 });
+    b.position.copy(this.bikeSafe);
+    this.onDismount(b, false);
   }
 
   /** Thrown off the bike (strong impact; Phase 4B: riding into a pedestrian, npc/Npc.ts). No-op on foot. */
@@ -429,6 +491,14 @@ export class CharacterController {
     }
     if (first) this.teleport(...first);
     return !!first;
+  }
+
+  /** Exactly (x, z) or nothing: onto the walkable surface there if it is dry and free, else false (no spiral search). */
+  private placeExact(x: number, z: number): boolean {
+    const y = this.surface(x, z);
+    if (y === null || y < (this.env.waterLevel ?? -Infinity) || this.overlaps(x, y, z)) return false;
+    this.teleport(x, y, z);
+    return true;
   }
 
   /** Moves the capsule now (no sweep) and forgets velocity; renderPosition does not lerp across it. */

@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { bikeRules, physics } from '../config.ts';
+import { bike as B, bikeRules, notices, physics } from '../config.ts';
 import { CharacterController } from '../player/CharacterController.ts';
 import { Bikes, canMount } from './Bikes.ts';
 
@@ -23,7 +23,7 @@ describe('Bikes: take / mount / get off (SPEC §6.3)', () => {
   it('F works only within interactRadius, on foot', () => {
     const { c, bikes } = setup();
     const far = bikes.add(bikeRules.interactRadius + 0.3, 0, 0, 0);
-    expect(bikes.interact(c)).toBeNull();
+    expect(bikes.interact(c)).toBe('bikeTooFar'); // Phase 5: near enough to say why
     far.position.x = bikeRules.interactRadius - 0.3;
     c.state.action = 'wave';
     expect(bikes.interact(c)).toBeNull(); // gesture running
@@ -42,7 +42,9 @@ describe('Bikes: take / mount / get off (SPEC §6.3)', () => {
     const { c, bikes } = setup();
     const b = bikes.add(1, 0, 0, 0);
     b.owner = 'Đội B';
-    expect(bikes.interact(c)).toBeNull();
+    expect(bikes.interact(c)).toBe('bikeTaken');
+    expect(c.riding).toBeNull();
+    expect(b.owner).toBe('Đội B');
   });
   it('taking a second bike makes the first disappear; get off keeps the owner', () => {
     const { c, bikes } = setup();
@@ -61,6 +63,63 @@ describe('Bikes: take / mount / get off (SPEC §6.3)', () => {
     bikes.add(1, 0, 0, 0);
     bikes.interact(c);
     c.riding!.speed = 4;
+    expect(bikes.interact(c)).toBe('bikeTooFast');
+    expect(c.riding).not.toBeNull();
+    c.riding!.speed = B.dismountMaxSpeed;
+    expect(bikes.interact(c)).toBe('dismount');
+  });
+});
+
+describe('Bikes.interact: why F did nothing (Phase 5 track C, SPEC §6.3)', () => {
+  it('riding above bike.dismountMaxSpeed (4 m/s; also in reverse) → bikeTooFast', () => {
+    const { c, bikes } = setup();
+    bikes.add(1, 0, 0, 0);
+    bikes.interact(c);
+    for (const v of [4, -4]) {
+      c.riding!.speed = v;
+      expect(bikes.interact(c)).toBe('bikeTooFast');
+    }
+  });
+
+  it('on foot, 4 m from a free bike → bikeTooFar; beyond notices.farReach, silent', () => {
+    const { c, bikes } = setup();
+    const b = bikes.add(4, 0, 0, 0);
+    expect(bikes.interact(c)).toBe('bikeTooFar');
+    b.position.x = notices.farReach + 0.5;
     expect(bikes.interact(c)).toBeNull();
+    expect(c.riding).toBeNull();
+  });
+
+  it("another team's bike in reach → bikeTaken; 4 m away it is silent; your own parked bike 4 m away → bikeTooFar", () => {
+    const { c, bikes } = setup();
+    const other = bikes.add(1, 0, 0, 0);
+    other.owner = 'Đội B';
+    expect(bikes.interact(c)).toBe('bikeTaken');
+    other.position.x = 4;
+    expect(bikes.interact(c)).toBeNull();
+    const mine = bikes.add(4, 0, 1, 0);
+    mine.owner = 'Đội A';
+    expect(bikes.interact(c)).toBe('bikeTooFar');
+  });
+
+  it('a free bike in reach beats a taken one next to it: mounts', () => {
+    const { c, bikes } = setup();
+    bikes.add(1, 0, 0, 0).owner = 'Đội B';
+    const free = bikes.add(-1.5, 0, 0, 0);
+    expect(bikes.interact(c)).toBe('mount');
+    expect(c.riding).toBe(free);
+  });
+
+  it('no bike within farReach → null; a gesture / swimming / the air stay silent even next to a bike', () => {
+    const { c, bikes } = setup();
+    expect(bikes.interact(c)).toBeNull();
+    bikes.add(3, 0, 0, 0);
+    for (const s of [{ action: 'wave' }, { moveMode: 'swim' }, { grounded: false }] as const) {
+      const saved = { action: c.state.action, moveMode: c.state.moveMode, grounded: c.state.grounded };
+      Object.assign(c.state, s);
+      expect(bikes.interact(c)).toBeNull();
+      Object.assign(c.state, saved);
+    }
+    expect(bikes.interact(c)).toBe('bikeTooFar');
   });
 });

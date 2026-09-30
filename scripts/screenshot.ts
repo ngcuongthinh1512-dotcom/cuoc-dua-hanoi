@@ -177,6 +177,9 @@ Object.assign(PRESETS, {
   'p5-gps-bike': '/?player=-2412,331,-135&bike&gps=-1955.6,787.3&wait=3',
 
   // [C] menu, toasts (bike at the stairs, F refused), respawn out of the Seine
+  'p5-menu': '/?player&menu', // menu open (settings tab), race-continues note, "Kẹt?" button
+  'p5-toast-stairs': '/?player=-2380.2,409.3,136&bike&autoMove=walk&orbit=70&wait=3', // p4-stairs-block: stopped at the first step → toast "Không đi xe trên bậc thang"
+  'p5-respawn': playerAt(48.8637, 2.3155, 90, '&respawn=1.7&wait=2'), // p3-swim, then "Kẹt?" after 1.7 s (swimming by then): on the coping at the top of the nearest quay flight + toast
 
   // [D] location label + clock, speedometer, street sign with the district line, F3 panel
 });

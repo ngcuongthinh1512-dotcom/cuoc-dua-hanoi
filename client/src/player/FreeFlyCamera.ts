@@ -1,6 +1,7 @@
 import { type PerspectiveCamera, Vector3 } from 'three';
 import { type Action, flyCamera as C, render } from '../config.ts';
 import type { Input } from '../core/Input.ts';
+import { settings } from '../ui/settings.ts';
 
 const DEG = Math.PI / 180;
 const MAX_PITCH = Math.PI / 2 - 1e-3; // just inside ±90° so the view never flips
@@ -28,8 +29,9 @@ export class FreeFlyCamera {
 
   update(dt: number, input: Input) {
     const { pad } = input;
-    this.yaw -= input.mouseDX * C.mouseSensitivity + pad.lookX * C.gamepadLookSpeed * dt;
-    this.pitch -= input.mouseDY * C.mouseSensitivity + pad.lookY * C.gamepadLookSpeed * dt;
+    const k = settings.mouseSensitivity; // menu settings: sensitivity, invert Y (mouse and stick)
+    this.yaw -= k * (input.mouseDX * C.mouseSensitivity + pad.lookX * C.gamepadLookSpeed * dt);
+    this.pitch -= k * (settings.invertY ? -1 : 1) * (input.mouseDY * C.mouseSensitivity + pad.lookY * C.gamepadLookSpeed * dt);
     if (input.wheel) this.speed = clamp(this.speed * C.wheelStep ** -input.wheel, C.minSpeed, C.maxSpeed);
     this.apply();
 
