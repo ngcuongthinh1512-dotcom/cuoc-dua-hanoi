@@ -72,6 +72,15 @@ const FEET = HALF + P.skin; // the controller keeps the capsule `skin` above the
 const WALKABLE = Math.cos((P.maxSlopeDeg * Math.PI) / 180); // min |normal.y| of a surface to stand on
 /** A shoved step (an NPC car overlaps the body) ignores the NPC cars: the KCC can't sweep out of a box it starts in. */
 const shoved = (sx: number, sz: number) => (sx || sz ? IGNORE_NPC : undefined);
+/** …so the own move (mx, mz) of a shoved step loses its part against the shove: no walking (riding) on into the car
+ *  (review m7). ponytail: a second car the body walks into while shoved is still ignored during the shove (it then
+ *  shoves the body out too); two KCC passes (shove without NPCs, own move with them) if that shows. */
+export function unshoved(mx: number, mz: number, sx: number, sz: number): [number, number] {
+  const d = mx * sx + mz * sz;
+  if (d >= 0) return [mx, mz];
+  const k = d / (sx * sx + sz * sz);
+  return [mx - sx * k, mz - sz * k];
+}
 const smooth = (a: number, b: number, t: number) => {
   const u = Math.min(Math.max((t - a) / (b - a), 0), 1);
   return u * u * (3 - 2 * u);
@@ -238,7 +247,8 @@ export class CharacterController {
       this.vy += g * dt;
     }
 
-    this.kcc.computeColliderMovement(this.collider, { x: this.vx * dt + sx, y: dy, z: this.vz * dt + sz }, undefined, shoved(sx, sz));
+    const [mx, mz] = unshoved(this.vx * dt, this.vz * dt, sx, sz);
+    this.kcc.computeColliderMovement(this.collider, { x: mx + sx, y: dy, z: mz + sz }, undefined, shoved(sx, sz));
     const m = this.kcc.computedMovement();
     const c = this.collider.translation();
     this.body.setNextKinematicTranslation({ x: c.x + m.x, y: c.y + m.y, z: c.z + m.z });
@@ -291,7 +301,8 @@ export class CharacterController {
     const g = physics.gravity.y;
     const dy = (this.vy + 0.5 * g * dt) * dt;
     this.vy += g * dt;
-    this.kcc.computeColliderMovement(this.collider, { x: fx * d + sx, y: dy, z: fz * d + sz }, undefined, shoved(sx, sz));
+    const [mx, mz] = unshoved(fx * d, fz * d, sx, sz);
+    this.kcc.computeColliderMovement(this.collider, { x: mx + sx, y: dy, z: mz + sz }, undefined, shoved(sx, sz));
     const m = this.kcc.computedMovement();
     const c = this.collider.translation();
     this.body.setNextKinematicTranslation({ x: c.x + m.x, y: c.y + m.y, z: c.z + m.z });

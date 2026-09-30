@@ -1,5 +1,8 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, WayFlag } from '@race/shared/graph';
+import type { LineLoop } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { bike as B, bikeTopSpeed, npcRender as R, physics, player as P } from '../config.ts';
 import { CharacterController } from '../player/CharacterController.ts';
@@ -121,6 +124,20 @@ describe('Npc on a real Rapier world (stub sims, ?npcTest parked cars)', () => {
     world.free();
   });
 
+  it('setExclusionZones: rings rebuilt, old geometries disposed, one shared material (no leak per call)', () => {
+    const { npc, world } = scene([]);
+    npc.setExclusionZones([{ x: 0, z: 0, r: 5 }, { x: 20, z: 0, r: 3 }]);
+    const first = npc.zoneRings.children.map((o) => o as LineLoop);
+    let disposed = 0;
+    for (const r of first) r.geometry.addEventListener('dispose', () => void disposed++);
+    npc.setExclusionZones([{ x: 5, z: 5, r: 2 }]);
+    const [ring] = npc.zoneRings.children as LineLoop[];
+    expect([npc.zoneRings.children.length, disposed]).toEqual([1, 2]);
+    expect(ring!.material).toBe(first[0]!.material);
+    expect(first[1]!.material).toBe(first[0]!.material);
+    world.free();
+  });
+
   it('riding at top speed into a parked van crashes the rider; its collider is placed along its heading', () => {
     // Van across the road ahead (heading west): its side (half width 1 m) faces the rider at z = −15 + 1.
     const { npc, c, run, world } = scene([{ kind: 'van', x: 0, z: -15, yawDeg: 90 }]);
@@ -161,6 +178,15 @@ describe('Npc on a real Rapier world (stub sims, ?npcTest parked cars)', () => {
     world.free();
   });
 
+  it('walking into a car that is shoving the body: pushed out, never walks through it (review m7)', () => {
+    const { npc, run, c, world } = scene([]);
+    const parked = npc.traffic.park('sedan', 0.4, 0, 0); // heading north, overlapping the body on its west side
+    const k = carShape(assets.vehicles.get('sedan')!);
+    run(3, { ...idle(), right: 1 }); // walk east (into and across the car) at full speed
+    expect(c.state.position.x).toBeLessThan(parked.x - k.hw - P.radius + 0.1);
+    world.free();
+  });
+
   it('crowd.step knocked > 0 (bike nose hit a pedestrian): crash at ≥ bike.crashImpact, not slower', () => {
     const { npc, c, run, world } = scene([]);
     const drops: boolean[] = [];
@@ -173,6 +199,58 @@ describe('Npc on a real Rapier world (stub sims, ?npcTest parked cars)', () => {
     expect(drops).toEqual([]);
     run(1.5, ahead());
     expect(drops).toEqual([true]);
+    world.free();
+  });
+});
+
+// ── Traffic + Crowd + Npc together on the real road graph at density 1 (review m8) ──
+const graphFile = join(import.meta.dirname, '../../../shared/data/roadgraph.json');
+describe.skipIf(!existsSync(graphFile))('Npc on roadgraph.json around Concorde, density 1 (Traffic + Crowd + Rapier)', { timeout: 120_000 }, () => {
+  it('30 s: cars and pedestrians > 0, no NaN, one light set; riding into a real pedestrian crashes the rider', () => {
+    const roads = new NpcRoads(RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile), () => 0);
+    const world = new RAPIER.World(physics.gravity);
+    world.timestep = DT;
+    world.createCollider(RAPIER.ColliderDesc.cuboid(2000, 0.5, 2000).setTranslation(0, -0.5, 0));
+    const npc = new Npc(world, roads, assets, { seed: 1, density: 1, auto: false, zones: [], test: [] });
+    expect(npc.crowd.lights).toBe(npc.traffic.lights);
+    const c = new CharacterController(world, { heightAt: () => 0, waterLevel: null, water: undefined });
+    world.step();
+    c.spawn(87.8, -184.5, 0); // Rue Royale (p3-street)
+    /** As Player.npcAnchor: the nose = feet + heading × wheelBase while riding. */
+    const anchor = () => {
+      const s = c.state, r = c.riding;
+      const nose = r ? { x: s.position.x - Math.sin(s.yaw) * B.wheelBase, z: s.position.z - Math.cos(s.yaw) * B.wheelBase } : null;
+      return anchorAt(s.position.x, s.position.z, { vx: s.velocity.x, vz: s.velocity.z, nose });
+    };
+    const step = () => {
+      npc.fixedUpdate(DT, anchor(), c);
+      c.fixedUpdate(DT, idle());
+      world.step();
+    };
+    npc.start(anchor());
+    let bad = 0, minCars = Infinity, minPeds = Infinity;
+    for (let i = 0; i < 30 / DT; i++) {
+      step();
+      for (const p of [...npc.traffic.cars, ...npc.crowd.peds]) if (![p.x, p.y, p.z, p.yaw].every(Number.isFinite)) bad++;
+      minCars = Math.min(minCars, npc.traffic.cars.length);
+      minPeds = Math.min(minPeds, npc.crowd.peds.length);
+    }
+    expect(bad).toBe(0);
+    expect(minCars).toBeGreaterThan(5);
+    expect(minPeds).toBeGreaterThan(5);
+
+    // A walking, un-knocked pedestrian; the bike put so that its nose is on them at top speed.
+    const ped = npc.crowd.peds.find((p) => p.activity === 'walk' && p.stagger < 0)!;
+    expect(ped).toBeTruthy();
+    const drops: boolean[] = [];
+    c.onDismount = (_b, crashed) => void drops.push(crashed);
+    const b = newBike('b', ped.x, 0, ped.z + B.wheelBase, 0); // heading north: nose = feet − wheelBase along z
+    b.speed = bikeTopSpeed();
+    c.ride(b);
+    step();
+    expect(ped.stagger).toBeGreaterThanOrEqual(0); // knocked (staggering)
+    expect(drops).toEqual([true]);
+    expect(c.state.action).toBe('crash');
     world.free();
   });
 });
