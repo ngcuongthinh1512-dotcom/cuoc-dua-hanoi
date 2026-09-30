@@ -18,6 +18,7 @@
     "screenshot": "tsx scripts/screenshot.ts",
     "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts",
     "build-chunks": "tsx scripts/build-chunks.ts",
+    "build-graph": "tsx scripts/build-graph.ts",
     "process-assets": "tsx scripts/process-assets.ts"
   },
   "devDependencies": {
