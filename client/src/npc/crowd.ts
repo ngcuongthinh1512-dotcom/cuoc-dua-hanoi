@@ -35,6 +35,7 @@ interface Ped {
   leg: Leg; after: Leg | null; wps: Wp[]; net: number;
   u: number; lat: number; speed: number;
   timer: number; idleAct: PedActivity; waveT: number; waveCool: number; cool: number; wait: number;
+  held: number; gate: Gate | null; // s blocked in a row; the kerb gate this crossing started from (null: turned back once)
   dodge: number; yOff: number; knockX: number; knockZ: number; seat: string | null; dead: boolean;
 }
 
@@ -91,8 +92,8 @@ export class Crowd {
       });
       if (worst >= 0) this.remove(worst);
     }
-    if (fill) for (let tries = 0; this.states.length < target && tries < target * 30; tries++) this.spawn(a, true, area);
-    else if (this.states.length < target) this.spawn(a, false, area);
+    if (fill) for (let tries = 0; this.states.length < target && tries < target * 30; tries++) this.spawn(a, true, area, cars);
+    else if (this.states.length < target) this.spawn(a, false, area, cars);
     let knocked = 0;
     for (const p of this.states) knocked += this.update(p, dt, a, cars);
     return { knocked };
@@ -294,6 +295,8 @@ export class Crowd {
       return out;
     }
     // cross the adjacent edge e1 at the mouth and go on along e2
+    // ponytail: always at the mouth (cd m out), never at a highway=crossing node further along e1 (plan §3.7 crossReach);
+    // upgrade: walk e1 up to ~15 m for a crossing node and put the gate there.
     const e2 = list[(idx + 2 * sgn + 2 * deg) % deg]!;
     const he = nr.halfWidth(g.edgeWay[e]!), h1 = nr.halfWidth(g.edgeWay[e1]!), h2 = nr.halfWidth(g.edgeWay[e2]!);
     const cd = Math.min(Math.max(he, h2) + 1, he + Math.max(nr.sidewalk(g.edgeWay[e]!), 1.5) - 0.3);
@@ -310,20 +313,39 @@ export class Crowd {
     return out;
   }
 
-  /** Nobody is about to reach the crossing segment within crossGap s, and the light (if any) lets pedestrians go. */
+  /** No car body (stretched forward by where a moving car gets within crossGap s) near the crossing segment, and the light
+   *  (if any) lets pedestrians go. */
   private clear(gt: Gate, cars: readonly CarPose[]): boolean {
     if (!this.lights.pedMayCross(gt.junction, gt.edge)) return false;
-    const segD = (x: number, z: number) => segPoint(x, z, gt.ax, gt.az, gt.bx, gt.bz)[1];
-    const cx = (gt.ax + gt.bx) / 2, cz = (gt.az + gt.bz) / 2;
     for (const c of cars) {
-      const ahead = c.speed * C.crossGap + 1.5;
-      if (Math.hypot(c.x - cx, c.z - cz) > ahead + 12) continue;
-      if (segD(c.x, c.z) < 3) return false;
-      if (c.speed < 0.3) continue;
-      const hx = -Math.sin(c.yaw), hz = -Math.cos(c.yaw);
-      for (let t = 1.5; t <= ahead; t += 1.5) if (segD(c.x + hx * t, c.z + hz * t) < 1.8) return false;
+      const ahead = c.speed < C.cross.still ? 0 : c.speed * C.crossGap + C.cross.lead;
+      if (segPoint(c.x, c.z, gt.ax, gt.az, gt.bx, gt.bz)[1] > ahead + npc.vehicles[c.kind].dims[2] / 2 + C.cross.clear) continue;
+      if (carDist(c, ahead, gt.ax, gt.az, gt.bx, gt.bz) < C.cross.clear) return false;
     }
     return true;
+  }
+
+  /** Stop instead of walking into a car body: the next carAhead m of the walk come within bodyRadius of one (and closer than
+   *  now, so someone a car has driven onto can still walk out). */
+  private carAhead(p: Ped, cars: readonly CarPose[]): boolean {
+    const ps = p.pose, w = p.wps[0];
+    if (!w) return false;
+    const d = Math.hypot(w.x - p.x, w.z - p.z) || 1, t = Math.min(C.carAhead, d);
+    const bx = ps.x + ((w.x - p.x) / d) * t, bz = ps.z + ((w.z - p.z) / d) * t;
+    for (const c of cars) {
+      if (Math.hypot(c.x - ps.x, c.z - ps.z) > C.carAhead + npc.vehicles[c.kind].dims[2] / 2 + 1) continue;
+      const d1 = carDist(c, 0, ps.x, ps.z, bx, bz);
+      if (d1 < C.bodyRadius && d1 < carDist(c, 0, ps.x, ps.z, ps.x, ps.z) - 0.01) return true;
+    }
+    return false;
+  }
+
+  /** Blocked too long (a player who does not move, a car that waits for us): walk back the way we came. */
+  private turnBack(p: Ped): void {
+    const { leg, wps, after } = p;
+    p.leg = { e: leg.e, dir: (-leg.dir) as 1 | -1, side: leg.side };
+    p.wps = [];
+    if (!this.plan(p, false)) (p.dead = false), (p.leg = leg), (p.wps = wps), (p.after = after);
   }
 
   // ── population ───────────────────────────────────────────────────────────────────────────────────
@@ -366,20 +388,20 @@ export class Crowd {
     return (this.area = { key, edges, cum, km });
   }
 
-  private spawn(a: NpcAnchor, fill: boolean, area: { edges: number[]; cum: number[] }): boolean {
+  private spawn(a: NpcAnchor, fill: boolean, area: { edges: number[]; cum: number[] }, cars: readonly CarPose[]): boolean {
     const g = this.g, rng = this.rng, rmin = fill ? 8 : 0.6 * C.radius, cone = (traffic.viewConeDeg * Math.PI) / 180;
     const inCone = (x: number, z: number) => !fill && Math.abs(angleStep(a.viewYaw, yawOf(x - a.x, z - a.z), Math.PI) - a.viewYaw) < cone;
     const okPos = (x: number, z: number) => {
       const d = Math.hypot(x - a.x, z - a.z);
-      return d >= rmin && d <= C.radius && !this.inZone(x, z) && !inCone(x, z);
+      return d >= rmin && d <= C.radius && !this.inZone(x, z) && !inCone(x, z) && !cars.some((c) => carDist(c, 0, x, z, x, z) < C.bodyRadius);
     };
     const id = this.nextId++;
     const mk = (x: number, z: number, leg: Leg, net: number, mode: Mode): Ped => {
       const stroll = rng() < C.strollShare;
       const p: Ped = {
         pose: { id, avatar: Math.floor(rng() * C.avatars), x, y: 0, z, yaw: 0, speed: 0, activity: 'walk', activityTime: rng() * 10, stagger: -1, staggerYaw: 0 },
-        mode, x, z, leg, after: null, wps: [], net, u: lerp(C.band, rng()), lat: (rng() * 2 - 1) * 0.6,
-        speed: lerp(stroll ? C.strollSpeed : C.walkSpeed, rng()), timer: 0, idleAct: 'stand', waveT: 0, waveCool: 0, cool: 0, wait: 0,
+        mode, x, z, leg, after: null, wps: [], net, u: lerp(C.band, rng()), lat: (rng() * 2 - 1) * C.pathLat,
+        speed: lerp(stroll ? C.strollSpeed : C.walkSpeed, rng()), timer: 0, idleAct: 'stand', waveT: 0, waveCool: 0, cool: 0, wait: 0, held: 0, gate: null,
         dodge: 0, yOff: 0, knockX: 0, knockZ: 0, seat: null, dead: false,
       };
       return p;
@@ -546,13 +568,22 @@ export class Crowd {
       p.wait += dt;
       this.act(p, 'stand', 0);
       const w = p.wps[0]!;
-      if (this.clear(w.gate!, cars)) (p.wps.shift(), (p.mode = 'walk'));
+      if (this.clear(w.gate!, cars)) (p.gate = w.gate!), p.wps.shift(), (p.mode = 'walk');
       else if (p.wait > C.giveUp) (p.wps = []), this.plan(p, true), (p.mode = 'walk');
       else return this.place(p), knocked;
     }
     // walk / cross
     let hold = false;
     this.dodgeStep(p, dt, a, (h) => (hold = h));
+    // blocked holdMax s: on the kerb turn back; in the road (a car stopped over the crossing) walk back to the kerb gate and wait
+    // there again; blocked once more on the same crossing: wait up to giveUp s, then go on (ponytail: through that car)
+    if (!hold && (p.mode === 'walk' || p.gate || p.held <= C.giveUp)) hold = this.carAhead(p, cars);
+    p.held = hold ? p.held + dt : p.mode === 'cross' ? p.held : 0;
+    if (p.held > C.avoid.holdMax && (p.mode === 'walk' || p.gate)) {
+      if (p.mode === 'walk') this.turnBack(p);
+      else p.wps.unshift({ x: p.gate!.ax, z: p.gate!.az, cross: true }, { x: p.gate!.ax, z: p.gate!.az, gate: p.gate! });
+      (p.held = 0), (p.gate = null);
+    }
     let budget = hold ? 0 : p.speed * dt, moved = 0;
     for (let guard = 0; guard < 6 && p.wps.length; guard++) {
       const w = p.wps[0]!, dx = w.x - p.x, dz = w.z - p.z, d = Math.hypot(dx, dz);
@@ -567,23 +598,27 @@ export class Crowd {
       p.z = w.z;
       budget -= d;
       moved += d;
-      if (w.gate && !this.clear(w.gate, cars)) {
-        p.mode = 'wait';
-        p.wait = 0;
-        break;
+      if (w.gate) {
+        if (!this.clear(w.gate, cars)) {
+          p.mode = 'wait';
+          p.wait = 0;
+          break;
+        }
+        p.gate = w.gate;
       }
       p.wps.shift();
       if (!p.wps.length) (p.leg = p.after!), this.plan(p, false);
     }
     if (p.mode !== 'wait') {
       p.mode = p.wps[0]?.cross ? 'cross' : 'walk';
+      if (p.mode === 'walk') p.gate = null;
       if (p.mode === 'walk' && moved > 0 && !this.inZone(p.x, p.z, 4) && this.rng() < ((C.idle.per100m / 100) * (p.net === PATH ? 2 : 1)) * moved) {
         p.mode = 'idle';
         p.timer = lerp(C.idle.seconds, this.rng());
         p.idleAct = (['stand', 'lookAround', 'phone'] as const)[Math.floor(this.rng() * 3)]!;
       }
     }
-    this.act(p, p.mode === 'wait' || p.mode === 'idle' ? (p.mode === 'idle' ? p.idleAct : 'stand') : 'walk', moved / dt);
+    this.act(p, p.mode === 'idle' ? p.idleAct : p.mode === 'wait' || moved === 0 ? 'stand' : 'walk', moved / dt);
     this.place(p);
     return knocked;
   }
@@ -594,9 +629,9 @@ export class Crowd {
     const hx = -Math.sin(ps.yaw), hz = -Math.cos(ps.yaw), rx = -hz, rz = hx;
     let want = 0;
     if (a.body && p.mode === 'walk') {
-      const dx = a.x - ps.x, dz = a.z - ps.z, ah = dx * hx + dz * hz, lt = dx * rx + dz * rz + p.dodge; // lt: player's side of the path itself
+      const dx = a.x - ps.x, dz = a.z - ps.z, ah = dx * hx + dz * hz, lb = dx * rx + dz * rz, lt = lb + p.dodge; // lb: from the body, lt: from the path
       if (ah > -1 && ah < C.avoid.ahead && Math.abs(lt) < C.avoid.side) want = (lt >= 0 ? -1 : 1) * C.avoid.shift;
-      setHold(ah > 0 && ah < 1.2 && Math.abs(lt) < 0.45);
+      setHold(ah > 0 && ah < C.avoid.holdAhead && Math.abs(lb) < C.avoid.holdSide);
       if (this.kind(p.leg.e) === SIDE) {
         const w = this.g.edgeWay[p.leg.e]!, [mx, mz] = this.norm(p.leg.e), o = this.ofs(p, p.leg.e, p.leg.side, p.leg.dir);
         const dot = (rx * mx + rz * mz) * -Math.sign(o); // + = the walker's right points toward the carriageway
@@ -605,7 +640,7 @@ export class Crowd {
         else if (dot < -0.5) want = Math.max(want, -room);
       }
     }
-    p.dodge += clamp(want - p.dodge, -2 * dt, 2 * dt);
+    p.dodge += clamp(want - p.dodge, -C.avoid.rate * dt, C.avoid.rate * dt);
   }
 
   private act(p: Ped, act: PedActivity, speed: number): void {
@@ -630,4 +665,19 @@ export class Crowd {
 }
 
 const pt = (q: [number, number]) => ({ x: q[0], z: q[1] });
+
+/** Distance from segment a→b to car c's body rectangle (npc.vehicles dims) stretched `ext` m forward; 0 = touching.
+ *  ponytail: sampled every 0.5 m along the segment (≤ 0.25 m error), exact segment–box distance if that ever matters. */
+function carDist(c: CarPose, ext: number, ax: number, az: number, bx: number, bz: number): number {
+  const [w, , l] = npc.vehicles[c.kind].dims, fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw);
+  const n = Math.ceil(Math.hypot(bx - ax, bz - az) / 0.5);
+  let best = Infinity;
+  for (let i = 0; i <= n; i++) {
+    const t = n ? i / n : 0, dx = ax + (bx - ax) * t - c.x, dz = az + (bz - az) * t - c.z;
+    const u = dx * fx + dz * fz, v = dx * -fz + dz * fx; // along, across (right)
+    const du = Math.max(-l / 2 - u, u - l / 2 - ext, 0), dv = Math.max(Math.abs(v) - w / 2, 0);
+    best = Math.min(best, Math.hypot(du, dv));
+  }
+  return best;
+}
 const seatKey = (s: Seat) => `${Math.round(s.x * 10)},${Math.round(s.z * 10)}`;

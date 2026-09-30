@@ -3,9 +3,10 @@ import { join } from 'node:path';
 import { latLonToWorld } from '@race/shared';
 import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, segPoint, WayFlag } from '@race/shared/graph';
 import { describe, expect, it } from 'vitest';
-import { crowd as C, npc, roads as R } from '../config.ts';
+import { crowd as C, npc, player, roads as R } from '../config.ts';
 import { Crowd } from './crowd.ts';
 import { NpcRoads } from './roads.ts';
+import { Traffic } from './traffic.ts';
 import type { CarPose, LightQuery, NpcAnchor } from './types.ts';
 
 const DT = 1 / 60;
@@ -22,7 +23,12 @@ const fixture = (tee: boolean) => {
   };
   return new NpcRoads(RoadGraph.decode(file), () => 0);
 };
-const car = (x: number, z: number, yaw: number, speed: number): CarPose => ({ id: 0, kind: 'sedan', paint: 0, x, y: 0, z, yaw, pitch: 0, speed, wheel: 0, braking: false });
+const car = (x: number, z: number, yaw: number, speed: number, kind: CarPose['kind'] = 'sedan'): CarPose => ({ id: 0, kind, paint: 0, x, y: 0, z, yaw, pitch: 0, speed, wheel: 0, braking: false });
+/** Is (x, z) inside car c's body rectangle (npc.vehicles dims)? */
+const inBody = (c: CarPose, x: number, z: number) => {
+  const [w, , l] = npc.vehicles[c.kind].dims, fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw), dx = x - c.x, dz = z - c.z;
+  return Math.abs(dx * fx + dz * fz) < l / 2 && Math.abs(dx * -fz + dz * fx) < w / 2;
+};
 const RED: LightQuery = { car: () => 'red', pedMayCross: () => false, headsNear: () => [] };
 
   /** Is (x, z) in a place a non-crossing pedestrian may be: a drawn sidewalk strip, a living street, or a footway? */
@@ -70,6 +76,19 @@ describe('Crowd (fixture)', () => {
     expect(count(() => [], RED)).toBe(0);
   });
 
+  it('crossing gate: a stopped car whose BODY lies over the crossing blocks it (bus, truck, sedan), one clear of it does not', () => {
+    const c = new Crowd(fixture(false), 1) as unknown as { clear(g: object, cars: CarPose[]): boolean };
+    const gate = { junction: 1, edge: 0, ax: 100, az: -6, bx: 100, bz: 6 }; // across the road at x = 100
+    const west = Math.PI / 2; // heading −X, stopped in the lane z = 1.5
+    expect(c.clear(gate, [])).toBe(true);
+    expect(c.clear(gate, [car(105, 1.5, west, 0, 'bus')])).toBe(false); // body x ∈ [99, 111], centre 5 m away
+    expect(c.clear(gate, [car(103.2, 1.5, west, 0, 'truck')])).toBe(false); // [99.95, 106.45]
+    expect(c.clear(gate, [car(102, 1.5, west, 0)])).toBe(false); // sedan [99.7, 104.3]
+    expect(c.clear(gate, [car(104, 1.5, west, 0)])).toBe(true); // sedan [101.7, 106.3]: 1.7 m clear
+    expect(c.clear(gate, [car(108.5, 1.5, west, 0, 'bus')])).toBe(true); // bus [102.5, 114.5]
+    expect(c.clear(gate, [car(108.5, 1.5, west, 2, 'bus')])).toBe(false); // …but rolling toward it
+  });
+
   it('T junction: corners and mouth crossings keep to the sidewalks, walkers reach both sides', () => {
     const r = fixture(true), g = r.graph;
     const c = new Crowd(r, 3);
@@ -100,6 +119,30 @@ describe('Crowd (living street)', () => {
       for (const p of cr.peds) (n++, expect(Math.abs(p.z)).toBeLessThanOrEqual(half - C.inset + 0.06), expect(Math.abs(p.z)).toBeGreaterThanOrEqual(half - C.inset - 0.06));
     });
     expect(n).toBeGreaterThan(500);
+  });
+
+  it('a car stopped on the walking band: nobody walks into its body, walkers stop and turn back (no one stands for good)', () => {
+    const file: RoadGraphFile = { v: GRAPH_VERSION, nodes: [0, 0, 1500, 0], kinds: ['living_street'], names: [], ways: [[0, CAR, 0, -1, 0, 0, 0, 1]], junctions: [], crossings: [], signals: [], bikeParking: [] };
+    const r = new NpcRoads(RoadGraph.decode(file), () => 0);
+    for (const seed of [1, 2, 3]) {
+      const c = new Crowd(r, seed);
+      const cars = [car(75, 1.5, -Math.PI / 2, 0), car(60, -1.5, Math.PI / 2, 0, 'truck')]; // right-hand lanes both ways
+      const last = new Map<number, { x: number; z: number; still: number }>();
+      let inside = 0, near = 0, stuck = 0;
+      run(c, 90, anchor(75, 0, { body: false }), (cr) => {
+        for (const p of cr.peds) {
+          if (cars.some((k) => inBody(k, p.x, p.z))) inside++;
+          if (cars.some((k) => Math.hypot(p.x - k.x, p.z - k.z) < 5)) near++;
+          const m = cr.modeOf(p.id), o = last.get(p.id) ?? { x: p.x, z: p.z, still: 0 };
+          o.still = Math.hypot(p.x - o.x, p.z - o.z) < 1e-4 && m === 'walk' ? o.still + DT : 0;
+          if (o.still > C.avoid.holdMax + 0.1) stuck++;
+          (o.x = p.x), (o.z = p.z), last.set(p.id, o);
+        }
+      }, () => cars, 10);
+      expect(near).toBeGreaterThan(100); // people did come up to the cars
+      expect(inside).toBe(0);
+      expect(stuck).toBe(0);
+    }
   });
 });
 
@@ -197,18 +240,32 @@ describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Concorde)', { ti
     expect(new Set(sitters.map((p) => `${p.x},${p.z}`)).size).toBe(sitters.length); // one person per chair
   });
 
-  it('a player standing in a walker\'s way is sidestepped or waited for, never walked into', () => {
-    const c = new Crowd(r, 6);
-    run(c, 15, a0, undefined, undefined, 3);
-    const p = c.peds.find((q) => c.modeOf(q.id) === 'walk' && q.stagger < 0)!;
-    const a = anchor(p.x - Math.sin(p.yaw) * 2.5, p.z - Math.cos(p.yaw) * 2.5);
-    let closest = 9;
-    for (let i = 0; i < 180; i++) {
-      c.step(DT, a, 3, []);
-      closest = Math.min(closest, Math.hypot(p.x - a.x, p.z - a.z));
+  it('a player standing still in a walker\'s way is walked past or turned away from (12 seeds), never touched, never stood at', () => {
+    const out: string[] = [];
+    for (let seed = 1; seed <= 12; seed++) {
+      const c = new Crowd(r, seed);
+      run(c, 15, a0, undefined, undefined, 3);
+      const p = c.peds.find((q) => c.modeOf(q.id) === 'walk' && q.stagger < 0 && Math.hypot(q.x, q.z) > 15)!;
+      const hx = -Math.sin(p.yaw), hz = -Math.cos(p.yaw);
+      const a = anchor(p.x + hx * 2.5, p.z + hz * 2.5);
+      let closest = 9, past = false, away = false, still = 0, stillMax = 0, lx = p.x, lz = p.z;
+      for (let i = 0; i < 30 / DT && c.peds.includes(p); i++) {
+        c.step(DT, a, 3, []);
+        const d = Math.hypot(p.x - a.x, p.z - a.z), m = c.modeOf(p.id);
+        closest = Math.min(closest, d);
+        if ((p.x - a.x) * hx + (p.z - a.z) * hz > 0.5) past = true; // beyond the player along its first heading
+        if (d > 8) away = true;
+        still = Math.hypot(p.x - lx, p.z - lz) < 1e-4 && m === 'walk' ? still + DT : 0;
+        stillMax = Math.max(stillMax, still);
+        (lx = p.x), (lz = p.z);
+      }
+      out.push(`${seed}:${past ? 'past' : away ? 'away' : 'STUCK'} ${closest.toFixed(2)} m, still ≤ ${stillMax.toFixed(1)} s`);
+      expect(p.stagger).toBe(-1);
+      expect(closest).toBeGreaterThan(C.bodyRadius + player.radius);
+      expect(past || away).toBe(true);
+      expect(stillMax).toBeLessThan(C.avoid.holdMax + 0.1);
     }
-    expect(p.stagger).toBe(-1);
-    expect(closest).toBeGreaterThan(C.bodyRadius + 0.3);
+    console.log('Player in the way:', out.join(' · '));
   });
 
   it('seats: deterministic, ≥ seatRoadClear from car roads, some in the Tuileries', () => {
@@ -247,16 +304,41 @@ describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Concorde)', { ti
     expect(c.peds.length).toBeLessThanOrEqual(C.max);
   });
 
+  it('real Traffic + Crowd at density 1 (Marais, St-Germain, Opéra): no pedestrian inside a car body', () => {
+    const P = (lat: number, lon: number) => latLonToWorld(lat, lon);
+    const spots = { marais: P(48.8575, 2.3585), stgermain: P(48.8539, 2.3336), opera: P(48.8706, 2.332) };
+    const res: string[] = [];
+    for (const [name, at] of Object.entries(spots)) {
+      const a = anchor(at.x, at.z, { body: false }), tr = new Traffic(r, 1), cr = new Crowd(r, 1);
+      cr.lights = tr.lights;
+      const step = (fill = false) => (tr.step(DT, a, 1, cr.peds, fill), cr.step(DT, a, 1, tr.cars, fill));
+      step(true);
+      for (let t = 0; t < 20; t += DT) step();
+      let inside = 0, samples = 0;
+      for (let k = 0; k < 90 / DT; k++) {
+        step();
+        if (k % 6) continue;
+        for (const p of cr.peds) (samples++, tr.cars.some((c) => inBody(c, p.x, p.z)) && inside++);
+      }
+      res.push(`${name} ${inside}/${samples} (${tr.cars.length} cars, ${cr.peds.length} peds)`);
+      expect(tr.cars.length).toBeGreaterThan(5);
+      expect(inside).toBe(0);
+    }
+    console.log('Pedestrian samples inside a car body:', res.join(' · '));
+  });
+
   it(`≤ 0.3 ms per step with ${C.max} pedestrians`, () => {
-    const c = new Crowd(r, 1);
+    const c = new Crowd(r, 1), tr = new Traffic(r, 1);
     const a = anchor(0, 0);
-    c.step(DT, a, 10, [], true);
-    for (let i = 0; i < 600; i++) c.step(DT, a, 10, []); // warm the caches
+    tr.step(DT, a, 3, [], true);
+    const cars = tr.cars; // a full street of cars (carAhead / clear() test against every one)
+    c.step(DT, a, 10, cars, true);
+    for (let i = 0; i < 600; i++) c.step(DT, a, 10, cars); // warm the caches
     const t0 = performance.now();
     const n = 1200;
-    for (let i = 0; i < n; i++) c.step(DT, anchor(i * 0.01, 0), 10, []);
+    for (let i = 0; i < n; i++) c.step(DT, anchor(i * 0.01, 0), 10, cars);
     const ms = (performance.now() - t0) / n;
-    console.log(`Crowd: ${c.peds.length} peds, ${ms.toFixed(3)} ms/step`);
+    console.log(`Crowd: ${c.peds.length} peds, ${cars.length} cars, ${ms.toFixed(3)} ms/step`);
     expect(c.peds.length).toBeGreaterThanOrEqual(C.max - 2);
     expect(ms).toBeLessThan(0.3);
   });
