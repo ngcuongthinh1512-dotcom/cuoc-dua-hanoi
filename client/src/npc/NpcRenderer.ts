@@ -86,6 +86,12 @@ function poleGeometry(): BufferGeometry {
     new BoxGeometry(0.3, 0.85, 0.22).translate(0, h - 0.425, 0.12),
   ])!;
 }
+const local = new Vector3(), inv = new Matrix4();
+/** `eye` (world) within npcRender.cameraClear m of the template's bounding box placed by `m`. */
+function eyeInside(geometry: BufferGeometry, m: Matrix4, eye: Vector3): boolean {
+  const box = geometry.boundingBox ?? (geometry.computeBoundingBox(), geometry.boundingBox)!;
+  return box.distanceToPoint(local.copy(eye).applyMatrix4(inv.copy(m).invert())) <= R.cameraClear;
+}
 const BULB_Y = { red: -0.2, amber: -0.425, green: -0.65 } as const; // below the pole top
 
 export class NpcRenderer {
@@ -124,17 +130,20 @@ export class NpcRenderer {
     this.root.add(this.wheels, this.poles, this.bulbs, this.zebras, this.chairs);
   }
 
-  /** Every car at its render pose; wheels roll by CarPose.wheel (m) / the template's wheel radius. */
-  cars(cars: readonly CarPose[], prev: ReadonlyMap<number, Snap>, alpha: number) {
+  /** Every car at its render pose; wheels roll by CarPose.wheel (m) / the template's wheel radius. A car whose body box
+   *  (+ npcRender.cameraClear m) holds `eye` is not drawn: the camera ignores NPC colliders (IGNORE_NPC), so a car stopped
+   *  behind the player would fill the frame with its inside (review M5). */
+  cars(cars: readonly CarPose[], prev: ReadonlyMap<number, Snap>, alpha: number, eye?: Vector3) {
     for (const mesh of this.carMeshes.values()) mesh.count = 0;
     let w = 0;
     for (const c of cars) {
       const mesh = this.carMeshes.get(c.kind);
       const t = this.assets.vehicles.get(c.kind);
       if (!mesh || !t || mesh.count >= CAPACITY) continue;
-      const i = mesh.count++;
       const p = lerpPose(c, prev.get(c.id), alpha, pose);
       m4.compose(pos.set(p.x, p.y, p.z), carQuaternion(p.yaw, p.pitch, quat), scl.set(1, 1, 1));
+      if (eye && eyeInside(t.geometry, m4, eye)) continue;
+      const i = mesh.count++;
       mesh.setMatrixAt(i, m4);
       mesh.setColorAt(i, col.setHex(c.paint));
       for (const [ax, ay, az] of t.axles) {

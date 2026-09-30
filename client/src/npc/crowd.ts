@@ -14,6 +14,7 @@ import { crowd as C, player, roads as R, npc, traffic } from '../config.ts';
 import { hash01 } from '../world/geom.ts';
 import type { NpcRoads } from './roads.ts';
 import { mulberry32, pickWeighted } from './rng.ts';
+import { groundAt } from './traffic.ts';
 import type { CarPose, ExclusionZone, LightQuery, NpcAnchor, PedActivity, PedPose, Seat } from './types.ts';
 import { NO_LIGHTS } from './types.ts';
 
@@ -649,18 +650,16 @@ export class Crowd {
     ps.speed = speed;
   }
 
-  /** Pose = path position + dodge; y = ground (bridge decks via NpcRoads.heightOn) + the kerb on raised sidewalks. */
+  /** Pose = path position + dodge; y = ground under the feet (groundAt: bridge decks too) + the kerb on raised sidewalks. */
   private place(p: Ped): void {
-    const dt = this.dt, ps = p.pose, g = this.g, e = p.leg.e;
+    const dt = this.dt, ps = p.pose, e = p.leg.e;
     const rx = Math.cos(ps.yaw), rz = -Math.sin(ps.yaw); // right of heading (−sin, −cos) is (cos, −sin)
     ps.x = p.x + rx * p.dodge;
     ps.z = p.z + rz * p.dodge;
     if (e < 0) return;
-    const a = g.edgeA[e]!, b = g.edgeB[e]!, L = g.edgeLength[e]!;
-    const s = clamp(((ps.x - g.x[a]!) * (g.x[b]! - g.x[a]!) + (ps.z - g.z[a]!) * (g.z[b]! - g.z[a]!)) / L, 0, L);
     const add = this.kind(e) === SIDE && p.mode !== 'cross' ? R.lift + R.curbHeight : 0;
     p.yOff += clamp(add - p.yOff, -2 * dt, 2 * dt);
-    ps.y = this.nr.heightOn(e, s) + p.yOff;
+    ps.y = groundAt(this.nr, e, ps.x, ps.z) + p.yOff;
   }
 }
 

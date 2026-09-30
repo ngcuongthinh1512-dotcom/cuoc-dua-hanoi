@@ -190,7 +190,7 @@ export class Npc {
       this.cars.setChairs(this.crowd.seatsNear(x, z, R.chair.radius), this.roads.heightAt);
     }
     this.cars.lightColours(this.traffic.lights);
-    this.cars.cars(this.traffic.cars, this.prevCars, alpha);
+    this.cars.cars(this.traffic.cars, this.prevCars, alpha, camera.position);
     this.peds.update(this.crowd.peds, this.prevPeds, alpha, camera.position, dt);
     Object.assign(this.stats, { cars: this.traffic.cars.length, peds: this.crowd.peds.length, density: this.density, colliders: this.colliders.near.length });
     this.stats.drawMs += (performance.now() - t0 - this.stats.drawMs) * 0.05;

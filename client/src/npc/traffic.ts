@@ -47,6 +47,16 @@ export function pathPoint(a: Seg, offA: number, b: Seg, offB: number, c: number,
   return out;
 }
 
+/** Ground y at (x, z) beside edge e, as RoadBuilder draws it (terrain at every vertex, not at the centre line); on a
+ *  bridge edge never below its deck (NpcRoads.heightOn at the projection of (x, z)). */
+export function groundAt(roads: NpcRoads, e: number, x: number, z: number): number {
+  const g = roads.graph, y = roads.heightAt(x, z);
+  if (!(g.flags(e) & WayFlag.bridge)) return y;
+  const a = g.edgeA[e]!, b = g.edgeB[e]!, L = g.edgeLength[e]! || 1;
+  const s = Math.min(L, Math.max(0, ((x - g.x[a]!) * (g.x[b]! - g.x[a]!) + (z - g.z[a]!) * (g.z[b]! - g.z[a]!)) / L));
+  return Math.max(y, roads.heightOn(e, s));
+}
+
 /** A simulated car: the public pose plus its driving state (tests read the state through this type). */
 export interface SimCar extends CarPose {
   readonly len: number; readonly wid: number; readonly vf: number;
@@ -188,8 +198,10 @@ export class Traffic {
       const tops = arms.filter((e) => rk(e) === top);
       const bearing = (e: number) => Math.atan2(g.z[farNode(roads, e, n)]! - g.z[n]!, g.x[farNode(roads, e, n)]! - g.x[n]!);
       c.kind = 'equal';
-      // the two top-ranked arms form a major road when they run nearly straight through (≤ 30°)
-      if (top > low && tops.length === 2 && angDiff(bearing(tops[0]!), bearing(tops[1]!)) >= Math.PI - Math.PI / 6) {
+      // the two top-ranked arms form a major road when they run nearly straight through (≤ 30°); a lone top-ranked arm (a
+      // oneway avenue a side street joins) has priority too, else its whole queue goes one car at a time
+      // (a jam west of Concorde once M7 put more cars on the avenues)
+      if (top > low && (tops.length === 1 || (tops.length === 2 && angDiff(bearing(tops[0]!), bearing(tops[1]!)) >= Math.PI - Math.PI / 6))) {
         c.kind = 'yield';
         for (const e of tops) c.major.add(e);
       }
@@ -296,9 +308,11 @@ export class Traffic {
           if (!block && nx !== undefined && !this.exitClear(car, nx, k!.cB)) block = true;
           if (!block && nx !== undefined && !(ctl.kind === 'ring' && this.isRing(de))) {
             // one car per exit edge: a car from another arm (or another lane of this one) that is about to turn onto it goes
-            // first (ring cars never yield); a claimant in this lane behind us is just following (gapAhead orders that)
+            // first (ring cars never yield); a claimant in this lane behind us is just following (gapAhead orders that), and
+            // one farther from this node's line than us is queued behind us in some lane (yielding to it deadlocks: it
+            // waits for us: a gridlock at Rue Royale / Concorde)
             const other = this.claims.get(nx);
-            if (other && other !== car && !(other.route.includes(de) && this.laneIn(de, other) === this.laneIn(de, car))) block = true;
+            if (other && other !== car && !(other.route.includes(de) && this.laneIn(de, other) === this.laneIn(de, car)) && !(this.toLine(other, n) > this.toLine(car, n))) block = true;
             else if (!other) {
               if (j === 0) car.claim = nx; // kept across steps only for the next exit (the snapshot drops others)
               this.claims.set(nx, car);
@@ -577,11 +591,9 @@ export class Traffic {
     car.x = this.out.x;
     car.z = this.out.z;
     car.yaw = this.out.yaw;
-    const fwd = (de & 1) === 0, L = a.len, e = de >> 1;
-    const at = (s: number) => this.roads.heightOn(e, fwd ? Math.min(Math.max(s, 0), L) : L - Math.min(Math.max(s, 0), L));
-    car.y = at(car.s);
-    const half = 0.3 * car.len;
-    car.pitch = Math.atan2(at(car.s + half) - at(car.s - half), 2 * half);
+    const e = de >> 1, half = 0.3 * car.len, fx = -Math.sin(car.yaw) * half, fz = -Math.cos(car.yaw) * half;
+    car.y = groundAt(this.roads, e, car.x, car.z);
+    car.pitch = Math.atan2(groundAt(this.roads, e, car.x + fx, car.z + fz) - groundAt(this.roads, e, car.x - fx, car.z - fz), 2 * half);
   }
 
   // ── spawning ──
@@ -599,7 +611,9 @@ export class Traffic {
       const a = g.edgeA[e]!, b = g.edgeB[e]!;
       if (Math.hypot((g.x[a]! + g.x[b]!) / 2 - anchor.x, (g.z[a]! + g.z[b]!) / 2 - anchor.z) > R) continue;
       km += g.edgeLength[e]! / 1000;
-      total += g.edgeLength[e]!; // every edge by its length: a roundabout of short edges gets its share
+      // spawn spot by length × lanes (both directions) ^ laneWeight: avenues get more of the cars (review M7: they looked
+      // empty); a roundabout of short edges still gets its share
+      total += g.edgeLength[e]! * (this.roads.lanes(g.edgeWay[e]!, true) + this.roads.lanes(g.edgeWay[e]!, false)) ** traffic.laneWeight;
       this.near.push(e);
       this.nearCum.push(total);
     }

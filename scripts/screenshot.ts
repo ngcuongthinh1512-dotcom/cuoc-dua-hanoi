@@ -131,7 +131,7 @@ Object.assign(PRESETS, {
   // [A] NPC assets on the dev-only turntable /npc.html (params in client/src/npc/npcPreview.ts)
   'p4b-cars': '/npc.html?show=cars', // 10 vehicles, side view, paints, scooter / moto riders
   'p4b-peds': '/npc.html?show=peds&clip=walk&t=0.4', // 4 avatars, LOD0 in front, LOD1 behind
-  'p4b-peds-idle': '/npc.html?show=peds&clip=sit,phone,wave', // seated (stand-in chair), phone, wave
+  'p4b-peds-idle': '/npc.html?show=peds&clip=sit,phone,wave&t=1.5', // seated (stand-in chair), phone, wave
 
   // [B] traffic, spectator views after the warm-up (coordinates only: drawn once track D wires the cars in)
   // Anchored near the ring centre (−1916, −922; the NPCs fill around the camera): 85 m SE of it, 150 m up, looking NW
@@ -147,7 +147,7 @@ Object.assign(PRESETS, {
   // [C] pedestrians (shown once track D's renderer is merged): standing on the east Rue Royale sidewalk (kerb + 1.75 m, edge 21480)
   // looking up the street; the zebra at the Rue Royale × Place de la Concorde crossing seen from its east kerb; a Tuileries
   // chair (npc/crowd.ts seatsNear) seen from the path it faces
-  'p4b-sidewalk': '/?player=105.1,-201.1,-26&wait=5',
+  'p4b-sidewalk': '/?player=105.1,-201.1,-26&wait=5&npcDensity=1',
   'p4b-crossing': camAt(86.3, -149.4, 3.5, 64, -10),
   'p4b-park': camAt(391.6, 258.6, 1.7, 154.4, -3),
 
@@ -156,7 +156,7 @@ Object.assign(PRESETS, {
   // it); the ring (radius + npc.zoneMargin) around the player shows with F3; Place de l'Opéra facing the Opéra Garnier.
   // npcDensity=1: fixed (headless Chrome's low FPS would lower the automatic density).
   'p4b-street': '/?player=87.8,-184.5,-25.97&autoMove=walk&wait=4&debug=1&npcDensity=1',
-  'p4b-bike-car': '/?player=87.8,-184.5,-25.97&bike&autoMove=walk&npcTest=car:van@93.06,-195.29,64.03&orbit=60&wait=3&npcDensity=1',
+  'p4b-bike-car': '/?player=87.8,-184.5,-25.97&bike&autoMove=walk&npcTest=car:van@93.06,-195.29,64.03&orbit=60&wait=4.5&npcDensity=1',
   'p4b-dodge': '/?player=94.2,-181.4,-25.97&autoMove=walk&wait=6&npcDensity=1',
   'p4b-zone': '/?player=87.8,-184.5,-25.97&npcZone=87.8,-184.5,20&camMode=far&debug=1&npcDensity=1',
   'p4b-density': playerAt(48.8706, 2.332, 0, '&debug=1&wait=2&npcDensity=1'),
@@ -256,7 +256,7 @@ try {
     await mkdir(outDir, { recursive: true });
     for (const [name, path] of Object.entries(jobs)) {
       await page.goto(`http://localhost:${PORT}${path}`);
-      const timeout = TIMEOUT_MS[name] ?? DEFAULT_TIMEOUT_MS;
+      const timeout = TIMEOUT_MS[name] ?? (name.startsWith('p4b-') ? 90_000 : DEFAULT_TIMEOUT_MS); // p4b: NPCs make each frame heavier (review m7)
       await page
         .waitForFunction(() => (globalThis as { __READY__?: boolean }).__READY__ === true, null, { timeout })
         .catch(() => void errors.push(`[${name}] không thấy window.__READY__ sau ${timeout} ms (vẫn chụp để xem lỗi)`));

@@ -171,7 +171,9 @@ async function start() {
         return Npc.create(scene, world, g, env.heightAt, {
           seed: overrides.npcSeed ?? npcCfg.seed,
           density: overrides.npcDensity ?? npcCfg.density,
-          auto: overrides.npcDensity === undefined,
+          // screenshots / scripted runs (?wait=, headless = navigator.webdriver) keep a fixed density: the frame rate of the
+          // capturing machine must not change the picture (review m1)
+          auto: overrides.npcDensity === undefined && !query.has('wait') && !navigator.webdriver,
           zones: overrides.npcZones ?? [],
           test: overrides.npcTest ?? [],
         });

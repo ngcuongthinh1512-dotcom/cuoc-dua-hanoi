@@ -785,8 +785,9 @@ export const traffic = {
   // highway=* kinds cars drive on (no service: parking entrances, courtyards); npc/roads.ts keeps the largest strongly
   // connected part of them, so no car ever gets stuck in a dead end
   kinds: ['primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'primary_link', 'secondary_link', 'tertiary_link'] as string[],
-  perKm: 10, // cars per km of NPC road within radius (× density)
+  perKm: 10, // cars per km of NPC road within radius (× density); placed by length × lanes^laneWeight (traffic.ts refreshNear)
   max: 60,
+  laneWeight: 0.5, // spawn spot by edge length × lanes^laneWeight (0 = length only; 1 put so many cars on the Concorde avenues that queues at the lights failed the "cars keep moving" test)
   radius: 250, // m around the anchor
   despawnMargin: 50, // m beyond radius
   viewConeDeg: 50, // ± around the anchor's viewYaw: no spawning inside it (closer than render.fog.near)
@@ -864,9 +865,10 @@ export const npcRender = {
   push: { maxSpeed: 1 }, // m/s: a car overlapping the player shoves it through the KCC
   warmUp: 20, // s simulated after the initial fill (queues at red lights on the first frame)
   // FPS mean over `window` s < minFps → density × down; ≥ okFps for upAfter s → + up; floor min (nextDensity).
-  // Off with URL ?npcDensity= (fixed density: screenshots don't depend on the machine's frame rate).
+  // Off with URL ?npcDensity= / ?wait= and when headless (navigator.webdriver): screenshots must not depend on the frame rate.
   autoDensity: { minFps: 45, okFps: 57, window: 2, upAfter: 5, down: 0.8, up: 0.1, min: 0.25 },
   refresh: 10, // m the anchor moves before the static sets (zebras, chairs, light heads) are gathered again
+  cameraClear: 1, // m around a car body box: the camera this close is inside it or has it filling the frame → that car is not drawn (the camera cast ignores NPCs)
   wheelWidth: 0.22, // m, the shared unit wheel (radius per template; wheel angle = CarPose.wheel m / that radius)
   // m; the pole stands exactly at SignalHead (x, z) (already on the right kerb, npc/types.ts) and its lamps look along
   // SignalHead.yaw, toward the arriving cars; the lit bulb sits bulbOut m in front of the housing (not tone mapped)

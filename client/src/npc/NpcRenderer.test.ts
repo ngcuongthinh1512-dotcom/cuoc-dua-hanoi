@@ -33,6 +33,16 @@ describe('NpcRenderer (asset stub)', () => {
     expect([sedan.count, sedan.visible, bus.count]).toEqual([0, false, 1]);
   });
 
+  it('a car whose body holds the camera is not drawn (wheels too); others are (review M5)', () => {
+    const r = new NpcRenderer(assets);
+    const cars = [car(1, 'truck', 0, 0, 0, 0.7), car(2, 'truck', 0, 20, 0)];
+    const wheels = assets.vehicles.get('truck')!.axles.length;
+    r.cars(cars, new Map(), 1, new Vector3(0.6, 1.5, 0.8)); // inside truck 1 (rotated), 1.4 m off its pivot
+    expect([r.carMeshes.get('truck')!.count, r.wheels.count]).toEqual([1, wheels]);
+    r.cars(cars, new Map(), 1, new Vector3(0, 1.5, 8)); // behind both
+    expect(r.carMeshes.get('truck')!.count).toBe(2);
+  });
+
   it('heading: yaw 0 = nose (+Z model) to the north (−Z), + = left; pitch lifts the nose', () => {
     const r = new NpcRenderer(assets);
     r.cars([car(1, 'van', 0xffffff, 3, 4, Math.PI / 2)], new Map(), 1);

@@ -7,6 +7,7 @@ import { traffic } from '../config.ts';
 import type { WaterData } from '../geo/chunkData.ts';
 import { heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
 import { carveRiver } from '../world/Terrain.ts';
+import { Crowd } from './crowd.ts';
 import { TrafficLights } from './lights.ts';
 import { NpcRoads } from './roads.ts';
 import { pathPoint, type Seg, Traffic } from './traffic.ts';
@@ -283,27 +284,34 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(tr.cars.length).toBeGreaterThan(10);
   }, 120_000);
 
-  it.each([1, 2])('10 min at density 1, seed %i: ≥ 80 % of the cars drive ≥ 50 m in the last minute (no gridlock)', (seed) => {
-    const tr = new Traffic(roads, seed);
-    tr.step(DT, concorde, 1, NOPEDS, true);
-    const track = new Map<number, { x: number; z: number; len: number; dist: number }>();
-    for (let k = 0; k < HZ * 600; k++) {
-      tr.step(DT, concorde, 1, NOPEDS);
-      if (k === HZ * 540) for (const c of tr.cars) track.set(c.id, { x: c.x, z: c.z, len: 0, dist: 0 });
-      if (k > HZ * 540)
-        for (const c of tr.cars) {
-          const t = track.get(c.id);
-          if (t) (t.len += Math.hypot(c.x - t.x, c.z - t.z)), (t.x = c.x), (t.z = c.z), (t.dist = Math.hypot(c.x, c.z));
-        }
+  // pooled over 4 seeds: one seed's 25 cars swing ±4 with a red light's queue (review M7 put more cars on the avenues)
+  it('10 min at density 1, seeds 1–4: ≥ 75 % of the cars drive ≥ 50 m in the last minute, ≤ 10 % stand > 30 s (no gridlock)', () => {
+    let moved = 0, tracked = 0, still30 = 0, cars = 0;
+    const res: string[] = [];
+    for (const seed of [1, 2, 3, 4]) {
+      const tr = new Traffic(roads, seed);
+      tr.step(DT, concorde, 1, NOPEDS, true);
+      const track = new Map<number, { x: number; z: number; len: number; dist: number }>();
+      for (let k = 0; k < HZ * 600; k++) {
+        tr.step(DT, concorde, 1, NOPEDS);
+        if (k === HZ * 540) for (const c of tr.cars) track.set(c.id, { x: c.x, z: c.z, len: 0, dist: 0 });
+        if (k > HZ * 540)
+          for (const c of tr.cars) {
+            const t = track.get(c.id);
+            if (t) (t.len += Math.hypot(c.x - t.x, c.z - t.z)), (t.x = c.x), (t.z = c.z), (t.dist = Math.hypot(c.x, c.z));
+          }
+      }
+      // a car that is gone left the area (drove away) unless it vanished well inside the radius (stuck → removed)
+      const m = [...track.entries()].filter(([id, t]) => (tr.cars.some((c) => c.id === id) ? t.len >= 50 : t.dist > traffic.radius - 40 || t.len >= 50)).length;
+      const s30 = tr.cars.filter((c) => (c as { still: number }).still > 30).length;
+      res.push(`seed ${seed} ${m}/${track.size} moved, ${s30}/${tr.cars.length} standing`);
+      expect(track.size).toBeGreaterThan(15);
+      [moved, tracked, still30, cars] = [moved + m, tracked + track.size, still30 + s30, cars + tr.cars.length];
     }
-    // a car that is gone left the area (drove away) unless it vanished well inside the radius (stuck → removed)
-    const moved = [...track.entries()].filter(([id, t]) => (tr.cars.some((c) => c.id === id) ? t.len >= 50 : t.dist > traffic.radius - 40 || t.len >= 50)).length;
-    const still30 = tr.cars.filter((c) => (c as { still: number }).still > 30).length;
-    console.log(`Gridlock check seed ${seed}: ${moved}/${track.size} cars moved ≥ 50 m (or drove out of the area) in the last minute, ${still30}/${tr.cars.length} standing > 30 s`);
-    expect(track.size).toBeGreaterThan(15);
-    expect(moved / track.size).toBeGreaterThanOrEqual(0.8);
-    expect(still30 / tr.cars.length).toBeLessThanOrEqual(0.2);
-  }, 120_000);
+    console.log(`Gridlock check (≥ 50 m in the last minute or drove out; standing > 30 s): ${res.join(' · ')}`);
+    expect(moved / tracked).toBeGreaterThanOrEqual(0.75);
+    expect(still30 / cars).toBeLessThanOrEqual(0.1);
+  }, 240_000);
 
   it('Étoile: entries wait for gaps, ring cars go anticlockwise, cars leave the ring within 90 s', () => {
     const name = g.file.names.indexOf('Place Charles de Gaulle');
@@ -384,6 +392,29 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(run(1)).toBe(a);
     expect(run(2)).not.toBe(a);
   }, 60_000);
+
+  it('sloped streets (Rue Royale, Opéra): cars on the drawn road, pedestrians on the drawn sidewalk / road (review M6)', () => {
+    let worstCar = 0, lo = 0, hi = 0;
+    for (const at of [latLonToWorld(48.8676, 2.3236), latLonToWorld(48.8706, 2.332)]) {
+      const a = anchor(at.x, at.z), tr = new Traffic(roads, 1), cr = new Crowd(roads, 1);
+      cr.lights = tr.lights;
+      const step = (fill = false) => (tr.step(DT, a, 1, cr.peds, fill), cr.step(DT, a, 1, tr.cars, fill));
+      step(true);
+      for (let k = 0; k < 30 / DT; k++) {
+        step();
+        if (k % 30) continue;
+        for (const c of tr.cars) worstCar = Math.max(worstCar, Math.abs(c.y - roads.heightAt(c.x, c.z)));
+        for (const p of cr.peds) {
+          const d = p.y - roads.heightAt(p.x, p.z); // road 0 … sidewalk lift + curbHeight (0.2), ramping between
+          [lo, hi] = [Math.min(lo, d), Math.max(hi, d)];
+        }
+      }
+    }
+    console.log(`Slope check: car |y − ground| ≤ ${worstCar.toFixed(3)} m, pedestrian y − ground ∈ [${lo.toFixed(3)}, ${hi.toFixed(3)}] m`);
+    expect(worstCar).toBeLessThan(0.1); // drawn asphalt / pavers = ground + 0.05…0.07
+    expect(lo).toBeGreaterThan(-0.1);
+    expect(hi).toBeLessThan(0.3);
+  });
 
   it('60 cars: ms per step', () => {
     const tr = new Traffic(roads, 1);
