@@ -920,10 +920,12 @@ export const gps = {
   offRoute: 25, // m from the route before it is searched again (A* ≤ 3 ms across the map, docs/plans/phase5.md §2)
   minInterval: 1, // s between searches
   arriveRadius: 15, // m: the waypoint is cleared on arrival
+  lookAhead: 80, // m of route beyond the current segment the player's foot may jump to (trims the walked part; corners)
 };
 export const locate = {
   maxDistance: 25, // m: nearest named street (no sidewalk / crossing) within this, else none
   keepDistance: 35, // m: the current street stays while its way is this close (no flicker at junctions)
+  recheck: 2, // m the feet move before the street is looked up again (≈ 2–4 lookups / s on foot, ≤ 0.1 ms each)
 };
 
 // ── C · menu, settings, toasts, bike notices, respawn (ui/Menu.ts, ui/settings.ts, ui/Toasts.ts, index.html,

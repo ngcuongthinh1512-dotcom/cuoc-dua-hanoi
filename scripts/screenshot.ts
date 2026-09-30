@@ -168,7 +168,13 @@ Object.assign(PRESETS, {
 Object.assign(PRESETS, {
   // [A] minimap (standing / turned / zoomed out on the bike), full map (whole / street names)
 
-  // [B] GPS route on the minimap and the full map, bike route around stairs
+  // [B] GPS route on the minimap and the full map, bike route around stairs. The route is drawn by track A (minimap /
+  // full map); until then these only run the GPS (scratch check: window.__GAME__.gps().route / .remaining / .stats).
+  'p5-gps': '/?player&gps=810.6,-569.4&wait=2', // Concorde spawn → Place de l'Opéra (48.8706, 2.3322), on foot, ≈ 1.25 km
+  'p5-gps-map': '/?player&gps=810.6,-569.4&map=2&wait=2', // the same route on the full map at 2 m/px
+  // Trocadéro esplanade → foot of the Eiffel Tower (48.8584, 2.2945) on the bike: walking goes down 3 stair flights
+  // (929 m), the bike route detours around them (1172 m)
+  'p5-gps-bike': '/?player=-2412,331,-135&bike&gps=-1955.6,787.3&wait=3',
 
   // [C] menu, toasts (bike at the stairs, F refused), respawn out of the Seine
 
