@@ -961,3 +961,16 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 ### 17.9 Nội dung chặng chưa chốt (2026-09-30)
 - Các điểm lộ trình và thử thách của từng chặng **chưa chốt**; anh sẽ gửi sau.
 - Chặng demo `worker/legs/paris-demo.json` (L1–L6 ở §17.4) chỉ dùng làm điểm kiểm thử (preset chụp ảnh, test đi bộ tới được). Không gắn cứng code gameplay hay địa danh vào các điểm này; nội dung chặng luôn đọc từ file chặng (Phase 7) và soạn được trên màn hình Host (Phase 10).
+
+### 17.10 Hộp mật thư hiện dần theo bước (chốt 2026-09-30; ghi đè §8.2 "mỗi điểm có một hộp")
+- Hộp của bước N+1 chỉ hiện khi server đánh dấu bước N **hoàn thành** (định nghĩa hoàn thành ở §8.1): đội đã tới điểm của bước N và xong việc ở đó. Nếu bước là thử thách / đường vòng / vượt rào thì phải **làm xong** (server kiểm, hoặc Host duyệt với bài `host_approval`) rồi hộp tiếp theo mới hiện.
+- Khi đội nhận mật thư N, hộp N hiện đúng vị trí thật **cho đội đó**, thấy được từ xa (cờ + ánh sáng nhẹ). Chấp nhận việc client biết tọa độ hộp hiện tại.
+- Hộp của các bước trước ở trạng thái "đã mở", vẫn hiện để định hướng. Hộp của bước sau chưa tới: không hiện, và server **không gửi tọa độ** cho client (cũng không đưa vào static asset).
+- Mỗi đội chỉ thấy hộp của đội mình (server điều khiển theo từng đội). Làm ở Phase 6–7.
+
+### 17.11 Rocketbox đã duyệt + quyết định NPC (chốt 2026-09-30; bổ sung §17.5, §17.7)
+- **Microsoft Rocketbox** (MIT, © 2020 Microsoft): đã duyệt 30 file + `LICENSE.md` (4 avatar `Male_Adult_08`, `Female_Adult_05`, `Business_Male_01`, `Business_Female_01` và 14 clip đi / đứng / ngồi / vẫy) để làm người đi đường Phase 4B. Nhân vật người chơi giữ Universal Base Characters + UAL (§17.7). Ghi nguồn trong game + `LICENSE` kèm model.
+- Người đi đường dùng **4 avatar**, đổi màu áo / quần để bớt trùng; không duyệt thêm avatar.
+- Đạp xe tông người đi đường → **người chơi ngã xe** (như tông xe NPC, §6.3); người bị tông lảo đảo.
+- Vòng xuyến Étoile: xe vào vòng nhường xe trên vòng (ngược ngoài đời, để không tắc cứng).
+- Camera khán giả (`?cam=`) **luôn có NPC**; `?npc=0` tắt (dùng cho kiểm thử vật lý).

@@ -116,7 +116,7 @@ Nguồn: SPEC §3 (hạn mức, chỉ client), §6.3 (ngã xe), §14 (hiệu nă
    - cùng seed + cùng đường đi của người chơi → cùng trạng thái (có test).
 3. **Neo (anchor):**
    - NPC sống quanh chân người chơi. Camera bay `V` vẫn neo vào thân người chơi.
-   - Chế độ khán giả `?cam=` mặc định không có NPC; `?npc=1` thì neo vào điểm đất dưới camera (không có thân để phanh).
+   - Chế độ khán giả `?cam=` **luôn có NPC** (quyết định 2026-09-30): neo vào điểm đất dưới camera (không có thân để phanh).
    - `?npc=0` tắt (dùng cho `ride-check` và các preset kiểm tra vật lý).
 4. **Mật độ:**
    - Số xe mục tiêu = `density × traffic.perKm × km đường car (hợp lệ) trong traffic.radius`, tối đa `traffic.max`. Mặc định 10 xe/km trong 250 m → Concorde ≈ 28, Opéra ≈ 37, Saint-Germain ≈ 48 (trần 60).
@@ -178,7 +178,7 @@ Nguồn: SPEC §3 (hạn mức, chỉ client), §6.3 (ngã xe), §14 (hiệu nă
    - **Né người chơi:**
      - thân người chơi trong `avoid.ahead` m phía trước và lệch ngang ≤ `avoid.side` m → dịch ngang tới `avoid.shift` m (mượt) hoặc dừng;
      - chạm (khoảng cách < `bodyRadius` + `player.radius`, hoặc mũi xe đạp) → lảo đảo `stagger.seconds`, bị đẩy `stagger.push` m ra xa rồi đi tiếp;
-     - `step` trả `knocked`: đang đạp xe tông người thì D nhân tốc độ xe với `npcRender.bikeHitKeep`, không ngã (câu hỏi 1).
+     - `step` trả `knocked`: đang đạp xe tông người thì D gọi crash có sẵn, người chơi **ngã xe** như tông xe NPC (quyết định 2026-09-30).
    - **Độ cao:** `heightOn` + `roads.lift + roads.curbHeight` trên vỉa hè (a); không cộng trên (b), (c).
    - **Vùng cấm** (bán kính + `npc.zoneMargin`):
      - không sinh, không ngồi, không dừng đứng trong vùng;
@@ -378,7 +378,7 @@ export const npc = {
 //    band: [0.3, 0.8], inset: 0.8, crossChance: 0.3, crossReach: 15, crossGap: 4, idle: { per100m: 0.15, seconds: [5, 25] },
 //    seatEvery: 20, seatChance: 0.5, seatOffset: 1.5, seatRoadClear: 15, sitShare: 0.15, avoid: { ahead: 3, side: 1, shift: 1 },
 //    stagger: { seconds: 1.2, push: 0.8 }, waveBack: 10 }
-// D: npcRender { pedLod0: 30, farAnimEvery: 3, colliderRadius: 40, maxColliders: 16, push: { maxSpeed: 1 }, bikeHitKeep: 0.6, warmUp: 20,
+// D: npcRender { pedLod0: 30, farAnimEvery: 3, colliderRadius: 40, maxColliders: 16, push: { maxSpeed: 1 }, warmUp: 20,
 //    autoDensity: { minFps: 45, okFps: 57, window: 2, upAfter: 5, down: 0.8, up: 0.1, min: 0.25 }, lights: { pole: 3.2, kerb: 0.5, radius: 200 },
 //    zebra: { depth: 3, stripe: 0.5, radius: 200 }, chair: { colour: '#3f6b3a', radius: 60 } }
 ```
@@ -443,7 +443,7 @@ Mỗi track chỉ sửa file của mình và **khối config của mình**, khô
   - cầu: `heightOn` giữa cầu Alexandre III > mặt sông + 5 m;
   - tất định: 2 lần chạy cùng seed → cùng hash trạng thái;
   - hiệu năng: ≤ 0,5 ms / bước với 60 xe (in ra).
-- **Preset** (khán giả + `npc=1`, tọa độ B chọn):
+- **Preset** (khán giả, NPC luôn bật, tọa độ B chọn):
   - `p4b-etoile`: nhìn chéo 160 m trên Étoile, `npcDensity=1.5`;
   - `p4b-red`: tầm mắt ở một giao lộ có đèn (hàng xe chờ, đèn đỏ thấy được sau khi ghép D);
   - `p4b-bridge`: xe trên mặt cầu Alexandre III nhìn từ kè;
@@ -502,7 +502,7 @@ Mỗi track chỉ sửa file của mình và **khối config của mình**, khô
 ## 7. Screenshot preset
 
 - `npm run screenshot -- p4b` chạy cả nhóm. Tên và chủ sở hữu ở mục 6.
-- Preset khán giả của B cần `npc=1` (neo camera) và warm-up.
+- Preset khán giả của B cần warm-up (NPC neo vào điểm đất dưới camera).
 - Preset `p3-*` / `p4-*` giữ NPC bật (thế giới thật). Preset nào bị NPC che mất chủ thể thì người tích hợp thêm `&npc=0`. `ride-check` luôn có `npc=0`.
 - Mỗi track tối đa 4 vòng chụp → sửa. Người tích hợp chụp lại tất cả `p4b-*`, `p4-*`, `p3-*`.
 
@@ -545,9 +545,9 @@ Mỗi track chỉ sửa file của mình và **khối config của mình**, khô
 - **Phase 7:** `npc.setExclusionZones(geofence hộp mật thư + thảm về đích)`. Hộp đặt ngoài lòng đường; điểm trên cầu (L4) thì xe tránh cạnh đó.
 - **Phase 12:** âm thanh xe / còi, đèn pha ban đêm, đổi làn / vượt, trạm xe buýt, instancing người ở xa, model đèn giao thông đẹp hơn, thêm avatar.
 
-## 11. Câu hỏi mở (cần anh quyết)
+## 11. Quyết định đã chốt (2026-09-30)
 
-1. **Đạp xe tông người đi đường:** hiện người đó lảo đảo, xe đạp chậm lại (còn 60 % tốc độ), người chơi **không** ngã. Anh có muốn người chơi ngã xe như khi tông xe NPC không?
-2. **Vòng xuyến Étoile:** ngoài đời xe trên vòng phải nhường xe đi vào (ưu tiên bên phải). Game làm ngược lại (xe vào nhường xe trên vòng) để dòng xe không tắc cứng. Được không?
-3. **Chỉ có 4 avatar Rocketbox** (2 nam, 2 nữ): đám đông 30–40 người sẽ thấy trùng người. Có muốn duyệt thêm vài avatar không (mỗi avatar ≈ 38–46 MB tải về, ≈ 1 MB sau xử lý)? Mặc định: làm với 4 avatar.
-4. **Camera khán giả** (`?cam=`, Host / đội đã về đích bay tự do): mặc định **không** có NPC (chỉ bật khi thêm `?npc=1`). Có cần NPC cả ở chế độ này không?
+1. Đạp xe tông người đi đường → **người chơi ngã xe** (như tông xe NPC); người bị tông vẫn lảo đảo.
+2. Étoile: xe vào vòng nhường xe trên vòng (ngược ngoài đời, để không tắc cứng).
+3. Làm với **4 avatar** Rocketbox, đổi màu áo / quần để bớt trùng; không duyệt thêm.
+4. Camera khán giả `?cam=` **luôn có NPC**; `?npc=0` vẫn tắt được (dùng cho `ride-check`, preset vật lý).
