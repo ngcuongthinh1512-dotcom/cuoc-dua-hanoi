@@ -132,7 +132,12 @@ Object.assign(PRESETS, {
 
   // [B] traffic, spectator views after the warm-up: p4b-etoile, p4b-red, p4b-bridge, p4b-concorde
 
-  // [C] pedestrians: p4b-sidewalk, p4b-crossing, p4b-park
+  // [C] pedestrians (shown once track D's renderer is merged): standing on the east Rue Royale sidewalk (kerb + 1.75 m, edge 21480)
+  // looking up the street; the zebra at the Rue Royale × Place de la Concorde crossing seen from its east kerb; a Tuileries
+  // chair (npc/crowd.ts seatsNear) seen from the path it faces
+  'p4b-sidewalk': '/?player=105.1,-201.1,-26&wait=5',
+  'p4b-crossing': camAt(86.3, -149.4, 3.5, 64, -10),
+  'p4b-park': camAt(391.6, 258.6, 1.7, 154.4, -3),
 
   // [D] in game: p4b-street, p4b-bike-car, p4b-dodge, p4b-zone, p4b-density
 });
