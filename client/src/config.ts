@@ -634,3 +634,62 @@ export const thirdPersonCamera = {
   waterClearance: 0.3, // m: while swimming the camera stays this far above the Seine surface (feet + swim.floatDepth)
   nearPlane: 0.1, // m, camera near plane in player mode (render.near 0.5 would cut the head when the arm is short)
 };
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// Phase 4 (docs/plans/phase4.md): movement. Each track edits ONLY its own block and adds no imports; the foundation
+// block belongs to the integrator. Speeds come only from `movement` (the leg file overrides it in Phase 6).
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+
+// ── Foundation · bike rules (SPEC §6.3, §6.6) ──
+/** SPEC §6.1: top bike speed = footSpeed × bikeSpeedMultiplier (read live: the leg file may change `movement`). */
+export const bikeTopSpeed = () => movement.footSpeed * movement.bikeSpeedMultiplier;
+export const bikeRules = {
+  interactRadius: 2.5, // m from the bike pivot: F takes / mounts it, on foot only (SPEC §6.3)
+  sparkleRadius: 30, // m: an available bike sparkles when the local player is this close (SPEC §6.6)
+  maxPerPlayer: 1, // taking another bike makes the old one disappear (SPEC §6.3)
+};
+
+// ── A · bike model + rider (vehicle/BikeModel.ts, player/Animation.ts IK, scripts/process-assets.ts) ──
+export const bikeModel = {
+  url: 'models/bike.glb', // Poly by Google "Bicycle" (CC-BY 3.0), recoloured Vélib'-style, basket, split pivots
+  // Vélib'-style livery without the brand: grey frame, green mudguards / basket trim, black tyres and saddle
+  colours: { frame: '#8f969c', accent: '#5aa532', tyre: '#1b1b1d', saddle: '#232326', metal: '#b9bec2' },
+  wheelRadius: 0.33, // m (26"), wheel angle = distance / this
+  gearRatio: 2.2, // wheel turns per crank turn
+  mountBlend: 0.35, // s: sit / stand crossfade + IK weight ramp on mount / dismount
+  sparkle: { count: 12, size: 0.08, height: 1.2, hz: 1.5 }, // points around the bike, m, blink rate
+};
+
+// ── B · bike physics + interaction (vehicle/BikeController.ts, vehicle/Bikes.ts, audio/sfx.ts, player/*) ──
+export const bike = {
+  accelTime: 1, // s from 0 to bikeTopSpeed() (SPEC §6.1)
+  brakeDecel: 7, // m/s² while braking (S)
+  coastDecel: 0.6, // m/s² rolling without input
+  reverseSpeed: 1, // m/s backwards (S held once stopped): get the nose out of a wall
+  turnRate: { slow: 2.4, top: 1.3 }, // rad/s at ~0 and at top speed (linear in between)
+  sharpTurn: { rate: 1.1, loss: 1.5 }, // rad/s above which speed bleeds, m/s² per rad/s of excess (SPEC §6.1)
+  leanMaxDeg: 25, // roll at full turn rate and top speed
+  leanSharpness: 6, // 1/s
+  paveGrip: 0.65, // × turn rate and brake on cobbles (SPEC §6.6: less friction on pavé)
+  wallKeep: 0.5, // share of speed kept after grazing an obstacle (SPEC §6.1: collisions slow down)
+  crashImpact: 3.2, // m/s of speed lost against an obstacle in one step → crash (SPEC §6.3: strong impact at speed)
+  wheelBase: 1.1, // m, front-wheel probe ahead of the pivot (nose doesn't enter walls)
+  dismountSide: 0.7, // m to the left of the bike where the rider lands
+  // Local dev bikes until Phase 6 (server bikes): offsets from playerSetup.spawn, m (x east, z south), heading °.
+  devSpawns: [[3, 0, 0], [-4, 2, 90], [6, -5, 180]] as [number, number, number][],
+};
+
+// ── C · road graph (shared/src/graph/*, scripts/build-graph.ts, geo/roadGraph.ts) ──
+export const roadGraph = {
+  snapRadius: 80, // m: nearestNode search for GPS / routing from a free position
+};
+
+// ── D · stairs + junctions (world/StairBuilder.ts, world/StreetProps.ts, scripts/build-chunks.ts) ──
+export const stairs = {
+  riser: 0.16, // m target step height (KCC autostep ≤ player.maxStep 0.4)
+  tread: 0.32, // m
+  stringer: { width: 0.25, height: 0.35 }, // m, side walls
+  handrail: { height: 0.9, radius: 0.025 }, // m
+  metroDepth: 3.5, // m a metro entrance goes down before its closed end (no tunnels)
+  colours: { stone: '#bdb4a3', rail: '#2a2d30' },
+};

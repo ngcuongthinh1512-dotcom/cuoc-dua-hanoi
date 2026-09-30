@@ -83,6 +83,13 @@ Object.assign(PRESETS, {
   'p3-turntable': '/character.html',
 });
 
+// Phase 4 (docs/plans/phase4.md §8): p4-* presets. ?bike = start mounted on a dev bike, autoTurn=left|right holds A / D.
+Object.assign(PRESETS, {
+  // [A] bike model + rider
+  // [B] physics + interaction
+  // [D] stairs + junctions
+});
+
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
 // point, camera `view` = [azimuth seen from the landmark, distance], raised ~ 0.35 × distance and looking at it.
 const worldCam = (x: number, y: number, z: number, tx: number, ty: number, tz: number) => {

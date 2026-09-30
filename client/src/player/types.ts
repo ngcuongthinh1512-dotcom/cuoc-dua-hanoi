@@ -4,8 +4,8 @@ import type { Vector3 } from 'three';
 import type { WaterData } from '../geo/chunkData.ts';
 
 /** walk = standard on-foot speed (movement.footSpeed, "jog" clip), slow = walkSlow held ("walk" clip),
- *  swim = in the Seine, air = jumping or falling. Phase 4 adds 'bike'. */
-export type MoveMode = 'walk' | 'slow' | 'swim' | 'air';
+ *  swim = in the Seine, air = jumping or falling, bike = riding (Phase 4, "cycle" clip + leg IK; vehicle/types.ts). */
+export type MoveMode = 'walk' | 'slow' | 'swim' | 'air' | 'bike';
 
 /** One-shot gesture over the locomotion; the controller times it (config playerSetup.actions), the animator plays it. */
 export type PlayerAction = 'none' | 'wave' | 'openBox' | 'celebrate' | 'crash' | 'climbOut';

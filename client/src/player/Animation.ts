@@ -4,6 +4,7 @@
 import { type AnimationAction, LoopOnce, LoopRepeat, MathUtils, type Object3D, Quaternion, Vector3 } from 'three';
 import { character as C, playerSetup } from '../config.ts';
 import type { CharacterModel } from './CharacterModel.ts';
+import type { RiderTargets } from '../vehicle/types.ts';
 import type { Gesture, PlayerState } from './types.ts';
 
 export type AnimState =
@@ -50,6 +51,7 @@ const hSpeed = (p: Readonly<PlayerState>) => Math.hypot(p.velocity.x, p.velocity
 /** Next state. `prev` / `prevTime` = current state and s spent in it; `jumped` = PlayerState.jumps changed this frame. */
 export function pickState(p: Readonly<PlayerState>, prev: AnimState, prevTime: number, jumped: boolean): AnimState {
   if (p.action !== 'none' && p.action !== 'wave') return p.action; // openBox / celebrate / crash / climbOut (wave = arm layer)
+  if (p.moveMode === 'bike') return 'cycle'; // Phase 4 track A: + leg / arm IK onto the bike (vehicle/BikeModel.ts)
   const moving = hSpeed(p) >= C.moveThreshold;
   if (p.moveMode === 'swim') return moving ? 'swimFwd' : 'swimIdle';
   if (jumped) return 'jumpStart';
@@ -123,6 +125,10 @@ export class CharacterAnimator {
     if (this.current) this.current.crossFadeTo(a, C.fade, false);
     this.current = a;
   }
+
+  /** Phase 4 track A: IK targets on the bike being ridden (null = on foot) and its lean, set before update().
+   *  FOUNDATION STUB: ignored until track A adds the leg / arm IK and the mount blend. */
+  setRider(_t: RiderTargets | null, _lean: number) {}
 
   update(p: Readonly<PlayerState>, dt: number) {
     const jumped = this.jumps !== undefined && p.jumps !== this.jumps;
