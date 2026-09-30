@@ -162,6 +162,19 @@ Object.assign(PRESETS, {
   'p4b-density': playerAt(48.8706, 2.332, 0, '&debug=1&wait=2&npcDensity=1'),
 });
 
+// Phase 5 (docs/plans/phase5.md §7): p5-* presets, HUD on (player mode). URL hooks (main.ts): gps=x,z (waypoint),
+// map[=metersPerPx] (full map open), menu (menu open), respawn=s ("Kẹt? Về chỗ an toàn" after s simulated seconds).
+// Each track adds its presets under its own line only.
+Object.assign(PRESETS, {
+  // [A] minimap (standing / turned / zoomed out on the bike), full map (whole / street names)
+
+  // [B] GPS route on the minimap and the full map, bike route around stairs
+
+  // [C] menu, toasts (bike at the stairs, F refused), respawn out of the Seine
+
+  // [D] location label + clock, speedometer, street sign with the district line, F3 panel
+});
+
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
 // point, camera `view` = [azimuth seen from the landmark, distance], raised ~ 0.35 × distance and looking at it.
 const worldCam = (x: number, y: number, z: number, tx: number, ty: number, tz: number) => {

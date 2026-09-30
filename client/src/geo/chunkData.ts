@@ -185,7 +185,12 @@ export interface WaterData {
    *  line at their top landings (quayMesh leaves the parapet out there). */
   stairs?: number[];
   stairGaps?: number[];
-} // clipped to RACE_BBOX + 200 m
+  /** Phase 5 (HUD location label, street-sign district line; geo/districts.ts): arrondissements (boundary=administrative +
+   *  admin_level=9), n = 1…20 (8 = "8e"), sorted by n. */
+  districts?: { n: number; outer: XZ; holes?: XZ[] }[];
+  /** Phase 5 big map: park / garden / grass outer rings ≥ 400 m², simplified to 2 m (whole areas, not cut per chunk). */
+  parks?: XZ[];
+} // clipped to the chunk grid around RACE_BBOX (build-chunks waterRect)
 
 /** Skyline outside the map (SPEC §17.6): La Défense towers from one small Overpass query (fetch-osm skyline.json). */
 export interface SkylineData {

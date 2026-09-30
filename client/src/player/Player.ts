@@ -7,6 +7,7 @@ import { crashSound, bell, rolling } from '../audio/sfx.ts';
 import { bike as B, bikeModel, npc, playerSetup, thirdPersonCamera } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import type { CarKind, ExclusionZone, NpcAnchor } from '../npc/types.ts';
+import { notice } from '../ui/Toasts.ts';
 import { loadBikeAsset } from '../vehicle/BikeModel.ts';
 import { Bikes, groundAt } from '../vehicle/Bikes.ts';
 import type { RoadSurface } from '../vehicle/types.ts';
@@ -118,6 +119,7 @@ export class Player {
       b.rider = null; // the bike stays the team's (SPEC §6.3)
       if (crashed) (b.lean = bikeModel.fallenLeanDeg * DEG), crashSound(); // lying on its right side, rider on the left
     };
+    this.controller.onStairs = () => notice('bikeStairs'); // Phase 5: SPEC §6.6
   }
 
   static async create(scene: Scene, world: RAPIER.World, camera: PerspectiveCamera, env: PlayerEnv, o: PlayerOverrides = {}) {
@@ -179,16 +181,21 @@ export class Player {
     return out;
   }
 
-  /** Input → intent and gestures, render pose, animation, camera. `input` null while the free-fly camera has it. */
-  update(dt: number, input: Input | null, alpha: number) {
-    if (input) {
+  /** Input → intent and gestures, render pose, animation, camera. `input` null while the free-fly camera has it;
+   *  `blocked` (Phase 5: menu or full map open) = no input read, the body stops (the camera still follows it). */
+  update(dt: number, input: Input | null, alpha: number, blocked = false) {
+    if (input && blocked) Object.assign(this.intent, newIntent());
+    else if (input) {
       this.camera.look(input, dt);
       if (input.wasPressed('camera')) this.camera.cycleMode();
       readMoveIntent(input, this.camera.yaw, this.intent);
       if (this.o.autoMove) [this.intent.forward, this.intent.right, this.intent.slow] = [1, 0, this.o.autoMove === 'slow'];
       if (this.o.autoTurn) this.intent.right = this.o.autoTurn === 'left' ? -1 : 1;
       if (this.o.holdJump) this.intent.jump = true;
-      if (input.wasPressed('interact')) this.bikes.interact(this.controller);
+      if (input.wasPressed('interact')) {
+        const r = this.bikes.interact(this.controller);
+        if (r && r !== 'mount' && r !== 'dismount') notice(r); // Phase 5: why F did nothing
+      }
       if (input.wasPressed('bell') && this.controller.riding) bell();
       if (input.wasPressed('wave') && !this.controller.riding) this.waved = this.controller.startAction('wave') || this.waved;
     }

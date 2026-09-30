@@ -3,12 +3,14 @@
 import { Color } from 'three';
 import { terrain as T } from '../config.ts';
 import { CHUNK_SIZE, type ChunkData, type ChunkKey, chunkBounds } from '../geo/chunkData.ts';
+import { type Districts, districtAt } from '../geo/districts.ts';
 import { type HeightGrid, heightAt } from '../geo/heightGrid.ts';
 import { buildBridges } from './BridgeBuilder.ts';
 import { buildBuildings } from './BuildingBuilder.ts';
 import { type BuildCtx, type Builder, type BuildOut, type MeshBucket, VERTEX_COLOR } from './buildTypes.ts';
 import { mergeBuckets, mergeTriMeshes, MeshBuffer } from './geom.ts';
 import { buildLandmarks } from './landmarks/index.ts';
+import { mapBuffers, mapVectors } from './mapVectors.ts';
 import { buildRoads } from './RoadBuilder.ts';
 import { buildStairs } from './StairBuilder.ts';
 import { buildStreetProps } from './StreetProps.ts';
@@ -60,10 +62,16 @@ export type BuildError = (builder: string, key: ChunkKey, err: unknown) => void;
 const warn: BuildError = (builder, key, err) => console.warn(`chunk ${key}: ${builder} failed, skipped:`, err);
 
 /** Every builder in its own try/catch (a failing one is reported and skipped, the chunk still builds). */
-export function buildChunk(chunk: ChunkData, grid: HeightGrid, onError: BuildError = warn): BuildOut {
+export function buildChunk(chunk: ChunkData, grid: HeightGrid, onError: BuildError = warn, districts?: Districts): BuildOut {
   const bounds = chunkBounds(chunk.key);
-  const ctx: BuildCtx = { key: chunk.key, bounds, height: (x, z) => heightAt(grid, x, z) };
+  const ctx: BuildCtx = { key: chunk.key, bounds, height: (x, z) => heightAt(grid, x, z), district: (x, z) => districtAt(districts, x, z) };
   const all: BuildOut = { meshes: [], instances: [], colliders: [], textures: [] };
+  try {
+    const map = mapVectors(chunk, ctx);
+    if (map) all.map = map;
+  } catch (err) {
+    onError('map', chunk.key, err);
+  }
   for (const [name, build] of Object.entries(BUILDERS)) {
     try {
       const out = build(chunk, ctx);
@@ -95,5 +103,6 @@ export function transferables(out: BuildOut): Transferable[] {
   for (const s of out.instances) set.add(s.matrices.buffer as ArrayBuffer);
   for (const c of out.colliders) set.add(c.vertices.buffer as ArrayBuffer), set.add(c.indices.buffer as ArrayBuffer);
   for (const t of out.textures ?? []) set.add(t.image);
+  for (const b of out.map ? mapBuffers(out.map) : []) set.add(b);
   return [...set];
 }

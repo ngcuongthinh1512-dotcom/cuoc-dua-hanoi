@@ -2,7 +2,9 @@
 // Builders are pure functions returning plain typed arrays in WORLD coordinates: testable in Node,
 // transferable to/from the worker with zero copy, turned into THREE objects by world/attach.ts.
 import type { ChunkData, ChunkKey, chunkBounds } from '../geo/chunkData.ts';
+import type { Districts } from '../geo/districts.ts';
 import type { HeightGrid } from '../geo/heightGrid.ts';
+import type { MapVectors } from './mapVectors.ts';
 
 /** Landmarks (world/landmarks/): 'stone' plain limestone, 'glass' transparent panes,
  *  'masonry' / 'metal' vertex-coloured stone|slate|lead|zinc|verdigris / painted steel, 'gold' gilding, 'bronze' statues,
@@ -68,18 +70,20 @@ export interface BuildOut {
   instances: InstanceSet[];
   colliders: TriMesh[];
   textures?: { material: MaterialId; image: ImageBitmap }[]; // per-chunk atlas (street signs) → cloned material
+  map?: MapVectors; // Phase 5: minimap layers (world/mapVectors.ts) → ChunkManager.onMap → ui/MapTiles.ts
 }
 
 export interface BuildCtx {
   key: ChunkKey;
   bounds: ReturnType<typeof chunkBounds>;
   height(x: number, z: number): number; // heightAt on the (carved) HeightGrid
+  district?(x: number, z: number): number; // Phase 5: arrondissement 1…20 (geo/districts.ts), 0 = none; absent in tests / preview
 }
 
 /** Pure: world-space coordinates, no THREE objects, no DOM (runs in the worker). */
 export type Builder = (chunk: ChunkData, ctx: BuildCtx) => BuildOut;
 
-export type ToWorker = { type: 'init'; grid: HeightGrid; dataUrl: string } | { type: 'build'; key: ChunkKey };
+export type ToWorker = { type: 'init'; grid: HeightGrid; dataUrl: string; districts?: Districts } | { type: 'build'; key: ChunkKey };
 
 export type FromWorker =
   | { type: 'built'; key: ChunkKey; out: BuildOut; ms: number }

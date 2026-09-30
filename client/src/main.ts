@@ -5,7 +5,10 @@ import { bounds, chunks as chunkCfg, flyCamera, npc as npcCfg, physics, playerSe
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
+import { districtAt } from './geo/districts.ts';
+import { Gps } from './geo/gps.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
+import { StreetLocator } from './geo/locate.ts';
 import { graphLines, loadRoadGraph } from './geo/roadGraph.ts';
 import { Npc } from './npc/Npc.ts';
 import type { NpcAnchor } from './npc/types.ts';
@@ -13,6 +16,14 @@ import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { parseOverrides, Player } from './player/Player.ts';
 import { initCredits } from './ui/Credits.ts';
 import { createDebugOverlay } from './ui/DebugOverlay.ts';
+import { FullMap } from './ui/FullMap.ts';
+import { HUD } from './ui/HUD.ts';
+import './ui/hud.css';
+import { MapTiles } from './ui/MapTiles.ts';
+import { Menu } from './ui/Menu.ts';
+import { Minimap } from './ui/Minimap.ts';
+import { notice } from './ui/Toasts.ts';
+import { type HudFrame, NO_GPS } from './ui/types.ts';
 import { withFallbacks } from './world/attach.ts';
 import { bboxCorners, createBoundsWalls, edgeDistance } from './world/Bounds.ts';
 import { createBuildingMaterials } from './world/BuildingBuilder.ts';
@@ -127,10 +138,12 @@ async function start() {
   const hasIndex = index?.v === 2 && Array.isArray(index.keys);
   if (!hasIndex) $('nodata').hidden = false;
   const worker = new Worker(new URL('./workers/chunkBuilder.worker.ts', import.meta.url), { type: 'module' });
-  worker.postMessage({ type: 'init', grid, dataUrl: hasIndex ? new URL('data/', location.href).href : '' } satisfies ToWorker);
+  worker.postMessage({ type: 'init', grid, dataUrl: hasIndex ? new URL('data/', location.href).href : '', districts: water?.districts } satisfies ToWorker);
   const propMeshes = createPropMeshes();
   const models = createLandmarkModels(new URL('data/', location.href).href, (x, z) => heightAt(grid, x, z), materials, propMeshes);
   const chunks = new ChunkManager(worker, hasIndex ? index.keys : bboxKeys(), scene, world, materials, propMeshes, hasIndex ? models.attach : undefined);
+  const tiles = new MapTiles(water); // Phase 5 minimap tiles, from each chunk's map layers (built in the worker)
+  chunks.onMap = (key, map) => tiles.add(key, map);
 
   const input = new Input(renderer.domElement);
   const fly = new FreeFlyCamera(camera); // spectator: flies through everything, no collider
@@ -192,20 +205,62 @@ async function start() {
     if (player) return player.npcAnchor(anchor, viewYaw);
     return Object.assign(anchor, { x: camera.position.x, z: camera.position.z, viewYaw, body: false, vx: 0, vz: 0, nose: null, waving: false });
   };
+  // Phase 5 HUD (docs/plans/phase5.md §5): player mode only (the spectator has no body). The full map, the GPS and the
+  // street names need the road graph: created once it is in.
+  const hud = player && new HUD();
+  const minimap = player && new Minimap(tiles);
+  let gps: Gps | undefined;
+  let fullMap: FullMap | undefined;
+  let streets: StreetLocator | undefined;
+  if (player) {
+    void graph.then((g) => {
+      if (!g) return;
+      const nav = (gps = new Gps(g));
+      streets = new StreetLocator(g);
+      fullMap = new FullMap(g, water, (p) => (p ? nav.setTarget(p.x, p.z) : nav.clear()));
+    });
+  }
+  const frame: HudFrame = { x: 0, z: 0, heading: 0, bodyYaw: 0, speed: 0, riding: false, swimming: false, time: 0, street: undefined, district: 0 };
+  const menu = new Menu({
+    resume: () => input.lock(),
+    ...(player && { respawn: () => notice(player.controller.respawn() === 'stairs' ? 'respawnStairs' : 'respawn') }),
+  });
+  const modal = () => menu.isOpen || !!fullMap?.isOpen; // the body stops, keys go to the menu / map
+  // URL hooks (screenshots, tests; docs/plans/phase5.md §7), applied once the world is ready: ?gps=x,z waypoint,
+  // ?map[=metersPerPx] full map open, ?menu menu open, ?respawn=s "Kẹt? Về chỗ an toàn" after s simulated seconds.
+  const gpsArg = query.get('gps')?.split(',').map(Number);
+  const respawnArg = Number(query.get('respawn') ?? NaN);
+  let respawnAt = Number.isFinite(respawnArg) ? respawnArg : Infinity;
+  const applyUrlHooks = () => {
+    if (gps && gpsArg?.length === 2 && gpsArg.every(Number.isFinite)) gps.setTarget(gpsArg[0]!, gpsArg[1]!);
+    if (fullMap && query.has('map')) fullMap.open(frame, Number(query.get('map')) || undefined);
+    else if (query.has('menu')) menu.open();
+    help.hidden = input.locked || menu.isOpen;
+  };
+
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
-  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs } }); // for scratch test scripts
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps } }); // for scratch test scripts
   const debug = createDebugOverlay(query.get('debug') === '1');
 
-  // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing.
+  // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing. SPEC §17.2: the menu opens
+  // by itself when the pointer is released (not at start: nothing was locked yet), except when M released it for the map.
   const help = $('help');
   help.hidden = false;
-  input.onPointerLockChange = (locked) => void (help.hidden = locked);
+  let unlockedAt = -Infinity;
+  input.onPointerLockChange = (locked) => {
+    if (locked) menu.close();
+    else {
+      unlockedAt = performance.now();
+      if (!fullMap?.isOpen) menu.open();
+    }
+    help.hidden = locked || menu.isOpen;
+  };
   input.onImeSuspected = () => {
-    const notice = $('ime');
-    notice.hidden = false;
-    setTimeout(() => void (notice.hidden = true), ui.imeNoticeMs);
+    const box = $('ime');
+    box.hidden = false;
+    setTimeout(() => void (box.hidden = true), ui.imeNoticeMs);
   };
   initCredits();
   const edge = $('edge');
@@ -236,8 +291,40 @@ async function start() {
         $('help-fly').hidden = !flying;
       }
       if (debug.visible && input.wasPressed('graphToggle')) toggleGraph();
+      // Phase 5: M = full map (pointer released for dragging / clicking); Esc with the pointer free closes the map or
+      // the menu, or opens the menu. A press right after an unlock is the Esc that released it (some browsers deliver
+      // it): ignored.
+      if (fullMap && input.wasPressed('map')) {
+        if (fullMap.isOpen) fullMap.close(), input.lock();
+        else {
+          menu.close();
+          fullMap.open(frame);
+          if (fullMap.isOpen) document.exitPointerLock();
+        }
+      }
+      if (input.wasPressed('menu') && performance.now() - unlockedAt > 300) {
+        if (fullMap?.isOpen) fullMap.close(), input.lock();
+        else if (menu.isOpen) menu.close(), input.lock();
+        else if (!input.locked) menu.open();
+        help.hidden = input.locked || menu.isOpen;
+      }
       if (flying) fly.update(dt, input);
-      player?.update(dt, flying ? null : input, loop.alpha);
+      if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
+      player?.update(dt, flying ? null : input, loop.alpha, modal());
+      if (player && hud && minimap) {
+        const s = player.controller.state;
+        camera.getWorldDirection(view);
+        const [x, z] = [player.position.x, player.position.z];
+        Object.assign(frame, {
+          x, z, heading: Math.atan2(-view.x, -view.z), bodyYaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z),
+          riding: !!player.controller.riding, swimming: s.moveMode === 'swim', time: Math.max(0, player.simTime),
+          street: streets?.at(x, z), district: districtAt(water?.districts, x, z),
+        } satisfies HudFrame);
+        gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
+        hud.update(frame, dt);
+        minimap.update(frame, gps ?? NO_GPS, dt);
+        if (fullMap?.isOpen) fullMap.update(frame, gps ?? NO_GPS);
+      }
       if (npcs?.started) {
         npcs.update(dt, loop.alpha, camera);
         npcFrames++;
@@ -280,6 +367,7 @@ async function start() {
         worldReady = true;
         loading.hidden = true;
         player?.activate(); // the chunk colliders around the spawn exist now
+        applyUrlHooks();
       }
       if (worldReady && npcs && !npcs.started) {
         npcs.start(npcAnchor()); // fill + warm-up (npcRender.warmUp s)

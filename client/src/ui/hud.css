@@ -1,0 +1,28 @@
+/* Phase 5 foundation: shared HUD look (STYLE_GUIDE "HUD": white text on a 60–70 % black box, small radius, light text
+   shadow; sans-serif for data, a handwritten face for street names). Each track styles its own widgets on top of these.
+   ponytail: system handwritten fonts (Segoe Print on Windows, Bradley Hand / Noteworthy on macOS); bundle an OFL font
+   if the look must match on every machine (docs/plans/phase5.md, open question). */
+:root {
+  --hud-bg: rgba(0, 0, 0, 0.65);
+  --hud-fg: #fff;
+  --hud-dim: rgba(255, 255, 255, 0.72);
+  --hud-radius: 3px;
+  --hud-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  --hud-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --hud-hand: 'Segoe Print', 'Bradley Hand', 'Noteworthy', 'Chalkboard SE', cursive;
+}
+
+.hud-box {
+  background: var(--hud-bg);
+  color: var(--hud-fg);
+  border-radius: var(--hud-radius);
+  text-shadow: var(--hud-shadow);
+  font: 14px/1.4 var(--hud-font);
+  pointer-events: none;
+}
+
+.hud-hand {
+  font-family: var(--hud-hand);
+  color: var(--hud-fg);
+  text-shadow: var(--hud-shadow), 0 0 6px rgba(0, 0, 0, 0.6);
+}

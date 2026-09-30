@@ -128,6 +128,9 @@ export class CharacterController {
   surfaceAt: (x: number, z: number) => RoadSurface = () => 'asphalt';
   /** The controller dropped the bike itself: crash (strong impact, `crashed`) or fell into the water. */
   onDismount: (b: BikeState, crashed: boolean) => void = () => {};
+  /** Phase 5 (track C calls it): the front / rear wheel stopped at a stair flight (SPEC §6.6) → toast "Không đi xe trên
+   *  bậc thang" (the toast feed drops repeats). */
+  onStairs: () => void = () => {};
 
   constructor(
     readonly world: RAPIER.World,
@@ -188,11 +191,13 @@ export class CharacterController {
     if (!this.place(x, z)) this.teleport(s.position.x, s.position.y, s.position.z);
   }
 
-  /** Back to the last safe ground (fell through the world; Phase 5 menu "Kẹt? Về chỗ an toàn"). */
-  respawn() {
+  /** Back to the last safe ground (fell through the world; Phase 5 menu "Kẹt? Về chỗ an toàn"). Where it went:
+   *  'safe' = lastSafe; Phase 5 track C adds 'stairs' = out of the Seine onto the nearest quay flight (SPEC §4.4). */
+  respawn(): 'safe' | 'stairs' {
     this.climb = null;
     const { x, y, z } = this.lastSafe;
     if (!this.place(x, z)) this.teleport(x, y, z);
+    return 'safe';
   }
 
   /** Phase 4B: moves the body (dx, dz) m at the next fixedUpdate, through the KCC (walls still stop it). Accumulates. */

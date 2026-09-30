@@ -7,6 +7,7 @@ import { chunks as C, landmarks as LM, render as R } from '../config.ts';
 import { type ChunkKey, chunkBounds } from '../geo/chunkData.ts';
 import { attachBuildOut, type Materials, type PropMeshes } from './attach.ts';
 import type { BuildOut, FromWorker, ToWorker, TriMesh } from './buildTypes.ts';
+import type { MapVectors } from './mapVectors.ts';
 import { stairColliders } from './stairs.ts';
 
 /** Distance from (x, z) to the chunk's square (0 inside). */
@@ -51,6 +52,8 @@ export class ChunkManager {
   private lastZ = NaN;
   private lastR = NaN;
   private dead = false; // the worker failed to start: nothing more can be built
+  /** Phase 5: each built chunk's minimap layers (world/mapVectors.ts) as they arrive (ui/MapTiles.ts keeps them). */
+  onMap?: (key: ChunkKey, map: MapVectors) => void;
 
   constructor(
     private readonly worker: Worker,
@@ -134,6 +137,7 @@ export class ChunkManager {
     this.inFlight.delete(msg.key);
     if (msg.type === 'built') {
       this.failures.delete(msg.key);
+      if (msg.out.map) this.onMap?.(msg.key, msg.out.map);
       this.ready.push({ key: msg.key, out: msg.out });
       this.built.add(msg.key);
       return this.pump();

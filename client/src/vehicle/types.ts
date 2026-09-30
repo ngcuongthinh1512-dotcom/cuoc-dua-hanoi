@@ -37,3 +37,8 @@ export interface RiderTargets {
 
 /** What the controller needs to know about the surface under a wheel (track C: RoadGraph.surfaceAt). */
 export type RoadSurface = 'asphalt' | 'pave';
+
+/** Phase 5 (docs/plans/phase5.md §5): why F did nothing (Bikes.interact) → a toast (ui/Toasts.ts notice). tooFast = riding
+ *  above bike.dismountMaxSpeed; tooFar = a takeable bike near but beyond bikeRules.interactRadius; taken = another
+ *  team's bike in reach (SPEC §6.3 "Xe này đã có đội sử dụng"). */
+export type BikeRefusal = 'bikeTooFast' | 'bikeTooFar' | 'bikeTaken';

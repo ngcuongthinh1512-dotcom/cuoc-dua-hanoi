@@ -8,7 +8,7 @@ import type { CharacterController } from '../player/CharacterController.ts';
 import { IGNORE_NPC } from '../npc/types.ts';
 import type { PlayerState } from '../player/types.ts';
 import { type BikeAsset, BikeModel } from './BikeModel.ts';
-import type { BikeState, RiderTargets } from './types.ts';
+import type { BikeRefusal, BikeState, RiderTargets } from './types.ts';
 
 /** On foot, on the ground, no gesture running (SPEC §6.3: "đang đi bộ"). */
 export const canMount = (s: Readonly<PlayerState>) =>
@@ -75,8 +75,9 @@ export class Bikes {
     b.ownerColour = this.colour;
   }
 
-  /** F: get off (at ≤ bike.dismountMaxSpeed) or take + mount the bike in reach. What happened, or null. */
-  interact(c: CharacterController): 'mount' | 'dismount' | null {
+  /** F: get off (at ≤ bike.dismountMaxSpeed) or take + mount the bike in reach. What happened, why nothing did
+   *  (BikeRefusal → toast; Phase 5 track C fills these in), or null (nothing to do, silent). */
+  interact(c: CharacterController): 'mount' | 'dismount' | BikeRefusal | null {
     const r = c.riding;
     if (r) {
       if (Math.abs(r.speed) > B.dismountMaxSpeed) return null;

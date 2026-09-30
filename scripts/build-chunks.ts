@@ -45,6 +45,12 @@ const QUAY_NEAR_RIVER = 50; // m: quay lines farther than this from the Seine ar
 const WARN_BYTES = 250 * 1024;
 const FAIL_BYTES = 2 * 1024 * 1024;
 const WATER_FAIL_BYTES = 1024 * 1024;
+// Phase 5 (docs/plans/phase5.md §3): big-map park overview in water.json (whole map, not per chunk)
+const PARK_TOL = 2; // m, Douglas–Peucker tolerance
+const PARK_MIN_AREA = 400; // m²: smaller park / grass areas (verge strips) are left out of the overview
+/** Arrondissement (SPEC §4.3: boundary=administrative + admin_level=9) → its number 1…20 (ref:INSEE 751xx), else 0. */
+const districtNo = (t: Tags | undefined) =>
+  t?.boundary === 'administrative' && t.admin_level === '9' ? Number(t['ref:INSEE'] ?? 0) % 100 : 0;
 
 const t0 = performance.now();
 const stats: Record<string, number> = {};
@@ -72,7 +78,7 @@ for (let i = Math.floor(bbox.minX / CHUNK_SIZE); i * CHUNK_SIZE < bbox.maxX; i++
 /** Chunk at a point, or undefined (counted as dropped.outside) when it lies outside the grid. */
 const chunkAt = (x: number, z: number) => chunks.get(chunkKey(x, z)) ?? void bump('dropped.outside');
 
-// --- load + dedupe; relations only when they are multipolygons we use (skips arrondissements, routes…) ---
+// --- load + dedupe; relations only when they are multipolygons we use or arrondissements (skips routes…) ---
 type OsmElement = { type: 'node' | 'way' | 'relation'; id: number; tags?: Tags };
 const elements = new Map<string, OsmElement>();
 const files = ['global.json', ...readdirSync(join(args.cache, 'tiles')).filter((f) => f.endsWith('.json')).sort().map((f) => join('tiles', f))];
@@ -81,7 +87,7 @@ for (const file of files) {
     const k = `${e.type}/${e.id}`;
     if (elements.has(k)) continue;
     const used = classify(e.tags ?? {}, 'area') !== undefined || OUTLINES.has(k) || LANDMARKS.some((d) => d.zone === k);
-    if (e.type === 'relation' && (e.tags?.type !== 'multipolygon' || !used)) continue;
+    if (e.type === 'relation' && !districtNo(e.tags) && (e.tags?.type !== 'multipolygon' || !used)) continue;
     elements.set(k, e);
   }
 }
@@ -142,6 +148,29 @@ const segDist = (px: number, pz: number, r: XZ, i: number, j: number) => {
   return Math.hypot(px - ax - t * dx, pz - az - t * dz);
 };
 const inPoly = (x: number, z: number, p: Poly) => inRing(x, z, p.outer) && !(p.holes ?? []).some((h) => inRing(x, z, h));
+/** Douglas–Peucker on a closed ring, split at vertex 0 and the vertex farthest from it (both always kept). */
+function simplifyRing(r: XZ, tol: number): XZ {
+  const n = r.length / 2;
+  const c = [...r, r[0]!, r[1]!]; // closed: vertex n = vertex 0
+  const keep = new Uint8Array(n + 1);
+  const dp = (i: number, j: number) => {
+    let best = -1, d = tol;
+    for (let k = i + 1; k < j; k++) {
+      const dk = segDist(c[2 * k]!, c[2 * k + 1]!, c, 2 * i, 2 * j);
+      if (dk > d) (d = dk), (best = k);
+    }
+    if (best < 0) return;
+    keep[best] = 1;
+    dp(i, best);
+    dp(best, j);
+  };
+  let m = 1;
+  for (let k = 2; k < n; k++) if (Math.hypot(c[2 * k]! - c[0]!, c[2 * k + 1]! - c[1]!) > Math.hypot(c[2 * m]! - c[0]!, c[2 * m + 1]! - c[1]!)) m = k;
+  keep[0] = keep[m] = 1;
+  dp(0, m);
+  dp(m, n);
+  return r.filter((_, k) => keep[k >> 1]);
+}
 
 // Landmark zones (areas whose buildings all belong to one landmark), resolved before the main pass.
 const zones = LANDMARKS.filter((d) => d.zone).map((def) => {
@@ -176,6 +205,8 @@ const roadWays: RoadWay[] = [];
 const stairWays: StairRec[] = [];
 const bridgeWays: BridgeWay[] = [];
 const water: WaterData['polygons'] = [];
+const districts: NonNullable<WaterData['districts']> = [];
+const parkOverview: XZ[] = [];
 const quayLines: XZ[] = [];
 const seenLandmarks = new Set<string>();
 type LmRec = { rec: BuildingRec; def: LandmarkDef; area: number; box: Rect };
@@ -192,6 +223,14 @@ for (const { geometry: g, p } of features) {
   const tags = p.tags ?? {};
   const shape = g.type === 'Point' ? 'point' : g.type === 'LineString' ? 'line' : g.type === 'Polygon' || g.type === 'MultiPolygon' ? 'area' : undefined;
   if (!shape) continue; // MultiLineString / GeometryCollection: routes, not used
+  const district = districtNo(tags);
+  if (district) {
+    if (g.type === 'Polygon' || g.type === 'MultiPolygon') for (const poly of polygons(g)) {
+      const clipped = clipPoly(poly, waterRect);
+      if (clipped) districts.push({ n: district, ...clipped });
+    }
+    continue;
+  }
   const def = OUTLINES.get(`${p.type}/${p.id}`);
   const cat = def ? 'building' : classify(tags, shape);
   if (cat === undefined) continue;
@@ -272,6 +311,8 @@ for (const { geometry: g, p } of features) {
       if (rec.height === undefined && rec.levels === undefined) bump('missing.building.heightAndLevels');
       chunkAt(cx, cz)?.buildings.push(rec);
     } else if (cat === 'park' || cat === 'grass') {
+      const whole = clipPoly(poly, waterRect)?.outer;
+      if (whole && ringArea(whole) >= PARK_MIN_AREA) parkOverview.push(simplifyRing(whole, PARK_TOL));
       const xs = poly.outer.filter((_, k) => k % 2 === 0);
       const zs = poly.outer.filter((_, k) => k % 2 === 1);
       for (let i = Math.floor(Math.min(...xs) / CHUNK_SIZE); i * CHUNK_SIZE < Math.max(...xs); i++) {
@@ -547,9 +588,13 @@ for (const c of chunks.values()) {
   writeFileSync(join(chunkDir, `${c.key}.json`), json);
 }
 for (const w of water) bump(w.river ? 'water.river' : 'water.other');
+bump('districts', new Set(districts.map((d) => d.n)).size);
+bump('parks.overview', parkOverview.length);
+bump('parks.overviewVertices', parkOverview.reduce((s, r) => s + r.length / 2, 0));
 const waterJson = JSON.stringify({
   v: 1, polygons: water, quays,
   stairs: quayFlights.flatMap((f) => f.pts.slice(-2)), stairGaps: quayFlights.flatMap((f) => f.gap),
+  districts: districts.sort((a, b) => a.n - b.n), parks: parkOverview,
 } satisfies WaterData);
 const waterBytes = Buffer.byteLength(waterJson);
 if (waterBytes > WATER_FAIL_BYTES) throw new Error(`[build-chunks] water.json is ${waterBytes} B > 1 MB`);

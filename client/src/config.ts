@@ -888,3 +888,63 @@ export const npcRender = {
   },
   zoneRing: '#ff3b30', // ?npcZone / setExclusionZones rings (radius + npc.zoneMargin) while the F3 panel is open
 };
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// Phase 5 (docs/plans/phase5.md §5.3): HUD. Each track edits ONLY its own block and adds no imports; the foundation
+// block belongs to the integrator. UI texts are Vietnamese (in the modules), sizes in CSS px.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+
+// ── Foundation · HUD layout (STYLE_GUIDE "HUD"; ui/hud.css holds the shared look) ──
+export const hud = {
+  margin: 16, // px from the screen edges
+  gap: 8, // px between stacked widgets (the toast feed sits this far above the minimap)
+  minimap: { width: 300, height: 190 }, // px, bottom-left, rectangular (SPEC §17.3); track C stacks the toasts above it
+};
+
+// ── A · map tiles, minimap, full map (world/mapVectors.ts, ui/MapTiles.ts, ui/Minimap.ts, ui/FullMap.ts) ──
+export const minimap = {
+  metersPerPx: [0.8, 1.6] as const, // CSS px scale standing → at bikeTopSpeed() and above (SPEC §17.3: zooms out when fast)
+  zoomSharpness: 2, // 1/s, exponential smoothing of the scale
+  anchorY: 0.65, // player position from the top, share of the height (more map ahead of the player, like GTA V)
+  maxTiles: 24, // LRU of raster tiles, one per chunk (canvas memory ≈ maxTiles × tile px² × 4 B)
+  rasterPerFrame: 1, // tiles rasterised per frame at most (≈ 1–3 ms each on the main thread)
+};
+export const fullMap = {
+  metersPerPx: [0.4, 6] as const, // CSS px zoom range (6 ≈ the whole 5.5 km map on a 1000 px wide window)
+  wheelZoom: 1.2, // scale factor per wheel step
+  labelMaxMpp: 2, // street names drawn at this zoom and closer (SPEC §4.6: street names only, no landmark names)
+};
+
+// ── B · GPS + street lookup (geo/gps.ts, geo/locate.ts); roadGraph.snapRadius (Phase 4) = snap distance ──
+export const gps = {
+  offRoute: 25, // m from the route before it is searched again (A* ≤ 3 ms across the map, docs/plans/phase5.md §2)
+  minInterval: 1, // s between searches
+  arriveRadius: 15, // m: the waypoint is cleared on arrival
+};
+export const locate = {
+  maxDistance: 25, // m: nearest named street (no sidewalk / crossing) within this, else none
+  keepDistance: 35, // m: the current street stays while its way is this close (no flicker at junctions)
+};
+
+// ── C · menu, settings, toasts, bike notices, respawn (ui/Menu.ts, ui/settings.ts, ui/Toasts.ts, index.html,
+//        player/CharacterController.ts respawn + onStairs, vehicle/Bikes.ts refusals, player/ThirdPersonCamera.ts +
+//        player/FreeFlyCamera.ts look scaling) ──
+export const menu = {
+  sensitivity: { min: 0.25, max: 3, step: 0.05 }, // × the camera's mouseSensitivity (settings slider)
+  storageKey: 'cuoc-dua-paris.settings', // localStorage (per browser; try/catch, defaults when blocked)
+};
+export const toasts = {
+  seconds: 4, // on screen
+  max: 4, // lines in the feed (oldest dropped)
+  repeatGap: 3, // s: the same text again within this is dropped
+};
+export const notices = {
+  farReach: 6, // m: a takeable bike this close but beyond bikeRules.interactRadius → "tooFar" (else F stays silent)
+};
+
+// ── D · HUD widgets + integration (ui/HUD.ts, main.ts, player/Player.ts, ui/DebugOverlay.ts, world/StreetProps.ts
+//        district line on the street signs) ──
+export const hudWidgets = {
+  streetSeconds: 5, // s the street / district label stays after a change (SPEC §12: "khi đổi khu vực")
+  streetFade: 0.6, // s fade out
+};

@@ -121,7 +121,8 @@ export class Input {
     this.held.add(e.code);
   }
 
-  private lock() {
+  /** Pointer lock (canvas click; Phase 5: menu "Tiếp tục", closing the full map). Only inside a user gesture. */
+  lock() {
     if (this.locked) return;
     // Chrome returns a Promise that rejects when re-locking too soon after Esc; Safari returns undefined.
     (this.canvas.requestPointerLock() as Promise<void> | undefined)?.catch(() => {});
