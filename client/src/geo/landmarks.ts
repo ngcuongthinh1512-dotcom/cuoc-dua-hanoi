@@ -58,7 +58,7 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   // ── g4 ──
   // Grand Palais: "la verrière culmine à 45 m sous le dôme" (fr.wikipedia.org/wiki/Grand_Palais_(Paris)); the 8 OSM parts carry it.
   { id: 'grand-palais', name: 'Grand Palais', group: 'g4', osm: ['way/56185523'], view: [180, 300] },
-  // Petit Palais: no published height found (2026-09-28); the generic fallback uses buildings.defaultHeight.
+  // Petit Palais: no published height found (2026-09-28); g4's petitPalais DetailFn uses an estimated 34 m dome (TODO.md).
   { id: 'petit-palais', name: 'Petit Palais', group: 'g4', osm: ['relation/2778854'], view: [250, 200] },
   { id: 'orsay', name: 'Bảo tàng Orsay', group: 'g4', osm: ['way/63178753'], view: [0, 300] },
   { id: 'palais-bourbon', name: 'Palais Bourbon', group: 'g4', osm: ['relation/1019368'], view: [0, 300] },
@@ -87,7 +87,29 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   // Tour Montparnasse: 210 m to the roof (en.wikipedia.org/wiki/Tour_Montparnasse). Ground: DEM edge value (outside the grid).
   { id: 'montparnasse', name: 'Tháp Montparnasse', group: 'g5', osm: [], at: [48.84211, 2.32201], height: 210, view: [350, 2000] },
   // La Défense: towers ≥ 60 m from client/public/data/skyline.json; Grande Arche 110 m (en.wikipedia.org/wiki/La_Grande_Arche).
-  { id: 'la-defense', name: 'Khu La Défense', group: 'g5', osm: [], at: [48.89259, 2.23601], height: 110, view: [110, 4500] },
+  { id: 'la-defense', name: 'Khu La Défense', group: 'g5', osm: [], at: [48.89259, 2.23601], height: 110, view: [116, 4500] }, // camera over the Av. de la Grande-Armée, inside the map
 ];
 
 export const LANDMARK_BY_ID = new Map(LANDMARKS.map((d) => [d.id, d]));
+
+/** Paved plazas that are flat in reality but sloped in the AWS DEM (a surface model: roofs smear 5–10 m into them).
+ *  Terrain.flattenPads levels the grid inside each ring ([lat, lon] corners, measured on the OSM outlines) to the
+ *  quantile q of the DEM heights inside it. ponytail: 3 hand-drawn pads; the Concorde is left out (its obelisk base
+ *  defines y = 0 and it slopes only ~2 m). */
+export const PADS: readonly { name: string; q: number; ring: readonly [number, number][] }[] = [
+  // Cour Napoléon: between the inner façades of the Richelieu / Denon wings, the Pavillon Sully to the wing ends (west).
+  // Median: the Louvre around it counts its façades from its high ground (landmarks/parts recordGround).
+  { name: 'Cour Napoléon', q: 0.5, ring: [[48.861832, 2.335003], [48.861162, 2.33778], [48.86009, 2.337186], [48.860759, 2.334408]] },
+  // Parvis Notre-Dame from the Rue de la Cité, the cathedral and the Rue du Cloître along its north flank (one level).
+  // Low quantile: open to the Seine, so it meets the quays (+1.5 m) as the real parvis does.
+  { name: 'Parvis Notre-Dame', q: 0.1, ring: [[48.854232, 2.34764], [48.85304, 2.350845], [48.852429, 2.350324], [48.853621, 2.347119]] },
+  // Quai de l'Horloge from the Pont Neuf past the Tour de l'Horloge, river wall to the façades (Place Dauphine houses,
+  // Conciergerie, Palais de Justice): the roofs smeared 5–10 m mounds onto the quay; carveRiver then lifts it to its floor.
+  {
+    name: "Quai de l'Horloge", q: 0.5,
+    ring: [
+      [48.857333, 2.341319], [48.856713, 2.345202], [48.85656, 2.345679], [48.856254, 2.346565], [48.856074, 2.346469],
+      [48.856371, 2.345611], [48.856533, 2.345202], [48.856578, 2.343472], [48.856874, 2.343295], [48.857252, 2.341319],
+    ],
+  },
+];

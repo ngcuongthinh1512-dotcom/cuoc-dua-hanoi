@@ -14,14 +14,17 @@ import { type ChunkData, type ChunkIndex, ringArea } from '../client/src/geo/chu
 import { ringCentroid } from '../client/src/geo/clip.ts';
 import { LANDMARKS } from '../client/src/geo/landmarks.ts';
 import { flatHeightGrid, heightAt, parseHeightGrid } from '../client/src/geo/heightGrid.ts';
+import { flattenPads } from '../client/src/world/Terrain.ts';
 
 const root = join(import.meta.dirname, '..');
 
-// Uncarved DEM (y relative to the obelisk), so eye heights are above the ground.
+// DEM with the plaza pads levelled like the game's, but not river-carved (y relative to the obelisk), so eye heights are
+// above the ground.
 const dem = join(root, 'client/public/data/elevation');
 const grid = existsSync(`${dem}.bin`)
   ? parseHeightGrid(JSON.parse(readFileSync(`${dem}.json`, 'utf8')), readFileSync(`${dem}.bin`))
   : flatHeightGrid();
+flattenPads(grid);
 /** Game URL with ?cam= at (lat, lon), `up` m above the terrain; yaw 0 = north, 90 = west, −90 = east. */
 const cam = (lat: number, lon: number, up: number, yawDeg: number, pitchDeg: number) => {
   const p = latLonToWorld(lat, lon);

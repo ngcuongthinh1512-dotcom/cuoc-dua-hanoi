@@ -265,9 +265,32 @@ for (const [name, build] of [['eiffel', eiffel], ['arc', arc]] as const) {
   if (bytes > MAX_BYTES) throw new Error(`${file} > 25 MB`);
 }
 
-// credits.json: every downloaded asset (manifest.json written by the download step) + the map data.
+// credits.json: every downloaded asset (manifest.json written by the download step) + the map data. Each line = a
+// Vietnamese usage label + the manifest attribution (its own label prefix dropped); "(đã chỉnh sửa)" only on the files
+// this script modifies (the others are not processed or used yet: Phase 3 / 4B re-run this with their files added).
 type Entry = { name: string; pageUrl: string; licence: string; author: string; attribution: string; usedFor: string };
 const manifest = JSON.parse(readFileSync(join(src, 'manifest.json'), 'utf8')) as Entry[];
+const MODIFIED = new Set(['eiffel_scott-marshall.glb', 'arc-triomphe_hoanghiepvu.glb']); // read by eiffel() / arc() above
+const LABELS: [RegExp, string][] = [
+  [/^eiffel_/, 'Tháp Eiffel'],
+  [/^arc-triomphe_/, 'Khải Hoàn Môn'],
+  [/^car-sedan-(\d)_/, 'Xe NPC (sedan $1)'],
+  [/^(free_low_poly_vehicles|suv|taxi|truck)/, 'Xe NPC'],
+  [/^(scooter|motorcycle)_/, 'Xe máy NPC'],
+  [/^bicycle_/, 'Xe đạp'],
+  [/^ped-/, 'Người đi đường'],
+  [/^universal_animation_library/, 'Người chơi (hoạt ảnh)'],
+  [/^Universal Base Characters/, 'Người chơi (nhân vật)'],
+];
+const label = (name: string) => {
+  const hit = LABELS.find(([re]) => re.test(name));
+  if (!hit) throw new Error(`process-assets: no credits label for ${name}`);
+  return name.match(hit[0])![0].replace(hit[0], hit[1]);
+};
+const credit = (e: Entry) => {
+  const text = e.attribution.replace(/^[^"]*: (?=")/, '').replace(' (đã chỉnh sửa)', MODIFIED.has(e.name) ? ' (đã chỉnh sửa)' : '');
+  return { title: `${label(e.name)}: ${/"([^"]+)"/.exec(text)?.[1] ?? e.name}`, text: `${label(e.name)}: ${text}`, licence: e.licence, url: e.pageUrl, author: e.author };
+};
 const credits = [
   { title: 'Bản đồ', text: 'Bản đồ: © OpenStreetMap contributors', licence: 'ODbL 1.0', url: 'https://www.openstreetmap.org/copyright' },
   {
@@ -276,7 +299,7 @@ const credits = [
     licence: 'xem trang nguồn',
     url: 'https://github.com/tilezen/joerd/blob/master/docs/attribution.md',
   },
-  ...manifest.map((e) => ({ title: e.name.replace(/\.(glb|zip)$/, ''), text: e.attribution, licence: e.licence, url: e.pageUrl, author: e.author })),
+  ...manifest.map(credit),
 ];
 writeFileSync(join(root, 'client/public/credits.json'), `${JSON.stringify(credits, null, 1)}\n`);
 console.log(`client/public/credits.json: ${credits.length} mục`);

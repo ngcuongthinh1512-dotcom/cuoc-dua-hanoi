@@ -123,7 +123,7 @@ function canvasTexture(draw: (g: CanvasRenderingContext2D) => void) {
 
 export function createLandmarkMaterials(): Partial<Record<MaterialId, Material>> {
   const C = L.colours;
-  const envMap = skyEnvironment(); // shared: one PMREM for all three metals
+  const envMap = skyEnvironment(); // shared equirect sky; three builds its PMREM once for all three metals
   const panes = canvasTexture((g) => {
     g.fillStyle = 'rgba(255,255,255,0.55)';
     g.fillRect(0, 0, 64, 64);

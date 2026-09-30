@@ -61,11 +61,13 @@ export function skyEnvironment(w = 64, h = 32): Texture {
   const horizon = new Color(W.sky.horizon);
   const data = new Uint8Array(w * h * 4);
   const c = new Color();
+  const o = { r: 0, g: 0, b: 0 };
   for (let j = 0; j < h; j++) {
     const elev = ((j + 0.5) / h - 0.5) * Math.PI; // row 0 = straight down (flipY false, v = 0)
     if (elev > 0) c.lerpColors(horizon, zenith, Math.sqrt(Math.sin(elev)));
     else c.copy(horizon).multiplyScalar(0.6);
-    for (let i = 0; i < w; i++) data.set([c.r * 255, c.g * 255, c.b * 255, 255], 4 * (j * w + i)); // sRGB bytes
+    c.getRGB(o, SRGBColorSpace); // Color holds linear; the texture is tagged sRGB, so encode once here
+    for (let i = 0; i < w; i++) data.set([o.r * 255, o.g * 255, o.b * 255, 255], 4 * (j * w + i));
   }
   const t = new DataTexture(data, w, h);
   Object.assign(t, { mapping: EquirectangularReflectionMapping, colorSpace: SRGBColorSpace, magFilter: LinearFilter, needsUpdate: true });

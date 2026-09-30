@@ -1,13 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { latLonToWorld } from '@race/shared';
 import { Color, Mesh, Scene } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { terrain as T } from '../config.ts';
 import { chunkBounds, type WaterData } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
-import { buildTerrain, carveRiver, createTerrainCollider, quayMesh, riverLevel } from './Terrain.ts';
+import { PADS } from '../geo/landmarks.ts';
+import { buildTerrain, carveRiver, createTerrainCollider, flattenPads, quayMesh, riverLevel } from './Terrain.ts';
 import { createWater } from './Water.ts';
 
 const flat = (): HeightGrid => ({ minX: 0, minZ: 0, cell: 5, cols: 61, rows: 61, h: new Float32Array(61 * 61) });
@@ -94,7 +96,19 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
   beforeAll(() => {
     grid = parseHeightGrid(JSON.parse(readFileSync(d + 'elevation.json', 'utf8')), readFileSync(d + 'elevation.bin'));
     water = JSON.parse(readFileSync(d + 'water.json', 'utf8')) as WaterData;
+    flattenPads(grid);
     carveRiver(grid, water);
+  });
+
+  it('plaza pads (Cour Napoléon with the pyramid, parvis Notre-Dame) are flat after the river carve', () => {
+    for (const pad of PADS.filter((p) => ['Cour Napoléon', 'Parvis Notre-Dame'].includes(p.name))) {
+      const [a, b, , c] = pad.ring.map(([lat, lon]) => latLonToWorld(lat, lon));
+      const hs: number[] = [];
+      for (let s = 0.1; s < 0.95; s += 0.1) {
+        for (let t = 0.1; t < 0.95; t += 0.1) hs.push(heightAt(grid, a!.x + s * (b!.x - a!.x) + t * (c!.x - a!.x), a!.z + s * (b!.z - a!.z) + t * (c!.z - a!.z)));
+      }
+      expect(Math.max(...hs) - Math.min(...hs), pad.name).toBeLessThan(0.5);
+    }
   });
 
   it('carved grid has no NaN and a Seine below its quays', () => {

@@ -1,4 +1,4 @@
-// Package B: Haussmann buildings from BuildingRecs (skips recs with .landmark, see Landmarks.ts).
+// Package B: Haussmann buildings from BuildingRecs (skips recs with .landmark, see world/landmarks/index.ts).
 // Module top level must not touch the DOM: the worker imports build*(); canvas textures only inside create*().
 //
 // Per building: ground g = min terrain over the outer ring, but at most groundSpan below its max (a footprint reaching

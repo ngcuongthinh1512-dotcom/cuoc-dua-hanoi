@@ -13,12 +13,13 @@ export function initCredits() {
     try {
       const res = await fetch(new URL('credits.json', location.href));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      for (const c of (await res.json()) as Credit[]) {
+      const items = ((await res.json()) as Credit[]).map((c) => {
         const li = document.createElement('li');
         const a = Object.assign(document.createElement('a'), { href: c.url, target: '_blank', rel: 'noopener', textContent: c.licence });
         li.append(`${c.text} · `, a);
-        list.append(li);
-      }
+        return li;
+      });
+      list.replaceChildren(...items); // all or nothing: a failed load leaves no half list for the retry to append to
     } catch (err) {
       console.warn('credits.json missing or unreadable', err);
       list.textContent = 'Không tải được danh sách ghi nguồn.';
@@ -26,4 +27,5 @@ export function initCredits() {
     }
   });
   $('credits-close').addEventListener('click', () => void (panel.hidden = true));
+  addEventListener('keydown', (e) => void (e.code === 'Escape' && (panel.hidden = true)));
 }

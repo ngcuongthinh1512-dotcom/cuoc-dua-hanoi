@@ -1,10 +1,12 @@
 // Package D: per-chunk terrain mesh, river carving, quays, the global Rapier colliders (docs/plans/phase2.md "D").
 // Module top level must not touch the DOM: the worker imports buildTerrain().
 import RAPIER from '@dimforge/rapier3d-compat'; // sideEffects: false → tree-shaken out of the worker bundle
+import { latLonToWorld } from '@race/shared';
 import { Color, type Material, MeshStandardMaterial } from 'three';
 import { terrain as T } from '../config.ts';
 import { CHUNK_SIZE, ringArea, type WaterData, type XZ } from '../geo/chunkData.ts';
 import type { HeightGrid } from '../geo/heightGrid.ts';
+import { PADS } from '../geo/landmarks.ts';
 import type { Builder, MaterialId, TriMesh } from './buildTypes.ts';
 import { MeshBuffer, offsetPolyline, type V3 } from './geom.ts';
 
@@ -40,17 +42,63 @@ function riverMask(g: HeightGrid, water: WaterData): Uint8Array {
 
 const carved = new WeakMap<HeightGrid, { level: number; water: WaterData }>();
 
-/** Median grid height over the masked nodes (NaN if none). */
-function median(g: HeightGrid, mask: Uint8Array): number {
+/** Quantile q (default: median) of the grid heights over the masked nodes (NaN if none). */
+function quantile(g: HeightGrid, mask: Uint8Array, q = 0.5): number {
   const hs = g.h.filter((_, k) => mask[k] === 1).sort();
-  return hs.length ? hs[hs.length >> 1]! : Number.NaN;
+  return hs.length ? hs[Math.min(Math.floor(q * hs.length), hs.length - 1)]! : Number.NaN;
 }
 
 /** Seine water surface y: config override, else the level carveRiver used on this grid, else the median grid height
  *  inside the river polygons (uncarved grid), else 0. */
 export function riverLevel(g: HeightGrid, water: WaterData): number {
-  const y = T.waterLevel ?? carved.get(g)?.level ?? median(g, riverMask(g, water));
+  const y = T.waterLevel ?? carved.get(g)?.level ?? quantile(g, riverMask(g, water));
   return Number.isNaN(y) ? 0 : y;
+}
+
+const padList = () =>
+  PADS.map((p) => ({
+    q: p.q,
+    ring: p.ring.flatMap(([lat, lon]) => {
+      const w = latLonToWorld(lat, lon);
+      return [w.x, w.z];
+    }),
+  }));
+
+/** Main thread, BEFORE carveRiver: levels every node inside each plaza ring (default geo/landmarks PADS) to the
+ *  quantile q of the grid heights inside it, then eases the ground back to the DEM over padBlend m outside (smoothstep
+ *  on the distance to the ring). Landmarks inside (pyramid, Notre-Dame) then stand on flat ground. */
+export function flattenPads(g: HeightGrid, pads: { q: number; ring: XZ }[] = padList()) {
+  const { cols, rows, cell, minX, minZ } = g;
+  const B = T.padBlend;
+  for (const { q, ring } of pads) {
+    const inside = new Uint8Array(cols * rows);
+    fillRings([ring], minX, minZ, cell, cols, rows, (c, r) => (inside[r * cols + c] = 1));
+    const level = quantile(g, inside, q);
+    if (Number.isNaN(level)) continue;
+    const xs = ring.filter((_, i) => i % 2 === 0);
+    const zs = ring.filter((_, i) => i % 2 === 1);
+    const [c0, c1] = [Math.min(...xs) - B, Math.max(...xs) + B].map((x) => Math.min(Math.max(Math.round((x - minX) / cell), 0), cols - 1));
+    const [r0, r1] = [Math.min(...zs) - B, Math.max(...zs) + B].map((z) => Math.min(Math.max(Math.round((z - minZ) / cell), 0), rows - 1));
+    for (let r = r0!; r <= r1!; r++) {
+      for (let c = c0!; c <= c1!; c++) {
+        const k = r * cols + c;
+        const t = inside[k] ? 0 : Math.min(ringDistance(ring, minX + c * cell, minZ + r * cell) / B, 1);
+        g.h[k] = level + (g.h[k]! - level) * t * t * (3 - 2 * t);
+      }
+    }
+  }
+}
+
+/** Distance (m) from (x, z) to the nearest edge of a closed ring. */
+function ringDistance(ring: XZ, x: number, z: number): number {
+  let d = Infinity;
+  for (let i = 0, n = ring.length; i < n; i += 2) {
+    const [ax, az, bx, bz] = [ring[i]!, ring[i + 1]!, ring[(i + 2) % n]!, ring[(i + 3) % n]!];
+    const [ex, ez] = [bx - ax, bz - az];
+    const s = Math.min(Math.max(((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez || 1), 0), 1);
+    d = Math.min(d, Math.hypot(x - ax - s * ex, z - az - s * ez));
+  }
+  return d;
 }
 
 /** Main thread, once at startup, BEFORE the grid goes to the worker: carves the Seine bed and raises the quays in place.
@@ -61,7 +109,7 @@ export function riverLevel(g: HeightGrid, water: WaterData): number {
  *  ponytail: the lower quays (berges) end up at street level under the band, carve them from WaterData.quays if needed. */
 export function carveRiver(g: HeightGrid, water: WaterData): void {
   const mask = riverMask(g, water);
-  const found = median(g, mask);
+  const found = quantile(g, mask);
   if (Number.isNaN(found)) {
     console.warn('carveRiver: no grid node inside a river polygon, nothing carved');
     return;

@@ -32,6 +32,7 @@ export function createLandmarkModels(dataUrl: string, height: (x: number, z: num
 
   async function build(m: (typeof MODELS)[number]): Promise<THREE.Object3D | undefined> {
     const res = await fetch(`${dataUrl}chunks/${m.key}.json`);
+    if (!res.ok) throw new Error(`chunk ${m.key}: HTTP ${res.status}`);
     const rec = ((await res.json()) as ChunkData).buildings.find((b: BuildingRec) => b.landmark === m.id);
     if (!rec) throw new Error(`no ${m.id} outline in chunk ${m.key}`);
     const ground = recordGround(rec.outer, height);

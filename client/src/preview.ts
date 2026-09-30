@@ -4,7 +4,7 @@
 //   fixture=1 (default) | chunks=<key>,<key>… | at=<lat>,<lon>&r=<m>   chunks to build (at: every chunk touching the circle)
 //   only=terrain,buildings,roads,bridges,vegetation,props,landmarks   builders to run (default all)
 //   cam=x,y,z,yawDeg,pitchDeg   camera (default: oblique view from the south framing the selection)
-//   carve=1   carveRiver(grid, water) before building · water=1   createWater(scene, water, grid)
+//   carve=1   flattenPads(grid) + carveRiver(grid, water) before building · water=1   createWater(scene, water, grid)
 import { latLonToWorld } from '@race/shared';
 import * as THREE from 'three';
 import { preview as P, render as R } from './config.ts';
@@ -22,7 +22,7 @@ import { mergeBuckets } from './world/geom.ts';
 import { createLandmarkMaterials } from './world/landmarks/index.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
 import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
-import { carveRiver, createTerrainMaterials } from './world/Terrain.ts';
+import { carveRiver, createTerrainMaterials, flattenPads } from './world/Terrain.ts';
 import { createWater } from './world/Water.ts';
 
 const q = new URLSearchParams(location.search);
@@ -87,6 +87,7 @@ async function start() {
   const empty = (key: ChunkKey): ChunkData => ({ v: 2, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
   const chunks = keys ? keys.map((key, i) => (loaded?.[i]?.v === 2 ? loaded[i] : empty(key))) : [fixture];
   const missing = keys ? keys.length - (loaded?.filter((c) => c?.v === 2).length ?? 0) : 0;
+  if (wantCarve) attempt('flattenPads', () => flattenPads(grid));
   if (wantCarve && water) attempt('carveRiver', () => carveRiver(grid, water));
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });

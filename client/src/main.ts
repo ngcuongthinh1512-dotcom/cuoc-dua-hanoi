@@ -19,7 +19,7 @@ import { createLandmarkModels } from './world/landmarks/models.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
 import { createSky } from './world/Sky.ts';
 import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
-import { carveRiver, createTerrainCollider, createTerrainMaterials } from './world/Terrain.ts';
+import { carveRiver, createTerrainCollider, createTerrainMaterials, flattenPads } from './world/Terrain.ts';
 import { createWater } from './world/Water.ts';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -91,13 +91,14 @@ async function start() {
   resize();
   addEventListener('resize', resize);
 
-  // 1. Height grid + water, then the river carve (before the grid goes to the worker and the collider).
+  // 1. Height grid + water, then the plaza pads and the river carve (before the grid goes to the worker and the collider).
   const [grid, water, index, skyline] = await Promise.all([
     loadHeightGrid('data/'),
     getJson<WaterData>('data/water.json'),
     getJson<ChunkIndex>('data/chunks/index.json'),
     getJson<SkylineData>('data/skyline.json'),
   ]);
+  attempt('flattenPads', () => flattenPads(grid));
   if (water) attempt('carveRiver', () => carveRiver(grid, water));
 
   // 2. Physics: terrain heightfield + invisible bbox walls (chunk trimeshes come with the chunks).
