@@ -5,7 +5,9 @@ import { type AnimationClip, type Object3D, Vector3 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { describe, expect, it } from 'vitest';
-import { character as C, playerSetup, swim } from '../config.ts';
+import { bikeModel, character as C, playerSetup, swim } from '../config.ts';
+import { bikeState, loadBike } from '../vehicle/BikeModel.test.ts';
+import { BikeModel } from '../vehicle/BikeModel.ts';
 import { type AnimState, armWeight, CharacterAnimator, crashPose, locomotionScale, pickState, UAL_CLIPS, UAL_CRASH_FALL } from './Animation.ts';
 import { CharacterModel, prepareAsset } from './CharacterModel.ts';
 import type { MoveMode, PlayerAction, PlayerState } from './types.ts';
@@ -53,6 +55,8 @@ describe('pickState', () => {
     ['celebrate', state({ action: 'celebrate' }), 'celebrate'],
     ['crash', state({ action: 'crash', mode: 'air' }), 'crash'],
     ['climb out', state({ action: 'climbOut', mode: 'swim' }), 'climbOut'],
+    ['riding', state({ mode: 'bike', speed: 5 }), 'cycle'],
+    ['crash wins over riding', state({ mode: 'bike', action: 'crash' }), 'crash'],
     ['wave while jogging = jog (arm layer)', state({ action: 'wave', speed: 4 }), 'jog'],
     ['standard mode below jogFrom (part-tilted stick, sliding) = walk', state({ speed: C.jogFrom[1] - 0.1 }), 'walk'],
   ])('%s', (_, p, want) => expect(pickState(p, 'idle', 1, false)).toBe(want));
@@ -181,5 +185,45 @@ describe('player-anims.glb', async () => {
     expect(anim.state).toBe('swimIdle');
     expect(model.body.position.y).toBe(0);
     expect(head()).toBeGreaterThan(swim.floatDepth);
+  });
+});
+
+describe('rider IK (player-anims.glb rig on bike.glb)', async () => {
+  const [rig, bike] = [await loadGlb('player-anims.glb'), new BikeModel(await loadBike())];
+  const model = new CharacterModel(prepareAsset(rig.scene, rig.animations), { shirt: '#d8342c' });
+  const anim = new CharacterAnimator(model);
+  const at = (n: string) => model.root.getObjectByName(n)!.getWorldPosition(new Vector3());
+  const b = bikeState({ position: new Vector3(3, 0.5, -2), yaw: 0.7, rider: 'p', lean: 0.15, steer: 0.1 });
+  const ride = (crank: number, dt: number) => {
+    b.crankAngle = crank;
+    bike.update(b, false, dt);
+    model.setPose(b.position, b.yaw);
+    anim.setRider(bike.riderTargets(), b.lean);
+    anim.update(state({ mode: 'bike', speed: 5 }), dt);
+    model.root.updateMatrixWorld(true);
+  };
+
+  it('seated, ball of each foot on its pedal (≤ 2 cm) at 8 crank angles, knees bent, hands on the grips', () => {
+    for (let t = 0; t < bikeModel.mountBlend + 0.2; t += 1 / 30) ride(0, 1 / 30);
+    expect(anim.state).toBe('cycle');
+    for (let k = 0; k < 8; k++) {
+      ride((k * Math.PI) / 4, 1 / 30);
+      const T = bike.riderTargets();
+      expect(at('pelvis').distanceTo(T.saddle), `pelvis ${k}`).toBeLessThan(0.02);
+      for (const [s, pedal, grip] of [['l', T.pedalL, T.gripL], ['r', T.pedalR, T.gripR]] as const) {
+        expect(at(`ball_${s}`).distanceTo(pedal), `foot ${s} ${k}`).toBeLessThan(0.02);
+        const [hip, knee, ankle] = [at(`thigh_${s}`), at(`calf_${s}`), at(`foot_${s}`)];
+        expect(hip.sub(knee).angleTo(ankle.sub(knee)), `knee ${s} ${k}`).toBeLessThan((175 * Math.PI) / 180);
+        expect(at(`middle_01_${s}`).distanceTo(grip), `hand ${s} ${k}`).toBeLessThan(0.03);
+      }
+    }
+  });
+
+  it('dismount: the IK fades out over mountBlend (body back on its feet), no NaN', () => {
+    anim.setRider(null, 0);
+    for (let t = 0; t < bikeModel.mountBlend + 0.05; t += 1 / 30) anim.update(state(), 1 / 30);
+    expect(model.body.position.toArray()).toEqual([0, 0, 0]);
+    expect(model.body.rotation.z).toBe(0);
+    model.root.traverse((o) => expect([...o.quaternion.toArray(), ...o.position.toArray()].every(Number.isFinite)).toBe(true));
   });
 });

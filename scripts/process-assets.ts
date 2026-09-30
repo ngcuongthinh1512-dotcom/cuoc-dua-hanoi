@@ -16,7 +16,7 @@ import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 // ponytail: @gltf-transform/extensions and sharp are dependencies of the approved @gltf-transform/{functions,cli}
 // (hoisted), not direct ones; add them to devDependencies if npm ever stops hoisting them.
 import sharp from 'sharp';
-import { landmarks } from '../client/src/config.ts';
+import { bikeModel, landmarks } from '../client/src/config.ts';
 import { UAL_CLIPS } from '../client/src/player/Animation.ts';
 import { footprintFrame } from '../client/src/world/landmarks/kit.ts';
 
@@ -351,8 +351,254 @@ async function playerAnims() {
   return doc;
 }
 
+// ── Bike (docs/plans/phase4.md §2.1, track A): Poly "Bicycle", one mesh of 6 materials, faces +Z, raw units. Split by
+// connected component into rigid parts, re-coloured Vélib'-style (vertex colours), scaled to a 26" wheel, pivot = ground
+// under the bottom bracket, + a code-built front basket and kickstand. One skinned primitive (1 draw call): the parts are
+// joints (frame > fork > wheelF, frame > wheelR / crank > pedalL, pedalR / stand), weights 1. Rider targets (saddle,
+// grips) and the steering axis / folded-stand rotation ride in the joints' extras (BikeModel reads them).
+const BIKE_RAW = {
+  ground: -237, // rear tyre bottom (the front tyre / rim / mudguard / fork sit 6.5 higher than its own spokes: dropped)
+  frontDrop: 6.5,
+  tyre: 154, // outer radius
+  rear: [-83, -248.5], // axle y, z (spokes' centre; tyre / rim / hub recentred on it)
+  front: [-83, 295.5], // after the drop
+  bb: [-119, -43], // bottom bracket y, z
+  steerTop: [214.5, 150], // head-tube top centre (after the drop): steering axis = through it and the front axle
+  pedal: { l: [26, -86.5, -90.5], r: [-22.5, -145.5, 2] }, // pedal centres (x > 0 = rider's left)
+  saddleTop: 256,
+  sitZ: -125, // rear half of the saddle (-185 … -41)
+  stem: [205, 253], // stem y span: its foot stays on the head tube, its top follows the moved bar
+};
+const JOINTS = ['frame', 'fork', 'wheelF', 'wheelR', 'crank', 'pedalL', 'pedalR', 'stand'] as const;
+type Part = (typeof JOINTS)[number];
+
+const linear = (hex: string) => [1, 3, 5].map((i) => {
+  const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+});
+
+/** Box along a → b with a square cross-section of half-size r (12 triangles, flat normals). */
+function bar(a: number[], b: number[], r: number) {
+  const d = [0, 1, 2].map((k) => b[k]! - a[k]!);
+  const l = Math.hypot(...d);
+  const w = d.map((c) => c / l);
+  const t = Math.abs(w[1]!) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const cr = (p: number[], q: number[]) => [p[1]! * q[2]! - p[2]! * q[1]!, p[2]! * q[0]! - p[0]! * q[2]!, p[0]! * q[1]! - p[1]! * q[0]!];
+  const u0 = cr(w, t);
+  const u = u0.map((c) => (c / Math.hypot(...u0)) * r);
+  const v = cr(w, u);
+  const corner = (e: number, i: number, j: number) => [0, 1, 2].map((k) => (e ? b : a)[k]! + i * u[k]! + j * v[k]!);
+  const pos: number[] = [];
+  const nrm: number[] = [];
+  const quad = (n: number[], p: number[][]) => {
+    const ln = Math.hypot(...n);
+    for (const k of [0, 1, 2, 0, 2, 3]) pos.push(...p[k]!), nrm.push(...n.map((c) => c / ln));
+  };
+  const S = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
+  for (let k = 0; k < 4; k++) {
+    const [i0, j0] = S[k]!;
+    const [i1, j1] = S[(k + 1) % 4]!;
+    const n = [0, 1, 2].map((c) => (i0 + i1) * u[c]! + (j0 + j1) * v[c]!);
+    quad(n, [corner(0, i0, j0), corner(0, i1, j1), corner(1, i1, j1), corner(1, i0, j0)]);
+  }
+  quad(w.map((c) => -c), S.map(([i, j]) => corner(0, i, j)).reverse());
+  quad(w, S.map(([i, j]) => corner(1, i, j)));
+  return { pos, nrm };
+}
+
+async function bike() {
+  const M = bikeModel;
+  const R = BIKE_RAW;
+  const s = M.wheelRadius / R.tyre;
+  const colour = Object.fromEntries(Object.entries(M.colours).map(([k, v]) => [k, linear(v)])) as Record<keyof typeof M.colours, number[]>;
+  const out = { pos: [] as number[], nrm: [] as number[], col: [] as number[], joint: [] as number[] };
+  const emit = (pos: number[], nrm: number[], part: Part, c: number[]) => {
+    out.pos.push(...pos);
+    out.nrm.push(...nrm);
+    for (let i = 0; i < pos.length / 3; i++) out.col.push(...c), out.joint.push(JOINTS.indexOf(part));
+  };
+  const lower = ((R.saddleTop - R.ground) * s - M.build.saddle) / s; // raw units the saddle + post go down
+  const [barBack, barUp] = [M.build.barBack / s, M.build.barUp / s];
+  const counts: Record<string, number> = {};
+  let grips: number[][] = [];
+  for (const g of collect(await io.read(join(src, 'bicycle_poly-by-google.glb')))) {
+    const mat = g.material.getName();
+    if (mat === 'default_Mat') continue; // a flat plate on the stem (label spot): no logos
+    // Connected components over the triangle soup (corners welded by position).
+    const nTri = g.pos.length / 9;
+    const par = Array.from({ length: nTri }, (_, i) => i);
+    const find = (i: number): number => (par[i] === i ? i : (par[i] = find(par[i]!)));
+    const seen = new Map<string, number>();
+    for (let t = 0; t < nTri; t++) {
+      for (let k = 0; k < 3; k++) {
+        const key = [0, 1, 2].map((c) => g.pos[t * 9 + k * 3 + c]!.toFixed(2)).join();
+        const o = seen.get(key);
+        if (o === undefined) seen.set(key, t);
+        else par[find(t)] = find(o);
+      }
+    }
+    const comps = new Map<number, number[]>();
+    for (let t = 0; t < nTri; t++) comps.set(find(t), [...(comps.get(find(t)) ?? []), t]);
+    for (const tris of comps.values()) {
+      const pts = tris.flatMap((t) => [0, 1, 2].map((k) => g.pos.slice(t * 9 + k * 3, t * 9 + k * 3 + 3)));
+      const lo = [0, 1, 2].map((c) => Math.min(...pts.map((p) => p[c]!)));
+      const hi = [0, 1, 2].map((c) => Math.max(...pts.map((p) => p[c]!)));
+      const corners = [[lo[1]!, lo[2]!], [lo[1]!, hi[2]!], [hi[1]!, lo[2]!], [hi[1]!, hi[2]!]];
+      const within = (c: readonly number[], r: number) => corners.every(([y, z]) => Math.hypot(y! - c[0]!, z! - c[1]!) <= r);
+      const maxX = Math.max(-lo[0]!, hi[0]!);
+      const near = (p: readonly number[], r: number) => [lo, hi].every((q) => Math.hypot(q[0]! - p[0]!, q[1]! - p[1]!, q[2]! - p[2]!) <= r);
+      const frontAxle = [R.front[0] + R.frontDrop, R.front[1]]; // before the drop
+      let part: Part = 'frame';
+      let f = (p: number[]) => p;
+      const onAxle = (c: readonly number[]) => Math.hypot((lo[1]! + hi[1]!) / 2 - c[0]!, (lo[2]! + hi[2]!) / 2 - c[1]!) < 12 && hi[1]! - lo[1]! < 320 && hi[2]! - lo[2]! < 320;
+      if (maxX <= 10 && (onAxle(R.rear) || onAxle(frontAxle))) {
+        const front = onAxle(frontAxle);
+        const axle = front ? R.front : R.rear;
+        const [dy, dz] = [axle[0] - (lo[1]! + hi[1]!) / 2, axle[1] - (lo[2]! + hi[2]!) / 2]; // recentre on the axle
+        part = front ? 'wheelF' : 'wheelR';
+        f = ([x, y, z]) => [x!, y! + dy, z! + dz];
+      } else if (near(R.pedal.l, 25) || near(R.pedal.r, 25)) {
+        part = near(R.pedal.l, 25) ? 'pedalL' : 'pedalR';
+        f = ([x, y, z]) => [x! * M.build.crankWidth, y!, z!];
+      } else if (maxX <= 40 && within(R.bb, 90)) {
+        part = 'crank';
+        f = ([x, y, z]) => [x! * M.build.crankWidth, y!, z!];
+      } else if (lo[2]! > 130) {
+        part = 'fork';
+        if (lo[1]! >= 240) f = ([x, y, z]) => [x!, y! - R.frontDrop + barUp, z! - barBack]; // bar + grips
+        else if (lo[1]! >= 200) {
+          f = ([x, y, z]) => {
+            const t = (y! - R.stem[0]) / (R.stem[1] - R.stem[0]);
+            return [x!, y! - R.frontDrop + t * barUp, z! - t * barBack];
+          };
+        } else f = ([x, y, z]) => [x!, y! - R.frontDrop, z!];
+      } else if ((mat === 'Mat.3' || mat === 'Mat.4') && hi[2]! < 0 && lo[1]! > 140) {
+        f = ([x, y, z]) => [x!, y! - lower, z!]; // saddle + seat post
+      }
+      const c =
+        mat === 'Mat.1' ? colour.tyre
+        : mat === 'Mat.3' ? colour.saddle
+        : mat === 'Mat.2' ? (tris.length >= 130 ? colour.accent : colour.frame) // the two mudguards (131 / 132 triangles)
+        : colour.metal; // Mat.4 spokes / hubs / post / bar / cranks, Mat (white) rims
+      const toM = ([x, y, z]: number[]) => [x! * s, (y! - R.ground) * s, (z! - R.bb[1]) * s];
+      const pos: number[] = [];
+      const nrm: number[] = [];
+      const kx = part === 'crank' || part.startsWith('pedal') ? M.build.crankWidth : 1;
+      for (const t of tris) {
+        for (let k = 0; k < 3; k++) {
+          const i = t * 9 + k * 3;
+          pos.push(...toM(f(g.pos.slice(i, i + 3))));
+          const n = [g.nrm[i]! / kx, g.nrm[i + 1]!, g.nrm[i + 2]!];
+          nrm.push(...n.map((v) => v / (Math.hypot(...n) || 1)));
+        }
+      }
+      if (mat === 'Mat.3' && part === 'fork') grips.push(toM(f([(lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2])));
+      emit(pos, nrm, part, c);
+      counts[part] = (counts[part] ?? 0) + tris.length;
+    }
+  }
+  grips = grips.sort((a, b) => b[0]! - a[0]!); // x > 0 = left first
+  const P = (y: number, z: number, x = 0) => [x * s, (y - R.ground) * s, (z - R.bb[1]) * s];
+  const at: Record<Part, number[]> = {
+    frame: [0, 0, 0],
+    fork: P(R.steerTop[0], R.steerTop[1]),
+    wheelF: P(R.front[0], R.front[1]),
+    wheelR: P(R.rear[0], R.rear[1]),
+    crank: P(R.bb[0], R.bb[1]),
+    pedalL: P(R.pedal.l[1], R.pedal.l[2], R.pedal.l[0] * M.build.crankWidth),
+    pedalR: P(R.pedal.r[1], R.pedal.r[2], R.pedal.r[0] * M.build.crankWidth),
+    stand: [0.06, 0.2, -0.08],
+  };
+  // Basket (fork): thin grey panels (bottom + 4 sides) and a green top rim, a bracket to the head tube.
+  const { z: [z0, z1], y: [y0, y1], width } = M.build.basket;
+  const [hw, th] = [width / 2, 0.006];
+  const panel = (a: number[], b: number[], c: number[]) => emit(...(Object.values(bar(a, b, th)) as [number[], number[]]), 'fork', c);
+  const box = (x0: number, x1: number, ya: number, yb: number, za: number, zb: number, c: number[]) => {
+    const pos: number[] = [];
+    const nrm: number[] = [];
+    const [lo, hi] = [[x0, ya, za], [x1, yb, zb]];
+    for (let a = 0; a < 3; a++) {
+      for (const side of [0, 1]) {
+        const [u, v] = [(a + 1) % 3, (a + 2) % 3];
+        const q = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([i, j]) => {
+          const p = [0, 0, 0];
+          p[a] = (side ? hi : lo)[a]!;
+          p[u] = (i ? hi : lo)[u]!;
+          p[v] = (j ? hi : lo)[v]!;
+          return p;
+        });
+        if (!side) q.reverse(); // counter-clockwise seen from outside
+        const n = [0, 0, 0];
+        n[a] = side ? 1 : -1;
+        for (const k of [0, 1, 2, 0, 2, 3]) pos.push(...q[k]!), nrm.push(...n);
+      }
+    }
+    emit(pos, nrm, 'fork', c);
+  };
+  box(-hw, hw, y0, y0 + 2 * th, z0, z1, colour.frame); // bottom
+  box(-hw, hw, y0, y1, z0, z0 + 2 * th, colour.frame); // back
+  box(-hw, hw, y0, y1, z1 - 2 * th, z1, colour.frame); // front
+  box(-hw, -hw + 2 * th, y0, y1, z0, z1, colour.frame); // sides
+  box(hw - 2 * th, hw, y0, y1, z0, z1, colour.frame);
+  const rim = [[-hw, z0], [hw, z0], [hw, z1], [-hw, z1]];
+  for (let k = 0; k < 4; k++) panel([rim[k]![0]!, y1, rim[k]![1]!], [rim[(k + 1) % 4]![0]!, y1, rim[(k + 1) % 4]![1]!], colour.accent);
+  const axis = [0, at.fork[1]! - at.wheelF[1]!, at.fork[2]! - at.wheelF[2]!];
+  const onAxis = (y: number) => at.wheelF[2]! + ((y - at.wheelF[1]!) / axis[1]!) * axis[2]!; // head-tube z at height y
+  panel([0, y0 + 0.03, onAxis(y0 + 0.03)], [0, y0 + 0.03, z0], colour.metal);
+  panel([0, y1 - 0.03, onAxis(y1 - 0.03)], [0, y1 - 0.03, z0], colour.metal);
+  // Kickstand (left, +x), built deployed: its tip touches the ground with the bike rolled standLeanDeg to the left.
+  const lean = (M.standLeanDeg * Math.PI) / 180;
+  const tipX = 0.19;
+  const tip = [tipX, tipX * Math.tan(lean) + 0.012, -0.2];
+  const leg = bar(at.stand, tip, 0.01);
+  emit(leg.pos, leg.nrm, 'stand', colour.metal);
+  // Folded: the leg turned onto the left chain stay (pointing back, level).
+  const [d0, d1] = [tip.map((v, k) => v - at.stand[k]!), [0.02, 0.01, -1]].map((d) => d.map((c) => c / Math.hypot(...d)));
+  const cr = [d0![1]! * d1![2]! - d0![2]! * d1![1]!, d0![2]! * d1![0]! - d0![0]! * d1![2]!, d0![0]! * d1![1]! - d0![1]! * d1![0]!];
+  const half = Math.acos(Math.min(1, d0!.reduce((a, v, k) => a + v * d1![k]!, 0))) / 2;
+  const fold = [...cr.map((c) => (c / Math.hypot(...cr)) * Math.sin(half)), Math.cos(half)];
+  // Document: one skinned primitive.
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const acc = (type: 'VEC3' | 'VEC4' | 'MAT4', a: Float32Array<ArrayBuffer> | Uint8Array<ArrayBuffer>) => doc.createAccessor().setType(type).setArray(a).setBuffer(buffer);
+  const n = out.pos.length / 3;
+  const joints0 = new Uint8Array(n * 4);
+  const weights0 = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) (joints0[i * 4] = out.joint[i]!), (weights0[i * 4] = 1);
+  const mat = doc.createMaterial('bike').setBaseColorFactor([1, 1, 1, 1]).setRoughnessFactor(0.55).setMetallicFactor(0);
+  const prim = doc
+    .createPrimitive()
+    .setMaterial(mat)
+    .setAttribute('POSITION', acc('VEC3', new Float32Array(out.pos)))
+    .setAttribute('NORMAL', acc('VEC3', new Float32Array(out.nrm)))
+    .setAttribute('COLOR_0', acc('VEC3', new Float32Array(out.col)))
+    .setAttribute('JOINTS_0', acc('VEC4', joints0))
+    .setAttribute('WEIGHTS_0', acc('VEC4', weights0));
+  const nodes = Object.fromEntries(JOINTS.map((j) => [j, doc.createNode(j)])) as Record<Part, ReturnType<Document['createNode']>>;
+  const parent: Record<Part, Part | null> = { frame: null, fork: 'frame', wheelF: 'fork', wheelR: 'frame', crank: 'frame', pedalL: 'crank', pedalR: 'crank', stand: 'frame' };
+  for (const j of JOINTS) {
+    const p = parent[j];
+    nodes[j].setTranslation(at[j].map((v, k) => v - (p ? at[p][k]! : 0)) as [number, number, number]);
+    if (p) nodes[p].addChild(nodes[j]);
+  }
+  const al = Math.hypot(...axis);
+  const saddleZ = (R.sitZ - R.bb[1]) * s;
+  nodes.frame.setExtras({ saddle: [0, M.build.saddle, saddleZ] });
+  nodes.fork.setExtras({ steerAxis: axis.map((c) => c / al), gripL: grips[0]!.map((v, k) => v - at.fork[k]!), gripR: grips[1]!.map((v, k) => v - at.fork[k]!) });
+  nodes.stand.setExtras({ fold });
+  const ibm = new Float32Array(JOINTS.length * 16);
+  JOINTS.forEach((j, i) => ibm.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -at[j][0]!, -at[j][1]!, -at[j][2]!, 1], i * 16));
+  const skin = doc.createSkin('bike').setSkeleton(nodes.frame).setInverseBindMatrices(acc('MAT4', ibm));
+  for (const j of JOINTS) skin.addJoint(nodes[j]);
+  doc.createScene('bike').addChild(nodes.frame).addChild(doc.createNode('bike').setMesh(doc.createMesh('bike').addPrimitive(prim)).setSkin(skin));
+  const b = bounds([{ material: mat, pos: out.pos, nrm: [], uv: [] }]);
+  console.log(`bike: ${JSON.stringify(counts)} tam giác / phần; dài ${(b.hi[2]! - b.lo[2]!).toFixed(2)} m, cao ${(b.hi[1]! - b.lo[1]!).toFixed(2)} m, yên ${M.build.saddle} m (hạ ${(lower * s).toFixed(3)} m)`);
+  if (grips.length !== 2) throw new Error(`bike: ${grips.length} grips`);
+  return doc;
+}
+
 mkdirSync(out, { recursive: true });
-const BUILDS = [['eiffel', eiffel], ['arc', arc], ['player', player], ['player-anims', playerAnims]] as const;
+const BUILDS = [['eiffel', eiffel], ['arc', arc], ['player', player], ['player-anims', playerAnims], ['bike', bike]] as const;
 for (const [name, build] of BUILDS.filter(([n]) => !only.length || only.includes(n))) {
   const doc = await build();
   await doc.transform(weld(), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
@@ -370,8 +616,8 @@ if (playerBytes > 2 * 2 ** 20) throw new Error(`player*.glb ${(playerBytes / 2 *
 // this script modifies (the others are not processed or used yet: Phase 3 / 4B re-run this with their files added).
 type Entry = { name: string; pageUrl: string; licence: string; author: string; attribution: string; usedFor: string };
 const manifest = JSON.parse(readFileSync(join(src, 'manifest.json'), 'utf8')) as Entry[];
-// read by eiffel() / arc() / player() / playerAnims() above (the CC0 attributions carry no "(đã chỉnh sửa)" to keep)
-const MODIFIED = new Set(['eiffel_scott-marshall.glb', 'arc-triomphe_hoanghiepvu.glb', 'Universal Base Characters[Standard].zip', 'universal_animation_librarystandard.zip']);
+// read by eiffel() / arc() / player() / playerAnims() / bike() above (the CC0 attributions carry no "(đã chỉnh sửa)" to keep)
+const MODIFIED = new Set(['eiffel_scott-marshall.glb', 'arc-triomphe_hoanghiepvu.glb', 'Universal Base Characters[Standard].zip', 'universal_animation_librarystandard.zip', 'bicycle_poly-by-google.glb']);
 const LABELS: [RegExp, string][] = [
   [/^eiffel_/, 'Tháp Eiffel'],
   [/^arc-triomphe_/, 'Khải Hoàn Môn'],
