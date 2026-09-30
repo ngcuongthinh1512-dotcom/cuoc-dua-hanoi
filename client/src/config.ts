@@ -833,6 +833,11 @@ export const crowd = {
   avoid: { ahead: 3, side: 1, shift: 1 }, // m
   stagger: { seconds: 1.2, push: 0.8 }, // s, m (knocked by the player / the bike nose)
   waveBack: 10, // m: G within this and facing the player → waves back
+  avatars: 4, // npc-peds.glb avatar count (PedPose.avatar)
+  giveUp: 20, // s waiting at a kerb before choosing a route without crossing
+  waveSeconds: 2, // s standing still waving back
+  turnRate: 6, // rad/s body yaw toward the walking direction
+  hitCooldown: 1.5, // s after a stagger before the same pedestrian can be knocked again
 };
 
 // ── D · rendering, colliders, integration (npc/Npc.ts, npc/NpcRenderer.ts, npc/PedRenderer.ts, main.ts, player/*) ──

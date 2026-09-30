@@ -139,7 +139,12 @@ Object.assign(PRESETS, {
   'p4b-bridge': cam(48.8637, 2.3155, 8, 90, -3), // river 95 m east of Pont Alexandre III, looking at the deck
   'p4b-concorde': camAt(70, 90, 40, 38, -30), // Place de la Concorde from the south-east, looking at the obelisk and the Champs-Élysées
 
-  // [C] pedestrians: p4b-sidewalk, p4b-crossing, p4b-park
+  // [C] pedestrians (shown once track D's renderer is merged): standing on the east Rue Royale sidewalk (kerb + 1.75 m, edge 21480)
+  // looking up the street; the zebra at the Rue Royale × Place de la Concorde crossing seen from its east kerb; a Tuileries
+  // chair (npc/crowd.ts seatsNear) seen from the path it faces
+  'p4b-sidewalk': '/?player=105.1,-201.1,-26&wait=5',
+  'p4b-crossing': camAt(86.3, -149.4, 3.5, 64, -10),
+  'p4b-park': camAt(391.6, 258.6, 1.7, 154.4, -3),
 
   // [D] in game: p4b-street, p4b-bike-car, p4b-dodge, p4b-zone, p4b-density
 });
