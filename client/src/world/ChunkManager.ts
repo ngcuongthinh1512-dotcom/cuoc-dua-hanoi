@@ -7,6 +7,7 @@ import { chunks as C, landmarks as LM, render as R } from '../config.ts';
 import { type ChunkKey, chunkBounds } from '../geo/chunkData.ts';
 import { attachBuildOut, type Materials, type PropMeshes } from './attach.ts';
 import type { BuildOut, FromWorker, ToWorker, TriMesh } from './buildTypes.ts';
+import { stairColliders } from './stairs.ts';
 
 /** Distance from (x, z) to the chunk's square (0 inside). */
 export function chunkDistance(key: ChunkKey, x: number, z: number): number {
@@ -96,7 +97,11 @@ export class ChunkManager {
       const d = chunkDistance(k, x, z);
       if (c.colliders && d > C.colliderRadius + C.colliderHysteresis) this.dropColliders(c);
       else if (!c.colliders && d <= C.colliderRadius && performance.now() - t0 < budgetMs) {
-        c.colliders = c.shapes.map((m) => this.physics.createCollider(RAPIER.ColliderDesc.trimesh(m.vertices, m.indices)));
+        c.colliders = c.shapes.map((m) => {
+          const col = this.physics.createCollider(RAPIER.ColliderDesc.trimesh(m.vertices, m.indices));
+          if (m.stairs) stairColliders.add(col.handle);
+          return col;
+        });
       }
     }
   }
@@ -149,7 +154,10 @@ export class ChunkManager {
   }
 
   private dropColliders(c: Loaded) {
-    for (const col of c.colliders ?? []) this.physics.removeCollider(col, false);
+    for (const col of c.colliders ?? []) {
+      stairColliders.delete(col.handle);
+      this.physics.removeCollider(col, false);
+    }
     c.colliders = undefined;
   }
 

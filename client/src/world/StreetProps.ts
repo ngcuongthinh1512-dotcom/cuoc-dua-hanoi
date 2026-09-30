@@ -8,13 +8,15 @@ import {
   CylinderGeometry,
   Float32BufferAttribute,
   type Material,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   SphereGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { props as P } from '../config.ts';
+import { props as P, stairs as ST } from '../config.ts';
 import { type ChunkData, type ChunkKey, chunkKey } from '../geo/chunkData.ts';
+import type { PropMeshes } from './attach.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind, TriMesh } from './buildTypes.ts';
 import { hash01, MeshBuffer } from './geom.ts';
 import { quadOut } from './landmarks/kit.ts';
@@ -33,12 +35,28 @@ export function pushMatrix(out: number[], x: number, y: number, z: number, yaw: 
 interface Arm { a: number; dx: number; dz: number; hw: number; name?: string }
 export interface Junction { x: number; z: number; arms: Arm[] } // arms sorted by angle atan2(dz, dx)
 
+/** Adds the arm toward q unless one points the same way (a way continuing through, or two pieces of one way). */
+function addArm(j: Junction, q: readonly number[], hw: number, name: string | undefined) {
+  const l = Math.hypot(q[0]! - j.x, q[1]! - j.z);
+  if (l < 1e-6) return;
+  const a = Math.atan2(q[1]! - j.z, q[0]! - j.x);
+  if (j.arms.some((o) => Math.abs(Math.atan2(Math.sin(o.a - a), Math.cos(o.a - a))) < 0.05)) return; // duplicate arm
+  j.arms.push({ a, dx: (q[0]! - j.x) / l, dz: (q[1]! - j.z) / l, hw, ...(name ? { name } : {}) });
+}
+
 /** Street junctions owned by this chunk (≥ 3 arms, or 2 differently named streets), plus every street junction vertex
- *  (for the lamp gap). ponytail: arms of a road piece stored in the neighbour chunk are missed, so some border junctions
- *  are skipped; upgrade: a global junction list from build-graph (Phase 4). */
+ *  (for the lamp gap). From ChunkData.junctions (build-chunks, whole map: arms across the chunk border and neighbours'
+ *  junctions near it included); chunks without it (fixtures) fall back to this chunk's roads. */
 export function findJunctions(chunk: ChunkData, key: ChunkKey) {
   const map = new Map<string, Junction>();
-  for (const r of chunk.roads) {
+  if (chunk.junctions) {
+    for (const r of chunk.junctions) {
+      const j: Junction = { x: r.x, z: r.z, arms: [] };
+      for (const arm of r.arms ?? []) addArm(j, arm.to, roadWidth(arm) / 2, arm.name);
+      map.set(`${r.x},${r.z}`, j);
+    }
+  }
+  for (const r of chunk.junctions ? [] : chunk.roads) {
     if (!STREET.has(r.kind)) continue;
     const n = r.pts.length / 2;
     const hw = roadWidth(r) / 2;
@@ -49,14 +67,7 @@ export function findJunctions(chunk: ChunkData, key: ChunkKey) {
       const k = `${x},${z}`;
       let j = map.get(k);
       if (!j) map.set(k, (j = { x, z, arms: [] }));
-      for (const q of [pt(i - 1), pt(i + 1)]) {
-        if (!q) continue;
-        const l = Math.hypot(q[0]! - x, q[1]! - z);
-        if (l < 1e-6) continue;
-        const a = Math.atan2(q[1]! - z, q[0]! - x);
-        if (j.arms.some((o) => Math.abs(Math.atan2(Math.sin(o.a - a), Math.cos(o.a - a))) < 0.05)) continue; // duplicate arm
-        j.arms.push({ a, dx: (q[0]! - x) / l, dz: (q[1]! - z) / l, hw, ...(r.name ? { name: r.name } : {}) });
-      }
+      for (const q of [pt(i - 1), pt(i + 1)]) if (q) addArm(j, q, hw, r.name);
     }
   }
   const all = [...map.values()];
@@ -279,7 +290,7 @@ export const buildStreetProps: Builder = (chunk, ctx) => {
   }
 
   const signs = buildSigns(spots, ctx);
-  const sets: [PropKind, number[]][] = [['lamp', lamps], ['morris', morris], ['metro', metro]];
+  const sets: [PropKind, number[]][] = [['lamp', lamps], ['morris', morris], ['metro', metro], ['metroMask', metro]];
   const instances = sets.filter(([, m]) => m.length).map(([kind, m]) => ({ kind, matrices: new Float32Array(m) }));
   const col = propColliders(instances);
   return {
@@ -342,7 +353,7 @@ function part(g: BufferGeometry, colour: string, x = 0, y = 0, z = 0, sx = 1, sy
 const cyl = (rt: number, rb: number, h: number, seg: number, open = false) => new CylinderGeometry(rt, rb, h, seg, 1, open);
 
 /** Shared mesh per instanced prop kind (≤ props.maxTriangles each), origin at its foot, front = local +Z. */
-export function createPropMeshes(): Record<PropKind, { geometry: BufferGeometry; material: Material }> {
+export function createPropMeshes(): PropMeshes {
   const k = P.treeHeight / 15;
   const tree = [
     part(cyl(0.18, 0.3, 7, 6, true), '#9a9281', 0, 3.5), // mottled plane-tree bark
@@ -368,7 +379,6 @@ export function createPropMeshes(): Record<PropKind, { geometry: BufferGeometry;
   ];
   const guimard = '#3d6b4f';
   const metro = [
-    part(new PlaneGeometry(2, 5).rotateX(-Math.PI / 2), '#121212', 0, 0.03, -2.5), // stairwell
     part(new BoxGeometry(0.08, 1, 5), guimard, 1.05, 0.5, -2.5),
     part(new BoxGeometry(0.08, 1, 5), guimard, -1.05, 0.5, -2.5),
     part(new BoxGeometry(2.18, 1, 0.08), guimard, 0, 0.5, -5),
@@ -382,5 +392,44 @@ export function createPropMeshes(): Record<PropKind, { geometry: BufferGeometry;
     geometry: mergeGeometries(parts)!,
     material: new MeshStandardMaterial({ vertexColors: true, roughness }),
   });
-  return { tree: mesh(tree, 0.9), lamp: mesh(lamp, 0.5), morris: mesh(morris, 0.7), metro: mesh(metro, 0.6) };
+  // Metro well: the terrain has no hole, so a depth-only lid (drawn right after the railings + well, before everything
+  // else) hides the ground inside the railings and the well shows through. ponytail: visual only, the propColliders box
+  // still closes it (no tunnels); a real opening needs a terrain hole + a station.
+  const lid = new PlaneGeometry(2 * W - 0.04, WELL - 0.06).rotateX(-Math.PI / 2).translate(0, LID, -WELL / 2);
+  lid.deleteAttribute('uv');
+  lid.deleteAttribute('normal');
+  return {
+    tree: mesh(tree, 0.9), lamp: mesh(lamp, 0.5), morris: mesh(morris, 0.7),
+    metro: { ...mesh([...metro, ...metroWell()], 0.6), renderOrder: -2 },
+    metroMask: { geometry: lid, material: new MeshBasicMaterial({ colorWrite: false }), renderOrder: -1, castShadow: false },
+  };
+}
+
+const W = 1; // m, half width of the Guimard stairwell (railings at ±1.05)
+const WELL = 5; // m, railing length behind the arch (local z 0 … −5)
+const LID = 0.35; // m above the entrance foot: over the raised sidewalk (roads.lift + curbHeight = 0.2)
+
+/** Stairwell under a Guimard entrance (local frame of the 'metro' prop: arch at z = 0, well toward −z): stairs.metroDepth
+ *  down at riser / tread, a landing, a closed gate; tiled walls up to the lid and a ceiling where the pavement covers it. */
+function metroWell(): BufferGeometry[] {
+  const n = Math.ceil(ST.metroDepth / ST.riser);
+  const rise = ST.metroDepth / n;
+  const t = ST.tread;
+  const end = n * t + ST.metroLanding;
+  const D = ST.metroDepth;
+  const { stone, tile, door } = ST.colours;
+  const g: BufferGeometry[] = [];
+  for (let k = 0; k < n; k++) {
+    const y = -(k + 1) * rise;
+    g.push(part(new PlaneGeometry(2 * W, t).rotateX(-Math.PI / 2), stone, 0, y, -(k + 0.5) * t)); // tread
+    g.push(part(new PlaneGeometry(2 * W, rise), stone, 0, y + rise / 2, -k * t)); // riser, faces the arch (+z)
+  }
+  g.push(part(new PlaneGeometry(2 * W, ST.metroLanding).rotateX(-Math.PI / 2), stone, 0, -D, -n * t - ST.metroLanding / 2));
+  const h = D + LID;
+  g.push(part(new PlaneGeometry(2 * W, h), tile, 0, LID - h / 2, -end)); // end wall
+  g.push(part(new PlaneGeometry(1.6, 2.2), door, 0, -D + 1.1, -end + 0.02)); // closed gate
+  g.push(part(new PlaneGeometry(end, h).rotateY(Math.PI / 2), tile, -W, LID - h / 2, -end / 2)); // side walls, facing in
+  g.push(part(new PlaneGeometry(end, h).rotateY(-Math.PI / 2), tile, W, LID - h / 2, -end / 2));
+  g.push(part(new PlaneGeometry(2 * W, end - WELL).rotateX(Math.PI / 2), tile, 0, -0.05, -(WELL + end) / 2)); // ceiling
+  return g;
 }

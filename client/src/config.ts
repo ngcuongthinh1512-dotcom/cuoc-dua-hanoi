@@ -686,10 +686,24 @@ export const roadGraph = {
 
 // ── D · stairs + junctions (world/StairBuilder.ts, world/StreetProps.ts, scripts/build-chunks.ts) ──
 export const stairs = {
-  riser: 0.16, // m target step height (KCC autostep ≤ player.maxStep 0.4)
-  tread: 0.32, // m
-  stringer: { width: 0.25, height: 0.35 }, // m, side walls
-  handrail: { height: 0.9, radius: 0.025 }, // m
+  riser: 0.16, // m target step height when OSM has no step_count (KCC autostep ≤ player.maxStep 0.4)
+  tread: 0.32, // m (quay flights and metro wells; OSM flights spread their steps over the way length)
+  stringer: { width: 0.25, height: 0.35 }, // m, side walls, height above the nosing line
+  handrail: { height: 0.9, radius: 0.025, postEvery: 2.5 }, // m above the nosing line
+  base: 0.4, // m the stringers reach below the ground (no gap on a DEM slope)
   metroDepth: 3.5, // m a metro entrance goes down before its closed end (no tunnels)
-  colours: { stone: '#bdb4a3', rail: '#2a2d30' },
+  metroLanding: 1.5, // m of floor between the last step and the closed gate
+  colours: { stone: '#bdb4a3', tile: '#e9e4d8', door: '#3b4045' }, // metro well (flights use the sidewalk + railing materials)
+  // Quay flights (SPEC §4.4) along the Seine wall, river side, top landing level with the coping. Build-time policy
+  // (scripts/build-chunks.ts places them: rebuild the chunks after changing reach / spacing / width / landing).
+  quay: {
+    reach: 15, // m: an OSM steps way with an end this close to the river gets a flight on the nearest wall point
+    spacing: 400, // m of bank: synthetic flights fill longer gaps
+    merge: 30, // m: OSM flights closer than this along the wall become one
+    bridgeClear: 15, // m kept free from bridge lines
+    width: 2.2, // m
+    landing: 2.2, // m of flat top landing (the parapet gap)
+    under: 0.5, // m the bottom step lies below the water surface
+    rampDepth: 2, // m below the surface the hidden ramp collider reaches (under a swimmer's feet, swim.floatDepth)
+  },
 };

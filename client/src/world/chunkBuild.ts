@@ -10,6 +10,7 @@ import { type BuildCtx, type Builder, type BuildOut, type MeshBucket, VERTEX_COL
 import { mergeBuckets, mergeTriMeshes, MeshBuffer } from './geom.ts';
 import { buildLandmarks } from './landmarks/index.ts';
 import { buildRoads } from './RoadBuilder.ts';
+import { buildStairs } from './StairBuilder.ts';
 import { buildStreetProps } from './StreetProps.ts';
 import { buildTerrain } from './Terrain.ts';
 import { buildVegetation } from './Vegetation.ts';
@@ -19,6 +20,7 @@ export const BUILDERS: Record<string, Builder> = {
   buildings: buildBuildings,
   roads: buildRoads,
   bridges: buildBridges,
+  stairs: buildStairs,
   vegetation: buildVegetation,
   props: buildStreetProps,
   landmarks: buildLandmarks,
@@ -79,7 +81,10 @@ export function buildChunk(chunk: ChunkData, grid: HeightGrid, onError: BuildErr
     }
   }
   all.meshes = mergeBuckets(all.meshes);
-  if (all.colliders.length > 1) all.colliders = [mergeTriMeshes(all.colliders)];
+  // One trimesh for the chunk, one for its stair flights (their handle marks them for the bike, world/stairs.ts).
+  const stairs = all.colliders.filter((c) => c.stairs);
+  const rest = all.colliders.filter((c) => !c.stairs);
+  all.colliders = [...(rest.length > 1 ? [mergeTriMeshes(rest)] : rest), ...(stairs.length ? [{ ...mergeTriMeshes(stairs), stairs: true as const }] : [])];
   return all;
 }
 

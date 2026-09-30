@@ -1,6 +1,6 @@
 // OSM tag parsing for scripts/build-chunks.ts (docs/plans/phase2.md "A — Data pipeline").
 // DOM-free and three-free. Extracts raw facts only; defaults (heights, widths…) live in the builders.
-import type { BridgeRec, BuildingRec, LandmarkPoint, PartRec, RoadRec, S3dFacts } from './chunkData.ts';
+import type { BridgeRec, BuildingRec, LandmarkPoint, PartRec, RoadRec, S3dFacts, StairRec } from './chunkData.ts';
 
 export type Tags = Record<string, string | undefined>;
 
@@ -115,4 +115,11 @@ export const bridgeFacts = (t: Tags): Omit<BridgeRec, 'pts'> => ({
   width: parseNumber(t.width),
   lanes: parseNumber(t.lanes),
   name: t.highway ? t.name : undefined,
+});
+
+/** highway=steps facts. ponytail: incline is not read, the DEM heights at both ends decide which way is up (the flight
+ *  must meet the ground); use it where the z14 DEM is flatter than the stair. */
+export const stairFacts = (t: Tags): Omit<StairRec, 'pts'> => ({
+  width: parseNumber(t.width),
+  steps: parseNumber(t.step_count),
 });
