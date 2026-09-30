@@ -128,7 +128,10 @@ Object.assign(PRESETS, {
 // Phase 4B (docs/plans/phase4b.md §6–7): p4b-* presets, NPCs on (the spectator ?cam= has them too; &npc=0 turns them
 // off). Each track adds its presets under its own line only.
 Object.assign(PRESETS, {
-  // [A] NPC assets on the dev-only turntable /npc.html: p4b-cars, p4b-peds, p4b-peds-idle
+  // [A] NPC assets on the dev-only turntable /npc.html (params in client/src/npc/npcPreview.ts)
+  'p4b-cars': '/npc.html?show=cars', // 10 vehicles, side view, paints, scooter / moto riders
+  'p4b-peds': '/npc.html?show=peds&clip=walk&t=0.4', // 4 avatars, LOD0 in front, LOD1 behind
+  'p4b-peds-idle': '/npc.html?show=peds&clip=sit,phone,wave', // seated (stand-in chair), phone, wave
 
   // [B] traffic, spectator views after the warm-up: p4b-etoile, p4b-red, p4b-bridge, p4b-concorde
 

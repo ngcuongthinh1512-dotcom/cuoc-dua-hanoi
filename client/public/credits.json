@@ -69,73 +69,17 @@
  },
  {
   "title": "Xe máy NPC: Scooter",
-  "text": "Xe máy NPC: \"Scooter\" – Poly by Google, CC BY 3.0, qua Poly Pizza",
+  "text": "Xe máy NPC: \"Scooter\" – Poly by Google, CC BY 3.0, qua Poly Pizza (đã chỉnh sửa)",
   "licence": "CC BY 3.0",
   "url": "https://poly.pizza/m/fPLXByG4Vx5",
   "author": "Poly by Google"
  },
  {
   "title": "Xe máy NPC: Motorcycle",
-  "text": "Xe máy NPC: \"Motorcycle\" – jeremy, CC BY 3.0, qua Poly Pizza",
+  "text": "Xe máy NPC: \"Motorcycle\" – jeremy, CC BY 3.0, qua Poly Pizza (đã chỉnh sửa)",
   "licence": "CC BY 3.0",
   "url": "https://poly.pizza/m/0lBe-ApqJs4",
   "author": "jeremy"
- },
- {
-  "title": "Người đi đường: Casual Character",
-  "text": "Người đi đường: \"Casual Character\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
-  "licence": "CC0 1.0",
-  "url": "https://poly.pizza/m/kZ3DmIoGip",
-  "author": "Quaternius"
- },
- {
-  "title": "Người đi đường: Hoodie Character",
-  "text": "Người đi đường: \"Hoodie Character\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
-  "licence": "CC0 1.0",
-  "url": "https://poly.pizza/m/gKLBoRsyKe",
-  "author": "Quaternius"
- },
- {
-  "title": "Người đi đường: Business Man",
-  "text": "Người đi đường: \"Business Man\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
-  "licence": "CC0 1.0",
-  "url": "https://poly.pizza/m/JFrLIKqvCH",
-  "author": "Quaternius"
- },
- {
-  "title": "Người đi đường: Punk",
-  "text": "Người đi đường: \"Punk\" – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
-  "licence": "CC0 1.0",
-  "url": "https://poly.pizza/m/BTALZymknF",
-  "author": "Quaternius"
- },
- {
-  "title": "Người đi đường: Animated Woman",
-  "text": "Người đi đường: \"Animated Woman\" (Casual) – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
-  "licence": "CC0 1.0",
-  "url": "https://poly.pizza/m/qJ2gsTUBHL",
-  "author": "Quaternius"
- },
- {
-  "title": "Người đi đường: Animated Woman",
-  "text": "Người đi đường: \"Animated Woman\" (Dress) – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
-  "licence": "CC0 1.0",
-  "url": "https://poly.pizza/m/nIItLV9nxS",
-  "author": "Quaternius"
- },
- {
-  "title": "Người đi đường: Punk",
-  "text": "Người đi đường: \"Punk\" (Woman) – Quaternius, qua Poly Pizza (CC0, ghi nguồn cho lịch sự)",
-  "licence": "CC0 1.0",
-  "url": "https://poly.pizza/m/djXoqejw6w",
-  "author": "Quaternius"
- },
- {
-  "title": "Người đi đường: Suit",
-  "text": "Người đi đường: \"Suit\" – Quaternius, CC BY 3.0, qua Poly Pizza",
-  "licence": "CC BY 3.0",
-  "url": "https://poly.pizza/m/sOUciDsoVV",
-  "author": "Quaternius"
  },
  {
   "title": "Người chơi (hoạt ảnh): Universal Animation Library",
@@ -157,5 +101,12 @@
   "licence": "CC BY 3.0",
   "url": "https://poly.pizza/m/5pBoRkAPQk6",
   "author": "Poly by Google"
+ },
+ {
+  "title": "Người đi đường: Microsoft Rocketbox Avatar Library",
+  "text": "Người đi đường: \"Microsoft Rocketbox Avatar Library\" – © 2020 Microsoft, MIT, qua GitHub (đã chỉnh sửa)",
+  "licence": "MIT",
+  "url": "https://github.com/microsoft/Microsoft-Rocketbox",
+  "author": "Microsoft"
  }
 ]
