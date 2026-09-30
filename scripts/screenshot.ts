@@ -167,6 +167,11 @@ Object.assign(PRESETS, {
 // Each track adds its presets under its own line only.
 Object.assign(PRESETS, {
   // [A] minimap (standing / turned / zoomed out on the bike), full map (whole / street names)
+  'p5-minimap': '/?player&wait=1', // Concorde spawn, facing the Arc de Triomphe: heading up, N on the rim
+  'p5-minimap-turn': '/?player&orbit=90&gps=766,-715&wait=1', // camera turned 90° left: map turned, N moved; Opéra waypoint on the rim
+  'p5-minimap-bike': '/?player&bike&autoMove=walk&npc=0&wait=2', // riding west on the Concorde: zoomed out (≈ metersPerPx[1]); no NPCs, 2 s: 30 s budget in SwiftShader
+  'p5-fullmap': '/?player&map&gps=766,-715', // whole map (base raster), player arrow, waypoint
+  'p5-fullmap-streets': '/?player&map=1&gps=766,-715', // 1 m/px around the Concorde: vector redraw + street names
 
   // [B] GPS route on the minimap and the full map, bike route around stairs
 
