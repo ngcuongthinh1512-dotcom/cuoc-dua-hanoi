@@ -87,6 +87,7 @@ export class Bikes {
     if (!b) return null;
     this.take(b);
     b.rider = this.playerId;
+    b.lean = 0; // picked up if it was lying after a crash
     c.ride(b);
     return 'mount';
   }

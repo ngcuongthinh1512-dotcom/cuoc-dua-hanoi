@@ -7,7 +7,7 @@
 //   graph=1 [route=lat,lon,lat,lon]   road graph overlay + A* walking route (Phase 4 track C)
 //   carve=1   flattenPads(grid) + carveRiver(grid, water) before building · water=1   createWater(scene, water, grid)
 import { latLonToWorld } from '@race/shared';
-import { WayFlag, shortestPath } from '@race/shared/graph';
+import { shortestPath } from '@race/shared/graph';
 import * as THREE from 'three';
 import { preview as P, render as R } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
@@ -15,7 +15,7 @@ import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkData, type ChunkKey, chunkBounds, type WaterData } from './geo/chunkData.ts';
 import { fixture } from './geo/fixture.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
-import { loadRoadGraph } from './geo/roadGraph.ts';
+import { graphLines, loadRoadGraph } from './geo/roadGraph.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { attachBuildOut, withFallbacks } from './world/attach.ts';
 import { createBuildingMaterials } from './world/BuildingBuilder.ts';
@@ -208,33 +208,17 @@ async function start() {
 async function drawGraph(scene: THREE.Scene, h: (x: number, z: number) => number) {
   const g = await loadRoadGraph();
   if (!g) return;
-  const lines = (pos: number[], col: number[]) => {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    const m = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false }));
-    m.renderOrder = 10;
-    scene.add(m);
-  };
-  const pos: number[] = [], col: number[] = [];
-  const v = (n: number, lift: number) => [g.x[n]!, h(g.x[n]!, g.z[n]!) + lift, g.z[n]!];
-  for (let e = 0; e < g.edgeA.length; e++) {
-    const f = g.flags(e);
-    const c = f & WayFlag.steps ? [1, 0, 1] : f & WayFlag.car ? [0.2, 0.5, 1] : [1, 0.85, 0.1];
-    pos.push(...v(g.edgeA[e]!, 1), ...v(g.edgeB[e]!, 1));
-    col.push(...c, ...c);
-  }
-  lines(pos, col);
   const r = list('route')?.map(Number);
-  if (r?.length !== 4) return;
-  const [a, b] = [latLonToWorld(r[0]!, r[1]!), latLonToWorld(r[2]!, r[3]!)];
-  const t0 = performance.now();
-  const p = shortestPath(g, g.nearestNode(a.x, a.z, 'walk'), g.nearestNode(b.x, b.z, 'walk'), 'walk');
-  if (!p) return console.warn('preview: no route');
-  console.log(`preview route: ${p.length.toFixed(0)} m, ${p.nodes.length} nodes, ${(performance.now() - t0).toFixed(1)} ms`);
-  const rp: number[] = [], rc: number[] = [];
-  for (let k = 0; k + 1 < p.nodes.length; k++) rp.push(...v(p.nodes[k]!, 2), ...v(p.nodes[k + 1]!, 2)), rc.push(1, 0, 0, 1, 0, 0);
-  lines(rp, rc);
+  let path: readonly number[] | undefined;
+  if (r?.length === 4) {
+    const [a, b] = [latLonToWorld(r[0]!, r[1]!), latLonToWorld(r[2]!, r[3]!)];
+    const t0 = performance.now();
+    const p = shortestPath(g, g.nearestNode(a.x, a.z, 'walk'), g.nearestNode(b.x, b.z, 'walk'), 'walk');
+    if (!p) console.warn('preview: no route');
+    else console.log(`preview route: ${p.length.toFixed(0)} m, ${p.nodes.length} nodes, ${(performance.now() - t0).toFixed(1)} ms`);
+    path = p?.nodes;
+  }
+  scene.add(graphLines(g, h, path));
 }
 
 start().catch((err: unknown) => {

@@ -4,7 +4,7 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { type PerspectiveCamera, type Scene, Vector3 } from 'three';
 import { crashSound, bell, rolling } from '../audio/sfx.ts';
-import { bike as B, playerSetup, thirdPersonCamera } from '../config.ts';
+import { bike as B, bikeModel, playerSetup, thirdPersonCamera } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import { loadBikeAsset } from '../vehicle/BikeModel.ts';
 import { Bikes, groundAt } from '../vehicle/Bikes.ts';
@@ -87,7 +87,7 @@ export class Player {
     this.target = { position: this.position, yaw: 0, speed: 0, moveMode: 'walk', vehicle: 'foot', collider: this.controller.collider };
     this.controller.onDismount = (b, crashed) => {
       b.rider = null; // the bike stays the team's (SPEC §6.3)
-      if (crashed) crashSound();
+      if (crashed) (b.lean = bikeModel.fallenLeanDeg * DEG), crashSound(); // lying on its right side, rider on the left
     };
   }
 

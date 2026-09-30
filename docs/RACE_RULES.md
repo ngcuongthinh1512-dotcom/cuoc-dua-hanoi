@@ -66,13 +66,22 @@ Sau khi về đích, bạn được bay camera tự do để xem các đội cò
 
 ### Đi bộ là mặc định
 - Mọi đội bắt đầu bằng **đôi chân**. Nhân vật di chuyển ở **tốc độ đi bộ chuẩn** (kiểu chạy bộ nhẹ), và đó cũng là tốc độ nhanh nhất khi đi bộ: **không có chạy nước rút**.
-- Lỡ rơi xuống sông Seine? Hãy bơi tới sát tường kè rồi bấm `Space` để leo lên bờ, hoặc bạn sẽ được đưa lên bậc thang gần nhất.
+- Lỡ rơi xuống sông Seine? Hãy bơi tới sát tường kè rồi bấm `Space` để leo lên bờ, đi lên một **bậc thang đá dọc tường kè** (bậc xuống tận mặt nước), hoặc bạn sẽ được đưa lên bậc thang gần nhất.
 
 ### Xe đạp, phương tiện duy nhất
 - Trong cuộc đua **chỉ có xe đạp**, nhanh hơn đi bộ **đúng 1,3 lần**.
 - Xe **xuất hiện ngẫu nhiên và rất ít** trên các con phố. Khi tới gần một chiếc xe còn trống, bạn sẽ thấy nó lấp lánh nhẹ.
 - Có cả **xe "mồi"** đặt ngẫu nhiên khắp bản đồ, trông y hệt xe thường. Đừng đoán lộ trình dựa vào chỗ có xe!
 - Xe không đi được bậc thang. Va chạm mạnh khi đang chạy nhanh sẽ làm bạn **ngã xe**; khoảng 2 giây sau nhân vật tự đứng dậy, xe vẫn là của bạn.
+
+### Đạp xe
+- Đứng cách xe **không quá 2,5 m** rồi bấm `F` để lên xe. Không lên xe được khi đang bơi, đang nhảy hay đang làm động tác khác.
+- `W`: đạp (khoảng 1 giây là đạt tốc độ tối đa) · `S`: phanh, dừng hẳn rồi giữ tiếp thì lùi chậm · `A` `D`: rẽ (xe nghiêng theo khúc cua; cua gắt thì xe chậm lại) · `R`: bấm chuông.
+- Trên xe, `A` `D` rẽ theo hướng xe chứ không theo hướng camera; camera tự lùi ra xa và cao hơn phía sau xe.
+- Trên **đường đá lát** (Champs-Élysées, Concorde…) xe khó cua, khó phanh hơn nhưng tốc độ tối đa vẫn vậy.
+- Đâm vào tường, va nhẹ thì xe chỉ chậm lại hoặc trượt dọc tường; đâm thẳng khi đang nhanh thì ngã.
+- Xuống xe: bấm `F` khi xe **gần như đã dừng** (phanh trước bằng `S`). Xe đứng lại bằng chân chống ngay cạnh bạn.
+- Đạp xe xuống sông thì xe ở lại trên bờ, bạn phải bơi.
 
 ### Ai lấy trước được trước
 - Đang đi bộ, đứng sát xe rồi bấm `F` để lấy xe.

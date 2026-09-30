@@ -6,7 +6,7 @@ import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
-import { loadRoadGraph } from './geo/roadGraph.ts';
+import { graphLines, loadRoadGraph } from './geo/roadGraph.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { parseOverrides, Player } from './player/Player.ts';
 import { initCredits } from './ui/Credits.ts';
@@ -144,11 +144,23 @@ async function start() {
   const player = spectator ? undefined : await Player.create(scene, world, camera, env, parseOverrides(query));
   let flying = !player;
   // Cobbles (SPEC §6.6) once roadgraph.json is in; asphalt until then or where the graph knows nothing.
-  if (player) void loadRoadGraph().then((g) => g && (player.controller.surfaceAt = (x, z) => g.surfaceAt(x, z) ?? 'asphalt'));
+  const graph = loadRoadGraph();
+  let graphLoaded = false; // the player activates after it (surfaces from the first step; deterministic screenshots)
+  void graph.then(() => void (graphLoaded = true));
+  if (player) void graph.then((g) => g && (player.controller.surfaceAt = (x, z) => g.surfaceAt(x, z) ?? 'asphalt'));
+  // N (F3 panel open) or ?graph=1: road graph overlay, built on first use (~100k edges, 1 draw call).
+  let graphOverlay: THREE.Object3D | undefined;
+  const toggleGraph = () =>
+    void graph.then((g) => {
+      if (!g) return;
+      if (graphOverlay) graphOverlay.visible = !graphOverlay.visible;
+      else scene.add((graphOverlay = graphLines(g, env.heightAt)));
+    });
+  if (query.get('graph') === '1') toggleGraph();
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
-  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player } }); // for scratch test scripts
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph } }); // for scratch test scripts
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing.
@@ -185,6 +197,7 @@ async function start() {
         $('help-player').hidden = flying;
         $('help-fly').hidden = !flying;
       }
+      if (debug.visible && input.wasPressed('graphToggle')) toggleGraph();
       if (flying) fly.update(dt, input);
       player?.update(dt, flying ? null : input, loop.alpha);
       input.endFrame();
@@ -214,7 +227,7 @@ async function start() {
       Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries } });
       // Signal for scripts/screenshot.ts: every chunk around the camera attached and a few frames drawn.
       if (!worldReady) loading.textContent = `Đang tải bản đồ… còn ${cs.pending} ô`;
-      if (!worldReady && loop.frames >= 3 && chunks.idle && models.idle) {
+      if (!worldReady && loop.frames >= 3 && chunks.idle && models.idle && graphLoaded) {
         worldReady = true;
         loading.hidden = true;
         player?.activate(); // the chunk colliders around the spawn exist now

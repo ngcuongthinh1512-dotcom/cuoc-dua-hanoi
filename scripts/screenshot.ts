@@ -108,7 +108,7 @@ Object.assign(PRESETS, {
   'p4-mount': '/?player&orbit=-50&wait=1', // dev bike 3 m east of the spawn, sparkling, within F reach
   'p4-ride': '/?player&bike&autoMove=walk&wait=3', // on the Champs-Élysées side of Concorde: bike camera, FOV up
   'p4-ride-turn': '/?player&bike&autoMove=walk&autoTurn=left&wait=2.5&debug=1', // leaning into a left turn
-  'p4-cobbles': '/?player&bike&autoMove=walk&autoTurn=right&wait=2&debug=1', // Concorde setts (F3: "đá lát" once roadgraph.json has them)
+  'p4-cobbles': '/?player&bike&autoMove=walk&wait=4&debug=1', // onto the Champs-Élysées setts: F3 "đá lát"
   'p4-stairs-block': '/?player=-2380.2,409.3,136&bike&autoMove=walk&orbit=70&wait=3&debug=1', // jardins du Trocadéro steps: stopped at the first step (with track D's stair colliders)
   'p4-crash': rideInto(48.868171, 2.322384, -24.1, 6, '&camMode=far&orbit=25&wait=3.2&debug=1'), // into the p3-wall facade at top speed: lying next to the bike
   // [D] stairs + junctions: a 3 m Trocadéro garden flight (jardins du Trocadéro) from the side; a quay flight on the north bank east of
@@ -119,6 +119,10 @@ Object.assign(PRESETS, {
   'p4-swim-exit': '/?player=-342,127.1,-90&autoMove=walk&wait=8&orbit=60',
   'p4-metro': camAt(111.1 - 5 * 0.895, 15 - 5 * 0.446, 5.5, -116.5, -45), // entrance yaw −116.5° (arch toward the road)
   'p4-border-junction': '/?player=1512,352,46',
+  // [integration] road graph overlay in game (?graph=1 = N in the F3 panel), 900 m top-down over Concorde;
+  // riding seen from behind (bike chase camera) on the Concorde setts
+  'p4-graph': '/?cam=0,900,0,0,-90&graph=1',
+  'p4-ride-rear': '/?player&bike&autoMove=walk&autoTurn=right&wait=1.5',
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
@@ -173,7 +177,7 @@ if (existsSync(join(dataDir, 'index.json'))) {
     if (s.id === 'L3') PRESETS['p3-eiffel'] = `/?player=${[p.x, p.z, yaw].map((v) => +v.toFixed(2)).join(',')}&camMode=far`; // under the tower
   }
 }
-const TIMEOUT_MS: Record<string, number> = { topdown: 90_000 };
+const TIMEOUT_MS: Record<string, number> = { topdown: 90_000, 'p4-graph': 90_000, 'p4-swim-exit': 90_000 }; // big views, long simulated waits
 const DEFAULT_TIMEOUT_MS = 30_000;
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 

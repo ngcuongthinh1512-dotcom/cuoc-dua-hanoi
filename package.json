@@ -16,6 +16,7 @@
     "dev": "npm run dev -w client",
     "dev:worker": "npm run dev -w worker",
     "screenshot": "tsx scripts/screenshot.ts",
+    "ride-check": "tsx scripts/ride-check.ts",
     "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts",
     "build-chunks": "tsx scripts/build-chunks.ts",
     "build-graph": "tsx scripts/build-graph.ts",

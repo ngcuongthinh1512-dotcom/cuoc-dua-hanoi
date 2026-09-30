@@ -30,7 +30,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Streaming: chỉ 1 worker dựng chunk (tối đa 2 chunk cùng lúc); dùng pool nhiều worker nếu lần tải đầu chậm.
 - Streaming: ngân sách "≤ 49 chunk" là cho bán kính tải 800 m; khi di chuyển có thể giữ tới ~60 chunk vì chỉ bỏ chunk ở 1000 m (`chunks.unloadRadius`, tránh tải lại liên tục ở mép). Khi bay cao, bán kính tải theo sương (`fog.far` + `chunks.fogMargin`) nên tải nhiều chunk hơn (79 ở preset `eiffel`).
 - Collider Rapier chỉ tạo cho chunk trong 150 m (`chunks.colliderRadius`), mỗi khung hình một chunk; một chunk dày vẫn mất ~5 ms (Apple Silicon, có thể ~10 ms trên laptop Windows) trong khung hình đó. Đo trên máy thật (F3); nếu giật thì dùng hộp giản lược thay trimesh.
-- Chưa trích từ OSM dù `fetch-osm` đã tải: `amenity=bicycle_parking` (chỗ ưu tiên đặt xe, SPEC §6 → Phase 4/7), `amenity=fountain` (hạt nước, SPEC §14 → Phase 12), ranh giới quận `admin_level=9` (tên quận trên biển/HUD → Phase 5), `tourism` / `historic` / `place` (bản đồ Host → Phase 10).
+- Chưa trích từ OSM dù `fetch-osm` đã tải: `amenity=bicycle_parking` vào chunk (đã có trong `roadgraph.json`, Phase 4; dùng ở Phase 7), `amenity=fountain` (hạt nước, SPEC §14 → Phase 12), ranh giới quận `admin_level=9` (tên quận trên biển/HUD → Phase 5), `tourism` / `historic` / `place` (bản đồ Host → Phase 10).
 - STYLE_GUIDE chưa có: đèn giao thông ở giao lộ, nắp cống, dải cỏ ven đường (Phase 12).
 - Đường một chiều tách làn: vỉa hè phía nửa đường cùng tên bị bỏ nếu hai nửa quá gần; chỉ xét trong cùng chunk, đo ở giữa mảnh đường (ponytail trong `RoadBuilder.ts`).
 - Ngoài bbox chỉ có dải chunk sát biên, đứng gần biên nhìn ra ngoài sẽ thấy mép thế giới (cảnh báo + tường vẫn chặn); có thể thêm địa hình/sương xa hơn hoặc khối nhà giản lược ngoài biên. Rõ nhất ở Panthéon (chỉ cách biên nam ~130 m): preset `lm-pantheon` thấy đồng đất trống phía nam. Mây vẽ tĩnh trong texture bầu trời.
@@ -53,15 +53,15 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Khối nâu lơ lửng gần tháp Saint-Jacques (≈ 1990, 45, 900): không có nhà / part / mái (`building=roof`) nào có `min_height` quanh đó trong dữ liệu chunk, và ảnh chụp từ (1880, 55, 1010) nhìn về đó không thấy khối nào; nguyên nhân chưa rõ, chưa tái hiện được.
 - Mặt bằng quảng trường (`PADS` trong `geo/landmarks.ts`, `Terrain.flattenPads`): mới san 3 chỗ vẽ tay – Cour Napoléon (theo trung vị ≈ 13 m, vì Louvre xung quanh đứng trên DEM gồ), parvis Notre-Dame cùng nhà thờ (≈ +1 m, ngang kè) và dải Quai de l'Horloge. Place du Carrousel, Concorde (gốc obelisk là y = 0, chỉ dốc ~2 m) và các quảng trường khác vẫn theo DEM; mép pad dốc lại về DEM trong 25 m (`terrain.padBlend`), nên Rue de Rivoli / nhà quanh Hôtel-Dieu có chân tường cao hơn.
 - Sương che địa danh cao ở các góc nhìn chính (sương 250–700 m, `render.fog`): từ parvis Trocadéro (đích L2, cách tháp ~630 m) tháp Eiffel gần như trắng; vòm Invalides cuối esplanade bị mờ; bay 250 m trên Louvre nhìn về tây không thấy Eiffel trong khi La Défense (8 km, bóng chân trời) vẫn thấy. Chưa sửa: `camera.far` và bán kính tải chunk đều theo sương, giảm sương riêng cho vật liệu địa danh sẽ làm tháp bị cắt ở mặt phẳng xa / hiện đột ngột khi chunk tải. Nâng cấp (Phase 12): vẽ Eiffel, vòm Invalides, Notre-Dame, Panthéon thành bóng chân trời (như `createSkyline`, sương riêng) khi chunk của chúng bị sương che hoặc chưa tải, và giảm sương cho chính mô hình khi ở gần.
-- Ghi nguồn: các model xe / người / xe đạp đã tải nhưng chưa xử lý, chưa dùng (Phase 3 / 4B); khi xử lý thì thêm tên file vào `MODIFIED` trong `scripts/process-assets.ts` để dòng ghi nguồn có "(đã chỉnh sửa)", rồi chạy lại `npm run process-assets`.
+- Ghi nguồn: các model xe / người đi đường đã tải nhưng chưa xử lý, chưa dùng (Phase 4B; xe đạp đã xử lý ở Phase 4); khi xử lý thì thêm tên file vào `MODIFIED` trong `scripts/process-assets.ts` để dòng ghi nguồn có "(đã chỉnh sửa)", rồi chạy lại `npm run process-assets`.
 
 ## Phase 3 – Nhân vật & camera (phần còn lại)
 Đã xong: nhân vật UBC + clip UAL, áo màu đội, bảng tên, controller Rapier, bơi, camera góc thứ ba (`docs/plans/phase3.md`).
-- Lên bờ sông Seine: leo tường kè ở mọi chỗ (`Space` khi bơi sát tường, ponytail trong `CharacterController.tryClimb`) vì bến thấp chưa khoét; khi khoét bến thấp thì chỉ cho lên ở cầu thang / dốc OSM. Xuống sông chỉ bằng cách nhảy qua lan can kè (1 m) hoặc rơi từ cầu; rơi từ trên cao xuống nước thì dừng đột ngột ở độ sâu bơi (chưa có bọt nước, chưa lặn).
+- Lên bờ sông Seine: đã có 81 bậc kè xuống tận nước (Phase 4), nhưng vẫn leo được tường kè ở mọi chỗ (`Space` khi bơi sát tường, ponytail trong `CharacterController.tryClimb`); có thể giới hạn chỉ ở bậc kè. Ngoài bậc kè, xuống sông bằng cách nhảy qua lan can kè (1 m) hoặc rơi từ cầu; rơi từ trên cao xuống nước thì dừng đột ngột ở độ sâu bơi (chưa có bọt nước, chưa lặn).
 - `openBox` dùng clip UAL `Interact` (một tay với ra, khá nhẹ); clip mở hộp thật cần asset mới (chưa duyệt). `wave` và `celebrate` là lớp tay dựng bằng code (+ `Dance_Loop`) vì clip Wave / Celebration của UAL nằm trong bản trả phí.
 - `clipSpeed.Swim_Fwd_Loop` (1,8 m/s) là ước lượng; chỉnh nếu thấy tay chân "trượt" khi bơi.
 - Bảng tên cố định ở độ cao đầu khi đứng, nên lúc ngã xe (nằm) nó vẫn lơ lửng ở trên; bảng tên của các nhân vật đứng sát nhau (< 2 m) chồng lên nhau khi nhìn từ xa (kích thước cố định trên màn hình), xếp lại ở Phase 6.
-- Collider: biển tên đường (cột 4 cm) chưa có collider; lối vào metro là khối đặc 1,1 m (chưa có bậc xuống); điểm spawn nằm trong nhà rỗng không bị phát hiện (chỉ bắt được khi tường chạm capsule), hiện spawn chọn tay nên chưa sao.
+- Collider: biển tên đường (cột 4 cm) chưa có collider; lối vào metro là khối đặc 1,1 m (bậc xuống giếng chỉ để nhìn, Phase 4); điểm spawn nằm trong nhà rỗng không bị phát hiện (chỉ bắt được khi tường chạm capsule), hiện spawn chọn tay nên chưa sao.
 - Camera: collider mỏng (đèn, cột Morris, metro) làm cần camera co lại một chút khi quét qua; GTA bỏ qua đồ mỏng. Hướng sửa: collider đồ đường phố tách khỏi trimesh của chunk, gán collision group riêng và truyền `filterGroups` trong `ThirdPersonCamera.cast`.
 - Camera: chỉ giữ trên mặt nước khi `moveMode === 'swim'`; lúc đang rơi xuống sông mà ngẩng camera có thể chìm dưới nước một chút (đưa `waterLevel` vào `CameraTarget`).
 - Camera ngôi thứ nhất chưa có va chạm và chưa làm mượt theo chiều dọc (bước lên bậc hơi giật). Camera sát tường: chưa làm mờ / ẩn thân khi cần < ~0,5 m như GTA.
@@ -74,11 +74,17 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Tạo `client/src/core/EventBus.ts` khi có module thật sự cần (Phase 3 gọi hàm trực tiếp nên chưa tạo).
 - `core/Time` (SPEC §3) hiện nằm trong `GameLoop` (delta khung hình đã kẹp, FPS, alpha); tách `client/src/core/Time.ts` khi có module khác cần đồng hồ game.
 
-## Phase 4 – Di chuyển
-- `npm run build-graph` → `shared/data/roadgraph.json`.
-- Xe đạp: vật lý, lên / xuống xe (`F`), clip `cycle` (UAL `Driving_Loop`) + IK chân, `moveMode 'bike'`, camera `vehicle: 'bike'` (hook `thirdPersonCamera.bike` đã có, chỉnh lại số khi có xe thật), ngã xe gọi `startAction('crash')` khi va chạm mạnh, test tốc độ xe = footSpeed × 1,3.
-- Bậc thang OSM hiện chỉ là mặt đường phẳng; dựng bậc thật (và lối xuống metro).
-- Giao lộ sát ranh chunk có thể bị bỏ sót khi đặt biển tên đường / cột đèn (nhánh đường nằm ở chunk bên cạnh); dùng danh sách giao lộ toàn cục của `build-graph`.
+## Phase 4 – Di chuyển (phần còn lại)
+Đã xong: xe đạp Vélib' (model, IK người đạp, vật lý 1,3 × footSpeed, `F` lên / xuống, ngã xe, chuông `R`, camera xe), bậc thang OSM + bậc kè sông + giếng metro, giao lộ toàn cục, `npm run build-graph` → `shared/data/roadgraph.json` + A* / hành lang / `surfaceAt` (`docs/plans/phase4.md`). Kiểm bằng `npm run ride-check`.
+- Xe hiện chỉ có ở máy mình: 3 xe thử đặt quanh điểm spawn (`Player.placeBikes`). Đồng bộ server, sinh xe chung ở bãi (`bicycle_parking` đã có trong đồ thị: 2 718 bãi), giành xe, đỗ xe, xe bị bỏ: Phase 6 / 7.
+- Lùi xe (`S` khi đã dừng, 1 m/s) chỉ có capsule chặn, không dò bánh sau.
+- Âm thanh chuông / lốp / đá lát / ngã xe là âm tổng hợp WebAudio tạm (`audio/sfx.ts`); thay bằng bản ghi thật ở Phase 12.
+- Bàn đạp là xương cứng xoay ngược đùi đĩa để luôn nằm ngang; cổ chân chưa gập theo vòng đạp.
+- Đồ thị đường: vùng `highway` dạng multipolygon (≈ 240 quan hệ) và phần bên trong quảng trường đi bộ chưa có, chỉ có đường viền; lối có mái (hành lang Louvre, arcade) bị bỏ cho khớp khối nhà đặc, nên Louvre → Notre-Dame dài 1,78 × đường chim bay.
+- `roadGraph.snapRadius` (80 m) chưa ai đọc; GPS ở Phase 5 dùng nó.
+- Bậc thang: không đọc `incline`, chiều lên / xuống theo DEM ở hai đầu; bậc OSM ngắn trên DEM phẳng thành bậc thấp. Bậc dốc hơn ~50° (lỗi DEM) không leo được bằng collider hộp (ponytail trong `StairBuilder.ts`).
+- Bậc kè: mặt bên của bậc có tường ẩn tới dưới nước, nên người bơi phải vào từ chân bậc (bơi dọc tường kè từ phía mặt bên thì bị chặn); leo tường kè ở chỗ khác vẫn dùng `tryClimb`.
+- Giếng metro chỉ là hình (bậc, chiếu nghỉ, cửa đóng); không có ga / đường hầm.
 
 ## Phase 4B – Xe cộ & người đi đường NPC (SPEC §17.5)
 - Xe NPC theo `roadgraph.json` (đúng chiều, dừng ở giao lộ, vòng xuyến Étoile) + người đi đường trên vỉa hè; chỉ chạy ở client, không đồng bộ server; người chơi không lái được xe NPC.
@@ -87,6 +93,8 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 
 ## Phase 5 – HUD
 - Menu thật (SPEC §17.2: tự mở khi chuột bị nhả, `Esc`); hiện chỉ hiện bảng hướng dẫn phím. Nút "Kẹt? Về chỗ an toàn" gọi `CharacterController.respawn()` (hiện về chỗ đứng an toàn gần nhất; khi đang ở dưới sông, SPEC §4.4 muốn đưa lên bậc thang gần nhất); tùy chọn đảo trục Y, độ nhạy chuột.
+- Thông báo xe đạp: "Không đi xe trên bậc thang" khi bánh trước chạm bậc; lý do khi `F` bị từ chối (đi nhanh quá / quá xa / xe của đội khác).
+- Hồi sinh dưới sông: đưa lên bậc kè gần nhất (`water.json` `stairs` = chân các bậc kè, SPEC §4.4).
 - Biển tên đường: thêm dòng quận (vd. "8e Arrt") khi có dữ liệu quận.
 
 ## Phase 6 – Server & presence
@@ -94,7 +102,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Đăng nhập mã đội / Host, token ký HMAC bằng `HOST_PASSWORD`.
 - Test Durable Object bằng `@cloudflare/vitest-pool-workers` (kiểm tra tương thích với Vitest 5 trước khi cài; hiện `worker/src/legs.test.ts` chạy trong môi trường Node vì chỉ kiểm tra dữ liệu).
 - Kết hợp Vite HMR với Worker/DO khi dev. Hai hướng: Vite proxy `/api` (và WebSocket) sang `wrangler dev`, hoặc dùng `@cloudflare/vite-plugin` 1.60.2. Hiện tại `npm run dev:worker` phải build lại client mỗi lần chạy.
-- `G` vẫy tay đã chạy trên máy mình (Phase 3); gửi `action` qua mạng cùng presence. `R` (bấm còi) chưa có tác dụng.
+- `G` vẫy tay đã chạy trên máy mình (Phase 3); gửi `action` qua mạng cùng presence. `R` (chuông xe) chỉ kêu ở máy mình (Phase 4); gửi qua mạng cho người gần đó nghe.
 - Người chơi khác: dựng `PlayerState` từ snapshot (nội suy) rồi dùng lại `CharacterModel` + `CharacterAnimator` + bảng tên; `movement` lấy từ file chặng.
 - Kiểm tra tốc độ phía server: khi trượt dọc collider góc cạnh (bể Louvre), controller Rapier có vài bước lẻ tới khoảng 4,8 m/s (footSpeed 4). Đo trên cửa sổ vài giây và cho dư khoảng 25 %, đừng kiểm từng bước.
 - Bảng debug F3: thêm ping và số người chơi đang thấy (SPEC §14).

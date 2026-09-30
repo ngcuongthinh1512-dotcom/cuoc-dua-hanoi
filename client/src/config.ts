@@ -81,6 +81,7 @@ const keyTable = {
   flyDown: ['KeyQ'],
   flyFast: ['ShiftLeft', 'ShiftRight'],
   flyToggle: ['KeyV'], // player ⇄ free-fly camera, only while the F3 debug panel is open (docs/plans/phase3.md)
+  graphToggle: ['KeyN'], // road graph overlay (roadgraph.json), only while the F3 debug panel is open
 };
 
 export type Action = keyof typeof keyTable;
