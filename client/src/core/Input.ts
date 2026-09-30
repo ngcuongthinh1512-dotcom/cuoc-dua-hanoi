@@ -1,4 +1,4 @@
-import { flyCamera, keys, type Action } from '../config.ts';
+import { flyCamera, keys, padButtons, type Action } from '../config.ts';
 
 const BOUND = new Set(Object.values(keys).flat());
 
@@ -35,6 +35,8 @@ export class Input {
   readonly pad = { moveX: 0, moveY: 0, lookX: 0, lookY: 0, rise: 0 };
   private readonly held = new Set<string>();
   private readonly pressed = new Set<string>();
+  private readonly padHeld = new Set<number>(); // button indices (config padButtons)
+  private readonly padPressed = new Set<number>();
   private lastWheel = -Infinity;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -70,12 +72,12 @@ export class Input {
   }
 
   isDown(action: Action) {
-    return keys[action].some((c) => this.held.has(c));
+    return keys[action].some((c) => this.held.has(c)) || !!padButtons[action]?.some((b) => this.padHeld.has(b));
   }
 
-  /** True only in the frame the key went down (auto-repeat ignored). */
+  /** True only in the frame the key / gamepad button went down (auto-repeat ignored). */
   wasPressed(action: Action) {
-    return keys[action].some((c) => this.pressed.has(c));
+    return keys[action].some((c) => this.pressed.has(c)) || !!padButtons[action]?.some((b) => this.padPressed.has(b));
   }
 
   poll() {
@@ -83,8 +85,16 @@ export class Input {
     const p = this.pad;
     if (!gp) {
       p.moveX = p.moveY = p.lookX = p.lookY = p.rise = 0;
+      this.padHeld.clear();
       return;
     }
+    gp.buttons.forEach((btn, i) => {
+      if (!btn.pressed) this.padHeld.delete(i);
+      else if (!this.padHeld.has(i)) {
+        this.padHeld.add(i);
+        this.padPressed.add(i);
+      }
+    });
     [p.moveX, p.moveY] = stick(gp.axes[0], gp.axes[1]);
     [p.lookX, p.lookY] = stick(gp.axes[2], gp.axes[3]);
     const b = (i: number) => gp.buttons[i]?.value ?? 0;
@@ -93,6 +103,7 @@ export class Input {
 
   endFrame() {
     this.pressed.clear();
+    this.padPressed.clear();
     this.mouseDX = this.mouseDY = this.wheel = 0;
   }
 

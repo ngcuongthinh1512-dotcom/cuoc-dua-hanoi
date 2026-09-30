@@ -80,10 +80,28 @@ const keyTable = {
   flyUp: ['Space', 'KeyE'],
   flyDown: ['KeyQ'],
   flyFast: ['ShiftLeft', 'ShiftRight'],
+  flyToggle: ['KeyV'], // player ⇄ free-fly camera, only while the F3 debug panel is open (docs/plans/phase3.md)
 };
 
 export type Action = keyof typeof keyTable;
 export const keys: Readonly<Record<Action, readonly string[]>> = keyTable;
+
+// Gamepad buttons per action, W3C "standard" mapping: 0 A/✕, 1 B/○, 2 X/□, 3 Y/△, 4 LB/L1, 5 RB/R1, 6 LT/L2, 7 RT/R2,
+// 8 View/Share, 9 Menu/Options, 10 L3, 11 R3, 12–15 D-pad ↑ ↓ ← →. Sticks: left = move, right = look (core/Input.ts).
+// The free-fly camera also rises with RT/RB and sinks with LT/LB (Input.pad.rise), so LB = slow walk only on foot.
+export const padButtons: Readonly<Partial<Record<Action, readonly number[]>>> = {
+  jump: [0],
+  interact: [2],
+  clueBook: [3],
+  walkSlow: [4],
+  camera: [8],
+  menu: [9],
+  flyFast: [10],
+  map: [12],
+  binoculars: [13],
+  wave: [14],
+  bell: [15],
+};
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════
 // Phase 2 (docs/plans/phase2.md): one block per package. Each package edits ONLY its own block and adds
@@ -473,4 +491,86 @@ export const landmarks = {
 export const preview = {
   viewPitchDeg: -35, // default camera: from the south, looking north down at the selection
   viewDistance: 1.6, // × selection half-diagonal
+};
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// Phase 3 (docs/plans/phase3.md): character & camera. Each track edits ONLY its own block and adds no imports;
+// the foundation block belongs to the integrator.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+
+// ── Foundation · movement + test session (player/Player.ts, main.ts) ──
+// SPEC §6.1: the leg file's `movement` block overrides footSpeed / bikeSpeedMultiplier (server-sent, Phase 6).
+export const movement = {
+  footSpeed: 4, // m/s: standard on-foot speed (the "jog" clip) = the maximum on foot, no sprint
+  slowWalkFactor: 0.35, // × footSpeed while walkSlow (Shift / LB) is held → 1.4 m/s (the "walk" clip)
+  bikeSpeedMultiplier: 1.3, // Phase 4: bike speed = footSpeed × this
+};
+
+const SPAWN_OUT = 14; // m from the obelisk toward the Arc: outside its fence (SPEC §17.4: ≥ 8–10 m)
+export const playerSetup = {
+  spawn: { x: (ARC.x / toArc) * SPAWN_OUT, z: (ARC.z / toArc) * SPAWN_OUT, yawDeg: (Math.atan2(-ARC.x, -ARC.z) * 180) / Math.PI },
+  teamColour: '#d8342c', // test team until login (Phase 6): shirt colour
+  teamName: 'Đội thử', // name tag
+  readyWait: 0.8, // s of simulation after the world is ready before window.__READY__ (URL ?wait= overrides)
+  // One-shot gestures (PlayerState.action): total time, and whether WASD is ignored meanwhile. Clip lengths: Interact
+  // 2.0 s, Dance_Loop 1.0 s, Hit_Chest 0.33 s + Death01 2.4 s. crash = fall + 2 s on the ground + stand up (SPEC §6.3).
+  actions: {
+    wave: { seconds: 2.4, locksMovement: false },
+    openBox: { seconds: 2.0, locksMovement: true },
+    celebrate: { seconds: 4.0, locksMovement: true },
+    crash: { seconds: 3.5, locksMovement: true },
+    climbOut: { seconds: 1.2, locksMovement: true },
+  },
+};
+
+// ── A · character model + animation (player/CharacterModel.ts, player/Animation.ts, scripts/process-assets.ts) ──
+export const character = {
+  modelUrl: 'models/player.glb', // UBC Superhero_Male + Hair_SimpleParted, one skin (npm run process-assets)
+  clipsUrl: 'models/player-anims.glb', // 15 UAL clips, bones renamed to the UBC (UE) names
+  outfit: { pants: '#2d3342', shoes: '#1d1d20' }, // shirt = team colour (bone-weight mask, docs/plans/phase3.md)
+  fade: 0.2, // s crossfade between clips
+  nameTag: { lift: 0.3, height: 0.28, maxDistance: 80 }, // m above the head, m tall, hidden beyond (m)
+};
+
+// ── B · character controller + swimming (player/CharacterController.ts, player/Swim.ts, world/StreetProps.ts colliders) ──
+export const player = {
+  radius: 0.3, // m, capsule
+  height: 1.8, // m, capsule total (UBC male is 1.81 m)
+  skin: 0.02, // m, Rapier KinematicCharacterController offset
+  maxStep: 0.4, // m, SPEC §5
+  minStepWidth: 0.2, // m of free floor needed on top of a step
+  maxSlopeDeg: 45, // SPEC §5
+  snapToGround: 0.3, // m
+  accel: 20, // m/s² toward the target speed on the ground
+  airControl: 0.3, // share of accel while in the air
+  turnRate: 10, // rad/s: body yaw toward the move direction (GTA-style, no strafing)
+  jumpSpeed: 4.4, // m/s up → ≈ 1 m jump
+  fallDelay: 0.25, // s airborne without a jump before moveMode 'air' counts as a fall (small drops stay 'walk')
+  respawnBelow: -40, // m: below this y (fell through the world) → back to the last safe ground
+};
+
+export const swim = {
+  speedFactor: 0.45, // × movement.footSpeed
+  enterDepth: 1.2, // m: feet this far below the Seine surface (over the river bed) → swimming
+  floatDepth: 1.35, // m: feet below the surface while swimming (head out of the water)
+  buoyancy: 4, // 1/s: vertical spring toward the float height
+  climbReach: 0.9, // m from a quay wall: Space climbs out (docs/plans/phase3.md: no stairs down to the water)
+};
+
+// ── C · third-person camera (player/ThirdPersonCamera.ts) ──
+// STYLE_GUIDE "Camera": 3–4 m behind, a bit above the head, slightly looking down; horizon at 40–45 % of the height.
+export const thirdPersonCamera = {
+  modes: ['near', 'far', 'first'] as const, // C cycles
+  near: { distance: 3.4, pivot: 1.65, shoulder: 0.35 }, // m behind the pivot, pivot above the feet, right of the spine
+  far: { distance: 5.5, pivot: 1.8, shoulder: 0.2 },
+  first: { eye: 1.66, forward: 0.12 }, // m above the feet, m ahead of the capsule axis
+  bike: { distanceScale: 1.35, pivotAdd: 0.5 }, // Phase 4 hook: further + higher on the bike
+  pitchDeg: { initial: -10, min: -70, max: 45 },
+  mouseSensitivity: 0.002, // rad per pixel
+  gamepadLookSpeed: 2.5, // rad/s at full stick
+  collisionRadius: 0.2, // m, shape cast from the pivot so the camera never enters a wall
+  followSharpness: 12, // 1/s, exponential smoothing of the pivot
+  recenter: { delay: 1.5, rate: 2 }, // s without look input while moving, then rad/s back behind the body
+  fovBoost: { perMps: 0.8, max: 6 }, // ° over render.fov per m/s of speed, capped
+  nearPlane: 0.1, // m, camera near plane in player mode (render.near 0.5 would cut the head when the arm is short)
 };

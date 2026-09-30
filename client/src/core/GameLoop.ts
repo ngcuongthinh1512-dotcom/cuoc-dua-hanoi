@@ -10,8 +10,6 @@ export function advanceFixedSteps(accumulator: number, frameDt: number, fixedDt:
 
 type Callbacks = { fixedUpdate(dt: number): void; update(dt: number): void; render(): void };
 
-// ponytail: render shows the latest physics state (no interpolation by accumulator / fixedDt);
-// add interpolation when the character (Phase 3) visibly jitters at high refresh rates.
 export class GameLoop {
   // Time (SPEC §3 "core/Time") lives here: clamped frame delta passed to update(), smoothed FPS and work time.
   fps = 0;
@@ -21,6 +19,11 @@ export class GameLoop {
   private last?: number;
 
   constructor(private readonly cb: Callbacks) {}
+
+  /** Share of a physics step not simulated yet (0..1): render poses lerp(previous step, latest step, alpha). */
+  get alpha() {
+    return this.accumulator / physics.fixedDt;
+  }
 
   start() {
     requestAnimationFrame(this.tick);

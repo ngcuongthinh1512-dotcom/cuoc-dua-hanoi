@@ -2,6 +2,7 @@
 // Any page: npm run screenshot -- --path "/preview.html?fixture=1" --name fixture → screenshots/fixture.png
 // Landmarks (Phase 2B): lm-<id> (oblique view per geo/landmarks.ts `view`), leg-L1…leg-L6 (street level at the demo
 // leg destinations). Several at once: npm run screenshot -- lm-notre-dame lm-pantheon
+// Player (Phase 3): p3-* presets; a bare prefix runs its group: npm run screenshot -- p3
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -52,6 +53,28 @@ const PRESETS: Record<string, string> = {
   edge: cam(48.86, 2.2855, 20, 90, -10), // ~37 m inside the west bbox edge, facing out
 };
 
+// Phase 3 (docs/plans/phase3.md "Screenshot presets"): player mode. ?player[=x,z,yawDeg] (feet on the ground), camMode,
+// orbit (° of camera yaw from behind the body), action, autoMove, wait (s simulated before __READY__). Owner in brackets.
+const playerAt = (lat: number, lon: number, yawDeg: number, extra = '') => {
+  const p = latLonToWorld(lat, lon);
+  return `/?player=${[p.x, p.z, yawDeg].map((v) => +v.toFixed(2)).join(',')}${extra}`;
+};
+Object.assign(PRESETS, {
+  'p3-idle': '/?player', // [A, C] idle at the Concorde spawn, near camera behind the shoulder
+  'p3-face': '/?player&orbit=160', // [A] face, team shirt, trousers, name tag
+  'p3-jog': '/?player&autoMove=walk&wait=2', // [A] Jog_Fwd at footSpeed, feet not sliding; [C] follow + FOV
+  'p3-slow': '/?player&autoMove=slow&wait=2', // [A] Walk at the slow-walk speed
+  'p3-far': '/?player&camMode=far', // [C]
+  'p3-first': '/?player&camMode=first', // [C]
+  'p3-wall': playerAt(48.868171, 2.322384, -24.1), // [C] back 1.2 m from a Rue Royale facade: arm shortened, no clipping
+  'p3-swim': playerAt(48.8637, 2.3155, 90, '&wait=2'), // [B, A] in the Seine ~95 m east of Pont Alexandre III, facing it
+  'p3-wave': '/?player&orbit=160&action=wave&wait=1.2', // [A]
+  'p3-openbox': '/?player&orbit=120&action=openBox&wait=1', // [A]
+  'p3-celebrate': '/?player&orbit=160&action=celebrate&wait=1.5', // [A]
+  'p3-crash': '/?player&orbit=110&action=crash&wait=1.5', // [A] on the ground
+  'p3-debug': '/?player&debug=1', // [integration] F3 player line
+});
+
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
 // point, camera `view` = [azimuth seen from the landmark, distance], raised ~ 0.35 × distance and looking at it.
 const worldCam = (x: number, y: number, z: number, tx: number, ty: number, tz: number) => {
@@ -100,6 +123,7 @@ if (existsSync(join(dataDir, 'index.json'))) {
     const yaw = (Math.atan2(p.x - t.x / t.w, p.z - t.z / t.w) * 180) / Math.PI;
     const y = Math.max(ground(p.x, p.z), roads.bridge.riverDeck) + 1.7; // L4 is on a Seine bridge: DEM there < deck
     PRESETS[`leg-${s.id}`] = `/?cam=${[p.x, y, p.z, yaw, f[1]].map((v) => +v.toFixed(2)).join(',')}`;
+    if (s.id === 'L4') PRESETS['p3-bridge'] = playerAt(s.destination.lat, s.destination.lon, 0, '&wait=1.5'); // [B] on the deck
   }
 }
 const TIMEOUT_MS: Record<string, number> = { topdown: 90_000 };
@@ -107,7 +131,8 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { path: { type: 'string' }, name: { type: 'string' } } });
-const unknown = positionals.filter((p) => !(p in PRESETS));
+const group = (p: string) => (p in PRESETS ? [p] : Object.keys(PRESETS).filter((k) => k.startsWith(`${p}-`)));
+const unknown = positionals.filter((p) => !group(p).length);
 if (!opt.path && unknown.length) {
   console.error(`Không có preset "${unknown.join('", "')}". Các preset: ${Object.keys(PRESETS).join(', ')}`);
   process.exit(2);
@@ -117,8 +142,8 @@ if (opt.path) TIMEOUT_MS[custom] = 90_000; // preview pages may build many chunk
 const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
-    ? Object.fromEntries(positionals.map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg)-/.test(k))); // the many landmark views only by name
+    ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3)-/.test(k))); // landmark / player views by name
 
 const outDir = join(root, 'screenshots');
 const errors: string[] = [];

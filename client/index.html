@@ -37,8 +37,15 @@
     <!-- pointer-events: none on panels, so a click anywhere reaches the canvas and locks the pointer -->
     <div id="help" class="panel" hidden>
       <strong>Nhấp chuột để điều khiển</strong><br />
-      <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> di chuyển · <kbd>Space</kbd>/<kbd>E</kbd> lên · <kbd>Q</kbd> xuống<br />
-      giữ <kbd>Shift</kbd> bay nhanh · lăn chuột đổi tốc độ<br />
+      <span id="help-player" hidden>
+        <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> đi · giữ <kbd>Shift</kbd> đi chậm · <kbd>Space</kbd> nhảy<br />
+        chuột nhìn quanh · <kbd>F</kbd> tương tác · <kbd>C</kbd> đổi camera · <kbd>G</kbd> vẫy tay<br />
+        <kbd>V</kbd> (khi bảng debug đang mở) camera bay tự do<br />
+      </span>
+      <span id="help-fly">
+        <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> di chuyển · <kbd>Space</kbd>/<kbd>E</kbd> lên · <kbd>Q</kbd> xuống<br />
+        giữ <kbd>Shift</kbd> bay nhanh · lăn chuột đổi tốc độ<br />
+      </span>
       <kbd>F3</kbd> hoặc <kbd>`</kbd> bảng debug · <kbd>Esc</kbd> nhả chuột
     </div>
     <div id="ime" class="panel" hidden>

@@ -10,6 +10,8 @@ type DebugStats = {
   speed: number;
   chunks: { loaded: number; pending: number };
   colliders: number;
+  /** One line about the player (Phase 3), absent in fly-only mode. */
+  player?: string;
 };
 
 /** F3 / ` panel (SPEC §14). Ping and visible players: TODO.md (Phase 6). */
@@ -23,6 +25,9 @@ export function createDebugOverlay(visible: boolean) {
   let next = 0;
 
   return {
+    get visible() {
+      return !el.hidden;
+    },
     toggle() {
       el.hidden = !el.hidden;
       next = 0;
@@ -43,6 +48,7 @@ export function createDebugOverlay(visible: boolean) {
         `Tốc độ bay: ${s.speed.toFixed(1)} m/s`,
         `Chunk: ${s.chunks.loaded} đã tải · ${s.chunks.pending} đang chờ`,
         `Collider vật lý: ${s.colliders}`,
+        ...(s.player ? [s.player] : []),
       ].join('\n');
     },
   };

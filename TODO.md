@@ -56,13 +56,18 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Ghi nguồn: các model xe / người / xe đạp đã tải nhưng chưa xử lý, chưa dùng (Phase 3 / 4B); khi xử lý thì thêm tên file vào `MODIFIED` trong `scripts/process-assets.ts` để dòng ghi nguồn có "(đã chỉnh sửa)", rồi chạy lại `npm run process-assets`.
 
 ## Phase 3 – Nhân vật & camera
-- Tạo `client/src/core/EventBus.ts` khi có module thật sự cần (Phase 1 chưa có nên chưa tạo).
-- `core/Time` (SPEC §3) hiện nằm trong `GameLoop` (delta khung hình đã kẹp, FPS); tách `client/src/core/Time.ts` khi có module khác cần đồng hồ game.
-- Nội suy vị trí giữa hai bước vật lý khi render (alpha = accumulator / fixedDt) nếu nhân vật bị giật; hiện render trạng thái vật lý mới nhất.
-- Gamepad: gán nút cho nhảy, tương tác, menu, sổ mật thư…; hiện chỉ có stick và LT/RT/LB/RB cho camera bay (chưa có bay nhanh / đổi tốc độ bằng tay cầm). Tay cầm không có mapping `standard` (một số tay trên Firefox) hiện bị bỏ qua.
-- Đèn, cột Morris, lối vào metro, biển tên đường chưa có collider; thêm trụ mỏng nếu người chơi đi xuyên qua.
-- Tia raycast thẳng đứng của Rapier có thể trượt qua heightfield nếu nằm đúng trên đường lưới 5 m; spawn/respawn cộng lệch 1 mm hoặc dùng shape cast.
-- Bơi dưới sông Seine và cầu thang xuống kè.
+Kế hoạch và phân việc: `docs/plans/phase3.md`. Các track không sửa file này; ghi việc còn lại vào báo cáo để người tích hợp cập nhật.
+- (A) Model người chơi + hoạt ảnh: hiện là khối capsule tạm màu áo đội (stub), chưa có GLB, bảng tên, hoạt ảnh.
+- (B) Character controller: stub trượt trên lưới địa hình, chưa có Rapier, nhảy, rơi, bơi, va chạm nhà.
+- (B) Nội suy vị trí giữa hai bước vật lý khi render: `GameLoop.alpha` đã có, `CharacterController.renderPosition` (stub) vẫn trả trạng thái mới nhất.
+- (B) Đèn, cột Morris, lối vào metro, biển tên đường chưa có collider; thêm trụ mỏng nếu người chơi đi xuyên qua.
+- (B) Tia raycast thẳng đứng của Rapier có thể trượt qua heightfield nếu nằm đúng trên đường lưới 5 m; spawn/respawn cộng lệch 1 mm hoặc dùng shape cast.
+- (B) Bơi dưới sông Seine. Kè cao 7 m và chưa khoét bến thấp, nên cầu thang OSM không xuống tới nước: lên bờ bằng cách leo ở tường kè (`Space` khi sát tường).
+- (C) Camera góc thứ ba: stub là cần cứng sau lưng, chưa lệch vai, chưa chống xuyên tường, chưa mượt, chưa tăng FOV.
+- (tích hợp) Cuối Phase 3: mặc định vào chế độ nhân vật; camera bay tự do chỉ khi có `?cam=` hoặc bấm `V` lúc bảng debug đang mở.
+- Gamepad: đã gán nút (`padButtons` trong `config.ts`). Tay cầm không có mapping `standard` (một số tay trên Firefox) vẫn bị bỏ qua; chưa đổi tốc độ bay bằng tay cầm.
+- Tạo `client/src/core/EventBus.ts` khi có module thật sự cần (Phase 3 gọi hàm trực tiếp nên chưa tạo).
+- `core/Time` (SPEC §3) hiện nằm trong `GameLoop` (delta khung hình đã kẹp, FPS, alpha); tách `client/src/core/Time.ts` khi có module khác cần đồng hồ game.
 
 ## Phase 4 – Di chuyển
 - `npm run build-graph` → `shared/data/roadgraph.json`.
@@ -84,6 +89,8 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Kết hợp Vite HMR với Worker/DO khi dev. Hai hướng: Vite proxy `/api` (và WebSocket) sang `wrangler dev`, hoặc dùng `@cloudflare/vite-plugin` 1.60.2. Hiện tại `npm run dev:worker` phải build lại client mỗi lần chạy.
 - Phím `G` (vẫy tay) và `R` (bấm còi) đã có trong `config.ts` nhưng chưa có tác dụng; làm cùng presence.
 - Bảng debug F3: thêm ping và số người chơi đang thấy (SPEC §14).
+- Camera bay tự do (`V` khi mở bảng debug): trong cuộc đua thật chỉ cho Host / khán giả / đội đã về đích; hiện ai mở bảng debug cũng bật được.
+- Bỏ qua các tham số URL thử nghiệm của Phase 3 (`?player=x,z,…`, `action`, `autoMove`) khi đã vào cuộc đua (dịch chuyển tức thời = gian lận).
 
 ## Phase 7 – Race engine lõi
 - Xuất phát: đặt các đội bên ngoài hàng rào obelisk, cách ≥ 8–10 m (SPEC §17.4). Geofence cho phép bán kính 15–40 m.
