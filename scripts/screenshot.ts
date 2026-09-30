@@ -135,6 +135,14 @@ Object.assign(PRESETS, {
   // [C] pedestrians: p4b-sidewalk, p4b-crossing, p4b-park
 
   // [D] in game: p4b-street, p4b-bike-car, p4b-dodge, p4b-zone, p4b-density
+  // Rue Royale toward the Madeleine (p3-street); the van stands across the road 12 m ahead of the rider (crash beside
+  // it); the ring (radius + npc.zoneMargin) around the player shows with F3; Place de l'Opéra facing the Opéra Garnier.
+  // npcDensity=1: fixed (headless Chrome's low FPS would lower the automatic density).
+  'p4b-street': '/?player=87.8,-184.5,-25.97&autoMove=walk&wait=4&debug=1&npcDensity=1',
+  'p4b-bike-car': '/?player=87.8,-184.5,-25.97&bike&autoMove=walk&npcTest=car:van@93.06,-195.29,64.03&orbit=60&wait=3&npcDensity=1',
+  'p4b-dodge': '/?player=94.2,-181.4,-25.97&autoMove=walk&wait=6&npcDensity=1',
+  'p4b-zone': '/?player=87.8,-184.5,-25.97&npcZone=87.8,-184.5,20&camMode=far&debug=1&npcDensity=1',
+  'p4b-density': playerAt(48.8706, 2.332, 0, '&debug=1&wait=2&npcDensity=1'),
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline

@@ -5,6 +5,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { type Scene, Vector3 } from 'three';
 import { bike as B, bikeRules as R } from '../config.ts';
 import type { CharacterController } from '../player/CharacterController.ts';
+import { IGNORE_NPC } from '../npc/types.ts';
 import type { PlayerState } from '../player/types.ts';
 import { type BikeAsset, BikeModel } from './BikeModel.ts';
 import type { BikeState, RiderTargets } from './types.ts';
@@ -28,10 +29,10 @@ export function bikeInReach(bikes: readonly BikeState[], feet: Vector3, team: st
   return best;
 }
 
-/** Top of the highest collider under (x, z) (ray from `from` down 20 m), or null. */
+/** Top of the highest collider under (x, z) (ray from `from` down 20 m; NPC cars ignored), or null. */
 export function groundAt(world: RAPIER.World, x: number, z: number, from: number, exclude?: RAPIER.Collider): number | null {
   const ray = new RAPIER.Ray({ x: x + 0.001, y: from, z: z + 0.001 }, { x: 0, y: -1, z: 0 });
-  const hit = world.castRay(ray, 20, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, exclude);
+  const hit = world.castRay(ray, 20, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, IGNORE_NPC, exclude);
   return hit ? from - hit.timeOfImpact : null;
 }
 

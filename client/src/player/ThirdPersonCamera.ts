@@ -5,6 +5,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { type PerspectiveCamera, Vector3 } from 'three';
 import { render, swim, thirdPersonCamera as C } from '../config.ts';
 import type { Input } from '../core/Input.ts';
+import { IGNORE_NPC } from '../npc/types.ts';
 import type { CameraTarget } from './types.ts';
 
 const DEG = Math.PI / 180;
@@ -130,9 +131,10 @@ export class ThirdPersonCamera {
     this.placed = true;
   }
 
-  /** Free distance (m) a ball of collisionRadius travels from `from` along unit `d`, up to `max`, minus collisionSkin. */
+  /** Free distance (m) a ball of collisionRadius travels from `from` along unit `d`, up to `max`, minus collisionSkin.
+   *  NPC cars are ignored (IGNORE_NPC): a car driving past must not yank the arm in. */
   private cast(from: Vector3, d: Vector3, max: number, exclude: RAPIER.Collider | undefined) {
-    const hit = this.world.castShape(from, NO_ROTATION, d, this.ball, 0, max, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, exclude);
+    const hit = this.world.castShape(from, NO_ROTATION, d, this.ball, 0, max, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, IGNORE_NPC, exclude);
     return hit ? Math.max(0, hit.time_of_impact - C.collisionSkin) : max;
   }
 }

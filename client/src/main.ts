@@ -1,12 +1,14 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { unlockAudio } from './audio/sfx.ts';
-import { bounds, chunks as chunkCfg, flyCamera, physics, playerSetup, render as R, ui } from './config.ts';
+import { bounds, chunks as chunkCfg, flyCamera, npc as npcCfg, physics, playerSetup, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
 import { graphLines, loadRoadGraph } from './geo/roadGraph.ts';
+import { Npc } from './npc/Npc.ts';
+import type { NpcAnchor } from './npc/types.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { parseOverrides, Player } from './player/Player.ts';
 import { initCredits } from './ui/Credits.ts';
@@ -141,7 +143,8 @@ async function start() {
   const [x, y, z, yawDeg, pitchDeg] = spectator ? cam : [s.x, s.y, s.z, s.yawDeg, s.pitchDeg];
   fly.setPose(x, y, z, yawDeg, pitchDeg);
   const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water };
-  const player = spectator ? undefined : await Player.create(scene, world, camera, env, parseOverrides(query));
+  const overrides = parseOverrides(query);
+  const player = spectator ? undefined : await Player.create(scene, world, camera, env, overrides);
   let flying = !player;
   // Cobbles (SPEC §6.6) once roadgraph.json is in; asphalt until then or where the graph knows nothing.
   const graph = loadRoadGraph();
@@ -157,10 +160,40 @@ async function start() {
       else scene.add((graphOverlay = graphLines(g, env.heightAt)));
     });
   if (query.get('graph') === '1') toggleGraph();
+  // Phase 4B: NPC traffic + pedestrians around the body (the spectator: around the ground under the camera). They start
+  // (fill + warm-up) with the world; __READY__ waits for that. ?npc=0 off.
+  let npcs: Npc | undefined;
+  let npcReady = !(npcCfg.enabled && overrides.npc !== false);
+  if (!npcReady) {
+    void graph
+      .then((g) => {
+        if (!g) throw new Error('no road graph');
+        return Npc.create(scene, world, g, env.heightAt, {
+          seed: overrides.npcSeed ?? npcCfg.seed,
+          density: overrides.npcDensity ?? npcCfg.density,
+          auto: overrides.npcDensity === undefined,
+          zones: overrides.npcZones ?? [],
+          test: overrides.npcTest ?? [],
+        });
+      })
+      .then((n) => void (npcs = n))
+      .catch((err: unknown) => {
+        console.warn('NPC disabled:', err);
+        npcReady = true;
+      });
+  }
+  const anchor: NpcAnchor = { x: 0, z: 0, viewYaw: 0, body: false, vx: 0, vz: 0, nose: null, waving: false };
+  const view = new THREE.Vector3();
+  const npcAnchor = () => {
+    camera.getWorldDirection(view);
+    const viewYaw = Math.atan2(-view.x, -view.z);
+    if (player) return player.npcAnchor(anchor, viewYaw);
+    return Object.assign(anchor, { x: camera.position.x, z: camera.position.z, viewYaw, body: false, vx: 0, vz: 0, nose: null, waving: false });
+  };
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
-  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph } }); // for scratch test scripts
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs } }); // for scratch test scripts
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing.
@@ -183,6 +216,8 @@ async function start() {
   let ready = false; // window.__READY__
   const loop = new GameLoop({
     fixedUpdate: (dt) => {
+      // Before the player (docs/plans/phase4b.md §5.2): cars → pedestrians → car colliders → shove / crash the body.
+      if (npcs?.started) npcs.fixedUpdate(dt, npcAnchor(), player?.active && !flying ? player.controller : undefined);
       player?.fixedUpdate(dt, flying);
       world.step();
     },
@@ -200,6 +235,10 @@ async function start() {
       if (debug.visible && input.wasPressed('graphToggle')) toggleGraph();
       if (flying) fly.update(dt, input);
       player?.update(dt, flying ? null : input, loop.alpha);
+      if (npcs?.started) {
+        npcs.update(dt, loop.alpha, camera);
+        npcs.zoneRings.visible = debug.visible;
+      }
       input.endFrame();
       const p = player && !flying ? player.position : camera.position; // streaming + colliders follow the body
       sky.update();
@@ -222,9 +261,15 @@ async function start() {
         player &&
         `Xe: ${rb ? `${rb.speed.toFixed(2)} m/s · nghiêng ${((rb.lean * 180) / Math.PI).toFixed(0)}° · mặt đường ${player.surface === 'pave' ? 'đá lát' : 'nhựa'}` : 'đi bộ'}` +
           ` · ${player.bikes.list.length} xe quanh đây`;
-      debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine, bike: bikeLine });
+      const ns = npcs?.stats;
+      const npcLine =
+        ns &&
+        `NPC: ${ns.cars} xe · ${ns.peds} người · mật độ ${ns.density.toFixed(2).replace('.', ',')} · ` +
+          `${ns.simMs.toFixed(2).replace('.', ',')} ms/bước · vẽ ${ns.drawMs.toFixed(2).replace('.', ',')} ms · ${ns.colliders} collider`;
+      debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine, bike: bikeLine, npc: npcLine });
       const { calls, triangles } = renderer.info.render;
-      Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries } });
+      const npcStats = { npcCars: ns?.cars ?? 0, npcPeds: ns?.peds ?? 0, npcMs: +(ns?.simMs ?? 0).toFixed(3), npcDrawMs: +(ns?.drawMs ?? 0).toFixed(3) };
+      Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries, ...npcStats } });
       // Signal for scripts/screenshot.ts: every chunk around the camera attached and a few frames drawn.
       if (!worldReady) loading.textContent = `Đang tải bản đồ… còn ${cs.pending} ô`;
       if (!worldReady && loop.frames >= 3 && chunks.idle && models.idle && graphLoaded) {
@@ -232,7 +277,11 @@ async function start() {
         loading.hidden = true;
         player?.activate(); // the chunk colliders around the spawn exist now
       }
-      if (!ready && worldReady && (!player || player.simTime >= wait)) {
+      if (worldReady && npcs && !npcs.started) {
+        npcs.start(npcAnchor()); // fill + warm-up (npcRender.warmUp s)
+        npcReady = true;
+      }
+      if (!ready && worldReady && npcReady && (!player || player.simTime >= wait)) {
         ready = true;
         Object.assign(window, { __READY__: true });
       }

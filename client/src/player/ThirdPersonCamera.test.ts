@@ -3,6 +3,7 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { render, swim, thirdPersonCamera as C } from '../config.ts';
 import type { Input } from '../core/Input.ts';
+import { NPC_GROUPS } from '../npc/types.ts';
 import { fovFor, nextArm, ThirdPersonCamera } from './ThirdPersonCamera.ts';
 import type { CameraTarget } from './types.ts';
 
@@ -50,6 +51,15 @@ describe('ThirdPersonCamera', () => {
     expect(view.z).toBeLessThan(-0.9);
     expect(Math.asin(view.y) / DEG).toBeCloseTo(C.pitchDeg.initial, 4);
     expect(cam.camera.near).toBe(C.nearPlane);
+  });
+
+  it('Phase 4B: an NPC car (NPC_GROUPS) right behind the pivot is ignored: full arm', () => {
+    const world = worldWith();
+    world.createCollider(RAPIER.ColliderDesc.cuboid(5, 5, 0.5).setTranslation(0, 0, 2.5).setCollisionGroups(NPC_GROUPS));
+    world.step();
+    const cam = new ThirdPersonCamera(new PerspectiveCamera(), world);
+    cam.update(DT, target());
+    expect(cam.arm).toBeCloseTo(C.near.distance, 6);
   });
 
   it('a wall behind the pivot keeps the camera in front of it by at least the radius; clear again → grows back smoothly', () => {
