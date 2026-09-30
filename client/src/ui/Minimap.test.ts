@@ -1,7 +1,7 @@
 // Phase 5 track A: minimap geometry (zoom, rotation, N on the rim, waypoint clamp, chunks in view). No DOM.
 import { describe, expect, it } from 'vitest';
 import { bikeTopSpeed, hud, minimap, movement } from '../config.ts';
-import { clampToRim, rimPoint, targetMpp, toScreen, toWorld, type View, visibleChunks } from './Minimap.ts';
+import { clampToRim, clearOf, rimPoint, targetMpp, toScreen, toWorld, type View, visibleChunks } from './Minimap.ts';
 
 const [W, H] = [hud.minimap.width, hud.minimap.height];
 const deg = Math.PI / 180;
@@ -70,5 +70,14 @@ describe('Minimap', () => {
     // every chunk of i, j ∈ −1…1 but 1_1 (x + z ≥ 500); 1_−1 / −1_1 get in through their corner (250, 0) / (0, 250).
     expect(sorted(visibleChunks(view(45 * deg, 1.6), W, H))).toEqual(sorted(['-1_-1', '0_-1', '1_-1', '-1_0', '0_0', '1_0', '-1_1', '0_1']));
     expect(visibleChunks(view(0, 1.6), W, H)[0]).toBe('0_0');
+  });
+
+  it('a waypoint under the N marker is pulled in along its bearing (phase5-review2 m2)', () => {
+    const [nx, ny] = [W / 2, 11];
+    const [px, py] = clearOf(W / 2, 120, W / 2, 9, nx, ny, 17); // due north: right under N
+    expect(px).toBeCloseTo(W / 2, 6);
+    expect(Math.hypot(px - nx, py - ny)).toBeGreaterThanOrEqual(17);
+    expect(Math.hypot(px - nx, py - ny)).toBeLessThan(20);
+    expect(clearOf(W / 2, 120, 30, 9, nx, ny, 17)).toEqual([30, 9]); // far from N: unchanged
   });
 });

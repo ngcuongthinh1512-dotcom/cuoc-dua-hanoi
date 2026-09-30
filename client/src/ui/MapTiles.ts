@@ -17,6 +17,13 @@ const ROAD_COLOUR = [col.foot, col.pedestrian, col.service, col.minor, col.major
 
 const AREA = bboxCorners(); // RACE_BBOX in world m (a slight trapezoid): the maps show `outside` beyond it
 
+/** A w × h canvas off the page: OffscreenCanvas, or a detached <canvas> where there is none (Safari < 16.4). Only the
+ *  2D API both share is used on it (no transferToImageBitmap / convertToBlob). */
+export function offscreen(w: number, h: number): OffscreenCanvas {
+  if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(w, h);
+  return Object.assign(document.createElement('canvas'), { width: w, height: h }) as unknown as OffscreenCanvas;
+}
+
 /** Clips g to the race area (the player cannot leave it: the maps end there). */
 export function clipToArea(g: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) {
   g.beginPath();
@@ -124,7 +131,7 @@ export class MapTiles {
       canvas = c; // recycled
     }
     const px = Math.round(C.tilePx * Math.min(2, globalThis.devicePixelRatio ?? 1));
-    if (canvas?.width !== px) canvas = new OffscreenCanvas(px, px);
+    if (canvas?.width !== px) canvas = offscreen(px, px);
     this.draw(canvas.getContext('2d')!, key, px);
     this.raster.set(key, canvas);
     Object.assign(this.stats, { tiles: this.raster.size, rasterMs: performance.now() - t0, rasters: this.stats.rasters + 1 });

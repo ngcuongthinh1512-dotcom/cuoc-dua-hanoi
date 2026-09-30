@@ -56,6 +56,13 @@ export function clampToRim(ax: number, ay: number, px: number, py: number, x0: n
   return rimPoint(ax, ay, px - ax, py - ay, x0, y0, x1, y1);
 }
 
+/** (px, py), or the point nearest it on the line from the anchor (ax, ay) to it that is at least r from (nx, ny). */
+export function clearOf(ax: number, ay: number, px: number, py: number, nx: number, ny: number, r: number): [number, number] {
+  let t = 1;
+  while (t > 0 && Math.hypot(ax + (px - ax) * t - nx, ay + (py - ay) * t - ny) < r) t -= 0.02;
+  return [ax + (px - ax) * t, ay + (py - ay) * t];
+}
+
 const span = (p: number[], ux: number, uz: number) => {
   let lo = Infinity, hi = -Infinity;
   for (let i = 0; i < p.length; i += 2) (lo = Math.min(lo, p[i]! * ux + p[i + 1]! * uz)), (hi = Math.max(hi, p[i]! * ux + p[i + 1]! * uz));
@@ -202,14 +209,14 @@ export class Minimap {
     if (gps.route) drawRoute(g, gps.route, v.mpp, C.routeWidth);
     g.restore();
 
-    if (gps.target) {
-      const [px, py] = toScreen(v, gps.target.x, gps.target.z);
-      const i = WAYPOINT_INSET;
-      drawWaypoint(g, ...clampToRim(v.ax, v.ay, px, py, i, i, W - i, H - i));
-    }
     // N where the ray north from the player meets the rim (north on screen = (sin h, −cos h)).
     const m = N_RADIUS + 3;
     const [nx, ny] = rimPoint(v.ax, v.ay, Math.sin(v.heading), -Math.cos(v.heading), m, m, W - m, H - m);
+    if (gps.target) {
+      const i = WAYPOINT_INSET;
+      const [px, py] = clampToRim(v.ax, v.ay, ...toScreen(v, gps.target.x, gps.target.z), i, i, W - i, H - i);
+      drawWaypoint(g, ...clearOf(v.ax, v.ay, px, py, nx, ny, N_RADIUS + 9)); // under N: pulled in along its bearing
+    }
     g.beginPath();
     g.arc(nx, ny, N_RADIUS, 0, 2 * Math.PI);
     g.fillStyle = 'rgba(0, 0, 0, 0.75)';

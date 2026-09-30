@@ -944,7 +944,8 @@ export const fullMap = {
   footMaxMpp: 2.5, // footways, cycleways, steps, service roads drawn at this zoom and closer (the base raster: none)
   clickPx: 12, // px: a click this close to the waypoint removes it
   dragPx: 4, // px of movement before a press is a drag, not a click
-  label: { font: '600 12px system-ui, -apple-system, "Segoe UI", sans-serif', height: 16, pad: 8, repeatPx: 320 }, // px; same name again within repeatPx: skipped
+  // px; same name again within repeatPx: skipped; a name sits on a straight run of its street (no node > bendPx off the text line)
+  label: { font: '600 12px system-ui, -apple-system, "Segoe UI", sans-serif', height: 16, pad: 8, repeatPx: 320, bendPx: 4 },
 };
 
 // ── B · GPS + street lookup (geo/gps.ts, geo/locate.ts); roadGraph.snapRadius (Phase 4) = snap distance ──

@@ -53,7 +53,7 @@ const setText = (el: HTMLElement, s: string) => void (el.textContent !== s && (e
 
 export class HUD {
   private readonly place = div(`text-align:right;opacity:0;transition:opacity ${W.streetFade}s`);
-  private readonly street = div('font-size:30px;line-height:1.15', 'hud-hand');
+  private readonly street = div('font-size:30px;line-height:1.15;max-width:36vw;text-wrap:balance', 'hud-hand'); // long names: 2 lines
   private readonly district = div('font-size:19px;line-height:1.2', 'hud-hand');
   private readonly clock: HTMLElement;
   private readonly speedRow: HTMLElement;

@@ -2,12 +2,14 @@
 // FullMap's constructor touches no DOM; open() / update() (canvas) are checked by the p5-fullmap screenshots.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { latLonToWorld } from '@race/shared';
 import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
 import { describe, expect, it, vi } from 'vitest';
 import { fullMap } from '../config.ts';
 import type { WaterData } from '../geo/chunkData.ts';
 import {
-  clickWaypoint, FullMap, type Label, type LabelCandidate, labelsOverlap, type MapView, mapToScreen, mapToWorld, placeLabels, zoomAt,
+  clickWaypoint, clipSegment, FullMap, type Label, type LabelCandidate, labelsOverlap, type MapView, mapToScreen, mapToWorld,
+  placeLabels, straight, zoomAt,
 } from './FullMap.ts';
 
 const measure = (t: string) => t.length * 6.5; // ≈ 12 px sans-serif
@@ -92,5 +94,37 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(waterFile))('FullMap (road
     expect(onWaypoint).toHaveBeenLastCalledWith(null);
     m.click(sx + 100, sy, target);
     expect(onWaypoint).toHaveBeenLastCalledWith({ x: 150, z: -20 });
+    // outside RACE_BBOX (the map's `outside` margin): no waypoint
+    onWaypoint.mockClear();
+    Object.assign(m.view, { cx: m.extent[0], cz: m.extent[1], mpp: 6 });
+    m.click(10, 10, null);
+    expect(onWaypoint).not.toHaveBeenCalled();
+  });
+
+  // Avenues are cut into short OSM ways at every junction: the names must still show (phase5-review2 M1).
+  it.each([
+    ['Avenue des Champs-Élysées', 48.8738, 2.295, 1],
+    ['Avenue des Champs-Élysées', 48.8738, 2.295, 2],
+    ['Boulevard Haussmann', 48.8718, 2.3318, 1],
+  ] as const)('names %s around (%f, %f) at %f m/px, no overlaps', (name, lat, lon, mpp) => {
+    const m = new FullMap(g, water, () => {});
+    const { x, z } = latLonToWorld(lat, lon);
+    const t0 = performance.now();
+    const ls = m.labels({ cx: x, cz: z, mpp, w: 1280, h: 720 }, measure);
+    console.log(`${mpp} m/px @ ${name}: ${ls.length} labels in ${(performance.now() - t0).toFixed(1)} ms`);
+    expect(ls.map((l) => l.text)).toContain(name);
+    expect(noOverlaps(ls)).toBe(true);
+  });
+});
+
+describe('label runs', () => {
+  it('straight(): tolerance to the chord; clipSegment(): view part or nothing', () => {
+    const p = [0, 0, 50, 3, 100, 0, 150, 40];
+    expect(straight(p, 0, 2, 4)).toBe(true);
+    expect(straight(p, 0, 2, 2)).toBe(false);
+    expect(straight(p, 0, 3, 4)).toBe(false);
+    expect(clipSegment(-100, 50, 300, 50, 200, 100)).toEqual([0, 50, 200, 50]);
+    expect(clipSegment(-100, -10, 300, -10, 200, 100)).toBeUndefined();
+    expect(clipSegment(10, 10, 20, 30, 200, 100)).toEqual([10, 10, 20, 30]);
   });
 });

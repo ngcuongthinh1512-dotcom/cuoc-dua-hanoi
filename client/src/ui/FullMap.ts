@@ -9,8 +9,8 @@ import { fullMap as C, minimap } from '../config.ts';
 import type { WaterData, XZ } from '../geo/chunkData.ts';
 import { roadWidth } from '../world/RoadBuilder.ts';
 import { BRIDGE, RoadClass, roadClass } from '../world/mapVectors.ts';
-import { bboxCorners } from '../world/Bounds.ts';
-import { type Box, boxes, clipToArea, hit, trace } from './MapTiles.ts';
+import { bboxCorners, edgeDistance } from '../world/Bounds.ts';
+import { type Box, boxes, clipToArea, hit, offscreen, trace } from './MapTiles.ts';
 import { drawArrow, drawRoute, drawWaypoint } from './Minimap.ts';
 import { type GpsView, type MapPoint, type HudFrame, NO_GPS } from './types.ts';
 
@@ -118,6 +118,30 @@ export function placeLabels(cands: readonly LabelCandidate[], measure: (text: st
   return placed;
 }
 
+/** Is every point of the flat x, y list p between i and k within tol of the segment i → k? */
+export function straight(p: readonly number[], i: number, k: number, tol: number): boolean {
+  const [ax, ay, dx, dy] = [p[2 * i]!, p[2 * i + 1]!, p[2 * k]! - p[2 * i]!, p[2 * k + 1]! - p[2 * i + 1]!];
+  const len2 = dx * dx + dy * dy || 1;
+  for (let m = i + 1; m < k; m++) {
+    const t = clamp(((p[2 * m]! - ax) * dx + (p[2 * m + 1]! - ay) * dy) / len2, 0, 1);
+    if (Math.hypot(p[2 * m]! - ax - t * dx, p[2 * m + 1]! - ay - t * dy) > tol) return false;
+  }
+  return true;
+}
+
+/** The part of the segment (x0, y0) → (x1, y1) inside [0, w] × [0, h] (Liang–Barsky), or undefined. */
+export function clipSegment(x0: number, y0: number, x1: number, y1: number, w: number, h: number): [number, number, number, number] | undefined {
+  const [dx, dy] = [x1 - x0, y1 - y0];
+  let [t0, t1] = [0, 1];
+  for (const [q, d] of [[x0, -dx], [w - x0, dx], [y0, -dy], [h - y0, dy]] as const) {
+    if (d === 0) {
+      if (q < 0) return undefined;
+    } else if (d < 0) t0 = Math.max(t0, q / d);
+    else t1 = Math.min(t1, q / d);
+  }
+  return t0 < t1 ? [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy] : undefined;
+}
+
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 export class FullMap {
@@ -136,7 +160,7 @@ export class FullMap {
   private canvas?: HTMLCanvasElement;
   private g?: CanvasRenderingContext2D;
   private base?: OffscreenCanvas;
-  private detail?: { canvas: OffscreenCanvas; view: MapView };
+  private detail?: { canvas: OffscreenCanvas; view: MapView; labels: Label[] };
   private shown = false;
   private dirty = true;
   private movedAt = -Infinity;
@@ -198,7 +222,7 @@ export class FullMap {
     else Object.assign(v, { mpp: clamp(Math.max((e[2] - e[0]) / v.w, (e[3] - e[1]) / v.h), ...C.metersPerPx), cx: (e[0] + e[2]) / 2, cz: (e[1] + e[3]) / 2 });
     const t0 = performance.now();
     const bm = C.baseMpp;
-    this.base = new OffscreenCanvas(Math.ceil((e[2] - e[0]) / bm), Math.ceil((e[3] - e[1]) / bm));
+    this.base = offscreen(Math.ceil((e[2] - e[0]) / bm), Math.ceil((e[3] - e[1]) / bm));
     const g = this.base.getContext('2d')!;
     g.setTransform(1 / bm, 0, 0, 1 / bm, -e[0] / bm, -e[1] / bm);
     this.paint(g, e, bm);
@@ -213,6 +237,7 @@ export class FullMap {
     this.shown = false;
     this.root!.hidden = true;
     this.base = this.detail = this.press = undefined; // ≈ 9 MB + a screen of pixels back
+    this.canvas!.width = this.canvas!.height = 0; // and the on-screen one (14 MB at DPR 2); open() → resize() sets it again
   }
 
   /** Every frame while open (player arrow, route). */
@@ -240,17 +265,17 @@ export class FullMap {
     const [bx, by] = mapToScreen(v, e[0], e[1]);
     const k = C.baseMpp / v.mpp;
     g.drawImage(this.base!, bx, by, this.base!.width * k, this.base!.height * k);
-    if (this.detail && vector) {
-      const dv = this.detail.view;
-      const [dx, dy] = mapToScreen(v, ...mapToWorld(dv, 0, 0));
-      g.drawImage(this.detail.canvas, dx, dy, (dv.w * dv.mpp) / v.mpp, (dv.h * dv.mpp) / v.mpp);
-    }
+    const detail = vector ? this.detail : undefined;
+    const s = detail ? detail.view.mpp / v.mpp : 1; // the sharp view, scaled / moved with the gesture until redrawn
+    const [dx, dy] = detail ? mapToScreen(v, ...mapToWorld(detail.view, 0, 0)) : [0, 0];
+    if (detail) g.drawImage(detail.canvas, dx, dy, detail.view.w * s, detail.view.h * s);
     if (gps.route) {
       g.save();
       g.setTransform(dpr / v.mpp, 0, 0, dpr / v.mpp, dpr * (v.w / 2 - v.cx / v.mpp), dpr * (v.h / 2 - v.cz / v.mpp));
       drawRoute(g, gps.route, v.mpp, minimap.routeWidth);
       g.restore();
     }
+    if (detail) this.drawLabels(g, detail.labels, dpr * s, dpr * dx, dpr * dy); // over the route (phase5-review2 m3)
     if (gps.target) drawWaypoint(g, ...mapToScreen(v, gps.target.x, gps.target.z));
     drawArrow(g, ...mapToScreen(v, f.x, f.z), -f.bodyYaw, 20);
     this.stats.drawMs = performance.now() - t0;
@@ -258,31 +283,52 @@ export class FullMap {
 
   /** A click at view px (sx, sy) (pointer handler; tests pass the waypoint). */
   click(sx: number, sy: number, target = this.gps.target): void {
-    this.onWaypoint(clickWaypoint(this.view, target, sx, sy));
+    const p = clickWaypoint(this.view, target, sx, sy);
+    if (!p || edgeDistance(p.x, p.z) >= 0) this.onWaypoint(p); // beyond RACE_BBOX: nowhere to go
   }
 
-  /** Street names for a view (text widths from `measure`): the longest in-view segment of every named way.
-   *  ponytail: straight text on one segment per OSM way piece, so curved streets made of short segments go unnamed;
-   *  lay the text along the polyline if players miss those names. */
+  /** Street names for a view (text widths from `measure`). OSM cuts an avenue into short ways at its junctions and
+   *  crossings, so the named ways in view are first chained end to end by name, then split into straight runs (no node
+   *  further than fullMap.label.bendPx from the run's chord); every run, clipped to the view, is a candidate.
+   *  ponytail: straight text on straight runs, so curved streets and round squares (Place Charles de Gaulle) go
+   *  unnamed; lay the text along the polyline if players miss those names. */
   labels(v: MapView, measure: (text: string) => number): Label[] {
     const { ways, names } = this.graph.file;
     const { x, z } = this.graph;
     const r: Box = [...mapToWorld(v, 0, 0), ...mapToWorld(v, v.w, v.h)];
-    const cands: LabelCandidate[] = [];
+    const n = x.length;
+    const ends = new Map<number, number[]>(); // name × n + end node → named ways in view
+    const inView: number[] = [];
     ways.forEach((w, k) => {
-      const c = this.cls[k]!;
-      if (w[3]! < 0 || c === SKIP || !hit(this.wayBox, k, r)) return;
-      let best = 0, seg: number[] | undefined;
-      for (let i = WAY_HEADER; i + 1 < w.length; i++) {
-        const [a, b] = [w[i]!, w[i + 1]!];
-        const [mx, mz] = [(x[a]! + x[b]!) / 2, (z[a]! + z[b]!) / 2];
-        const len = Math.hypot(x[b]! - x[a]!, z[b]! - z[a]!);
-        if (len > best && mx > r[0] && mx < r[2] && mz > r[1] && mz < r[3]) (best = len), (seg = [a, b]);
-      }
-      if (!seg) return;
-      const [x0, y0] = mapToScreen(v, x[seg[0]!]!, z[seg[0]!]!), [x1, y1] = mapToScreen(v, x[seg[1]!]!, z[seg[1]!]!);
-      cands.push({ text: names[w[3]!]!, x0, y0, x1, y1, order: -((c & 7) * 1e5 + best) }); // major roads, long segments first
+      if (w[3]! < 0 || this.cls[k] === SKIP || !hit(this.wayBox, k, r)) return;
+      inView.push(k);
+      for (const key of [w[3]! * n + w[WAY_HEADER]!, w[3]! * n + w[w.length - 1]!]) ends.get(key)?.push(k) ?? ends.set(key, [k]);
     });
+    const used = new Set<number>();
+    const cands: LabelCandidate[] = [];
+    const rank = (k: number) => (this.cls[k]! & 7) % RoadClass.steps; // foot … major; steps lowest
+    for (const k0 of inView) {
+      if (used.has(k0)) continue;
+      used.add(k0);
+      const name = ways[k0]![3]!;
+      const chain = ways[k0]!.slice(WAY_HEADER);
+      let cls = rank(k0);
+      for (let pass = 0; pass < 2; pass++, chain.reverse()) {
+        for (let k; (k = ends.get(name * n + chain[chain.length - 1]!)?.find((j) => !used.has(j))) !== undefined; ) {
+          used.add(k);
+          cls = Math.max(cls, rank(k));
+          const w = ways[k]!.slice(WAY_HEADER);
+          if (w[0] !== chain[chain.length - 1]) w.reverse();
+          for (let i = 1; i < w.length; i++) chain.push(w[i]!);
+        }
+      }
+      const p = chain.flatMap((i) => mapToScreen(v, x[i]!, z[i]!));
+      for (let i = 0, j = 1; j < chain.length; i = j, j++) {
+        while (j + 1 < chain.length && straight(p, i, j + 1, C.label.bendPx)) j++;
+        const s = clipSegment(p[2 * i]!, p[2 * i + 1]!, p[2 * j]!, p[2 * j + 1]!, v.w, v.h);
+        if (s) cands.push({ text: names[name]!, x0: s[0], y0: s[1], x1: s[2], y1: s[3], order: -(cls * 1e5 + Math.hypot(s[2] - s[0], s[3] - s[1])) }); // major roads, long runs first
+      }
+    }
     return placeLabels(cands, measure, v.w, v.h);
   }
 
@@ -346,12 +392,20 @@ export class FullMap {
     const v = { ...this.view }, dpr = this.dpr();
     const canvas = this.detail?.canvas.width === Math.round(v.w * dpr) && this.detail.canvas.height === Math.round(v.h * dpr)
       ? this.detail.canvas
-      : new OffscreenCanvas(Math.round(v.w * dpr), Math.round(v.h * dpr));
+      : offscreen(Math.round(v.w * dpr), Math.round(v.h * dpr));
     const g = canvas.getContext('2d')!;
     g.setTransform(dpr / v.mpp, 0, 0, dpr / v.mpp, dpr * (v.w / 2 - v.cx / v.mpp), dpr * (v.h / 2 - v.cz / v.mpp));
     this.paint(g, [...mapToWorld(v, 0, 0), ...mapToWorld(v, v.w, v.h)], v.mpp);
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const labels = v.mpp <= C.labelMaxMpp ? this.labels(v, (t) => this.measure(g, t)) : [];
+    this.detail = { canvas, view: v, labels };
+    this.dirty = true;
+    this.stats.labels = labels.length;
+    this.stats.detailMs = performance.now() - t0;
+  }
+
+  /** Street names (view px of the detail view) at device px ox + k·x, oy + k·y. */
+  private drawLabels(g: CanvasRenderingContext2D, labels: readonly Label[], k: number, ox: number, oy: number) {
+    g.save();
     g.font = C.label.font;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
@@ -360,14 +414,12 @@ export class FullMap {
     g.strokeStyle = 'rgba(0, 0, 0, 0.85)';
     g.fillStyle = '#fff';
     for (const l of labels) {
-      g.setTransform(dpr * Math.cos(l.angle), dpr * Math.sin(l.angle), -dpr * Math.sin(l.angle), dpr * Math.cos(l.angle), dpr * l.x, dpr * l.y);
+      const [c, s] = [k * Math.cos(l.angle), k * Math.sin(l.angle)];
+      g.setTransform(c, s, -s, c, ox + k * l.x, oy + k * l.y);
       g.strokeText(l.text, 0, 0.5);
       g.fillText(l.text, 0, 0.5);
     }
-    this.detail = { canvas, view: v };
-    this.dirty = true;
-    this.stats.labels = labels.length;
-    this.stats.detailMs = performance.now() - t0;
+    g.restore();
   }
 
   private measure(g: Ctx, text: string): number {
