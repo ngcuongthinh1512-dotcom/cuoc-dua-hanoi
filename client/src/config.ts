@@ -903,16 +903,47 @@ export const hud = {
 
 // ── A · map tiles, minimap, full map (world/mapVectors.ts, ui/MapTiles.ts, ui/Minimap.ts, ui/FullMap.ts) ──
 export const minimap = {
-  metersPerPx: [0.8, 1.6] as const, // CSS px scale standing → at bikeTopSpeed() and above (SPEC §17.3: zooms out when fast)
+  metersPerPx: [0.8, 1.6] as const, // CSS px scale up to movement.footSpeed → at bikeTopSpeed() and above (SPEC §17.3: zooms out when fast)
   zoomSharpness: 2, // 1/s, exponential smoothing of the scale
   anchorY: 0.65, // player position from the top, share of the height (more map ahead of the player, like GTA V)
   maxTiles: 24, // LRU of raster tiles, one per chunk (canvas memory ≈ maxTiles × tile px² × 4 B)
   rasterPerFrame: 1, // tiles rasterised per frame at most (≈ 1–3 ms each on the main thread)
+  tilePx: 256, // px per 250 m chunk tile (≈ 1 m/px), × min(2, devicePixelRatio)
+  tilePad: 2, // m of neighbour content around each tile: blitted tiles overlap, no seams when the map turns
+  routeWidth: 4, // px, GPS line (+ 2 px dark casing each side)
+  // Shared by the minimap tiles and the full map. GTA V-like radar: dark blocks, light streets, green parks, blue water.
+  colours: {
+    outside: '#1d2126', // beyond the map data
+    ground: '#50555c', // pavement, squares, courtyards
+    building: '#383c42',
+    buildingEdge: '#2c2f34',
+    park: '#48663f',
+    grass: '#557747',
+    water: '#3f6f98',
+    foot: '#7d828a', // footway, path, cycleway
+    pedestrian: '#737880', // pedestrian streets / squares
+    service: '#8e939a',
+    minor: '#a4a8ae',
+    major: '#c6c9cd',
+    bridgeCasing: '#23262b',
+    steps: '#b9ae97',
+    route: '#b863f2', // GPS line + waypoint (GTA purple)
+    routeCasing: '#2b1740',
+    player: '#ffffff',
+    playerEdge: '#16181c',
+  },
 };
 export const fullMap = {
   metersPerPx: [0.4, 6] as const, // CSS px zoom range (6 ≈ the whole 5.5 km map on a 1000 px wide window)
-  wheelZoom: 1.2, // scale factor per wheel step
+  wheelZoom: 1.2, // scale factor per wheel step (one step per wheel event, like flyCamera)
+  wheelGapMs: 60, // min time between wheel steps (a trackpad's stream of tiny events)
   labelMaxMpp: 2, // street names drawn at this zoom and closer (SPEC §4.6: street names only, no landmark names)
+  baseMpp: 3, // m/px of the whole-map raster made on open (≈ 1 900 × 1 250 px ≈ 9 MB, dropped on close)
+  settleMs: 150, // ms without drag / zoom before the view is redrawn from vectors at its exact scale (zoom < baseMpp × DPR)
+  footMaxMpp: 2.5, // footways, cycleways, steps, service roads drawn at this zoom and closer (the base raster: none)
+  clickPx: 12, // px: a click this close to the waypoint removes it
+  dragPx: 4, // px of movement before a press is a drag, not a click
+  label: { font: '600 12px system-ui, -apple-system, "Segoe UI", sans-serif', height: 16, pad: 8, repeatPx: 320 }, // px; same name again within repeatPx: skipped
 };
 
 // ── B · GPS + street lookup (geo/gps.ts, geo/locate.ts); roadGraph.snapRadius (Phase 4) = snap distance ──
