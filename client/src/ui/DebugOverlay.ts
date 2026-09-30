@@ -16,13 +16,16 @@ type DebugStats = {
   bike?: string;
   /** Phase 4B: NPC cars / pedestrians / density / sim time. */
   npc?: string;
+  /** Phase 5: minimap tiles / raster time, GPS searches (player mode). */
+  hud?: string;
 };
 
-/** F3 / ` panel (SPEC §14). Ping and visible players: TODO.md (Phase 6). */
+/** F3 / ` panel (SPEC §14), top right (Phase 5: the minimap has the bottom left). Ping and visible players: TODO.md
+ *  (Phase 6). */
 export function createDebugOverlay(visible: boolean) {
   const el = document.createElement('pre');
   el.style.cssText =
-    'position:fixed;bottom:8px;left:8px;margin:0;padding:6px 10px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;' +
+    'position:fixed;top:8px;right:8px;margin:0;padding:6px 10px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;' +
     'color:#e8f1ff;background:rgba(10,14,22,.7);border-radius:6px;pointer-events:none';
   el.hidden = !visible;
   document.body.append(el);
@@ -55,6 +58,7 @@ export function createDebugOverlay(visible: boolean) {
         ...(s.player ? [s.player] : []),
         ...(s.bike ? [s.bike] : []),
         ...(s.npc ? [s.npc] : []),
+        ...(s.hud ? [s.hud] : []),
       ].join('\n');
     },
   };

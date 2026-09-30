@@ -3,7 +3,7 @@ import { props as P } from '../config.ts';
 import { type ChunkData, chunkBounds, type RoadRec } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import type { BuildCtx } from './buildTypes.ts';
-import { buildStreetProps, createPropMeshes, findJunctions, placeLamps, placeSigns, propColliders, splitName } from './StreetProps.ts';
+import { buildStreetProps, createPropMeshes, findJunctions, placeLamps, placeSigns, propColliders, signCell, splitName } from './StreetProps.ts';
 import { buildVegetation } from './Vegetation.ts';
 
 const ctx: BuildCtx = { key: '0_0', bounds: chunkBounds('0_0'), height: () => 0 };
@@ -70,6 +70,21 @@ describe('street props placement', () => {
     expect(splitName("Quai d'Orsay")).toEqual(["QUAI D'", 'ORSAY']);
     expect(splitName('Rue de la Paix')).toEqual(['RUE DE LA', 'PAIX']);
     expect(splitName('Place Charles de Gaulle')).toEqual(['PLACE', 'CHARLES DE GAULLE']);
+  });
+
+  it('plaque cell: district line on top makes the cell taller, smaller than the name; none → the old layout', () => {
+    const measure = (text: string, px: number) => text.length * px * 0.55; // stand-in for canvas measureText
+    const old = signCell('Rue Royale', 0, measure);
+    expect(old).toEqual({ lines: [{ text: 'RUE', size: 13, y: 19 }, { text: 'ROYALE', size: 26, y: 41 }], w: 110, h: P.signs.cellH });
+    expect(signCell('Pyramides', 0, measure).lines).toEqual([{ text: 'PYRAMIDES', size: 26, y: 33 }]);
+    const d = signCell('Rue Royale', 8, measure);
+    expect(d.h).toBe(P.signs.cellH + P.signs.districtLine);
+    expect(d.lines[0]).toMatchObject({ text: '8e Arrt' });
+    expect(d.lines[0]!.size).toBeLessThan(d.lines[2]!.size);
+    expect(d.lines.slice(1).map((l) => l.y)).toEqual(old.lines.map((l) => l.y + P.signs.districtLine)); // shifted down
+    expect(d.lines[2]!.y + d.lines[2]!.size / 2).toBeLessThan(d.h - 7.5); // name inside the inner frame line
+    expect(signCell('Rue de Rivoli', 1, measure).lines[0]!.text).toBe('1er Arrt');
+    expect(signCell('Avenue des Champs-Élysées', 8, measure).w).toBeLessThanOrEqual(P.signs.cellW);
   });
 
   it('buildStreetProps: Morris ≈ 1 in morrisOneIn junctions, metro faces the nearest road, no NaN', () => {

@@ -16,6 +16,7 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { props as P, stairs as ST } from '../config.ts';
 import { type ChunkData, type ChunkKey, chunkKey } from '../geo/chunkData.ts';
+import { districtPlaque } from '../geo/districts.ts';
 import type { PropMeshes } from './attach.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind, TriMesh } from './buildTypes.ts';
 import { hash01, MeshBuffer } from './geom.ts';
@@ -169,8 +170,32 @@ export function splitName(name: string): [string, string] {
 }
 
 const FONT = '"Arial Narrow", "Helvetica Neue", Arial, sans-serif';
+const PAD = 12; // px, text inset from the cell sides
 
-/** Per-chunk sign atlas (OffscreenCanvas, shelf-packed cells) + the 'sign' bucket (posts + double-sided plaques). */
+export interface SignLine { text: string; size: number; y: number } // bold px font size, middle of the line from the cell top
+export interface SignCell { lines: SignLine[]; w: number; h: number }
+
+/** Plaque layout (pure; measure(text, px) = width of bold text): an optional "8e Arrt" line on top (Phase 5, like real
+ *  Paris plaques: the cell grows by signs.districtLine), street type + particles, the name (shrunk to fit cellW). */
+export function signCell(name: string, district: number, measure: (text: string, px: number) => number): SignCell {
+  const S = P.signs;
+  const [pre, main] = splitName(name);
+  const plaque = districtPlaque(district);
+  const top = plaque ? S.districtLine : 0;
+  let fs = 26;
+  const mw = measure(main, fs);
+  if (mw > S.cellW - 2 * PAD) fs = Math.max(15, Math.floor((fs * (S.cellW - 2 * PAD)) / mw));
+  const lines: SignLine[] = [
+    ...(plaque ? [{ text: plaque, size: 11, y: 18 }] : []),
+    ...(pre ? [{ text: pre, size: 13, y: top + 19 }] : []),
+    { text: main, size: fs, y: top + (pre ? 41 : 33) },
+  ];
+  const w = Math.min(S.cellW, Math.max(96, Math.ceil(Math.max(...lines.map((l) => measure(l.text, l.size))) + 2 * PAD)));
+  return { lines, w, h: S.cellH + top };
+}
+
+/** Per-chunk sign atlas (OffscreenCanvas, shelf-packed cells) + the 'sign' bucket (posts + double-sided plaques). One
+ *  cell per (district at the post, name): a street on a district border gets both plaques. */
 function buildSigns(spots: SignSpot[], ctx: BuildCtx): Pick<BuildOut, 'meshes' | 'textures'> | undefined {
   if (!spots.length) return;
   if (typeof OffscreenCanvas === 'undefined') {
@@ -180,25 +205,20 @@ function buildSigns(spots: SignSpot[], ctx: BuildCtx): Pick<BuildOut, 'meshes' |
   }
   const S = P.signs;
   const probe = new OffscreenCanvas(1, 1).getContext('2d')!;
-  const pad = 12;
+  const measure = (text: string, px: number) => ((probe.font = `bold ${px}px ${FONT}`), probe.measureText(text).width);
   const SOLID = 16; // px reserved at the atlas top-left: post colour above, border colour below
-  const cells = new Map<string, { pre: string; main: string; fs: number; w: number; x: number; y: number }>();
-  let [cx, cy] = [SOLID, 0];
-  for (const name of new Set(spots.map((s) => s.name))) {
-    const [pre, main] = splitName(name);
-    let fs = 26;
-    probe.font = `bold ${fs}px ${FONT}`;
-    const mw = probe.measureText(main).width;
-    if (mw > S.cellW - 2 * pad) fs = Math.max(15, Math.floor((fs * (S.cellW - 2 * pad)) / mw));
-    probe.font = `bold ${fs}px ${FONT}`;
-    const m2 = probe.measureText(main).width;
-    probe.font = `bold 13px ${FONT}`;
-    const w = Math.min(S.cellW, Math.max(96, Math.ceil(Math.max(m2, probe.measureText(pre).width) + 2 * pad)));
-    if (cx + w > S.atlasW) [cx, cy] = [0, cy + S.cellH];
-    cells.set(name, { pre, main, fs, w, x: cx, y: cy });
-    cx += w;
+  const keys = spots.map((sp) => `${ctx.district?.(sp.x, sp.z) ?? 0}|${sp.name}`); // district at the post foot
+  const cells = new Map<string, SignCell & { x: number; y: number }>();
+  let [cx, cy, rowH] = [SOLID, 0, S.cellH];
+  for (const key of new Set(keys)) {
+    const bar = key.indexOf('|');
+    const c = signCell(key.slice(bar + 1), Number(key.slice(0, bar)), measure);
+    if (cx + c.w > S.atlasW) [cx, cy, rowH] = [0, cy + rowH, 0];
+    cells.set(key, { ...c, x: cx, y: cy });
+    cx += c.w;
+    rowH = Math.max(rowH, c.h);
   }
-  const [W, H] = [S.atlasW, cy + S.cellH];
+  const [W, H] = [S.atlasW, cy + rowH];
   const canvas = new OffscreenCanvas(W, H);
   const g = canvas.getContext('2d');
   if (!g) return void console.warn('StreetProps: không tạo được canvas 2D cho biển tên đường');
@@ -210,20 +230,17 @@ function buildSigns(spots: SignSpot[], ctx: BuildCtx): Pick<BuildOut, 'meshes' |
   g.textBaseline = 'middle';
   for (const c of cells.values()) {
     g.fillStyle = S.border;
-    g.fillRect(c.x, c.y, c.w, S.cellH);
+    g.fillRect(c.x, c.y, c.w, c.h);
     g.fillStyle = S.enamel;
-    g.fillRect(c.x + 4, c.y + 4, c.w - 8, S.cellH - 8);
+    g.fillRect(c.x + 4, c.y + 4, c.w - 8, c.h - 8);
     g.strokeStyle = S.text;
     g.lineWidth = 1.5;
-    g.strokeRect(c.x + 7.5, c.y + 7.5, c.w - 15, S.cellH - 15);
+    g.strokeRect(c.x + 7.5, c.y + 7.5, c.w - 15, c.h - 15);
     g.fillStyle = S.text;
-    const mid = c.x + c.w / 2;
-    if (c.pre) {
-      g.font = `bold 13px ${FONT}`;
-      g.fillText(c.pre, mid, c.y + 19, c.w - 2 * pad);
+    for (const l of c.lines) {
+      g.font = `bold ${l.size}px ${FONT}`;
+      g.fillText(l.text, c.x + c.w / 2, c.y + l.y, c.w - 2 * PAD);
     }
-    g.font = `bold ${c.fs}px ${FONT}`;
-    g.fillText(c.main, mid, c.y + (c.pre ? 41 : 33), c.w - 2 * pad);
   }
   const image = canvas.transferToImageBitmap();
 
@@ -233,10 +250,10 @@ function buildSigns(spots: SignSpot[], ctx: BuildCtx): Pick<BuildOut, 'meshes' |
   const edgeUv = [SOLID / 2 / W, (3 * S.cellH) / 4 / H] as const;
   const ph = S.plaqueHeight;
   const t = 0.03; // half thickness
-  for (const sp of spots) {
-    const c = cells.get(sp.name)!;
+  spots.forEach((sp, i) => {
+    const c = cells.get(keys[i]!)!;
     const y = ctx.height(sp.x, sp.z);
-    const [y1, y0] = [y + S.postHeight, y + S.postHeight - ph];
+    const [y1, y0] = [y + S.postHeight, y + S.postHeight - (ph * c.h) / S.cellH]; // a district line makes it taller
     const hl = (ph * c.w) / S.cellH / 2; // half length
     const [dx, dz] = [sp.dx, sp.dz];
     const [nx, nz] = [dz, -dx];
@@ -246,7 +263,7 @@ function buildSigns(spots: SignSpot[], ctx: BuildCtx): Pick<BuildOut, 'meshes' |
       const [fx, fz] = [nx * side, nz * side];
       const [rx, rz] = [fz, -fx];
       const q = (r: number, yy: number) => [sp.x + fx * t + rx * r, yy, sp.z + fz * t + rz * r] as const;
-      buf.quad(q(-hl, y0), q(hl, y0), q(hl, y1), q(-hl, y1), c.x / W, (c.y + S.cellH) / H, (c.x + c.w) / W, c.y / H);
+      buf.quad(q(-hl, y0), q(hl, y0), q(hl, y1), q(-hl, y1), c.x / W, (c.y + c.h) / H, (c.x + c.w) / W, c.y / H);
     }
     // Plaque edges (border colour) and the post (4 sides).
     const [u, v] = edgeUv;
@@ -261,7 +278,7 @@ function buildSigns(spots: SignSpot[], ctx: BuildCtx): Pick<BuildOut, 'meshes' |
       const out: [number, number, number] = [dx * oa + nx * ob, 0, dz * oa + nz * ob];
       quadOut(buf, pc(-1, y), pc(1, y), pc(1, y0), pc(-1, y0), out, postUv[0], postUv[1], postUv[0], postUv[1]);
     }
-  }
+  });
   return { meshes: [buf.bucket()], textures: [{ material: 'sign', image }] };
 }
 
