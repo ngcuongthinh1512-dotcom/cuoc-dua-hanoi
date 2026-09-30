@@ -86,6 +86,12 @@ Object.assign(PRESETS, {
   'p3-turntable': '/character.html',
 });
 
+/** ?bike&autoMove=walk from `back` m before (lat, lon), heading yawDeg toward it (crash / stairs runs). */
+const rideInto = (lat: number, lon: number, yawDeg: number, back: number, extra = '') => {
+  const p = latLonToWorld(lat, lon);
+  const y = (yawDeg * Math.PI) / 180;
+  return `/?player=${[p.x + Math.sin(y) * back, p.z + Math.cos(y) * back, yawDeg].map((v) => +v.toFixed(2)).join(',')}&bike&autoMove=walk${extra}`;
+};
 // Phase 4 (docs/plans/phase4.md §8): p4-* presets. ?bike = start mounted on a dev bike, autoTurn=left|right holds A / D.
 Object.assign(PRESETS, {
   // [A] bike model + rider. Turntable (/bike.html, params in client/src/vehicle/bikePreview.ts): side, three-quarter,
@@ -99,6 +105,12 @@ Object.assign(PRESETS, {
   'p4-ride-side': '/?bike&autoMove=walk&orbit=90&wait=2',
   'p4-ride-lean': '/?bike&autoMove=walk&autoTurn=left&wait=2',
   // [B] physics + interaction
+  'p4-mount': '/?player&orbit=-50&wait=1', // dev bike 3 m east of the spawn, sparkling, within F reach
+  'p4-ride': '/?player&bike&autoMove=walk&wait=3', // on the Champs-Élysées side of Concorde: bike camera, FOV up
+  'p4-ride-turn': '/?player&bike&autoMove=walk&autoTurn=left&wait=2.5&debug=1', // leaning into a left turn
+  'p4-cobbles': '/?player&bike&autoMove=walk&autoTurn=right&wait=2&debug=1', // Concorde setts (F3: "đá lát" once roadgraph.json has them)
+  'p4-stairs-block': '/?player=-2380.2,409.3,136&bike&autoMove=walk&orbit=70&wait=3&debug=1', // jardins du Trocadéro steps: stopped at the first step (with track D's stair colliders)
+  'p4-crash': rideInto(48.868171, 2.322384, -24.1, 6, '&camMode=far&orbit=25&wait=3.2&debug=1'), // into the p3-wall facade at top speed: lying next to the bike
   // [D] stairs + junctions: a 3 m Trocadéro garden flight (jardins du Trocadéro) from the side; a quay flight on the north bank east of
   // Pont Alexandre III seen from the water; a swimmer 7 m past its foot swimming in and up; the Concorde Guimard well;
   // Rue du Louvre × Rue Berger, a junction ON the 6_1 border (its west arm lies in 5_1: sign + lamp gap now).

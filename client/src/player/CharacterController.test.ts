@@ -4,11 +4,13 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { latLonToWorld } from '@race/shared';
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { movement, physics, player as P, playerSetup, swim as S, terrain as T } from '../config.ts';
+import { bike as B, bikeTopSpeed, movement, physics, player as P, playerSetup, swim as S, terrain as T } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import { type ChunkData, chunkKey, type WaterData } from '../geo/chunkData.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
 import { buildChunk } from '../world/chunkBuild.ts';
+import { newBike } from '../vehicle/Bikes.ts';
+import { stairColliders } from '../world/stairs.ts';
 import { carveRiver, createTerrainCollider, riverLevel } from '../world/Terrain.ts';
 import { CharacterController, moveDirection, newIntent, readMoveIntent, spiral, tickAction, turnToward, yawOf } from './CharacterController.ts';
 import type { MoveIntent, PlayerEnv, PlayerState } from './types.ts';
@@ -333,6 +335,132 @@ describe.skipIf(!has)('real Seine', () => {
       expect(c.state.grounded).toBe(true);
       expect(c.state.position.y).toBeCloseTo(level + T.quayHeight + T.copingLift, 1); // on the quay coping
     }
+    world.free();
+  });
+});
+
+describe('CharacterController riding a bike (Phase 4 track B)', () => {
+  /** Spawned at the origin facing north, mounted on a bike owned by 'Đội A'. */
+  function mounted(build: (w: RAPIER.World) => void = ground) {
+    const { world, c } = setup(build);
+    spawned(world, c, 0, 0);
+    const b = newBike('b', c.state.position.x, c.state.position.y, c.state.position.z, 0);
+    b.owner = 'Đội A';
+    const drops: boolean[] = [];
+    c.onDismount = (_b, crashed) => void drops.push(crashed);
+    c.ride(b);
+    return { world, c, b, drops };
+  }
+
+  it('top speed / walk speed = 1.3 ± 1 % on a flat Rapier plane; 0 → 90 % in ~1 s', () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 0, 0);
+    const foot = speedOf(world, c, walk());
+    const m = mounted();
+    let t = 0;
+    while (Math.hypot(m.c.state.velocity.x, m.c.state.velocity.z) < 0.9 * bikeTopSpeed() && t < 3) {
+      run(m.world, m.c, DT, walk());
+      t += DT;
+    }
+    expect(t).toBeGreaterThanOrEqual(0.88);
+    expect(t).toBeLessThanOrEqual(1.1);
+    const onBike = speedOf(m.world, m.c, walk());
+    expect(Math.abs(onBike / foot - movement.bikeSpeedMultiplier)).toBeLessThan(0.01 * movement.bikeSpeedMultiplier);
+    expect(m.c.state.moveMode).toBe('bike');
+    expect(m.c.state.position.y).toBeCloseTo(0, 2);
+    world.free();
+    m.world.free();
+  });
+
+  it('steering is bike-relative: D turns right (yaw −), the camera yaw is ignored', () => {
+    const { world, c, b } = mounted();
+    run(world, c, 1.5, { ...walk(1, false, 2), right: 1 });
+    expect(b.yaw).toBeLessThan(-0.5);
+    expect(c.state.yaw).toBe(b.yaw);
+    expect(b.lean).toBeGreaterThan(0);
+    world.free();
+  });
+
+  it('a wall hit at top speed (≥ crashImpact) crashes: off the bike, crash action, up after it, bike still owned', () => {
+    const { world, c, b, drops } = mounted((w) => (ground(w), cuboid(w, 0, 1, -12, 5, 1, 0.5))); // wall face at z = −11.5
+    run(world, c, 3, walk());
+    expect(drops).toEqual([true]);
+    expect(c.riding).toBeNull();
+    expect(c.state.action).toBe('crash');
+    expect(b.owner).toBe('Đội A');
+    expect(b.speed).toBe(0);
+    expect(b.position.z).toBeGreaterThan(-11.5); // nose never went through
+    run(world, c, playerSetup.actions.crash.seconds);
+    expect([c.state.action, c.state.moveMode]).toEqual(['none', 'walk']);
+    world.free();
+  });
+
+  it('a slow bump (< crashImpact) only stops the bike', () => {
+    const { world, c, b, drops } = mounted((w) => (ground(w), cuboid(w, 0, 1, -12, 5, 1, 0.5)));
+    const slow = { ...walk(), forward: (0.8 * B.crashImpact) / bikeTopSpeed() };
+    run(world, c, 6, slow);
+    expect(drops).toEqual([]);
+    expect(c.riding).toBe(b);
+    expect(b.speed).toBeLessThan(0.5);
+    expect(c.state.position.z).toBeGreaterThan(-11.5 + B.wheelBase - B.noseRadius - 0.05);
+    world.free();
+  });
+
+  it('grazing a wall at a shallow angle only slows the bike', () => {
+    // Wall along z at x = −1.5, bike heading 10° into it.
+    const { world, c, b, drops } = mounted((w) => (ground(w), cuboid(w, -2, 1, -20, 0.5, 1, 30)));
+    b.yaw = (10 * Math.PI) / 180;
+    c.state.yaw = b.yaw;
+    run(world, c, 3, walk());
+    expect(drops).toEqual([]);
+    expect(b.speed).toBeGreaterThan(0.8 * bikeTopSpeed());
+    expect(c.state.position.x).toBeGreaterThan(-1.5);
+    expect(c.state.position.z).toBeLessThan(-10);
+    world.free();
+  });
+
+  it('cannot ride onto stairs: stops before a stair collider, no crash, no climb', () => {
+    let handle = -1;
+    const { world, c, b, drops } = mounted((w) => {
+      ground(w);
+      // 3 m flight going north from z = −8: a ramp collider like track D's (slope 25°)
+      const L = 3 / Math.tan((25 * Math.PI) / 180);
+      const v = new Float32Array([-2, 0, -8, 2, 0, -8, 2, 3, -8 - L, -2, 3, -8 - L]);
+      handle = w.createCollider(RAPIER.ColliderDesc.trimesh(v, new Uint32Array([0, 1, 2, 0, 2, 3]))).handle;
+      stairColliders.add(handle);
+    });
+    run(world, c, 4, walk());
+    stairColliders.delete(handle);
+    expect(drops).toEqual([]);
+    expect(c.riding).toBe(b);
+    expect(b.speed).toBe(0);
+    expect(c.state.position.y).toBeCloseTo(0, 1);
+    expect(c.state.position.z).toBeGreaterThan(-8);
+    world.free();
+  });
+
+  it('the same ramp without the stairs tag is ridden up', () => {
+    const { world, c } = mounted((w) => {
+      ground(w);
+      const L = 1 / Math.tan((8 * Math.PI) / 180);
+      const v = new Float32Array([-2, 0, -8, 2, 0, -8, 2, 1, -8 - L, -2, 1, -8 - L, -2, 1, -30, 2, 1, -30]);
+      w.createCollider(RAPIER.ColliderDesc.trimesh(v, new Uint32Array([0, 1, 2, 0, 2, 3, 3, 2, 5, 3, 5, 4])));
+    });
+    run(world, c, 5, walk());
+    expect(c.state.position.y).toBeCloseTo(1, 1);
+    world.free();
+  });
+
+  it('get off: the bike stays at the feet, the rider lands on its left', () => {
+    const { world, c, b, drops } = mounted();
+    run(world, c, 1, walk());
+    run(world, c, 2, newIntent()); // coast (no brake) then stand
+    expect(drops).toEqual([]);
+    const at = c.state.position.clone();
+    c.ride(null);
+    expect(b.position.distanceTo(at)).toBeLessThan(1e-6);
+    expect(c.state.position.x).toBeCloseTo(at.x - B.dismountSide, 1); // heading north: left = west
+    expect(c.state.moveMode).toBe('walk');
     world.free();
   });
 });
