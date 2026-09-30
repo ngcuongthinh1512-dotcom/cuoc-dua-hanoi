@@ -851,9 +851,17 @@ export const npcRender = {
   maxColliders: 16,
   push: { maxSpeed: 1 }, // m/s: a car overlapping the player shoves it through the KCC
   warmUp: 20, // s simulated after the initial fill (queues at red lights on the first frame)
-  // FPS mean over `window` s < minFps → density × down; ≥ okFps for upAfter s → + up; floor min (nextDensity)
+  // FPS mean over `window` s < minFps → density × down; ≥ okFps for upAfter s → + up; floor min (nextDensity).
+  // Off with URL ?npcDensity= (fixed density: screenshots don't depend on the machine's frame rate).
   autoDensity: { minFps: 45, okFps: 57, window: 2, upAfter: 5, down: 0.8, up: 0.1, min: 0.25 },
-  lights: { pole: 3.2, kerb: 0.5, radius: 200 }, // m
-  zebra: { depth: 3, stripe: 0.5, radius: 200 }, // m
+  refresh: 10, // m the anchor moves before the static sets (zebras, chairs, light heads) are gathered again
+  wheelWidth: 0.22, // m, the shared unit wheel (radius per template)
+  // m; SignalHead (x, z) = stop line on the way's centre line, yaw = heading of the arriving cars: the pole stands
+  // kerb m onto the sidewalk on their right, the lit bulb faces them (not tone mapped)
+  lights: { pole: 3.2, kerb: 0.5, radius: 200, colour: '#2f3833', bulbs: { red: '#ff2a1a', amber: '#ffae00', green: '#22ff77' } },
+  zebra: { depth: 3, stripe: 0.5, radius: 200 }, // m: stripes parallel to the road, stripe wide, stripe apart, depth long
   chair: { colour: '#3f6b3a', radius: 60 }, // Paris park chair green, m
+  pedFade: 0.3, // s crossfade between pedestrian clips
+  stagger: { tiltDeg: 18, rise: 0.12 }, // root lean toward the push, reached in `rise` s, fading out over crowd.stagger.seconds
+  zoneRing: '#ff3b30', // ?npcZone / setExclusionZones rings (radius + npc.zoneMargin) while the F3 panel is open
 };

@@ -8,6 +8,7 @@ import { bike as B, bikeTopSpeed, movement, physics, player as P, playerSetup, s
 import type { Input } from '../core/Input.ts';
 import { type ChunkData, chunkKey, type WaterData } from '../geo/chunkData.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
+import { NPC_GROUPS } from '../npc/types.ts';
 import { buildChunk } from '../world/chunkBuild.ts';
 import { newBike } from '../vehicle/Bikes.ts';
 import { stairColliders } from '../world/stairs.ts';
@@ -481,6 +482,78 @@ describe('CharacterController riding a bike (Phase 4 track B)', () => {
     expect(b.position.distanceTo(at)).toBeLessThan(1e-6);
     expect(c.state.position.x).toBeCloseTo(at.x - B.dismountSide, 1); // heading north: left = west
     expect(c.state.moveMode).toBe('walk');
+    world.free();
+  });
+});
+
+describe('NPC car colliders (Phase 4B track D: NPC_GROUPS kinematic cuboids)', () => {
+  /** A car-sized kinematic box in NPC_GROUPS, like npc/Npc.ts CarColliders: centre (x, hy, z). */
+  const car = (w: RAPIER.World, x: number, z: number, hx = 1, hy = 0.75, hz = 2.3) => {
+    const body = w.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(x, hy, z));
+    return w.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setCollisionGroups(NPC_GROUPS), body);
+  };
+
+  it('walking into a car: blocked at its side', () => {
+    const { world, c } = setup((w) => (ground(w), car(w, 0, -5, 3, 0.75, 1))); // side face at z = −4
+    spawned(world, c, 0, 0);
+    run(world, c, 4, walk());
+    expect(c.state.position.z).toBeGreaterThan(-4 + P.radius - 0.05);
+    expect(c.state.position.y).toBeCloseTo(0, 1);
+    world.free();
+  });
+
+  it('place() / spawn onto a car: next to it on the ground, never on its roof', () => {
+    const { world, c } = setup((w) => (ground(w), car(w, 0, 0)));
+    world.step();
+    spawned(world, c, 0, 0);
+    const p = c.state.position;
+    expect(p.y).toBeCloseTo(0, 1);
+    expect(Math.abs(p.x) > 1 + P.radius - 0.05 || Math.abs(p.z) > 2.3 + P.radius - 0.05).toBe(true);
+    world.free();
+  });
+
+  it('push(): moves the body through the KCC, a wall still stops it', () => {
+    const { world, c } = setup((w) => (ground(w), cuboid(w, 1.5, 1, 0, 0.5, 1, 5))); // wall face at x = 1
+    spawned(world, c, 0, 0);
+    for (let i = 0; i < 30; i++) {
+      c.push(0.01, 0);
+      run(world, c, DT);
+    }
+    expect(c.state.position.x).toBeCloseTo(0.3, 1);
+    for (let i = 0; i < 200; i++) {
+      c.push(0.02, 0);
+      run(world, c, DT);
+    }
+    expect(c.state.position.x).toBeLessThan(1 - P.radius + 0.05);
+    run(world, c, 0.5); // no push queued → stays
+    expect(c.state.position.x).toBeLessThan(1 - P.radius + 0.05);
+    world.free();
+  });
+
+  it('riding into a car at top speed crashes (onDismount crashed = true), the nose never enters it', () => {
+    const { world, c } = setup((w) => (ground(w), car(w, 0, -12, 2.3, 0.75, 1))); // side face at z = −11
+    spawned(world, c, 0, 0);
+    const b = newBike('b', 0, c.state.position.y, 0, 0);
+    const drops: boolean[] = [];
+    c.onDismount = (_b, crashed) => void drops.push(crashed);
+    c.ride(b);
+    run(world, c, 3, walk());
+    expect(drops).toEqual([true]);
+    expect(c.state.action).toBe('crash');
+    expect(b.position.z).toBeGreaterThan(-11);
+    world.free();
+  });
+
+  it('crash(): thrown off like a strong impact; on foot a no-op', () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 0, 0);
+    c.crash();
+    expect(c.state.action).toBe('none');
+    const drops: boolean[] = [];
+    c.onDismount = (_b, crashed) => void drops.push(crashed);
+    c.ride(newBike('b', 0, 0, 0, 0));
+    c.crash();
+    expect([drops, c.riding, c.state.action]).toEqual([[true], null, 'crash']);
     world.free();
   });
 });

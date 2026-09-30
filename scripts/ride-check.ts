@@ -40,7 +40,7 @@ const only = (n: number) => !process.env.RIDE_ONLY || process.env.RIDE_ONLY === 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
 async function run(page: Page, path: string) {
-  await page.goto(`http://localhost:${PORT}${path}`);
+  await page.goto(`http://localhost:${PORT}${path}${path.includes('?') ? '&' : '?'}npc=0`); // no NPCs: physics only
   await page.waitForFunction(() => (globalThis as { __READY__?: boolean }).__READY__ === true, null, { timeout: 90_000 });
   const log: Sample[] = [];
   const sample = () =>

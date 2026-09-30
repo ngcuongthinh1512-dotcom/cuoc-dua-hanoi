@@ -8,6 +8,7 @@ import { type Action, bike as B, movement, physics, player as P, playerSetup, sw
 import type { Input } from '../core/Input.ts';
 import { stepBike } from '../vehicle/BikeController.ts';
 import type { BikeState, RoadSurface } from '../vehicle/types.ts';
+import { IGNORE_NPC } from '../npc/types.ts';
 import { stairColliders } from '../world/stairs.ts';
 import type { Gesture, MoveIntent, PlayerEnv, PlayerState } from './types.ts';
 
@@ -69,6 +70,8 @@ const NO_ROT = { x: 0, y: 0, z: 0, w: 1 };
 const HALF = P.height / 2; // capsule centre above its bottom
 const FEET = HALF + P.skin; // the controller keeps the capsule `skin` above the ground: centre − FEET = feet on it
 const WALKABLE = Math.cos((P.maxSlopeDeg * Math.PI) / 180); // min |normal.y| of a surface to stand on
+/** A shoved step (an NPC car overlaps the body) ignores the NPC cars: the KCC can't sweep out of a box it starts in. */
+const shoved = (sx: number, sz: number) => (sx || sz ? IGNORE_NPC : undefined);
 const smooth = (a: number, b: number, t: number) => {
   const u = Math.min(Math.max((t - a) / (b - a), 0), 1);
   return u * u * (3 - 2 * u);
@@ -109,6 +112,9 @@ export class CharacterController {
   /** Last grounded dry spot while riding: where the bike stays when the rider ends up in the Seine. */
   private readonly bikeSafe = new Vector3();
   private readonly nose = new RAPIER.Ball(B.noseRadius);
+  /** Horizontal shove (m) queued by push() for the next step (an NPC car overlapping the body). */
+  private shoveX = 0;
+  private shoveZ = 0;
   /** Surface under the wheels (main.ts: RoadGraph.surfaceAt once roadgraph.json loaded). */
   surfaceAt: (x: number, z: number) => RoadSurface = () => 'asphalt';
   /** The controller dropped the bike itself: crash (strong impact, `crashed`) or fell into the water. */
@@ -180,11 +186,19 @@ export class CharacterController {
     if (!this.place(x, z)) this.teleport(x, y, z);
   }
 
-  /** One physics step (before world.step()). Consumes intent.jump. */
+  /** Phase 4B: moves the body (dx, dz) m at the next fixedUpdate, through the KCC (walls still stop it). Accumulates. */
+  push(dx: number, dz: number) {
+    this.shoveX += dx;
+    this.shoveZ += dz;
+  }
+
+  /** One physics step (before world.step()). Consumes intent.jump and the push(). */
   fixedUpdate(dt: number, intent: MoveIntent) {
     const s = this.state;
     const jump = intent.jump;
     intent.jump = false;
+    const [sx, sz] = [this.shoveX, this.shoveZ];
+    this.shoveX = this.shoveZ = 0;
     this.prev.copy(s.position);
     this.prevYaw = s.yaw;
     if (this.pending) {
@@ -193,7 +207,7 @@ export class CharacterController {
     }
     const locked = tickAction(s, dt);
     if (this.climb) return this.climbStep();
-    if (this.bike) return this.rideStep(dt, intent, this.bike);
+    if (this.bike) return this.rideStep(dt, intent, this.bike, sx, sz);
 
     const p = s.position;
     const level = this.env.waterLevel ?? -Infinity;
@@ -224,7 +238,7 @@ export class CharacterController {
       this.vy += g * dt;
     }
 
-    this.kcc.computeColliderMovement(this.collider, { x: this.vx * dt, y: dy, z: this.vz * dt });
+    this.kcc.computeColliderMovement(this.collider, { x: this.vx * dt + sx, y: dy, z: this.vz * dt + sz }, undefined, shoved(sx, sz));
     const m = this.kcc.computedMovement();
     const c = this.collider.translation();
     this.body.setNextKinematicTranslation({ x: c.x + m.x, y: c.y + m.y, z: c.z + m.z });
@@ -253,7 +267,7 @@ export class CharacterController {
    *  would hit this step: its head-on share of the speed is the impact (≥ bike.crashImpact → crash, SPEC §6.3), below
    *  that the bike turns along the obstacle and loses (1 − wallKeep) of the head-on share (SPEC §6.1). Reversing, the
    *  rear-wheel probe stops the bike at an obstacle (reverseSpeed never crashes). */
-  private rideStep(dt: number, intent: MoveIntent, b: BikeState) {
+  private rideStep(dt: number, intent: MoveIntent, b: BikeState, sx: number, sz: number) {
     const s = this.state;
     const p = s.position;
     stepBike(b, { throttle: Math.max(0, intent.forward), brake: intent.forward < -0.1, turn: -intent.right }, this.surfaceAt(p.x, p.z), dt);
@@ -267,7 +281,7 @@ export class CharacterController {
     } else if (hit) {
       const into = -(fx * hit.nx + fz * hit.nz); // cos of the angle between the heading and the obstacle's normal
       const impact = b.speed * into;
-      if (impact >= B.crashImpact) return this.crash(b);
+      if (impact >= B.crashImpact) return this.crash();
       const [tx, tz] = [fx + hit.nx * into, fz + hit.nz * into]; // heading slid along the obstacle
       if (Math.hypot(tx, tz) > 1e-3) b.yaw = yawOf(tx, tz);
       b.speed = Math.max(0, b.speed * Math.sqrt(1 - into * into) - (1 - B.wallKeep) * impact);
@@ -277,7 +291,7 @@ export class CharacterController {
     const g = physics.gravity.y;
     const dy = (this.vy + 0.5 * g * dt) * dt;
     this.vy += g * dt;
-    this.kcc.computeColliderMovement(this.collider, { x: fx * d, y: dy, z: fz * d });
+    this.kcc.computeColliderMovement(this.collider, { x: fx * d + sx, y: dy, z: fz * d + sz }, undefined, shoved(sx, sz));
     const m = this.kcc.computedMovement();
     const c = this.collider.translation();
     this.body.setNextKinematicTranslation({ x: c.x + m.x, y: c.y + m.y, z: c.z + m.z });
@@ -309,7 +323,10 @@ export class CharacterController {
     }
   }
 
-  private crash(b: BikeState) {
+  /** Thrown off the bike (strong impact; Phase 4B: riding into a pedestrian, npc/Npc.ts). No-op on foot. */
+  crash() {
+    const b = this.bike;
+    if (!b) return;
     this.ride(null);
     this.startAction('crash');
     this.onDismount(b, true);
@@ -362,14 +379,14 @@ export class CharacterController {
     return this.env.waterLevel !== null && this.env.heightAt(x, z) < this.env.waterLevel - 1;
   }
 
-  /** Feet y on the highest walkable surface at (x, z) (bridge deck over river bed), or a swimmer's float height over
-   *  open water; null if nothing walkable is below. The ray is nudged 1 mm off the 5 m grid lines: Rapier's vertical
+  /** Feet y on the highest walkable surface at (x, z) (bridge deck over river bed; never an NPC car roof), or a
+   *  swimmer's float height over open water; null if nothing walkable is below. The ray is nudged 1 mm off the 5 m grid lines: Rapier's vertical
    *  ray can slip through the heightfield exactly on a triangle edge. */
   private surface(x: number, z: number): number | null {
     const ground = this.env.heightAt(x, z);
     const from = Math.max(ground, this.env.waterLevel ?? -Infinity) + P.spawnCastHeight;
     const ray = new RAPIER.Ray({ x: x + 0.001, y: from, z: z + 0.001 }, DOWN);
-    const hit = this.world.castRayAndGetNormal(ray, from - ground + 10, true, undefined, undefined, this.collider);
+    const hit = this.world.castRayAndGetNormal(ray, from - ground + 10, true, undefined, IGNORE_NPC, this.collider);
     if (!hit || Math.abs(hit.normal.y) < WALKABLE) return null;
     const y = from - hit.timeOfImpact;
     const level = this.env.waterLevel ?? -Infinity;

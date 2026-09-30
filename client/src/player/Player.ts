@@ -4,8 +4,9 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { type PerspectiveCamera, type Scene, Vector3 } from 'three';
 import { crashSound, bell, rolling } from '../audio/sfx.ts';
-import { bike as B, bikeModel, playerSetup, thirdPersonCamera } from '../config.ts';
+import { bike as B, bikeModel, npc, playerSetup, thirdPersonCamera } from '../config.ts';
 import type { Input } from '../core/Input.ts';
+import type { CarKind, ExclusionZone, NpcAnchor } from '../npc/types.ts';
 import { loadBikeAsset } from '../vehicle/BikeModel.ts';
 import { Bikes, groundAt } from '../vehicle/Bikes.ts';
 import type { RoadSurface } from '../vehicle/types.ts';
@@ -32,17 +33,44 @@ export interface PlayerOverrides {
   bike?: boolean;
   /** Holds A (left) / D (right): on the bike a steady turn. */
   autoTurn?: 'left' | 'right';
+  /** Phase 4B: ?npc=0 turns the NPCs off. */
+  npc?: false;
+  npcSeed?: number;
+  /** ?npcDensity: fixed density (no automatic factor). */
+  npcDensity?: number;
+  npcZones?: ExclusionZone[];
+  /** ?npcTest=car:<kind>@x,z,yawDeg[;…]: parked cars (Traffic.park). */
+  npcTest?: { kind: CarKind; x: number; z: number; yawDeg: number }[];
 }
 
 const GESTURES = Object.keys(playerSetup.actions) as Gesture[];
 const oneOf = <T extends string>(v: string | null, allowed: readonly T[]) => (allowed as readonly string[]).includes(v ?? '') ? (v as T) : undefined;
 
+const KINDS = Object.keys(npc.vehicles) as CarKind[];
+/** "a,b,c;d,e,f" → the groups of `n` finite numbers (others dropped). */
+const groups = (v: string | null, n: number) =>
+  (v ?? '').split(';').map((g) => g.split(',').map(Number)).filter((g) => g.length === n && g.every(Number.isFinite));
+const finite = (v: string | null) => (v !== null && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
+
 /** ?player[=x,z,yawDeg]&camMode=near|far|first&orbit=deg&action=<gesture>&autoMove=walk|slow&jump&bike&autoTurn=left|right;
- *  invalid fields ignored. */
+ *  Phase 4B: npc=0, npcSeed=n, npcDensity=d, npcZone=x,z,r[;…], npcTest=car:<kind>@x,z,yawDeg[;…]. Invalid fields ignored. */
 export function parseOverrides(q: URLSearchParams): PlayerOverrides {
   const p = q.get('player')?.split(',').map(Number);
   const orbit = Number(q.get('orbit'));
+  const seed = finite(q.get('npcSeed')), density = finite(q.get('npcDensity'));
+  const zones = groups(q.get('npcZone'), 3).filter(([, , r]) => r! > 0).map(([x, z, r]) => ({ x: x!, z: z!, r: r! }));
+  const test = (q.get('npcTest') ?? '').split(';').flatMap((t) => {
+    const m = /^car:(\w+)@(.+)$/.exec(t);
+    const kind = oneOf(m?.[1] ?? null, KINDS);
+    const at = groups(m?.[2] ?? null, 3)[0];
+    return kind && at ? [{ kind, x: at[0]!, z: at[1]!, yawDeg: at[2]! }] : [];
+  });
   return {
+    ...(q.get('npc') === '0' ? { npc: false as const } : {}),
+    ...(seed !== undefined ? { npcSeed: Math.trunc(seed) } : {}),
+    ...(density !== undefined && density >= 0 ? { npcDensity: density } : {}),
+    ...(zones.length ? { npcZones: zones } : {}),
+    ...(test.length ? { npcTest: test } : {}),
     ...(p?.length === 3 && p.every(Number.isFinite) ? { spawn: { x: p[0]!, z: p[1]!, yawDeg: p[2]! } } : {}),
     ...(q.has('orbit') && Number.isFinite(orbit) ? { orbitDeg: orbit } : {}),
     camMode: oneOf(q.get('camMode'), thirdPersonCamera.modes),
@@ -65,6 +93,7 @@ export class Player {
   private readonly intent = newIntent();
   private readonly target: CameraTarget;
   private bikesPlaced = false;
+  private waved = false; // G since the last npcAnchor()
   /** Surface under the bike this frame (tyre sound, debug line). */
   surface: RoadSurface = 'asphalt';
 
@@ -139,6 +168,17 @@ export class Player {
     if (this.o.bike) this.bikes.interact(this.controller);
   }
 
+  /** Phase 4B: what the NPCs live around (docs/plans/phase4b.md §3.3): the feet (+ the front wheel when riding), the
+   *  camera heading; waving = G since the last call. */
+  npcAnchor(out: NpcAnchor, viewYaw: number): NpcAnchor {
+    const s = this.controller.state;
+    const r = this.controller.riding;
+    out.nose = r ? { x: s.position.x - Math.sin(s.yaw) * B.wheelBase, z: s.position.z - Math.cos(s.yaw) * B.wheelBase } : null;
+    Object.assign(out, { x: s.position.x, z: s.position.z, viewYaw, body: true, vx: s.velocity.x, vz: s.velocity.z, waving: this.waved });
+    this.waved = false;
+    return out;
+  }
+
   /** Input → intent and gestures, render pose, animation, camera. `input` null while the free-fly camera has it. */
   update(dt: number, input: Input | null, alpha: number) {
     if (input) {
@@ -150,7 +190,7 @@ export class Player {
       if (this.o.holdJump) this.intent.jump = true;
       if (input.wasPressed('interact')) this.bikes.interact(this.controller);
       if (input.wasPressed('bell') && this.controller.riding) bell();
-      if (input.wasPressed('wave') && !this.controller.riding) this.controller.startAction('wave');
+      if (input.wasPressed('wave') && !this.controller.riding) this.waved = this.controller.startAction('wave') || this.waved;
     }
     const s = this.controller.state;
     const a = input ? alpha : 1; // free-fly: fixedUpdate is frozen, so prev stays put; don't blend toward it

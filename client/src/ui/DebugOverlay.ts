@@ -14,6 +14,8 @@ type DebugStats = {
   player?: string;
   /** Phase 4: bike speed / lean / surface, or on foot. */
   bike?: string;
+  /** Phase 4B: NPC cars / pedestrians / density / sim time. */
+  npc?: string;
 };
 
 /** F3 / ` panel (SPEC §14). Ping and visible players: TODO.md (Phase 6). */
@@ -52,6 +54,7 @@ export function createDebugOverlay(visible: boolean) {
         `Collider vật lý: ${s.colliders}`,
         ...(s.player ? [s.player] : []),
         ...(s.bike ? [s.bike] : []),
+        ...(s.npc ? [s.npc] : []),
       ].join('\n');
     },
   };
