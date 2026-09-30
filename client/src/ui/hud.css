@@ -26,3 +26,9 @@
   color: var(--hud-fg);
   text-shadow: var(--hud-shadow), 0 0 6px rgba(0, 0, 0, 0.6);
 }
+
+/* Track D: no HUD while loading or with the free-fly camera (main.ts toggles body.hud-off). */
+.hud-off .hud-box,
+.hud-off .hud-hand {
+  visibility: hidden;
+}

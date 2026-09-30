@@ -235,6 +235,7 @@ export const props = {
   maxTriangles: 300, // per prop mesh
   signs: {
     cellW: 256, cellH: 64, dedupe: 15, // px, px (max cell, sized to content), m (same name)
+    districtLine: 14, // px added on top of the cell for the "8e Arrt" line (Phase 5 D; the plaque grows, text scale kept)
     atlasW: 512, // px, per-chunk atlas width (height grows with rows)
     plaqueHeight: 0.42, postHeight: 2.6, // m; plaque top at the post top
     enamel: '#1d4f9c', border: '#2f7d4a', text: '#ffffff', post: '#2a2d30',
@@ -983,6 +984,7 @@ export const respawnRules = {
 // ── D · HUD widgets + integration (ui/HUD.ts, main.ts, player/Player.ts, ui/DebugOverlay.ts, world/StreetProps.ts
 //        district line on the street signs) ──
 export const hudWidgets = {
-  streetSeconds: 5, // s the street / district label stays after a change (SPEC §12: "khi đổi khu vực")
-  streetFade: 0.6, // s fade out
+  streetSeconds: 5, // s (race clock) the street / district label stays after a change (SPEC §12: "khi đổi khu vực")
+  streetFade: 0.6, // s fade in / out
+  bottom: 30, // px from the bottom edge: clears the attribution line (#credits, ~18 px)
 };

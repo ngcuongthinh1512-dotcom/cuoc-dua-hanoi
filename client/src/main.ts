@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { unlockAudio } from './audio/sfx.ts';
-import { bounds, chunks as chunkCfg, flyCamera, npc as npcCfg, physics, playerSetup, render as R, ui } from './config.ts';
+import { bounds, chunks as chunkCfg, flyCamera, keys, npc as npcCfg, physics, playerSetup, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
@@ -207,6 +207,7 @@ async function start() {
   };
   // Phase 5 HUD (docs/plans/phase5.md §5): player mode only (the spectator has no body). The full map, the GPS and the
   // street names need the road graph: created once it is in.
+  document.body.classList.add('hud-off'); // until the world is ready (the loop toggles it)
   const hud = player && new HUD();
   const minimap = player && new Minimap(tiles);
   let gps: Gps | undefined;
@@ -235,7 +236,7 @@ async function start() {
     if (gps && gpsArg?.length === 2 && gpsArg.every(Number.isFinite)) gps.setTarget(gpsArg[0]!, gpsArg[1]!);
     if (fullMap && query.has('map')) fullMap.open(frame, Number(query.get('map')) || undefined);
     else if (query.has('menu')) menu.open();
-    help.hidden = input.locked || menu.isOpen;
+    help.hidden = input.locked || modal();
   };
 
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
@@ -255,8 +256,15 @@ async function start() {
       unlockedAt = performance.now();
       if (!fullMap?.isOpen) menu.open();
     }
-    help.hidden = locked || menu.isOpen;
+    help.hidden = locked || modal();
   };
+  // Firefox (and Safari) grant pointer lock only inside an input event handler, not in the frame loop that handles M /
+  // Esc below: a key that will close the map or the menu locks right here (the loop closes it next frame; its own
+  // lock() is then a no-op, or a rejected request that Input swallows). Chrome allows both.
+  addEventListener('keydown', (e) => {
+    if (e.repeat || input.locked || performance.now() - unlockedAt <= 300) return;
+    if ((fullMap?.isOpen && (keys.map.includes(e.code) || keys.menu.includes(e.code))) || (menu.isOpen && keys.menu.includes(e.code))) input.lock();
+  });
   input.onImeSuspected = () => {
     const box = $('ime');
     box.hidden = false;
@@ -306,11 +314,13 @@ async function start() {
         if (fullMap?.isOpen) fullMap.close(), input.lock();
         else if (menu.isOpen) menu.close(), input.lock();
         else if (!input.locked) menu.open();
-        help.hidden = input.locked || menu.isOpen;
+        help.hidden = input.locked || modal();
       }
       if (flying) fly.update(dt, input);
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
       player?.update(dt, flying ? null : input, loop.alpha, modal());
+      // No HUD while loading or flying (V): hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
+      document.body.classList.toggle('hud-off', !worldReady || flying);
       if (player && hud && minimap) {
         const s = player.controller.state;
         camera.getWorldDirection(view);
@@ -357,7 +367,12 @@ async function start() {
         ns &&
         `NPC: ${ns.cars} xe · ${ns.peds} người · mật độ ${ns.density.toFixed(2).replace('.', ',')} · ` +
           `${ns.simMs.toFixed(2).replace('.', ',')} ms/bước · vẽ ${ns.drawMs.toFixed(2).replace('.', ',')} ms · ${ns.colliders} collider`;
-      debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine, bike: bikeLine, npc: npcLine });
+      const ts = tiles.stats;
+      const hudLine =
+        player &&
+        `HUD: ${ts.tiles} ô bản đồ (${ts.vectors} chunk vector) · raster ${ts.rasterMs.toFixed(2).replace('.', ',')} ms · ` +
+          `GPS ${gps?.stats.searches ?? 0} lần, ${(gps?.stats.ms ?? 0).toFixed(2).replace('.', ',')} ms`;
+      debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine, bike: bikeLine, npc: npcLine, hud: hudLine });
       const { calls, triangles } = renderer.info.render;
       const npcStats = { npcCars: ns?.cars ?? 0, npcPeds: ns?.peds ?? 0, npcMs: +(ns?.simMs ?? 0).toFixed(3), npcDrawMs: +(ns?.drawMs ?? 0).toFixed(3) };
       Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries, ...npcStats } });

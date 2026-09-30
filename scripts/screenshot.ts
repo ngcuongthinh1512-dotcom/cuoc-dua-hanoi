@@ -187,6 +187,13 @@ Object.assign(PRESETS, {
   'p5-respawn': playerAt(48.8637, 2.3155, 90, '&respawn=1.7&wait=2'), // p3-swim, then "Kẹt?" after 1.7 s (swimming by then): on the coping at the top of the nearest quay flight + toast
 
   // [D] location label + clock, speedometer, street sign with the district line, F3 panel
+  // Rue Royale walking toward the Madeleine (street name from track B's locator); riding across Concorde; the Rue Royale
+  // plaque at its Concorde corner (StreetProps sign (78.5, −148.8), plaque along (0.433, −0.902)) from 2.5 m on the road
+  // side; F3 at the top right with the HUD line.
+  'p5-hud': '/?player=87.8,-184.5,-25.97&autoMove=walk&wait=2',
+  'p5-hud-bike': '/?player&bike&autoMove=walk&wait=3',
+  'p5-sign': camAt(76.25, -149.88, 2.3, -115.6, 3) + '&npc=0',
+  'p5-debug': '/?player&debug=1',
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
