@@ -1,0 +1,80 @@
+// Track B (docs/plans/phase4.md §3.12): synthesised placeholder sounds (SPEC §6.6): bell (R), tyre noise (louder on
+// cobbles), crash. The AudioContext opens on the first click (browsers block audio before a user gesture); until then
+// every call is a no-op.
+// ponytail: WebAudio synthesis, no files; real recordings in Phase 12.
+import { bike as B, bikeTopSpeed } from '../config.ts';
+import type { RoadSurface } from '../vehicle/types.ts';
+
+let ctx: AudioContext | null = null;
+let noise: AudioBuffer | null = null;
+let roll: { gain: GainNode; filter: BiquadFilterNode } | null = null;
+
+/** Call from a user gesture (click / pointer lock). */
+export function unlockAudio() {
+  try {
+    ctx ??= new AudioContext();
+    void ctx.resume();
+  } catch (err) {
+    console.warn('AudioContext unavailable:', err);
+  }
+}
+
+function noiseBuffer(c: AudioContext) {
+  if (noise) return noise;
+  noise = c.createBuffer(1, c.sampleRate, c.sampleRate);
+  const d = noise.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return noise;
+}
+
+/** Two-tone bicycle bell, bike.bellSeconds decay. */
+export function bell() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.25, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + B.bellSeconds);
+  g.connect(ctx.destination);
+  for (const f of [2100, 3200]) {
+    const o = ctx.createOscillator();
+    o.frequency.value = f;
+    o.connect(g);
+    o.start(t);
+    o.stop(t + B.bellSeconds);
+  }
+}
+
+/** Short low noise burst. */
+export function crashSound() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer(ctx);
+  const f = ctx.createBiquadFilter();
+  f.frequency.value = 700;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.6, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  src.connect(f).connect(g).connect(ctx.destination);
+  src.start(t);
+  src.stop(t + 0.4);
+}
+
+/** Tyre noise every frame: gain ∝ speed (bike.rollVolume per surface), cobbles = low rumble, asphalt = soft hiss. */
+export function rolling(speed: number, surface: RoadSurface | null) {
+  if (!ctx) return;
+  if (!roll) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
+    roll = { gain, filter };
+  }
+  const v = surface ? B.rollVolume[surface] * Math.min(1, Math.abs(speed) / bikeTopSpeed()) : 0;
+  roll.gain.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
+  roll.filter.frequency.setTargetAtTime(surface === 'pave' ? 250 + 60 * Math.sin(ctx.currentTime * 40) : 1800, ctx.currentTime, 0.02);
+}

@@ -1,10 +1,12 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import { unlockAudio } from './audio/sfx.ts';
 import { bounds, chunks as chunkCfg, flyCamera, physics, playerSetup, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
+import { loadRoadGraph } from './geo/roadGraph.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { parseOverrides, Player } from './player/Player.ts';
 import { initCredits } from './ui/Credits.ts';
@@ -141,6 +143,9 @@ async function start() {
   const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water };
   const player = spectator ? undefined : await Player.create(scene, world, camera, env, parseOverrides(query));
   let flying = !player;
+  // Cobbles (SPEC §6.6) once roadgraph.json is in; asphalt until then or where the graph knows nothing.
+  if (player) void loadRoadGraph().then((g) => g && (player.controller.surfaceAt = (x, z) => g.surfaceAt(x, z) ?? 'asphalt'));
+  renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
   if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player } }); // for scratch test scripts
@@ -199,7 +204,12 @@ async function start() {
         `Nhân vật: ${ps.moveMode}${ps.action === 'none' ? '' : ` (${ps.action})`} · ${ps.grounded ? 'chạm đất' : 'không chạm đất'}` +
           `${ps.inWater ? ' · dưới nước' : ''} · ${Math.hypot(ps.velocity.x, ps.velocity.z).toFixed(2)} m/s · ` +
           `chân y ${ps.position.y.toFixed(2)} · camera ${flying ? 'bay tự do (V)' : player.camera.mode}`;
-      debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine });
+      const rb = player?.controller.riding;
+      const bikeLine =
+        player &&
+        `Xe: ${rb ? `${rb.speed.toFixed(2)} m/s · nghiêng ${((rb.lean * 180) / Math.PI).toFixed(0)}° · mặt đường ${player.surface === 'pave' ? 'đá lát' : 'nhựa'}` : 'đi bộ'}` +
+          ` · ${player.bikes.list.length} xe quanh đây`;
+      debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine, bike: bikeLine });
       const { calls, triangles } = renderer.info.render;
       Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries } });
       // Signal for scripts/screenshot.ts: every chunk around the camera attached and a few frames drawn.

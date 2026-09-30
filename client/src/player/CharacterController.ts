@@ -1,9 +1,14 @@
 // Track B (docs/plans/phase3.md): Rapier KinematicCharacterController on a capsule (step 0.4 m, slope 45°, ground snap),
 // walk / slow walk / jump / fall, swimming in the Seine + climbing out onto a quay, safe spawn and respawn.
+// Phase 4 track B: riding (ride(bike)) moves the same capsule with the bike's velocity (vehicle/BikeController.ts), a
+// front-wheel probe keeps the nose out of walls and off stairs, a strong impact is a crash (SPEC §6.3).
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Vector3 } from 'three';
-import { type Action, movement, physics, player as P, playerSetup, swim as S } from '../config.ts';
+import { type Action, bike as B, movement, physics, player as P, playerSetup, swim as S } from '../config.ts';
 import type { Input } from '../core/Input.ts';
+import { stepBike } from '../vehicle/BikeController.ts';
+import type { BikeState, RoadSurface } from '../vehicle/types.ts';
+import { stairColliders } from '../world/stairs.ts';
 import type { Gesture, MoveIntent, PlayerEnv, PlayerState } from './types.ts';
 
 const axis = (input: Input, pos: Action, neg: Action) => Number(input.isDown(pos)) - Number(input.isDown(neg));
@@ -100,6 +105,14 @@ export class CharacterController {
   /** Spawn waiting for colliders created this frame to enter Rapier's query tree (on the next world.step()). */
   private pending: { x: number; z: number; wait: number } | null = null;
   private climb: { from: Vector3; to: Vector3 } | null = null;
+  private bike: BikeState | null = null;
+  /** Last grounded dry spot while riding: where the bike stays when the rider ends up in the Seine. */
+  private readonly bikeSafe = new Vector3();
+  private readonly nose = new RAPIER.Ball(B.noseRadius);
+  /** Surface under the wheels (main.ts: RoadGraph.surfaceAt once roadgraph.json loaded). */
+  surfaceAt: (x: number, z: number) => RoadSurface = () => 'asphalt';
+  /** The controller dropped the bike itself: crash (strong impact, `crashed`) or fell into the water. */
+  onDismount: (b: BikeState, crashed: boolean) => void = () => {};
 
   constructor(
     readonly world: RAPIER.World,
@@ -127,6 +140,39 @@ export class CharacterController {
     this.pending = { x, z, wait: 1 };
   }
 
+  /** The bike being ridden, null on foot. */
+  get riding(): BikeState | null {
+    return this.bike;
+  }
+
+  /** False until the spawn found its ground (Player places the dev bikes after that). */
+  get placed() {
+    return !this.pending;
+  }
+
+  /** Mount `b` (the capsule jumps onto its pivot, heading = the bike's), or get off (null): the bike stays at the feet
+   *  with speed 0, the rider lands bike.dismountSide m to its left (nearest free spot). */
+  ride(b: BikeState | null) {
+    const s = this.state;
+    if (b) {
+      this.bike = b;
+      this.climb = null;
+      s.yaw = b.yaw;
+      this.teleport(b.position.x, b.position.y, b.position.z);
+      this.bikeSafe.copy(b.position);
+      s.moveMode = 'bike';
+      return;
+    }
+    const old = this.bike;
+    if (!old) return;
+    this.bike = null;
+    Object.assign(old, { speed: 0, lean: 0, steer: 0, yaw: s.yaw });
+    old.position.copy(s.position);
+    s.moveMode = 'walk';
+    const [x, z] = [s.position.x - Math.cos(s.yaw) * B.dismountSide, s.position.z + Math.sin(s.yaw) * B.dismountSide];
+    if (!this.place(x, z)) this.teleport(s.position.x, s.position.y, s.position.z);
+  }
+
   /** Back to the last safe ground (fell through the world; Phase 5 menu "Kẹt? Về chỗ an toàn"). */
   respawn() {
     this.climb = null;
@@ -147,6 +193,7 @@ export class CharacterController {
     }
     const locked = tickAction(s, dt);
     if (this.climb) return this.climbStep();
+    if (this.bike) return this.rideStep(dt, intent, this.bike);
 
     const p = s.position;
     const level = this.env.waterLevel ?? -Infinity;
@@ -200,6 +247,91 @@ export class CharacterController {
       this.safeTime = 0;
       this.lastSafe.copy(p);
     }
+  }
+
+  /** One riding step: stepBike → velocity along the heading through the KCC. The front-wheel probe finds what the nose
+   *  would hit this step: its head-on share of the speed is the impact (≥ bike.crashImpact → crash, SPEC §6.3), below
+   *  that the bike turns along the obstacle and loses (1 − wallKeep) of the head-on share (SPEC §6.1). */
+  private rideStep(dt: number, intent: MoveIntent, b: BikeState) {
+    const s = this.state;
+    const p = s.position;
+    stepBike(b, { throttle: Math.max(0, intent.forward), brake: intent.forward < -0.1, turn: -intent.right }, this.surfaceAt(p.x, p.z), dt);
+    const [fx, fz] = [-Math.sin(b.yaw), -Math.cos(b.yaw)];
+    let d = b.speed * dt;
+    const hit = d > 0 ? this.noseProbe(fx, fz, d) : undefined;
+    if (hit === null) b.speed = d = 0; // stairs ahead: stop like at a wall, no crash (SPEC §6.6)
+    else if (hit) {
+      const into = -(fx * hit.nx + fz * hit.nz); // cos of the angle between the heading and the obstacle's normal
+      const impact = b.speed * into;
+      if (impact >= B.crashImpact) return this.crash(b);
+      const [tx, tz] = [fx + hit.nx * into, fz + hit.nz * into]; // heading slid along the obstacle
+      if (Math.hypot(tx, tz) > 1e-3) b.yaw = yawOf(tx, tz);
+      b.speed = Math.max(0, b.speed * Math.sqrt(1 - into * into) - (1 - B.wallKeep) * impact);
+      d = hit.free;
+    }
+    s.yaw = b.yaw;
+    const g = physics.gravity.y;
+    const dy = (this.vy + 0.5 * g * dt) * dt;
+    this.vy += g * dt;
+    this.kcc.computeColliderMovement(this.collider, { x: fx * d, y: dy, z: fz * d });
+    const m = this.kcc.computedMovement();
+    const c = this.collider.translation();
+    this.body.setNextKinematicTranslation({ x: c.x + m.x, y: c.y + m.y, z: c.z + m.z });
+    p.set(c.x + m.x, c.y + m.y - FEET, c.z + m.z);
+    s.velocity.set(m.x / dt, m.y / dt, m.z / dt);
+    s.grounded = this.kcc.computedGrounded();
+    if (s.grounded) this.vy = 0;
+    else this.vy = Math.min(this.vy, m.y / dt);
+    const level = this.env.waterLevel ?? -Infinity;
+    s.inWater = this.overRiver(p.x, p.z) && p.y < level;
+    if (p.y < P.respawnBelow || p.y < this.env.heightAt(p.x, p.z) - P.fellThrough) return this.respawn();
+    if (s.inWater) {
+      // Rode into the Seine: the bike stays on the last dry ground, the rider swims (next step).
+      this.bike = null;
+      Object.assign(b, { speed: 0, lean: 0, steer: 0 });
+      b.position.copy(this.bikeSafe);
+      s.moveMode = 'swim';
+      return this.onDismount(b, false);
+    }
+    if (s.grounded) this.bikeSafe.copy(p);
+    // The capsule's side against a wall the probe missed: keep only the speed actually made. Ground contacts don't
+    // count (Rapier's KCC now and then returns no motion for one step on flat ground).
+    for (let i = 0; i < this.kcc.numComputedCollisions(); i++) {
+      const n = this.kcc.computedCollision(i)?.normal1;
+      if (n && Math.abs(n.y) < WALKABLE) {
+        b.speed = Math.min(b.speed, Math.max(0, (m.x * fx + m.z * fz) / dt));
+        break;
+      }
+    }
+  }
+
+  private crash(b: BikeState) {
+    this.ride(null);
+    this.startAction('crash');
+    this.onDismount(b, true);
+  }
+
+  /** What the front wheel (bike.wheelBase ahead of the pivot, a bike.noseRadius ball at bike.noseHeight) would hit
+   *  moving `want` m: how far the pivot may go (`free`) and the obstacle's horizontal normal; undefined if nothing;
+   *  null when that, or the ground under the front wheel, is a stair collider (world/stairs.ts). Obstacles the heading
+   *  is parallel to or moving away from are ignored. */
+  private noseProbe(fx: number, fz: number, want: number): { free: number; nx: number; nz: number } | null | undefined {
+    const p = this.state.position;
+    const top = p.y + P.maxStep + 0.5;
+    const ahead = B.wheelBase + want;
+    const ray = new RAPIER.Ray({ x: p.x + fx * ahead, y: top, z: p.z + fz * ahead }, DOWN);
+    const under = this.world.castRay(ray, top - p.y + 1.5, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.collider);
+    if (under && stairColliders.has(under.collider.handle)) return null;
+    const reach = B.wheelBase - B.noseRadius;
+    const from = { x: p.x, y: p.y + B.noseHeight, z: p.z };
+    const hit = this.world.castShape(from, NO_ROT, { x: fx, y: 0, z: fz }, this.nose, 0, reach + want, true,
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.collider);
+    if (!hit) return undefined;
+    if (stairColliders.has(hit.collider.handle)) return null;
+    const [nx, nz] = [-hit.normal2.x, -hit.normal2.z]; // ball's contact normal, reversed = the obstacle's
+    const h = Math.hypot(nx, nz);
+    if (h < 1e-3 || -(fx * nx + fz * nz) / h < 0.02) return undefined;
+    return { free: Math.max(0, hit.time_of_impact - reach), nx: nx / h, nz: nz / h };
   }
 
   /** Feet at the render time: lerp(previous step, latest step, alpha) (GameLoop.alpha). */

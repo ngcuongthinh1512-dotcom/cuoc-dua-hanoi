@@ -12,6 +12,8 @@ type DebugStats = {
   colliders: number;
   /** One line about the player (Phase 3), absent in fly-only mode. */
   player?: string;
+  /** Phase 4: bike speed / lean / surface, or on foot. */
+  bike?: string;
 };
 
 /** F3 / ` panel (SPEC §14). Ping and visible players: TODO.md (Phase 6). */
@@ -49,6 +51,7 @@ export function createDebugOverlay(visible: boolean) {
         `Chunk: ${s.chunks.loaded} đã tải · ${s.chunks.pending} đang chờ`,
         `Collider vật lý: ${s.colliders}`,
         ...(s.player ? [s.player] : []),
+        ...(s.bike ? [s.bike] : []),
       ].join('\n');
     },
   };

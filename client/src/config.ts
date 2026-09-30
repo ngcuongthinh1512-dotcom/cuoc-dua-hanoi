@@ -667,14 +667,23 @@ export const bike = {
   coastDecel: 0.6, // m/s² rolling without input
   reverseSpeed: 1, // m/s backwards (S held once stopped): get the nose out of a wall
   turnRate: { slow: 2.4, top: 1.3 }, // rad/s at ~0 and at top speed (linear in between)
-  sharpTurn: { rate: 1.1, loss: 1.5 }, // rad/s above which speed bleeds, m/s² per rad/s of excess (SPEC §6.1)
+  turnMinSpeed: 1, // m/s below which the turn rate fades to 0 (a bike doesn't spin on the spot)
+  steerMaxDeg: 25, // front wheel angle at full A / D when slow (half of it at top speed), visual only
+  // Turning faster than `rate` rad/s caps the speed at top − loss × excess (m/s per rad/s); above the cap it bleeds at
+  // brakeDecel (SPEC §6.1: sharp turns slow down). Full A / D at top speed settles ≈ 87 % of top.
+  sharpTurn: { rate: 1.1, loss: 2 },
   leanMaxDeg: 25, // roll at full turn rate and top speed
   leanSharpness: 6, // 1/s
-  paveGrip: 0.65, // × turn rate and brake on cobbles (SPEC §6.6: less friction on pavé)
+  paveGrip: 0.65, // × turn rate, acceleration and brake on cobbles (SPEC §6.6: less friction on pavé); top speed unchanged
   wallKeep: 0.5, // share of speed kept after grazing an obstacle (SPEC §6.1: collisions slow down)
   crashImpact: 3.2, // m/s of speed lost against an obstacle in one step → crash (SPEC §6.3: strong impact at speed)
   wheelBase: 1.1, // m, front-wheel probe ahead of the pivot (nose doesn't enter walls)
   dismountSide: 0.7, // m to the left of the bike where the rider lands
+  dismountMaxSpeed: 2.5, // m/s: F gets off only at or below this (brake first)
+  noseHeight: 0.6, // m above the feet of the front-wheel probe ball: its bottom = player.maxStep, so curbs pass under it
+  noseRadius: 0.2, // m, front-wheel probe ball
+  bellSeconds: 0.6, // bell ring decay (audio/sfx.ts)
+  rollVolume: { asphalt: 0.04, pave: 0.16 }, // tyre noise gain at top speed per surface
   // Local dev bikes until Phase 6 (server bikes): offsets from playerSetup.spawn, m (x east, z south), heading °.
   devSpawns: [[3, 0, 0], [-4, 2, 90], [6, -5, 180]] as [number, number, number][],
 };

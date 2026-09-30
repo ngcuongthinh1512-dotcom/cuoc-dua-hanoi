@@ -10,4 +10,8 @@ describe('parseOverrides (URL test hooks)', () => {
     const o = parseOverrides(new URLSearchParams('player&camMode=top&action=fly&orbit=x&autoMove=run'));
     expect(o).toEqual({ camMode: undefined, action: undefined, autoMove: undefined });
   });
+  it('Phase 4: ?bike starts mounted, autoTurn=left|right holds A / D', () => {
+    expect(parseOverrides(new URLSearchParams('bike&autoTurn=left'))).toMatchObject({ bike: true, autoTurn: 'left' });
+    expect(parseOverrides(new URLSearchParams('autoTurn=up')).autoTurn).toBeUndefined();
+  });
 });
