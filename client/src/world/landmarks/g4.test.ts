@@ -4,11 +4,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { latLonToWorld } from '../../../../shared/src/projection.ts';
-import { landmarks as LM } from '../../config.ts';
+import { buildings as B, landmarks as LM } from '../../config.ts';
 import { type BuildingRec, type ChunkData, type ChunkIndex, chunkBounds, type LandmarkId, type WaterData } from '../../geo/chunkData.ts';
 import { heightAt, parseHeightGrid } from '../../geo/heightGrid.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { carveRiver } from '../Terrain.ts';
+import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import { buildLandmarks } from './index.ts';
 import { recordGround } from './parts.ts';
 
@@ -30,6 +31,7 @@ const EXPECT: Partial<Record<LandmarkId, [number, number, ('min' | 'ground')?]>>
   'hotel-invalides': [30, 60_000], // OSM part: the north central pavilion (portal arch, rounded roof) 30 m
   rodin: [G.rodin.height, 20_000],
   'ecole-militaire': [G.ecole.domeTop + 2.5, 60_000], // OSM quadrangular dome 22 m + lantern
+  'crazy-horse': [6 * B.levelHeight + B.chimneySize[2]!, 20_000], // OSM building:levels 6 (BuildingBuilder) + chimneys
 };
 
 describe.skipIf(!has)('g4 landmarks on the real chunks', () => {
@@ -94,6 +96,28 @@ describe.skipIf(!has)('g4 landmarks on the real chunks', () => {
     const z = 98 + G.tokyo.pillarSize; // first pillar of the north edge: its collider's foot just under the terrain
     const pillar = (x: number) => surfaceAt(o, x, z, height(x, z) - 1, height(x, z)).length > 0;
     expect(pillar(-1791 + G.tokyo.pillarPitch / 2) || pillar(-1747 - G.tokyo.pillarPitch / 2)).toBe(true);
+  });
+
+  it('Crazy Horse: registered in g4, its board faces Avenue George V (within 30 m in front of it)', () => {
+    expect(LANDMARK_BY_ID.get('crazy-horse')?.group).toBe('g4');
+    const board = out.get('crazy-horse')!.o.meshes.find((m) => m.material === 'neonSign')!;
+    expect(board).toBeDefined();
+    const n = board.position.length / 3;
+    const [cx, cz] = [0, 2].map((k) => [...board.position].filter((_, i) => i % 3 === k).reduce((a, v) => a + v, 0) / n) as [number, number];
+    const [nx, nz] = [board.normal[0]!, board.normal[2]!];
+    let best = { d: Infinity, dx: 0, dz: 0 };
+    for (const c of chunks.values()) {
+      for (const r of c.roads) {
+        if (r.name !== 'Avenue George V') continue;
+        for (let i = 0; i < r.pts.length; i += 2) {
+          const [dx, dz] = [r.pts[i]! - cx, r.pts[i + 1]! - cz];
+          if (Math.hypot(dx, dz) < best.d) best = { d: Math.hypot(dx, dz), dx, dz };
+        }
+      }
+    }
+    // nearest avenue vertex: in front of the board (angle < 45°) and close
+    expect((best.dx * nx + best.dz * nz) / best.d).toBeGreaterThan(Math.SQRT1_2);
+    expect(best.d).toBeLessThan(30);
   });
 
   it('L2 (Trocadéro Parvis) and L5 (Orsay esplanade) stay open: nothing from 0.3 m to 40 m above the terrain', () => {

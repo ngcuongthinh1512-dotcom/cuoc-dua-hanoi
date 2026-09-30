@@ -27,6 +27,8 @@ const FALLBACK_COLOUR: Record<MaterialId, number> = {
   gold: 0xd4a53c,
   bronze: 0x5a4a32,
   waterJet: 0xe8f2f8,
+  neon: 0xffffff, // × vertex colour
+  neonSign: 0xff2f78,
 };
 
 /** Flat-coloured stand-in for a material no package provides yet (vertexColors iff VERTEX_COLOR has it). */

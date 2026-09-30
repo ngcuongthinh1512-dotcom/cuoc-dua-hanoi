@@ -38,7 +38,7 @@ export type LandmarkId =
   | 'bir-hakeim' | 'alexandre-iii' | 'pont-neuf' | 'pont-des-arts' | 'alma' | 'flamme'
   | 'louvre' | 'pyramid' | 'carrousel' | 'palais-royal' | 'obelisk' | 'concorde-fountains' | 'vendome' | 'madeleine' | 'opera'
   | 'grand-palais' | 'petit-palais' | 'orsay' | 'palais-bourbon' | 'invalides' | 'hotel-invalides' | 'ecole-militaire'
-  | 'rodin' | 'chaillot' | 'palais-de-tokyo'
+  | 'rodin' | 'chaillot' | 'palais-de-tokyo' | 'crazy-horse'
   | 'notre-dame' | 'sainte-chapelle' | 'conciergerie' | 'hotel-de-ville' | 'pompidou' | 'tour-saint-jacques'
   | 'saint-sulpice' | 'pantheon' | 'luxembourg'
   | 'sacre-coeur' | 'montparnasse' | 'la-defense';

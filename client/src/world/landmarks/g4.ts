@@ -1,13 +1,15 @@
 // Group g4 (SPEC §17.6, docs/plans/phase2b-assets.md §1 #2, #6, #8, #9, #12, #17, #27–29): Palais de Chaillot +
 // Trocadéro, Palais de Tokyo, Grand Palais, Petit Palais, Musée d'Orsay, Palais Bourbon, Dôme + Hôtel des Invalides,
-// École Militaire, Musée Rodin. A = OSM building:part through renderPart, B = the procedural details below.
+// École Militaire, Musée Rodin, Crazy Horse Paris (SPEC §17.8). A = OSM building:part through renderPart, B = the procedural details below.
 // Everything is built in world coordinates into one Paint (a parts.ts Sink: one buffer per material + lod), so a
 // landmark costs one draw call per material. Stone = 'masonry' tinted per building, windows / steel = tinted 'metal'.
 // Small details (dormers, small statues, jets, clock hands) are LOD 'near'. Colliders: renderPart prisms plus boxes
 // (columns, plinths, the Parvis) and ramps (stairs); never detail geometry. Numbers + sources: config landmarks.g4.
 // DOM-free (chunk worker).
+import { latLonToWorld } from '@race/shared';
 import { landmarks as LM } from '../../config.ts';
-import type { BuildingRec, LandmarkId, LandmarkPoint, XZ } from '../../geo/chunkData.ts';
+import { type BuildingRec, type ChunkData, type LandmarkId, type LandmarkPoint, ringArea, type XZ } from '../../geo/chunkData.ts';
+import { buildBuildings } from '../BuildingBuilder.ts';
 import type { BuildOut, MaterialId } from '../buildTypes.ts';
 import { MeshBuffer, mergeBuckets, triangulate, type V3 } from '../geom.ts';
 import type { DetailFn, LandmarkCtx } from './index.ts';
@@ -1131,6 +1133,123 @@ function parvis(s: Paint, a: BuildingRec, b: BuildingRec, ctx: LandmarkCtx, yRef
   for (const p of pts) if (p.kind === 'fountain') jet(s, p.x, p.z, ctx.height(p.x, p.z), p.sub === 'isolated' ? P.jetIsolated : P.jet, 0.35);
 }
 
+/** Façade toward a point: the straight run of the outline (consecutive edges within `angle`°, ≥ minLen m) nearest to
+ *  (px, pz). a → b along the run, (nx, nz) = outward unit normal. */
+export function facadeRun(rec: BuildingRec, px: number, pz: number, minLen: number, angle: number) {
+  const r = partRings(rec)?.[0];
+  if (!r) return undefined;
+  const n = r.length / 2;
+  const dir = (i: number) => Math.atan2(r[(2 * i + 3) % r.length]! - r[2 * i + 1]!, r[(2 * i + 2) % r.length]! - r[2 * i]!);
+  const turn = (i: number, j: number) => Math.abs(((dir(i) - dir(j) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+  const lim = (angle * Math.PI) / 180;
+  let i0 = 0;
+  while (i0 < n && turn((i0 + n - 1) % n, i0) < lim) i0++;
+  i0 %= n;
+  let best: { a: P2; b: P2; d: number } | undefined;
+  for (let k = 0; k < n; ) {
+    const s = (i0 + k) % n;
+    let e = k + 1;
+    while (e < n && turn(s, (i0 + e) % n) < lim) e++;
+    const a: P2 = [r[2 * s]!, r[2 * s + 1]!];
+    const j = (i0 + e) % n;
+    const b: P2 = [r[2 * j]!, r[2 * j + 1]!];
+    const [dx, dz] = [b[0] - a[0], b[1] - a[1]];
+    const len = Math.hypot(dx, dz);
+    const t = clamp(((px - a[0]) * dx + (pz - a[1]) * dz) / (len * len || 1), 0, 1);
+    const d = Math.hypot(a[0] + dx * t - px, a[1] + dz * t - pz);
+    if (len >= minLen && (!best || d < best.d)) best = { a, b, d };
+    k = e;
+  }
+  if (!best) return undefined;
+  const len = Math.hypot(best.b[0] - best.a[0], best.b[1] - best.a[1]);
+  const [tx, tz] = [(best.b[0] - best.a[0]) / len, (best.b[1] - best.a[1]) / len];
+  return { a: best.a, b: best.b, len, tx, tz, nx: -tz, nz: tx }; // CCW ring (partRings): outward = (−tz, tx)
+}
+
+/** Crazy Horse Paris: the Haussmann block as any other (BuildingBuilder: shopfronts, window grid, mansard, balconies,
+ *  its collider) + the cabaret frontage on its Avenue George V run (facadeRun toward the OSM node): dark ground floor,
+ *  door, red marquise with a black valance, "CRAZY HORSE" board (canvas lettering, 'neonSign'), pink neon strips and
+ *  warm globes ('neon', near only). The 1-level retail box in front of the block's north end (way/69486351, 1.4 m deep)
+ *  is the dark showcase the marquise rests on. ponytail: built alone, so its party walls get façades + mansard insets (hidden
+ *  inside the neighbours, a 1.2 m roof gap); pass the chunk's neighbours to buildBuildings if it shows from above. */
+const crazyHorse: DetailFn = (rec, _parts, ctx) => {
+  const P = G.crazyHorse;
+  if (Math.abs(ringArea(rec.outer)) < P.showcaseArea) {
+    const s = new Paint();
+    const f = footprintFrame(rec.outer);
+    const [y0, y1, e] = [ctx.minGround - 0.3, ctx.ground + P.canopy.y, 0.03];
+    const box = rectL(f, -f.a, f.a, -f.b, f.b);
+    prism(s.m('metal', P.colours.front), box, y0, y1);
+    prism(s.m('neon', P.colours.neon, 'near'), rectL(f, -f.a - e, f.a + e, -f.b - e, f.b + e), y1 - P.neon, y1);
+    s.solid(box, y0, y1);
+    return out(s);
+  }
+  const { landmark: _l, parts: _p, points: _q, ...plain } = rec;
+  const block = buildBuildings({ buildings: [plain] } as ChunkData, ctx);
+  const K = P.colours;
+  const node = latLonToWorld(P.node[0], P.node[1]);
+  const run = facadeRun(rec, node.x, node.z, P.minRun, P.runAngle);
+  if (!run) return block;
+  const { a, len, tx, tz, nx, nz } = run;
+  const s = new Paint();
+  const g = ctx.ground;
+  const W = (u: number, d: number): P2 => [a[0] + tx * u + nx * d, a[1] + tz * u + nz * d];
+  const V = (u: number, y: number, d: number): V3 => [a[0] + tx * u + nx * d, y, a[1] + tz * u + nz * d];
+  const fbox = (b: MeshBuffer, u0: number, u1: number, y0: number, y1: number, d0: number, d1: number) =>
+    prism(b, [W(u0, d0), W(u1, d0), W(u1, d1), W(u0, d1)], y0, y1, true);
+  const face = (b: MeshBuffer, u0: number, u1: number, y0: number, y1: number, d: number, uv = [0, 0, 1, 1]) =>
+    quadOut(b, V(u0, y0, d), V(u1, y0, d), V(u1, y1, d), V(u0, y1, d), [nx, 0, nz], uv[0], uv[1], uv[2], uv[3]);
+  const half = Math.max(P.canopy.w, P.sign.w) / 2;
+  const ue = clamp((node.x - a[0]) * tx + (node.z - a[1]) * tz, Math.min(half, len / 2), Math.max(len - half, len / 2)); // entrance
+
+  // frontage (whole run) + door
+  const yb = Math.min(ctx.height(...W(0, 0)), ctx.height(...W(len, 0)), ctx.height(...W(ue, 0))) - 0.3;
+  face(s.m('metal', K.front), 0, len, yb, g + P.frontH, P.frontOut);
+  const D = P.door;
+  face(s.m('metal', K.valance), ue - D.w / 2, ue + D.w / 2, yb, g + D.h, P.frontOut + 0.02);
+  const fr = s.m('masonry', K.frame);
+  for (const e of [-1, 1]) fbox(fr, ue + e * (D.w / 2) - D.frame / 2, ue + e * (D.w / 2) + D.frame / 2, yb, g + D.h, 0, P.frontOut + 0.12);
+  fbox(fr, ue - D.w / 2 - D.frame / 2, ue + D.w / 2 + D.frame / 2, g + D.h, g + D.h + D.frame, 0, P.frontOut + 0.12);
+
+  // marquise: red slab, black valance hanging round its free edges
+  const Cn = P.canopy;
+  const [c0, c1, cy] = [ue - Cn.w / 2, ue + Cn.w / 2, g + Cn.y];
+  fbox(s.m('masonry', K.canopy), c0, c1, cy, cy + Cn.thick, 0, Cn.depth);
+  const val = s.m('metal', K.valance);
+  fbox(val, c0, c1, cy - Cn.valance, cy, Cn.depth - 0.08, Cn.depth);
+  for (const u of [c0, c1 - 0.08]) fbox(val, u, u + 0.08, cy - Cn.valance, cy, 0, Cn.depth - 0.08);
+
+  // board + lettering (u = 0 → 1 left to right as seen from the avenue)
+  const S = P.sign;
+  const [s0, s1, sy] = [ue - S.w / 2, ue + S.w / 2, g + S.y];
+  fbox(s.m('metal', K.board), s0, s1, sy, sy + S.h, 0, S.out);
+  const rightward = tz * nx - tx * nz < 0; // viewer looks along −n, right = (nz, −nx)
+  face(s.m('neonSign'), s0, s1, sy + 0.06, sy + S.h - 0.06, S.out + 0.01, rightward ? [0, 0, 1, 1] : [1, 0, 0, 1]);
+
+  // neon tubes (near): frontage top, marquise edges, door jambs, board outline
+  const t = P.neon;
+  const neon = s.m('neon', K.neon, 'near');
+  fbox(neon, 0, len, g + P.frontH - t, g + P.frontH, P.frontOut, P.frontOut + t);
+  fbox(neon, c0, c1, cy - Cn.valance - t, cy - Cn.valance, Cn.depth - t, Cn.depth + 0.02);
+  fbox(neon, c0, c1, cy + Cn.thick, cy + Cn.thick + t, Cn.depth - t, Cn.depth);
+  for (const e of [-1, 1]) fbox(neon, ue + e * (D.w / 2 + D.frame) - t / 2, ue + e * (D.w / 2 + D.frame) + t / 2, yb + 0.3, g + D.h, P.frontOut, P.frontOut + t);
+  fbox(neon, s0 - t, s1 + t, sy - t, sy, 0, S.out + t);
+  fbox(neon, s0 - t, s1 + t, sy + S.h, sy + S.h + t, 0, S.out + t);
+  // globes under the marquise + 2 wall lamps beside the door (near)
+  const lamp = s.m('neon', K.lamp, 'near');
+  const z = P.lampSize / 2;
+  for (let k = 0; k < P.lamps; k++) {
+    const u = c0 + ((k + 0.5) / P.lamps) * Cn.w;
+    fbox(lamp, u - z, u + z, cy - P.lampSize - 0.05, cy - 0.05, Cn.depth * 0.55 - z, Cn.depth * 0.55 + z);
+  }
+  for (const e of [-1, 1]) {
+    const u = ue + e * (D.w / 2 + D.frame + 0.6);
+    fbox(lamp, u - z, u + z, g + 2.3, g + 2.3 + P.lampSize * 1.4, P.frontOut + 0.1, P.frontOut + 0.1 + P.lampSize);
+  }
+  const d = s.out();
+  return { meshes: mergeBuckets([...block.meshes, ...d.meshes]), instances: [], colliders: block.colliders };
+};
+
 export const details: Partial<Record<LandmarkId, DetailFn>> = {
   'grand-palais': grandPalais,
   'petit-palais': petitPalais,
@@ -1142,5 +1261,6 @@ export const details: Partial<Record<LandmarkId, DetailFn>> = {
   rodin,
   chaillot,
   'palais-de-tokyo': tokyo,
+  'crazy-horse': crazyHorse,
 };
 

@@ -428,6 +428,21 @@ export const landmarks = {
     // Musée Rodin (Hôtel Biron, 1730): no published height → 3 levels × 4.2 m + hipped slate roof (estimate).
     rodin: { cornice: 12.6, height: 19, plinth: 1.3, windowRows: [[0.8, 3.2], [5, 3.2], [9.4, 2]] as [number, number][] },
     dormer: { w: 1.5, h: 2.2 },
+    // Crazy Horse Paris (12 av. George V): the Haussmann block way/69486346 (6 levels, BuildingBuilder look) + the
+    // cabaret frontage. node = OSM node/1292046637 (amenity=theatre), 5.6 m inside the block's west side on the avenue:
+    // the façade is the straight run (edges within runAngle°, ≥ minRun m) nearest to it. Sizes (m) estimated from
+    // photographs (no published figures); y above the block's ground; out = m in front of the wall.
+    crazyHorse: {
+      node: [48.8659605, 2.3017221] as [number, number], minRun: 8, runAngle: 5,
+      showcaseArea: 40, // m²: a smaller outline of the landmark is the showcase box (way/69486351, 16 m²)
+      frontH: 4.4, frontOut: 0.06, // dark ground-floor frontage over the shopfront band (4.5 m)
+      door: { w: 2.6, h: 2.9, frame: 0.18 },
+      canopy: { w: 7.5, depth: 2.4, y: 3.1, thick: 0.3, valance: 0.4 }, // marquise: red slab, black valance
+      sign: { w: 9, h: 1.5, y: 4.75, out: 0.25 }, // board with the canvas lettering (world/landmarks/index.ts)
+      neon: 0.08, // strip section
+      lamps: 4, lampSize: 0.22, // globes under the canopy
+      colours: { front: '#141115', canopy: '#a3111d', valance: '#0c0b0d', frame: '#5c0d14', neon: '#ff2f78', lamp: '#ffe4b0', board: '#0a0a0c' },
+    },
   },
   // g5 (world/landmarks/g5.ts): Notre-Dame … Luxembourg + skyline. Colours sRGB (vertex colours of 'masonry').
   g5: {

@@ -4,7 +4,7 @@
 //      landmarks.partCoverage of it (S3DB: an outline with parts is not extruded); no parts → the outline alone.
 // Non-building outlines (bridge decks, fountains, artworks) are drawn by details only. A DetailFn that throws is
 // reported and replaced by the generic renderer. DOM-free except createLandmarkMaterials() (main thread only).
-import { CanvasTexture, DoubleSide, type Material, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
+import { CanvasTexture, DoubleSide, type Material, MeshBasicMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
 import { landmarks as L } from '../../config.ts';
 import type { BuildingRec, LandmarkId, PartRec } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID, type LandmarkDef } from '../../geo/landmarks.ts';
@@ -142,5 +142,40 @@ export function createLandmarkMaterials(): Partial<Record<MaterialId, Material>>
     gold: new MeshStandardMaterial({ color: C.gold, roughness: 0.3, metalness: 1, envMap }),
     bronze: new MeshStandardMaterial({ color: C.bronze, roughness: 0.5, metalness: 0.8, envMap }),
     waterJet: new MeshStandardMaterial({ color: C.waterJet, roughness: 0.2, transparent: true, opacity: 0.6, depthWrite: false }),
+    neon: new MeshBasicMaterial({ vertexColors: true, toneMapped: false }), // unlit: reads as light in any sun
+    neonSign: new MeshBasicMaterial({ map: signTexture(), toneMapped: false }),
   };
+}
+
+/** Crazy Horse board: self-drawn "CRAZY HORSE" in red / pink neon tubes on black (no real logo, SPEC §17.8). */
+function signTexture() {
+  const [W, H] = [1024, 176];
+  const c = document.createElement('canvas');
+  [c.width, c.height] = [W, H];
+  const g = c.getContext('2d')!;
+  const pink = L.g4.crazyHorse.colours.neon;
+  g.fillStyle = L.g4.crazyHorse.colours.board;
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = pink;
+  g.lineWidth = 5;
+  g.shadowColor = pink;
+  g.shadowBlur = 18;
+  g.strokeRect(14, 14, W - 28, H - 28); // tube frame
+  g.font = 'italic 900 118px "Arial Black", Impact, "Helvetica Neue", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const text = 'CRAZY HORSE';
+  const k = Math.min(1, (W - 90) / g.measureText(text).width);
+  g.setTransform(k, 0, 0, 1, W / 2, H / 2 + 6);
+  g.shadowBlur = 28;
+  g.fillStyle = '#ff1a2e'; // red letters with a pink glow and a pale core line (the lit tube)
+  g.fillText(text, 0, 0);
+  g.shadowBlur = 0;
+  g.lineWidth = 3;
+  g.strokeStyle = '#ffc2d8';
+  g.strokeText(text, 0, 0);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
 }

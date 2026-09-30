@@ -70,6 +70,10 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   // near 300: the Trocadéro gardens down to the Seine (58 fountain jets of the Fontaine de Varsovie, gilded statues).
   { id: 'chaillot', name: 'Palais de Chaillot / Trocadéro', group: 'g4', osm: ['relation/6826569'], near: 300, view: [135, 350] },
   { id: 'palais-de-tokyo', name: 'Palais de Tokyo', group: 'g4', osm: ['way/79219351', 'way/79219308', 'way/79219265'], view: [180, 250] }, // west wing, east wing (MAM), peristyle canopy
+  // Crazy Horse (SPEC §17.8): the Haussmann block at 12 av. George V (way/69486346, 6 levels) that holds the cabaret
+  // node/1292046637 (amenity=theatre, "Le Crazy horse de Paris", queried 2026-09-30: not in the tile cache). Façade on
+  // the avenue = its west side; way/69486351 = the 1-level retail box on that side (showcase). View from across the avenue.
+  { id: 'crazy-horse', name: 'Crazy Horse Paris', group: 'g4', osm: ['way/69486346', 'way/69486351'], view: [240, 50] },
   // ── g5 ──
   { id: 'notre-dame', name: 'Nhà thờ Đức Bà Paris', group: 'g5', osm: ['way/201611261'], view: [250, 300] },
   { id: 'sainte-chapelle', name: 'Sainte-Chapelle', group: 'g5', osm: ['relation/3344870'], view: [200, 200] },

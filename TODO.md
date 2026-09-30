@@ -45,6 +45,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Pont Neuf: các vòm đều nhau (thực tế khác nhau); tượng trên trụ cầu Bir-Hakeim, tượng Zouave / Henri IV / Renommée hiện là khối thô.
 - Cầu Bir-Hakeim: sàn metro tầng trên nằm trên sàn đường + `railLayerStep`; đoạn dốc lên đồi Passy khá gắt (theo địa hình DEM).
 - Grand Palais: dựng 2 cỗ xe tứ mã (đúng thực tế, kế hoạch ghi 4).
+- Crazy Horse Paris: kích thước mặt tiền (mái hiên, biển hiệu, cửa) ước lượng theo ảnh, chưa có số công bố. Tòa nhà dựng riêng bằng `buildBuildings` nên tường chung với nhà bên cạnh vẫn có mặt tiền + mái mansard lùi 1,2 m (khe nhỏ nhìn từ trên cao); nâng cấp: truyền các nhà hàng xóm trong chunk vào. Vị trí lấy từ node OSM 1292046637 (48.86596, 2.30172), cách tọa độ gần đúng 48.8667, 2.3014 khoảng 80 m về phía nam.
 - Chiều cao ước lượng (không có số công bố, ghi `est.` / ponytail trong code): mái từng cánh Louvre, Petit Palais (vòm 34 m), Hôtel Biron (19 m), gờ mái Hôtel des Invalides, cánh Chaillot, chuông Tòa thị chính (50 m), sân thượng + tượng tháp Saint-Jacques, hướng tháp Montparnasse (115°), dáng đồi Montmartre; mái vòm École Militaire dùng 22 m của OSM (có vẻ thấp).
 - Các nhóm g5 phụ thuộc giá trị OSM hiện tại (Notre-Dame 69 / 96 m, Sainte-Chapelle 75 / 30 m, chóp Conciergerie 30 m): nếu `build-chunks` đổi, DetailFn rơi về dựng chung và `g5.test.ts` báo lỗi.
 - `parts.ts` vẽ đầu hồi của part mái kính bằng vật liệu tường (g4 tự xử lý bằng màu kính nhạt).

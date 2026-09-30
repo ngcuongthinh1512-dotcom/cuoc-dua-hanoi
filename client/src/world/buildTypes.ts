@@ -6,7 +6,8 @@ import type { HeightGrid } from '../geo/heightGrid.ts';
 
 /** Landmarks (world/landmarks/): 'stone' plain limestone, 'glass' transparent panes,
  *  'masonry' / 'metal' vertex-coloured stone|slate|lead|zinc|verdigris / painted steel, 'gold' gilding, 'bronze' statues,
- *  'waterJet' fountain spray. */
+ *  'waterJet' fountain spray, 'neon' unlit vertex-coloured light strips / lamps, 'neonSign' the Crazy Horse lettering
+ *  (uv 0–1 over the board). */
 export type MaterialId =
   | 'terrain'
   | 'wall'
@@ -26,11 +27,13 @@ export type MaterialId =
   | 'metal'
   | 'gold'
   | 'bronze'
-  | 'waterJet';
+  | 'waterJet'
+  | 'neon'
+  | 'neonSign';
 
 /** Buckets of these materials MUST carry a `color` attribute (linear RGB: per-building tint, park green) and their
  *  materials use vertexColors; buckets of every other material MUST NOT. geom.MeshBuffer applies this rule itself. */
-export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'wall', 'shopfront', 'roof', 'masonry', 'metal']);
+export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'wall', 'shopfront', 'roof', 'masonry', 'metal', 'neon']);
 
 export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro';
 
