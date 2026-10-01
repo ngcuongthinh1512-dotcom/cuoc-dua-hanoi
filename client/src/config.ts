@@ -1061,7 +1061,14 @@ export const hostPage = {
 // ── B · client race integration (race/RaceClient.ts, race/PitStop.ts, ClueBoxes, main.ts, Player.ts) ──
 export const raceClient = {
   checkinEveryMs: 2000, // standing in the Pit Stop mat zone, not finished yet: `race checkin` this often (SPEC §8.6; idempotent on the server)
-  // D17: a server spawn / clue box takes the highest walkable surface EXCEPT a rail viaduct top (Bir-Hakeim metro deck)
+  // D17: a spawn / clue box takes the highest walkable surface EXCEPT a rail viaduct top (Bir-Hakeim metro deck, player/railDecks.ts)
+  railSlack: 1.5, // m: rail strip half width margin; and in a rail column every hit within railLayerStep − this below the top is skipped
+  hintAbove: 1.5, // m: a re-entry spawn ray starts this far above welcome.pose.y (the deck / promenade it stood on, D17)
+  opMinGapMs: 800, // F / check-in: at most one `race` op this often (each is preceded by a pose: the server's 15 msg/s limit)
+  spectateAfterS: 4.5, // s after the check-in (celebrate ≈ 4 s) the finished team becomes a spectator (free-fly, D19)
+  // Pit Stop (SPEC §8.6): a red mat with yellow stripes at the zone centre (the check-in zone is the whole radius) + the host NPC
+  mat: { length: 7, width: 3.2, colour: '#b3201c', stripe: '#f2c230', stripeWidth: 0.25, lift: 0.04 },
+  host: { shirt: '#23262d', name: 'Người dẫn chương trình', offset: [2.4, 0.6], waveEveryS: 6, waveRadius: 25 }, // offset [side, along] m from the mat centre
 };
 
 // ── C · race HUD widgets (race/ui/*: clue card, Sổ mật thư, start-order banner, Pit Stop line, zone panel; ui/HUD.ts clock) ──

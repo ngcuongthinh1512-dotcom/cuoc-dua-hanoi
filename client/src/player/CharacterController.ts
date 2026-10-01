@@ -4,7 +4,7 @@
 // front-wheel probe keeps the nose out of walls and off stairs, a strong impact is a crash (SPEC §6.3).
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Vector3 } from 'three';
-import { type Action, bike as B, movement, physics, player as P, playerSetup, respawnRules as RR, swim as S } from '../config.ts';
+import { type Action, bike as B, movement, physics, player as P, playerSetup, raceClient as RC, respawnRules as RR, roads as RL, swim as S } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import type { WaterData } from '../geo/chunkData.ts';
 import { inRing } from '../geo/districts.ts';
@@ -12,6 +12,7 @@ import { stepBike } from '../vehicle/BikeController.ts';
 import type { BikeState, RoadSurface } from '../vehicle/types.ts';
 import { IGNORE_NPC } from '../npc/types.ts';
 import { stairColliders } from '../world/stairs.ts';
+import { castColumn, pickSurface } from './railDecks.ts';
 import type { Gesture, MoveIntent, PlayerEnv, PlayerState } from './types.ts';
 
 const axis = (input: Input, pos: Action, neg: Action) => Number(input.isDown(pos)) - Number(input.isDown(neg));
@@ -157,7 +158,7 @@ export class CharacterController {
   private airTime = 0;
   private jumped = false;
   /** Spawn waiting for colliders created this frame to enter Rapier's query tree (on the next world.step()). */
-  private pending: { x: number; z: number; wait: number } | null = null;
+  private pending: { x: number; z: number; wait: number; yHint: number | undefined } | null = null;
   private climb: { from: Vector3; to: Vector3 } | null = null;
   private bike: BikeState | null = null;
   /** Last grounded dry spot while riding: where the bike stays when the rider ends up in the Seine. */
@@ -170,6 +171,9 @@ export class CharacterController {
   surfaceAt: (x: number, z: number) => RoadSurface = () => 'asphalt';
   /** The controller dropped the bike itself: crash (strong impact, `crashed`) or fell into the water. */
   onDismount: (b: BikeState, crashed: boolean) => void = () => {};
+  /** Phase 7 D17 (main.ts: RailDecks.at): (x, z) under an upper rail viaduct deck → never stand on its top; undefined =
+   *  not known yet (a pending spawn waits for it; other placements take it as false). */
+  railAt: (x: number, z: number) => boolean | undefined = () => false;
   /** Phase 5 (track C calls it): the front / rear wheel stopped at a stair flight (SPEC §6.6) → toast "Không đi xe trên
    *  bậc thang" (the toast feed drops repeats). */
   onStairs: () => void = () => {};
@@ -191,13 +195,15 @@ export class CharacterController {
 
   /** Places the feet on safe ground at (x, z): on the terrain grid now (so chunks stream around it), then on the
    *  highest walkable collider at the first fixedUpdate after a world.step() (colliders created this frame are not
-   *  queryable before). Frozen until then, and while nothing walkable is below (no fall before the ground exists). */
-  spawn(x: number, z: number, yaw: number) {
+   *  queryable before). Frozen until then, and while nothing walkable is below (no fall before the ground exists).
+   *  `yHint` (Phase 7, re-entry: welcome.pose.y): the ray starts raceClient.hintAbove over it first (the deck / promenade
+   *  the team stood on, not a viaduct or bridge above it). */
+  spawn(x: number, z: number, yaw: number, yHint?: number) {
     Object.assign(this.state, { yaw, action: 'none', actionTime: 0, grounded: true, inWater: false, moveMode: 'walk' });
     this.climb = null;
     this.teleport(x, this.env.heightAt(x, z), z);
     this.forgetSafe();
-    this.pending = { x, z, wait: 1 };
+    this.pending = { x, z, wait: 1, yHint };
   }
 
   /** The bike being ridden, null on foot. */
@@ -298,7 +304,8 @@ export class CharacterController {
     this.prevYaw = s.yaw;
     this.clock += dt;
     if (this.pending) {
-      if (this.pending.wait-- <= 0 && this.place(this.pending.x, this.pending.z)) {
+      const { x, z, yHint } = this.pending;
+      if (this.railAt(x, z) !== undefined && this.pending.wait-- <= 0 && this.place(x, z, yHint)) {
         this.pending = null;
         this.forgetSafe(); // the spawn found its real ground
       }
@@ -488,16 +495,17 @@ export class CharacterController {
     return this.env.waterLevel !== null && this.env.heightAt(x, z) < this.env.waterLevel - 1;
   }
 
-  /** Feet y on the highest walkable surface at (x, z) (bridge deck over river bed; never an NPC car roof), or a
-   *  swimmer's float height over open water; null if nothing walkable is below. The ray is nudged 1 mm off the 5 m grid lines: Rapier's vertical
-   *  ray can slip through the heightfield exactly on a triangle edge. */
-  private surface(x: number, z: number): number | null {
+  /** Feet y on the highest walkable surface at (x, z) (bridge deck over river bed; never an NPC car roof, never the top
+   *  of a rail viaduct: Phase 7 D17, player/railDecks.ts), or a swimmer's float height over open water; null if nothing
+   *  walkable is below. `yHint`: from just above that height first (re-entry), the usual ray if nothing is there. */
+  private surface(x: number, z: number, yHint?: number): number | null {
     const ground = this.env.heightAt(x, z);
-    const from = Math.max(ground, this.env.waterLevel ?? -Infinity) + P.spawnCastHeight;
-    const ray = new RAPIER.Ray({ x: x + 0.001, y: from, z: z + 0.001 }, DOWN);
-    const hit = this.world.castRayAndGetNormal(ray, from - ground + 10, true, undefined, IGNORE_NPC, this.collider);
-    if (!hit || Math.abs(hit.normal.y) < WALKABLE) return null;
-    const y = from - hit.timeOfImpact;
+    const rail = !!this.railAt(x, z);
+    const top = Math.max(ground, this.env.waterLevel ?? -Infinity) + P.spawnCastHeight + (rail ? RL.bridge.railLayerStep : 0);
+    // the hinted ray starts under any viaduct (the team never stood on one): a plain highest-surface pick there
+    const cast = (from: number, r: boolean) => pickSurface(castColumn(this.world, x, z, from, from - ground + 10, r, WALKABLE, this.collider), r);
+    const y = (yHint !== undefined && yHint < top ? cast(yHint + RC.hintAbove, false) : null) ?? cast(top, rail);
+    if (y === null) return null;
     const level = this.env.waterLevel ?? -Infinity;
     return this.overRiver(x, z) && y < level - S.enterDepth ? level - S.floatDepth : y;
   }
@@ -509,10 +517,10 @@ export class CharacterController {
   }
 
   /** Nearest free walkable spot within spawnSearch m (spiral), else the first walkable one; false if none at all. */
-  private place(x: number, z: number): boolean {
+  private place(x: number, z: number, yHint?: number): boolean {
     let first: [number, number, number] | undefined;
     for (const [cx, cz] of spiral(x, z, P.spawnSearch)) {
-      const y = this.surface(cx, cz);
+      const y = this.surface(cx, cz, yHint);
       if (y === null) continue;
       if (!this.overlaps(cx, y, cz)) {
         this.teleport(cx, y, cz);

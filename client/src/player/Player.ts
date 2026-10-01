@@ -113,6 +113,10 @@ export class Player {
    *  its speed window instead of flagging the jump. */
   onRespawn?: (how: RespawnHow) => void;
   private stepping = false; // inside controller.fixedUpdate: a respawn there = fell through the world
+  private spawnHint: number | undefined; // setSpawn's yHint (re-entry: welcome.pose.y)
+  /** Phase 7 (D23): F on foot asks this first (main.ts: RaceClient.interact, the current box in reach → `race open`);
+   *  true = handled (the openBox gesture plays, no bike), false = F goes to the bikes as before. */
+  onInteract?: () => boolean;
 
   private constructor(
     readonly model: CharacterModel,
@@ -159,10 +163,12 @@ export class Player {
   }
 
   /** Phase 6: where the team last stood (welcome.pose, SPEC §8.10), before activate(): spawns there provisionally so the
-   *  chunks stream around it; activate() then places it on the colliders. */
-  setSpawn(x: number, z: number, yaw: number) {
+   *  chunks stream around it; activate() then places it on the colliders. Phase 7: also the leg start (welcome.start);
+   *  `yHint` = welcome.pose.y (D17: back onto the surface it stood on). */
+  setSpawn(x: number, z: number, yaw: number, yHint?: number) {
     this.o.spawn = { x, z, yawDeg: yaw / DEG };
-    this.controller.spawn(x, z, yaw);
+    this.spawnHint = yHint;
+    this.controller.spawn(x, z, yaw, yHint);
     this.camera.yaw = yaw;
     this.position.copy(this.controller.state.position);
   }
@@ -179,7 +185,7 @@ export class Player {
   activate() {
     if (this.active) return;
     const s = this.spawnPoint;
-    this.controller.spawn(s.x, s.z, s.yawDeg * DEG);
+    this.controller.spawn(s.x, s.z, s.yawDeg * DEG, this.spawnHint);
     this.target.collider = this.controller.collider;
     if (this.o.action) this.controller.startAction(this.o.action);
     this.simTime = 0;
@@ -236,7 +242,8 @@ export class Player {
       if (this.o.autoMove) [this.intent.forward, this.intent.right, this.intent.slow] = [1, 0, this.o.autoMove === 'slow'];
       if (this.o.autoTurn) this.intent.right = this.o.autoTurn === 'left' ? -1 : 1;
       if (this.o.holdJump) this.intent.jump = true;
-      if (input.wasPressed('interact')) {
+      if (input.wasPressed('interact') && !this.controller.riding && this.onInteract?.()) this.controller.startAction('openBox');
+      else if (input.wasPressed('interact')) {
         const r = this.bikes.interact(this.controller);
         if (r && r !== 'mount' && r !== 'dismount') notice(r); // Phase 5: why F did nothing
       }

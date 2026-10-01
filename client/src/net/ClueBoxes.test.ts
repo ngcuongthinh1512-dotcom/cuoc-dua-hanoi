@@ -23,3 +23,24 @@ describe('clue boxes (SPEC §17.10: drawn only from what the server sent)', () =
     expect(parseBoxes(null)).toEqual([]);
   });
 });
+
+describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', () => {
+  it('reveal opened: true repaints the same box; kind mat draws the mat; every change reports the list', async () => {
+    const { Scene } = await import('three');
+    const { ClueBoxes } = await import('./ClueBoxes.ts');
+    const scene = new Scene();
+    const cb = new ClueBoxes(scene, () => 1.5, () => 0);
+    const seen: number[] = [];
+    cb.onChange = (l) => seen.push(l.length);
+    cb.reset([box('L1')]);
+    const root = scene.children[0]!;
+    const glow = () => (root.children[0] as unknown as { material: { emissiveIntensity: number } }).material.emissiveIntensity;
+    expect([root.name, root.position.y, glow() > 0]).toEqual(['box', 1.5, true]);
+    cb.apply({ t: 'box', op: 'reveal', box: box('L1', true) });
+    expect([scene.children.length, scene.children[0], glow()]).toEqual([1, root, 0]);
+    cb.apply({ t: 'box', op: 'reveal', box: { step: 'PS', x: 40, z: 0, opened: false, r: 20, kind: 'mat' } });
+    expect(cb.mat?.name).toBe('mat');
+    expect(cb.mat?.position.x).toBe(40);
+    expect(seen).toEqual([1, 1, 2]);
+  });
+});

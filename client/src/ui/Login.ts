@@ -59,11 +59,17 @@ export const NET_DOWN: Readonly<Record<NetDown, string>> = {
 };
 export const netDownText = (reason: NetDown) => NET_DOWN[reason];
 
-/** "Chào mừng trở lại" lines (Phase 7 adds the current step and "Bạn có 1 mật thư mới"). */
+/** "Chào mừng trở lại" lines: race clock (from the Host-entered start time, SPEC §17.12), the current step (Phase 7),
+ *  last seen. ponytail: "Bạn có 1 mật thư mới" needs the server to know which cards were read (Phase 8+). */
 export function summaryLines(s: Summary): string[] {
   const clock = (ms: number) => new Date(ms).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const h = (sec: number) => `${Math.floor(sec / 3600)}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(Math.floor(sec) % 60).padStart(2, '0')}`;
-  return [s.raceTime === null ? 'Cuộc đua chưa bắt đầu' : `Thời gian đua: ${h(s.raceTime)}`, ...(s.lastSeen === null ? [] : [`Lần cuối trong game: ${clock(s.lastSeen)}`])];
+  const step = typeof s.step === 'number' ? `Bước ${s.step + 1}` : s.step;
+  return [
+    s.raceTime === null ? 'Đồng hồ đua chưa chạy (Host chưa nhập giờ xuất phát)' : `Thời gian đua: ${h(s.raceTime)}`,
+    ...(step ? [`Đang làm: ${step}`] : []),
+    ...(s.lastSeen === null ? [] : [`Lần cuối trong game: ${clock(s.lastSeen)}`]),
+  ];
 }
 
 const FORM = `<form class="menu-box login-box" novalidate>

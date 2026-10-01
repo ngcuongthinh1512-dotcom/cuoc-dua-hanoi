@@ -8,6 +8,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { latLonToWorld } from '@race/shared';
+import { type Leg, startSpot } from '@race/shared/leg';
 import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
 import { flyCamera, roads } from '../client/src/config.ts';
@@ -217,12 +218,27 @@ Object.assign(PRESETS, {
   'p6-host': '/host.html?demo=1', // [D]
 });
 
+// [B] demo leg start spots (startSpot, as the server sends welcome.start); mat / box views mid Pont d'Iéna (a deck over the
+// Seine: the placement ray must pick the deck; the demo Pit Stop's centre is ON the Louvre glass pyramid)
+const DEMO_LEG = JSON.parse(readFileSync(join(root, 'worker/legs/paris-demo.json'), 'utf8')) as Leg;
+const startAt = (n: number) => {
+  const s = startSpot(DEMO_LEG, n);
+  return [s.x, s.z, (s.yaw * 180) / Math.PI].map((v) => +v.toFixed(2)).join(',');
+};
+const ISLAND_SPOT = 4;
+const PIT = (({ x, z }) => ({ x: +x.toFixed(1), z: +z.toFixed(1) }))(latLonToWorld(48.8596, 2.29243));
 // Phase 7 (docs/plans/phase7.md §7): p7-* presets, offline stand-ins only (the screenshot server is Vite, no wrangler):
 // RaceHud.demo(query) (?card=, ?book, ?startOrder=, ?finish, ?zone) and Bir-Hakeim / Pit Stop views. Each track adds its
 // presets under its own line only.
 Object.assign(PRESETS, {
   // [A] server: no screenshots (worker tests + harness)
   // [B] start spawn on the Bir-Hakeim road deck (not on the metro viaduct), box opening (openBox), Pit Stop mat + host NPC, celebrate
+  // ?start=x,z,yawDeg = welcome.start of the demo leg's n-th team (same spawn path); F3: feet ≈ 1.3, not 7.2 (metro top)
+  'p7-start': `/?start=${startAt(1)}&wait=1&debug=1&camMode=far&npc=0`,
+  'p7-start-island': `/?start=${startAt(ISLAND_SPOT)}&wait=1&debug=1&orbit=120&npc=0`, // a spread spot over the Île aux Cygnes: still the deck
+  'p7-openbox': `/?player=${PIT.x},${PIT.z + 4},0&boxes=L6,${PIT.x + 0.9},${PIT.z + 2.6}&action=openBox&wait=0.9&orbit=140&npc=0`, // box ahead, opening it, "Bấm F" prompt
+  'p7-mat': `/?player=${PIT.x - 4},${PIT.z + 9},-24&boxes=PS,${PIT.x},${PIT.z}&mat&wait=1.5&camMode=far&npc=0`, // mat + host NPC waving at the team
+  'p7-celebrate': `/?player=${PIT.x},${PIT.z + 0.5},180&boxes=PS,${PIT.x},${PIT.z}&mat&action=celebrate&wait=1.2&orbit=160&npc=0`,
   // [C] clue card (each step type), full card popup, Sổ mật thư, "Xuất phát ở vị trí thứ n", Pit Stop line, clock --:-- / penalty
   // [D] leg format + validator: no screenshots
   // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
