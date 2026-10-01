@@ -115,6 +115,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Còn 17 lỗi nhỏ trong `docs/reports/phase6-review-*.md`.
 
 ## Phase 7 – Race engine lõi
+- KHÔNG có Vượt rào (SPEC §17.12): bỏ `roadblock` khỏi schema zod / máy trạng thái / mật thư; xem lại `docs/RACE_RULES.md`, `worker/legs/paris-demo.json` (nếu có bước vượt rào) và Phase 9 (Vé ưu tiên không còn gắn Vượt rào) để gỡ phần liên quan.
 - Thông báo thứ tự xuất phát (SPEC §17.12): khi đội vào game, góc phải hiện "Xuất phát ở vị trí thứ n" trong 15 s đầu rồi mờ dần biến mất. n = thứ tự ĐĂNG NHẬP VÀO GAME lần đầu (đội vào đầu tiên = 1, vào muộn nhất = cuối), không theo giờ Host nhập: server ghi `startOrder` ở lần đăng nhập đầu tiên của đội (bảng `teams`, giữ nguyên khi vào lại), gửi trong `welcome`; client dùng cùng cách mờ dần với `HUD` tên đường, đếm bằng thời gian mô phỏng. Chỉ hiện MỘT lần ở lần đăng nhập đầu tiên, tại vạch xuất phát; vào lại KHÔNG hiện; không thông báo ở các lộ trình sau hay khi về đích (server gửi cờ `showStartOrder` chỉ ở lần đầu, hoặc client dựa vào `startOrder` mới ghi).
 - Đồng hồ mỗi đội (SPEC §17.12): tính từ lúc đội nhận mật thư đầu tiên ngoài game; Host nhập giờ bắt đầu từng đội; `welcome.raceTime` (hiện `null`) = hiện tại − giờ bắt đầu của đội.
 - Server phải biết `respawn()` / dịch chuyển hợp lệ (cờ trong `pos` đã có); ZonePanel / ghost theo SPEC §7 dời sang đây.
