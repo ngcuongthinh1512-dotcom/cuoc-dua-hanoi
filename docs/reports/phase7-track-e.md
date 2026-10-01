@@ -27,3 +27,7 @@ Nhánh `p7-track-e` (từ `fee5e6f`). File sở hữu: `client/src/host/*`, `cli
 - Bot `--leg` giả định: welcome của đội đầu có `view.card.step` = bước đầu của chặng và `welcome.start`; `race` view có `finishAt` khi check-in; từ chối thao tác trả `notice`.
 - Nhánh B của `mini` (host_approval) chỉ qua được khi `verifyTask` còn là bản tạm Phase 7; Phase 8 phải cho bot chọn nhánh có đáp án (ghi `ponytail:` trong sim.ts).
 - Không đụng `docs/SPEC.md`, `TODO.md`, `CLAUDE.md`, `shared/**`. TODO gợi ý cho người tích hợp: ma trận chưa có "ô khóa" / lọc theo đội; chưa có bảng `step_progress` đầy đủ (Phase 10).
+
+## Sửa sau kiểm tra độc lập
+- BLOCKER sim.ts: `goto` bắt đầu sau một nhịp (`stepMs/speedup`), `settle` chờ 400 ms/speedup trước mỗi lần gửi pose+op, và cả hai ném lỗi ngay (kèm mã đóng) khi `sock.dropped !== null`. Tránh vượt 15 tin/giây (4429). Test "whole leg" vẫn skip tới khi engine track A được merge; chưa chạy được ở nhánh này.
+- MAJOR host/main.ts: `autoCandidates` tính lại bất cứ khi nào server không có ứng viên (`spawning.candidates === 0`), không còn so `leg.id`; `lastAttempt` chỉ để giãn 10 s giữa các lần thử (sau lỗi tải đồ thị cũng tự thử lại) và được đặt 0 mỗi lần `host.leg`. Không có test DOM cho Host page nên chưa thêm test tự động.

@@ -96,7 +96,7 @@ const counters = el('section');
 const bikes = el('section');
 const candStatus = el('span', { className: 'note' }); // outlives render(): the status of the last "Tính hành lang" click
 let computing = false;
-let computedFor = ''; // leg id the candidates were last computed for (D11: recomputed by itself when it changes)
+let lastAttempt = 0; // throttles automatic retries (D11: recomputed by itself whenever the server holds no candidates)
 let legResult: { ok: boolean; issues: LegIssueView[] } | null = null;
 let showT = false; // §13.6: real time ⇄ T+ on each team's own clock
 const notices: { level: 'error' | 'warning'; message: string; at: number }[] = [];
@@ -170,7 +170,7 @@ async function sendCandidates() {
   const { points, checkpoints } = corridorPoints(leg);
   if (points.length < 2) return void (candStatus.textContent = 'Chặng chưa có đủ điểm (cần ≥ 2: xuất phát + đích) để tính hành lang.');
   computing = true;
-  computedFor = leg.id;
+  lastAttempt = Date.now();
   candStatus.textContent = 'Đang tải đồ thị đường và tính hành lang…';
   if (state) render(state);
   try {
@@ -192,13 +192,14 @@ async function sendCandidates() {
 /** D11: a leg loaded (or none computed yet: the server drops the old candidates when it loads a leg) → compute by itself. */
 async function autoCandidates() {
   const s = state;
-  if (!ws || computing || !s?.leg || s.leg.id === computedFor || s.spawning.candidates > 0) return;
+  if (!ws || computing || !s?.leg || s.spawning.candidates > 0 || Date.now() - lastAttempt < 10_000) return;
   await sendCandidates();
 }
 
 function loadLeg(msg: { id: string } | { json: string }) {
   if (!send({ t: 'host.leg', ...msg })) return void addNotice('error', 'Đang mất kết nối, chưa nạp được chặng.');
   legResult = null;
+  lastAttempt = 0; // the server drops its candidates on every host.leg, even for the same id
 }
 
 function pickFile(input: HTMLInputElement) {

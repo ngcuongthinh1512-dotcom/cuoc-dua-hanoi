@@ -168,6 +168,7 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
   const v = Math.min(footSpeed * 0.9, (0.95 * footSpeed * bikeSpeedMultiplier * NET.speedTolerance) / o.speedup);
   const stepMs = 1000 / NET.sendHz;
   const sendPose = () => sock.send(encodePose({ x, y: 0, z, yaw, mode: 'walk', action: 'none' }));
+  const settleGapMs = 400;
   const fail = (what: string) => new Error(`Bot ${bot.i + 1}: ${what}`);
 
   const goto = async (tx: number, tz: number) => {
@@ -176,9 +177,10 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
     const path = a >= 0 && b >= 0 && a !== b ? shortestPath(graph, a, b, 'walk') : null;
     const poly = [x, z, ...(path ? pathPolyline(graph, path) : []), tx, tz];
     let seg = 0;
-    let due = Date.now();
+    let due = Date.now() + stepMs / o.speedup;
     while (2 * seg + 3 < poly.length) {
       await sleep(due - Date.now());
+      if (sock.dropped !== null) throw fail(`server đã đóng socket (mã ${sock.dropped})`);
       let left = v * (stepMs / 1000);
       while (left > 0 && 2 * seg + 3 < poly.length) {
         const [nx, nz] = [poly[2 * seg + 2]!, poly[2 * seg + 3]!];
@@ -207,6 +209,8 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
   const settle = async (id: string, op: Record<string, unknown> | null) => {
     for (let tries = 0; tries < 40 && Date.now() < o.deadline; tries++) {
       if (moved(id)) return;
+      await sleep(settleGapMs / o.speedup); // pace: pose + op right after the last goto pose would break the 15 msg/s limit
+      if (sock.dropped !== null) throw fail(`server đã đóng socket (mã ${sock.dropped})`);
       const mark = sock.log.length;
       sendPose();
       if (op) sock.send(op);
