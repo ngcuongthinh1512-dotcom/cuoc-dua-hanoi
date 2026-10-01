@@ -49,7 +49,7 @@ Quy tắc viết JSON: chữ nằm trong dấu ngoặc kép `"..."`; số không
 |---|---|---|---|
 | `id` | có | | Mã chặng: chữ thường a–z, số, gạch ngang, ≤ 32 ký tự, không bắt đầu bằng gạch ngang. `"paris-1"` |
 | `title` | có | | Tên chặng (hiện cho Host). `"Chặng Paris 2026"` |
-| `timezone` | không | `"Asia/Ho_Chi_Minh"` | Múi giờ để **hiểu giờ xuất phát Host gõ vào** (Host ở đâu cũng được). Ví dụ giờ Paris: `"Europe/Paris"`. Sai tên: `leg:check` cảnh báo |
+| `timezone` | không | `"Asia/Ho_Chi_Minh"` | Múi giờ để **hiểu giờ xuất phát Host gõ vào** (Host ở đâu cũng được). Ví dụ giờ Paris: `"Europe/Paris"`. Sai tên (vd. `"Paris"`, `"UTC+7"`): **LỖI**, máy chủ không nạp chặng (giờ xuất phát sẽ bị hiểu sai) |
 | `start` | có | | Nơi xuất phát, mục 4 |
 | `steps` | có | | Các bước, mục 5 (1–60 bước) |
 | `eliminationLeg` | không | `false` | `true` = chặng có loại đội cuối (xử lý ở phase sau) |
@@ -175,7 +175,7 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
 • Bước 2 (T1, challenge): Vườn Trocadéro (phía dưới) — vùng 30 m — đi bộ ≈ 340 m từ điểm trước
     Avenue Albert 1er de Monaco, Quận 16 — 48.86050, 2.29030
     Bản đồ: https://www.openstreetmap.org/?mlat=48.86050&mlon=2.29030#map=19/48.86050/2.29030
-    Xem: npm run screenshot -- --path "/preview.html?at=48.8605,2.2903&r=80" --name leg-T1
+    Xem: npm run screenshot -- --path "/preview.html?at=48.86050,2.29030&r=80" --name leg-T1
 ```
 
 - **Tên đường + quận** cho biết ngay nếu gõ nhầm số (nhầm 2 chữ số vẫn nằm trong bản đồ nhưng sai tên đường / quận).
@@ -360,6 +360,7 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `tâm vùng nằm trong một tòa nhà (...)` / `nằm trong một tòa nhà` | LỖI | Dời điểm ra vỉa hè / quảng trường; xem ảnh lệnh `Xem:` |
 | `không đi bộ tới được từ ... theo đồ thị đường` | LỖI | Điểm ở cù lao, sân trong, nóc cầu... không có đường đi bộ nối; dời về chỗ có đường |
 | `bãi xe nằm trong một tòa nhà` | LỖI | Dời `bikeParking` ra vỉa hè |
+| `múi giờ: "..." không phải múi giờ hợp lệ; dùng tên IANA ...` | LỖI | Dùng tên chuẩn IANA như `"Asia/Ho_Chi_Minh"`, `"Europe/Paris"` (không phải `"Paris"`, `"UTC+7"`); máy chủ không nạp chặng có múi giờ sai |
 | `chứa nguyên văn "..." của chặng` (tên file `client/...`) | LỖI | Chặng / mật thư đang nằm trong `client/`; xóa khỏi đó |
 | `bãi xe cách tâm N m, nằm trong vùng` | CẢNH BÁO | Dời bãi xe ra ngoài vùng (≈ bán kính + 20 m) |
 | `đường đi bộ gần nhất cách tâm N m, xa hơn bán kính` | CẢNH BÁO | Đường đi bộ ở xa tâm: đội phải ra khỏi vùng để tới đường; dời tâm gần đường hơn |
@@ -369,7 +370,6 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `nằm giữa mặt nước (sông)` | CẢNH BÁO | Dời vào bờ hoặc lên cầu |
 | `nằm trên một cây cầu ... không bắc qua sông` | CẢNH BÁO | Có thể là cầu cạn đường sắt / metro: kiểm tra link bản đồ; đặt xuống mặt đường. Riêng điểm xuất phát giữa cầu Bir-Hakeim của chặng demo thì cảnh báo này là bình thường (game đặt đội trên mặt cầu, không phải nóc metro) |
 | `chứa chữ ... trùng một đáp án của chặng` | CẢNH BÁO | Đáp án trùng tên đường / địa danh có trong dữ liệu bản đồ: bình thường. Chỉ xóa nếu file đó là bản chép chặng do bạn bỏ vào `client/` |
-| `"..." không phải múi giờ hợp lệ` | CẢNH BÁO | Dùng tên chuẩn như `Asia/Ho_Chi_Minh`, `Europe/Paris` |
 | `file nằm ngoài worker/legs/` | CẢNH BÁO | Chuyển file vào `worker/legs/` |
 | `... còn trống` (mật thư, tiêu đề, đáp án, link Facebook...) | CÒN TRỐNG | Ô bạn chưa điền; cho phép khi soạn nháp, phải điền trước khi mở cuộc đua |
 | `KHÔNG hợp lệ: N lỗi` (dòng cuối) | | Còn lỗi: máy chủ không nạp file này |

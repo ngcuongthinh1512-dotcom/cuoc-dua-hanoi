@@ -136,21 +136,27 @@ export function fmtDuration(ms: number): string {
   const s = Math.round(Math.abs(ms) / 1000);
   return `${ms < 0 ? '-' : ''}${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
 }
-/** "mm:ss" (minutes may exceed 59). */
-export const fmtMinSec = (ms: number) => `${pad(Math.floor(Math.abs(ms) / 60_000))}:${pad(Math.round(Math.abs(ms) / 1000) % 60)}`;
+/** "mm:ss" (minutes may exceed 59); rounded once to whole seconds, so 59.6 s is "01:00", not "00:00". */
+export function fmtMinSec(ms: number): string {
+  const s = Math.round(Math.abs(ms) / 1000);
+  return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+}
 /** "HH:mm:ss" on the wall clock of zone `tz`. */
 export function fmtTimeOfDay(ms: number, tz: string): string {
   const f = fieldsIn(ms, tz);
   return `${pad(f.h)}:${pad(f.mi)}:${pad(f.s)}`;
 }
 
-/** What the Host reads under the start-time input: the team clock that value would give right now. */
-export function startPreview(inputMs: number | null, nowMs: number): { text: string; level: 'ok' | 'warn' | 'bad' } {
+/** What the Host reads under the start-time input: the team clock that value would give right now, or (finished team,
+ *  `finishAt` set) its final time = finishAt − start (D15: the server refuses a start in the future or after the finish). */
+export function startPreview(inputMs: number | null, nowMs: number, finishAt: number | null = null): { text: string; level: 'ok' | 'warn' | 'bad' } {
   if (inputMs === null) return { text: 'Chưa hiểu giờ này.', level: 'bad' };
-  const d = nowMs - inputMs;
-  if (d < -60_000) return { text: `Giờ này còn ${fmtDuration(-d)} nữa mới tới: máy chủ sẽ từ chối (tối đa 60 giây sau bây giờ).`, level: 'bad' };
+  if (inputMs - nowMs > 60_000) return { text: `Giờ này còn ${fmtDuration(inputMs - nowMs)} nữa mới tới: máy chủ sẽ từ chối (tối đa 60 giây sau bây giờ).`, level: 'bad' };
+  if (finishAt !== null && inputMs > finishAt) return { text: 'Giờ này sau giờ về đích của đội: máy chủ sẽ từ chối.', level: 'bad' };
+  const d = (finishAt ?? nowMs) - inputMs;
   if (d < 0) return { text: 'Đồng hồ đội bắt đầu từ bây giờ.', level: 'ok' };
-  return { text: `Đồng hồ đội sẽ hiện T+${fmtDuration(d)}.`, level: d > 6 * 3600_000 ? 'warn' : 'ok' };
+  const level = d > 6 * 3600_000 ? 'warn' : 'ok';
+  return finishAt !== null ? { text: `Đội đã về đích: thời gian sẽ là T+${fmtDuration(d)}.`, level } : { text: `Đồng hồ đội sẽ hiện T+${fmtDuration(d)}.`, level };
 }
 
 export interface StatusButton { op: 'start' | 'pause' | 'resume' | 'finish'; label: string; confirm: string | null; danger?: boolean }

@@ -4,7 +4,7 @@ import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
 import { parseLeg, stepZones } from '@race/shared/leg';
 import { decodePose, type HostState, type RaceView, type ServerMessage, type Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { answersOf, type Bot, legArg, playLeg, runSim } from './sim.ts';
+import { answersOf, type Bot, legArg, legFailed, legRowBudget, playLeg, runSim } from './sim.ts';
 
 // Real workerd + Durable Object (createTestHarness) and real WebSockets: 3 bots walk 30 simulated seconds on the A* road graph.
 // speedup 2 (10 msg/s per bot) leaves margin under the server's 15 msg/s socket limit (1 s window) and is the CLI maximum;
@@ -34,7 +34,8 @@ describe('sim bots (docs/plans/phase6.md §6 D)', () => {
 });
 
 // Phase 7 (docs/plans/phase7.md track E): bots play a whole leg. `mini` is ~2.4 km (≈ 6 min real time at the trusted-point speed), so the
-// test squeezes the same steps, branches, answers and Pit Stop onto the Bir-Hakeim bridge deck (35 m apart, FAKE content as in mini).
+// test squeezes the same steps, branches, answers and Pit Stop onto the Bir-Hakeim bridge from the leg's own start (35 m apart, FAKE
+// content as in mini).
 const mini = readFileSync(join(import.meta.dirname, '../worker/legs/test/mini.json'), 'utf8');
 function compactMini(): string {
   const spots = new Map<string, number>();
@@ -43,8 +44,10 @@ function compactMini(): string {
     if (!spots.has(k)) spots.set(k, spots.size);
     return spots.get(k)!;
   };
-  // NW along the bridge from its centre (start): 35 m per spot
-  const put = (o: { lat: number; lon: number }, i: number, extra = 0) => ((o.lat = 48.85569 + 0.000262 * i + extra), (o.lon = 2.28758 - 0.000263 * i + extra));
+  const leg = JSON.parse(mini);
+  const s0 = { lat: leg.start.lat as number, lon: leg.start.lon as number }; // spot 0 = the start, wherever mini.json puts it
+  // NW along the bridge from the start: 35 m per spot
+  const put = (o: { lat: number; lon: number }, i: number, extra = 0) => ((o.lat = s0.lat + 0.000262 * i + extra), (o.lon = s0.lon - 0.000263 * i + extra));
   const walk = (o: unknown): void => {
     if (Array.isArray(o)) return o.forEach(walk);
     if (!o || typeof o !== 'object') return;
@@ -58,7 +61,6 @@ function compactMini(): string {
     }
     Object.values(r).forEach(walk);
   };
-  const leg = JSON.parse(mini);
   walk(leg);
   return JSON.stringify(leg);
 }
@@ -160,7 +162,24 @@ describe('sim --leg (Phase 7)', () => {
 
   it.skipIf(!engineReady)('3 bots finish the whole leg: all checked in, ranking has 3 rows, ≤ 110 SQLite rows per team', { timeout: 300_000 }, async () => {
     const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-leg', password: 'test-secret', log: () => {}, leg: { json: compactMini() } });
-    expect(r.leg).toMatchObject({ id: 'mini', steps: 6, finished: 3, ranked: 3 });
-    expect(r.leg!.rowsPerTeam).toBeLessThanOrEqual(110);
+    expect(r.leg).toMatchObject({ id: 'mini', steps: 6, finished: 3, ranked: 3, rowBudget: 110 });
+    // per team = rows written while the race ran minus the shared snapshot / replay rows (they do not grow with the team count)
+    expect(r.leg!.sharedRows).toBeGreaterThan(0);
+    expect(r.leg!.rowsPerTeam).toBeGreaterThan(10);
+    expect(r.leg!.rowsPerTeam! * 3 + r.leg!.sharedRows!).toBeLessThanOrEqual(r.counters.rows);
+    expect(r.leg!.rowsPerTeam).toBeLessThanOrEqual(r.leg!.rowBudget);
+    expect(legFailed(r)).toBe(false);
+  });
+
+  it('a long leg is not reported as LỖI for the shared rows: the budget counts per-team race rows (organiser review)', () => {
+    // the organiser's 4-step leg, 2 bots, 826 s at speedup 2: 324 rows = 2 × 40 race rows + 244 snapshot / replay rows (413 s real,
+    // one every 2 s + one every 10 s); the old check divided all 324 by 2 → "162 > 110 ← LỖI"
+    const leg = { id: 'x', steps: 4, finished: 2, ranked: 2, rowsPerTeam: 40, sharedRows: 244, rowBudget: legRowBudget(4), refused: [] };
+    const r = { bots: 2, counters: { wsIn: 0, wsOut: 0, http: 0, alarms: 0, rows: 324 }, leg } as unknown as Parameters<typeof legFailed>[0];
+    expect(legFailed(r)).toBe(false);
+    expect(legFailed({ ...r, leg: { ...leg, rowsPerTeam: 111 } })).toBe(true);
+    expect(legFailed({ ...r, leg: { ...leg, finished: 1 } })).toBe(true);
+    expect(legFailed({ ...r, leg: { ...leg, rowsPerTeam: null } })).toBe(false); // --url: not measured, not a failure
+    expect([legRowBudget(4), legRowBudget(10), legRowBudget(12)]).toEqual([110, 110, 132]);
   });
 });

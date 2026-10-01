@@ -39,6 +39,9 @@ li.error { color: #ff8a7a; }
 li.warning { color: #f0c24a; }
 li.blank { color: #8d99b0; }
 .scroll { overflow-x: auto; }
+/* the team column stays put while the Host scrolls a wide table sideways */
+table.pin tr > :first-child { position: sticky; left: 0; z-index: 1; background: #141a26; text-align: left; }
+.preview { display: block; white-space: normal; }
 table.matrix td { text-align: center; }
 table.matrix td.cell { font-variant-numeric: tabular-nums; font-size: 13px; min-width: 7em; border-left: 1px solid #222b3d; }
 td.todo { background: #1b2230; color: #596379; }

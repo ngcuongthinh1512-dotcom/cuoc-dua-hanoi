@@ -1,6 +1,6 @@
 import { isClientMessage } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, billableRequests, corridorPoints, counterLines, demoState, fmtDuration, inputToMs, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, msToInput, openBlanks, parseTeamLines, progressTable, startPreview, startRows, statusButtons, teamRows, warnings } from './hostView.ts';
+import { ago, billableRequests, corridorPoints, counterLines, demoState, fmtDuration, fmtMinSec, inputToMs, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, msToInput, openBlanks, parseTeamLines, progressTable, startPreview, startRows, statusButtons, teamRows, warnings } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -79,6 +79,19 @@ describe('Host view', () => {
     expect(startPreview(now + 61_000, now).level).toBe('bad');
     expect(startPreview(null, now).level).toBe('bad');
     expect(fmtDuration(-61_000)).toBe('-00:01:01');
+  });
+
+  it('preview of a finished team: its final time (finishAt − start), not now − start; a start after the finish is refused', () => {
+    const now = 10_000_000;
+    const finishAt = now - 4 * 60_000;
+    expect(startPreview(now - 50 * 60_000, now, finishAt)).toEqual({ text: 'Đội đã về đích: thời gian sẽ là T+00:46:00.', level: 'ok' });
+    expect(startPreview(finishAt + 1000, now, finishAt).level).toBe('bad');
+  });
+
+  it('mm:ss rounds once: 59.6 s is 01:00, 119.5 s is 02:00', () => {
+    expect(fmtMinSec(59_600)).toBe('01:00');
+    expect(fmtMinSec(119_500)).toBe('02:00');
+    expect(fmtMinSec(-61_000)).toBe('01:01');
   });
 
   it('status buttons follow the race state machine (D9)', () => {

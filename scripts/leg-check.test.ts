@@ -63,6 +63,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(report).toContain('Place du Trocadéro, Quận 16');
     expect(report).toContain('https://www.openstreetmap.org/?mlat=48.86215&mlon=2.28843#map=19/48.86215/2.28843');
     expect(report).toContain('npm run screenshot -- --path "/preview.html?at=48.86215,2.28843&r=80" --name leg-L1');
+    expect(report).toMatch(/--name leg-start\n/); // not "leg-xu-t-ph-t" (\W eats the Vietnamese letters)
     expect(report).toMatch(/Bước 4 \(D1\/B, detour\)/);
     expect(report).toMatch(/đi bộ ≈ \d+ m/);
   });
@@ -116,16 +117,18 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(errors(r4).some((x) => x.includes('ngoài bản đồ đua'))).toBe(true);
   });
 
-  it('a point in the middle of the river is a warning; a bad timezone too', () => {
+  it('a point in the middle of the river is a warning; a bad timezone is an error (the server refuses the leg)', () => {
     const j = miniJson();
     let w = { x: 0, z: 0 };
     for (let x = -400; x < 400; x += 10) for (let z = 150; z < 500; z += 10) if (map.inWater(x, z) && !map.onBridge(x, z)) w = { x, z };
     expect(w.z).toBeGreaterThan(0);
     Object.assign(j.steps[2].destination, worldToLatLon(w.x, w.z)); // somewhere in the Seine
-    j.timezone = 'Viet/Nam';
     const r = runT('w1.json', j);
+    expect(r.ok).toBe(true);
     expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('mặt nước'))).toBe(true);
-    expect(r.issues.some((i) => i.level === 'warning' && i.where === 'múi giờ')).toBe(true);
+    const tz = runT('w2.json', { ...miniJson(), timezone: 'Viet/Nam' });
+    expect(tz.ok).toBe(false);
+    expect(tz.issues.filter((i) => i.where === 'múi giờ')).toEqual([expect.objectContaining({ level: 'error', message: expect.stringContaining('"Viet/Nam" không phải múi giờ hợp lệ') })]);
   });
 
   it('leak scan: a clue / answer copied into a static folder is found, short answers are not searched', () => {

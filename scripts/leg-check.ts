@@ -173,16 +173,11 @@ function points(leg: Leg): Pt[] {
   return out;
 }
 
-/** Summary + warnings that need the map (water, bridges, timezone) + bike-rack suggestions. */
+/** Summary + warnings that need the map (water, bridges) + bike-rack suggestions. A bad time zone is an error of checkLeg. */
 function mapReport(leg: Leg, map: MapData) {
   const issues: LegIssue[] = [];
   const lines: string[] = [];
   const add = (level: LegIssue['level'], path: PropertyKey[], message: string) => issues.push({ level, where: placeOf(leg, path), message });
-  try {
-    new Intl.DateTimeFormat('en', { timeZone: leg.timezone });
-  } catch {
-    add('warning', ['timezone'], `"${leg.timezone}" không phải múi giờ hợp lệ (ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"); giờ xuất phát của Host sẽ bị hiểu sai`);
-  }
   const rackPts = new Set<string>();
   const racks: [number, number][] = [];
   for (let i = 0; i < map.graph.file.bikeParking.length; i += 2) racks.push([map.graph.file.bikeParking[i]! / 10, map.graph.file.bikeParking[i + 1]! / 10]);
@@ -207,7 +202,7 @@ function mapReport(leg: Leg, map: MapData) {
     lines.push(`• ${p.step === 0 ? 'Xuất phát' : `Bước ${p.step} (${p.id}, ${kind})`}: ${p.label || '(chưa đặt tên)'}${p.r ? ` — vùng ${p.r} m` : ''} — ${walk}`);
     lines.push(`    ${street ?? 'không có tên đường gần đó'}${dis ? `, Quận ${dis}` : ''} — ${lat}, ${lon}`);
     lines.push(`    Bản đồ: https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=19/${lat}/${lon}`);
-    lines.push(`    Xem: npm run screenshot -- --path "/preview.html?at=${lat},${lon}&r=80" --name leg-${p.id.replace(/\W+/g, '-')}`);
+    lines.push(`    Xem: npm run screenshot -- --path "/preview.html?at=${lat},${lon}&r=80" --name leg-${p.step === 0 ? 'start' : p.id.replace(/\W+/g, '-')}`);
     const where = p.path;
     const bridge = map.onBridge(p.x, p.z);
     const wet = map.inWater(p.x, p.z);

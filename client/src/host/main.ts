@@ -257,7 +257,7 @@ function drawStart(s: State) {
     const tbl = rows.map((r) => {
       const input = el('input', { type: 'datetime-local', step: '1', value: drafts.get(r.id) ?? r.input });
       input.addEventListener('input', () => (drafts.set(r.id, input.value), updatePreviews()));
-      const out = el('span', { className: 'note' });
+      const out = el('span', { className: 'note preview' });
       previews.set(r.id, { input, out });
       const save = () => {
         const at = inputToMs(input.value, tz);
@@ -265,18 +265,19 @@ function drawStart(s: State) {
         if (send({ t: 'host.team', op: 'startAt', team: r.id, at })) drafts.delete(r.id);
         else addNotice('error', 'Đang mất kết nối, chưa gửi được.');
       };
+      // short columns first, the wide input last: "Bước hiện tại" / "Phạt" stay visible at 1024 px (review: Host tables)
       return el('tr', {},
         el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
-        el('td', {}, r.startOrder),
-        el('td', {}, r.joined),
-        el('td', {}, input, ' ', el('button', { className: 'small', onclick: save }, 'Lưu'), ' ', el('button', { className: 'small', onclick: () => (drafts.delete(r.id), send({ t: 'host.team', op: 'startAt', team: r.id, at: 'now' })) }, 'Bây giờ'), ' ', el('button', { className: 'small', disabled: r.startAt === null, onclick: () => (drafts.delete(r.id), send({ t: 'host.team', op: 'startAt', team: r.id, at: null })) }, 'Xóa'), ' ', out),
         el('td', {}, r.stepLabel),
         el('td', {}, r.penalty),
+        el('td', {}, r.startOrder),
+        el('td', {}, r.joined),
+        el('td', {}, input, ' ', el('button', { className: 'small', onclick: save }, 'Lưu'), ' ', el('button', { className: 'small', onclick: () => (drafts.delete(r.id), send({ t: 'host.team', op: 'startAt', team: r.id, at: 'now' })) }, 'Bây giờ'), ' ', el('button', { className: 'small', disabled: r.startAt === null, onclick: () => (drafts.delete(r.id), send({ t: 'host.team', op: 'startAt', team: r.id, at: null })) }, 'Xóa'), out),
       );
     });
     startBox.replaceChildren(
       el('p', { className: 'note' }, `Giờ nhập theo múi giờ của chặng: ${tz} (không phải múi giờ máy này). Đây là lúc đội nhận mật thư đầu tiên ngoài game.`),
-      tbl.length ? el('div', { className: 'scroll' }, el('table', {}, el('tr', {}, ...['Đội', 'Xuất phát thứ', 'Vào game lúc', 'Giờ xuất phát', 'Bước hiện tại', 'Phạt'].map((t) => el('th', {}, t))), ...tbl)) : 'Chưa có đội nào.',
+      tbl.length ? el('div', { className: 'scroll' }, el('table', { className: 'pin' }, el('tr', {}, ...['Đội', 'Bước hiện tại', 'Phạt', 'Thứ tự vào', 'Vào game lúc', 'Giờ xuất phát'].map((t) => el('th', {}, t))), ...tbl)) : 'Chưa có đội nào.',
     );
     updatePreviews();
   });
@@ -288,10 +289,10 @@ function updatePreviews() {
   if (!s) return;
   const tz = s.leg?.timezone ?? 'Asia/Ho_Chi_Minh';
   const now = s.serverMs + (Date.now() - receivedAt);
-  for (const { input, out } of previews.values()) {
-    const p = input.value ? startPreview(inputToMs(input.value, tz), now) : null;
+  for (const [id, { input, out }] of previews) {
+    const p = input.value ? startPreview(inputToMs(input.value, tz), now, s.teams.find((t) => t.id === id)?.finishAt ?? null) : null;
     out.textContent = p?.text ?? '';
-    out.className = `note ${p?.level ?? ''}`;
+    out.className = `note preview ${p?.level ?? ''}`;
   }
 }
 
@@ -299,13 +300,13 @@ function drawMatrix(s: State, now: number) {
   const { head, rows } = progressTable(s, now, showT ? 't' : 'real');
   if (!rows.length) return void matrixBox.replaceChildren('Chưa có đội nào.');
   const th = (t: string, title = '') => el('th', { title }, t);
-  matrixBox.replaceChildren(el('div', { className: 'scroll' }, el('table', { className: 'matrix' },
-    el('tr', {}, th('Hạng'), th('Đội'), ...head.map((h) => th(h.label, h.title)), th('Phạt'), th('Về đích'), th('Chính thức'), th('Cách')),
+  // team (pinned) + ranking columns before the step columns: the result is readable at 1024 px without scrolling sideways
+  matrixBox.replaceChildren(el('div', { className: 'scroll' }, el('table', { className: 'matrix pin' },
+    el('tr', {}, th('Đội'), th('Hạng'), th('Chính thức'), th('Cách'), th('Phạt'), th('Về đích'), ...head.map((h) => th(h.label, h.title))),
     ...rows.map((r) => el('tr', {},
-      el('td', {}, r.rank),
       el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
+      el('td', {}, r.rank), el('td', {}, r.official), el('td', {}, r.gap), el('td', {}, r.penalty), el('td', {}, r.finish),
       ...r.cells.map((c) => el('td', { className: `cell ${c.state}`, title: c.title }, c.text)),
-      el('td', {}, r.penalty), el('td', {}, r.finish), el('td', {}, r.official), el('td', {}, r.gap),
     )),
   )));
 }
