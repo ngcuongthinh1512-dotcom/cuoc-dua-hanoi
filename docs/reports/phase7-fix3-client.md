@@ -99,8 +99,12 @@ Test `CharacterModel.test.ts` › "name tag": LOD của NPC dẫn ẩn ở `tagD
 
 ## Cổng kiểm tra
 
+Kết quả cuối, chạy trên cây đã commit `775d9c5` (gồm cả bản sửa vòng 3 của server và host-tools):
 - `npm run build` qua.
-- `client` vitest: 64 file / 627 test qua (vòng 2: 624; thêm 3 test).
-- Toàn bộ `npm test`: xem phần kết quả trả về. Lúc chạy lần đầu, `scripts/leg-check.test.ts` ("paris-demo") fail. File này thuộc khu vực của agent host-tools đang sửa dở (`scripts/leg-check.ts` chưa commit), không liên quan tới client.
+- `npm test` qua: scripts 47, shared 45, client 627 (vòng 2: 624; thêm 3 test), worker 90.
+
+Trong lúc các agent khác còn sửa dở, có hai lần chạy fail, cả hai nằm ngoài phần client và đều hết sau khi họ commit:
+- `scripts/leg-check.test.ts` ("paris-demo"), khi `scripts/leg-check.ts` chưa commit.
+- `worker/src/RaceRoom.live.test.ts` ("a reconnect or a first pose…"), khi điểm xuất phát trong `worker/legs/test/mini.json` chưa commit.
 
 Các script tạm (đo xe, e2e) nằm trong scratchpad, không vào repo. Không để lại vite / wrangler / workerd chạy nền.
