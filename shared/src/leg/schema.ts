@@ -55,6 +55,10 @@ export const taskSchema = z.strictObject({
   answers: z.array(z.string().max(200)).default([]),
   proofInstruction: text().default(''),
   timeLimitMinutes: z.number().positive().nullable().default(null),
+  /** Mini-game parameters of kinds other than answer / free (object positions, target photo + heading, gates…: SPEC
+   *  §11). Phase 7 stores them unchecked so a real leg can be written now; Phase 8 validates them per kind and decides
+   *  what reaches the team (never sent in Phase 7: cardOf leaves them out, like `answers`). */
+  params: z.record(z.string(), z.unknown()).optional(),
 });
 
 const routeInfo = z.strictObject({

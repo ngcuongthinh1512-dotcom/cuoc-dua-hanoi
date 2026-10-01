@@ -1060,8 +1060,8 @@ export const hostPage = {
 
 // ── B · client race integration (race/RaceClient.ts, race/PitStop.ts, ClueBoxes, main.ts, Player.ts) ──
 export const raceClient = {
-  checkinEveryMs: 2000, // on the Pit Stop mat after the penalty wait: `race checkin` at most this often (SPEC §8.6)
-  headroom: 2.2, // m: a spawn / box under a deck (Bir-Hakeim metro viaduct) goes to the lowest walkable surface with this much free space above
+  checkinEveryMs: 2000, // standing in the Pit Stop mat zone, not finished yet: `race checkin` this often (SPEC §8.6; idempotent on the server)
+  // D17: a server spawn / clue box takes the highest walkable surface EXCEPT a rail viaduct top (Bir-Hakeim metro deck)
 };
 
 // ── C · race HUD widgets (race/ui/*: clue card, Sổ mật thư, start-order banner, Pit Stop line, zone panel; ui/HUD.ts clock) ──

@@ -1,9 +1,9 @@
 // Phase 6 wire contract (docs/plans/phase6.md §5.1) + Phase 7 race engine (docs/plans/phase7.md §5.1). Hot messages
 // (poses, ticks) are plain number arrays rounded to cm (SPEC §3); everything else is a small JSON object with a `t` tag.
 // Changing a shape = PROTOCOL_VERSION + 1. Leg literals come from the leg schema as types only (no zod in the client).
-import type { StepType, TaskKind, Transport, Verification } from '../leg/schema.ts';
+import type { StepType, TaskKind, Transport, Verification, VehiclesConfig } from '../leg/schema.ts';
 
-export type { StepType, TaskKind, Transport, Verification };
+export type { StepType, TaskKind, Transport, Verification, VehiclesConfig };
 
 /** Locomotion modes (client/src/player/types.ts MoveMode derives from this); the wire sends the index. */
 export const MOVE_MODES = ['walk', 'slow', 'swim', 'air', 'bike'] as const;
@@ -200,8 +200,10 @@ export type HostMessage =
   /** Phase 7: open the race (lobby → running), pause / resume (race ops refused while paused, clocks run on: decision
    *  D9), end the leg (SPEC §13.3). */
   | { t: 'host.race'; op: 'start' | 'pause' | 'resume' | 'finish' }
-  /** Phase 7 (SPEC §17.12): when the team got its first clue outside the game (server ms), null = clear. */
-  | { t: 'host.team'; op: 'startAt'; team: string; at: number | null }
+  /** Phase 7 (SPEC §17.12): when the team got its first clue outside the game (server ms), null = clear, 'now' = the
+   *  server stamps its own clock (the "Bây giờ" button: the Host machine's clock may be off). Refused (host.notice) when
+   *  later than the server's now + 60 s; a warning when later than the team's first entry (it got the clue before). */
+  | { t: 'host.team'; op: 'startAt'; team: string; at: number | null | 'now' }
   /** Phase 7: load a bundled leg (`id`) or a leg file the Host picked (`json` text), lobby only; answer: host.legResult. */
   | { t: 'host.leg'; id?: string; json?: string };
 
@@ -264,6 +266,9 @@ export type ServerMessage =
   | { t: 'zone'; teams: ZoneMember[] }
   /** Phase 7: answer to `host.leg`. */
   | { t: 'host.legResult'; ok: boolean; issues: LegIssueView[] }
+  /** Phase 7: a Host op refused or worth a warning (start time in the future, host.leg after teams entered, a race
+   *  status change that does not apply…), Vietnamese text shown on the Host page. */
+  | { t: 'host.notice'; level: 'error' | 'warning'; message: string }
   | HostState;
 
 /** Host screen state (every ≤ 1 s while it changes); Phase 6 shows codes, online status and the quota counters. */
@@ -275,14 +280,30 @@ export interface HostState {
     code: string; player: string; lastSeen: number | null; reconnects: number; pose: PoseSample | null; flagged: boolean;
     /** Phase 7: SPEC §17.12 start time (server ms, Host input), first-entry order, current step index, check-in, penalty. */
     startAt: number | null; startOrder: number | null; step: number; finishAt: number | null; penaltyMinutes: number;
+    /** server ms of the team's first entry into the game (the start time should be before it). */
+    joinedAt: number | null;
   })[];
   counters: QuotaCounters;
   bikes: BikeInfo[];
   spawning: { paused: boolean; candidates: number; nextAt: number | null };
-  /** Leg points (start + step destinations, world m) for the Host page's bike corridors (tracks C / D). */
+  /** Phase 6 leg points (demo leg). Phase 7 track A drops it once the Host page (track E) reads `leg` below. */
   steps?: { id: string; x: number; z: number }[];
-  /** Phase 7: the loaded leg (Host only: names included), the bundled legs it may load, its readiness issues (§13.1). */
-  leg: { id: string; title: string; steps: { id: string; type: StepType; label: string; name: string }[]; bundled: string[]; issues: LegIssueView[] } | null;
+  /** Phase 7: the loaded leg (Host only: names + zones included), the bundled legs it may load, its readiness issues
+   *  (§13.1). The Host page builds the bike corridors from start → every zone in order (both branch places of a
+   *  detour) and keeps bikes ≥ vehicles.minDistanceFromCheckpoint from every zone (SPEC §6.2 (2)); it recomputes the
+   *  candidates by itself whenever `id` changes. */
+  leg: {
+    id: string;
+    title: string;
+    /** IANA zone the Host's start-time input is read in (leg.timezone). */
+    timezone: string;
+    start: { x: number; z: number };
+    /** stepZones(leg) per step (+ branchZone of each detour branch). */
+    steps: { id: string; type: StepType; label: string; name: string; x: number; z: number; r: number; branches?: { id: string; name: string; x: number; z: number; r: number }[] }[];
+    vehicles: VehiclesConfig;
+    bundled: string[];
+    issues: LegIssueView[];
+  } | null;
   /** Phase 7: step_progress rows (SPEC §8.1) and the ranking (§13.6 / §13.8). */
   progress: StepProgressView[];
   ranking: RankRow[];

@@ -33,7 +33,7 @@ const FIELD: Record<string, string> = {
   transport: 'phương tiện', destination: 'điểm đến', name: 'tên', lat: 'vĩ độ (lat)', lon: 'kinh độ (lon)', radius: 'bán kính',
   bikeParking: 'bãi xe', branches: 'nhánh', task: 'nhiệm vụ', description: 'mô tả', media: 'ảnh/video', location: 'nơi làm nhiệm vụ',
   kind: 'kiểu nhiệm vụ', verification: 'cách xác nhận', answers: 'đáp án', proofInstruction: 'hướng dẫn gửi bài',
-  timeLimitMinutes: 'giới hạn thời gian (phút)', teaser: 'câu gợi ý', summary: 'mô tả ngắn', yawDeg: 'hướng nhìn (độ)',
+  timeLimitMinutes: 'giới hạn thời gian (phút)', params: 'tham số mini-game', teaser: 'câu gợi ý', summary: 'mô tả ngắn', yawDeg: 'hướng nhìn (độ)',
   spreadMeters: 'khoảng rải đội (m)', contactUrl: 'link Facebook của Host', contactLabel: 'chữ trên nút gửi bài',
 };
 const TYPE: Record<string, string> = { number: 'một số', string: 'chữ (trong dấu ngoặc kép)', boolean: 'true hoặc false', array: 'danh sách [...]', object: 'một khối {...}' };
@@ -169,25 +169,46 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
       for (const [t, p] of texts) if (normalizeAnswer(t).includes(a)) add('warning', p, `chứa đáp án "${a}" của bước ${i + 1} (${s.id}): đội đọc được trước khi giải`);
   });
 
-  // map data (CLI only)
+  // map data (CLI only): every point a team must reach (step zones, each detour branch's own place) is outside buildings
+  // and walkable from every point of the step before (both branch places → the next step); bike racks outside buildings
+  // and outside their zone (SPEC §6.4: next to the point, not in it).
   if (geo) {
     const zones = stepZones(leg);
+    type Pt = { x: number; z: number; r: number; id: string; path: PropertyKey[] };
     const s0 = latLonToWorld(leg.start.lat, leg.start.lon);
-    let prev = { x: s0.x, z: s0.z, id: 'xuất phát' };
-    const where = (i: number): PropertyKey[] => {
-      const s = steps[i]!;
-      return s.type === 'route_info' || s.type === 'pit_stop' ? ['steps', i, 'destination'] : ['steps', i, 'task', 'location'];
-    };
-    const sb = geo.building(prev.x, prev.z);
+    let prevs: Pt[] = [{ x: s0.x, z: s0.z, r: 0, id: 'xuất phát', path: ['start'] }];
+    const sb = geo.building(s0.x, s0.z);
     if (sb) add('error', ['start'], `nằm trong một tòa nhà (${sb}); dời ra vỉa hè / quảng trường`);
-    zones.forEach((z, i) => {
-      if (z.x === prev.x && z.z === prev.z) return; // same point as before (task here, the Pit Stop after its route)
-      const b = geo.building(z.x, z.z);
-      if (b) add('error', where(i), `tâm vùng nằm trong một tòa nhà (${b}); dời ra vỉa hè / quảng trường`);
-      const w = geo.walk(prev, z);
-      if (!w) add('error', where(i), `không đi bộ tới được từ ${prev.id} theo đồ thị đường`);
-      else if (w.snapB > z.r) add('warning', where(i), `đường đi bộ gần nhất cách tâm ${Math.round(w.snapB)} m, xa hơn bán kính ${z.r} m`);
-      prev = { x: z.x, z: z.z, id: `bước ${i + 1} (${steps[i]!.id})` };
+    const rack = (d: { lat: number; lon: number; radius: number; bikeParking?: { lat: number; lon: number } | undefined } | null, path: PropertyKey[]) => {
+      if (!d?.bikeParking) return;
+      const [c, p] = [latLonToWorld(d.lat, d.lon), latLonToWorld(d.bikeParking.lat, d.bikeParking.lon)];
+      const b = geo.building(p.x, p.z);
+      if (b) add('error', [...path, 'bikeParking'], `bãi xe nằm trong một tòa nhà (${b}); dời ra vỉa hè`);
+      const dist = Math.hypot(p.x - c.x, p.z - c.z);
+      if (dist <= d.radius) add('warning', [...path, 'bikeParking'], `bãi xe cách tâm ${Math.round(dist)} m, nằm trong vùng (bán kính ${d.radius} m); nên đặt ngoài vùng ≈ ${leg.vehicles.bikeParking.offsetMeters} m`);
+    };
+    steps.forEach((s, i) => {
+      const own: Pt[] =
+        s.type === 'detour'
+          ? s.branches.map((b, k) => ({ ...(b.task.location ? latLonToWorld(b.task.location.lat, b.task.location.lon) : zones[i]!), r: b.task.location?.radius ?? zones[i]!.r, id: `bước ${i + 1} (${s.id}) nhánh ${b.id}`, path: ['steps', i, 'branches', k, 'task', 'location'] }))
+          : [{ ...zones[i]!, id: `bước ${i + 1} (${s.id})`, path: s.type === 'route_info' || s.type === 'pit_stop' ? ['steps', i, 'destination'] : ['steps', i, 'task', 'location'] }];
+      if (s.type === 'route_info' || s.type === 'pit_stop') rack(s.destination, ['steps', i, 'destination']);
+      if (s.type === 'challenge') rack(s.task.location, ['steps', i, 'task', 'location']);
+      if (s.type === 'detour') s.branches.forEach((b, k) => rack(b.task.location, ['steps', i, 'branches', k, 'task', 'location']));
+      const next: Pt[] = [];
+      for (const z of own) {
+        const from = prevs.filter((p) => p.x !== z.x || p.z !== z.z);
+        if (from.length < prevs.length) { next.push(z); continue; } // same point as before (task here, the Pit Stop after its route)
+        const b = geo.building(z.x, z.z);
+        if (b) add('error', z.path, `tâm vùng nằm trong một tòa nhà (${b}); dời ra vỉa hè / quảng trường`);
+        for (const p of from) {
+          const w = geo.walk(p, z);
+          if (!w) add('error', z.path, `không đi bộ tới được từ ${p.id} theo đồ thị đường`);
+          else if (w.snapB > z.r) add('warning', z.path, `đường đi bộ gần nhất cách tâm ${Math.round(w.snapB)} m, xa hơn bán kính ${z.r} m`);
+        }
+        next.push(z);
+      }
+      prevs = next;
     });
   }
   return out;

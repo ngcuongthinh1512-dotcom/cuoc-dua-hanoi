@@ -41,3 +41,25 @@ export class SpeedWindow {
 
 /** True when `w` moved faster than `limit` m/s × tolerance (SPEC: foot ≤ footSpeed, bike ≤ footSpeed × multiplier). */
 export const overSpeed = (w: SpeedWindow, limit: number, tolerance: number = NET.speedTolerance) => w.speed > limit * tolerance;
+
+/** Phase 7 geofence trust (docs/plans/phase7.md D4; critic: a pose after ≥ 3 s standing still, a reconnect's first pose
+ *  and a respawn all passed the window above unchecked). The server's trusted point follows the client's poses at no
+ *  more than `rate` m/s: a bucket refilled by `rate` × elapsed time, capped at `cap` m (bunched poses after a short
+ *  stall), plus `grant` m on top (a reconnect: the time unseen at bike speed; a respawn ≤ NET.respawnTrust). A pose out of
+ *  reach moves the point only by the budget left, so no single message can carry a team into a zone or the box-reveal
+ *  radius; an honest client the point lags behind (long stall) is caught up at `rate`. Returns the m that did not fit
+ *  (> 0 → RaceRoom.teleport(): event + flag). */
+export class TrustedPoint {
+  constructor(public x: number, public z: number, public at: number, public budget = 0) {}
+
+  follow(now: number, x: number, z: number, rate: number, cap: number, grant = 0): number {
+    this.budget = Math.min(cap, this.budget + (rate * Math.max(0, now - this.at)) / 1000) + grant;
+    this.at = now;
+    const d = Math.hypot(x - this.x, z - this.z);
+    const k = d <= this.budget ? 1 : this.budget / d;
+    this.x += (x - this.x) * k;
+    this.z += (z - this.z) * k;
+    this.budget -= d * k;
+    return d * (1 - k);
+  }
+}

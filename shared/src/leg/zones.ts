@@ -10,11 +10,23 @@ export interface Zone {
   r: number;
   /** destination / task location name (Host only: never sent to a team before the step is done). */
   name: string;
+  /** SPEC §6.4 rack id, keyed by the POINT (rounded centre), not by the step: several steps done at one point (a route's
+   *  box, then a challenge / detour there) share one rack, so vehicles.bikeParking.maxBikes counts right. */
+  rack: string;
+  /** Where that rack stands (the point's bikeParking), null = none in the file (the bike stays where it stands). */
+  parking: { x: number; z: number } | null;
 }
+
+const rackId = (x: number, z: number) => `rack:${Math.round(x)}_${Math.round(z)}`;
+
+const xz = (p: { lat: number; lon: number }) => {
+  const w = latLonToWorld(p.lat, p.lon);
+  return { x: w.x, z: w.z };
+};
 
 const zone = (d: Destination): Zone => {
   const p = latLonToWorld(d.lat, d.lon);
-  return { x: p.x, z: p.z, r: d.radius, name: d.name };
+  return { x: p.x, z: p.z, r: d.radius, name: d.name, rack: rackId(p.x, p.z), parking: d.bikeParking ? xz(d.bikeParking) : null };
 };
 
 /** Index-aligned with leg.steps:
@@ -26,7 +38,7 @@ const zone = (d: Destination): Zone => {
 export function stepZones(leg: Leg): Zone[] {
   const out: Zone[] = [];
   const s0 = latLonToWorld(leg.start.lat, leg.start.lon);
-  let prev: Zone = { x: s0.x, z: s0.z, r: LEG_LIMITS.radiusMax, name: leg.start.name };
+  let prev: Zone = { x: s0.x, z: s0.z, r: LEG_LIMITS.radiusMax, name: leg.start.name, rack: rackId(s0.x, s0.z), parking: null };
   leg.steps.forEach((s, i) => {
     const next = leg.steps[i + 1];
     const z =

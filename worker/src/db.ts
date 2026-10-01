@@ -74,12 +74,17 @@ export const emptyProgress = (team: string, step: string): StepProgressRow => ({
 export const readProgress = (sql: SqlStorage) => sql.exec<StepProgressRow>('SELECT * FROM step_progress').toArray();
 
 const PROGRESS_COLS = Object.keys(emptyProgress('', ''));
-/** Upsert of the whole row: 1 row written (WITHOUT ROWID, no other index). */
-export function writeProgress(sql: SqlStorage, r: StepProgressRow) {
-  sql.exec(
-    `INSERT OR REPLACE INTO step_progress (${PROGRESS_COLS.join(', ')}) VALUES (${PROGRESS_COLS.map(() => '?').join(', ')})`,
+/** Upsert of the whole row (WITHOUT ROWID, no other index). ON CONFLICT DO UPDATE, not INSERT OR REPLACE: a REPLACE is
+ *  a delete + insert and Cloudflare bills deletes as rows written. Returns the rows SQLite says it wrote (add them to
+ *  counters.rows: the budget test measures, it does not trust our own count). */
+export function writeProgress(sql: SqlStorage, r: StepProgressRow): number {
+  const cur = sql.exec(
+    `INSERT INTO step_progress (${PROGRESS_COLS.join(', ')}) VALUES (${PROGRESS_COLS.map(() => '?').join(', ')})
+     ON CONFLICT (team, step) DO UPDATE SET ${PROGRESS_COLS.slice(2).map((c) => `${c} = excluded.${c}`).join(', ')}`,
     ...PROGRESS_COLS.map((c) => r[c] ?? null),
   );
+  cur.toArray();
+  return cur.rowsWritten;
 }
 
 export interface EventRow extends Record<string, SqlStorageValue> {

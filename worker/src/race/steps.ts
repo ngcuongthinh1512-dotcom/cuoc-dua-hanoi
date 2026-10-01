@@ -36,8 +36,15 @@ export type RaceEffect =
   /** Step done; the team now holds the clue of step + 1 (received at the same `now`). */
   | { kind: 'complete'; step: number }
   | { kind: 'finish' }
-  /** SPEC §6.4: the team's bike goes to the rack of `step`'s zone (a task clue / a walk-only route was just received). */
-  | { kind: 'park'; step: number }
+  /** SPEC §6.4: the team's bike (if it holds one) goes to the rack of the point where the team STANDS — never the point
+   *  ahead (docs/plans/phase7.md D18). Emitted:
+   *   - with `complete` of step k when the clue now received (k + 1) is a task done at that point or a walk-only route →
+   *     zones[k].rack / zones[k].parking (the point of the box just opened, NOT zones[k + 1]: for a walk-only route that
+   *     is the destination ahead);
+   *   - with `arrive` in a task zone somewhere else (challenge task.location, a detour branch's location) → that zone's
+   *     rack (the team rode there; it walks only inside the task area).
+   *  `rack` = Zone.rack (keyed by point), `at` = Zone.parking (null = the bike stays where it stands). */
+  | { kind: 'park'; rack: string; at: { x: number; z: number } | null }
   | { kind: 'refuse'; code: ServerNotice };
 
 /** Phase 7 verdict source (race/tasks.ts verifyTask); injected so tests can fail a task. */

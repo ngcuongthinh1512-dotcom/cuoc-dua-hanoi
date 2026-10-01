@@ -123,7 +123,9 @@ describe('frames and JSON messages', () => {
     expect(isClientMessage({ t: 'host.race', op: 'restart' }, 'host')).toBe(false);
     expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 1_790_000_000_000 }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: null }, 'host')).toBe(true);
-    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 'now' }, 'host')).toBe(false);
+    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 'now' }, 'host')).toBe(true); // server stamps
+    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 'soon' }, 'host')).toBe(false);
+    expect(isClientMessage({ t: 'race', op: 'book' }, 'host')).toBe(false); // the Host socket has no team
     expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 1 }, 'team')).toBe(false);
     expect(isClientMessage({ t: 'host.leg', id: 'paris-demo' }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.leg', json: '{}' }, 'host')).toBe(true);

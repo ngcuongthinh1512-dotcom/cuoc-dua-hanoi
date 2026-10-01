@@ -21,7 +21,11 @@
         "name": "Sân trước Palais de Chaillot",
         "lat": 48.86215,
         "lon": 2.28843,
-        "radius": 35
+        "radius": 35,
+        "bikeParking": {
+          "lat": 48.8625,
+          "lon": 2.2878
+        }
       }
     },
     {
@@ -29,12 +33,27 @@
       "type": "challenge",
       "label": "Thử thách 1",
       "task": {
-        "title": "(GIẢ) Câu hỏi",
+        "title": "(GIẢ) Câu hỏi ở vườn Trocadéro",
         "description": "(GIẢ) 6 × 7 = ?",
+        "media": [
+          "https://example.invalid/gia/vuon-trocadero.jpg"
+        ],
+        "location": {
+          "name": "Vườn Trocadéro (phía dưới)",
+          "lat": 48.8605,
+          "lon": 2.2903,
+          "radius": 30,
+          "bikeParking": {
+            "lat": 48.8601,
+            "lon": 2.2899
+          }
+        },
         "answers": [
           "42"
-        ]
-      }
+        ],
+        "timeLimitMinutes": 10
+      },
+      "teaser": "(GIẢ) Đi xuống vườn, tìm chỗ có tiếng nước."
     },
     {
       "id": "L2",
@@ -79,7 +98,17 @@
             "description": "(GIẢ) Chụp màn hình dưới chân tháp.",
             "kind": "free",
             "verification": "host_approval",
-            "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook."
+            "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook.",
+            "location": {
+              "name": "Bãi cỏ Champ de Mars",
+              "lat": 48.8562,
+              "lon": 2.2978,
+              "radius": 30,
+              "bikeParking": {
+                "lat": 48.8558,
+                "lon": 2.2972
+              }
+            }
           }
         }
       ]

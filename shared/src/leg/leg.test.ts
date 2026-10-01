@@ -105,7 +105,24 @@ describe('leg schema', () => {
     };
     expect(checkLeg(leg, geo).map((i) => `${i.where}: ${i.message}`)).toEqual([
       'Bước 1 (L1) › điểm đến: tâm vùng nằm trong một tòa nhà (yes); dời ra vỉa hè / quảng trường',
-      'Bước 4 (L2) › điểm đến: không đi bộ tới được từ bước 1 (L1) theo đồ thị đường',
+      'Bước 4 (L2) › điểm đến: không đi bộ tới được từ bước 3 (D1) nhánh A theo đồ thị đường',
+      'Bước 4 (L2) › điểm đến: không đi bộ tới được từ bước 3 (D1) nhánh B theo đồ thị đường',
+    ]);
+  });
+
+  it('checks a detour branch at its own place and the bike racks (critic: both were skipped)', () => {
+    const j = mini() as Mini;
+    (j.steps[0] as { destination: object }).destination = { ...dest(48.8662, 2.3195), bikeParking: { lat: 48.8662, lon: 2.3196 } };
+    const leg = legSchema.parse(j);
+    const b = latLonToWorld(48.867, 2.318);
+    const geo = {
+      building: (x: number, z: number) => (Math.hypot(x - b.x, z - b.z) < 1 ? 'apartments' : null),
+      walk: (a: { x: number; z: number }, to: { x: number; z: number }) => (Math.hypot(a.x - b.x, a.z - b.z) < 1 && to.z > 0 ? null : { meters: 100, snapA: 1, snapB: 2 }),
+    };
+    expect(checkLeg(leg, geo).map((i) => `${i.level} ${i.where}: ${i.message}`)).toEqual([
+      'warning Bước 1 (L1) › điểm đến › bãi xe: bãi xe cách tâm 7 m, nằm trong vùng (bán kính 20 m); nên đặt ngoài vùng ≈ 20 m',
+      'error Bước 3 (D1) › nhánh B › nhiệm vụ › nơi làm nhiệm vụ: tâm vùng nằm trong một tòa nhà (apartments); dời ra vỉa hè / quảng trường',
+      'error Bước 4 (L2) › điểm đến: không đi bộ tới được từ bước 3 (D1) nhánh B theo đồ thị đường',
     ]);
   });
 
@@ -132,6 +149,13 @@ describe('zones', () => {
     expect(branchZone(leg, zones, 2, 'A')).toBe(zones[0]);
     expect(branchZone(leg, zones, 2, 'B')).toMatchObject({ r: 30, x: at(48.867, 2.318).x });
     expect(branchZone(leg, zones, 1, 'A')).toBeNull();
+  });
+
+  it('keys bike racks by point, not by step (critic B1: L1 box + T1 + D1 at one point = one rack)', () => {
+    expect(new Set(zones.slice(0, 3).map((z) => z.rack)).size).toBe(1);
+    expect(zones[3]!.rack).toBe(zones[4]!.rack);
+    expect(zones[0]!.rack).not.toBe(zones[3]!.rack);
+    expect(zones[0]!.parking).toBeNull();
   });
 
   it('spreads teams arriving together around the start, inside spreadMeters', () => {

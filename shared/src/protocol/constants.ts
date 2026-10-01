@@ -36,6 +36,9 @@ export const NET = {
   /** SPEC §17.10: the server compares each online team's last pose with its current clue box this often (one sqrt per
    *  team, no SQLite); radius + hysteresis come from the leg file (boxReveal). */
   boxCheckMs: 2_000,
+  /** Phase 7 (D4): a respawn this short (quay stairs, "Kẹt?" safe spot, fell through) moves the trusted point at once;
+   *  a longer one only at the trust rate (TrustedPoint), and is a teleport. */
+  respawnTrust: 30,
   /** Phase 7: m added to a geofence radius when the server judges an op (open / task / checkin) against the last valid
    *  pose: the pose is ≤ 200 ms old (≈ 1 m at bike speed) and the box stands at the zone's centre anyway. */
   geofenceSlack: 2,

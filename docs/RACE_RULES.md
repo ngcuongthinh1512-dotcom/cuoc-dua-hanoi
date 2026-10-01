@@ -238,7 +238,7 @@ Tổng phút phạt luôn hiện ở góc trên bên phải, cạnh đồng hồ
 - **Thời gian chính thức** = giờ check-in trên thảm − giờ xuất phát của đội bạn − thời gian chờ Host duyệt (nếu chặng có bù giờ).
 - Thời gian đứng chờ hết phạt **đã nằm trong** thời gian chính thức.
 - Mỗi đội tính từ giờ xuất phát riêng của mình.
-- **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hộp mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục. **Đồng hồ vẫn chạy và thời gian tạm dừng không được trừ** khỏi thời gian chính thức.
+- **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hộp mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục. **Đồng hồ vẫn chạy và thời gian tạm dừng không được trừ** khỏi thời gian chính thức. Việc bạn **tới** một điểm trong lúc tạm dừng vẫn được ghi đúng giờ. Hệ quả: đội đang đi đường gần như không mất gì (vẫn đi tiếp được), còn đội đang đứng ở hộp mật thư hoặc trên thảm thì phải chờ hết thời gian tạm dừng. Khi Host cho tiếp tục, đội đang đứng trên thảm được check-in ngay, không cần di chuyển.
 - Thời gian chính thức càng ngắn, thứ hạng càng cao. Host bấm **"Công bố kết quả"** để gửi thứ hạng chính thức tới mọi người chơi.
 
 ## 12. Thoát ra & vào lại

@@ -484,8 +484,8 @@ export class RaceRoom extends DurableObject<Env> {
     const online = this.online();
     const teams = this.teams().map((t) => {
       const s = this.teamState(t);
-      const { startAt, startOrder, step, finishAt, penaltyMinutes } = s;
-      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, startAt, startOrder, step, finishAt, penaltyMinutes };
+      const { startAt, startOrder, step, finishAt, penaltyMinutes, joinedAt } = s;
+      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, startAt, startOrder, step, finishAt, penaltyMinutes, joinedAt };
     });
     // Phase 7 foundation: leg / progress / ranking empty until track A wires race/engine.ts (engine.hostView).
     return { t: 'host.state', serverMs: now, status: this.status, teams, counters: this.counters.toJSON(), bikes: this.bikes.list(), spawning: this.bikes.spawning, steps: legPoints(), leg: null, progress: [], ranking: [] };

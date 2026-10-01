@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NET } from './constants.ts';
-import { overSpeed, SpeedWindow } from './speed.ts';
+import { overSpeed, SpeedWindow, TrustedPoint } from './speed.ts';
 
 /** Feeds `seconds` of straight motion at `mps` (5 Hz), starting at t0, x0. */
 function walk(w: SpeedWindow, t0: number, x0: number, mps: number, seconds: number) {
@@ -62,5 +62,30 @@ describe('SpeedWindow', () => {
     v.push(3200, 300, 0); // the same jump without a respawn message
     walk(v, 3400, 300, 4, 1);
     expect(overSpeed(v, 4)).toBe(true);
+  });
+});
+
+describe('TrustedPoint (Phase 7 geofence, docs/plans/phase7.md D4)', () => {
+  const rate = 4 * 1.3 * NET.speedTolerance; // bike limit, m/s
+  const cap = (rate * NET.speedLeadMs) / 1000;
+
+  it('follows an honest walker exactly, bunched poses after a short stall included', () => {
+    const p = new TrustedPoint(0, 0, 0);
+    for (let i = 1; i <= 10; i++) expect(p.follow(i * 200, i * 0.8, 0, rate, cap)).toBe(0);
+    for (let i = 1; i <= 8; i++) expect(p.follow(3600 + i, 8 + i * 0.8, 0, rate, cap)).toBe(0); // 1.6 s stall, 8 at once
+    expect(p.x).toBeCloseTo(14.4);
+  });
+
+  it('stand still 3.5 s, then a pose 2 km away: moves only the capped budget, the rest is a teleport', () => {
+    const p = new TrustedPoint(0, 0, 0);
+    expect(p.follow(3500, 2000, 0, rate, cap)).toBeCloseTo(2000 - cap);
+    expect(p.x).toBeCloseTo(cap);
+    expect(p.follow(3700, 2000, 0, rate, cap)).toBeGreaterThan(1900); // then at `rate` only
+  });
+
+  it('a reconnect grant (time unseen at bike speed) and a short respawn pass at once', () => {
+    const p = new TrustedPoint(0, 0, 0);
+    expect(p.follow(10, 300, 0, rate, cap, 300)).toBe(0);
+    expect(p.follow(20, 300 + NET.respawnTrust, 0, rate, cap, NET.respawnTrust)).toBe(0);
   });
 });
