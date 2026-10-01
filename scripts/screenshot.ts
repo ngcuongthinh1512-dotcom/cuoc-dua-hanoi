@@ -213,7 +213,8 @@ Object.assign(PRESETS, {
   // bikes (bike.devSpawns) into server-like stand-ins in order (vehicle/Bikes.ts applyStandIns).
   'p6-bikes': '/?player&bikes=free,mine,other&camMode=far&orbit=-64&wait=1', // looking north: free (3 m E, sparkle), Đội Xanh's (blue lock, back right), own (red lock, bottom left)
   'p6-bike-lost': '/?player&bikes=lost&orbit=-50&wait=1', // toast "Chậm một bước!" once main.ts wires bikes.notify = notice (track B's codes)
-  // [D] Host page: team codes, online status, counters
+  // [D] Host page: team codes, online status, counters (demo data, no server)
+  'p6-host': '/host.html?demo=1', // [D]
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
@@ -317,7 +318,7 @@ try {
       const stats = await page.evaluate(() => (globalThis as { __STATS__?: unknown }).__STATS__);
       if (stats !== undefined) console.log(`[${name}] __STATS__ ${JSON.stringify(stats)}`);
       const file = join(outDir, `${name}.png`);
-      await page.screenshot({ path: file });
+      await page.screenshot({ path: file, fullPage: path.startsWith('/host.html') }); // the Host page scrolls, game pages don't
       console.log(`Đã chụp ${file}`);
     }
   } finally {
