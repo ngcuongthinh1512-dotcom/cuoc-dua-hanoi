@@ -45,7 +45,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(r.ok).toBe(true);
     expect(r.issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(r.issues.some((i) => i.level === 'blank')).toBe(true);
-    expect(r.issues.every((i) => i.level !== 'warning' || /đường đi bộ gần nhất/.test(i.message))).toBe(true);
+    expect(r.issues.every((i) => i.level !== 'warning' || /đường đi bộ gần nhất|cây cầu/.test(i.message))).toBe(true);
   });
 
   it.each(['test/mini.json', 'test/paris-demo.filled.json', 'test/near.json'])('%s: 0 errors on the real map data', (f) => {
@@ -54,8 +54,8 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(r.ok).toBe(true);
   });
 
-  it('mini: no blanks, no warnings', () => {
-    expect(run(legs('test/mini.json')).issues).toEqual([]);
+  it('mini: no blanks; the only warning is the (intended) Bir-Hakeim viaduct start', () => {
+    expect(run(legs('test/mini.json')).issues).toEqual([expect.objectContaining({ level: 'warning', where: 'điểm xuất phát' })]);
   });
 
   it('summary lists every point with street, district, OSM link and screenshot command', () => {
@@ -142,6 +142,39 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(hits.map((h) => h.where).sort()).toEqual(['app.js', 'data.json']);
     const r = checkFile(legs('test/mini.json'), { root, map, scanDirs: [dir] });
     expect(r.ok).toBe(false);
+  });
+
+  it('leak scan: an answer equal to a street / landmark name already shipped in the map data is only a warning', () => {
+    const j = miniJson();
+    j.steps.find((s: { id: string }) => s.id === 'T1').task.answers = ['Avenue des Champs-Élysées'];
+    const f = put('leak-street.json', j);
+    const r = checkFile(f, { root: tmp, map, scanDirs: [join(root, 'client/public')] });
+    expect(r.ok).toBe(true);
+    expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('trùng một đáp án'))).toBe(true);
+    // ...but a file holding 2+ secrets (a copy of the leg) stays an error
+    const dir = mkdtempSync(join(tmpdir(), 'legleak2-'));
+    writeFileSync(join(dir, 'copy.json'), JSON.stringify({ a: 'Avenue des Champs-Élysées', b: 'Khải Hoàn Môn là đáp án khác' }));
+    j.steps.find((s: { id: string }) => s.id === 'T1').task.answers = ['Avenue des Champs-Élysées', 'Khải Hoàn Môn là đáp án khác'];
+    expect(checkFile(put('leak-copy.json', j), { root: tmp, map, scanDirs: [dir] }).ok).toBe(false);
+  });
+
+  it('a start on the Bir-Hakeim viaduct over land (chunk bridge polygon) is a warning', () => {
+    const j = miniJson();
+    Object.assign(j.start, { lat: 48.85569, lon: 2.28758 });
+    const p = latLonToWorld(48.85569, 2.28758);
+    expect(map.onBridge(p.x, p.z)).toBe(true);
+    expect(map.inWater(p.x, p.z)).toBe(false);
+    const r = runT('bh.json', j);
+    expect(r.issues.some((i) => i.level === 'warning' && i.where === 'điểm xuất phát' && i.message.includes('cầu'))).toBe(true);
+  });
+
+  it('a point beside a disconnected footpath: the distance is measured to the main walk network', () => {
+    const j = miniJson();
+    Object.assign(j.steps[0].destination, { lat: 48.86231, lon: 2.28528, radius: 20 });
+    const w = latLonToWorld(48.86231, 2.28528);
+    expect(map.geo.walk({ x: w.x, z: w.z }, { x: w.x, z: w.z })!.snapB).toBeGreaterThan(20);
+    const r = runT('snap.json', j);
+    expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('đường đi bộ gần nhất'))).toBe(true);
   });
 
   it('a file outside worker/legs/ gets a warning', () => {

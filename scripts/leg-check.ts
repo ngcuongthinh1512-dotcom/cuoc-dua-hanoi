@@ -47,26 +47,40 @@ export function loadMap(root = ROOT): MapData {
   };
   const locator = new StreetLocator(graph);
   const inWater = (x: number, z: number) => water.polygons.some((p) => inRing(x, z, p.outer) && !(p.holes ?? []).some((h) => inRing(x, z, h)));
+  /** Footprints (any kind) around (x, z) that contain it; a footprint may be stored in a neighbouring chunk. */
+  const footprints = (x: number, z: number) => {
+    const out: ChunkData['buildings'] = [];
+    const [ci, cj] = [Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE)];
+    for (let i = ci - 1; i <= ci + 1; i++)
+      for (let j = cj - 1; j <= cj + 1; j++)
+        for (const b of chunk(i, j)?.buildings ?? []) if (inRing(x, z, b.outer) && !(b.holes ?? []).some((h) => inRing(x, z, h))) out.push(b);
+    return out;
+  };
+  // the chunk bridge polygon (plan D12: Bir-Hakeim over Île aux Cygnes) first, the graph's bridge edges as a fallback
   const onBridge = (x: number, z: number) =>
+    footprints(x, z).some((b) => b.kind === 'bridge') ||
     graph.edgesNear(x, z, 8).some((e) => {
       const a = graph.edgeA[e]!, b = graph.edgeB[e]!;
       return graph.flags(e) & WayFlag.bridge && segPoint(x, z, graph.x[a]!, graph.z[a]!, graph.x[b]!, graph.z[b]!)[1] <= 6;
     });
+  /** Distance to the nearest walkable edge of the main network (the only one the game can route on), Infinity if > 300 m. */
+  const mainSnap = (x: number, z: number) => {
+    let best = Infinity;
+    for (const e of graph.edgesNear(x, z, 300)) {
+      const a = graph.edgeA[e]!, b = graph.edgeB[e]!;
+      if (graph.flags(e) & WayFlag.walk && graph.component[a] === graph.main)
+        best = Math.min(best, segPoint(x, z, graph.x[a]!, graph.z[a]!, graph.x[b]!, graph.z[b]!)[1]);
+    }
+    return best;
+  };
   const geo: LegGeo = {
-    building(x, z) {
-      const [ci, cj] = [Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE)];
-      // a footprint may be stored in the neighbouring chunk when it straddles the border
-      for (let i = ci - 1; i <= ci + 1; i++)
-        for (let j = cj - 1; j <= cj + 1; j++)
-          for (const b of chunk(i, j)?.buildings ?? []) if (solid(b) && inRing(x, z, b.outer) && !(b.holes ?? []).some((h) => inRing(x, z, h))) return b.kind;
-      return null;
-    },
+    building: (x, z) => footprints(x, z).find(solid)?.kind ?? null,
     walk(a, b) {
       const [na, nb] = [graph.nearestNode(a.x, a.z, 'walk'), graph.nearestNode(b.x, b.z, 'walk')];
-      if (na < 0 || nb < 0) return null;
-      const snap = (p: { x: number; z: number }, n: number) => graph.nearestEdge(p.x, p.z, 300)?.dist ?? Math.hypot(graph.x[n]! - p.x, graph.z[n]! - p.z);
+      const [snapA, snapB] = [mainSnap(a.x, a.z), mainSnap(b.x, b.z)];
+      if (na < 0 || nb < 0 || snapB === Infinity) return null;
       const path = na === nb ? { length: 0 } : shortestPath(graph, na, nb, 'walk');
-      return path ? { meters: path.length, snapA: snap(a, na), snapB: snap(b, nb) } : null;
+      return path ? { meters: path.length, snapA: Math.min(snapA, 300), snapB } : null;
     },
   };
   return { geo, graph, water, street: (x, z) => locator.at(x, z), district: (x, z) => districtAt(water.districts, x, z), inWater, onBridge };
@@ -84,6 +98,13 @@ export function secretStrings(leg: Leg, min = 12): string[] {
   return [...out].map((x) => x.trim()).filter((x) => x.length >= min);
 }
 
+/** The answers among the secrets: short place names / street signs, so they may legitimately also be in the map data. */
+export function answerStrings(leg: Leg, min = 12): Set<string> {
+  const out = new Set<string>();
+  for (const s of leg.steps) for (const t of s.type === 'detour' ? s.branches.map((b) => b.task) : s.type === 'challenge' ? [s.task] : []) t.answers.forEach((x) => x.trim().length >= min && out.add(x.trim()));
+  return out;
+}
+
 const TEXT_EXT = /\.(json|js|mjs|html|css|txt|svg|map|md|csv)$/i;
 function* walkFiles(dir: string): Generator<string> {
   for (const n of readdirSync(dir)) {
@@ -93,17 +114,24 @@ function* walkFiles(dir: string): Generator<string> {
   }
 }
 
-/** SPEC §3: leg content must not sit in files the browser downloads. Plain text and its JSON-escaped form are searched. */
-export function scanLeaks(dirs: string[], strings: string[], root = ROOT): LegIssue[] {
+/** SPEC §3: leg content must not sit in files the browser downloads. Plain text and its JSON-escaped form are searched.
+ *  A clue / task text found, or 2+ different secrets in one file = ERROR (a copy of the leg). A lone answer in `weak` =
+ *  WARNING: answers are often street / landmark names that the map files legitimately contain. */
+export function scanLeaks(dirs: string[], strings: string[], root = ROOT, weak: Set<string> = new Set()): LegIssue[] {
   const out: LegIssue[] = [];
+  const cut = (s: string) => `"${s.slice(0, 40)}${s.length > 40 ? '…' : ''}"`;
   const keys = strings.map((s) => [s, JSON.stringify(s).slice(1, -1), JSON.stringify(s).slice(1, -1).replace(/[^\x00-\x7f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)] as const);
   for (const d of dirs) {
     if (!existsSync(d)) continue;
     for (const f of walkFiles(d)) {
       if (statSync(f).size > 64 * 1024 * 1024) continue;
       const text = readFileSync(f, 'utf8');
-      for (const [s, ...forms] of keys)
-        if (text.includes(s) || forms.some((x) => text.includes(x))) out.push({ level: 'error', where: relative(root, f), message: `chứa nguyên văn "${s.slice(0, 40)}${s.length > 40 ? '…' : ''}" của chặng: file này tới máy người chơi, đội đọc được đáp án / mật thư. Xóa khỏi thư mục client/` });
+      const hits = keys.filter(([s, ...forms]) => text.includes(s) || forms.some((x) => text.includes(x))).map(([s]) => s);
+      if (!hits.length) continue;
+      const where = relative(root, f);
+      if (hits.length === 1 && weak.has(hits[0]!))
+        out.push({ level: 'warning', where, message: `chứa chữ ${cut(hits[0]!)} trùng một đáp án của chặng. Thường chỉ là tên đường / địa danh có sẵn trong bản đồ (không sao); nếu file này là bản chép chặng do bạn bỏ vào client/ thì xóa nó` });
+      else out.push({ level: 'error', where, message: `chứa nguyên văn ${hits.map(cut).join(', ')} của chặng: file này tới máy người chơi, đội đọc được đáp án / mật thư. Nếu bạn đã bỏ file chặng hoặc bản chép của nó vào thư mục client/ thì xóa đi và build lại` });
     }
   }
   return out;
@@ -230,7 +258,7 @@ export function checkFile(file: string, opts: { root?: string; scanDirs?: string
     issues.push(...checkLeg(r.leg, map.geo).filter((i) => !base.has(`${i.level}|${i.where}|${i.message}`)));
     const rep = mapReport(r.leg, map);
     issues.push(...rep.issues);
-    issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(r.leg), root));
+    issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(r.leg), root, answerStrings(r.leg)));
     lines.push(...rep.lines);
   }
   const rel = relative(join(root, 'worker/legs'), resolve(file));

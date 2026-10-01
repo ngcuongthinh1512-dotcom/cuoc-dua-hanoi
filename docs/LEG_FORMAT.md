@@ -186,7 +186,7 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
 ## 9. Đáp án nằm đâu, và không bao giờ tới máy người chơi
 
 - Mật thư, nhiệm vụ, **đáp án**, tên điểm đến đều chỉ nằm ở **máy chủ** (trong file chặng được nạp từ Host). Máy người chơi chỉ nhận **thẻ đã lọc** (mật thư của bước hiện tại, mô tả nhiệm vụ đã mở); đáp án **không bao giờ** được gửi xuống: người chơi gõ câu trả lời, máy chủ trả lời đúng / sai.
-- Vì vậy **không bỏ file chặng vào thư mục `client/`** (`client/public`, `client/dist`): mọi thứ ở đó được tải về máy người chơi. `leg:check` quét hai thư mục này và báo LỖI nếu có chuỗi mật thư / đáp án (từ 12 ký tự) lọt vào.
+- Vì vậy **không bỏ file chặng vào thư mục `client/`** (`client/public`, `client/dist`): mọi thứ ở đó được tải về máy người chơi. `leg:check` quét hai thư mục này và báo LỖI nếu có mật thư / mô tả (từ 12 ký tự) lọt vào, hoặc từ 2 chuỗi bí mật nằm chung một file (bản chép của chặng). Một đáp án đơn lẻ trùng tên đường / địa danh có sẵn trong bản đồ chỉ bị CẢNH BÁO (bình thường, bỏ qua).
 - File nằm ngoài `worker/legs/` bị cảnh báo; hãy để chặng thật ở `worker/legs/` (hoặc giữ ngoài kho mã và chỉ chọn file khi nạp ở trang Host).
 - Đáp án **không được xuất hiện** trong chữ đội đọc trước khi giải (mật thư, tiêu đề, mô tả, gợi ý): `leg:check` cảnh báo nếu thấy (đáp án từ 3 ký tự).
 - **Đáp án phải dựa trên thứ có trong game** (chữ trên biển tên đường, hình dáng công trình, số trên tượng...). Game dựng từ dữ liệu OpenStreetMap: không có biển hiệu cửa hàng, thực đơn, chữ trong nhà, hoặc vật mà bản đồ không có. Hãy **vào game đứng ở đó** kiểm tra đáp án có thấy được không trước khi chốt.
@@ -367,7 +367,8 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `chứa đáp án "..." của bước N` | CẢNH BÁO | Đáp án bị lộ trong chữ đội đọc trước; sửa chữ |
 | `nhiệm vụ "free" không tự chấm được` | CẢNH BÁO | Đổi sang `"verification": "host_approval"` |
 | `nằm giữa mặt nước (sông)` | CẢNH BÁO | Dời vào bờ hoặc lên cầu |
-| `nằm trên một cây cầu ... không bắc qua sông` | CẢNH BÁO | Có thể là cầu cạn đường sắt / metro: kiểm tra link bản đồ; đặt xuống mặt đường |
+| `nằm trên một cây cầu ... không bắc qua sông` | CẢNH BÁO | Có thể là cầu cạn đường sắt / metro: kiểm tra link bản đồ; đặt xuống mặt đường. Riêng điểm xuất phát giữa cầu Bir-Hakeim của chặng demo thì cảnh báo này là bình thường (game đặt đội trên mặt cầu, không phải nóc metro) |
+| `chứa chữ ... trùng một đáp án của chặng` | CẢNH BÁO | Đáp án trùng tên đường / địa danh có trong dữ liệu bản đồ: bình thường. Chỉ xóa nếu file đó là bản chép chặng do bạn bỏ vào `client/` |
 | `"..." không phải múi giờ hợp lệ` | CẢNH BÁO | Dùng tên chuẩn như `Asia/Ho_Chi_Minh`, `Europe/Paris` |
 | `file nằm ngoài worker/legs/` | CẢNH BÁO | Chuyển file vào `worker/legs/` |
 | `... còn trống` (mật thư, tiêu đề, đáp án, link Facebook...) | CÒN TRỐNG | Ô bạn chưa điền; cho phép khi soạn nháp, phải điền trước khi mở cuộc đua |

@@ -23,3 +23,8 @@ Trạng thái: **xong**. `npm run build && npm test` qua trong worktree (scripts
 
 ## needsFromOtherTracks
 - A: nếu `worker/src/race/leg.ts` cần đóng gói `near`, import `worker/legs/test/near.json`.
+
+## Sửa sau kiểm tra độc lập (3 lỗi major)
+- Quét rò rỉ: đáp án đơn lẻ trùng tên đường / địa danh có sẵn trong dữ liệu bản đồ chỉ còn là CẢNH BÁO; mật thư / mô tả bị tìm thấy, hoặc từ 2 chuỗi bí mật trong cùng một file, vẫn là LỖI. Thông báo không còn bắt Host "xóa khỏi client/" vô điều kiện. Test: đáp án "Avenue des Champs-Élysées" trên dữ liệu thật => ok; file chứa 2 chuỗi => lỗi.
+- `onBridge` dùng đa giác cầu trong chunk (kind 'bridge') trước, cạnh đồ thị làm dự phòng. Điểm xuất phát Bir-Hakeim giờ có cảnh báo (cố ý, ghi trong LEG_FORMAT); test mini / demo đã chỉnh cho cảnh báo này.
+- `walk`: khoảng cách snap tính tới cạnh đi bộ của thành phần chính (không phải cạnh gần nhất bất kỳ); không có cạnh chính trong ~300 m thì "không đi bộ tới được" (trước đây không bao giờ xảy ra). Test: điểm cạnh Avenue Chauvet bán kính 20 => cảnh báo.
