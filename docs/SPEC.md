@@ -964,7 +964,7 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 
 ### 17.10 Hộp mật thư hiện dần theo bước (chốt 2026-09-30; ghi đè §8.2 "mỗi điểm có một hộp")
 - Hộp của bước N+1 chỉ hiện khi server đánh dấu bước N **hoàn thành** (định nghĩa hoàn thành ở §8.1): đội đã tới điểm của bước N và xong việc ở đó. Nếu bước là thử thách / đường vòng / vượt rào thì phải **làm xong** (server kiểm, hoặc Host duyệt với bài `host_approval`) rồi hộp tiếp theo mới hiện.
-- Khi đội nhận mật thư N, hộp N hiện đúng vị trí thật **cho đội đó**, thấy được từ xa (cờ + ánh sáng nhẹ). Chấp nhận việc client biết tọa độ hộp hiện tại.
+- Khi đội nhận mật thư N, hộp N hiện đúng vị trí thật **cho đội đó** (cờ + ánh sáng nhẹ), nhưng **chỉ khi lọt vào tầm mắt** (chốt 2026-10-01, thay cho "thấy từ xa"): server không biết camera nên **chỉ gửi tọa độ hộp hiện tại khi đội vào bán kính nhìn thấy `boxReveal.radius`** (mặc định 150 m (chốt 2026-10-01 sau khi cân nhắc 500 m), cấu hình trong file chặng, so khoảng cách vài giây một lần, không tính nặng trong DO); client vẽ hộp như vật thể 3D thường, nên nhà che hoặc quay lưng thì không thấy. Trước khi vào bán kính, client không có tọa độ hộp. Sau khi vào bán kính, người chơi kỹ thuật vẫn đọc được tọa độ (không thể chặn tuyệt đối).
 - Hộp của các bước trước ở trạng thái "đã mở", vẫn hiện để định hướng. Hộp của bước sau chưa tới: không hiện, và server **không gửi tọa độ** cho client (cũng không đưa vào static asset).
 - Mỗi đội chỉ thấy hộp của đội mình (server điều khiển theo từng đội). Làm ở Phase 6–7.
 
