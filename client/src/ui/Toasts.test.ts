@@ -40,12 +40,14 @@ describe('toast feed (pure part)', () => {
 
 describe('notices', () => {
   it('every code has its own Vietnamese text (SPEC §6.3 / §6.6 wording)', () => {
-    const codes: NoticeCode[] = ['bikeStairs', 'bikeTooFast', 'bikeTooFar', 'bikeTaken', 'respawn', 'respawnStairs'];
+    const codes: NoticeCode[] = ['bikeStairs', 'bikeTooFast', 'bikeTooFar', 'bikeTaken', 'respawn', 'respawnStairs', 'bikeLost', 'bikeGone', 'bikeParked', 'walkOnly'];
     expect(Object.keys(NOTICES).sort()).toEqual([...codes].sort());
     expect(new Set(Object.values(NOTICES)).size).toBe(codes.length);
     expect(NOTICES.bikeStairs).toBe('Không đi xe trên bậc thang');
     expect(NOTICES.bikeTaken).toBe('Xe này đã có đội sử dụng');
     expect(NOTICES.respawnStairs).toBe('Đã đưa bạn lên bậc kè gần nhất');
+    expect(NOTICES.bikeLost).toBe('Chậm một bước! Xe đã có người lấy.'); // SPEC §6.3
+    expect(NOTICES.walkOnly).toBe('Lộ trình này bắt buộc đi bộ'); // SPEC §6.5
   });
 
   it('importing and calling toast / notice in Node (no DOM) is harmless', () => {

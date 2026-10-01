@@ -1016,6 +1016,18 @@ export const remote = {
   interpolationMs: 200, // render this far behind the server clock (SPEC §7: buffer ~200 ms; ticks every 200 ms)
   extrapolateMs: 150, // keep moving at the last velocity this long after the newest sample, then hold
   snapDistance: 10, // m: a jump longer than this (respawn, reconnect) is not interpolated
+  bufferSamples: 10, // ticks kept per remote player (2 s at 5 Hz)
+  clockSlewMs: 1, // ms the server-clock offset estimate sinks per tick (≈ 5 ms/s): drift and one lucky fast tick wear off
+  renderRadius: 300, // m: until welcome.presence.renderRadius arrives (DEV ?peers stand-ins)
+  bellRadius: 60, // m: another team's bell (R) is heard this close
+  leanSmoothing: 0.15, // s: a remote rider's lean (derived from the turn rate, not on the wire) follows with this lag
+};
+// SPEC §17.10: the team's clue box, drawn only once the server sent its position (within boxReveal.radius); flag + glow.
+export const clueBox = {
+  size: 0.6, // m, cube on the ground
+  colours: { box: '#f2c230', band: '#d6342b', opened: '#7d7466' }, // yellow / red route-marker look; opened = faded
+  flag: { height: 2.6, width: 0.9, depth: 0.55 }, // m: pole and cloth (yellow over red), visible over parked cars
+  glow: 0.45, // emissive strength of an unopened box (no real light: one more light recompiles every shader)
 };
 
 // ── C · shared bikes (worker/src/race/VehicleSpawner.ts, vehicle/Bikes.ts server mode, host/spawnCandidates.ts) ──

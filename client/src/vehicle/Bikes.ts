@@ -118,6 +118,7 @@ export class Bikes {
     for (const b of this.list) {
       const m = this.models.get(b.id);
       if (!m) continue;
+      m.root.visible = b.rider === null || b.owner === this.team; // Phase 6: another team's ridden bike is net/RemotePlayers'
       if (b === ridden) {
         m.update({ ...b, position: riderPos, yaw: riderYaw }, false, dt);
         targets = m.riderTargets();

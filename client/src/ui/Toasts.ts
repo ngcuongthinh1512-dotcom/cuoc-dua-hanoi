@@ -13,6 +13,11 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   bikeTaken: 'Xe này đã có đội sử dụng', // SPEC §6.3
   respawn: 'Đã đưa bạn về chỗ an toàn',
   respawnStairs: 'Đã đưa bạn lên bậc kè gần nhất',
+  // Phase 6: the server's `notice` (SPEC §6.3–6.5)
+  bikeLost: 'Chậm một bước! Xe đã có người lấy.',
+  bikeGone: 'Xe của bạn đã biến mất vì bị bỏ lại quá xa',
+  bikeParked: 'Xe của bạn đã được để ở bãi xe cạnh điểm. Trong lúc bạn làm thử thách, đội khác có thể lấy mất!',
+  walkOnly: 'Lộ trình này bắt buộc đi bộ',
 };
 
 export interface Toast {
