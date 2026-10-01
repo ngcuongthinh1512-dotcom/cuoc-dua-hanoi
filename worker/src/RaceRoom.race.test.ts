@@ -161,12 +161,17 @@ describe.concurrent('race engine (workerd)', () => {
     for (const s of [a2, b, host]) s.close();
   }, 90_000);
 
-  it('"Tại điểm này" only in the team\'s own done / current place; a team at the mat during a pause checks in on resume', async () => {
+  it('"Tại điểm này" only in the team\'s own done / current place; a respawn keeps the bike mode; a team at the mat during a pause checks in on resume', async () => {
     const { host, socks: [a, b] } = await newRace('race-zone', 2);
     host.send({ t: 'host.race', op: 'start' });
     await view(b!, (v) => v.status === 'running');
     // B does L1 and reaches T1's place; A walks there while still on L1 (a later step's place for A)
-    let pb = await walkTo(b!, W(b!).start!, P[1]!);
+    let pb = await walkTo(b!, W(b!).start!, P[1]!, 25, 'bike');
+    // a rider's 0 m respawn keeps the trusted pose's mode (review m4: it became walk and the box opened on the bike)
+    b!.send({ t: 'respawn', x: pb.x, y: 0, z: pb.z, yaw: 0, how: 'safe' });
+    b!.send({ t: 'race', op: 'open', step: 'L1' });
+    await notice(b!, 'boxRiding');
+    await walkTo(b!, pb, pb);
     b!.send({ t: 'race', op: 'open', step: 'L1' });
     await step(b!, 'T1');
     pb = await walkTo(b!, pb, P[2]!);

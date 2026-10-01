@@ -42,7 +42,7 @@ function fake() {
       teams.set(id, r);
     },
     teamIds: () => [...teams.keys()],
-    slot: () => 0,
+    slot: (id: string) => [...teams.keys()].indexOf(id),
     online: () => [...teams.keys()],
     pose: (id: string) => poses.get(id) ?? null,
     park: () => log.push('park'),
@@ -120,5 +120,50 @@ describe('RaceEngine', () => {
     e.onOp('t0', { t: 'race', op: 'open', step: 'L1' }, at(2), 42);
     expect(f.log).toEqual(['send notice', 'send notice']);
     expect(f.sent.slice(-2).map(([, m]) => m)).toEqual([{ t: 'notice', code: 'boxRiding' }, { t: 'notice', code: 'boxFar' }]);
+  });
+
+  it('a broken JSON leg gets a Vietnamese line / column, not the engine text (review)', () => {
+    const f = fake();
+    f.teams.set('t0', { ...NEW_TEAM_RACE });
+    const e = new RaceEngine(f.io);
+    const r: ServerMessage[] = [];
+    e.onHost({ t: 'host.leg', json: '{\n  "id": "x",\n  "yawDeg": 33, // huong nhin\n}' }, (m) => r.push(m), 0);
+    const msg = (r[0] as { issues: { message: string }[] }).issues[0]!.message;
+    expect(msg).toMatch(/^File không phải JSON hợp lệ: lỗi cú pháp \(dòng 3, cột 17\)\. Có thể do: .*chú thích/);
+    expect(msg).not.toMatch(/Expected|position|JSON at/);
+  });
+
+  it('after the Host\'s "Kết thúc" the view says finished and a pose writes nothing (read-only, SPEC §8.10)', () => {
+    const f = fake();
+    f.teams.set('t0', { ...NEW_TEAM_RACE });
+    const e = new RaceEngine(f.io);
+    e.onHost({ t: 'host.leg', id: 'mini' }, () => {}, 0);
+    f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1 });
+    e.onHost({ t: 'host.race', op: 'start' }, () => {}, 1);
+    e.onHost({ t: 'host.race', op: 'finish' }, () => {}, 2);
+    expect(f.sent.at(-1)).toEqual(['t0', { t: 'race', view: expect.objectContaining({ status: 'finished', finishAt: null }) }]);
+    f.log.length = 0;
+    e.onPose('t0', at(0), 10);
+    e.onOp('t0', { t: 'race', op: 'open', step: 'L1' }, at(0), 11);
+    expect(f.log).toEqual(['send notice']); // raceOver; no arrival row, no park
+  });
+
+  it('"Tại điểm này" never shows a team on a later step than the viewer (review m3: a later step\'s label there)', () => {
+    const leg = structuredClone(bundledLeg('mini')!);
+    (leg.steps[2] as { destination: unknown }).destination = (leg.steps[0] as { destination: unknown }).destination; // L2 back at L1's place
+    const chaillot = stepZones(leg)[0]!;
+    const f = fake();
+    f.teams.set('t0', { ...NEW_TEAM_RACE }).set('t1', { ...NEW_TEAM_RACE });
+    const e = new RaceEngine(f.io);
+    const r: ServerMessage[] = [];
+    e.onHost({ t: 'host.leg', json: JSON.stringify(leg) }, (m) => r.push(m), 0);
+    expect(r[0]).toMatchObject({ ok: true });
+    f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, step: 2 }).set('t1', { ...NEW_TEAM_RACE, startOrder: 2, joinedAt: 1, step: 1 });
+    const p: PoseSample = { x: chaillot.x, y: 0, z: chaillot.z, yaw: 0, mode: 'walk', action: 'none' };
+    e.onPose('t0', p, 10); // A arrives for L2
+    e.onPose('t1', p, 11); // B (on T1) walks back to the L1 place it did
+    const zones = (team: string) => f.sent.filter(([t, m]) => t === team && (m as { t: string }).t === 'zone').map(([, m]) => m);
+    expect(zones('t1')).toEqual([{ t: 'zone', teams: [] }]);
+    expect(zones('t0').at(-1)).toEqual({ t: 'zone', teams: [{ slot: 1, label: 'Thử thách 1', type: 'challenge', branch: null, since: 11 }] });
   });
 });

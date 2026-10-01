@@ -380,8 +380,9 @@ export class RaceRoom extends DurableObject<Env> {
         // A legal teleport (stairs / "Kẹt?" / fell through), counted with the others: new window from here. D4: the
         // trusted point takes it at once only while the window's instant metres stay ≤ NET.respawnTrust (a chain of
         // short hops gets one hop) and the team's teleports are not suspicious; otherwise it follows at the trust rate.
-        const pose: PoseSample = { x: m.x, y: m.y, z: m.z, yaw: m.yaw, mode: 'walk', action: 'none' };
-        const l = this.liveOf(t.id, a.since, pose);
+        // the mode stays the last pose's (review: forced 'walk', a rider's 0 m respawn passed the boxRiding check)
+        const l = this.liveOf(t.id, a.since, { x: m.x, y: m.y, z: m.z, yaw: m.yaw, mode: 'walk', action: 'none' });
+        const pose: PoseSample = { x: m.x, y: m.y, z: m.z, yaw: m.yaw, mode: l.pose.mode, action: 'none' };
         const d = Math.hypot(m.x - l.pose.x, m.z - l.pose.z);
         const suspicious = this.teleport(t, l, d, now, 'respawn', { how: m.how, d: Math.round(d) });
         const near = Math.hypot(m.x - l.trust.x, m.z - l.trust.z);

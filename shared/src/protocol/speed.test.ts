@@ -96,4 +96,13 @@ describe('TrustedPoint (Phase 7 geofence, docs/plans/phase7.md D4)', () => {
     p.follow(7000, 1000, 0, rate, cap, 0, 5 * rate); // 5 s unseen: past the cap
     expect(p.x).toBeCloseTo(7 * rate);
   });
+
+  it('unseen time cannot be banked: an unused reconnect allowance is trimmed to the cap on the next pose (review 2)', () => {
+    const p = new TrustedPoint(0, 0, 0);
+    p.follow(600_000, 0, 0, rate, cap, 0, 600 * rate); // 10 min offline, back at the same spot
+    for (let t = 600_200; t <= 660_000; t += 200) p.follow(t, 0, 0, rate, cap); // stands 60 s
+    const left = p.follow(661_000, 2000, 0, rate, cap, 0, rate); // 1 s reconnect, first pose 2 km away
+    expect(p.x).toBeCloseTo(cap + rate);
+    expect(left).toBeCloseTo(2000 - cap - rate); // → RaceRoom: jump event + flag
+  });
 });

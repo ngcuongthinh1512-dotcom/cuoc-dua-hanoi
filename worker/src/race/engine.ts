@@ -3,7 +3,7 @@
 // step_progress (cache + writes) and the team race fields in teams.state; it applies steps.ts effects — SQLite first,
 // in one transaction, the cache patched only once it committed, THEN the answers (SPEC §3) — and builds the welcome /
 // host.state parts.
-import { branchZone, parseLeg, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
+import { branchZone, jsonProblem, parseLeg, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
 import { latLonToWorld } from '@race/shared';
 import type { BoxInfo, HostMessage, HostState, PoseSample, RaceOp, RaceStatus, RaceView, ServerMessage, StepProgressView, Welcome, ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
@@ -207,7 +207,7 @@ export class RaceEngine {
       try {
         input = JSON.parse(m.json!);
       } catch (e) {
-        return fail(`File không phải JSON hợp lệ: ${(e as Error).message}`);
+        return fail(`File không phải JSON hợp lệ: ${jsonProblem(m.json!, e)}`);
       }
     }
     const r = parseLeg(input);
@@ -330,7 +330,8 @@ export class RaceEngine {
   /** One input through the state machine; effects written (one transaction) BEFORE anything is sent. */
   private step(team: string, input: RaceInput, now: number) {
     const r = this.io.team(team);
-    if (!r) return;
+    // SPEC §8.10: after the Host's "Kết thúc" the race is read-only (no arrival, no bike moved to a rack)
+    if (!r || this.statusV === 'finished') return;
     const { p, effects } = advance(this.legV, this.zones, this.progress(team, r), input, now, verifyTask, this.statusV === 'running');
     if (effects.length) this.apply(team, r, p, effects, now);
   }
@@ -426,10 +427,13 @@ export class RaceEngine {
       let list = '[]';
       if (ok) {
         if (!keys.has(w.key) && this.sentZone.has(t)) continue;
+        const mine = this.io.team(t)!.step;
         const members: ZoneMember[] = online.flatMap((u) => {
           const wu = this.where.get(u);
           const ru = this.io.team(u);
-          if (u === t || wu?.key !== w.key || !ru) return [];
+          // only teams on a step this team already holds the clue of: a team further on, back at a place this team has
+          // done, would show it a later step's label / type there (review m3, SPEC §17.10)
+          if (u === t || wu?.key !== w.key || !ru || ru.step > mine) return [];
           const s = this.legV.steps[ru.step]!;
           return [{ slot: this.io.slot(u), label: s.label, type: s.type, branch: this.progress(u, ru).branch, since: wu.since }];
         });

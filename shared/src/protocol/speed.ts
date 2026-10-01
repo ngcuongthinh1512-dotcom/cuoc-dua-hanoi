@@ -45,7 +45,7 @@ export const overSpeed = (w: SpeedWindow, limit: number, tolerance: number = NET
 /** Phase 7 geofence trust (docs/plans/phase7.md D4; critic: a pose after ≥ 3 s standing still, a reconnect's first pose
  *  and a respawn all passed the window above unchecked). The server's trusted point follows the client's poses at no
  *  more than `rate` m/s: a bucket refilled by `rate` × elapsed time, capped at `cap` m (bunched poses after a short
- *  stall); a reconnect raises it to at least `earned` m on top of what it held (the time unseen at bike speed: the same
+ *  stall); a reconnect raises it to at least `earned` m on top of what it held, capped (the time unseen at bike speed: the same
  *  seconds as the refill, never paid twice — review fix: a reconnect every 2 s doubled the rate), and a respawn adds
  *  `grant` m (≤ NET.respawnTrust). A pose out of reach moves the point only by the budget left, so no single message can
  *  carry a team into a zone or the box-reveal radius; an honest client the point lags behind (long stall) is caught up
@@ -55,7 +55,9 @@ export class TrustedPoint {
 
   follow(now: number, x: number, z: number, rate: number, cap: number, grant = 0, earned = 0): number {
     const b = this.budget;
-    this.budget = Math.max(Math.min(cap, b + (rate * Math.max(0, now - this.at)) / 1000), b + earned) + grant;
+    // what it held is capped before `earned` is added: an unused reconnect allowance is gone on the next pose (review 2:
+    // uncapped, unseen time was banked and spent later in one jump after another reconnect)
+    this.budget = Math.max(Math.min(cap, b + (rate * Math.max(0, now - this.at)) / 1000), Math.min(b, cap) + earned) + grant;
     this.at = now;
     const d = Math.hypot(x - this.x, z - this.z);
     const k = d <= this.budget ? 1 : this.budget / d;

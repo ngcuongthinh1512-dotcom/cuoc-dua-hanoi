@@ -97,6 +97,27 @@ export function normalizeAnswer(s: string): string {
   return s.normalize('NFD').replace(/\p{M}/gu, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/** JSON.parse error of a leg file → Vietnamese "lỗi cú pháp (dòng X, cột Y)" + the usual mistakes of non-programmers
+ *  (docs/LEG_FORMAT.md §10); never the engine's English text. */
+export function jsonProblem(text: string, err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = /position (\d+)/.exec(msg);
+  const pos = m ? Number(m[1]) : /end of JSON/.test(msg) ? text.length : null;
+  let where = '';
+  if (pos !== null) {
+    const before = text.slice(0, pos);
+    where = ` (dòng ${before.split('\n').length}, cột ${pos - before.lastIndexOf('\n')})`;
+  }
+  const hints: string[] = [];
+  if (/[“”‘’]/.test(text)) hints.push('có dấu ngoặc kép cong “ ” (thường do copy từ Word / Google Docs): thay bằng dấu ngoặc kép thẳng "');
+  if (/"(lat|lon)"\s*:\s*-?\d+,\d/.test(text)) hints.push('tọa độ dùng dấu phẩy thập phân (48,85): phải dùng dấu chấm (48.85)');
+  if (/,\s*[}\]]/.test(text)) hints.push('có dấu phẩy thừa ngay trước } hoặc ]: xóa dấu phẩy cuối cùng');
+  if (/(^|[\s,{[])\/\/|\/\*|^\s*#/m.test(text)) hints.push('JSON không có chú thích (// hoặc /* */): xóa các chú thích');
+  if (/'[A-Za-z_]+'\s*:/.test(text)) hints.push("tên trường dùng dấu nháy đơn ': phải dùng dấu ngoặc kép \"");
+  if (pos === text.length) hints.push('file bị cắt cụt hoặc rỗng: thiếu } hoặc ] ở cuối');
+  return `lỗi cú pháp${where}${hints.length ? '. Có thể do: ' + hints.join('; ') : ''}`;
+}
+
 /** Shape (zod) + rules (checkLeg without map data). ok = no `error` issue: the server loads only such legs. */
 export function parseLeg(input: unknown): ParsedLeg {
   const r = legSchema.safeParse(input);
