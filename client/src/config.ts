@@ -1028,4 +1028,6 @@ export const serverBikes = {
 // ── D · dev tooling + minimal Host page (host.html, host/main.ts, scripts/sim.ts) ──
 export const hostPage = {
   refreshMs: 1000, // how often the DOM table is rewritten from host.state (SPEC §13: ≤ 1 s)
+  reconnectMs: 2000, // Host socket: wait before reconnecting (the token stays valid 24 h)
+  colours: ['#2c6bd8', '#d8342c', '#e0b020', '#2c9a4a', '#8a3fc4', '#e07a20', '#20a8b8', '#c0408a'], // team shirt colours, round-robin
 };
