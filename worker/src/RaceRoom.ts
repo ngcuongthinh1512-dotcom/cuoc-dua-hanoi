@@ -53,8 +53,9 @@ interface Live {
   bikeAt: number;
   /** Over the limit right now (one `speed` event per episode). */
   over: boolean;
-  /** Teleports in the current NET.respawnWindowMs: count, summed length (m). Memory only (a wake starts a new one). */
-  tp?: { start: number; n: number; d: number };
+  /** Teleports in the current NET.respawnWindowMs: count, summed length (m), metres the trusted point took at once
+   *  (respawns, ≤ NET.respawnTrust per window). Memory only (a wake starts a new one). */
+  tp?: { start: number; n: number; d: number; g: number };
 }
 
 type RaceWelcome = ReturnType<RaceEngine['welcome']>;
@@ -329,7 +330,7 @@ export class RaceRoom extends DurableObject<Env> {
   /** A respawn or an unexplained jump: logged, and counted per NET.respawnWindowMs — more than NET.maxRespawns or more
    *  than NET.maxRespawnJump m in all → suspicious + flagged; events stop at the cap (SQLite row budget). */
   private teleport(t: TeamRow, l: Live, d: number, now: number, type: string, data: object): boolean {
-    const r = l.tp && now - l.tp.start < NET.respawnWindowMs ? l.tp : (l.tp = { start: now, n: 0, d: 0 });
+    const r = l.tp && now - l.tp.start < NET.respawnWindowMs ? l.tp : (l.tp = { start: now, n: 0, d: 0, g: 0 });
     r.n++;
     r.d += d;
     const suspicious = r.n > NET.maxRespawns || r.d > NET.maxRespawnJump;
@@ -371,14 +372,17 @@ export class RaceRoom extends DurableObject<Env> {
         const t = a.role === TEAM ? this.team(a.team) : undefined;
         if (!t) return;
         // A legal teleport (stairs / "Kẹt?" / fell through), counted with the others: new window from here. D4: the
-        // trusted point takes it at once only when it is short (≤ NET.respawnTrust from the trusted point) and the
-        // team's teleports are not suspicious (no chain of short hops); otherwise it follows at the trust rate.
+        // trusted point takes it at once only while the window's instant metres stay ≤ NET.respawnTrust (a chain of
+        // short hops gets one hop) and the team's teleports are not suspicious; otherwise it follows at the trust rate.
         const pose: PoseSample = { x: m.x, y: m.y, z: m.z, yaw: m.yaw, mode: 'walk', action: 'none' };
         const l = this.liveOf(t.id, a.since, pose);
         const d = Math.hypot(m.x - l.pose.x, m.z - l.pose.z);
         const suspicious = this.teleport(t, l, d, now, 'respawn', { how: m.how, d: Math.round(d) });
         const near = Math.hypot(m.x - l.trust.x, m.z - l.trust.z);
-        this.follow(l, pose, now, near <= NET.respawnTrust && !suspicious ? near : 0);
+        const r = l.tp!; // set by teleport()
+        const instant = !suspicious && r.g + near <= NET.respawnTrust;
+        if (instant) r.g += near;
+        this.follow(l, pose, now, instant ? near : 0);
         (l.win = new SpeedWindow()).reset(now, m.x, m.z);
         Object.assign(l, { bikeAt: 0, over: false });
         this.moved(t.slot, now);

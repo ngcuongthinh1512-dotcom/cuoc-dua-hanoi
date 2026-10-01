@@ -211,10 +211,10 @@ describe.concurrent('race engine (workerd)', () => {
 
   it('D4: a jump after standing still, a long respawn or a reconnect far away opens no box and enters no zone', async () => {
     const race = 'race-trust';
-    const { host, teams } = await setupRace(server, race, 4);
+    const { host, teams } = await setupRace(server, race, 5);
     host.send({ t: 'host.leg', id: 'mini' }); // real foot speed (4 m/s): trust rate 6.5 m/s, cap 13 m; L1 915 m away
     expect(await hostSays(host, 'host.legResult')).toMatchObject({ ok: true });
-    const [a, b, c, d] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
+    const [a, b, c, d, e] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
     host.send({ t: 'host.race', op: 'start' });
     await view(a!, (v) => v.status === 'running');
     const l1 = stepZones(bundledLeg('mini')!)[0]!;
@@ -232,6 +232,9 @@ describe.concurrent('race engine (workerd)', () => {
     await notice(b!, 'boxFar');
     const sc = W(c!).start!;
     c!.send({ t: 'respawn', x: sc.x + 20, y: 0, z: sc.z, yaw: 0, how: 'stairs' });
+    // E: a chain of six 29 m respawns (each ≤ NET.respawnTrust, 174 m in all, unflagged): only the first is taken at once
+    const se = W(e!).start!;
+    for (let i = 1; i <= 6; i++) e!.send({ t: 'respawn', x: se.x + 29 * i, y: 0, z: se.z, yaw: 0, how: 'safe' });
     // D: a pose at the start, ≈ 1.3 s offline, then back right at the box
     const sd = W(d!).start!;
     await walkTo(d!, sd, sd);
@@ -243,16 +246,17 @@ describe.concurrent('race engine (workerd)', () => {
     await notice(d2, 'boxFar');
     await sleep(300);
     const st = (await host.until((m) => m.t === 'host.state' && m.teams.filter((t: { flagged: boolean }) => t.flagged).length >= 3)) as unknown as HostState;
-    expect(st.teams.map((t) => t.flagged)).toEqual([true, true, false, true]);
+    expect(st.teams.map((t) => t.flagged)).toEqual([true, true, false, true, false]);
     const sql = await sqlOf(race);
     expect(await sql.exec('SELECT team, step FROM step_progress')).toEqual([]); // nobody arrived anywhere
     // where the server believes they stand: their welcome after a reconnect
-    const [a2, b2, c2] = await Promise.all([0, 1, 2].map((i) => joinTeam(server, race, teams[i]!.code)));
+    const [a2, b2, c2, e2] = await Promise.all([0, 1, 2, 4].map((i) => joinTeam(server, race, teams[i]!.code)));
     const dist = (p: { x: number; z: number } | null, q: { x: number; z: number }) => Math.hypot(p!.x - q.x, p!.z - q.z);
     expect(dist(W(a2!).pose, pa)).toBeLessThanOrEqual(14);
     expect(dist(W(b2!).pose, sb)).toBeLessThanOrEqual(14);
     expect(dist(W(c2!).pose, { x: sc.x + 20, z: sc.z })).toBeLessThan(0.1);
-    for (const s of [a2!, b2!, c2!, c, d2, host]) s!.close();
+    expect(dist(W(e2!).pose, se)).toBeLessThanOrEqual(29 + 14); // one hop + the trust lead, not 174 m
+    for (const s of [a2!, b2!, c2!, e2!, c, e, d2, host]) s!.close();
   }, 60_000);
 });
 
