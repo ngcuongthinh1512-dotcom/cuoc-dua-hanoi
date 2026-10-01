@@ -212,7 +212,7 @@ Object.assign(PRESETS, {
   // [C] shared bikes: free (sparkle), another team's (lock), own; claim refused toast. ?bikes=<kind,…> turns the dev
   // bikes (bike.devSpawns) into server-like stand-ins in order (vehicle/Bikes.ts applyStandIns).
   'p6-bikes': '/?player&bikes=free,mine,other&camMode=far&orbit=-64&wait=1', // looking north: free (3 m E, sparkle), Đội Xanh's (blue lock, back right), own (red lock, bottom left)
-  'p6-bike-lost': '/?player&bikes=lost&orbit=-50&wait=1', // toast "Chậm một bước!" once main.ts wires bikes.notify = notice (track B's codes)
+  'p6-bike-lost': '/?player&bikes=lost&orbit=-50&wait=0.2&npc=0', // toast "Chậm một bước!" (bikes.notify = notice); no NPCs + short wait: the 4 s toast must still be up
   // [D] Host page: team codes, online status, counters (demo data, no server)
   'p6-host': '/host.html?demo=1', // [D]
 });

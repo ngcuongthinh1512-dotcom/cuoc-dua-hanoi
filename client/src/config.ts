@@ -1011,6 +1011,8 @@ export const net = {
 export const netClient = {
   reconnectMs: [1000, 2000, 4000, 8000, 15000], // backoff per attempt, the last one repeats (SPEC §3: auto reconnect)
   storageKey: 'cuoc-dua-paris.team-code', // localStorage: the team code is remembered (SPEC §8.10), try/catch
+  remountSeconds: 3, // after an F5 the team that was riding gets back on its bike if it stands on its feet within this (SPEC §8.10)
+  gestureGapMs: 500, // a bell / wave is sent at most this often (the server closes > NET.maxMessagesPerSec)
 };
 export const remote = {
   interpolationMs: 200, // render this far behind the server clock (SPEC §7: buffer ~200 ms; ticks every 200 ms)

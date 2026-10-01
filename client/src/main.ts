@@ -2,7 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { unlockAudio } from './audio/sfx.ts';
 import { NET, type PoseSample } from '@race/shared/protocol';
-import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, remote as remoteCfg, render as R, ui } from './config.ts';
+import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
@@ -11,6 +11,7 @@ import { Gps } from './geo/gps.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
 import { StreetLocator } from './geo/locate.ts';
 import { graphLines, loadRoadGraph } from './geo/roadGraph.ts';
+import { BikeLink } from './net/bikeLink.ts';
 import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
 import { fakeTeams, fakeTick, parsePeers, RemotePlayers } from './net/RemotePlayers.ts';
@@ -188,6 +189,9 @@ async function start() {
   if (import.meta.env.DEV && !session) boxes.reset(parseBoxes(query.get('boxes')));
   const netPanel = $('net');
   let welcomed = !session; // the world waits for the first welcome (the spawn)
+  // Track C's shared bikes: online the list is the server's (Player skips the dev bikes), F asks it (claim).
+  const bikeLink = session && player ? new BikeLink(player.bikes) : undefined;
+  if (player) player.bikes.notify = notice; // a refused claim → toast (offline too: the p6-bike-lost stand-in)
   const net =
     session &&
     new NetClient(session, {
@@ -199,7 +203,7 @@ async function start() {
         // SPEC §8.10: back where the team last stood (the first welcome only: after a reconnect the body stays put)
         if (!welcomed && w.pose) player?.setSpawn(w.pose.x, w.pose.z, w.pose.yaw);
         welcomed = true;
-        // [C] w.bikes → player.bikes (server mode), w.pose.bikeId / mode 'bike' → mount again
+        bikeLink?.welcome(w); // w.bikes; w.pose.bikeId + mode 'bike' → mount again (SPEC §8.10)
       },
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
@@ -207,7 +211,7 @@ async function start() {
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') notice(m.code);
         else if (m.t === 'box') boxes.apply(m);
-        // [C] 'bikes' / 'bike' (claim result) → player.bikes
+        else bikeLink?.message(m); // 'bikes' / 'bike' (claim result)
       },
       status: (connected, reason) => {
         netPanel.textContent = connected ? '' : netDownText(reason ?? 'closed');
@@ -215,7 +219,14 @@ async function start() {
       },
     });
   if (net && player) {
-    player.onGesture = (g) => net.send({ t: 'gesture', g });
+    player.bikes.net = net; // team / colour: Player.create(…, session.team)
+    player.bikes.ground = (x, z, y) => groundAt(world, x, z, Math.max(y, env.heightAt(x, z)) + 3);
+    let gestureAt = -Infinity; // R / G mashing must not trip the server's message limit
+    player.onGesture = (g) => {
+      if (performance.now() - gestureAt < netClient.gestureGapMs) return;
+      gestureAt = performance.now();
+      net.send({ t: 'gesture', g });
+    };
     player.onRespawn = (how) => {
       const p = player.controller.state;
       net.send({ t: 'respawn', x: p.position.x, y: p.position.y, z: p.position.z, yaw: p.yaw, how });
@@ -388,6 +399,7 @@ async function start() {
       if (flying) fly.update(dt, input);
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
       player?.update(dt, flying ? null : input, loop.alpha, modal());
+      if (player?.active) bikeLink?.frame(dt, player.controller);
       if (net && player?.active) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides)
       if (peers.length && player?.active && player.simTime * 1000 >= nextFakeTick) {
         remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock

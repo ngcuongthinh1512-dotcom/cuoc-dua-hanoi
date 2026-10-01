@@ -23,14 +23,12 @@ export interface NetEvents {
 /** Reconnect delay before attempt `n` (0-based): netClient.reconnectMs, the last value repeating. */
 export const backoffMs = (n: number) => netClient.reconnectMs[Math.min(n, netClient.reconnectMs.length - 1)]!;
 
-/** Close codes that end the session (no retry). */
+/** Close codes that end the session (no retry). tooFast / tooBig / badMessage reconnect with backoff: a network stall
+ *  flushes the queued poses in one burst (> NET.maxMessagesPerSec), which must not drop the team out of the race. */
 const FINAL: Record<number, KickReason> = {
   [CLOSE.badToken]: 'badToken',
   [CLOSE.otherDevice]: 'otherDevice',
   [CLOSE.raceClosed]: 'raceClosed',
-  [CLOSE.badMessage]: 'protocol',
-  [CLOSE.tooBig]: 'protocol',
-  [CLOSE.tooFast]: 'protocol',
 };
 
 /** SPEC §3: a pose goes out when its rounded array differs from the last one sent, at most NET.sendHz a second. */

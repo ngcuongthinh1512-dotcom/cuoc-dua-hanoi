@@ -150,6 +150,17 @@ describe('NetClient (fake socket, fake timers)', () => {
     expect(FakeSocket.all).toHaveLength(4); // the attempt counter restarted
   });
 
+  it('too many / too big / bad message closes reconnect with backoff (a stall flushes a burst of poses, review fix)', () => {
+    for (const code of [CLOSE.tooFast, CLOSE.tooBig, CLOSE.badMessage]) {
+      connect();
+      const n = FakeSocket.all.length;
+      last().drop(code);
+      expect(status.at(-1)).toEqual([false, 'closed']);
+      vi.advanceTimersByTime(backoffMs(0));
+      expect(FakeSocket.all).toHaveLength(n + 1);
+    }
+  });
+
   it('kick / final close codes stop for good (other device, bad token); a protocol mismatch asks for a reload', () => {
     connect();
     last().push({ t: 'kick', reason: 'otherDevice' });
