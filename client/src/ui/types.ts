@@ -16,8 +16,13 @@ export interface HudFrame {
   speed: number;
   riding: boolean;
   swimming: boolean;
-  /** s the race clock shows. Phase 5: since Player.activate (local); Phase 7: the server's race time for the team. */
+  /** s of sim clock since Player.activate (fades, the offline clock). */
   time: number;
+  /** Phase 7: s on the team's race clock (server: now − its start time, SPEC §17.12); null = no start time yet (--:--);
+   *  undefined = offline (the clock shows `time`). */
+  raceTime?: number | null;
+  /** Phase 7: total penalty minutes (SPEC §12: next to the clock). */
+  penaltyMinutes?: number;
   /** Street under / nearest the feet (geo/locate.ts, with hysteresis); undefined = none within locate.maxDistance. */
   street: string | undefined;
   /** Arrondissement 1…20 (geo/districts.ts), 0 = none. */

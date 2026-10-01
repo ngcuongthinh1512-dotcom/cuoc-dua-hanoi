@@ -115,7 +115,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Còn 17 lỗi nhỏ trong `docs/reports/phase6-review-*.md`.
 
 ## Phase 7 – Race engine lõi
-- KHÔNG có Vượt rào (SPEC §17.12): bỏ `roadblock` khỏi schema zod / máy trạng thái / mật thư; xem lại `docs/RACE_RULES.md`, `worker/legs/paris-demo.json` (nếu có bước vượt rào) và Phase 9 (Vé ưu tiên không còn gắn Vượt rào) để gỡ phần liên quan.
+- KHÔNG có Vượt rào (SPEC §17.12): schema zod (`shared/src/leg`, báo lỗi rõ nếu gặp `roadblock`) và `docs/RACE_RULES.md` đã gỡ ở nền Phase 7; máy trạng thái / mật thư (track A, C) không có loại này. Phase 9: Vé ưu tiên không còn gắn Vượt rào.
 - Thông báo thứ tự xuất phát (SPEC §17.12): khi đội vào game, góc phải hiện "Xuất phát ở vị trí thứ n" trong 15 s đầu rồi mờ dần biến mất. n = thứ tự ĐĂNG NHẬP VÀO GAME lần đầu (đội vào đầu tiên = 1, vào muộn nhất = cuối), không theo giờ Host nhập: server ghi `startOrder` ở lần đăng nhập đầu tiên của đội (bảng `teams`, giữ nguyên khi vào lại), gửi trong `welcome`; client dùng cùng cách mờ dần với `HUD` tên đường, đếm bằng thời gian mô phỏng. Chỉ hiện MỘT lần ở lần đăng nhập đầu tiên, tại vạch xuất phát; vào lại KHÔNG hiện; không thông báo ở các lộ trình sau hay khi về đích (server gửi cờ `showStartOrder` chỉ ở lần đầu, hoặc client dựa vào `startOrder` mới ghi).
 - Đồng hồ mỗi đội (SPEC §17.12): tính từ lúc đội nhận mật thư đầu tiên ngoài game; Host nhập giờ bắt đầu từng đội; `welcome.raceTime` (hiện `null`) = hiện tại − giờ bắt đầu của đội.
 - Server phải biết `respawn()` / dịch chuyển hợp lệ (cờ trong `pos` đã có); ZonePanel / ghost theo SPEC §7 dời sang đây.
@@ -124,7 +124,6 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Xuất phát (SPEC §17.12): điểm bắt đầu chặng là **cầu Bir-Hakeim** (lấy từ file chặng, thay `playerSetup.spawn` Concorde khi vào cuộc đua thật; chế độ offline giữ Concorde); các đội tới lần lượt, không xuất phát chung; rải đội tới cùng lúc quanh điểm. Đổi điểm đầu trong `paris-demo.json` sang Bir-Hakeim. Geofence cho phép bán kính 15–40 m.
 - `F` mở hộp mật thư (`openBox`), `celebrate` ở Pit Stop; `pickUp` (`PickUp_Table`) và `talk` (`Idle_Talking_Loop`) đã có clip nhưng chưa dùng (Phase 7–8).
 - Schema zod cho file chặng trong `/shared`; Worker import `worker/legs/paris-demo.json` để nạp lần đầu vào SQLite (hiện mới chỉ test import file này).
-- Quyết định thời gian Host tạm dừng có bị trừ khỏi thời gian chính thức không (SPEC §13.3 nói đồng hồ dừng, công thức §13.8 không trừ), rồi cập nhật `docs/RACE_RULES.md` mục 11.
 
 ## Phase 11 – Test toàn trình
 - `npm run sim` (bot mô phỏng), `worker/legs/test/paris-demo.filled.json`, `worker/legs/test/specials.json`.

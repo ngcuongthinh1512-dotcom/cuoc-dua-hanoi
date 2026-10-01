@@ -14,12 +14,12 @@ export function nextBoxes(list: readonly BoxInfo[], m: BoxMessage): BoxInfo[] {
   return list.filter((b) => b.step !== m.step || b.opened);
 }
 
-/** DEV ?boxes=step,x,z[,opened];… (p6-boxes): stand-in boxes without a server. */
+/** DEV ?boxes=step,x,z[,opened];… (p6-boxes): stand-in boxes without a server (zone radius 20 m). */
 export function parseBoxes(v: string | null): BoxInfo[] {
   return (v ?? '').split(';').flatMap((g) => {
     const [step, x, z, opened] = g.split(',');
     const [px, pz] = [Number(x), Number(z)];
-    return step && Number.isFinite(px) && Number.isFinite(pz) && x?.trim() && z?.trim() ? [{ step, x: px, z: pz, opened: opened === 'opened' }] : [];
+    return step && Number.isFinite(px) && Number.isFinite(pz) && x?.trim() && z?.trim() ? [{ step, x: px, z: pz, opened: opened === 'opened', r: 20 }] : [];
   });
 }
 

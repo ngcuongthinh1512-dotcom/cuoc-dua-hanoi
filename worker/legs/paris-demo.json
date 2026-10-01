@@ -65,9 +65,11 @@
     }
   },
   "start": {
-    "name": "Cột obelisk – Quảng trường Concorde",
-    "lat": 48.86548,
-    "lon": 2.32115
+    "name": "Cầu Bir-Hakeim – giữa cầu, lối đi bộ dưới cầu cạn metro",
+    "lat": 48.85569,
+    "lon": 2.28758,
+    "yawDeg": 33,
+    "spreadMeters": 5
   },
   "steps": [
     {

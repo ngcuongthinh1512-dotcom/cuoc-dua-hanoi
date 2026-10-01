@@ -110,4 +110,24 @@ describe('frames and JSON messages', () => {
     expect(isClientMessage('respawn', 'team')).toBe(false);
     expect(isClientMessage({ t: 'welcome' }, 'team')).toBe(false);
   });
+
+  it('Phase 7: race ops from a team, race / team / leg ops from the Host only', () => {
+    for (const m of [{ t: 'race', op: 'open', step: 'L1' }, { t: 'race', op: 'task', step: 'D1', branch: 'A' }, { t: 'race', op: 'task', step: 'T1', answer: 'bảy' }, { t: 'race', op: 'checkin' }, { t: 'race', op: 'book' }])
+      expect(isClientMessage(m, 'team')).toBe(true);
+    expect(isClientMessage({ t: 'race', op: 'open' }, 'team')).toBe(false); // which box?
+    expect(isClientMessage({ t: 'race', op: 'open', step: 'x'.repeat(17) }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'race', op: 'task', step: 'T1', answer: 'a'.repeat(201) }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'race', op: 'skip', step: 'L1' }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'host.race', op: 'pause' }, 'host')).toBe(true);
+    expect(isClientMessage({ t: 'host.race', op: 'pause' }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'host.race', op: 'restart' }, 'host')).toBe(false);
+    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 1_790_000_000_000 }, 'host')).toBe(true);
+    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: null }, 'host')).toBe(true);
+    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 'now' }, 'host')).toBe(false);
+    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 1 }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'host.leg', id: 'paris-demo' }, 'host')).toBe(true);
+    expect(isClientMessage({ t: 'host.leg', json: '{}' }, 'host')).toBe(true);
+    expect(isClientMessage({ t: 'host.leg', id: 'a', json: '{}' }, 'host')).toBe(false); // one or the other
+    expect(isClientMessage({ t: 'host.leg', id: 'paris-demo' }, 'team')).toBe(false);
+  });
 });

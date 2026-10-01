@@ -1052,3 +1052,19 @@ export const hostPage = {
   corridor: { corridorMeters: 150, minDistanceFromCheckpoint: 100 },
   addBikeOffset: 3, // m east of the team: "Thêm xe" in the team table puts a shared bike this close to the team's last pose
 };
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// Phase 7 (docs/plans/phase7.md §5.3): race engine. Each track edits ONLY its own block and adds no imports. Race rules
+// (zones, transport, penalties) come from the leg file on the server; these are client presentation tunables only.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+
+// ── B · client race integration (race/RaceClient.ts, race/PitStop.ts, ClueBoxes, main.ts, Player.ts) ──
+export const raceClient = {
+  checkinEveryMs: 2000, // on the Pit Stop mat after the penalty wait: `race checkin` at most this often (SPEC §8.6)
+  headroom: 2.2, // m: a spawn / box under a deck (Bir-Hakeim metro viaduct) goes to the lowest walkable surface with this much free space above
+};
+
+// ── C · race HUD widgets (race/ui/*: clue card, Sổ mật thư, start-order banner, Pit Stop line, zone panel; ui/HUD.ts clock) ──
+export const raceHud = {
+  startOrderSeconds: 15, // SPEC §17.12: "Xuất phát ở vị trí thứ n" stays this long (sim clock), then fades (hudWidgets.streetFade)
+};

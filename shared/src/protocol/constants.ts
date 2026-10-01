@@ -1,6 +1,7 @@
 // Phase 6 (docs/plans/phase6.md §3): rates and limits BOTH sides must agree on. Client-only tunables stay in
 // client/src/config.ts, race rules in the leg file (movement, presence, vehicles); these are the wire contract.
-export const PROTOCOL_VERSION = 1;
+// 2 = Phase 7 race engine (race / book / zone messages, welcome.race / startOrder / start, BoxInfo.r).
+export const PROTOCOL_VERSION = 2;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */
@@ -35,6 +36,9 @@ export const NET = {
   /** SPEC §17.10: the server compares each online team's last pose with its current clue box this often (one sqrt per
    *  team, no SQLite); radius + hysteresis come from the leg file (boxReveal). */
   boxCheckMs: 2_000,
+  /** Phase 7: m added to a geofence radius when the server judges an op (open / task / checkin) against the last valid
+   *  pose: the pose is ≤ 200 ms old (≈ 1 m at bike speed) and the box stands at the zone's centre anyway. */
+  geofenceSlack: 2,
   /** Message limits: a player frame (pose 31 B, JSON ops < 200 B) and a Host frame (spawn candidates). Over → closed. */
   maxPlayerBytes: 1_024,
   maxHostBytes: 262_144,

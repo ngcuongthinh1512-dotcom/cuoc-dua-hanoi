@@ -18,6 +18,16 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   bikeGone: 'Xe của bạn đã biến mất vì bị bỏ lại quá xa',
   bikeParked: 'Xe của bạn đã được để ở bãi xe cạnh điểm. Trong lúc bạn làm thử thách, đội khác có thể lấy mất!',
   walkOnly: 'Lộ trình này bắt buộc đi bộ',
+  // Phase 7: race ops (SPEC §8)
+  raceNotOpen: 'Cuộc đua chưa bắt đầu, hãy chờ Host',
+  racePaused: 'Cuộc đua đang tạm dừng',
+  raceOver: 'Chặng đua đã kết thúc',
+  boxFar: 'Hãy vào gần hộp mật thư hơn',
+  boxRiding: 'Xuống xe rồi mới mở được hộp mật thư', // SPEC §6.3
+  boxOpened: 'Hộp mật thư này đã mở rồi',
+  taskFar: 'Hãy tới đúng nơi làm nhiệm vụ',
+  clueNew: 'Mật thư mới đã vào Sổ mật thư', // SPEC §8.9
+  penaltyWait: 'Hãy chờ cạnh thảm cho hết phút phạt', // SPEC §8.6
 };
 
 export interface Toast {

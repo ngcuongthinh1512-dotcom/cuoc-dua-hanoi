@@ -97,7 +97,7 @@ Sau khi về đích, bạn được bay camera tự do để xem các đội cò
 
 ### Bãi xe cạnh mỗi điểm
 Mỗi điểm lộ trình có một **bãi xe đạp** ngay bên cạnh.
-- Khi bạn **mở mật thư của một nhiệm vụ tại điểm** (Lựa chọn kép, Thử thách, Vượt rào, Gờ giảm tốc, Vé vượt), hoặc **nhận một lộ trình bắt buộc đi bộ**, xe của bạn tự động vào bãi.
+- Khi bạn **mở mật thư của một nhiệm vụ tại điểm** (Lựa chọn kép, Thử thách, Gờ giảm tốc, Vé vượt), hoặc **nhận một lộ trình bắt buộc đi bộ**, xe của bạn tự động vào bãi.
 - Xe ở bãi **không còn là của riêng ai: bất kỳ đội nào cũng lấy được**, kể cả chính bạn. Ai tới trước được trước!
 - Làm xong nhiệm vụ mà xe vẫn còn ở bãi, bấm `F` để lấy lại như lấy xe mới. Nếu xe đã bị lấy mất, hãy đi bộ hoặc lấy chiếc khác đang có ở bãi.
 - Bãi xe có sức chứa giới hạn; khi bãi đầy, chiếc xe để lâu nhất sẽ biến mất.
@@ -111,9 +111,12 @@ Mỗi mật thư lộ trình ghi rõ luật phương tiện, và màn hình luô
 
 - Chặng đua là **một chuỗi bước theo đúng thứ tự**. Bạn chỉ nhận mật thư bước tiếp theo khi máy chủ xác nhận bạn đã xong bước hiện tại. **Không thể nhảy cóc.**
 - Tại mỗi điểm có một **hộp mật thư cắm cờ vàng–đỏ**, phát sáng nhẹ để dễ thấy khi tới gần.
-- Bước vào vùng quanh hộp mật thư rồi bấm `F` để mở.
-- Tới nhầm điểm của một bước sau thì hộp mật thư **không mở được**. Hãy quay lại đúng lộ trình của mình.
-- **Xuất phát**: Host đếm ngược, rồi tất cả các đội nhận mật thư đầu tiên cùng lúc. Chặng cũng có thể cho **xuất phát lệch giờ** theo kết quả chặng trước.
+- Chỉ hộp của mật thư bạn **đang giữ** mới hiện, và chỉ khi bạn tới gần (khoảng 150 m). Hộp của các bước sau chưa hiện, nên không thể tìm trước. Hộp đã mở vẫn còn đó (màu nhạt) để bạn định hướng.
+- Bước vào vùng quanh hộp mật thư, **xuống xe**, rồi bấm `F` để mở. Mật thư mới tự vào Sổ mật thư.
+
+### Xuất phát
+- Mỗi đội nhận **mật thư đầu tiên ở ngoài trò chơi**, mỗi đội vào một lúc khác nhau: không có tiếng súng xuất phát chung. **Đồng hồ của đội bạn chạy từ lúc đó** (Host ghi lại giờ này), kể cả khoảng thời gian trước khi bạn vào game.
+- Lần đầu vào game, bạn xuất hiện ở **điểm xuất phát của chặng** (chặng này: cầu Bir-Hakeim). Góc phải màn hình hiện **"Xuất phát ở vị trí thứ n"** trong 15 giây: n là thứ tự đội bạn **vào game** (đội vào đầu tiên là 1), không phải thứ hạng. Thông báo chỉ hiện một lần; vào lại thì không hiện nữa.
 
 ## 5. Các loại thẻ mật thư
 
@@ -128,11 +131,6 @@ Mỗi loại thẻ có tiêu đề và màu riêng, nhìn là nhận ra ngay.
 - Được **đổi nhánh**, nhưng sẽ **mất toàn bộ tiến độ** của nhánh cũ.
 - Không đổi nhánh được khi đang chờ Host duyệt bài.
 - Xong nhánh đã chọn thì nhận mật thư tiếp theo.
-
-### Vượt rào
-- **Nhiệm vụ bắt buộc, không có nhánh để chọn**, và thường khó hơn.
-- Ban đầu thẻ **chỉ hiện một câu gợi ý**. Bấm **"Nhận thử thách"** mới thấy nội dung nhiệm vụ.
-- Chỉ bỏ qua được bằng cách **bỏ cuộc** (bị phạt nặng) hoặc dùng **Vé ưu tiên**.
 
 ### Thử thách
 - Nhiệm vụ bắt buộc tại một điểm, không có nhánh để chọn.
@@ -155,7 +153,7 @@ Nhiệm vụ có thể làm ngay tại điểm vừa tới, hoặc ở một khu
 Xe dùng trong nhiệm vụ chở hàng hay đạp xe qua cổng là **xe riêng của thử thách**: chỉ xuất hiện cho đội đang làm, biến mất khi xong, không liên quan tới xe đạp ngoài đường.
 
 ### Chặng dừng
-- Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**. Bước lên thảm để check-in, người dẫn chương trình sẽ đón và báo thứ tự về đích của đội bạn (trừ khi chặng có bù giờ chờ duyệt, xem mục 7).
+- Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**. Bước lên thảm để check-in: người dẫn chương trình đón đội bạn và báo thời gian của đội. Vì mỗi đội xuất phát vào một lúc khác nhau, **thứ hạng chính thức do Host công bố** (mục 11).
 - Nếu đội bạn có **phút phạt**, bạn phải **đứng chờ cạnh thảm cho hết thời gian phạt** rồi mới được check-in. Trong lúc đó, đội tới sau có thể check-in trước bạn!
 - Chặng có thể là **chặng loại** (đội về cuối bị loại) hoặc **chặng không loại** (đội cuối được cứu, nhưng phải nhận **Gờ giảm tốc** ở chặng sau).
 - Sau khi check-in, bạn trở thành **khán giả**: bay camera tự do để theo dõi các đội còn lại.
@@ -180,7 +178,7 @@ Có những nhiệm vụ game không tự chấm được. Khi đó bạn gửi 
 
 ### Bù giờ chờ duyệt
 - Nếu chặng có bù giờ, mọi khoảng thời gian từ lúc bạn gửi bài tới lúc Host quyết định (Duyệt hay Chưa đạt) được **trừ khỏi thời gian chính thức**. Đội bạn không bị thiệt nếu Host duyệt chậm.
-- Vì vậy, thứ tự các đội bước lên thảm **có thể khác thứ hạng chính thức**. Tại Chặng dừng, người dẫn chương trình chỉ nói *"Bạn đã về đích! Thứ hạng chính thức sẽ được Host công bố."*
+- Vì vậy (và vì mỗi đội xuất phát một lúc khác nhau), thứ tự các đội bước lên thảm **có thể khác thứ hạng chính thức**. Thứ hạng chính thức do Host công bố.
 
 ## 8. Sổ mật thư
 
@@ -227,7 +225,7 @@ Mỗi chặng tự quyết định bật hay tắt từng yếu tố dưới đ�
 
 Bạn bị cộng phút phạt khi:
 - **Di chuyển nhanh hơn tốc độ đi bộ trong lộ trình bắt buộc đi bộ**, phát hiện bằng tốc độ di chuyển.
-- **Bỏ cuộc một nhiệm vụ**: bấm **"Bỏ cuộc"** ở Lựa chọn kép, Thử thách hoặc Vượt rào để nhận luôn mật thư tiếp theo.
+- **Bỏ cuộc một nhiệm vụ**: bấm **"Bỏ cuộc"** ở Lựa chọn kép hoặc Thử thách để nhận luôn mật thư tiếp theo.
 - **Host phạt trực tiếp**, luôn kèm lý do.
 
 Số phút phạt do từng chặng quy định, ví dụ 15 phút cho vi phạm đi bộ, 30 phút cho bỏ cuộc.
@@ -236,10 +234,11 @@ Tổng phút phạt luôn hiện ở góc trên bên phải, cạnh đồng hồ
 
 ## 11. Thời gian chính thức & xếp hạng
 
-- **Đồng hồ đua** ở góc trên bên phải chạy từ lúc đội bạn xuất phát. Nếu Host tạm dừng cuộc đua, đồng hồ của mọi đội cùng dừng.
+- **Đồng hồ đua** chạy từ lúc đội bạn **nhận mật thư đầu tiên ở ngoài trò chơi** (giờ xuất phát của đội, Host ghi lại), kể cả khoảng thời gian trước khi bạn vào game. Khi Host chưa ghi giờ này, đồng hồ hiện `--:--`.
 - **Thời gian chính thức** = giờ check-in trên thảm − giờ xuất phát của đội bạn − thời gian chờ Host duyệt (nếu chặng có bù giờ).
 - Thời gian đứng chờ hết phạt **đã nằm trong** thời gian chính thức.
-- Xuất phát lệch giờ thì mỗi đội tính từ giờ xuất phát riêng của mình.
+- Mỗi đội tính từ giờ xuất phát riêng của mình.
+- **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hộp mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục. **Đồng hồ vẫn chạy và thời gian tạm dừng không được trừ** khỏi thời gian chính thức.
 - Thời gian chính thức càng ngắn, thứ hạng càng cao. Host bấm **"Công bố kết quả"** để gửi thứ hạng chính thức tới mọi người chơi.
 
 ## 12. Thoát ra & vào lại

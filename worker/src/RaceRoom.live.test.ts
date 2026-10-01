@@ -4,7 +4,7 @@
 // harness (they wait for the tick loop to go idle), so they run afterwards, one by one, on the races left behind.
 import { decodeTick, encodePose, type BoxInfo, type HostState, type MoveMode, type QuotaCounters, type Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { stepBox } from './race/boxes.ts';
+import { legPoints, stepBox } from './race/boxes.ts';
 import { joinTeam, openSocket, raceHarness, setupRace, sleep } from './test/harness.ts';
 
 const server = raceHarness();
@@ -15,13 +15,18 @@ afterAll(() => server.close());
 
 type Sock = Awaited<ReturnType<typeof joinTeam>>;
 const L1 = stepBox(0)!;
-const pose = (x: number, z: number, mode: MoveMode = 'walk') => encodePose({ x, y: 0, z, yaw: 0, mode, action: 'none' });
-const respawn = (x: number, z: number) => ({ t: 'respawn', x, y: 0, z, yaw: 0, how: 'safe' });
+// Positions below are metres from the leg start S (Phase 7: Pont de Bir-Hakeim, SPEC §17.12; a team never seen stands there).
+const S = legPoints()[0]!;
+const L1r = { x: L1.x - S.x, z: L1.z - S.z };
+const pose = (x: number, z: number, mode: MoveMode = 'walk') => encodePose({ x: S.x + x, y: 0, z: S.z + z, yaw: 0, mode, action: 'none' });
+const respawn = (x: number, z: number) => ({ t: 'respawn', x: S.x + x, y: 0, z: S.z + z, yaw: 0, how: 'safe' });
+/** A pose as it comes back from the wire (cm). */
+const wire = (x: number, z: number) => { const a = encodePose({ x: S.x + x, y: 0, z: S.z + z, yaw: 0, mode: 'walk', action: 'none' }); return { x: a[1]! / 100, z: a[3]! / 100 }; };
 const ticks = (msgs: unknown[]) => msgs.filter(Array.isArray).map((m) => decodeTick(m)!);
 const slotsOf = (msgs: unknown[]) => ticks(msgs).at(-1)?.entries.map((e) => e.slot).sort();
 const hostStates = (msgs: { t?: string }[]) => msgs.filter((m) => m.t === 'host.state') as HostState[];
 const boxMsgs = (msgs: { t?: string }[]) => msgs.filter((m) => m.t === 'box');
-const reveal = { t: 'box', op: 'reveal', box: { step: 'L1', x: L1.x, z: L1.z, opened: false } satisfies BoxInfo };
+const reveal = { t: 'box', op: 'reveal', box: { step: 'L1', x: L1.x, z: L1.z, opened: false, r: L1.r } satisfies BoxInfo };
 const hide = { t: 'box', op: 'hide', step: 'L1' };
 const sqlOf = (race: string) => server.getWorker().getDurableObjectStorage('RaceRoom', { name: race });
 const snapSeq = async (race: string) => {
@@ -62,7 +67,7 @@ describe.concurrent('RaceRoom live', () => {
     a!.send(pose(1, 0));
     const [ma2, mb2, mh2] = await Promise.all([a!.drain(500), b!.drain(500), host.drain(500)]);
     expect(ticks(ma2)).toEqual([]);
-    expect(ticks(mb2).at(-1)?.entries).toEqual([{ slot: sa, pose: { x: 1, y: 0, z: 0, yaw: 0, mode: 'walk', action: 'none' } }]);
+    expect(ticks(mb2).at(-1)?.entries).toEqual([{ slot: sa, pose: { ...wire(1, 0), y: 0, yaw: 0, mode: 'walk', action: 'none' } }]);
     expect(slotsOf(mh2)).toEqual([sa, sb, sc]);
     // C leaves: the Host's next tick drops it
     c!.close();
@@ -100,7 +105,7 @@ describe.concurrent('RaceRoom live', () => {
     expect(billable2h).toBeLessThan(40_000);
     expect(rows2h).toBeLessThan(20_000);
     // B ends next to L1 for the welcome.boxes check after the restart
-    b!.send(respawn(L1.x - 100, L1.z));
+    b!.send(respawn(L1r.x - 100, L1r.z));
     expect(await b!.until((m) => m.t === 'box', 3000)).toEqual(reveal);
     host.close();
     Object.assign(cadence, { hostToken, codes: teams.map((t) => t.code), slot: teams[0]!.slot, ax, wsIn: c1.wsIn });
@@ -134,7 +139,7 @@ describe.concurrent('RaceRoom live', () => {
     const race = 'live-teleport';
     const { host, teams } = await setupRace(server, race, 4);
     const [a, b, c, d] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
-    a!.send(pose(0, 0)); // the leg start (Concorde = world origin)
+    a!.send(pose(0, 0)); // the leg start
     b!.send(pose(0, 0));
     d!.send(pose(1500, 0)); // never seen before: 1.5 km from the leg start
     await sleep(300);
@@ -181,7 +186,7 @@ describe.concurrent('RaceRoom live', () => {
     const race = 'live-boxes';
     const { host, teams } = await setupRace(server, race, 2);
     const [a, b] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
-    const at = (d: number) => a!.send(respawn(L1.x + d, L1.z));
+    const at = (d: number) => a!.send(respawn(L1r.x + d, L1r.z));
     b!.send(pose(0, 0));
     at(200);
     expect(boxMsgs(await a!.drain(2500))).toEqual([]);
@@ -205,10 +210,10 @@ describe('RaceRoom restart', () => {
     const race = 'live-cadence';
     await evict(race, 'close');
     const [a, b] = await Promise.all(cadence.codes.map((c) => joinTeam(server, race, c)));
-    expect((a!.welcome as unknown as Welcome).pose).toMatchObject({ x: cadence.ax, z: 0, bikeId: null });
+    expect((a!.welcome as unknown as Welcome).pose).toMatchObject({ ...wire(cadence.ax, 0), bikeId: null });
     expect((a!.welcome as unknown as Welcome).boxes).toEqual([]);
     expect((b!.welcome as unknown as Welcome).boxes).toEqual([reveal.box]);
-    b!.send(respawn(L1.x - 180, L1.z)); // already revealed through welcome: walking out hides it
+    b!.send(respawn(L1r.x - 180, L1r.z)); // already revealed through welcome: walking out hides it
     expect(await b!.until((m) => m.t === 'box', 3000)).toEqual(hide);
     const host = await openSocket(server, race, cadence.hostToken);
     const st = (await host.until((m) => m.t === 'host.state')) as unknown as HostState;
@@ -224,7 +229,7 @@ describe('RaceRoom restart', () => {
 
   it('keeps the revealed box in the socket attachment across hibernation', async () => {
     await evict('live-boxes', 'hibernate');
-    boxTeam!.send(respawn(L1.x + 175, L1.z));
+    boxTeam!.send(respawn(L1r.x + 175, L1r.z));
     expect(await boxTeam!.until((m) => m.t === 'box', 3000)).toEqual(hide);
     boxTeam!.close();
   }, 30_000);

@@ -1,0 +1,62 @@
+// Where each step of a leg is done (SPEC §8.1–8.2), in world metres. Pure; the Durable Object checks poses against these,
+// `npm run leg:check` walks them on the road graph.
+import { latLonToWorld } from '../projection.ts';
+import { LEG_LIMITS, type Destination, type Leg } from './schema.ts';
+
+export interface Zone {
+  x: number;
+  z: number;
+  /** Geofence radius, m. */
+  r: number;
+  /** destination / task location name (Host only: never sent to a team before the step is done). */
+  name: string;
+}
+
+const zone = (d: Destination): Zone => {
+  const p = latLonToWorld(d.lat, d.lon);
+  return { x: p.x, z: p.z, r: d.radius, name: d.name };
+};
+
+/** Index-aligned with leg.steps:
+ *  - route_info → its destination, except the route right before the Pit Stop → the Pit Stop's (SPEC §8.1: that route is
+ *    done by entering the Pit Stop zone);
+ *  - pit_stop → its destination (the mat);
+ *  - challenge → task.location, else where the team already is (the zone of the step before);
+ *  - detour → the zone of the step before (each branch may have its own: branchZone). */
+export function stepZones(leg: Leg): Zone[] {
+  const out: Zone[] = [];
+  const s0 = latLonToWorld(leg.start.lat, leg.start.lon);
+  let prev: Zone = { x: s0.x, z: s0.z, r: LEG_LIMITS.radiusMax, name: leg.start.name };
+  leg.steps.forEach((s, i) => {
+    const next = leg.steps[i + 1];
+    const z =
+      s.type === 'route_info' ? zone(next?.type === 'pit_stop' ? next.destination : s.destination)
+      : s.type === 'pit_stop' ? zone(s.destination)
+      : s.type === 'challenge' && s.task.location ? zone(s.task.location)
+      : prev;
+    out.push(z);
+    prev = z;
+  });
+  return out;
+}
+
+/** The zone of a detour branch's task (its own location, else the detour's zone). */
+export function branchZone(leg: Leg, zones: readonly Zone[], step: number, branch: string): Zone | null {
+  const s = leg.steps[step];
+  if (s?.type !== 'detour') return null;
+  const b = s.branches.find((x) => x.id === branch);
+  return b ? (b.task.location ? zone(b.task.location) : zones[step]!) : null;
+}
+
+const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+
+/** SPEC §17.12: where the team with start order `order` (1, 2, …) first appears — spread over leg.start.spreadMeters
+ *  (sunflower pattern: no two of the first 8 closer than ~1.5 m at 5 m) so name tags of teams arriving together do not
+ *  stack; heading leg.start.yawDeg (rad here). */
+export function startSpot(leg: Leg, order: number): { x: number; z: number; yaw: number } {
+  const p = latLonToWorld(leg.start.lat, leg.start.lon);
+  const k = Math.max(0, order - 1);
+  const r = leg.start.spreadMeters * Math.sqrt(((k % 8) + 0.5) / 8);
+  const a = k * GOLDEN;
+  return { x: p.x + r * Math.cos(a), z: p.z + r * Math.sin(a), yaw: (leg.start.yawDeg * Math.PI) / 180 };
+}

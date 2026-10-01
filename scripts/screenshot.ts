@@ -217,6 +217,17 @@ Object.assign(PRESETS, {
   'p6-host': '/host.html?demo=1', // [D]
 });
 
+// Phase 7 (docs/plans/phase7.md §7): p7-* presets, offline stand-ins only (the screenshot server is Vite, no wrangler):
+// RaceHud.demo(query) (?card=, ?book, ?startOrder=, ?finish, ?zone) and Bir-Hakeim / Pit Stop views. Each track adds its
+// presets under its own line only.
+Object.assign(PRESETS, {
+  // [A] server: no screenshots (worker tests + harness)
+  // [B] start spawn on the Bir-Hakeim road deck (not on the metro viaduct), box opening (openBox), Pit Stop mat + host NPC, celebrate
+  // [C] clue card (each step type), full card popup, Sổ mật thư, "Xuất phát ở vị trí thứ n", Pit Stop line, clock --:-- / penalty
+  // [D] leg format + validator: no screenshots
+  // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
+});
+
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
 // point, camera `view` = [azimuth seen from the landmark, distance], raised ~ 0.35 × distance and looking at it.
 const worldCam = (x: number, y: number, z: number, tx: number, ty: number, tz: number) => {
@@ -286,7 +297,7 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6)-/.test(k))); // landmark / player / online views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7)-/.test(k))); // landmark / player / online views by name
 
 const outDir = join(root, 'screenshots');
 const errors: string[] = [];

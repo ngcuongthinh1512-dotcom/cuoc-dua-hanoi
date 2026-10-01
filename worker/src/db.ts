@@ -1,7 +1,9 @@
-// Durable Object SQLite schema (docs/plans/phase6.md §3.5). Rows written are quota (100 000 / day on the Free plan, an
-// index row counts too): hot data is batched into single JSON rows, only `events` carries an index (the Host filters by
-// team). Phase 7 adds the leg content + step_progress tables here, bumping SCHEMA_VERSION with ALTER / CREATE steps.
-export const SCHEMA_VERSION = 1;
+// Durable Object SQLite schema (docs/plans/phase6.md §3.5, docs/plans/phase7.md §5.4). Rows written are quota (100 000 /
+// day on the Free plan, an index row counts too): hot data is batched into single JSON rows, only `events` carries an
+// index (the Host filters by team). v2 (Phase 7): step_progress (one row per team × step, WITHOUT ROWID on its primary
+// key = 1 row written per upsert); the loaded leg lives in meta ('leg' JSON, 'legId'); the new team fields (startAt,
+// startOrder, finishAt, penalty…) live in teams.state JSON, so no ALTER.
+export const SCHEMA_VERSION = 2;
 
 const DDL = [
   // key / value: race, status, schema, seed, candidates (JSON), spawning (JSON)…
@@ -17,6 +19,13 @@ const DDL = [
   'CREATE INDEX IF NOT EXISTS events_team ON events (team, t)',
   // shared bikes (SPEC §6.2–6.4): one JSON row each (ServerBike in race/VehicleSpawner.ts)
   'CREATE TABLE IF NOT EXISTS bikes (id TEXT PRIMARY KEY, data TEXT NOT NULL)',
+  // v2 – SPEC §8.1 step_progress: every column of the spec now (Phase 8–10 fill the rest), timestamps = server ms UTC
+  'CREATE TABLE IF NOT EXISTS step_progress (team TEXT NOT NULL, step TEXT NOT NULL, ' +
+    'arrived_at INTEGER, clue_opened_at INTEGER, task_started_at INTEGER, completed_at INTEGER, branch TEXT, ' +
+    'branch_switches INTEGER NOT NULL DEFAULT 0, wrong_answers INTEGER NOT NULL DEFAULT 0, penalty_minutes REAL NOT NULL DEFAULT 0, ' +
+    'transport_used TEXT, bike_distance_m REAL NOT NULL DEFAULT 0, bike_lost_at_rack INTEGER NOT NULL DEFAULT 0, skipped_by TEXT, ' +
+    'submitted_at INTEGER, decided_at INTEGER, decided_by TEXT, rejections INTEGER NOT NULL DEFAULT 0, ' +
+    'approval_wait_seconds REAL NOT NULL DEFAULT 0, PRIMARY KEY (team, step)) WITHOUT ROWID',
 ];
 
 // Rows extend Record<string, SqlStorageValue>: sql.exec<T>() requires it.
@@ -31,6 +40,48 @@ export interface TeamRow extends Record<string, SqlStorageValue> {
   state: string;
 }
 
+/** One step of one team (SPEC §8.1). clue_opened_at = when the team got this step's clue (the previous step's completion;
+ *  step 1: its start time, else its first entry). */
+export interface StepProgressRow extends Record<string, SqlStorageValue> {
+  team: string;
+  step: string;
+  arrived_at: number | null;
+  clue_opened_at: number | null;
+  task_started_at: number | null;
+  completed_at: number | null;
+  branch: string | null;
+  branch_switches: number;
+  wrong_answers: number;
+  penalty_minutes: number;
+  transport_used: string | null;
+  bike_distance_m: number;
+  bike_lost_at_rack: number;
+  skipped_by: string | null;
+  submitted_at: number | null;
+  decided_at: number | null;
+  decided_by: string | null;
+  rejections: number;
+  approval_wait_seconds: number;
+}
+
+export const emptyProgress = (team: string, step: string): StepProgressRow => ({
+  team, step, arrived_at: null, clue_opened_at: null, task_started_at: null, completed_at: null, branch: null, branch_switches: 0,
+  wrong_answers: 0, penalty_minutes: 0, transport_used: null, bike_distance_m: 0, bike_lost_at_rack: 0, skipped_by: null,
+  submitted_at: null, decided_at: null, decided_by: null, rejections: 0, approval_wait_seconds: 0,
+});
+
+/** Every step_progress row (read once by the engine, then kept in memory and patched on write). */
+export const readProgress = (sql: SqlStorage) => sql.exec<StepProgressRow>('SELECT * FROM step_progress').toArray();
+
+const PROGRESS_COLS = Object.keys(emptyProgress('', ''));
+/** Upsert of the whole row: 1 row written (WITHOUT ROWID, no other index). */
+export function writeProgress(sql: SqlStorage, r: StepProgressRow) {
+  sql.exec(
+    `INSERT OR REPLACE INTO step_progress (${PROGRESS_COLS.join(', ')}) VALUES (${PROGRESS_COLS.map(() => '?').join(', ')})`,
+    ...PROGRESS_COLS.map((c) => r[c] ?? null),
+  );
+}
+
 export interface EventRow extends Record<string, SqlStorageValue> {
   id: number;
   t: number;
@@ -43,7 +94,7 @@ export interface EventRow extends Record<string, SqlStorageValue> {
 export function migrate(sql: SqlStorage): number {
   for (const stmt of DDL) sql.exec(stmt);
   const v = Number(getMeta(sql, 'schema') ?? 0);
-  // ponytail: versioned ALTERs go here when SCHEMA_VERSION grows (Phase 7); v1 only creates.
+  // v1 → v2 only creates a table (in DDL); versioned ALTERs go here when a later version changes existing tables.
   if (v < SCHEMA_VERSION) setMeta(sql, 'schema', String(SCHEMA_VERSION));
   return SCHEMA_VERSION;
 }

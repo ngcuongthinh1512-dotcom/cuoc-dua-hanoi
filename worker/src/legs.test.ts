@@ -1,8 +1,29 @@
 import { RACE_BBOX } from '@race/shared';
+import { parseLeg } from '@race/shared/leg';
 import { describe, expect, it } from 'vitest';
 import leg from '../legs/paris-demo.json';
+import { BUNDLED_LEGS, bundledLeg } from './race/leg.ts';
 
-// Pure data checks of the demo leg against SPEC §10.1 (the zod schema arrives in Phase 7).
+describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
+  it('every bundled leg parses with no error', () => {
+    expect(BUNDLED_LEGS).toEqual(['paris-demo', 'paris-demo-filled', 'mini']);
+    for (const id of BUNDLED_LEGS) expect(bundledLeg(id)?.id).toBe(id);
+  });
+
+  it('the demo leg is a draft: only the Host blanks of SPEC §10.1 are open; the filled test copy has none', () => {
+    const r = parseLeg(leg);
+    expect(r.ok).toBe(true);
+    expect(new Set(r.issues.map((i) => i.level))).toEqual(new Set(['blank']));
+    expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 3 (D1)', 'Bước 5 (T1)', 'Bước 8 (T2)', 'Host duyệt']));
+    for (const id of ['paris-demo-filled', 'mini']) expect(parseLeg(bundledLeg(id)).issues).toEqual([]);
+  });
+
+  it('starts at the Pont de Bir-Hakeim (SPEC §17.12), not at the obelisk', () => {
+    expect(leg.start).toMatchObject({ lat: 48.85569, lon: 2.28758 });
+  });
+});
+
+// Pure data checks of the demo leg against SPEC §10.1.
 describe('legs/paris-demo.json', () => {
   const steps = leg.steps;
   const count = (type: string) => steps.filter((s) => s.type === type).length;

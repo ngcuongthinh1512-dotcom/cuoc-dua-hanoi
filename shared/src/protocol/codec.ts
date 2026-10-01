@@ -99,6 +99,18 @@ export function isClientMessage(m: unknown, role: 'team' | 'host'): boolean {
       return role === 'host' && (o.op === 'add' || o.op === 'remove' || o.op === 'release');
     case 'host.spawning':
       return role === 'host' && typeof o.paused === 'boolean';
+    // Phase 7 (docs/plans/phase7.md §5.1): step ids are ≤ 16 chars (LEG_LIMITS.stepId), answers ≤ 200
+    case 'race':
+      if (o.op === 'checkin' || o.op === 'book') return true;
+      if (!str(o.step, 16)) return false;
+      if (o.op === 'open') return true;
+      return o.op === 'task' && (o.branch === undefined || str(o.branch, 16)) && (o.answer === undefined || (typeof o.answer === 'string' && o.answer.length <= 200));
+    case 'host.race':
+      return role === 'host' && (o.op === 'start' || o.op === 'pause' || o.op === 'resume' || o.op === 'finish');
+    case 'host.team':
+      return role === 'host' && o.op === 'startAt' && str(o.team) && (o.at === null || (num(o.at) && o.at > 0));
+    case 'host.leg':
+      return role === 'host' && (o.id === undefined) !== (o.json === undefined) && (o.id === undefined || str(o.id, 32)) && (o.json === undefined || typeof o.json === 'string');
     default:
       return false;
   }

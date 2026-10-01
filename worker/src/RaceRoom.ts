@@ -11,6 +11,7 @@ import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, setMeta, type TeamRow } from './db.ts';
 import type { Env } from './index.ts';
 import { BikeService } from './race/BikeService.ts';
+import { NEW_TEAM_RACE, type TeamRace } from './race/engine.ts';
 import { legPoints, stepBox, welcomeBoxes } from './race/boxes.ts';
 import { legRules } from './race/leg.ts';
 import { needsTick, tickEntries, tickKey, type Peer } from './race/presence.ts';
@@ -26,12 +27,11 @@ interface Attachment {
   box: string | null;
 }
 
-/** Per-team race state kept in teams.state (JSON); Phase 7 adds clue fields and owns `step`. */
-interface TeamState {
+/** Per-team state kept in teams.state (JSON): presence fields + the Phase 7 race fields (race/engine.ts TeamRace, `step`
+ *  = index of the current step; track A wires the engine). */
+interface TeamState extends TeamRace {
   reconnects: number;
   lastSeen: number | null;
-  /** Index of the current step in the leg (Phase 6: always 0 → the demo leg's L1 box). */
-  step: number;
   /** Over the speed limit or a suspicious respawn (SPEC §13.9): red on the Host, never cleared automatically. */
   flagged: boolean;
 }
@@ -484,9 +484,11 @@ export class RaceRoom extends DurableObject<Env> {
     const online = this.online();
     const teams = this.teams().map((t) => {
       const s = this.teamState(t);
-      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged };
+      const { startAt, startOrder, step, finishAt, penaltyMinutes } = s;
+      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, startAt, startOrder, step, finishAt, penaltyMinutes };
     });
-    return { t: 'host.state', serverMs: now, status: this.status, teams, counters: this.counters.toJSON(), bikes: this.bikes.list(), spawning: this.bikes.spawning, steps: legPoints() };
+    // Phase 7 foundation: leg / progress / ranking empty until track A wires race/engine.ts (engine.hostView).
+    return { t: 'host.state', serverMs: now, status: this.status, teams, counters: this.counters.toJSON(), bikes: this.bikes.list(), spawning: this.bikes.spawning, steps: legPoints(), leg: null, progress: [], ranking: [] };
   }
 
   // ── helpers ──
@@ -503,7 +505,7 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   private teamState(row?: TeamRow): TeamState {
-    return { reconnects: 0, lastSeen: null, step: 0, flagged: false, ...(row ? (JSON.parse(row.state) as Partial<TeamState>) : {}) };
+    return { reconnects: 0, lastSeen: null, flagged: false, ...NEW_TEAM_RACE, ...(row ? (JSON.parse(row.state) as Partial<TeamState>) : {}) };
   }
 
   /** 1 row written. */
@@ -572,6 +574,11 @@ export class RaceRoom extends DurableObject<Env> {
       raceTime: null,
       bikes: myBikes,
       boxes,
+      // Phase 7 foundation: track A fills these from race/engine.ts (engine.welcome).
+      view: null,
+      startOrder: null,
+      showStartOrder: false,
+      start: null,
     };
   }
 

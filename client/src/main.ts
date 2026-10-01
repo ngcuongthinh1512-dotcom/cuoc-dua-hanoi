@@ -16,6 +16,8 @@ import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
 import { fakeTeams, fakeTick, parsePeers, RemotePlayers } from './net/RemotePlayers.ts';
 import { startSession } from './net/session.ts';
+import { RaceClient } from './race/RaceClient.ts';
+import { RaceHud } from './race/ui/RaceHud.ts';
 import { Npc } from './npc/Npc.ts';
 import type { NpcAnchor } from './npc/types.ts';
 import { loadCharacterAsset } from './player/CharacterModel.ts';
@@ -192,6 +194,13 @@ async function start() {
   // Track C's shared bikes: online the list is the server's (Player skips the dev bikes), F asks it (claim).
   const bikeLink = session && player ? new BikeLink(player.bikes) : undefined;
   if (player) player.bikes.notify = notice; // a refused claim → toast (offline too: the p6-bike-lost stand-in)
+  // Phase 7 (docs/plans/phase7.md §5.3): race HUD widgets (track C; DEV offline: stand-ins from the URL, p7-* presets) and
+  // the team's race state from the server (track B).
+  const raceHud = player
+    ? new RaceHud({ task: (step, branch) => net?.send({ t: 'race', op: 'task', step, ...(branch ? { branch } : {}) }), book: () => net?.send({ t: 'race', op: 'book' }) })
+    : undefined;
+  if (import.meta.env.DEV && !session) raceHud?.demo(query);
+  const race = session && player ? new RaceClient({ hud: raceHud, send: (m) => net?.send(m), serverNow: () => (net ? net.serverNow() : Date.now()) }) : undefined;
   const net =
     session &&
     new NetClient(session, {
@@ -204,9 +213,11 @@ async function start() {
         if (!welcomed && w.pose) player?.setSpawn(w.pose.x, w.pose.z, w.pose.yaw);
         welcomed = true;
         bikeLink?.welcome(w); // w.bikes; w.pose.bikeId + mode 'bike' → mount again (SPEC §8.10)
+        race?.welcome(w, player?.simTime ?? 0);
       },
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
+        if (race?.message(m)) return; // race / book / zone (Phase 7)
         if (m.t === 'team') remote?.setOnline(m.slot, m.online);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') notice(m.code);
@@ -304,7 +315,7 @@ async function start() {
     resume: () => input.lock(),
     ...(player && { respawn: () => notice(player.controller.respawn() === 'stairs' ? 'respawnStairs' : 'respawn') }),
   });
-  const modal = () => menu.isOpen || !!fullMap?.isOpen; // the body stops, keys go to the menu / map
+  const modal = () => menu.isOpen || !!fullMap?.isOpen || !!raceHud?.open; // the body stops, keys go to the menu / map / Sổ mật thư
   // URL hooks (screenshots, tests; docs/plans/phase5.md §7), applied once the world is ready: ?gps=x,z waypoint,
   // ?map[=metersPerPx] full map open, ?menu menu open, ?respawn=s "Kẹt? Về chỗ an toàn" after s simulated seconds.
   const gpsArg = query.get('gps')?.split(',').map(Number);
@@ -390,6 +401,7 @@ async function start() {
           if (fullMap.isOpen) document.exitPointerLock();
         }
       }
+      if (raceHud && input.wasPressed('clueBook') && !menu.isOpen && !fullMap?.isOpen) raceHud.toggleBook(); // Tab: Sổ mật thư (SPEC §8.11)
       if (input.wasPressed('menu') && performance.now() - unlockedAt > 300) {
         if (fullMap?.isOpen) fullMap.close(), input.lock();
         else if (menu.isOpen) menu.close(), input.lock();
@@ -417,7 +429,9 @@ async function start() {
           x, z, heading: Math.atan2(-view.x, -view.z), bodyYaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z),
           riding: !!player.controller.riding, swimming: s.moveMode === 'swim', time: Math.max(0, player.simTime),
           street: streets?.at(x, z), district: districtAt(water?.districts, x, z),
+          raceTime: race ? race.raceTime() : undefined, penaltyMinutes: race?.view?.penaltyMinutes,
         } satisfies HudFrame);
+        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone: false /* track B */ });
         gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
         hud.update(frame, dt);
         minimap.update(frame, gps ?? NO_GPS, dt);

@@ -1,0 +1,111 @@
+{
+  "id": "mini",
+  "title": "Chặng ngắn để test (NỘI DUNG GIẢ)",
+  "hostApproval": {
+    "contactUrl": "https://m.me/test-host-gia"
+  },
+  "start": {
+    "name": "Cầu Bir-Hakeim – giữa cầu",
+    "lat": 48.85569,
+    "lon": 2.28758,
+    "yawDeg": 33,
+    "spreadMeters": 5
+  },
+  "steps": [
+    {
+      "id": "L1",
+      "type": "route_info",
+      "label": "Lộ trình 1",
+      "clue": "(GIẢ) Lên quảng trường có tầm nhìn đẹp nhất ra 'bà đầm sắt'.",
+      "destination": {
+        "name": "Sân trước Palais de Chaillot",
+        "lat": 48.86215,
+        "lon": 2.28843,
+        "radius": 35
+      }
+    },
+    {
+      "id": "T1",
+      "type": "challenge",
+      "label": "Thử thách 1",
+      "task": {
+        "title": "(GIẢ) Câu hỏi",
+        "description": "(GIẢ) 6 × 7 = ?",
+        "answers": [
+          "42"
+        ]
+      }
+    },
+    {
+      "id": "L2",
+      "type": "route_info",
+      "label": "Lộ trình 2",
+      "clue": "(GIẢ) Qua sông, tới chân tháp. Bắt buộc: đi bộ.",
+      "transport": {
+        "mandatory": "walk"
+      },
+      "destination": {
+        "name": "Chân tháp Eiffel",
+        "lat": 48.8583,
+        "lon": 2.2945,
+        "radius": 40
+      }
+    },
+    {
+      "id": "D1",
+      "type": "detour",
+      "label": "Lựa chọn kép",
+      "clue": "(GIẢ) Chọn một trong hai.",
+      "branches": [
+        {
+          "id": "A",
+          "name": "Tính",
+          "summary": "(GIẢ) Một phép tính.",
+          "task": {
+            "title": "(GIẢ) Phép tính",
+            "description": "(GIẢ) 3 + 4 = ?",
+            "answers": [
+              "7",
+              "bảy"
+            ]
+          }
+        },
+        {
+          "id": "B",
+          "name": "Ảnh",
+          "summary": "(GIẢ) Gửi ảnh cho Host.",
+          "task": {
+            "title": "(GIẢ) Ảnh",
+            "description": "(GIẢ) Chụp màn hình dưới chân tháp.",
+            "kind": "free",
+            "verification": "host_approval",
+            "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook."
+          }
+        }
+      ]
+    },
+    {
+      "id": "L3",
+      "type": "route_info",
+      "label": "Lộ trình 3",
+      "clue": "(GIẢ) Chặng dừng ở giữa cây cầu nối tháp với quảng trường.",
+      "destination": {
+        "name": "Giữa cầu Iéna",
+        "lat": 48.8596,
+        "lon": 2.29243,
+        "radius": 25
+      }
+    },
+    {
+      "id": "PS",
+      "type": "pit_stop",
+      "label": "Về đích",
+      "destination": {
+        "name": "Giữa cầu Iéna",
+        "lat": 48.8596,
+        "lon": 2.29243,
+        "radius": 25
+      }
+    }
+  ]
+}

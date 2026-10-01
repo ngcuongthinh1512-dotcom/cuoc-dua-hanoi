@@ -5,11 +5,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./graph": "./src/graph/index.ts",
+    "./leg": "./src/leg/index.ts",
     "./protocol": "./src/protocol/index.ts",
     "./data/*": "./data/*"
   },
   "scripts": {
     "build": "tsc -p .",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
   }
 }

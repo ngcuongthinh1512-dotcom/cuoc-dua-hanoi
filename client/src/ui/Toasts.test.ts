@@ -40,7 +40,8 @@ describe('toast feed (pure part)', () => {
 
 describe('notices', () => {
   it('every code has its own Vietnamese text (SPEC §6.3 / §6.6 wording)', () => {
-    const codes: NoticeCode[] = ['bikeStairs', 'bikeTooFast', 'bikeTooFar', 'bikeTaken', 'respawn', 'respawnStairs', 'bikeLost', 'bikeGone', 'bikeParked', 'walkOnly'];
+    const codes: NoticeCode[] = ['bikeStairs', 'bikeTooFast', 'bikeTooFar', 'bikeTaken', 'respawn', 'respawnStairs', 'bikeLost', 'bikeGone', 'bikeParked', 'walkOnly',
+      'raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'clueNew', 'penaltyWait'];
     expect(Object.keys(NOTICES).sort()).toEqual([...codes].sort());
     expect(new Set(Object.values(NOTICES)).size).toBe(codes.length);
     expect(NOTICES.bikeStairs).toBe('Không đi xe trên bậc thang');

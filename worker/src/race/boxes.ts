@@ -10,7 +10,7 @@ const BOXES = demoLeg.steps.map((s) => {
   const d = 'destination' in s ? s.destination : undefined;
   if (!d) return null;
   const { x, z } = latLonToWorld(d.lat, d.lon);
-  return { step: s.id, x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100 };
+  return { step: s.id, x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100, r: d.radius };
 });
 
 /** The box of step index `step` (no `opened` flag), null when that step has none. */
