@@ -174,13 +174,14 @@ export class BikeService {
     }
   }
 
-  /** Phase 7 (SPEC §6.4): the owner opened a task clue or a walk-only route → its bike goes to the step's rack, free for
-   *  anyone; a full rack (bikeParking.maxBikes) loses its longest parked bike. ponytail: the bike stays where it stood
-   *  (the team is at the checkpoint anyway); Phase 7 moves it onto the rack's coordinates. */
-  park(team: string, rack: string, now: number) {
+  /** Phase 7 (SPEC §6.4, D18): the owner opened a task clue / a walk-only route (or entered a task place elsewhere) → its
+   *  bike goes to the rack of the point it stands at, free for anyone; a full rack (bikeParking.maxBikes) loses its
+   *  longest parked bike. `at` = the rack's spot (leg bikeParking); ponytail: null (none in the leg file) → the bike stays
+   *  where it stood (`npm run leg:check` suggests a spot to add). */
+  park(team: string, rack: string, at: { x: number; z: number } | null, now: number) {
     const b = [...this.bikes.values()].find((o) => o.owner === team);
     if (!b) return;
-    Object.assign(b, { owner: null, rider: false, parked: true, rack, parkedAt: now });
+    Object.assign(b, { owner: null, rider: false, parked: true, rack, parkedAt: now }, at ?? {});
     const atRack = [...this.bikes.values()].filter((o) => o.rack === rack).sort((p, q) => (p.parkedAt ?? 0) - (q.parkedAt ?? 0));
     const gone = atRack.slice(0, Math.max(0, atRack.length - this.io.cfg.bikeParking.maxBikes)).map((o) => o.id);
     this.put(b);
@@ -188,6 +189,18 @@ export class BikeService {
     this.event(now, team, 'bikePark', { id: b.id, rack, gone });
     this.io.send(team, { t: 'notice', code: 'bikeParked' });
     this.toHosts([b], gone);
+  }
+
+  /** Phase 7 (D11): a new leg was loaded (lobby, no team entered yet): the old corridor's candidates and bikes go; the
+   *  Host page recomputes the candidates from the new leg (its id changed). */
+  resetForLeg(now: number) {
+    const ids = [...this.bikes.keys()];
+    this.drop(ids);
+    this.cands = null;
+    this.io.sql.exec("DELETE FROM meta WHERE key = 'candidates'");
+    this.io.counters.rows += 1;
+    if (ids.length) this.event(now, null, 'bikeGone', { ids, why: 'leg' });
+    this.toHosts([], ids);
   }
 
   get spawning(): { paused: boolean; candidates: number; nextAt: number | null } {

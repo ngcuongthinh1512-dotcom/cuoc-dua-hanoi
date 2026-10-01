@@ -5,15 +5,14 @@
 // Rebuild rule: memory is a cache — teams / poses / counters come back from SQLite in the constructor, per-socket facts
 // (role, team, revealed box) from the socket attachment (docs/plans/phase6.md §3, §6 A).
 import { DurableObject } from 'cloudflare:workers';
-import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, type BoxInfo, type ClientMessage, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
+import { startSpot } from '@race/shared/leg';
+import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
 import { HOST, newClaims, signToken, verifyToken } from './auth.ts';
 import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, setMeta, type TeamRow } from './db.ts';
 import type { Env } from './index.ts';
 import { BikeService } from './race/BikeService.ts';
-import { NEW_TEAM_RACE, type TeamRace } from './race/engine.ts';
-import { legPoints, stepBox, welcomeBoxes } from './race/boxes.ts';
-import { legRules } from './race/leg.ts';
+import { NEW_TEAM_RACE, RaceEngine, type TeamRace } from './race/engine.ts';
 import { needsTick, tickEntries, tickKey, type Peer } from './race/presence.ts';
 import type { PlayerSpot } from './race/VehicleSpawner.ts';
 
@@ -28,7 +27,7 @@ interface Attachment {
 }
 
 /** Per-team state kept in teams.state (JSON): presence fields + the Phase 7 race fields (race/engine.ts TeamRace, `step`
- *  = index of the current step; track A wires the engine). */
+ *  = index of the current step). */
 interface TeamState extends TeamRace {
   reconnects: number;
   lastSeen: number | null;
@@ -40,8 +39,12 @@ interface TeamState extends TeamRace {
 interface Live {
   /** Last received: ticks, bikes. */
   pose: PoseSample;
-  /** Last one that passed the speed check: snapshot, welcome, boxes. */
+  /** Trusted position (D4): the last pose with x, z = `trust` — geofence, box channel, snapshot, welcome. */
   valid: PoseSample;
+  /** Phase 7 (D4): follows the poses at no more than the bike speed × tolerance; nothing else moves `valid`. */
+  trust: TrustedPoint;
+  /** m the trusted point is behind the last pose (a teleport is when this grows). */
+  lag: number;
   /** Server ms the team was last known to stand at `valid` (its arrival; on a disconnect the socket's last sign of life). */
   validAt: number;
   /** Undefined → the next pose opens a new window, judged against `valid` / `validAt` (connect, disconnect, wake). */
@@ -54,7 +57,12 @@ interface Live {
   tp?: { start: number; n: number; d: number };
 }
 
+type RaceWelcome = ReturnType<RaceEngine['welcome']>;
+
 const TEAM = 'team';
+/** m: a lag of the trusted point that grows by less than this is not logged as a teleport (the client's spawn settling
+ *  next to its start spot, rounding); faster drifts are the speed window's flag, and the trusted point stays honest. */
+const JUMP_NOISE_M = 5;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const att = (ws: WebSocket) => ws.deserializeAttachment() as Attachment;
 
@@ -68,6 +76,8 @@ export class RaceRoom extends DurableObject<Env> {
   private readonly loginFails = new Map<string, { n: number; until: number }>();
   /** Shared bikes (track C) behind one seam. */
   private readonly bikes: BikeService;
+  /** Phase 7 race engine (leg, status, step_progress, ranking) behind one seam. */
+  private readonly engine: RaceEngine;
   /** teams rows (read once, patched on write: no SELECT per message). */
   private teamRows: TeamRow[] | null = null;
   private snapSeq = 0;
@@ -97,12 +107,38 @@ export class RaceRoom extends DurableObject<Env> {
     this.snapSeq = data.seq ?? 0;
     for (const [team, arr] of Object.entries(data.poses ?? {})) {
       const p = decodePose(arr);
-      if (p) this.live.set(team, { pose: p, valid: p, validAt: data.at?.[team] ?? snap!.t, bikeAt: 0, over: false });
+      const at = data.at?.[team] ?? snap!.t;
+      if (p) this.live.set(team, { pose: p, valid: p, validAt: at, trust: new TrustedPoint(p.x, p.z, at), lag: 0, bikeAt: 0, over: false });
     }
+    this.engine = new RaceEngine({
+      sql: this.sql,
+      counters: this.counters,
+      transaction: (fn) => this.ctx.storage.transactionSync(fn),
+      send: (team, m) => this.sockets(team).forEach((ws) => this.send(ws, m)),
+      changed: (now) => this.soon(now),
+      event: (t, team, type, data) => this.event(t, team, type, data),
+      team: (id) => {
+        const r = this.team(id);
+        return r && this.teamState(r);
+      },
+      saveTeam: (id, r) => {
+        const row = this.team(id);
+        if (row) this.saveTeamState(row, { ...this.teamState(row), ...r });
+      },
+      teamIds: () => this.teams().map((t) => t.id),
+      slot: (id) => this.team(id)?.slot ?? -1,
+      online: () => [...this.online()],
+      pose: (id) => this.live.get(id)?.valid ?? null,
+      park: (team, rack, at, now) => this.bikes.park(team, rack, at, now),
+      legLoaded: (now) => this.bikes.resetForLeg(now),
+    });
+    const engine = this.engine;
     this.bikes = new BikeService({
       sql: this.sql,
       counters: this.counters,
-      cfg: legRules().vehicles,
+      get cfg() {
+        return engine.rules().vehicles; // the loaded leg's (D11)
+      },
       send: (team, m) => this.sockets(team).forEach((ws) => this.send(ws, m)),
       broadcast: (m) => this.broadcast(m),
       setAlarm: (at) => this.setAlarm(at),
@@ -143,7 +179,7 @@ export class RaceRoom extends DurableObject<Env> {
     const token = await signToken(this.env.HOST_PASSWORD, newClaims(this.race, team.id, now));
     this.event(now, team.id, 'login', { ip });
     const s = this.teamState(team);
-    return json({ ok: true, token, team: this.info(team, this.online()), summary: { reconnects: s.reconnects, lastSeen: s.lastSeen, raceTime: null } });
+    return json({ ok: true, token, team: this.info(team, this.online()), summary: { reconnects: s.reconnects, lastSeen: s.lastSeen, ...this.engine.summary(team.id, now) } });
   }
 
   /** WebSocket upgrade: a valid token for this race → Hibernation API accept, one socket per team (§8.10), `welcome`. */
@@ -162,12 +198,16 @@ export class RaceRoom extends DurableObject<Env> {
     }
     const now = Date.now();
     this.ctx.acceptWebSocket(server, [role, ...(team ? [team.id] : [])]);
-    let boxes: BoxInfo[] = [];
+    let race: RaceWelcome | null = null;
     if (team) {
+      // One synchronous section from enter() to the teams.state write (no await): sockets opening together get start
+      // orders 1, 2… and the write never carries an older state (critic: minor 3).
+      const e = this.engine.enter(team.id, now);
       const s = this.teamState(team);
       const l = this.live.get(team.id);
-      boxes = welcomeBoxes(s.step, l?.valid, legRules().boxReveal);
-      server.serializeAttachment({ role, team: team.id, since: now, box: boxes.find((b) => !b.opened)?.step ?? null } satisfies Attachment);
+      this.saveTeamState(team, { ...s, reconnects: s.reconnects + 1, lastSeen: now, ...(e.first ? { startOrder: e.startOrder, joinedAt: now } : {}) });
+      race = this.engine.welcome(team.id, l?.valid ?? null, e.first, now);
+      server.serializeAttachment({ role, team: team.id, since: now, box: race.boxes.find((b) => !b.opened)?.step ?? null } satisfies Attachment);
       // Newer device wins (accepted first, so the old socket's close does not take the team offline).
       for (const old of this.sockets(team.id)) {
         if (old === server) continue;
@@ -175,17 +215,16 @@ export class RaceRoom extends DurableObject<Env> {
         this.close(old, CLOSE.otherDevice, 'logged in elsewhere');
       }
       if (l) Object.assign(l, { win: undefined, over: false }); // the client spawns at welcome.pose: new window
-      this.saveTeamState(team, { ...s, reconnects: s.reconnects + 1, lastSeen: now });
       this.event(now, team.id, 'connect');
     } else {
       server.serializeAttachment({ role, team: HOST, since: now, box: null } satisfies Attachment);
     }
-    this.send(server, this.welcome(role, team, boxes, now));
+    this.send(server, this.welcome(role, team, race, now));
     if (team) this.broadcast({ t: 'team', slot: team.slot, online: true }, server);
     else this.send(server, this.hostState(now));
     this.soon(now); // ticks for the new set of peers + host.state
     // Bike spawning alarm (SPEC §3: only while a team is online; track C's alarm() re-arms while players remain).
-    if (team && (await this.ctx.storage.getAlarm()) === null) this.setAlarm(now + legRules().vehicles.spawnIntervalMinutes * 60_000);
+    if (team && (await this.ctx.storage.getAlarm()) === null) this.setAlarm(now + this.engine.rules().vehicles.spawnIntervalMinutes * 60_000);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -222,14 +261,17 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   // ── handlers ──
-  /** A pose: speed window (SPEC §13.9: flag only), last valid pose, dirty slot, due snapshot / replay / host.state. */
+  /** A pose: speed window (SPEC §13.9: flag only), the trusted point (D4: the only position the race believes), dirty
+   *  slot, due snapshot / replay / host.state, then the race engine (arrivals, Pit Stop). */
   private onPose(ws: WebSocket, a: Attachment, pose: PoseSample, now: number) {
     const t = a.role === TEAM ? this.team(a.team) : undefined;
     if (!t) return;
     const l = this.liveOf(t.id, a.since, pose);
-    const { footSpeed, bikeSpeedMultiplier } = legRules().movement;
+    const { footSpeed, bikeSpeedMultiplier } = this.engine.rules().movement;
     if (pose.mode === 'bike') l.bikeAt = now;
     let over = false;
+    let grant = 0;
+    let unseen: number | null = null;
     if (l.win) {
       l.win.push(now, pose.x, pose.z);
       over = overSpeed(l.win, footSpeed * (now - l.bikeAt <= NET.speedWindowMs ? bikeSpeedMultiplier : 1));
@@ -238,41 +280,62 @@ export class RaceRoom extends DurableObject<Env> {
         this.flag(t);
       }
     } else {
-      // New window (first pose, (re)connect, wake), SPEC §8.10: the way from the last valid pose may take the time the team
+      // New window (first pose, (re)connect, wake), SPEC §8.10: the way from the trusted point may take the time the team
       // was unseen at bike speed — offline, plus since its last ping on this socket (a connected client that sends no pose
       // stands still). The rest is a teleport.
       const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
-      const s = (Math.max(0, a.since - l.validAt) + Math.max(0, now - Math.max(a.since, l.validAt, pinged))) / 1000;
-      const d = Math.hypot(pose.x - l.valid.x, pose.z - l.valid.z);
-      const excess = d - footSpeed * bikeSpeedMultiplier * NET.speedTolerance * s;
-      if (excess > 0) this.teleport(t, l, excess, now, 'jump', { d: Math.round(d), s: Math.round(s) });
+      unseen = (Math.max(0, a.since - l.validAt) + Math.max(0, now - Math.max(a.since, l.validAt, pinged))) / 1000;
+      grant = this.trustRate() * unseen;
       (l.win = new SpeedWindow()).reset(now, pose.x, pose.z);
     }
     l.over = over;
-    if (!over) Object.assign(l, { valid: pose, validAt: now });
-    l.pose = pose;
+    const d = Math.hypot(pose.x - l.trust.x, pose.z - l.trust.z);
+    const grew = this.follow(l, pose, now, grant);
+    if (grew > JUMP_NOISE_M) this.teleport(t, l, grew, now, 'jump', unseen === null ? { d: Math.round(grew) } : { d: Math.round(d), s: Math.round(unseen) });
     this.moved(t.slot, now);
+    this.engine.onPose(t.id, l.valid, now);
   }
 
-  /** The team's poses; a team never seen yet stands at the leg start from the moment its socket opened. */
+  /** m/s the trusted point may move: bike speed × tolerance for every mode (walking too fast is the `speed` flag's job). */
+  private trustRate() {
+    const { footSpeed, bikeSpeedMultiplier } = this.engine.rules().movement;
+    return footSpeed * bikeSpeedMultiplier * NET.speedTolerance;
+  }
+
+  /** The trusted point towards `pose` (+ `grant` m): `valid` = the pose at the trusted x, z. Returns how much the lag
+   *  behind the client grew (> 0: part of this pose is out of reach). */
+  private follow(l: Live, pose: PoseSample, now: number, grant: number): number {
+    const rate = this.trustRate();
+    const left = l.trust.follow(now, pose.x, pose.z, rate, (rate * NET.speedLeadMs) / 1000, grant);
+    const grew = left - l.lag;
+    l.lag = left;
+    Object.assign(l, { pose, valid: { ...pose, x: l.trust.x, z: l.trust.z }, validAt: now });
+    return grew;
+  }
+
+  /** The team's poses; a team never seen yet stands at its spot at the leg start (startSpot, D17) from the moment its
+   *  socket opened. */
   private liveOf(team: string, since: number, pose: PoseSample): Live {
     let l = this.live.get(team);
     if (!l) {
-      const start = legPoints()[0]!;
-      this.live.set(team, (l = { pose, valid: { ...pose, x: start.x, z: start.z }, validAt: since, bikeAt: 0, over: false }));
+      const row = this.team(team);
+      const spot = startSpot(this.engine.leg, (row && this.teamState(row).startOrder) ?? 1);
+      const at = { ...pose, x: spot.x, z: spot.z };
+      this.live.set(team, (l = { pose: at, valid: at, validAt: since, trust: new TrustedPoint(spot.x, spot.z, since), lag: 0, bikeAt: 0, over: false }));
     }
     return l;
   }
 
   /** A respawn or an unexplained jump: logged, and counted per NET.respawnWindowMs — more than NET.maxRespawns or more
    *  than NET.maxRespawnJump m in all → suspicious + flagged; events stop at the cap (SQLite row budget). */
-  private teleport(t: TeamRow, l: Live, d: number, now: number, type: string, data: object) {
+  private teleport(t: TeamRow, l: Live, d: number, now: number, type: string, data: object): boolean {
     const r = l.tp && now - l.tp.start < NET.respawnWindowMs ? l.tp : (l.tp = { start: now, n: 0, d: 0 });
     r.n++;
     r.d += d;
     const suspicious = r.n > NET.maxRespawns || r.d > NET.maxRespawnJump;
     if (r.n <= NET.maxRespawns) this.event(now, t.id, type, { ...data, ...(suspicious ? { suspicious } : {}) });
     if (suspicious) this.flag(t);
+    return suspicious;
   }
 
   /** One more `k` in the team's current NET.respawnWindowMs; returns the count so far. */
@@ -297,7 +360,7 @@ export class RaceRoom extends DurableObject<Env> {
         const l = this.live.get(a.team);
         // Each op may write a row: past the budget the socket goes (a real player never gets near it).
         if (this.count(a.team, 'bike', now) > NET.maxBikeOps) return this.close(ws, CLOSE.tooFast, 'too many bike ops');
-        return this.bikes.onTeam(a.team, l ? { team: a.team, x: l.pose.x, z: l.pose.z } : null, m, false /* Phase 7: current step transport */, now);
+        return this.bikes.onTeam(a.team, l ? { team: a.team, x: l.pose.x, z: l.pose.z } : null, m, this.engine.walkOnly(a.team), now);
       }
       case 'gesture': {
         const team = a.role === TEAM ? this.team(a.team) : undefined;
@@ -307,15 +370,29 @@ export class RaceRoom extends DurableObject<Env> {
       case 'respawn': {
         const t = a.role === TEAM ? this.team(a.team) : undefined;
         if (!t) return;
-        // A legal teleport (stairs / "Kẹt?" / fell through), counted with the others: new window from here.
+        // A legal teleport (stairs / "Kẹt?" / fell through), counted with the others: new window from here. D4: the
+        // trusted point takes it at once only when it is short (≤ NET.respawnTrust from the trusted point) and the
+        // team's teleports are not suspicious (no chain of short hops); otherwise it follows at the trust rate.
         const pose: PoseSample = { x: m.x, y: m.y, z: m.z, yaw: m.yaw, mode: 'walk', action: 'none' };
         const l = this.liveOf(t.id, a.since, pose);
-        const d = Math.hypot(m.x - l.valid.x, m.z - l.valid.z);
-        this.teleport(t, l, d, now, 'respawn', { how: m.how, d: Math.round(d) });
+        const d = Math.hypot(m.x - l.pose.x, m.z - l.pose.z);
+        const suspicious = this.teleport(t, l, d, now, 'respawn', { how: m.how, d: Math.round(d) });
+        const near = Math.hypot(m.x - l.trust.x, m.z - l.trust.z);
+        this.follow(l, pose, now, near <= NET.respawnTrust && !suspicious ? near : 0);
         (l.win = new SpeedWindow()).reset(now, m.x, m.z);
-        Object.assign(l, { pose, valid: pose, validAt: now, bikeAt: 0, over: false });
-        return this.moved(t.slot, now);
+        Object.assign(l, { bikeAt: 0, over: false });
+        this.moved(t.slot, now);
+        return this.engine.onPose(t.id, l.valid, now);
       }
+      case 'race':
+        // D4: judged at the trusted pose (the client sends its pose right before the op, on the same socket)
+        if (a.role === TEAM) this.engine.onOp(a.team, m, this.live.get(a.team)?.valid ?? null, now);
+        return;
+      case 'host.race':
+      case 'host.team':
+      case 'host.leg':
+        this.engine.onHost(m, (r) => this.send(ws, r), now);
+        return this.soon(now);
     }
   }
 
@@ -332,6 +409,7 @@ export class RaceRoom extends DurableObject<Env> {
     const now = Date.now();
     this.saveTeamState(team, { ...this.teamState(team), lastSeen: now });
     this.event(now, team.id, 'disconnect');
+    this.engine.left(team.id, now);
     if (l) Object.assign(l, { win: undefined, over: false });
     this.writeSnapshot(now); // SPEC §8.10: where it stood, at once
     this.broadcast({ t: 'team', slot: team.slot, online: false });
@@ -394,12 +472,11 @@ export class RaceRoom extends DurableObject<Env> {
 
   /** SPEC §17.10: the current step's box to that team only, within radius; hidden beyond radius + hysteresis. */
   private checkBoxes() {
-    const r = legRules().boxReveal;
+    const r = this.engine.rules().boxReveal;
     for (const ws of this.sockets(TEAM)) {
       const a = att(ws);
-      const t = this.team(a.team);
       const l = this.live.get(a.team);
-      const box = t && stepBox(this.teamState(t).step);
+      const box = this.engine.currentBox(a.team);
       if (!l || !box) continue;
       const was = a.box === box.step;
       const vis = boxVisible(was, Math.hypot(l.valid.x - box.x, l.valid.z - box.z), r);
@@ -487,15 +564,13 @@ export class RaceRoom extends DurableObject<Env> {
       const { startAt, startOrder, step, finishAt, penaltyMinutes, joinedAt } = s;
       return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, startAt, startOrder, step, finishAt, penaltyMinutes, joinedAt };
     });
-    // Phase 7 foundation: leg / progress / ranking empty until track A wires race/engine.ts (engine.hostView).
-    return { t: 'host.state', serverMs: now, status: this.status, teams, counters: this.counters.toJSON(), bikes: this.bikes.list(), spawning: this.bikes.spawning, steps: legPoints(), leg: null, progress: [], ranking: [] };
+    const race = this.engine.hostView(now);
+    // ponytail: `steps` (Phase 6 corridor points: start + route / Pit Stop zones) stays until the Host page reads `leg`
+    const steps = race.leg && [{ id: 'start', ...race.leg.start }, ...race.leg.steps.filter((s) => s.type === 'route_info' || s.type === 'pit_stop').map(({ id, x, z }) => ({ id, x, z }))];
+    return { t: 'host.state', serverMs: now, status: this.engine.status, teams, counters: this.counters.toJSON(), bikes: this.bikes.list(), spawning: this.bikes.spawning, ...(steps ? { steps } : {}), ...race };
   }
 
   // ── helpers ──
-  private get status() {
-    return (getMeta(this.sql, 'status') as Welcome['status'] | undefined) ?? 'lobby';
-  }
-
   private teams(): TeamRow[] {
     return (this.teamRows ??= this.sql.exec<TeamRow>('SELECT * FROM teams ORDER BY slot').toArray());
   }
@@ -510,8 +585,9 @@ export class RaceRoom extends DurableObject<Env> {
 
   /** 1 row written. */
   private saveTeamState(row: TeamRow, s: TeamState) {
-    row.state = JSON.stringify(s);
-    this.sql.exec('UPDATE teams SET state = ? WHERE id = ?', row.state, row.id);
+    const state = JSON.stringify(s);
+    this.sql.exec('UPDATE teams SET state = ? WHERE id = ?', state, row.id);
+    row.state = state; // the cache only after the write (a failed write / rolled-back transaction leaves it as it was)
     this.counters.rows += 1;
   }
 
@@ -558,27 +634,21 @@ export class RaceRoom extends DurableObject<Env> {
     return { slot: t.slot, id: t.id, name: t.name, colour: t.colour, online: online.has(t.id) };
   }
 
-  private welcome(role: Role, team: TeamRow | undefined, boxes: BoxInfo[], now: number): Welcome {
-    const { movement, presence } = legRules();
+  private welcome(role: Role, team: TeamRow | undefined, race: RaceWelcome | null, now: number): Welcome {
+    const { movement, presence } = this.engine.rules();
     const online = this.online();
     const l = team && this.live.get(team.id);
     // Track C: a team sees only its own bikes + free / standing ones near it (forTeam); the Host sees all.
     const myBikes = team ? this.bikes.forTeam(team.id, l ? { team: team.id, x: l.pose.x, z: l.pose.z } : null) : this.bikes.list();
     return {
-      t: 'welcome', v: PROTOCOL_VERSION, race: this.race, serverMs: now, status: this.status, role,
+      t: 'welcome', v: PROTOCOL_VERSION, race: this.race, serverMs: now, status: this.engine.status, role,
       teams: this.teams().map((t) => this.info(t, online)), movement,
       presence: { ...presence, interestRadius: NET.interestRadius },
       ...(team ? { team: { ...this.info(team, online), player: team.player } } : {}),
       // SPEC §8.10: last valid pose (from the snapshot row after a restart) + the bike it holds (track C's list).
       pose: team && l ? { ...l.valid, bikeId: myBikes.find((b) => b.owner === team.id)?.id ?? null } : null,
-      raceTime: null,
       bikes: myBikes,
-      boxes,
-      // Phase 7 foundation: track A fills these from race/engine.ts (engine.welcome).
-      view: null,
-      startOrder: null,
-      showStartOrder: false,
-      start: null,
+      ...(race ?? { raceTime: null, boxes: [], view: null, startOrder: null, showStartOrder: false, start: null }),
     };
   }
 

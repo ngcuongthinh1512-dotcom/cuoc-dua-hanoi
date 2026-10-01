@@ -4,7 +4,7 @@
 import { CLOSE, encodePose, NET, PROTOCOL_VERSION, type HostState, type Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { signToken } from './auth.ts';
-import { joinTeam, login, openSocket, raceHarness, setupRace, TEST_PASSWORD } from './test/harness.ts';
+import { joinTeam, login, openSocket, raceHarness, setupRace, sleep, TEST_PASSWORD } from './test/harness.ts';
 
 const server = raceHarness();
 const RACE = 'paris-test';
@@ -76,13 +76,15 @@ describe('RaceRoom', () => {
     const w = await first.next<Welcome>();
     expect(w).toMatchObject({ role: 'team', team: { id: teamId, name: 'Đội Xanh', player: 'An', online: true }, pose: null });
     expect(w.teams).toHaveLength(2);
-    first.send(encodePose({ x: 10, y: 0.5, z: -20, yaw: 1, mode: 'walk', action: 'none' }));
+    const st = w.start!; // Phase 7: a team never seen appears at its spot at the leg start (D17)
+    await sleep(800); // D4: the trusted point may follow ≈ 6.5 m/s × the time since the socket opened
+    first.send(encodePose({ x: st.x + 3, y: 0.5, z: st.z - 2, yaw: 1, mode: 'walk', action: 'none' }));
     first.send({ t: 'gesture', g: 'wave' });
     const second = await openSocket(server, RACE, t.body.token!);
     expect(await first.next()).toMatchObject({ t: 'kick', reason: 'otherDevice' });
     expect(await first.next()).toMatchObject({ closed: CLOSE.otherDevice });
     const w2 = await second.next<Welcome>();
-    expect(w2.pose).toMatchObject({ x: 10, z: -20, mode: 'walk', bikeId: null });
+    expect(w2.pose).toMatchObject({ x: expect.closeTo(st.x + 3, 1), z: expect.closeTo(st.z - 2, 1), mode: 'walk', bikeId: null });
     const host = await openSocket(server, RACE, hostToken);
     const hw = await host.next<Welcome>();
     expect(hw.teams.find((x) => x.id === teamId)?.online).toBe(true);

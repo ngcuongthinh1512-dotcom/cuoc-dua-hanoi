@@ -212,7 +212,7 @@ describe('BikeService (memory SQLite, controlled clock)', () => {
       s.onHost({ t: 'host.bike', op: 'add', x: 3 * i, z: 0 }, i);
       const id = s.list().at(-1)!.id;
       s.onTeam(`t${i}`, spot(`t${i}`, 3 * i, 0), { t: 'bike', op: 'claim', id }, false, 100 + i);
-      s.park(`t${i}`, 'L1', 200 + i);
+      s.park(`t${i}`, 'L1', null, 200 + i);
     }
     expect(sent.at(-2)).toEqual([`t${cfg.bikeParking.maxBikes}`, { t: 'notice', code: 'bikeParked' }]);
     expect(s.list()).toHaveLength(cfg.bikeParking.maxBikes);
@@ -220,6 +220,9 @@ describe('BikeService (memory SQLite, controlled clock)', () => {
     expect(s.list().map((b) => b.x)).not.toContain(0); // the first one parked went
     s.onTeam('t9', spot('t9', 3, 0), { t: 'bike', op: 'claim', id: s.list()[0]!.id }, false, 300); // anyone may take it back
     expect(s.list()[0]).toMatchObject({ owner: 't9', parked: false });
+    const id9 = s.list()[0]!.id;
+    s.park('t9', 'L2', { x: 50, z: -7 }, 400); // D18: moved onto the rack's spot from the leg
+    expect(s.list().find((b) => b.id === id9)).toMatchObject({ x: 50, z: -7, owner: null, parked: true });
   });
 
   it('Host: release frees a team’s bike, remove deletes it', () => {
