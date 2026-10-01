@@ -4,6 +4,12 @@ Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự g
 
 Đặc tả đầy đủ: [`docs/SPEC.md`](docs/SPEC.md). Luật cho người chơi: [`docs/RACE_RULES.md`](docs/RACE_RULES.md).
 
+## Nhập chặng đua (cho người tổ chức)
+1. Viết file chặng `.json` theo [`docs/LEG_FORMAT.md`](docs/LEG_FORMAT.md) (copy `worker/legs/test/mini.json` làm mẫu). Để file chặng thật **ngoài thư mục dự án**, không bao giờ trong `client/`.
+2. Kiểm tra: `npm run leg:check -- <đường-dẫn-file.json>` → sửa tới khi dòng cuối là "Hợp lệ"; bảng cuối có link bản đồ / ảnh vệ tinh / ảnh 3D / link đứng thử trong game cho từng điểm.
+3. Chơi thử tự động: `npm run sim -- --leg <đường-dẫn-file.json> --bots 2 --speedup 2` (`--help` để xem tùy chọn).
+4. Nạp vào cuộc đua: `npm run dev:worker`, mở http://localhost:8787/host.html, nhập mã cuộc đua + mật khẩu Host (`HOST_PASSWORD` trong `worker/.dev.vars`), phần "Chặng" → **Nạp chặng từ file**. Đội vào bằng link `/?race=<mã>` mà trang Host in ra.
+
 ## Yêu cầu
 - Node.js ≥ 22.12 (khuyên dùng 24), npm ≥ 10.
 - Google Chrome (dùng cho `npm run screenshot`).
@@ -26,12 +32,15 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 | `npm run fetch-map` | Tải dữ liệu OSM thô (Overpass) vào `.cache/osm/` và độ cao (AWS Terrain Tiles) → `client/public/data/elevation.*`. Chỉ cần chạy một lần. |
 | `npm run process-assets` | Xử lý asset gốc đã duyệt trong `.cache/assets/` → `client/public/models/*.glb` (kể cả nhân vật `player.glb` + `player-anims.glb`) và `client/public/credits.json`. |
 | `npm run build-graph` | Dựng đồ thị đường từ `.cache/osm/` → `shared/data/roadgraph.json` (đường, vỉa hè, vạch qua đường, bậc thang, một chiều, bãi xe đạp). |
+| `npm run leg:check -- <file.json>` | Kiểm tra file chặng đua (cú pháp, luật, điểm trên bản đồ, đáp án lọt ra ngoài): [`docs/LEG_FORMAT.md`](docs/LEG_FORMAT.md). |
+| `npm run sim -- --leg <mã \| file.json>` | Bot chơi thử hết một chặng qua WebSocket thật (máy chủ tạm trong máy), in số đội về đích, xếp hạng, số dòng ghi; không có `--leg`: đo lưu lượng. `--help` xem tùy chọn. |
+| `npm run dev:api` | Chỉ chạy API + Durable Object (`wrangler dev` :8787) để dùng cùng `npm run dev` (Vite chuyển `/api` sang đó). |
 | `npm run ride-check` | Chơi thử tự động bằng phím thật trong Chrome headless: đi bộ → đạp xe 300 m → phanh → ngã xe → xuống bậc kè → bơi → lên bờ; in tốc độ đo được. |
 | `npm run build-chunks` | Cắt dữ liệu OSM thô thành các ô 250 m: `client/public/data/chunks/*.json` + `index.json` + `water.json`. |
 
 Thử nhanh khi `npm run dev:worker` đang chạy: `curl localhost:8787/api/health`, `curl localhost:8787/api/room/ping`.
 
-Tham số URL của game (tiện khi thử): mặc định vào chế độ nhân vật ở Place de la Concorde. `?cam=x,y,z,yaw,pitch` = chế độ khán giả (chỉ bay camera tự do, mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``), `?player=x,z,yaw` đặt chỗ xuất hiện của nhân vật (thêm `camMode=near|far|first`, `orbit=<độ>`, `action=wave|openBox|celebrate|crash`, `autoMove=walk|slow`, `jump`, `wait=<giây>` – xem `docs/plans/phase3.md` §7; Phase 4: `bike` = bắt đầu trên xe, `autoTurn=left|right`, `graph=1` = hiện đồ thị đường). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`) `/character.html` xem nhân vật với các tư thế, `/bike.html` xem xe đạp.
+Tham số URL của game (tiện khi thử): mặc định vào chế độ nhân vật ở Place de la Concorde. `?cam=x,y,z,yaw,pitch` = chế độ khán giả (chỉ bay camera tự do, mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``), `?player=x,z,yaw` đặt chỗ xuất hiện của nhân vật (thêm `camMode=near|far|first`, `orbit=<độ>`, `action=wave|openBox|celebrate|crash`, `autoMove=walk|slow`, `jump`, `wait=<giây>` – xem `docs/plans/phase3.md` §7; Phase 4: `bike` = bắt đầu trên xe, `autoTurn=left|right`, `graph=1` = hiện đồ thị đường; Phase 7: `start=x,z,yaw` = xuất hiện như đội vào game ở đó, `boxes=<mã>,x,z` = đặt hộp mật thư thử, thêm `mat` = thảm Chặng dừng; `leg:check` in sẵn các link này cho từng điểm của chặng). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`) `/character.html` xem nhân vật với các tư thế, `/bike.html` xem xe đạp.
 
 ## Điều khiển
 | Thao tác | Bàn phím / chuột | Tay cầm |
@@ -50,7 +59,7 @@ Tham số URL của game (tiện khi thử): mặc định vào chế độ nhâ
 | Hiện đồ thị đường (khi bảng debug đang mở) | `N` | – |
 | Nhả chuột (menu ở Phase 5) | `Esc` | – |
 
-Camera bay tự do: `W` `A` `S` `D` bay, `Space` hoặc `E` lên, `Q` xuống, giữ `Shift` bay nhanh, lăn chuột đổi tốc độ (tay cầm: `RT`/`RB` lên, `LT`/`LB` xuống, bấm stick trái bay nhanh). Đã gán nhưng chưa có tác dụng: `F` mở hộp mật thư (Phase 7), `Tab` Sổ mật thư, `M` bản đồ, `B` ống nhòm.
+Camera bay tự do: `W` `A` `S` `D` bay, `Space` hoặc `E` lên, `Q` xuống, giữ `Shift` bay nhanh, lăn chuột đổi tốc độ (tay cầm: `RT`/`RB` lên, `LT`/`LB` xuống, bấm stick trái bay nhanh). `F` cũng mở hộp mật thư, `Tab` mở Sổ mật thư, `M` bản đồ lớn, `Esc` menu. Đã gán nhưng chưa có tác dụng: `B` ống nhòm.
 
 Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh khi còn cách ≤ 30 m. Xe nhanh gấp 1,3 lần đi bộ, đạt tốc độ tối đa trong khoảng 1 giây, chậm lại khi cua gắt hoặc va chạm; trên đá lát khó cua, khó phanh hơn. Đâm mạnh vào tường khi đang nhanh thì ngã, 2 giây sau đứng dậy, xe vẫn là của đội. Không đi xe lên bậc thang (xe dừng lại).
 
@@ -63,10 +72,10 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 2B | Địa danh Paris dựng chính xác (39 công trình, kể cả ngoài lộ trình: OSM 3D + chi tiết dựng bằng code + mô hình Eiffel / Khải Hoàn Môn) + bóng công trình ở đường chân trời; bảng "Ghi nguồn" trong game (SPEC §17.6) | Xong |
 | 3 | Nhân vật & camera: nhân vật có xương (áo màu đội, bảng tên), hoạt ảnh, Rapier character controller (bậc ≤ 0,4 m, dốc ≤ 45°, nhảy, rơi), bơi sông Seine + leo kè, camera góc thứ ba kiểu GTA | Xong |
 | 4 | Di chuyển: xe đạp Vélib' (vật lý, lên / xuống xe, ngã xe, chuông, camera xe), bậc thang OSM + bậc kè xuống sông + lối xuống metro, đồ thị đường `roadgraph.json` (A*, hành lang, mặt đường) | Xong |
-| 4B | Xe cộ & người đi đường NPC, chỉ chạy trên máy người chơi (SPEC §17.5) | Chưa làm |
-| 5 | HUD cơ bản | Chưa làm |
-| 6 | Server & presence (Durable Object, WebSocket, vào lại) | Chưa làm |
-| 7 | Race engine lõi | Chưa làm |
+| 4B | Xe cộ & người đi đường NPC, chỉ chạy trên máy người chơi (SPEC §17.5) | Xong |
+| 5 | HUD cơ bản | Xong |
+| 6 | Server & presence (Durable Object, WebSocket, vào lại) | Xong |
+| 7 | Race engine lõi: chặng từ file (`leg:check`), mật thư, hộp, Chặng dừng, giờ xuất phát lệch, trang Host tối giản | Xong |
 | 8 | Thử thách, Host duyệt | Chưa làm |
 | 9 | Yếu tố đặc biệt, phạt giờ | Chưa làm |
 | 10 | Màn hình Host đầy đủ | Chưa làm |

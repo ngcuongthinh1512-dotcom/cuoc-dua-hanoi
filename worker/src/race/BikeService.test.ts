@@ -6,7 +6,7 @@ import { encodePose } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { QuotaCounters } from '../counters.ts';
 import { migrate, setMeta } from '../db.ts';
-import { LEG_START, login, openSocket, raceHarness, TEST_PASSWORD } from '../test/harness.ts';
+import { login, openSocket, raceHarness, TEST_PASSWORD } from '../test/harness.ts';
 import { BikeService } from './BikeService.ts';
 import { legRules } from './leg.ts';
 import type { ServerBike } from './VehicleSpawner.ts';
@@ -293,8 +293,9 @@ describe('BikeService through the Durable Object (createTestHarness)', () => {
     const teams = await Promise.all(st.teams.map(async (t) => openSocket(server, RACE, (await login(server, RACE, { code: t.code })).body.token!)));
     const spots: { x: number; z: number }[] = [];
     for (const t of teams) spots.push((await until<Welcome>(t, (m) => m.t === 'welcome')).start!);
-    // at the leg start, ≤ 2.2 m from both start spots (D4: claims reach from the trusted point, where a team first appears)
-    host.send({ t: 'host.bike', op: 'add', x: LEG_START.x, z: LEG_START.z });
+    // between the two start spots of the default leg, wherever its start is (D4: claims reach from the trusted point, where a
+    // team first appears; spots ≤ 2 × spreadMeters apart)
+    host.send({ t: 'host.bike', op: 'add', x: (spots[0]!.x + spots[1]!.x) / 2, z: (spots[0]!.z + spots[1]!.z) / 2 });
     const id = (await until<{ list: { id: string }[] }>(host, (m) => m.t === 'bikes')).list[0]!.id; // teams: via their view
     teams.forEach((t, i) => t.send(encodePose({ x: spots[i]!.x, y: 0, z: spots[i]!.z, yaw: 0, mode: 'walk', action: 'none' })));
     teams.forEach((t) => t.send({ t: 'bike', op: 'claim', id }));

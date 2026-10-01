@@ -1,5 +1,5 @@
 // Phase 6 bots (docs/plans/phase6.md §6 D): `npm run sim -- --bots 3 --minutes 2 [--speedup 1] [--url http://localhost:8787]
-// [--race <id>] [--password <HOST_PASSWORD>]`. Real WebSockets against the real Worker + Durable Object (wrangler's
+// [--race <id>] [--password <HOST_PASSWORD>]` (`--help`: USAGE below; organisers: docs/LEG_FORMAT.md "Chơi thử tự động"). Real WebSockets against the real Worker + Durable Object (wrangler's
 // createTestHarness by default, or a running `npm run dev:api` with --url): the Host socket creates the teams, every bot
 // logs in with its team code and walks an A* route on the real road graph at 0.9 × footSpeed, sending `pos` at 5 Hz.
 // Prints message / byte counts and the Host counters so the estimate can be compared with the §9 budget.
@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { RoadGraph, type RoadGraphFile, pathPolyline, shortestPath } from '@race/shared/graph';
-import { encodePose, NET, type HostState, type PoseSample, type ServerMessage, type Welcome } from '@race/shared/protocol';
+import { encodePose, NET, type HostState, type PoseSample, type ServerMessage, type ServerNotice, type Welcome } from '@race/shared/protocol';
 
 export interface SimOptions {
   url?: string; // running server (wrangler dev); default: in-process createTestHarness
@@ -63,6 +63,8 @@ const FILE = join(import.meta.dirname, '../shared/data/roadgraph.json');
 export const legRowBudget = (steps: number) => 11 * Math.max(10, steps);
 /** The leg run failed: a team did not finish / rank, or wrote more rows than the budget. */
 export const legFailed = (r: SimReport) => !!r.leg && (r.leg.finished < r.bots || r.leg.ranked < r.bots || (r.leg.rowsPerTeam ?? 0) > r.leg.rowBudget);
+/** Notices that refuse a race op (Toasts.ts texts); the others only inform (clueNew = "Mật thư mới đã vào Sổ mật thư"). */
+const REFUSALS = new Set<ServerNotice>(['raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'penaltyWait']);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -153,13 +155,15 @@ export function answersOf(json: string): Map<string, string> {
   return out;
 }
 
-/** `--leg mini` → the bundled id and its file (for the answers); `--leg path/to/leg.json` → the file's text (host.leg {json}). */
+/** `--leg mini` → the bundled id and its file (for the answers; `paris-demo-filled` = test/paris-demo.filled.json, the id the Host
+ *  page lists); `--leg path/to/leg.json` → the file's text (host.leg {json}). */
 export function legArg(arg: string): { id?: string; json?: string; file: string } {
   if (arg.endsWith('.json')) {
     const json = readFileSync(arg, 'utf8');
     return { json, file: arg };
   }
-  const file = [`../worker/legs/test/${arg}.json`, `../worker/legs/${arg}.json`].map((f) => join(import.meta.dirname, f)).find(existsSync);
+  const name = arg.replace(/-filled$/, '.filled');
+  const file = [`../worker/legs/test/${name}.json`, `../worker/legs/${name}.json`].map((f) => join(import.meta.dirname, f)).find(existsSync);
   if (!file) throw new Error(`Không tìm thấy chặng "${arg}" trong worker/legs/ hoặc worker/legs/test/`);
   return { id: arg, file };
 }
@@ -224,7 +228,7 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
       sendPose();
       if (op) sock.send(op);
       await sock.until((m): m is RaceMsg => m.t === 'race' && (m.view.finishAt !== null || (m.view.card !== null && m.view.card.step !== id)), 1500, mark).catch(() => null);
-      for (const m of sock.log.slice(mark)) if (m.t === 'notice') o.refused.push(`${id}: ${m.code}`);
+      for (const m of sock.log.slice(mark)) if (m.t === 'notice' && REFUSALS.has(m.code)) o.refused.push(`${id}: ${m.code}`);
     }
     if (!moved(id)) throw fail(`kẹt ở bước ${id} (${o.refused.filter((r) => r.startsWith(id + ':')).slice(-3).join(', ') || 'không có phản hồi'})`);
   };
@@ -480,19 +484,41 @@ function print(r: SimReport) {
   console.log(`  Đội bị đánh dấu vượt tốc: ${r.flagged}${r.speedup > 1 ? ' (tua nhanh: bot đi nhanh hơn thật, bị đánh dấu là bình thường)' : ''}`);
 }
 
+export const USAGE = `Cách dùng: npm run sim -- [tùy chọn]   (bot chơi thử qua WebSocket thật; hướng dẫn: docs/LEG_FORMAT.md mục "Chơi thử tự động")
+  --leg <mã | file.json>  chơi HẾT một chặng: mã chặng có sẵn (mini, paris-demo-filled, paris-demo) hoặc đường dẫn file chặng
+                          (vd. --leg ~/Documents/chang-that/paris-1.json). Không có --leg: bot đi bộ ngẫu nhiên (đo lưu lượng).
+  --bots <n>              số đội bot (mặc định 3)
+  --speedup <1…2>         tua nhanh (mặc định 1; 2 = nhanh gấp đôi, tối đa vì máy chủ ngắt quá 15 tin/giây)
+  --minutes <n>           thời gian chạy tối đa, phút mô phỏng (mặc định 2; với --leg: 30)
+  --url <địa chỉ>         dùng máy chủ đang chạy (vd. http://localhost:8787 của npm run dev:api) thay vì máy chủ tạm trong máy
+  --race <mã>             mã cuộc đua (mặc định sim-<giờ>, luôn là cuộc đua mới)
+  --password <mật khẩu>   mật khẩu Host khi dùng --url (mặc định HOST_PASSWORD hoặc test-secret; xem README)
+  --help                  in hướng dẫn này`;
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { values: v } = parseArgs({
-    options: { bots: { type: 'string', default: '3' }, minutes: { type: 'string' }, speedup: { type: 'string', default: '1' }, url: { type: 'string' }, leg: { type: 'string' }, race: { type: 'string' }, password: { type: 'string' } },
-  });
-  const leg = v.leg ? legArg(v.leg) : undefined;
+  let v: Record<string, string | boolean | undefined>;
+  try {
+    v = parseArgs({
+      options: { bots: { type: 'string', default: '3' }, minutes: { type: 'string' }, speedup: { type: 'string', default: '1' }, url: { type: 'string' }, leg: { type: 'string' }, race: { type: 'string' }, password: { type: 'string' }, help: { type: 'boolean', short: 'h' } },
+    }).values;
+  } catch (e) {
+    console.error(`Tùy chọn không hợp lệ (${e instanceof Error ? e.message.split('.')[0] : String(e)})\n\n${USAGE}`);
+    process.exit(2);
+  }
+  if (v.help) {
+    console.log(USAGE);
+    process.exit(0);
+  }
+  const str = (k: string) => (typeof v[k] === 'string' ? v[k] : undefined);
+  const leg = str('leg') ? legArg(str('leg')!) : undefined;
   const report = await runSim({
-    url: v.url,
-    bots: Number(v.bots),
-    seconds: Number(v.minutes ?? (leg ? 30 : 2)) * 60, // with --leg: the cap for the whole run
+    url: str('url'),
+    bots: Number(str('bots')),
+    seconds: Number(str('minutes') ?? (leg ? 30 : 2)) * 60, // with --leg: the cap for the whole run
     ...(leg && { leg: leg.json ? { json: leg.json } : { id: leg.id } }),
-    speedup: Number(v.speedup),
-    race: v.race ?? `sim-${Date.now().toString(36)}`,
-    password: v.password ?? process.env.HOST_PASSWORD ?? 'test-secret',
+    speedup: Number(str('speedup')),
+    race: str('race') ?? `sim-${Date.now().toString(36)}`,
+    password: str('password') ?? process.env.HOST_PASSWORD ?? 'test-secret',
     rejoinGapMs: 10_000,
     log: console.log,
   });

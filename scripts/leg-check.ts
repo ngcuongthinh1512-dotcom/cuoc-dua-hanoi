@@ -1,19 +1,28 @@
 // `npm run leg:check -- <file.json>` (docs/plans/phase7.md D12, docs/LEG_FORMAT.md): checks a leg file before the Host
-// loads it. Shape + rules (shared/src/leg/check.ts, the same the server applies) + the map facts the server never has:
-// building footprints (client/public/data/chunks), walking routes (shared/data/roadgraph.json), water / bridges, a leak
-// scan of the static assets, a summary table per point (street, district, OSM link, screenshot command) and suggested
-// bike racks. Everything printed in Vietnamese. Exit 1 on any error.
+// loads it. Shape + rules (shared/src/leg/check.ts, the same the server applies; a rule error such as a bad time zone does
+// not hide the rest) + the map facts the server never has: building footprints (client/public/data/chunks), walking routes
+// (shared/data/roadgraph.json), water / bridges / carriageways, a leak scan of the static assets, a summary table per point
+// (street, district, OSM / satellite links, screenshot command, in-game URL, bike rack) and suggested bike racks. Everything
+// printed in Vietnamese. Exit 1 on any error.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { latLonToWorld, worldToLatLon } from '@race/shared';
+import { latLonToWorld, RACE_BBOX, worldToLatLon } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, WayFlag, segPoint, shortestPath } from '@race/shared/graph';
-import { type Leg, type LegGeo, type LegIssue, checkLeg, parseLeg, placeOf } from '@race/shared/leg';
+import { type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, parseLeg, placeOf, startSpot } from '@race/shared/leg';
+import { roads, traffic } from '../client/src/config.ts';
 import { CHUNK_SIZE, type ChunkData, type WaterData } from '../client/src/geo/chunkData.ts';
 import { districtAt, inRing } from '../client/src/geo/districts.ts';
+import { flatHeightGrid, heightAt, parseHeightGrid } from '../client/src/geo/heightGrid.ts';
+import { LANDMARKS } from '../client/src/geo/landmarks.ts';
 import { StreetLocator } from '../client/src/geo/locate.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/** "Xem" screenshot: the game's spectator camera this far (m) from the point, from the south, looking down this much (°):
+ *  at fov 70 and 16:9 the picture covers ≈ 160 × 105 m with the point in the middle. */
+const VIEW = { distance: 65, pitchDeg: 60 };
+/** "Trong game" link: the client dev server (`npm run dev`, Vite's default port). */
+const DEV_URL = 'http://localhost:5173';
 
 /** A building the game turns into a solid block (BuildingBuilder: canopies `building=roof` and parts raised off the
  *  ground leave the ground free; bridges / fountains / artworks are walkable; the Eiffel Tower is open underneath). */
@@ -21,6 +30,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // without three); change both when the builder's rules change.
 const OPEN_KINDS = new Set(['roof', 'bridge', 'fountain', 'artwork']);
 const solid = (b: ChunkData['buildings'][number]) => !OPEN_KINDS.has(b.kind) && !(b.minHeight && b.minHeight > 2.5) && b.landmark !== 'eiffel';
+const LANDMARK_NAME = new Map(LANDMARKS.map((l) => [l.id, l.name]));
+const fmt = (n: number) => n.toFixed(5);
+const inBox = (p: { lat: number; lon: number }) => p.lat > RACE_BBOX.south && p.lat < RACE_BBOX.north && p.lon > RACE_BBOX.west && p.lon < RACE_BBOX.east;
 
 interface MapData {
   geo: LegGeo;
@@ -28,14 +40,21 @@ interface MapData {
   water: WaterData;
   street(x: number, z: number): string | undefined;
   district(x: number, z: number): number;
-  inWater(x: number, z: number): boolean;
+  /** The water polygon under (x, z): 'river' = the Seine, 'pond' = a basin / lake / fountain pool, null = dry. */
+  waterAt(x: number, z: number): 'river' | 'pond' | null;
   onBridge(x: number, z: number): boolean;
+  /** Name (or "đường không tên") of the NPC car road whose drawn carriageway covers (x, z), null = none. */
+  carriageway(x: number, z: number): string | null;
+  /** Ground height (DEM, m, y of the world) for the screenshot camera. */
+  ground(x: number, z: number): number;
 }
 
 export function loadMap(root = ROOT): MapData {
   const read = <T>(p: string) => JSON.parse(readFileSync(join(root, p), 'utf8')) as T;
   const graph = RoadGraph.decode(read<RoadGraphFile>('shared/data/roadgraph.json'));
   const water = read<WaterData>('client/public/data/water.json');
+  const dem = join(root, 'client/public/data/elevation');
+  const grid = existsSync(`${dem}.bin`) ? parseHeightGrid(read<Parameters<typeof parseHeightGrid>[0]>('client/public/data/elevation.json'), readFileSync(`${dem}.bin`)) : flatHeightGrid();
   const cache = new Map<string, ChunkData | null>();
   const chunk = (i: number, j: number) => {
     const k = `${i}_${j}`;
@@ -46,7 +65,10 @@ export function loadMap(root = ROOT): MapData {
     return cache.get(k);
   };
   const locator = new StreetLocator(graph);
-  const inWater = (x: number, z: number) => water.polygons.some((p) => inRing(x, z, p.outer) && !(p.holes ?? []).some((h) => inRing(x, z, h)));
+  const waterAt = (x: number, z: number) => {
+    const p = water.polygons.find((p) => inRing(x, z, p.outer) && !(p.holes ?? []).some((h) => inRing(x, z, h)));
+    return p ? (p.river ? 'river' : 'pond') : null;
+  };
   /** Footprints (any kind) around (x, z) that contain it; a footprint may be stored in a neighbouring chunk. */
   const footprints = (x: number, z: number) => {
     const out: ChunkData['buildings'] = [];
@@ -63,27 +85,80 @@ export function loadMap(root = ROOT): MapData {
       const a = graph.edgeA[e]!, b = graph.edgeB[e]!;
       return graph.flags(e) & WayFlag.bridge && segPoint(x, z, graph.x[a]!, graph.z[a]!, graph.x[b]!, graph.z[b]!)[1] <= 6;
     });
-  /** Distance to the nearest walkable edge of the main network (the only one the game can route on), Infinity if > 300 m. */
-  const mainSnap = (x: number, z: number) => {
+  /** Distance to the nearest walkable edge of the main network (the only one the game can route on) within r, else Infinity. */
+  const mainSnap = (x: number, z: number, r = 300) => {
     let best = Infinity;
-    for (const e of graph.edgesNear(x, z, 300)) {
+    for (const e of graph.edgesNear(x, z, r)) {
       const a = graph.edgeA[e]!, b = graph.edgeB[e]!;
       if (graph.flags(e) & WayFlag.walk && graph.component[a] === graph.main)
         best = Math.min(best, segPoint(x, z, graph.x[a]!, graph.z[a]!, graph.x[b]!, graph.z[b]!)[1]);
     }
-    return best;
+    return best <= r ? best : Infinity;
+  };
+  // ponytail: RoadBuilder.roadWidth written down here (RoadBuilder draws on a canvas: not importable under the scripts' Node
+  // types); layers ignored (a footpath under a road bridge counts as on it). Change both when the drawn width changes.
+  const carKinds = new Set(traffic.kinds);
+  const half = (w: number[]) => {
+    const name = w[3]! >= 0 ? graph.file.names[w[3]!] : undefined;
+    const byName = name === undefined ? undefined : roads.widthByName[name];
+    const single = !(w[1]! & WayFlag.oneway) || !!(w[1]! & WayFlag.roundabout);
+    const kind = graph.file.kinds[w[0]!]!;
+    return (byName !== undefined && single ? byName : w[4] ? w[4] / 10 : w[2] ? w[2] * roads.laneWidth : (roads.widthByKind[kind] ?? roads.defaultWidth)) / 2;
+  };
+  const carriageway = (x: number, z: number) => {
+    for (const e of graph.edgesNear(x, z, 40)) {
+      const w = graph.file.ways[graph.edgeWay[e]!]!;
+      if (!(w[1]! & WayFlag.car) || !carKinds.has(graph.file.kinds[w[0]!]!)) continue;
+      const a = graph.edgeA[e]!, b = graph.edgeB[e]!;
+      if (segPoint(x, z, graph.x[a]!, graph.z[a]!, graph.x[b]!, graph.z[b]!)[1] < half(w)) return w[3]! >= 0 ? graph.file.names[w[3]!]! : 'đường không tên';
+    }
+    return null;
+  };
+  /** Nearest spot ≤ 150 m away a team can stand on: no solid building, no water off a bridge, no carriageway, ≤ 8 m from the
+   *  main walk network (ring by ring, 3 m apart; in a ring the one closest to a footway). */
+  const nearestOutdoor = (x: number, z: number) => {
+    for (let r = 3; r <= 150; r += 3) {
+      let best: { x: number; z: number; snap: number } | null = null;
+      const n = Math.ceil((2 * Math.PI * r) / 3);
+      for (let k = 0; k < n; k++) {
+        const [px, pz] = [x + r * Math.cos((2 * Math.PI * k) / n), z + r * Math.sin((2 * Math.PI * k) / n)];
+        if (footprints(px, pz).some(solid) || (waterAt(px, pz) && !onBridge(px, pz)) || carriageway(px, pz)) continue;
+        const snap = mainSnap(px, pz, 8);
+        if (snap < (best?.snap ?? Infinity)) best = { x: px, z: pz, snap };
+      }
+      if (best) return { ...best, d: r };
+    }
+    return null;
   };
   const geo: LegGeo = {
-    building: (x, z) => footprints(x, z).find(solid)?.kind ?? null,
+    // Not the OSM `building` value ("yes" means nothing to an organiser): the landmark's name if any + the nearest outdoor
+    // spot; checkLeg prints it as "… nằm trong một tòa nhà (<this>)".
+    building(x, z) {
+      const b = footprints(x, z).find(solid);
+      if (!b) return null;
+      const alt = nearestOutdoor(x, z);
+      const g = alt && worldToLatLon(alt.x, alt.z);
+      const street = alt && locator.at(alt.x, alt.z);
+      const hint = alt && g ? `điểm ngoài nhà gần nhất: ${fmt(g.lat)}, ${fmt(g.lon)}, cách ${alt.d} m${street ? `, cạnh ${street}` : ''}` : 'không có chỗ ngoài nhà trong 150 m';
+      const name = b.landmark && LANDMARK_NAME.get(b.landmark);
+      return name ? `${name}; ${hint}` : hint;
+    },
     walk(a, b) {
-      const [na, nb] = [graph.nearestNode(a.x, a.z, 'walk'), graph.nearestNode(b.x, b.z, 'walk')];
+      // ≤ 300 m like mainSnap: a point off the map (a typo, still map-checked since a rule error no longer stops the run) would
+      // make the unbounded ring search crawl the whole grid
+      const [na, nb] = [graph.nearestNode(a.x, a.z, 'walk', 300), graph.nearestNode(b.x, b.z, 'walk', 300)];
       const [snapA, snapB] = [mainSnap(a.x, a.z), mainSnap(b.x, b.z)];
       if (na < 0 || nb < 0 || snapB === Infinity) return null;
       const path = na === nb ? { length: 0 } : shortestPath(graph, na, nb, 'walk');
       return path ? { meters: path.length, snapA: Math.min(snapA, 300), snapB } : null;
     },
   };
-  return { geo, graph, water, street: (x, z) => locator.at(x, z), district: (x, z) => districtAt(water.districts, x, z), inWater, onBridge };
+  return {
+    geo, graph, water, waterAt, onBridge, carriageway,
+    street: (x, z) => locator.at(x, z),
+    district: (x, z) => districtAt(water.districts, x, z),
+    ground: (x, z) => heightAt(grid, x, z),
+  };
 }
 
 /** Every string a team must not be able to read before solving (clues, task texts, answers) of ≥ `min` characters. */
@@ -137,32 +212,13 @@ export function scanLeaks(dirs: string[], strings: string[], root = ROOT, weak: 
   return out;
 }
 
-/** JSON.parse error → "dòng X, cột Y" + the usual mistakes of non-programmers (docs/LEG_FORMAT.md §10). */
-export function jsonProblem(text: string, err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  const m = /position (\d+)/.exec(msg);
-  let where = '';
-  if (m) {
-    const pos = Number(m[1]);
-    const before = text.slice(0, pos);
-    where = ` (dòng ${before.split('\n').length}, cột ${pos - before.lastIndexOf('\n')})`;
-  }
-  const hints: string[] = [];
-  if (/[“”‘’]/.test(text)) hints.push('có dấu ngoặc kép cong “ ” (thường do copy từ Word / Google Docs): thay bằng dấu ngoặc kép thẳng "');
-  if (/"(lat|lon)"\s*:\s*-?\d+,\d/.test(text)) hints.push('tọa độ dùng dấu phẩy thập phân (48,85): phải dùng dấu chấm (48.85)');
-  if (/,\s*[}\]]/.test(text)) hints.push('có dấu phẩy thừa ngay trước } hoặc ]: xóa dấu phẩy cuối cùng');
-  if (/^\s*(\/\/|#)/m.test(text) || /\/\*/.test(text)) hints.push('JSON không có chú thích (// hoặc /* */): xóa các dòng chú thích');
-  if (/'[A-Za-z_]+'\s*:/.test(text)) hints.push("tên trường dùng dấu nháy đơn ': phải dùng dấu ngoặc kép \"");
-  return `${msg.replace(/ in JSON.*$/, '')}${where}${hints.length ? '\n  Có thể do: ' + hints.join('; ') : ''}`;
-}
-
-interface Pt { path: PropertyKey[]; x: number; z: number; r: number; lat: number; lon: number; id: string; label: string; step: number; rack: boolean }
+interface Pt { path: PropertyKey[]; x: number; z: number; r: number; lat: number; lon: number; id: string; label: string; step: number; rack: { lat: number; lon: number } | null }
 
 /** Every place the team is sent to (start, route / Pit Stop destinations, challenge / branch places), in play order. */
 function points(leg: Leg): Pt[] {
-  const mk = (path: PropertyKey[], d: { lat: number; lon: number; radius: number; name: string; bikeParking?: unknown }, id: string, step: number): Pt => {
+  const mk = (path: PropertyKey[], d: { lat: number; lon: number; radius: number; name: string; bikeParking?: { lat: number; lon: number } | null }, id: string, step: number): Pt => {
     const w = latLonToWorld(d.lat, d.lon);
-    return { path, x: w.x, z: w.z, r: d.radius, lat: d.lat, lon: d.lon, id, label: d.name, step, rack: !!d.bikeParking };
+    return { path, x: w.x, z: w.z, r: d.radius, lat: d.lat, lon: d.lon, id, label: d.name, step, rack: d.bikeParking ?? null };
   };
   const out: Pt[] = [mk(['start'], { ...leg.start, radius: 0 }, 'xuất phát', 0)];
   leg.steps.forEach((s, i) => {
@@ -173,19 +229,33 @@ function points(leg: Leg): Pt[] {
   return out;
 }
 
-/** Summary + warnings that need the map (water, bridges) + bike-rack suggestions. A bad time zone is an error of checkLeg. */
+/** Compass bearing (°, clockwise from north) of a leg yawDeg (0 = north, + = turned left / west) and its Vietnamese name. */
+export function compass(yawDeg: number): { deg: number; name: string } {
+  const deg = Math.round((((-yawDeg % 360) + 360) % 360));
+  const name = ['bắc', 'đông bắc', 'đông', 'đông nam', 'nam', 'tây nam', 'tây', 'tây bắc'][Math.round(deg / 45) % 8]!;
+  return { deg: deg % 360, name };
+}
+
+/** Summary + warnings that need the map (water, bridges, carriageways, racks off the map) + bike-rack suggestions. */
 function mapReport(leg: Leg, map: MapData) {
   const issues: LegIssue[] = [];
   const lines: string[] = [];
   const add = (level: LegIssue['level'], path: PropertyKey[], message: string) => issues.push({ level, where: placeOf(leg, path), message });
   const rackPts = new Set<string>();
+  const warned = new Set<string>(); // a point repeated (the Pit Stop after its route, step 1 at the start): its map warnings once
   const racks: [number, number][] = [];
   for (let i = 0; i < map.graph.file.bikeParking.length; i += 2) racks.push([map.graph.file.bikeParking[i]! / 10, map.graph.file.bikeParking[i + 1]! / 10]);
   let prev: Pt[] = [];
   let lastStep = -1;
-  lines.push('', 'Các điểm trên bản đồ (mở link để xem điểm nằm ở đâu; chụp ảnh khu vực bằng lệnh "Xem"):');
+  lines.push(
+    '',
+    'Các điểm trên bản đồ. "Bản đồ" / "Vệ tinh": mở trong trình duyệt, có ghim đúng điểm. "Xem": dán vào Terminal → ảnh screenshots/leg-<mã>.png',
+    'chụp xiên từ trên cao, khung ≈ 160 × 105 m, điểm ở GIỮA ảnh, đánh dấu bằng tấm thảm đỏ viền vàng (3 × 7 m, như thảm Chặng dừng) đặt đúng tâm; ảnh chưa vẽ vòng bán kính.',
+    `"Trong game": mở khi máy đang chạy npm run dev → đứng đúng tại điểm (thế giới thử, không cần cuộc đua).`,
+  );
   let cur: Pt[] = [];
   const pts = points(leg);
+  const s0 = pts[0]!;
   for (const p of pts) {
     if (p.step !== lastStep) {
       if (cur.length) prev = cur;
@@ -193,24 +263,55 @@ function mapReport(leg: Leg, map: MapData) {
       lastStep = p.step;
     }
     cur.push(p);
-    const [lat, lon] = [p.lat.toFixed(5), p.lon.toFixed(5)];
+    const [lat, lon] = [fmt(p.lat), fmt(p.lon)];
     const street = map.street(p.x, p.z);
     const dis = map.district(p.x, p.z);
     const walks = prev.map((q) => (Math.hypot(q.x - p.x, q.z - p.z) < 1 ? { meters: 0, snapA: 0, snapB: 0 } : map.geo.walk(q, p))).filter((w) => w !== null);
     const walk = walks.length ? `đi bộ ≈ ${Math.round(Math.min(...walks.map((w) => w.meters + w.snapA + w.snapB)))} m từ điểm trước` : p.step === 0 ? 'điểm xuất phát' : 'KHÔNG đi bộ tới được';
-    const kind = p.step === 0 ? 'xuất phát' : leg.steps[p.step - 1]!.type;
-    lines.push(`• ${p.step === 0 ? 'Xuất phát' : `Bước ${p.step} (${p.id}, ${kind})`}: ${p.label || '(chưa đặt tên)'}${p.r ? ` — vùng ${p.r} m` : ''} — ${walk}`);
+    const step = p.step === 0 ? null : leg.steps[p.step - 1]!;
+    lines.push(`• ${step ? `Bước ${p.step} (${p.id}, ${step.type})` : 'Xuất phát'}: ${p.label || '(chưa đặt tên)'}${p.r ? ` — vùng ${p.r} m` : ''} — ${walk}`);
     lines.push(`    ${street ?? 'không có tên đường gần đó'}${dis ? `, Quận ${dis}` : ''} — ${lat}, ${lon}`);
+    const xz = (x: number, z: number) => `${+x.toFixed(1)},${+z.toFixed(1)}`;
+    if (!step) {
+      const c = compass(leg.start.yawDeg);
+      lines.push(`    Hướng nhìn lúc vào: la bàn ${c.deg}° (${c.name}) — "yawDeg": ${leg.start.yawDeg}; muốn nhìn hướng la bàn B° thì ghi "yawDeg": -B`);
+    }
+    if (step && p.step === 1 && Math.hypot(p.x - s0.x, p.z - s0.z) <= p.r)
+      lines.push('    Điểm xuất phát nằm trong vùng này: đội vào game là đã tới, mở được hộp ngay (đúng kiểu mật thư 1 phát ngoài game dẫn tới chính nơi xuất phát).');
+    if (p.rack) {
+      const w = latLonToWorld(p.rack.lat, p.rack.lon);
+      lines.push(`    Bãi xe: ${fmt(p.rack.lat)}, ${fmt(p.rack.lon)} (${inBox(p.rack) ? `cách tâm ${Math.round(Math.hypot(w.x - p.x, w.z - p.z))} m` : 'NGOÀI bản đồ đua'})`);
+    }
     lines.push(`    Bản đồ: https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=19/${lat}/${lon}`);
-    lines.push(`    Xem: npm run screenshot -- --path "/preview.html?at=${lat},${lon}&r=80" --name leg-${p.step === 0 ? 'start' : p.id.replace(/\W+/g, '-')}`);
+    lines.push(`    Vệ tinh: https://www.google.com/maps?q=${lat},${lon}&t=k&z=19`);
+    const pitch = (VIEW.pitchDeg * Math.PI) / 180;
+    const cam = [p.x, map.ground(p.x, p.z) + VIEW.distance * Math.sin(pitch), p.z + VIEW.distance * Math.cos(pitch), 0, -VIEW.pitchDeg].map((v) => +v.toFixed(1)).join(',');
+    const name = step ? p.id.replace(/\W+/g, '-') : 'start';
+    // the Pit Stop mat as the marker: seen from 65 m a 0.6 m clue box is a few pixels (checked on screenshots)
+    lines.push(`    Xem: npm run screenshot -- --path "/?cam=${cam}&boxes=${name},${xz(p.x, p.z)}&mat&npc=0" --name leg-${name}`);
+    // in game: what the team will find there (the clue box; the mat at the Pit Stop)
+    const marker = step ? `&boxes=${name},${xz(p.x, p.z)}${step.type === 'pit_stop' ? '&mat' : ''}` : '';
+    const spawn = step ? p : startSpot(leg, 1);
+    lines.push(`    Trong game: ${DEV_URL}/?start=${xz(spawn.x, spawn.z)},${step ? 0 : leg.start.yawDeg}${marker}`);
     const where = p.path;
-    const bridge = map.onBridge(p.x, p.z);
-    const wet = map.inWater(p.x, p.z);
-    if (wet && !bridge) add('warning', where, 'nằm giữa mặt nước (sông), đội không đứng được; dời vào bờ hoặc lên cầu');
-    if (bridge && !wet) add('warning', where, 'nằm trên một cây cầu / cầu cạn không bắc qua sông (cầu trên đất liền, vd. cầu cạn đường sắt): dễ đặt nhầm lên nóc; kiểm tra ở link bản đồ');
-    // bike-rack suggestion (SPEC §6.4): a rack in the file, else the nearest graph rack 20–120 m away, else a spot on the walkable road
     const key = `${Math.round(p.x)}_${Math.round(p.z)}`;
-    if (p.step > 0 && !p.rack && !rackPts.has(key)) {
+    if (p.rack && !inBox(p.rack)) // shared/src/leg/check.ts outsideMap covers destination racks only (same message: deduped)
+      add('error', [...where, 'bikeParking'], `(${p.rack.lat}, ${p.rack.lon}) nằm ngoài bản đồ đua (vĩ độ ${RACE_BBOX.south}–${RACE_BBOX.north}, kinh độ ${RACE_BBOX.west}–${RACE_BBOX.east})`);
+    if (!warned.has(key)) {
+      warned.add(key);
+      const bridge = map.onBridge(p.x, p.z);
+      const wet = map.waterAt(p.x, p.z);
+      if (wet === 'river' && !bridge) add('warning', where, 'nằm giữa sông, đội không đứng được; dời vào bờ hoặc lên mặt cầu');
+      if (wet === 'pond' && !bridge) add('warning', where, 'nằm giữa mặt nước (hồ / bể nước / đài phun nước), đội không đứng được; dời ra chỗ đất cạnh đó');
+      if (bridge && !wet)
+        add('warning', where, 'nằm trên đoạn cầu bắc qua đất (bờ / đảo), không phải qua mặt nước: kiểm tra đúng mặt cầu đi bộ, không phải nóc cầu cạn metro / đường sắt (giữa cầu Bir-Hakeim trên đảo Île aux Cygnes: bình thường)');
+      const road = map.carriageway(p.x, p.z);
+      if (road) add('warning', where, step
+        ? `tâm nằm giữa lòng đường xe chạy (${road}): ${step.type === 'pit_stop' ? 'thảm Chặng dừng' : 'hộp mật thư'} sẽ nằm giữa dòng xe; dời lên vỉa hè / quảng trường cạnh đó`
+        : `nằm giữa lòng đường xe chạy (${road}): đội vào game giữa dòng xe; dời lên vỉa hè / lối đi bộ`);
+    }
+    // bike-rack suggestion (SPEC §6.4): a rack in the file, else the nearest graph rack 20–120 m away, else a spot on the walkable road
+    if (step && !p.rack && !rackPts.has(key)) {
       rackPts.add(key);
       let best: [number, number] | null = null, bd = Infinity;
       for (const r of racks) {
@@ -219,7 +320,7 @@ function mapReport(leg: Leg, map: MapData) {
       }
       if (best) {
         const g = worldToLatLon(best[0], best[1]);
-        lines.push(`    Gợi ý bãi xe (có sẵn trong OSM, cách ${Math.round(bd)} m): "bikeParking": { "lat": ${g.lat.toFixed(5)}, "lon": ${g.lon.toFixed(5)} }`);
+        lines.push(`    Gợi ý bãi xe (có sẵn trong OSM, cách ${Math.round(bd)} m): "bikeParking": { "lat": ${fmt(g.lat)}, "lon": ${fmt(g.lon)} }`);
       } else lines.push('    Chưa có bãi xe: xe bị bỏ lại đúng chỗ đội đang đứng (không lỗi; nếu muốn, thêm "bikeParking" ở vỉa hè ngay ngoài vùng).');
     }
   }
@@ -246,19 +347,25 @@ export function checkFile(file: string, opts: { root?: string; scanDirs?: string
   }
   const r = parseLeg(json);
   let issues = [...r.issues];
-  if (r.ok) {
+  // the shape is right but a rule failed (bad time zone, Pit Stop not last…): still check the map, so one run lists everything
+  const shape = r.ok ? null : legSchema.safeParse(json);
+  const leg = r.ok ? r.leg : shape?.success ? shape.data : null;
+  if (leg) {
     const map = opts.map ?? loadMap(root);
-    // checkLeg without geo already ran inside parseLeg; rerun with the map and keep only what is new
-    const base = new Set(r.issues.map((i) => `${i.level}|${i.where}|${i.message}`));
-    issues.push(...checkLeg(r.leg, map.geo).filter((i) => !base.has(`${i.level}|${i.where}|${i.message}`)));
-    const rep = mapReport(r.leg, map);
+    issues.push(...checkLeg(leg, map.geo)); // checkLeg without geo already ran inside parseLeg: duplicates dropped below
+    const rep = mapReport(leg, map);
     issues.push(...rep.issues);
-    issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(r.leg), root, answerStrings(r.leg)));
+    issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(leg), root, answerStrings(leg)));
     lines.push(...rep.lines);
   }
-  const rel = relative(join(root, 'worker/legs'), resolve(file));
-  if (rel.startsWith('..') || rel.startsWith(sep))
-    issues.push({ level: 'warning', where: 'cả file', message: 'file nằm ngoài worker/legs/: nội dung chặng thật nên để trong worker/legs/ (không bao giờ trong client/); đừng chép file này vào thư mục client/' });
+  // SPEC §3: leg content never in client/ (shipped to every player); a real leg is best kept outside the project (no git)
+  const inside = (dir: string) => ((rel) => !rel.startsWith('..') && !isAbsolute(rel))(relative(join(root, dir), resolve(file)));
+  if (inside('client'))
+    issues.push({ level: 'error', where: 'cả file', message: 'file chặng nằm trong thư mục client/: mọi thứ ở đó được gửi tới máy người chơi (đội đọc được đáp án). Chuyển file ra ngoài thư mục dự án' });
+  else if (inside('.') && !inside('worker/legs'))
+    issues.push({ level: 'warning', where: 'cả file', message: 'file chặng nằm trong thư mục dự án: dễ bị đưa lên git cùng mã nguồn. Chặng thật nên để NGOÀI thư mục dự án và chỉ chọn file khi nạp ở trang Host' });
+  const key = (i: LegIssue) => `${i.level}|${i.where}|${i.message}`;
+  issues = [...new Map(issues.map((i) => [key(i), i])).values()];
   issues = issues.sort((a, b) => ['error', 'warning', 'blank'].indexOf(a.level) - ['error', 'warning', 'blank'].indexOf(b.level));
   const LABEL = { error: 'LỖI', warning: 'CẢNH BÁO', blank: 'CÒN TRỐNG' } as const;
   const out = issues.map((i) => `${LABEL[i.level]}  ${i.where}: ${i.message}`);
@@ -271,9 +378,9 @@ export function checkFile(file: string, opts: { root?: string; scanDirs?: string
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const file = process.argv[2];
-  if (!file) {
-    console.error('Cách dùng: npm run leg:check -- <đường-dẫn-file-chặng.json>   (ví dụ: npm run leg:check -- worker/legs/chang-that.json)');
-    process.exit(2);
+  if (!file || file === '--help' || file === '-h') {
+    console.error('Cách dùng: npm run leg:check -- <đường-dẫn-file-chặng.json>   (ví dụ: npm run leg:check -- ~/Documents/chang-that/paris-1.json; hướng dẫn: docs/LEG_FORMAT.md)');
+    process.exit(file ? 0 : 2);
   }
   const r = checkFile(file);
   console.log(r.report);

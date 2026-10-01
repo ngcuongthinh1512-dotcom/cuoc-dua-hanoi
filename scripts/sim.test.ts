@@ -107,6 +107,7 @@ function fakeEngine(legJson: string) {
       if (op.op === 'checkin') finished = true;
       else step++;
       push();
+      if (!finished) log.push({ t: 'notice', code: 'clueNew' }); // like engine.ts: news, not a refusal
     },
     until: async (pred: (m: ServerMessage) => boolean, _t = 0, from = 0) => {
       for (let k = 0; k < 60; k++) {
@@ -137,6 +138,9 @@ describe('sim bot against a stand-in engine (no workerd)', () => {
     expect(eng.state()).toEqual({ step: 5, finished: true });
     expect(eng.ops.filter((o) => o === 'open')).toHaveLength(2); // L1, L2 (L3 is done by entering the mat)
     expect(eng.ops.filter((o) => o === 'task')).toHaveLength(2); // T1, D1
+    // organiser review: "Mật thư mới đã vào Sổ mật thư" (clueNew) was printed as a refused op
+    expect(eng.sock.log.some((m) => !Array.isArray(m) && m.t === 'notice' && m.code === 'clueNew')).toBe(true);
+    expect(refused.filter((r) => r.endsWith('clueNew'))).toEqual([]);
   });
 });
 
@@ -151,6 +155,9 @@ describe('sim --leg (Phase 7)', () => {
 
   it('--leg <id> finds the test leg file; unknown id says so', () => {
     expect(legArg('mini')).toMatchObject({ id: 'mini' });
+    // the id the Host page lists → its file test/paris-demo.filled.json (organiser review: "Không tìm thấy chặng")
+    expect(legArg('paris-demo-filled')).toMatchObject({ id: 'paris-demo-filled', file: expect.stringMatching(/worker\/legs\/test\/paris-demo\.filled\.json$/) });
+    expect(legArg('paris-demo').file).toMatch(/worker\/legs\/paris-demo\.json$/);
     expect(() => legArg('khong-co')).toThrow('khong-co');
   });
 
