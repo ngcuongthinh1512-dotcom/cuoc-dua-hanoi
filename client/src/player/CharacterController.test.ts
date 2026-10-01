@@ -13,7 +13,7 @@ import { buildChunk } from '../world/chunkBuild.ts';
 import { newBike } from '../vehicle/Bikes.ts';
 import { stairColliders } from '../world/stairs.ts';
 import { carveRiver, createTerrainCollider, riverLevel } from '../world/Terrain.ts';
-import { CharacterController, moveDirection, newIntent, quayStairNear, readMoveIntent, spiral, tickAction, turnToward, yawOf } from './CharacterController.ts';
+import { CharacterController, haltIntent, moveDirection, newIntent, quayStairNear, readMoveIntent, spiral, tickAction, turnToward, yawOf } from './CharacterController.ts';
 import type { MoveIntent, PlayerEnv, PlayerState } from './types.ts';
 
 const fakeInput = (held: string[], pad = { moveX: 0, moveY: 0 }, pressed: string[] = []) =>
@@ -334,6 +334,8 @@ describe('quayStairNear (Phase 5): where a swimmer is put', () => {
 });
 
 describe('respawn on land (Phase 5 track C)', () => {
+  const flat = (a: Vector3, b: Vector3) => Math.hypot(a.x - b.x, a.z - b.z);
+
   it("'safe': back to a dry spot minAge s old (not the stuck one), a second press stays put", () => {
     const { world, c } = setup(ground);
     spawned(world, c, 0, 0);
@@ -341,12 +343,85 @@ describe('respawn on land (Phase 5 track C)', () => {
     const here = c.state.position.clone();
     expect(c.respawn()).toBe('safe');
     const back = c.state.position.z - here.z; // walked north (−z), so back in +z
-    expect(back).toBeGreaterThan((RR.minAge - 1.6) * movement.footSpeed);
-    expect(back).toBeLessThan((RR.minAge + 1.6) * movement.footSpeed);
+    expect(back).toBeGreaterThan(Math.max(RR.minDistance, RR.minAge * movement.footSpeed) - 0.5);
+    expect(back).toBeLessThan(RR.minAge * movement.footSpeed + RR.spacing + 1);
     expect(c.state.position.y).toBeCloseTo(0, 1);
     const at = c.state.position.clone();
     c.respawn();
     expect(c.state.position.distanceTo(at)).toBeLessThan(0.05);
+    world.free();
+  });
+
+  it('stuck standing still for > minAge s after a walk: still back ≥ minDistance along the way (review M2)', () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 0, 0);
+    run(world, c, 6, walk());
+    run(world, c, 9);
+    const here = c.state.position.clone();
+    c.respawn();
+    const back = c.state.position.z - here.z;
+    expect(back).toBeGreaterThanOrEqual(RR.minDistance - 0.5);
+    expect(back).toBeLessThan(RR.minDistance + RR.spacing + 0.5);
+    expect(Math.abs(c.state.position.x)).toBeLessThan(0.5);
+    world.free();
+  });
+
+  it('pacing a sealed pit (walls 1.5 m, no way out) for 12 s: back out onto the ground it came from (review M2)', () => {
+    // Ground at y 0 around a 10 × 10 m pit (|x|, |z| ≤ 5) whose floor is y −1.5: too high to jump or step out.
+    const { world, c } = setup((w) => {
+      cuboid(w, 0, -0.5, -52.5, 100, 0.5, 47.5);
+      cuboid(w, 0, -0.5, 52.5, 100, 0.5, 47.5);
+      cuboid(w, -52.5, -0.5, 0, 47.5, 0.5, 5);
+      cuboid(w, 52.5, -0.5, 0, 47.5, 0.5, 5);
+      cuboid(w, 0, -2, 0, 5, 0.5, 5);
+    });
+    spawned(world, c, 0, 25);
+    run(world, c, 7, walk()); // north, into the pit at z = 5
+    expect(c.state.position.y).toBeCloseTo(-1.5, 1);
+    for (let k = 0; k < 8; k++) run(world, c, 1.5, walk(1, false, (k * Math.PI) / 2 + 0.3)); // round and round the pit
+    const p = c.state.position;
+    expect([Math.abs(p.x) < 5, Math.abs(p.z) < 5, p.y < -1]).toEqual([true, true, true]);
+    c.respawn();
+    run(world, c, 0.2);
+    expect(p.y).toBeCloseTo(0, 1);
+    expect(Math.max(Math.abs(p.x), Math.abs(p.z))).toBeGreaterThan(5.3);
+    world.free();
+  });
+
+  it('riding for 10 s: back along the ride, not to where the bike was taken (review M1)', () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 0, 0);
+    c.ride(newBike('b', 0, c.state.position.y, 0, 0));
+    run(world, c, 10, walk());
+    const here = c.state.position.clone();
+    expect(here.z).toBeLessThan(-40);
+    c.respawn();
+    const back = c.state.position.z - here.z;
+    expect(back).toBeGreaterThanOrEqual(RR.minDistance - 0.5);
+    expect(back).toBeLessThan((RR.minAge + 1) * bikeTopSpeed());
+    world.free();
+  });
+
+  it('haltIntent (menu / full map open while riding): brakes to 0 within the braking distance, never reverses (review M3)', () => {
+    const { world, c } = setup(ground);
+    spawned(world, c, 0, 0);
+    const b = newBike('b', 0, c.state.position.y, 0, 0);
+    c.ride(b);
+    run(world, c, 3, walk());
+    const v = b.speed;
+    expect(v).toBeGreaterThan(0.95 * bikeTopSpeed());
+    const from = c.state.position.clone();
+    const i = walk();
+    let min = Infinity;
+    for (let k = 0; k < 10 / DT; k++) {
+      c.fixedUpdate(DT, haltIntent(i, c.riding));
+      world.step();
+      min = Math.min(min, b.speed);
+    }
+    expect([b.speed, min, c.riding]).toEqual([0, 0, b]);
+    expect(flat(c.state.position, from)).toBeLessThan((v * v) / (2 * B.brakeDecel) + 0.3);
+    expect(c.state.position.z).toBeLessThanOrEqual(from.z); // no roll back
+    expect(haltIntent(walk(), null)).toEqual(newIntent()); // on foot: just no input
     world.free();
   });
 

@@ -74,15 +74,18 @@ export class Menu {
   }
 
   close(): void {
-    if (this.root) this.root.hidden = true;
+    if (!this.root) return;
+    this.root.hidden = true;
+    // A menu button keeping the focus while playing would keep Space / Tab (core/Input.ts leaves them to a focused button).
+    if (this.root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   }
 
   private build(): HTMLElement {
     const { actions } = this;
-    // A click is the user gesture the pointer lock needs: close first, then resume (a refused lock leaves a clean screen).
+    // A click is the user gesture the pointer lock needs. The menu closes once the lock is granted (main.ts
+    // onPointerLockChange); a refused one (Chrome, ~1 s after Esc released it) leaves it open, so a second click works (review m2).
     const go = (first?: () => void) => () => {
       first?.();
-      this.close();
       actions.resume();
     };
     const main = el('div', { className: 'menu-main' }, el('button', { type: 'button', className: 'menu-resume', textContent: 'Tiếp tục', onclick: go() }));

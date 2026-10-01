@@ -12,7 +12,7 @@ import { loadBikeAsset } from '../vehicle/BikeModel.ts';
 import { Bikes, groundAt } from '../vehicle/Bikes.ts';
 import type { RoadSurface } from '../vehicle/types.ts';
 import { CharacterAnimator } from './Animation.ts';
-import { CharacterController, newIntent, readMoveIntent } from './CharacterController.ts';
+import { CharacterController, haltIntent, newIntent, readMoveIntent } from './CharacterController.ts';
 import { CharacterModel, loadCharacterAsset } from './CharacterModel.ts';
 import { type CameraMode, ThirdPersonCamera } from './ThirdPersonCamera.ts';
 import type { CameraTarget, Gesture, PlayerEnv } from './types.ts';
@@ -95,6 +95,7 @@ export class Player {
   private readonly target: CameraTarget;
   private bikesPlaced = false;
   private waved = false; // G since the last npcAnchor()
+  private blocked = false; // menu / full map open (update → fixedUpdate)
   /** Surface under the bike this frame (tyre sound, debug line). */
   surface: RoadSurface = 'asphalt';
 
@@ -151,6 +152,7 @@ export class Player {
   fixedUpdate(dt: number, frozen: boolean) {
     if (!this.active || frozen) return;
     if (!this.bikesPlaced && this.controller.placed) this.placeBikes();
+    if (this.blocked) haltIntent(this.intent, this.controller.riding);
     this.controller.fixedUpdate(dt, this.intent);
     this.simTime += dt;
   }
@@ -182,10 +184,11 @@ export class Player {
   }
 
   /** Input → intent and gestures, render pose, animation, camera. `input` null while the free-fly camera has it;
-   *  `blocked` (Phase 5: menu or full map open) = no input read, the body stops (the camera still follows it). */
+   *  `blocked` (Phase 5: menu or full map open) = no input read, the body stops, a bike brakes to a stop (fixedUpdate,
+   *  haltIntent); the camera still follows it. */
   update(dt: number, input: Input | null, alpha: number, blocked = false) {
-    if (input && blocked) Object.assign(this.intent, newIntent());
-    else if (input) {
+    this.blocked = !!input && blocked;
+    if (input && !blocked) {
       this.camera.look(input, dt);
       if (input.wasPressed('camera')) this.camera.cycleMode();
       readMoveIntent(input, this.camera.yaw, this.intent);

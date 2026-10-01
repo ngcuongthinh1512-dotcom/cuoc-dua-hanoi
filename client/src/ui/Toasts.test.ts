@@ -6,12 +6,13 @@ import type { NoticeCode } from './types.ts';
 const texts = (feed: ReturnType<typeof nextFeed>) => feed.map((t) => t.text);
 
 describe('toast feed (pure part)', () => {
-  it('the same text within repeatGap s is dropped, after it a new line appears', () => {
+  it('the same text within repeatGap s is dropped, after it the line comes back as new (never two same lines)', () => {
     let feed = nextFeed([], 'A', 0);
+    feed = nextFeed(feed, 'B', 0.5);
     feed = nextFeed(feed, 'A', toasts.repeatGap - 0.1);
-    expect(feed).toEqual([{ text: 'A', at: 0 }]);
+    expect(feed).toEqual([{ text: 'A', at: 0 }, { text: 'B', at: 0.5 }]);
     feed = nextFeed(feed, 'A', toasts.repeatGap + 0.1);
-    expect(feed).toEqual([{ text: 'A', at: 0 }, { text: 'A', at: toasts.repeatGap + 0.1 }]);
+    expect(feed).toEqual([{ text: 'B', at: 0.5 }, { text: 'A', at: toasts.repeatGap + 0.1 }]);
   });
 
   it('a different text is not a repeat; lines older than toasts.seconds are gone', () => {

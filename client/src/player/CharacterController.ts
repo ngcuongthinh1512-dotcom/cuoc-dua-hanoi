@@ -18,6 +18,11 @@ const axis = (input: Input, pos: Action, neg: Action) => Number(input.isDown(pos
 
 export const newIntent = (): MoveIntent => ({ forward: 0, right: 0, cameraYaw: 0, slow: false, jump: false });
 
+/** Phase 5, menu / full map open (Player, every physics step): no input; a ridden bike brakes (S) to a stop, never on into
+ *  reverse (review M3). */
+export const haltIntent = (out: MoveIntent, riding: BikeState | null): MoveIntent =>
+  Object.assign(out, newIntent(), { forward: riding && riding.speed > 0 ? -1 : 0 });
+
 /** WASD + left stick, camera-relative, length ≤ 1. `jump` is OR-ed in: the consumer clears it. */
 export function readMoveIntent(input: Input, cameraYaw: number, out: MoveIntent): MoveIntent {
   const f = axis(input, 'moveForward', 'moveBack') - input.pad.moveY;
@@ -139,15 +144,17 @@ export class CharacterController {
   /** Feet and heading at the previous step (renderPosition / renderYaw blend from them). */
   private readonly prev = new Vector3();
   private prevYaw = 0;
-  /** Dry ground the body stood on, one spot per player.safeEvery s (newest last, ≤ respawnRules.history): respawn goes back
-   *  to one that is respawnRules.minAge s old. */
-  private readonly safe: Vector3[] = [];
+  /** Dry ground the body stood on (on foot or riding), by distance: a new spot once respawnRules.spacing m from the newest,
+   *  older spots that close to it dropped (pacing a sealed yard or standing still never floods it); newest last,
+   *  ≤ respawnRules.history. `t` = this.clock when it was stood on. See respawn(). */
+  private safe: { p: Vector3; t: number }[] = [];
+  /** s of fixedUpdate so far (ages of the safe spots). */
+  private clock = 0;
   /** Intended horizontal velocity (accelerates toward the input; a wall doesn't reset it) and vertical velocity. */
   private vx = 0;
   private vz = 0;
   private vy = 0;
   private airTime = 0;
-  private safeTime = 0;
   private jumped = false;
   /** Spawn waiting for colliders created this frame to enter Rapier's query tree (on the next world.step()). */
   private pending: { x: number; z: number; wait: number } | null = null;
@@ -189,7 +196,7 @@ export class CharacterController {
     Object.assign(this.state, { yaw, action: 'none', actionTime: 0, grounded: true, inWater: false, moveMode: 'walk' });
     this.climb = null;
     this.teleport(x, this.env.heightAt(x, z), z);
-    this.safe.splice(0, this.safe.length, this.state.position.clone());
+    this.forgetSafe();
     this.pending = { x, z, wait: 1 };
   }
 
@@ -227,8 +234,12 @@ export class CharacterController {
   }
 
   /** Back to safe ground (fell through the world; the menu's "Kẹt? Về chỗ an toàn"): from the Seine onto the parapet gap at
-   *  the top of the nearest quay flight, facing inland ('stairs', SPEC §4.4); otherwise to a dry spot respawnRules.minAge s
-   *  ago ('safe'), so not to the place one is stuck in. Riding: the bike stays where its wheels last stood on dry ground. */
+   *  the top of the nearest quay flight, facing inland ('stairs', SPEC §4.4); otherwise ('safe') to the newest remembered
+   *  dry spot that is ≥ respawnRules.minAge s old AND ≥ respawnRules.minDistance m away, else the oldest one, so not to
+   *  the place one is stuck in (also after standing still, or pacing a sealed yard smaller than minDistance). Riding: the
+   *  bike stays where its wheels last stood on dry ground.
+   *  ponytail: straight-line distance, not reachability: a sealed area wider than minDistance can still keep you inside,
+   *  and a spot behind a wall counts as away; pick spots on the road graph's walk component (nearestNode) if that shows. */
   respawn(): 'safe' | 'stairs' {
     const s = this.state;
     this.climb = null;
@@ -240,12 +251,34 @@ export class CharacterController {
       s.yaw = this.prevYaw = yawOf(q.nx, q.nz); // renderYaw must not blend from the old heading
       result = 'stairs';
     } else {
-      const { x, y, z } = this.safe[Math.max(0, this.safe.length - 1 - Math.ceil(RR.minAge / P.safeEvery))] ?? s.position;
+      let pick = this.safe[0];
+      for (let i = this.safe.length - 1; i >= 0; i--) {
+        const { p, t } = this.safe[i]!;
+        if (this.clock - t >= RR.minAge && Math.hypot(p.x - s.position.x, p.z - s.position.z) >= RR.minDistance) {
+          pick = this.safe[i];
+          break;
+        }
+      }
+      const { x, y, z } = pick?.p ?? s.position;
       if (!this.place(x, z)) this.teleport(x, y, z);
     }
     Object.assign(s, { inWater: false, grounded: true, moveMode: 'walk' });
-    this.safe.splice(0, this.safe.length, s.position.clone()); // pressed again at once: stay here, not back to the old spot
+    this.forgetSafe(); // pressed again at once: stay here, not back to the old spot
     return result;
+  }
+
+  /** The safe-spot history = only where the body is now. */
+  private forgetSafe() {
+    this.safe = [{ p: this.state.position.clone(), t: this.clock }];
+  }
+
+  /** Dry ground under the body now (on foot or riding): kept once respawnRules.spacing m from the newest spot. */
+  private rememberSafe(p: Vector3) {
+    const far = (q: Vector3) => Math.hypot(q.x - p.x, q.z - p.z) >= RR.spacing;
+    const last = this.safe.at(-1);
+    if (last && !far(last.p)) return;
+    this.safe = this.safe.filter((e) => far(e.p));
+    if (this.safe.push({ p: p.clone(), t: this.clock }) > RR.history) this.safe.shift();
   }
 
   /** Phase 4B: moves the body (dx, dz) m at the next fixedUpdate, through the KCC (walls still stop it). Accumulates. */
@@ -263,10 +296,11 @@ export class CharacterController {
     this.shoveX = this.shoveZ = 0;
     this.prev.copy(s.position);
     this.prevYaw = s.yaw;
+    this.clock += dt;
     if (this.pending) {
       if (this.pending.wait-- <= 0 && this.place(this.pending.x, this.pending.z)) {
         this.pending = null;
-        this.safe.splice(0, this.safe.length, s.position.clone()); // the spawn found its real ground
+        this.forgetSafe(); // the spawn found its real ground
       }
       return;
     }
@@ -323,10 +357,7 @@ export class CharacterController {
     s.moveMode = swimming ? 'swim' : this.jumped || this.airTime > P.fallDelay ? 'air' : intent.slow ? 'slow' : 'walk';
 
     if (p.y < P.respawnBelow || p.y < this.env.heightAt(p.x, p.z) - P.fellThrough) return this.respawn();
-    if ((this.safeTime += dt) >= P.safeEvery && s.grounded && !s.inWater) {
-      this.safeTime = 0;
-      if (this.safe.push(p.clone()) > RR.history) this.safe.shift();
-    }
+    if (s.grounded && !s.inWater) this.rememberSafe(p);
   }
 
   /** One riding step: stepBike → velocity along the heading through the KCC. The front-wheel probe finds what the nose
@@ -378,7 +409,7 @@ export class CharacterController {
       s.moveMode = 'swim';
       return;
     }
-    if (s.grounded) this.bikeSafe.copy(p);
+    if (s.grounded) this.bikeSafe.copy(p), this.rememberSafe(p); // respawn while riding: back along the ride (review M1)
     // The capsule's side against a wall the probe missed: keep only the speed actually made. Ground contacts don't
     // count (Rapier's KCC now and then returns no motion for one step on flat ground).
     for (let i = 0; i < this.kcc.numComputedCollisions(); i++) {

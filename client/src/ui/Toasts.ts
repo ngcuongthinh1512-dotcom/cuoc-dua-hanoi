@@ -22,11 +22,12 @@ export interface Toast {
 }
 
 /** The feed once `text` arrives at `now` (s): lines older than toasts.seconds gone; a repeat of a line younger than
- *  toasts.repeatGap dropped; at most toasts.max lines, the oldest go first. Pure: the DOM below only draws the result. */
+ *  toasts.repeatGap dropped, an older one moved to the end as new (never two same lines, review m7); at most toasts.max
+ *  lines, the oldest go first. Pure: the DOM below only draws the result. */
 export function nextFeed(feed: readonly Toast[], text: string, now: number): readonly Toast[] {
   const live = feed.filter((t) => now - t.at < T.seconds);
   if (live.some((t) => t.text === text && now - t.at < T.repeatGap)) return live;
-  return [...live, { text, at: now }].slice(-T.max);
+  return [...live.filter((t) => t.text !== text), { text, at: now }].slice(-T.max);
 }
 
 let feed: readonly Toast[] = [];
@@ -52,7 +53,9 @@ function draw() {
 }
 
 export function toast(text: string): void {
-  feed = nextFeed(feed, text, clock());
+  const next = nextFeed(feed, text, clock());
+  if (next.length === feed.length && next.at(-1) === feed.at(-1)) return; // a dropped repeat (every physics step at a stair, review m6)
+  feed = next;
   if (typeof document === 'undefined') return; // Node tests
   if (!box) {
     // Bottom-left, the newest line nearest the minimap (menu.css #toasts: column, fade keyframes).
