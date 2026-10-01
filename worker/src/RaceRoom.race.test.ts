@@ -147,6 +147,11 @@ describe.concurrent('race engine (workerd)', () => {
     expect(st.ranking.map((r) => [r.team, r.rank, r.officialMs])).toEqual([[teams[0]!.id, 1, fin.officialMs], [teams[1]!.id, 2, null]]);
     expect(st.progress.filter((r) => r.team === teams[0]!.id).map((r) => r.step)).toEqual(['L1', 'T1', 'L2', 'D1', 'L3', 'PS']);
     expect(st.progress.find((r) => r.team === teams[0]!.id && r.step === 'L1')!.openedAt).toBe(startA); // D3, on read
+    // checked in = a spectator (SPEC §8.6): a bike right here cannot be taken
+    host.send({ t: 'host.bike', op: 'add', x: pa.x + 1, z: pa.z });
+    const near = (await host.until((m) => m.t === 'bikes' && m.list[0]?.x === pa.x + 1)) as { list: { id: string }[] };
+    a!.send({ t: 'bike', op: 'claim', id: near.list[0]!.id });
+    expect(await a!.until((m) => m.t === 'bike')).toMatchObject({ ok: false, reason: 'finished' });
     // a later welcome: the clock stopped at the check-in
     const a2 = await joinTeam(server, race, teams[0]!.code);
     expect(W(a2).raceTime).toBeCloseTo(fin.officialMs! / 1000, 0);

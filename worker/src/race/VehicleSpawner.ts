@@ -39,7 +39,7 @@ export interface SpawnerState {
   paused: boolean;
 }
 
-export type ClaimResult = { ok: true } | { ok: false; reason: 'taken' | 'far' | 'walkOnly' | 'gone' };
+export type ClaimResult = { ok: true } | { ok: false; reason: 'taken' | 'far' | 'walkOnly' | 'finished' | 'gone' };
 
 /** m between the claimer's last pose and the bike: bikeRules.interactRadius (2.5, client) + 1 m for a 5 Hz pose lag. */
 export const CLAIM_REACH = 3.5;
@@ -127,10 +127,10 @@ export function periodicSpawn(cfg: VehiclesConfig, cands: SpawnCandidates, state
 
 /** F on a bike (SPEC §6.3), also re-mounting the team's own bike: atomic because the Durable Object runs one message at a
  *  time, so the first claim wins. `at` = the claimer's last pose (null = unknown → too far). */
-export function claim(bike: ServerBike | undefined, team: string, at: PlayerSpot | null, walkOnly: boolean): ClaimResult {
+export function claim(bike: ServerBike | undefined, team: string, at: PlayerSpot | null, blocked: false | 'walkOnly' | 'finished'): ClaimResult {
   if (!bike) return { ok: false, reason: 'gone' };
   if (bike.owner !== null && bike.owner !== team) return { ok: false, reason: 'taken' };
-  if (walkOnly) return { ok: false, reason: 'walkOnly' };
+  if (blocked) return { ok: false, reason: blocked };
   // A ridden bike (here only ever the claimer's own) follows its rider on the server (BikeService.tick); a standing one,
   // own included, must be in reach of the claimer's last pose: nobody summons a bike from afar.
   const reach = bike.owner === team ? OWN_REACH : CLAIM_REACH;

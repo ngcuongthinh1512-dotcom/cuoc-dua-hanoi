@@ -24,8 +24,8 @@ export type RaceInput =
   | { kind: 'pose'; x: number; z: number; riding: boolean }
   /** F on the current box (SPEC §8.2): on foot, inside the zone (+ NET.geofenceSlack). */
   | { kind: 'open'; step: string; x: number; z: number; riding: boolean }
-  /** A task done (Phase 7: the stub passes it; Phase 8: checked). */
-  | { kind: 'task'; step: string; branch?: string; answer?: string; x: number; z: number }
+  /** A task done (Phase 7: the stub passes it; Phase 8: checked); on a bike → boxRiding (D4). */
+  | { kind: 'task'; step: string; branch?: string; answer?: string; x: number; z: number; riding?: boolean }
   /** Standing on the Pit Stop mat after the penalty wait (SPEC §8.6); on a bike → boxRiding. */
   | { kind: 'checkin'; x: number; z: number; riding?: boolean };
 
@@ -141,12 +141,13 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   const branch = s.type === 'detour' ? (input.branch ?? null) : null;
   const place = s.type === 'detour' ? (branch === null ? null : branchZone(leg, zones, i, branch)) : zones[i]!;
   if (!place) return silent;
+  if (input.riding) return refuse('boxRiding');
   if (!inside(place, input.x, input.z, slack)) return refuse('taskFar');
   arrive(input.x, input.z, slack);
   if (verify(leg, i, input.branch, input.answer) !== 'pass') return { p, effects: fx }; // Phase 8: wrong / pending
   fx.push({ kind: 'start', step: i, branch });
   complete(i, place);
-  settle(input.x, input.z, true); // riding unknown: no check-in by position from here (the client's checkin does it)
+  settle(input.x, input.z, !!input.riding);
   return { p, effects: fx };
 }
 

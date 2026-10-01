@@ -122,6 +122,61 @@ describe('RaceEngine', () => {
     expect(f.sent.slice(-2).map(([, m]) => m)).toEqual([{ t: 'notice', code: 'boxRiding' }, { t: 'notice', code: 'boxFar' }]);
   });
 
+  it('D4: a task on a bike is refused with boxRiding (the trusted pose\'s mode), on foot it passes', () => {
+    const f = fake();
+    f.teams.set('t0', { ...NEW_TEAM_RACE });
+    const e = new RaceEngine(f.io);
+    e.onHost({ t: 'host.leg', id: 'mini' }, () => {}, 0);
+    f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, step: 1 });
+    e.onHost({ t: 'host.race', op: 'start' }, () => {}, 1);
+    f.log.length = 0;
+    e.onOp('t0', { t: 'race', op: 'task', step: 'T1' }, at(1, 'bike'), 10);
+    expect(f.log).toEqual(['send notice']); // nothing written, no park under the rider
+    expect(f.sent.at(-1)).toEqual(['t0', { t: 'notice', code: 'boxRiding' }]);
+    e.onOp('t0', { t: 'race', op: 'task', step: 'T1' }, at(1), 11);
+    expect(f.teams.get('t0')!.step).toBe(2);
+  });
+
+  it('D15: a start time after the team\'s check-in is refused; a change for a running team moves its clock, which then only runs forward', () => {
+    const f = fake();
+    f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, startAt: 100_000, finishAt: 900_000 }).set('t1', { ...NEW_TEAM_RACE, startOrder: 2, joinedAt: 1 });
+    const e = new RaceEngine(f.io);
+    e.onHost({ t: 'host.race', op: 'start' }, () => {}, 0);
+    const r: ServerMessage[] = [];
+    const startAt = (team: string, at: number | 'now', now: number) => e.onHost({ t: 'host.team', op: 'startAt', team, at }, (m) => r.push(m), now);
+    f.log.length = 0;
+    startAt('t0', 900_001, 1_000_000);
+    expect(r).toEqual([{ t: 'host.notice', level: 'error', message: expect.stringContaining('về đích') }]);
+    expect(f.log).toEqual([]); // nothing written, nothing sent to the team
+    expect(f.teams.get('t0')!.startAt).toBe(100_000);
+    startAt('t0', 900_000, 1_000_000); // = the check-in: allowed
+    expect(f.sent.at(-1)).toEqual(['t0', { t: 'race', view: expect.objectContaining({ startAt: 900_000, officialMs: 0 }) }]);
+    // a running team: each change moves its clock; from there it only runs forward and never below 0 (≤ 60 s ahead is
+    // accepted for a clock skew)
+    const clock = (now: number) => e.summary('t1', now).raceTime;
+    startAt('t1', 400_000, 1_000_000);
+    expect([1_000_000, 1_005_000].map(clock)).toEqual([600, 605]);
+    startAt('t1', 'now', 1_010_000);
+    expect([1_010_000, 1_011_000].map(clock)).toEqual([0, 1]);
+    startAt('t1', 1_050_000, 1_020_000);
+    expect([1_020_000, 1_040_000, 1_050_000, 1_055_000].map(clock)).toEqual([0, 0, 0, 5]);
+    const views = f.sent.filter(([t, m]) => t === 't1' && (m as { t: string }).t === 'race').map(([, m]) => (m as { view: { startAt: number | null } }).view.startAt);
+    expect(views.slice(-3)).toEqual([400_000, 1_010_000, 1_050_000]);
+  });
+
+  it('every status change reaches each online team as a race view, and its welcome carries it (lobby / paused / finished on screen)', () => {
+    const f = fake();
+    f.teams.set('t1', { ...NEW_TEAM_RACE, startOrder: 2, joinedAt: 1 });
+    const e = new RaceEngine(f.io);
+    expect(e.welcome('t1', null, false, 0).view!.status).toBe('lobby');
+    for (const [op, status] of [['start', 'running'], ['pause', 'paused'], ['resume', 'running'], ['finish', 'finished']] as const) {
+      f.sent.length = 0;
+      e.onHost({ t: 'host.race', op }, () => {}, 1);
+      expect(f.sent.filter(([, m]) => (m as { t: string }).t === 'race').map(([t, m]) => [t, (m as { view: { status: string } }).view.status])).toEqual([['t0', status], ['t1', status]]);
+      expect(e.welcome('t1', null, false, 2).view!.status).toBe(status);
+    }
+  });
+
   it('a broken JSON leg gets a Vietnamese line / column, not the engine text (review)', () => {
     const f = fake();
     f.teams.set('t0', { ...NEW_TEAM_RACE });

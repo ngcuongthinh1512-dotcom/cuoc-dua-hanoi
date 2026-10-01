@@ -251,7 +251,8 @@ export type ServerMessage =
   | { t: 'team'; slot: number; online: boolean }
   /** Changed bikes (full = the whole list); `gone` = ids that vanished (abandoned, replaced, removed by the Host). */
   | { t: 'bikes'; list: BikeInfo[]; gone?: string[]; full?: boolean }
-  | { t: 'bike'; op: 'claim'; id: string; ok: boolean; reason?: 'taken' | 'far' | 'walkOnly' | 'gone' }
+  /** reason 'finished': the team checked in or the race is over (a spectator, SPEC §8.6 / §8.10). */
+  | { t: 'bike'; op: 'claim'; id: string; ok: boolean; reason?: 'taken' | 'far' | 'walkOnly' | 'finished' | 'gone' }
   | { t: 'gesture'; slot: number; g: GestureKind }
   | { t: 'notice'; code: ServerNotice }
   /** Per-team channel (SPEC §17.10): the current box's position when the team comes within boxReveal.radius, taken

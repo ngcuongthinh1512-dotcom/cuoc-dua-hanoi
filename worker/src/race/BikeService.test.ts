@@ -87,7 +87,7 @@ describe('BikeService (memory SQLite, controlled clock)', () => {
     s.onHost({ t: 'host.bike', op: 'add', x: 10, z: 10 }, 1);
     s.onHost({ t: 'host.bike', op: 'add', x: 50, z: 50 }, 2);
     const [a, b] = s.list().map((x) => x.id) as [string, string];
-    s.onTeam('t1', spot('t1', 10, 11), { t: 'bike', op: 'claim', id: a }, true, 3);
+    s.onTeam('t1', spot('t1', 10, 11), { t: 'bike', op: 'claim', id: a }, 'walkOnly', 3);
     expect(sent.at(-1)).toEqual(['t1', { t: 'bike', op: 'claim', id: a, ok: false, reason: 'walkOnly' }]);
     s.onTeam('t0', spot('t0', 10, 11), { t: 'bike', op: 'claim', id: a }, false, 4);
     expect(rows(sql).find((r) => r.id === a)).toMatchObject({ owner: 't0', rider: true });
@@ -223,6 +223,27 @@ describe('BikeService (memory SQLite, controlled clock)', () => {
     const id9 = s.list()[0]!.id;
     s.park('t9', 'L2', { x: 50, z: -7 }, 400); // D18: moved onto the rack's spot from the leg
     expect(s.list().find((b) => b.id === id9)).toMatchObject({ x: 50, z: -7, owner: null, parked: true });
+  });
+
+  it('bikes parked at one rack spot stand side by side in a row, never on top of each other (SPEC §6.4, review F6)', () => {
+    const { s } = service();
+    const parkOne = (i: number) => {
+      s.onHost({ t: 'host.bike', op: 'add', x: 3 * i, z: 0 }, 10 * i);
+      const id = s.list().at(-1)!.id;
+      s.onTeam(`t${i}`, spot(`t${i}`, 3 * i, 0), { t: 'bike', op: 'claim', id }, false, 10 * i);
+      s.park(`t${i}`, 'R', { x: 50, z: -7 }, 10 * i);
+      return id;
+    };
+    const row = () => s.list().filter((b) => b.parked).map((b) => [Math.round(b.x * 10) / 10, b.z, b.yaw]);
+    const ids = [0, 1, 2].map(parkOne);
+    expect(row()).toEqual([[50, -7, 0], [49.1, -7, 0], [50.9, -7, 0]]);
+    s.onTeam('t9', spot('t9', 49, -7), { t: 'bike', op: 'claim', id: ids[1]! }, false, 25); // its place is free again
+    parkOne(3);
+    expect(row()).toEqual([[50, -7, 0], [50.9, -7, 0], [49.1, -7, 0]]);
+    for (let i = 4; i <= cfg.bikeParking.maxBikes + 1; i++) parkOne(i); // full: the longest parked goes, its place is reused
+    const xs = row().map(([x]) => x);
+    expect(xs).toHaveLength(cfg.bikeParking.maxBikes);
+    expect(new Set(xs).size).toBe(xs.length);
   });
 
   it('Host: release frees a team’s bike, remove deletes it', () => {

@@ -86,8 +86,9 @@ describe('claim (SPEC §6.3, §6.5)', () => {
     expect(claim(bike('t1'), 't0', at(1), false)).toEqual({ ok: false, reason: 'taken' });
     expect(claim(bike(), 't0', at(CLAIM_REACH + 0.1), false)).toEqual({ ok: false, reason: 'far' });
     expect(claim(bike(), 't0', null, false)).toEqual({ ok: false, reason: 'far' });
-    expect(claim(bike(), 't0', at(1), true)).toEqual({ ok: false, reason: 'walkOnly' });
-    expect(claim(bike('t0'), 't0', at(1), true)).toEqual({ ok: false, reason: 'walkOnly' });
+    expect(claim(bike(), 't0', at(1), 'walkOnly')).toEqual({ ok: false, reason: 'walkOnly' });
+    expect(claim(bike('t0'), 't0', at(1), 'walkOnly')).toEqual({ ok: false, reason: 'walkOnly' });
+    expect(claim(bike('t0'), 't0', at(1), 'finished')).toEqual({ ok: false, reason: 'finished' }); // checked in: a spectator
     expect(claim(undefined, 't0', at(1), false)).toEqual({ ok: false, reason: 'gone' });
   });
 

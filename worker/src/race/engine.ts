@@ -159,7 +159,7 @@ export class RaceEngine {
     const riding = at.mode === 'bike';
     const input: RaceInput =
       m.op === 'open' ? { kind: 'open', step: m.step, x: at.x, z: at.z, riding }
-      : m.op === 'task' ? { kind: 'task', step: m.step, ...(m.branch !== undefined ? { branch: m.branch } : {}), ...(m.answer !== undefined ? { answer: m.answer } : {}), x: at.x, z: at.z }
+      : m.op === 'task' ? { kind: 'task', step: m.step, ...(m.branch !== undefined ? { branch: m.branch } : {}), ...(m.answer !== undefined ? { answer: m.answer } : {}), x: at.x, z: at.z, riding }
       : { kind: 'checkin', x: at.x, z: at.z, riding };
     this.step(team, input, now);
   }
@@ -229,10 +229,13 @@ export class RaceEngine {
     return (r && this.boxes[r.step]) ?? null;
   }
 
-  /** SPEC §6.5: the current step is a walk-only route (BikeService.onTeam refuses claims). */
-  walkOnly(team: string): boolean {
-    const s = this.legV.steps[this.io.team(team)?.step ?? -1];
-    return s?.type === 'route_info' && 'mandatory' in s.transport;
+  /** Why the team may not take a bike now (BikeService.onTeam), false = it may: checked in or the race is over (a
+   *  spectator, SPEC §8.6 / §8.10), or the current step is a walk-only route (SPEC §6.5). */
+  bikeBlock(team: string): false | 'walkOnly' | 'finished' {
+    const r = this.io.team(team);
+    if (r?.finishAt != null || this.statusV === 'finished') return 'finished';
+    const s = this.legV.steps[r?.step ?? -1];
+    return s?.type === 'route_info' && 'mandatory' in s.transport ? 'walkOnly' : false;
   }
 
   /** A team's socket went: it leaves the "Tại điểm này" lists of the others. */

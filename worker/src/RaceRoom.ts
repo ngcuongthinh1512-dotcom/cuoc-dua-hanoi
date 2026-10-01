@@ -367,7 +367,7 @@ export class RaceRoom extends DurableObject<Env> {
         // Each op may write a row: past the budget the socket goes (a real player never gets near it).
         if (this.count(a.team, 'bike', now) > NET.maxBikeOps) return this.close(ws, CLOSE.tooFast, 'too many bike ops');
         // D4: claim / dismount reach from the trusted point (a fake pose next to a bike 2 km away claims nothing)
-        return this.bikes.onTeam(a.team, l ? { team: a.team, x: l.valid.x, z: l.valid.z } : null, m, this.engine.walkOnly(a.team), now);
+        return this.bikes.onTeam(a.team, l ? { team: a.team, x: l.valid.x, z: l.valid.z } : null, m, this.engine.bikeBlock(a.team), now);
       }
       case 'gesture': {
         const team = a.role === TEAM ? this.team(a.team) : undefined;

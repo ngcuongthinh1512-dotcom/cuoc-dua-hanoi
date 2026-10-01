@@ -50,6 +50,7 @@ describe('advance: tasks', () => {
     expect(run(P(1), { kind: 'task', step: 'T1', ...at(Z[1]!, 60) }).effects).toEqual([{ kind: 'refuse', code: 'taskFar' }]);
     const a = run(P(1), pose(Z[1]!));
     expect(a.effects).toEqual([{ kind: 'arrive', step: 1 }, park(Z[1]!)]);
+    expect(run(a.p, { kind: 'task', step: 'T1', ...at(Z[1]!), riding: true })).toEqual({ p: a.p, effects: [{ kind: 'refuse', code: 'boxRiding' }] }); // D4
     const t = run(a.p, { kind: 'task', step: 'T1', answer: '42', ...at(Z[1]!) }, 3000);
     // L2 is walk-only: the bike goes to the rack of the point the team STANDS at (T1's place), not L2's (D18)
     expect(t).toEqual({ p: P(2), effects: [{ kind: 'start', step: 1, branch: null }, { kind: 'complete', step: 1 }, park(Z[1]!)] });

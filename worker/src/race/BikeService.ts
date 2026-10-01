@@ -35,6 +35,8 @@ interface Spawner extends SpawnerState {
  *  lag). A bike another team rides never does (RemotePlayers draws it from the tick), so `bikes` shows no rider, no route
  *  far ahead and no other team's stops (SPEC §7, §17.10; plan decisions 5 / 18). */
 const VIEW_METERS = 250;
+/** m between two bikes side by side in a rack row (handlebars ≈ 0.6 m wide). */
+const RACK_SPACING = 0.9;
 /** m: a dismount's y outside the map's span (Seine bed … Eiffel top, as decodePose) is ignored. */
 const okY = (y: number | undefined): y is number => y !== undefined && y >= -100 && y <= 1000;
 
@@ -68,7 +70,7 @@ export class BikeService {
 
   /** claim / mount / dismount from a team (SPEC §6.3; `at` = its last known spot, null = unknown). Writes before answering.
    *  mount = claim of the team's own bike (client: got back on after a crash / reconnect). */
-  onTeam(team: string, at: PlayerSpot | null, m: TeamBikeMessage, walkOnly: boolean, now: number) {
+  onTeam(team: string, at: PlayerSpot | null, m: TeamBikeMessage, blocked: false | 'walkOnly' | 'finished', now: number) {
     const b = this.bikes.get(m.id);
     if (m.op === 'dismount') {
       if (!b || b.owner !== team || !b.rider) return; // nothing changes: no row, no message
@@ -82,7 +84,7 @@ export class BikeService {
       if (at) this.sync(team, at);
       return;
     }
-    const r = claim(b, team, at, walkOnly);
+    const r = claim(b, team, at, blocked);
     if (!r.ok || !b) return this.io.send(team, { t: 'bike', op: 'claim', id: m.id, ok: false, reason: r.ok ? 'gone' : r.reason });
     if (b.owner === team && b.rider) return this.io.send(team, { t: 'bike', op: 'claim', id: b.id, ok: true }); // already: no row
     const taken = b.owner !== team;
@@ -181,9 +183,20 @@ export class BikeService {
   park(team: string, rack: string, at: { x: number; z: number } | null, now: number) {
     const b = [...this.bikes.values()].find((o) => o.owner === team);
     if (!b) return;
-    Object.assign(b, { owner: null, rider: false, parked: true, rack, parkedAt: now }, at ?? {});
+    Object.assign(b, { owner: null, rider: false, parked: true, rack, parkedAt: now });
     const atRack = [...this.bikes.values()].filter((o) => o.rack === rack).sort((p, q) => (p.parkedAt ?? 0) - (q.parkedAt ?? 0));
     const gone = atRack.slice(0, Math.max(0, atRack.length - this.io.cfg.bikeParking.maxBikes)).map((o) => o.id);
+    if (at) {
+      // ponytail: no rack model (SPEC §6.4): one east–west row from the leg's rack spot, every bike facing north, each in
+      // the first free place (0, −1, +1, −2 … × RACK_SPACING). Upgrade: a rack model + the OSM rack's direction.
+      const stand = atRack.filter((o) => o !== b && !gone.includes(o.id));
+      for (let k = 0; ; k++) {
+        const x = at.x + (k % 2 ? -1 : 1) * Math.ceil(k / 2) * RACK_SPACING;
+        if (stand.some((o) => Math.hypot(o.x - x, o.z - at.z) < RACK_SPACING / 2)) continue;
+        Object.assign(b, { x, z: at.z, yaw: 0 });
+        break;
+      }
+    }
     this.put(b);
     this.drop(gone);
     this.event(now, team, 'bikePark', { id: b.id, rack, gone });
