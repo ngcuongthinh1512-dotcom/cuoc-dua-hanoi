@@ -40,9 +40,42 @@ export async function openSocket(server: Harness, race: string, token: string) {
       const t = setTimeout(() => reject(new Error('no message within ' + timeoutMs + ' ms')), timeoutMs);
       waiters.push((m) => (clearTimeout(t), resolve(m as T & { closed?: number })));
     });
+  /** Skips messages until one matches (or the socket closes: that `{ closed }` is returned). */
+  const until = async <T = Record<string, unknown>>(match: (m: any) => boolean, timeoutMs = 5000) => {
+    const end = Date.now() + timeoutMs;
+    for (;;) {
+      const m = await next<T>(Math.max(1, end - Date.now()));
+      if (m.closed !== undefined || match(m)) return m;
+    }
+  };
+  /** Everything that arrives within `ms` (and was queued before). */
+  const drain = async (ms: number): Promise<any[]> => {
+    await sleep(ms);
+    return queue.splice(0);
+  };
   await new Promise<void>((resolve) => {
     ws.addEventListener('open', () => resolve(), { once: true });
     ws.addEventListener('close', () => resolve(), { once: true });
   });
-  return { ws, next, send: (m: unknown) => ws.send(typeof m === 'string' ? m : JSON.stringify(m)), close: () => ws.close() };
+  return { ws, next, until, drain, send: (m: unknown) => ws.send(typeof m === 'string' ? m : JSON.stringify(m)), close: () => ws.close() };
+}
+
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Host socket + `n` new teams (codes, ids, slots) in `race`. */
+export async function setupRace(server: Harness, race: string, n: number) {
+  const hostToken = (await login(server, race, { host: TEST_PASSWORD })).body.token!;
+  const host = await openSocket(server, race, hostToken);
+  await host.until((m) => m.t === 'host.state');
+  host.send({ t: 'host.createTeams', teams: Array.from({ length: n }, (_, i) => ({ name: `Đội ${i}`, colour: '#123456' })) });
+  const st = await host.until<{ teams: { id: string; slot: number; code: string }[] }>((m) => m.t === 'host.state' && m.teams.length >= n);
+  return { host, hostToken, teams: st.teams.slice(-n) };
+}
+
+/** Team login + socket, past its `welcome`. */
+export async function joinTeam(server: Harness, race: string, code: string) {
+  const token = (await login(server, race, { code })).body.token!;
+  const s = await openSocket(server, race, token);
+  const welcome = await s.until((m) => m.t === 'welcome');
+  return { ...s, token, welcome };
 }

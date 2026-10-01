@@ -136,6 +136,8 @@ export interface HostState {
   counters: QuotaCounters;
   bikes: BikeInfo[];
   spawning: { paused: boolean; candidates: number; nextAt: number | null };
+  /** Leg points (start + step destinations, world m) for the Host page's bike corridors (tracks C / D). */
+  steps?: { id: string; x: number; z: number }[];
 }
 
 /** Estimated Cloudflare usage (SPEC §3: the Host debug view shows these). */

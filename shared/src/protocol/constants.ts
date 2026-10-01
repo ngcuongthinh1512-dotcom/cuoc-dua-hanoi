@@ -34,6 +34,11 @@ export const NET = {
   ping: 'ping',
   pong: 'pong',
   pingMs: 5_000,
+  /** A socket with no message and no keepalive ping for this long is closed (CLOSE.silent) and its team goes offline. */
+  deadSocketMs: 30_000,
+  /** Server beat for the slower chores while the tick loop runs: host.state push (at most this often, only after a
+   *  change), bike abandonment, dead sockets, one replay sample. */
+  slowTickMs: 1_000,
   /** Login tokens (HMAC with HOST_PASSWORD) live this long: one race day. */
   tokenTtlMs: 24 * 3_600_000,
   /** SPEC §8.10: 5 wrong team codes in a row → that client waits 60 s. */
@@ -52,4 +57,6 @@ export const CLOSE = {
   tooFast: 4429,
   badMessage: 4400,
   raceClosed: 4410,
+  /** No message / ping for NET.deadSocketMs. */
+  silent: 4408,
 } as const;

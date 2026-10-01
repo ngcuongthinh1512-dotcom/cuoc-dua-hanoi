@@ -1,0 +1,184 @@
+// RaceRoom over real time (workerd via createTestHarness): ticks by interest radius, snapshot / replay cadence vs the
+// quota budget (docs/plans/phase6.md §9), the speed flag, the clue-box channel (SPEC §17.10), then restart from SQLite
+// and hibernation. Each race = its own Durable Object, so the first block runs concurrently; evictions stall the
+// harness (they wait for the tick loop to go idle), so they run afterwards, one by one, on the races left behind.
+import { decodeTick, encodePose, type BoxInfo, type HostState, type MoveMode, type QuotaCounters, type Welcome } from '@race/shared/protocol';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { stepBox } from './race/boxes.ts';
+import { joinTeam, openSocket, raceHarness, setupRace, sleep } from './test/harness.ts';
+
+const server = raceHarness();
+beforeAll(async () => {
+  await server.listen();
+}, 60_000);
+afterAll(() => server.close());
+
+type Sock = Awaited<ReturnType<typeof joinTeam>>;
+const L1 = stepBox(0)!;
+const pose = (x: number, z: number, mode: MoveMode = 'walk') => encodePose({ x, y: 0, z, yaw: 0, mode, action: 'none' });
+const respawn = (x: number, z: number) => ({ t: 'respawn', x, y: 0, z, yaw: 0, how: 'safe' });
+const ticks = (msgs: unknown[]) => msgs.filter(Array.isArray).map((m) => decodeTick(m)!);
+const slotsOf = (msgs: unknown[]) => ticks(msgs).at(-1)?.entries.map((e) => e.slot).sort();
+const hostStates = (msgs: { t?: string }[]) => msgs.filter((m) => m.t === 'host.state') as HostState[];
+const boxMsgs = (msgs: { t?: string }[]) => msgs.filter((m) => m.t === 'box');
+const reveal = { t: 'box', op: 'reveal', box: { step: 'L1', x: L1.x, z: L1.z, opened: false } satisfies BoxInfo };
+const hide = { t: 'box', op: 'hide', step: 'L1' };
+const sqlOf = (race: string) => server.getWorker().getDurableObjectStorage('RaceRoom', { name: race });
+const snapSeq = async (race: string) => {
+  const rows = (await (await sqlOf(race)).exec('SELECT data FROM snapshot')) as { data: string }[];
+  return rows[0] ? (JSON.parse(rows[0].data) as { seq: number }).seq : 0;
+};
+const evict = (race: string, webSockets: 'close' | 'hibernate') => server.getWorker().evictDurableObject('RaceRoom', { name: race, webSockets });
+/** Sends `n` poses 200 ms apart (5 Hz), x advancing by `step` m each; returns the last x. */
+async function walk(s: { send(m: unknown): void }, x0: number, z: number, step: number, n: number, mode: MoveMode = 'walk') {
+  for (let i = 1; i <= n; i++) {
+    s.send(pose(x0 + i * step, z, mode));
+    await sleep(200);
+  }
+  return x0 + n * step;
+}
+
+/** Left behind by the first block for the restart / hibernation checks. */
+const cadence = { hostToken: '', codes: [] as string[], slot: 0, ax: 0, wsIn: 0 };
+let boxTeam: Sock | null = null;
+
+describe.concurrent('RaceRoom live', () => {
+  it('ticks: teams within 500 m only, never itself; the Host gets all; nothing when nobody moves', async () => {
+    const race = 'live-ticks';
+    const { host, teams } = await setupRace(server, race, 3);
+    const [a, b, c] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
+    const [sa, sb, sc] = teams.map((t) => t.slot) as [number, number, number];
+    a!.send(pose(0, 0));
+    b!.send(pose(300, 0));
+    c!.send(pose(900, 0)); // 900 m from A, 600 m from B
+    const [ma, mb, mc, mh] = await Promise.all([a!.drain(600), b!.drain(600), c!.drain(600), host.drain(600)]);
+    expect(slotsOf(ma)).toEqual([sb]);
+    expect(slotsOf(mb)).toEqual([sa]);
+    expect(ticks(mc).every((t) => t.entries.length === 0)).toBe(true);
+    expect(slotsOf(mh)).toEqual([sa, sb, sc]);
+    // nobody moves → no tick at all
+    expect((await Promise.all([a!.drain(700), b!.drain(700), host.drain(700)])).flatMap(ticks)).toEqual([]);
+    // A moves: B and the Host get a tick (standing B and C still in the Host's), A itself none
+    a!.send(pose(1, 0));
+    const [ma2, mb2, mh2] = await Promise.all([a!.drain(500), b!.drain(500), host.drain(500)]);
+    expect(ticks(ma2)).toEqual([]);
+    expect(ticks(mb2).at(-1)?.entries).toEqual([{ slot: sa, pose: { x: 1, y: 0, z: 0, yaw: 0, mode: 'walk', action: 'none' } }]);
+    expect(slotsOf(mh2)).toEqual([sa, sb, sc]);
+    // C leaves: the Host's next tick drops it
+    c!.close();
+    expect(await host.until((m) => m.t === 'team')).toMatchObject({ slot: sc, online: false });
+    a!.send(pose(2, 0));
+    expect(slotsOf(await host.drain(500))).toEqual([sa, sb]);
+    for (const s of [a, b, host]) s!.close();
+  }, 20_000);
+
+  it('snapshot every 2 s + replay every 10 s, counters within the quota budget', async () => {
+    const race = 'live-cadence';
+    const { host, hostToken, teams } = await setupRace(server, race, 2);
+    const [a, b] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
+    const c0 = hostStates(await host.drain(1200)).at(-1)!.counters;
+    const seq0 = await snapSeq(race);
+    const T = 6; // s at 5 Hz, 2.5 m/s
+    const [ax] = await Promise.all([walk(a!, 0, 0, 0.5, T * 5), walk(b!, 0, 50, 0.5, T * 5)]);
+    const c1: QuotaCounters = hostStates(await host.drain(2500)).at(-1)!.counters;
+    const snaps = (await snapSeq(race)) - seq0;
+    expect(snaps).toBeGreaterThanOrEqual(2);
+    expect(snaps).toBeLessThanOrEqual(3);
+    expect(c1.wsIn - c0.wsIn).toBe(2 * T * 5); // every received message counted
+    expect(c1.rows - c0.rows).toBeLessThanOrEqual(snaps); // nothing but the snapshot row while moving
+    // the replay row: 10 s after the first pose, the 1 Hz samples of both teams
+    const sql = await sqlOf(race);
+    let replay: { data: string }[] = [];
+    for (let i = 0; i < 30 && !replay.length; i++, await sleep(200)) replay = (await sql.exec('SELECT data FROM replay')) as { data: string }[];
+    expect(replay).toHaveLength(1);
+    const samples = (JSON.parse(replay[0]!.data) as number[][]).map((m) => decodeTick(m)!);
+    expect(samples.length).toBeGreaterThanOrEqual(5);
+    expect(samples.at(-2)?.entries).toHaveLength(2);
+    // docs/plans/phase6.md §9 at the measured rates: 20 teams moving for 2 h (+ the plan's other lines)
+    const billable2h = Math.ceil((((c1.wsIn - c0.wsIn) / 2 / T) * 20 * 7200) / 20) + 344;
+    const rows2h = (snaps / T + 1 / 10) * 7200 + 2750;
+    expect(billable2h).toBeLessThan(40_000);
+    expect(rows2h).toBeLessThan(20_000);
+    // B ends next to L1 for the welcome.boxes check after the restart
+    b!.send(respawn(L1.x - 100, L1.z));
+    expect(await b!.until((m) => m.t === 'box', 3000)).toEqual(reveal);
+    host.close();
+    Object.assign(cadence, { hostToken, codes: teams.map((t) => t.code), slot: teams[0]!.slot, ax, wsIn: c1.wsIn });
+  }, 30_000);
+
+  it('flags 20 m/s over the 3 s window for the Host; a 300 m respawn and bike speed are fine', async () => {
+    const race = 'live-speed';
+    const { host, teams } = await setupRace(server, race, 3);
+    const [a, b, c] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
+    await Promise.all([
+      walk(a!, 0, 0, 4, 15), // 20 m/s
+      (async () => {
+        const x = await walk(b!, 1000, 0, 0.6, 8); // 3 m/s
+        b!.send(respawn(x + 300, 0));
+        await sleep(200);
+        await walk(b!, x + 300, 0, 0.6, 8);
+      })(),
+      walk(c!, -1000, 0, 1.1, 15, 'bike'), // 5.5 m/s ≤ 4 × 1.3 × 1.25
+    ]);
+    const st = (await host.until((m) => m.t === 'host.state' && m.teams[0].flagged)) as unknown as HostState;
+    expect(st.teams.map((t) => t.flagged)).toEqual([true, false, false]);
+    const ev = (await (await sqlOf(race)).exec('SELECT team, type, data FROM events WHERE type IN (?, ?) ORDER BY id', 'speed', 'respawn')) as { team: string; type: string; data: string }[];
+    expect(ev.map((e) => [e.team, e.type, JSON.parse(e.data)]).sort()).toEqual([
+      [teams[0]!.id, 'speed', expect.objectContaining({ v: expect.any(Number) })],
+      [teams[1]!.id, 'respawn', { how: 'safe', d: 300 }],
+    ]);
+    for (const s of [a, b, c, host]) s!.close();
+  }, 20_000);
+
+  it('reveals the current box within 150 m to that team only, hides it beyond 170 m', async () => {
+    const race = 'live-boxes';
+    const { host, teams } = await setupRace(server, race, 2);
+    const [a, b] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
+    const at = (d: number) => a!.send(respawn(L1.x + d, L1.z));
+    b!.send(pose(0, 0));
+    at(200);
+    expect(boxMsgs(await a!.drain(2500))).toEqual([]);
+    at(140);
+    expect(boxMsgs(await a!.drain(2500))).toEqual([reveal]); // exactly one
+    expect(boxMsgs([...(await b!.drain(10)), ...(await host.drain(10))])).toEqual([]);
+    b!.close();
+    host.close();
+    at(165); // inside the hysteresis band
+    expect(boxMsgs(await a!.drain(2500))).toEqual([]);
+    at(175);
+    expect(await a!.until((m) => m.t === 'box', 3000)).toEqual(hide);
+    at(140);
+    expect(await a!.until((m) => m.t === 'box', 3000)).toEqual(reveal);
+    boxTeam = a!;
+  }, 20_000);
+});
+
+describe('RaceRoom restart', () => {
+  it('keeps poses, counters and the revealed box across a restart; a disconnect writes the snapshot at once', async () => {
+    const race = 'live-cadence';
+    await evict(race, 'close');
+    const [a, b] = await Promise.all(cadence.codes.map((c) => joinTeam(server, race, c)));
+    expect((a!.welcome as unknown as Welcome).pose).toMatchObject({ x: cadence.ax, z: 0, bikeId: null });
+    expect((a!.welcome as unknown as Welcome).boxes).toEqual([]);
+    expect((b!.welcome as unknown as Welcome).boxes).toEqual([reveal.box]);
+    b!.send(respawn(L1.x - 180, L1.z)); // already revealed through welcome: walking out hides it
+    expect(await b!.until((m) => m.t === 'box', 3000)).toEqual(hide);
+    const host = await openSocket(server, race, cadence.hostToken);
+    const st = (await host.until((m) => m.t === 'host.state')) as unknown as HostState;
+    expect(st.counters.wsIn).toBeGreaterThanOrEqual(cadence.wsIn);
+    expect(st.teams[0]).toMatchObject({ online: true, reconnects: 2, flagged: false });
+    expect(st.teams[1]!.flagged).toBe(true); // B's ≈ 2 km respawn to L1 > NET.maxRespawnJump
+    const seq = await snapSeq(race);
+    a!.close();
+    expect(await host.until((m) => m.t === 'team')).toMatchObject({ slot: cadence.slot, online: false });
+    expect(await snapSeq(race)).toBe(seq + 1);
+    for (const s of [b, host]) s!.close();
+  }, 30_000);
+
+  it('keeps the revealed box in the socket attachment across hibernation', async () => {
+    await evict('live-boxes', 'hibernate');
+    boxTeam!.send(respawn(L1.x + 175, L1.z));
+    expect(await boxTeam!.until((m) => m.t === 'box', 3000)).toEqual(hide);
+    boxTeam!.close();
+  }, 30_000);
+});

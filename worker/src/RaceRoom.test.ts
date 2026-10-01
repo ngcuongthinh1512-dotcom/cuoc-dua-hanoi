@@ -1,8 +1,10 @@
 // End to end through workerd: Host login → create teams → team login → WebSocket welcome → one device per team →
-// restart (evict) keeps the teams. Tracks A / C extend this file (ticks, snapshots, bikes).
+// lockout → restart (evict) keeps the teams; tokens and malformed / oversized / too fast messages are refused.
+// Ticks, snapshots, speed and boxes: RaceRoom.live.test.ts.
 import { CLOSE, encodePose, NET, PROTOCOL_VERSION, type HostState, type Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { login, openSocket, raceHarness, TEST_PASSWORD } from './test/harness.ts';
+import { signToken } from './auth.ts';
+import { joinTeam, login, openSocket, raceHarness, setupRace, TEST_PASSWORD } from './test/harness.ts';
 
 const server = raceHarness();
 const RACE = 'paris-test';
@@ -39,6 +41,9 @@ describe('RaceRoom', () => {
     const w = await s.next<Welcome>();
     expect(w).toMatchObject({ t: 'welcome', v: PROTOCOL_VERSION, race: RACE, role: 'host', status: 'lobby', teams: [] });
     expect(w.movement).toEqual({ footSpeed: 4, bikeSpeedMultiplier: 1.3 });
+    const first = await s.next<HostState>(); // pushed on connect
+    expect(first).toMatchObject({ t: 'host.state', teams: [] });
+    expect(first.steps?.map((p) => p.id)).toEqual(['start', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'PS']);
     s.send({ t: 'host.createTeams', teams: [{ name: 'Đội Xanh', colour: '#2c6bd8', player: 'An' }, { name: 'Đội Đỏ', colour: '#d8342c' }] });
     const st = await s.next<HostState>();
     expect(st.t).toBe('host.state');
@@ -82,13 +87,48 @@ describe('RaceRoom', () => {
     const hw = await host.next<Welcome>();
     expect(hw.teams.find((x) => x.id === teamId)?.online).toBe(true);
     second.close();
-    expect(await host.next()).toMatchObject({ t: 'team', slot: 0, online: false });
+    expect(await host.until((m) => m.t === 'team')).toMatchObject({ t: 'team', slot: 0, online: false });
     host.close();
   });
 
   it('locks a client after 5 wrong codes', async () => {
     for (let i = 0; i < NET.loginAttempts; i++) expect((await login(server, RACE, { code: 'AAAAAA' })).status).toBe(401);
     expect((await login(server, RACE, { code }))).toMatchObject({ status: 429, body: { error: 'locked' } });
+  });
+
+  it('refuses expired, forged and other-race tokens (4401)', async () => {
+    const now = Date.now();
+    const tokens = [
+      await signToken(TEST_PASSWORD, { r: RACE, t: teamId, e: now - 1 }), // expired
+      await signToken('not-the-secret', { r: RACE, t: 'host', e: now + 60_000 }), // forged
+      await signToken(TEST_PASSWORD, { r: 'other-race', t: teamId, e: now + 60_000 }), // another race
+      await signToken(TEST_PASSWORD, { r: RACE, t: 'no-such-team', e: now + 60_000 }),
+    ];
+    for (const token of tokens) expect(await (await openSocket(server, RACE, token)).next()).toMatchObject({ closed: CLOSE.badToken });
+  });
+
+  it('closes sockets that send malformed, oversized or too many messages', async () => {
+    const { host, teams } = await setupRace(server, 'paris-frames', 1);
+    const bad: [unknown, number][] = [
+      ['{not json', CLOSE.badMessage],
+      [[1, 1.5, 0, 0, 0, 0, 0], CLOSE.badMessage], // pose numbers must be integers (cm)
+      [[1, 0, 0, 0, 0, 9, 0], CLOSE.badMessage], // unknown move mode
+      [{ t: 'respawn', x: 'a' }, CLOSE.badMessage],
+      [{ t: 'nope' }, CLOSE.badMessage],
+      ['x'.repeat(NET.maxPlayerBytes + 1), CLOSE.tooBig],
+    ];
+    for (const [m, code] of bad) {
+      const s = await joinTeam(server, 'paris-frames', teams[0]!.code);
+      s.send(m);
+      expect(await s.until(() => false)).toEqual({ closed: code });
+    }
+    const s = await joinTeam(server, 'paris-frames', teams[0]!.code);
+    s.ws.send(new Uint8Array([1, 2, 3])); // binary frames are not part of the protocol
+    expect(await s.until(() => false)).toEqual({ closed: CLOSE.badMessage });
+    const f = await joinTeam(server, 'paris-frames', teams[0]!.code);
+    for (let i = 0; i <= NET.maxMessagesPerSec; i++) f.send(encodePose({ x: 0, y: 0, z: 0, yaw: 0, mode: 'walk', action: 'none' }));
+    expect(await f.until(() => false)).toEqual({ closed: CLOSE.tooFast });
+    host.close();
   });
 
   it('keeps the teams across a Durable Object restart (SQLite)', async () => {
@@ -99,5 +139,12 @@ describe('RaceRoom', () => {
     const s = await openSocket(server, RACE, hostToken);
     expect((await s.next<Welcome>()).teams).toHaveLength(2);
     s.close();
+    expect((await login(server, RACE, { code })).status).toBe(200); // the lockout was memory only (ponytail)
+  }, 30_000); // eviction waits for the tick loop to go idle (NET.idleStopMs after the last pose)
+
+  it('logs into the default race when the link has no ?race=', async () => {
+    const r = await server.fetch('/api/login', { method: 'POST', body: JSON.stringify({ host: TEST_PASSWORD }) });
+    expect(r.status).toBe(200);
+    expect(await openSocket(server, 'paris', ((await r.json()) as { token: string }).token).then((s) => s.next())).toMatchObject({ t: 'welcome', race: 'paris' });
   });
 });
