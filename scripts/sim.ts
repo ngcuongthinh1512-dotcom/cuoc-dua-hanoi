@@ -180,7 +180,7 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
     let due = Date.now() + stepMs / o.speedup;
     while (2 * seg + 3 < poly.length) {
       await sleep(due - Date.now());
-      if (sock.dropped !== null) throw fail(`server đã đóng socket (mã ${sock.dropped})`);
+      if (sock.dropped != null) throw fail(`server đã đóng socket (mã ${sock.dropped})`);
       let left = v * (stepMs / 1000);
       while (left > 0 && 2 * seg + 3 < poly.length) {
         const [nx, nz] = [poly[2 * seg + 2]!, poly[2 * seg + 3]!];
@@ -210,7 +210,7 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
     for (let tries = 0; tries < 40 && Date.now() < o.deadline; tries++) {
       if (moved(id)) return;
       await sleep(settleGapMs / o.speedup); // pace: pose + op right after the last goto pose would break the 15 msg/s limit
-      if (sock.dropped !== null) throw fail(`server đã đóng socket (mã ${sock.dropped})`);
+      if (sock.dropped != null) throw fail(`server đã đóng socket (mã ${sock.dropped})`);
       const mark = sock.log.length;
       sendPose();
       if (op) sock.send(op);
