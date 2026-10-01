@@ -27,4 +27,10 @@ describe('parseOverrides (URL test hooks)', () => {
     expect(['npc', 'npcSeed', 'npcDensity', 'npcZones', 'npcTest'].filter((k) => k in o)).toEqual([]);
     expect(parseOverrides(new URLSearchParams('npcDensity=0')).npcDensity).toBe(0);
   });
+  it('Phase 6: online (in a race) drops every test hook, keeps the npc* fields', () => {
+    const q = new URLSearchParams('player=10,-20,90&camMode=far&orbit=180&action=wave&autoMove=slow&jump&bike&autoTurn=left&npc=0&npcSeed=3');
+    expect(parseOverrides(q, true)).toEqual({ online: true, npc: false, npcSeed: 3 });
+    expect(parseOverrides(q)).toMatchObject({ spawn: { x: 10, z: -20, yawDeg: 90 }, action: 'wave', autoMove: 'slow', holdJump: true, bike: true, autoTurn: 'left' });
+    expect(parseOverrides(q).online).toBeUndefined(); // offline: unchanged
+  });
 });

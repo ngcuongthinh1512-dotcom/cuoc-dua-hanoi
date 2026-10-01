@@ -1,8 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { unlockAudio } from './audio/sfx.ts';
-import type { PoseSample } from '@race/shared/protocol';
-import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, render as R, ui } from './config.ts';
+import { NET, type PoseSample } from '@race/shared/protocol';
+import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, remote as remoteCfg, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
@@ -11,11 +11,13 @@ import { Gps } from './geo/gps.ts';
 import { heightAt, loadHeightGrid } from './geo/heightGrid.ts';
 import { StreetLocator } from './geo/locate.ts';
 import { graphLines, loadRoadGraph } from './geo/roadGraph.ts';
+import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
-import { RemotePlayers } from './net/RemotePlayers.ts';
+import { fakeTeams, fakeTick, parsePeers, RemotePlayers } from './net/RemotePlayers.ts';
 import { startSession } from './net/session.ts';
 import { Npc } from './npc/Npc.ts';
 import type { NpcAnchor } from './npc/types.ts';
+import { loadCharacterAsset } from './player/CharacterModel.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { parseOverrides, Player } from './player/Player.ts';
 import { initCredits } from './ui/Credits.ts';
@@ -23,11 +25,14 @@ import { createDebugOverlay } from './ui/DebugOverlay.ts';
 import { FullMap } from './ui/FullMap.ts';
 import { HUD } from './ui/HUD.ts';
 import './ui/hud.css';
+import { netDownText } from './ui/Login.ts';
 import { MapTiles } from './ui/MapTiles.ts';
 import { Menu } from './ui/Menu.ts';
 import { Minimap } from './ui/Minimap.ts';
 import { notice } from './ui/Toasts.ts';
 import { type HudFrame, NO_GPS } from './ui/types.ts';
+import { loadBikeAsset } from './vehicle/BikeModel.ts';
+import { groundAt } from './vehicle/Bikes.ts';
 import { withFallbacks } from './world/attach.ts';
 import { bboxCorners, createBoundsWalls, edgeDistance } from './world/Bounds.ts';
 import { createBuildingMaterials } from './world/BuildingBuilder.ts';
@@ -90,6 +95,9 @@ async function start() {
         'Hãy cập nhật Chrome, Edge, Firefox hoặc Safari và bật "tăng tốc phần cứng" trong cài đặt trình duyệt.',
     );
   }
+  // Phase 6: online (?race= link, PROD) → the login screen comes up now, over the loading world; offline → null at once.
+  const query = new URLSearchParams(location.search);
+  const sessionP = startSession(query);
   await RAPIER.init();
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -151,23 +159,35 @@ async function start() {
 
   const input = new Input(renderer.domElement);
   const fly = new FreeFlyCamera(camera); // spectator: flies through everything, no collider
-  const query = new URLSearchParams(location.search);
-  // ?cam=x,y,z,yawDeg,pitchDeg = spectator (free-fly only, no body; landmark / topdown screenshots). Otherwise the player
-  // walks from the spawn (?player[=x,z,yawDeg] overrides it, Player.parseOverrides) and V in the debug panel flies.
+  // Phase 6 (docs/plans/phase6.md §3.11, §3.15): the session decides the body. A team (online) walks from where it last
+  // stood (welcome.pose); the Host flies as a spectator; online, the test hooks (?player=, action, autoMove, jump, bike,
+  // autoTurn, ?cam=) are ignored. Offline (dev server without ?race=, ?offline=1): the test world as before.
+  const session = await sessionP;
+  const host = session?.role === 'host';
+  // ?cam=x,y,z,yawDeg,pitchDeg = spectator (free-fly only, no body; landmark / topdown screenshots; online: Host only).
+  // Otherwise the player walks from the spawn (?player[=x,z,yawDeg] overrides it offline, Player.parseOverrides).
   const cam = query.get('cam')?.split(',').filter(Boolean).map(Number); // empty fields → not 5 numbers → spawn
-  const spectator = cam?.length === 5 && cam.every(Number.isFinite);
+  const camOk = cam?.length === 5 && cam.every(Number.isFinite) && (!session || host);
   const s = flyCamera.spawn;
-  const [x, y, z, yawDeg, pitchDeg] = spectator ? cam : [s.x, s.y, s.z, s.yawDeg, s.pitchDeg];
+  const [x, y, z, yawDeg, pitchDeg] = camOk ? cam : [s.x, s.y, s.z, s.yawDeg, s.pitchDeg];
   fly.setPose(x, y, z, yawDeg, pitchDeg);
   const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water };
-  const overrides = parseOverrides(query);
-  const player = spectator ? undefined : await Player.create(scene, world, camera, env, overrides);
+  const overrides = parseOverrides(query, !!session);
+  const player = camOk || host ? undefined : await Player.create(scene, world, camera, env, overrides, session?.team);
   let flying = !player;
-  // Phase 6 (docs/plans/phase6.md §5): online session (team code → token → WebSocket to the race's Durable Object) or
-  // the offline test world as before (null). Track B: login screen, spawn at the saved pose, respawn / G / R over the
-  // wire, test URL params ignored online, free-fly for the Host / spectators / finished teams only.
-  const session = await startSession(query);
-  const remote = session && player ? new RemotePlayers(scene, player.assets.character, player.assets.bike, 300) : undefined;
+  const canFly = !session || host; // V (F3 open): offline tests and the Host. ponytail: Phase 7 adds teams that finished
+  // Remote players: online, or DEV ?peers=slot,x,z,yawDeg,mode[,action];… stand-ins (p6-peers) offline.
+  const peers = import.meta.env.DEV && !session ? parsePeers(query.get('peers')) : [];
+  const assets = player?.assets ?? (host ? { character: await loadCharacterAsset(), bike: await loadBikeAsset() } : undefined);
+  const remote = assets && (session || peers.length) ? new RemotePlayers(scene, assets.character, assets.bike, remoteCfg.renderRadius) : undefined;
+  if (peers.length) remote?.setTeams(fakeTeams(peers));
+  let nextFakeTick = 0; // ms of player.simTime
+  const groundY = (x: number, z: number) => groundAt(world, x, z, env.heightAt(x, z) + 19); // 20 m ray: decks over the Seine bed too
+  // SPEC §17.10: this team's clue boxes, only from what the server sent (DEV ?boxes=step,x,z[,opened];… offline).
+  const boxes = new ClueBoxes(scene, groundY, env.heightAt);
+  if (import.meta.env.DEV && !session) boxes.reset(parseBoxes(query.get('boxes')));
+  const netPanel = $('net');
+  let welcomed = !session; // the world waits for the first welcome (the spawn)
   const net =
     session &&
     new NetClient(session, {
@@ -175,14 +195,32 @@ async function start() {
         Object.assign(movement, w.movement); // SPEC §6.1: the leg file's speeds, also the server's speed-check limits
         remote?.setTeams(w.teams);
         if (remote) remote.renderRadius = w.presence.renderRadius;
+        boxes.reset(w.boxes);
+        // SPEC §8.10: back where the team last stood (the first welcome only: after a reconnect the body stays put)
+        if (!welcomed && w.pose) player?.setSpawn(w.pose.x, w.pose.z, w.pose.yaw);
+        welcomed = true;
+        // [C] w.bikes → player.bikes (server mode), w.pose.bikeId / mode 'bike' → mount again
       },
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
         if (m.t === 'team') remote?.setOnline(m.slot, m.online);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
+        else if (m.t === 'notice') notice(m.code);
+        else if (m.t === 'box') boxes.apply(m);
+        // [C] 'bikes' / 'bike' (claim result) → player.bikes
       },
-      status: () => {},
+      status: (connected, reason) => {
+        netPanel.textContent = connected ? '' : netDownText(reason ?? 'closed');
+        netPanel.hidden = connected;
+      },
     });
+  if (net && player) {
+    player.onGesture = (g) => net.send({ t: 'gesture', g });
+    player.onRespawn = (how) => {
+      const p = player.controller.state;
+      net.send({ t: 'respawn', x: p.position.x, y: p.position.y, z: p.position.z, yaw: p.yaw, how });
+    };
+  }
   net?.connect();
   const poseOf = (): PoseSample => {
     const s = player!.controller.state;
@@ -271,7 +309,7 @@ async function start() {
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
-  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote } }); // for scratch test scripts
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes } }); // for scratch test scripts
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing. SPEC §17.2: the menu opens
@@ -319,8 +357,9 @@ async function start() {
     update: (dt) => {
       input.poll();
       if (input.wasPressed('debug')) debug.toggle();
-      // V: player ⇄ free-fly (debug only, SPEC §17.2 "camera bay tự do"); the body stays frozen where it was.
-      if (player && debug.visible && input.wasPressed('flyToggle')) {
+      // V: player ⇄ free-fly (debug only, SPEC §17.2 "camera bay tự do"); the body stays frozen where it was. Not for a
+      // team in a race (Phase 6: Host / spectators / offline only).
+      if (player && canFly && debug.visible && input.wasPressed('flyToggle')) {
         flying = !flying;
         euler.setFromQuaternion(camera.quaternion, 'YXZ');
         if (flying) fly.setPose(camera.position.x, camera.position.y, camera.position.z, euler.y / (Math.PI / 180), euler.x / (Math.PI / 180));
@@ -350,7 +389,12 @@ async function start() {
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
       player?.update(dt, flying ? null : input, loop.alpha, modal());
       if (net && player?.active) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides)
-      if (net) remote?.update(dt, net.serverNow(), camera.position);
+      if (peers.length && player?.active && player.simTime * 1000 >= nextFakeTick) {
+        remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
+        nextFakeTick += 1000 / NET.tickHz;
+      }
+      remote?.update(dt, net ? net.serverNow() : player ? player.simTime * 1000 : 0, camera.position);
+      boxes.update();
       // No HUD while loading or flying (V): hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
       document.body.classList.toggle('hud-off', !worldReady || flying);
       if (player && hud && minimap) {
@@ -404,17 +448,17 @@ async function start() {
         player &&
         `HUD: ${ts.tiles} ô bản đồ (${ts.vectors} chunk vector) · raster ${ts.rasterMs.toFixed(2).replace('.', ',')} ms · ` +
           `GPS ${gps?.stats.searches ?? 0} lần, ${(gps?.stats.ms ?? 0).toFixed(2).replace('.', ',')} ms`;
-      const netLine =
-        net &&
-        `Mạng: ${net.connected ? 'đã nối' : 'mất kết nối'} · ping ${Number.isFinite(net.rtt) ? `${net.rtt.toFixed(0)} ms` : '–'} · ` +
-          `${remote?.count ?? 0} người chơi đang thấy · gửi ${net.stats.sent} · nhận ${net.stats.received}`;
+      const netLine = net
+        ? `Mạng: ${net.connected ? 'đã nối' : 'mất kết nối'} · ping ${Number.isFinite(net.rtt) ? `${net.rtt.toFixed(0)} ms` : '–'} · ` +
+          `${remote?.count ?? 0} người chơi đang thấy · gửi ${net.stats.sent} · nhận ${net.stats.received} · nối lại ${net.stats.reconnects}`
+        : remote && `Mạng: ngoại tuyến · ${remote.count} người chơi giả đang thấy (?peers)`;
       debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine, bike: bikeLine, npc: npcLine, hud: hudLine, net: netLine || undefined });
       const { calls, triangles } = renderer.info.render;
       const npcStats = { npcCars: ns?.cars ?? 0, npcPeds: ns?.peds ?? 0, npcMs: +(ns?.simMs ?? 0).toFixed(3), npcDrawMs: +(ns?.drawMs ?? 0).toFixed(3) };
       Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries, ...npcStats } });
       // Signal for scripts/screenshot.ts: every chunk around the camera attached and a few frames drawn.
-      if (!worldReady) loading.textContent = `Đang tải bản đồ… còn ${cs.pending} ô`;
-      if (!worldReady && loop.frames >= 3 && chunks.idle && models.idle && graphLoaded) {
+      if (!worldReady) loading.textContent = cs.pending || welcomed ? `Đang tải bản đồ… còn ${cs.pending} ô` : 'Đang kết nối máy chủ…';
+      if (!worldReady && loop.frames >= 3 && chunks.idle && models.idle && graphLoaded && welcomed) {
         worldReady = true;
         loading.hidden = true;
         player?.activate(); // the chunk colliders around the spawn exist now

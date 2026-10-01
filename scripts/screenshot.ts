@@ -196,12 +196,19 @@ Object.assign(PRESETS, {
   'p5-debug': '/?player&debug=1',
 });
 
+// [B] fake remote players in front of the Concorde spawn (facing the Arc): slot,x,z,yawDeg,mode[,action]
+const PEERS = '0,-22.5,-6.4,-25.75,walk;1,-24.8,-17.5,154.25,bike;2,-17.8,-11.4,-115.75,walk,wave';
 // Phase 6 (docs/plans/phase6.md §7): p6-* presets. The screenshot server is Vite only (no wrangler), so online views use
 // dev-only stand-ins the tracks add as URL hooks (?peers=… fake remote players, ?login login screen, ?bikes=… server-bike
 // stand-ins, /host.html?demo=1). Each track adds its presets under its own line only.
 Object.assign(PRESETS, {
   // [A] server: no screenshots (worker tests + `npm run sim`)
   // [B] login screen, "Chào mừng trở lại", remote players (walking, riding, waving) around the spawn, F3 network line
+  'p6-login': '/?login&npc=0', // team-code form (DEV stand-in, offline world behind it)
+  'p6-welcome-back': '/?login=back&npc=0', // "Chào mừng trở lại, Đội Xanh!" + summary + "Tiếp tục"
+  'p6-peers': `/?player&npc=0&wait=2&peers=${PEERS}`, // in front of the spawn: walking across, riding (leaning), waving at us
+  'p6-debug': `/?player&npc=0&wait=2&debug=1&peers=${PEERS}`, // F3 "Mạng:" line (offline: stand-in count)
+  'p6-boxes': '/?player&npc=0&boxes=L2,-18,-10.9;L1,-25.2,-7.7,opened', // SPEC §17.10: current box (flag, glow) + an opened one
   // [C] shared bikes: free (sparkle), another team's (lock), own; claim refused toast
   // [D] Host page: team codes, online status, counters
 });

@@ -18,6 +18,7 @@
       #edge { top: 38%; font-size: 20px; font-weight: 600; background: rgba(150, 30, 20, 0.85); }
       #nodata { bottom: 80px; background: rgba(150, 80, 0, 0.92); }
       #loading { top: 50%; }
+      #net { top: 30%; z-index: 2; font-weight: 600; background: rgba(150, 80, 0, 0.92); } /* over the HUD (minimap) */
       #credits {
         position: fixed; right: 6px; bottom: 4px; font-size: 11px; color: rgba(255, 255, 255, 0.85);
         text-shadow: 0 0 3px #000; pointer-events: none;
@@ -62,6 +63,7 @@
       Không tải được dữ liệu bản đồ (data/chunks/index.json), nên chỉ hiển thị địa hình. Hãy tải lại trang.
     </div>
     <div id="loading" class="panel">Đang tải bản đồ…</div>
+    <div id="net" class="panel" role="status" hidden></div>
     <div id="error" class="panel" hidden></div>
     <div id="credits">
       Bản đồ © OpenStreetMap contributors (ODbL) · Độ cao: Terrain Tiles (Mapzen / AWS Open Data): EU-DEM (Copernicus), SRTM (NASA / USGS) · <button id="credits-open" type="button">Ghi nguồn</button>

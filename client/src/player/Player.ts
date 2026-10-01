@@ -16,11 +16,15 @@ import { CharacterController, haltIntent, newIntent, readMoveIntent } from './Ch
 import { type CharacterAsset, CharacterModel, loadCharacterAsset } from './CharacterModel.ts';
 import { type CameraMode, ThirdPersonCamera } from './ThirdPersonCamera.ts';
 import type { CameraTarget, Gesture, PlayerEnv } from './types.ts';
+import type { GestureKind, RespawnHow } from '@race/shared/protocol';
 
 const DEG = Math.PI / 180;
 
 /** Test / screenshot overrides from the URL (docs/plans/phase3.md "Screenshot presets"). */
 export interface PlayerOverrides {
+  /** Phase 6: in a real race (?race=, not ?offline=1): the test hooks below are dropped (only npc* stay), no dev bikes
+   *  (the server's shared bikes instead, track C). */
+  online?: true;
   spawn?: { x: number; z: number; yawDeg: number };
   camMode?: CameraMode;
   /** Camera yaw relative to "behind the body", degrees (180 = in front, looking at the face). */
@@ -54,8 +58,9 @@ const groups = (v: string | null, n: number) =>
 const finite = (v: string | null) => (v !== null && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
 
 /** ?player[=x,z,yawDeg]&camMode=near|far|first&orbit=deg&action=<gesture>&autoMove=walk|slow&jump&bike&autoTurn=left|right;
- *  Phase 4B: npc=0, npcSeed=n, npcDensity=d, npcZone=x,z,r[;…], npcTest=car:<kind>@x,z,yawDeg[;…]. Invalid fields ignored. */
-export function parseOverrides(q: URLSearchParams): PlayerOverrides {
+ *  Phase 4B: npc=0, npcSeed=n, npcDensity=d, npcZone=x,z,r[;…], npcTest=car:<kind>@x,z,yawDeg[;…]. Invalid fields ignored.
+ *  Phase 6: `online` (in a race) keeps only the npc* fields: a team cannot teleport, auto-walk or pose by URL. */
+export function parseOverrides(q: URLSearchParams, online = false): PlayerOverrides {
   const p = q.get('player')?.split(',').map(Number);
   const orbit = Number(q.get('orbit'));
   const seed = finite(q.get('npcSeed')), density = finite(q.get('npcDensity'));
@@ -66,12 +71,16 @@ export function parseOverrides(q: URLSearchParams): PlayerOverrides {
     const at = groups(m?.[2] ?? null, 3)[0];
     return kind && at ? [{ kind, x: at[0]!, z: at[1]!, yawDeg: at[2]! }] : [];
   });
-  return {
+  const npcPart: PlayerOverrides = {
     ...(q.get('npc') === '0' ? { npc: false as const } : {}),
     ...(seed !== undefined ? { npcSeed: Math.trunc(seed) } : {}),
     ...(density !== undefined && density >= 0 ? { npcDensity: density } : {}),
     ...(zones.length ? { npcZones: zones } : {}),
     ...(test.length ? { npcTest: test } : {}),
+  };
+  if (online) return { online: true, ...npcPart };
+  return {
+    ...npcPart,
     ...(p?.length === 3 && p.every(Number.isFinite) ? { spawn: { x: p[0]!, z: p[1]!, yawDeg: p[2]! } } : {}),
     ...(q.has('orbit') && Number.isFinite(orbit) ? { orbitDeg: orbit } : {}),
     camMode: oneOf(q.get('camMode'), thirdPersonCamera.modes),
@@ -98,6 +107,12 @@ export class Player {
   private blocked = false; // menu / full map open (update → fixedUpdate)
   /** Surface under the bike this frame (tyre sound, debug line). */
   surface: RoadSurface = 'asphalt';
+  /** Phase 6: G started a wave / R rang the bell (sent to the other teams). */
+  onGesture?: (g: GestureKind) => void;
+  /** Phase 6: the body was teleported (spawn placed, "Kẹt?", out of the Seine, fell through the world): the server resets
+   *  its speed window instead of flagging the jump. */
+  onRespawn?: (how: RespawnHow) => void;
+  private stepping = false; // inside controller.fixedUpdate: a respawn there = fell through the world
 
   private constructor(
     readonly model: CharacterModel,
@@ -123,14 +138,33 @@ export class Player {
       if (crashed) (b.lean = bikeModel.fallenLeanDeg * DEG), crashSound(); // lying on its right side, rider on the left
     };
     this.controller.onStairs = () => notice('bikeStairs'); // Phase 5: SPEC §6.6
+    // Phase 6: every respawn is reported (CharacterController untouched: the instance method is wrapped, so its own calls
+    // from a physics step go through here too).
+    const respawn = this.controller.respawn.bind(this.controller);
+    this.controller.respawn = () => {
+      const how = respawn();
+      this.onRespawn?.(this.stepping ? 'fell' : how);
+      return how;
+    };
   }
 
-  static async create(scene: Scene, world: RAPIER.World, camera: PerspectiveCamera, env: PlayerEnv, o: PlayerOverrides = {}) {
+  /** `team` (Phase 6, from the login): shirt, name tag and bike ownership; the test team offline. */
+  static async create(scene: Scene, world: RAPIER.World, camera: PerspectiveCamera, env: PlayerEnv, o: PlayerOverrides = {}, team?: { id: string; name: string; colour: string }) {
     const [character, bike] = await Promise.all([loadCharacterAsset(), loadBikeAsset()]);
-    const model = new CharacterModel(character, { shirt: playerSetup.teamColour, name: playerSetup.teamName });
+    const [id, name, colour] = team ? [team.id, team.name, team.colour] : [playerSetup.teamName, playerSetup.teamName, playerSetup.teamColour];
+    const model = new CharacterModel(character, { shirt: colour, name });
     scene.add(model.root);
-    const bikes = new Bikes(scene, bike, playerSetup.teamName, playerSetup.teamColour);
+    const bikes = new Bikes(scene, bike, id, colour);
     return new Player(model, bikes, { character, bike }, world, camera, env, o);
+  }
+
+  /** Phase 6: where the team last stood (welcome.pose, SPEC §8.10), before activate(): spawns there provisionally so the
+   *  chunks stream around it; activate() then places it on the colliders. */
+  setSpawn(x: number, z: number, yaw: number) {
+    this.o.spawn = { x, z, yawDeg: yaw / DEG };
+    this.controller.spawn(x, z, yaw);
+    this.camera.yaw = yaw;
+    this.position.copy(this.controller.state.position);
   }
 
   private get spawnPoint() {
@@ -154,9 +188,13 @@ export class Player {
   /** One physics step, before world.step(). Frozen until activate() and while `frozen` (free-fly debug camera). */
   fixedUpdate(dt: number, frozen: boolean) {
     if (!this.active || frozen) return;
-    if (!this.bikesPlaced && this.controller.placed) this.placeBikes();
+    if (!this.bikesPlaced && this.controller.placed && !this.o.online) this.placeBikes(); // online: the server's bikes
     if (this.blocked) haltIntent(this.intent, this.controller.riding);
+    const placed = this.controller.placed;
+    this.stepping = true;
     this.controller.fixedUpdate(dt, this.intent);
+    this.stepping = false;
+    if (!placed && this.controller.placed) this.onRespawn?.('safe'); // spawn() found its ground (Phase 6: legit jump)
     this.simTime += dt;
   }
 
@@ -202,8 +240,8 @@ export class Player {
         const r = this.bikes.interact(this.controller);
         if (r && r !== 'mount' && r !== 'dismount') notice(r); // Phase 5: why F did nothing
       }
-      if (input.wasPressed('bell') && this.controller.riding) bell();
-      if (input.wasPressed('wave') && !this.controller.riding) this.waved = this.controller.startAction('wave') || this.waved;
+      if (input.wasPressed('bell') && this.controller.riding) bell(), this.onGesture?.('bell');
+      if (input.wasPressed('wave') && !this.controller.riding && this.controller.startAction('wave')) (this.waved = true), this.onGesture?.('wave');
     }
     const s = this.controller.state;
     const a = input ? alpha : 1; // free-fly: fixedUpdate is frozen, so prev stays put; don't blend toward it
