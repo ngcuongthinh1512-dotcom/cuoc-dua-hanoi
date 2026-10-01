@@ -72,7 +72,9 @@ export function parseFrame(raw: string | ArrayBuffer, maxBytes: number): unknown
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const str = (v: unknown, max = 64): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
-const point = (m: Record<string, unknown>) => num(m.x) && num(m.y) && num(m.z) && num(m.yaw) && Math.abs(m.x) <= MAX_XZ && Math.abs(m.z) <= MAX_XZ;
+/** A JSON position (m) inside the pose bounds, so it always encodes to a pose / tick the other side can decode. */
+const point = (m: Record<string, unknown>) =>
+  num(m.x) && num(m.y) && num(m.z) && num(m.yaw) && Math.abs(m.x) <= MAX_XZ / CM && Math.abs(m.z) <= MAX_XZ / CM && m.y >= MIN_Y / CM && m.y <= MAX_Y / CM;
 
 /** Shape check of a parsed player / Host JSON message (the server's trust boundary). Poses go through decodePose. */
 export function isClientMessage(m: unknown, role: 'team' | 'host'): boolean {

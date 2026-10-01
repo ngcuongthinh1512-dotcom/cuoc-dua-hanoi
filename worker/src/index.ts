@@ -13,6 +13,8 @@ export interface Env {
 
 /** Race ids come from the Host's link (/?race=<id>): short slugs, one Durable Object each (docs/plans/phase6.md §3.1). */
 const RACE_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
+/** A link without ?race= (client config net.defaultRace). */
+const DEFAULT_RACE = 'paris';
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 // Static assets (client/dist) are matched before this handler runs; only unmatched paths get here.
@@ -25,7 +27,7 @@ export default {
     // Login (SPEC §3, §7): {race, code} → the race's object checks the team code; {race, host} → password → Host token.
     if (request.method === 'POST' && pathname === '/api/login') {
       const body = (await request.json().catch(() => null)) as { race?: unknown; code?: unknown; host?: unknown } | null;
-      const race = typeof body?.race === 'string' && RACE_ID.test(body.race) ? body.race : null;
+      const race = body?.race === undefined ? DEFAULT_RACE : typeof body.race === 'string' && RACE_ID.test(body.race) ? body.race : null;
       if (!body || !race) return json({ ok: false, error: 'bad_race' }, 400);
       if (typeof body.host === 'string') {
         if (!env.HOST_PASSWORD || !constantTimeEqual(body.host, env.HOST_PASSWORD)) return json({ ok: false, error: 'bad_password' }, 401);

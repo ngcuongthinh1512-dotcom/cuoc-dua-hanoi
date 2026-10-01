@@ -9,8 +9,12 @@ export class SpeedWindow {
 
   constructor(readonly windowMs: number = NET.speedWindowMs) {}
 
-  /** A pose received at server time `t` (ms). */
-  push(t: number, x: number, z: number) {
+  /** A pose received at server time `now` (ms). Stamped max(now, previous + 1000 / sendHz), at most NET.speedLeadMs
+   *  ahead of `now`: poses queued during a network stall arrive together but spread over the time they really covered
+   *  (an honest walker is not judged faster), and a client sending faster than sendHz cannot bank more than the lead. */
+  push(now: number, x: number, z: number) {
+    const prev = this.t.at(-1);
+    const t = prev === undefined ? now : Math.min(Math.max(now, prev + 1000 / NET.sendHz), now + NET.speedLeadMs);
     this.t.push(t), this.x.push(x), this.z.push(z);
     while (this.t.length > 1 && t - this.t[0]! > this.windowMs) this.t.shift(), this.x.shift(), this.z.shift();
   }

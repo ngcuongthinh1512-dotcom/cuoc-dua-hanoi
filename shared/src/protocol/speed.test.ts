@@ -32,6 +32,25 @@ describe('SpeedWindow', () => {
     expect(NET.speedTolerance).toBe(1.25);
   });
 
+  it('spreads a burst after a network stall; sending faster than sendHz banks at most speedLeadMs', () => {
+    for (const stall of [800, 1200, 2000]) {
+      // footSpeed 4 m/s at 5 Hz for 10 s; the poses made during `stall` ms after 3 s arrive together when it ends
+      const w = new SpeedWindow();
+      let worst = 0;
+      for (let i = 0; i <= 50; i++) {
+        const made = i * 200;
+        w.push(made > 3000 && made < 3000 + stall ? 3000 + stall : made, 0.8 * i, 0);
+        worst = Math.max(worst, w.speed);
+      }
+      expect(worst).toBeLessThanOrEqual(4.01); // stamped by arrival alone: 6.4 m/s at 2 s
+    }
+    // 8 m/s sent at 10 Hz: looks like 4 m/s only until the lead is used up
+    const w = new SpeedWindow();
+    for (let i = 0; i <= 100; i++) w.push(i * 100, 0.8 * i, 0);
+    expect(w.speed).toBeCloseTo(8, 1);
+    expect(NET.speedLeadMs).toBeLessThan(NET.speedWindowMs);
+  });
+
   it('reset() forgets the jump of a respawn', () => {
     const w = new SpeedWindow();
     const end = walk(w, 0, 0, 4, 3);
