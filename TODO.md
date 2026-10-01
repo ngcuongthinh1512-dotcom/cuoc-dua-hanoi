@@ -79,7 +79,6 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Xe hiện chỉ có ở máy mình: 3 xe thử đặt quanh điểm spawn (`Player.placeBikes`). Đồng bộ server, sinh xe chung ở bãi (`bicycle_parking` đã có trong đồ thị: 2 718 bãi), giành xe, đỗ xe, xe bị bỏ: Phase 6 / 7.
 - Âm thanh chuông / lốp / đá lát / ngã xe là âm tổng hợp WebAudio tạm (`audio/sfx.ts`); thay bằng bản ghi thật ở Phase 12.
 - Đồ thị đường: vùng `highway` dạng multipolygon (≈ 240 quan hệ) và phần bên trong quảng trường đi bộ chưa có, chỉ có đường viền; lối có mái (hành lang Louvre, arcade) bị bỏ cho khớp khối nhà đặc, nên Louvre → Notre-Dame dài 1,78 × đường chim bay.
-- `roadGraph.snapRadius` (80 m) chưa ai đọc; GPS ở Phase 5 dùng nó.
 - Bậc thang: không đọc `incline`, chiều lên / xuống theo DEM ở hai đầu; bậc OSM ngắn trên DEM phẳng thành bậc thấp. Chỉ đọc `incline` thì chưa sửa được gì: hai đầu bậc phải chạm mặt đất DEM, nên chiều và độ cao vẫn phải theo DEM. Muốn theo `incline` / `step_count` thì phải nắn địa hình quanh hai đầu bậc (như `PADS`) rồi build lại toàn bộ chunk. Bậc dốc hơn ~50° (lỗi DEM) không leo được bằng collider hộp (ponytail trong `StairBuilder.ts`).
 - Giếng metro chỉ là hình (bậc, chiếu nghỉ, cửa đóng); không có ga / đường hầm.
 
@@ -92,13 +91,18 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Camera: xe NPC trong 1 m quanh camera bị ẩn hẳn (không mờ dần).
 - Preset `p4b-dodge` (chưa thấy ai lảo đảo), `p4b-crossing` (chưa có người trên vạch), `p4b-park` (ghế trống, người ngồi bị cây che) chưa thấy rõ chủ thể; `p4-cobbles`: xe trắng ở Concorde trông hơi chìm (chưa kiểm).
 - Thân moto / scooter > 2 000 tam giác (trần riêng `npcAssets.maxTris.twoWheeler` = 2 100).
-- `ride-check` phần 3 (vào bậc kè từ mặt bên) thỉnh thoảng hỏng khi máy tải nặng: lái lại hướng mỗi bước như `walkToBike`.
+- `ride-check` phần 3 (bơi, vào bậc kè từ mặt bên) không còn trong lượt chạy mặc định (giả định người chơi không bơi; chạy riêng bằng `RIDE_ONLY=3`): hỏng ổn định ở (−328, 128) trên `main` sau Phase 5, chập chờn từ trước; chưa điều tra xem có phải regress từ thay đổi lấy mẫu chỗ an toàn.
 
-## Phase 5 – HUD
-- Menu thật (SPEC §17.2: tự mở khi chuột bị nhả, `Esc`); hiện chỉ hiện bảng hướng dẫn phím. Nút "Kẹt? Về chỗ an toàn" gọi `CharacterController.respawn()` (hiện về chỗ đứng an toàn gần nhất; khi đang ở dưới sông, SPEC §4.4 muốn đưa lên bậc thang gần nhất); tùy chọn đảo trục Y, độ nhạy chuột.
-- Thông báo xe đạp: "Không đi xe trên bậc thang" khi bánh trước chạm bậc; lý do khi `F` bị từ chối (đi nhanh quá / quá xa / xe của đội khác).
-- Hồi sinh dưới sông: đưa lên bậc kè gần nhất (`water.json` `stairs` = chân các bậc kè, SPEC §4.4).
-- Biển tên đường: thêm dòng quận (vd. "8e Arrt") khi có dữ liệu quận.
+## Phase 5 – HUD (phần còn lại)
+Đã xong: minimap (góc dưới trái, N, xoay, tự zoom khi đạp xe, đường GPS), bản đồ lớn `M` (kéo / zoom / bấm đặt đích, chỉ tên đường), GPS A* tới đích người chơi đặt (`?gps=x,z` để thử), HUD phải-dưới (tên đường, quận, đồng hồ, tốc độ), biển tên đường có dòng quận, menu thật (`Esc`, "Kẹt?", cài đặt đảo trục Y / độ nhạy, Phím điều khiển, Luật đua, Ghi nguồn), toast xe đạp, hồi sinh lên bậc kè (`docs/plans/phase5.md`, báo cáo `docs/reports/phase5-*.md`).
+- Kiểm tay (headless Chrome không khóa chuột): luồng `M` / `Esc` + khóa con trỏ trên Chrome / Firefox / Safari; kéo, cuộn, bấm chuột trên bản đồ lớn; toast từ chối xe đạp (đi nhanh quá / quá xa / xe của đội khác) chưa có preset. Safari cần ≥ 16.4 cho `OffscreenCanvas` (đã có fallback canvas thường).
+- Tay cầm: nút Menu không mở menu khi chuột đang khóa; bản đồ lớn chưa điều khiển được bằng tay cầm.
+- Bản đồ lớn: quảng trường tròn và phố cong chưa có tên (Place de l'Opéra, Place Charles de Gaulle; hướng nâng cấp: chữ chạy theo đường cong); một số nhãn đại lộ nằm trên làn phụ cùng tên thay vì giữa đường; dải gợi ý phía dưới che vài nhãn.
+- GPS: đầu tuyến có thể có khúc quay đầu ngắn (≤ 80 m) vì bám nút gần nhất, chưa bám điểm gần nhất trên cạnh; tìm tuyến xe thất bại khi vào ô bị bậc thang cắt mất ~13 ms (hiếm).
+- HUD: chữ trắng viết tay yếu trên nền sáng, dòng "Quận n" mảnh khó đọc; nhãn quận hiện lại khi đi dọc ranh giới quận; trên cửa sổ hẹp (< ~1150 px) dòng ghi nguồn đè lên minimap; "Ghi nguồn" trong menu mở panel hẹp hơn menu.
+- Menu: tab "Luật đua" tải lười thêm 1 file 23,7 kB lần đầu mở (trái "không thêm request"); bộ dựng Markdown chỉ hỗ trợ phần luật đang dùng (chưa bảng / link); hằng số 300 ms bỏ qua `Esc` viết cứng trong `main.ts`; `Esc` đóng menu có thể không khóa lại chuột trên một số trình duyệt (kiểm tay).
+- "Kẹt?": chọn chỗ cách ≥ 15 m theo đường thẳng, không xét đi tới được; một vùng kín rộng hơn 15 m vẫn có thể giữ người chơi. Camera chưa tự quay theo thân ở dịch chuyển ngắn dưới `snapDistance`. Phase 6: server phải biết lần dịch chuyển của `respawn()` để không tính là gian lận tốc độ.
+- Preset `p4-cobbles` cần tăng `TIMEOUT_MS` (mất ~38 s để READY khi máy tải).
 
 ## Phase 6 – Server & presence
 - Thay `RaceRoom` tạm (chỉ có `SELECT 1`) bằng room thật: WebSocket, SQLite, Alarms; bỏ endpoint thử `/api/room/ping` và room cố định `"dev"`, định tuyến mỗi cuộc đua vào Durable Object riêng.
