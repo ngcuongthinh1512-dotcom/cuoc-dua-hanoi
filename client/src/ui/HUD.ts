@@ -1,6 +1,7 @@
 // Phase 5 track D (docs/plans/phase5.md §3.6–3.8): bottom-right HUD (STYLE_GUIDE): street name (handwritten) + district
 // on a change of place (hudWidgets.streetSeconds, then fades), "LABEL · value" blocks under it: race clock, speedometer
-// (km/h + bike icon, riding only, SPEC §12). Top-left stays free for the Phase 7 mission card. DOM is written only when
+// (km/h + bike icon, riding only, SPEC §12). Top-left holds the Phase 7 mission card (race/ui/RaceHud.ts); Phase 7: the clock is the team's race clock (--:-- until the Host
+// enters its start time) with "PHẠT +n phút" under it. DOM is written only when
 // a text changes; the module top level touches no DOM (tests import the pure parts in Node).
 import { hud as H, hudWidgets as W } from '../config.ts';
 import { districtLabel } from '../geo/districts.ts';
@@ -8,8 +9,9 @@ import type { HudFrame } from './types.ts';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-/** Race clock, whole seconds: 37 → "00:37", 3725 → "1:02:05". */
-export function formatClock(s: number): string {
+/** Race clock, whole seconds: 37 → "00:37", 3725 → "1:02:05"; null = the Host has not entered the team's start time yet. */
+export function formatClock(s: number | null): string {
+  if (s == null) return '--:--';
   const t = Math.max(0, Math.floor(s));
   const [h, m, sec] = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60];
   return h ? `${h}:${pad2(m)}:${pad2(sec)}` : `${pad2(m)}:${pad2(sec)}`;
@@ -56,11 +58,15 @@ export class HUD {
   private readonly street = div('font-size:30px;line-height:1.15;max-width:36vw;text-wrap:balance', 'hud-hand'); // long names: 2 lines
   private readonly district = div('font-size:19px;line-height:1.2', 'hud-hand');
   private readonly clock: HTMLElement;
+  private readonly penaltyRow: HTMLElement;
+  private readonly penalty: HTMLElement;
   private readonly speedRow: HTMLElement;
   private readonly speed: HTMLElement;
   private readonly label = new PlaceLabel();
   private shown = false;
   private riding = false;
+  /** DEV only, offline (no race clock from the server): ?raceTime=--|<s>&penalty=<min> for the p7-clock preset. */
+  private readonly demo = import.meta.env.DEV && typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
 
   constructor() {
     const root = div(
@@ -79,10 +85,13 @@ export class HUD {
     };
     let clockRow: HTMLElement;
     [clockRow, this.clock] = row('THỜI GIAN');
+    [this.penaltyRow, this.penalty] = row('PHẠT');
+    this.penaltyRow.style.display = 'none';
+    this.penalty.style.color = '#ff8a7a';
     [this.speedRow, this.speed] = row(`${BIKE_ICON}TỐC ĐỘ`);
     this.speedRow.style.display = 'none'; // not `hidden`: the inline display:flex would win over it
     this.place.append(this.street, this.district);
-    root.append(this.place, clockRow, this.speedRow);
+    root.append(this.place, clockRow, this.penaltyRow, this.speedRow);
     document.body.append(root);
   }
 
@@ -92,7 +101,15 @@ export class HUD {
     if (on !== this.shown) this.place.style.opacity = (this.shown = on) ? '1' : '0';
     setText(this.street, this.label.street);
     setText(this.district, districtLabel(this.label.district));
-    setText(this.clock, formatClock(f.time));
+    let [raceTime, penalty] = [f.raceTime, f.penaltyMinutes ?? 0];
+    if (f.raceTime === undefined && this.demo) {
+      if (this.demo.has('raceTime')) raceTime = this.demo.get('raceTime') === '--' ? null : Number(this.demo.get('raceTime'));
+      if (this.demo.has('penalty')) penalty = Number(this.demo.get('penalty'));
+    }
+    setText(this.clock, formatClock(raceTime === undefined ? f.time : raceTime)); // undefined = offline: the sim clock
+    const showPenalty = penalty > 0;
+    if (showPenalty !== (this.penaltyRow.style.display === 'flex')) this.penaltyRow.style.display = showPenalty ? 'flex' : 'none';
+    if (showPenalty) setText(this.penalty, `+${penalty} phút`);
     if (f.riding !== this.riding) this.speedRow.style.display = (this.riding = f.riding) ? 'flex' : 'none';
     if (f.riding) setText(this.speed, formatSpeed(f.speed));
   }

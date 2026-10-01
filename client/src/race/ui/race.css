@@ -1,0 +1,297 @@
+/* Phase 7 track C: race HUD widgets. Look from ui/hud.css (.hud-box, .hud-hand, --hud-*); step type colour = --c. */
+
+/* Top-left stack: mission card + "Tại điểm này". */
+.rc-tl {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.rc-tl [hidden],
+.rc-penalty[hidden],
+.rc-prompt[hidden],
+.rc-npc[hidden] {
+  display: none !important;
+}
+.rc-card {
+  box-sizing: border-box;
+  padding: 8px 12px 8px 14px;
+  border-left: 5px solid var(--c, #e8b923);
+}
+.rc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.rc-icon {
+  display: inline-flex;
+  color: var(--c);
+}
+.rc-label {
+  flex: 1;
+  text-transform: uppercase;
+  font-size: 13px;
+}
+.rc-transport {
+  display: inline-flex;
+  color: var(--hud-dim);
+}
+.rc-clue {
+  margin-top: 4px;
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: var(--lines, 5);
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rc-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--hud-dim);
+}
+.rc-zone {
+  box-sizing: border-box;
+  max-width: 330px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.rc-zone-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+/* "Xuất phát ở vị trí thứ n": right side, fades like the street label. */
+.rc-banner {
+  position: fixed;
+  right: 24px;
+  top: 38%;
+  max-width: 40vw;
+  text-align: right;
+  font-size: 34px;
+  line-height: 1.2;
+  opacity: 0;
+  transition: opacity 0.6s;
+  pointer-events: none;
+}
+.rc-banner.on {
+  opacity: 1;
+}
+
+/* Centre lines: penalty countdown (top, under the help line), "Bấm F" prompt, host NPC line (bottom). */
+.rc-penalty,
+.rc-prompt,
+.rc-npc {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  padding: 6px 16px;
+  text-align: center;
+  pointer-events: none;
+}
+.rc-penalty {
+  top: 62px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #ffb3a8;
+}
+.rc-prompt {
+  bottom: 22%;
+  font-size: 18px;
+  font-weight: 600;
+}
+.rc-npc {
+  bottom: 120px;
+  width: min(560px, calc(100vw - 32px));
+  font-size: 17px;
+  border-left: 5px solid #3fae5a;
+}
+
+/* Full card + Sổ mật thư: dimmed overlay, panel takes the clicks. z-index 0: the menu (z 1) always sits above. */
+.rc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  font: 15px/1.5 var(--hud-font);
+  color: #fff;
+}
+.rc-overlay[hidden] {
+  display: none !important;
+}
+.rc-full,
+.rc-book {
+  pointer-events: auto;
+  box-sizing: border-box;
+  max-height: 100%;
+  overflow-y: auto;
+  background: rgba(14, 17, 24, 0.94);
+  border-radius: 6px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+.rc-full {
+  padding: 16px 20px;
+  animation: rc-rise 0.55s 0.3s both ease-out;
+}
+.rc-book {
+  padding: 0 20px 16px;
+}
+.rc-book-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0 10px;
+  background: rgba(14, 17, 24, 0.97);
+}
+.rc-book-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 20px;
+}
+.rc-empty {
+  padding: 24px 0;
+  color: var(--hud-dim);
+  text-align: center;
+}
+.rc-detail {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-left: 5px solid var(--c);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+.rc-full .rc-detail {
+  margin-top: 0;
+}
+.rc-detail.pinned {
+  background: rgba(255, 255, 255, 0.1);
+}
+.rc-detail .rc-head {
+  font-size: 15px;
+}
+.rc-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.rc-status.active {
+  background: var(--c);
+  color: #111;
+}
+.rc-transport-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--hud-dim);
+}
+.rc-text {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+.rc-task {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.rc-task-title {
+  font-weight: 700;
+}
+.rc-task-meta,
+.rc-meta,
+.rc-note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--hud-dim);
+}
+.rc-task-text {
+  margin-top: 2px;
+  white-space: pre-wrap;
+}
+.rc-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.rc-btn {
+  font: inherit;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 4px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.rc-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+.rc-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.rc-task-btn {
+  margin-top: 8px;
+  font-weight: 600;
+  background: var(--c);
+  border-color: transparent;
+  color: #111;
+}
+.rc-task-btn:hover {
+  filter: brightness(1.1);
+  background: var(--c);
+}
+
+/* Envelope opening (SPEC §8.3): the flap swings up, the envelope fades, the card rises out of it. */
+.rc-env {
+  position: relative;
+  width: 220px;
+  height: 120px;
+  margin-bottom: -96px;
+  background: var(--c);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  animation: rc-env-out 0.5s 0.45s both ease-in;
+}
+.rc-flap {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 62px;
+  background: color-mix(in srgb, var(--c) 78%, #000);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transform-origin: top;
+  animation: rc-flap 0.4s 0.05s both ease-in-out;
+}
+@keyframes rc-flap {
+  to { transform: rotateX(180deg); opacity: 0.4; }
+}
+@keyframes rc-env-out {
+  to { opacity: 0; transform: translateY(30px); }
+}
+@keyframes rc-rise {
+  from { opacity: 0; transform: translateY(70px) scale(0.85); }
+  to { opacity: 1; transform: none; }
+}

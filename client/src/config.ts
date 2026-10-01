@@ -1067,4 +1067,10 @@ export const raceClient = {
 // ── C · race HUD widgets (race/ui/*: clue card, Sổ mật thư, start-order banner, Pit Stop line, zone panel; ui/HUD.ts clock) ──
 export const raceHud = {
   startOrderSeconds: 15, // SPEC §17.12: "Xuất phát ở vị trí thứ n" stays this long (sim clock), then fades (hudWidgets.streetFade)
+  colours: { route_info: '#e8b923', detour: '#3b82f6', challenge: '#f0643c', pit_stop: '#3fae5a' }, // D22 step type colours (card stripe / icon)
+  cardWidth: 330, // px, top-left mission card (the full card and the book use fullWidth)
+  clueLines: 5, // lines of clue text kept on the compact card (the full card / book show everything)
+  fullWidth: 520, // px, full card popup + Sổ mật thư
+  finishSeconds: 14, // s (sim clock) the host NPC's finish line stays on screen
+  taskLockSeconds: 2, // s the "Hoàn thành (tạm)" buttons stay disabled after a click (the answer comes back as a new `race` view)
 };
