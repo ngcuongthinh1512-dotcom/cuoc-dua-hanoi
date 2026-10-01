@@ -25,7 +25,7 @@ export interface CardSummary {
   label: string;
   clue: string;
   transport: ReturnType<typeof transportLabel>;
-  blocks: { branch: string | null; title: string; text: string; place: string | null; limit: string | null }[];
+  blocks: { branch: string | null; title: string; text: string; place: string | null; limit: string | null; chosen: boolean }[];
   active: boolean;
 }
 
@@ -35,11 +35,11 @@ export function summarize(card: ClueCard): CardSummary {
   const blocks: CardSummary['blocks'] = [];
   if (card.task) {
     const t = card.task;
-    blocks.push({ branch: null, title: t.title, text: t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes) });
+    blocks.push({ branch: null, title: t.title, text: t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes), chosen: false });
   }
   for (const b of card.branches ?? []) {
     const t = b.task;
-    blocks.push({ branch: b.id, title: b.name, text: b.summary || t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes) });
+    blocks.push({ branch: b.id, title: b.name, text: b.summary || t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes), chosen: b.id === card.branch });
   }
   const clue = card.text || (card.type === 'pit_stop' ? 'Hãy về Chặng dừng và đứng trên thảm để về đích.' : '');
   return { type: card.type, label: card.label, clue, transport: transportLabel(card.transport), blocks, active: card.status === 'active' };

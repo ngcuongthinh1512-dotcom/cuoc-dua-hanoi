@@ -16,12 +16,14 @@ describe('card summary', () => {
   });
   it('challenge: teaser + one task block with place and limit', () => {
     const s = summarize(card({ type: 'challenge', text: 'Gợi ý', task: { ...task, place: 'Sân' } }));
-    expect(s.blocks).toEqual([{ branch: null, title: 'Nhiệm vụ', text: 'Mô tả', place: 'Sân', limit: 'Thời hạn: 20 phút' }]);
+    expect(s.blocks).toEqual([{ branch: null, title: 'Nhiệm vụ', text: 'Mô tả', place: 'Sân', limit: 'Thời hạn: 20 phút', chosen: false }]);
   });
   it('detour: one block per branch; pit stop gets a default line', () => {
     const b = (id: string) => ({ id, name: `Nhánh ${id}`, summary: `Tóm tắt ${id}`, task });
     const s = summarize(card({ type: 'detour', branches: [b('A'), b('B')] }));
     expect(s.blocks.map((x) => [x.branch, x.title, x.text])).toEqual([['A', 'Nhánh A', 'Tóm tắt A'], ['B', 'Nhánh B', 'Tóm tắt B']]);
+    expect(s.blocks.map((x) => x.chosen)).toEqual([false, false]);
+    expect(summarize(card({ type: 'detour', branch: 'B', branches: [b('A'), b('B')] })).blocks.map((x) => x.chosen)).toEqual([false, true]);
     expect(summarize(card({ type: 'pit_stop', text: '' })).clue).toMatch(/Chặng dừng/);
   });
 });

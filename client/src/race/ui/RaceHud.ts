@@ -73,6 +73,9 @@ interface TaskButton {
   branch: string | undefined;
 }
 
+// ArrowUp/Down = 1 line-ish step (0.2 panel height), PageUp/Down = 1 page, Home = back to the current clue (the pinned one on top).
+const SCROLL: Record<string, number> = { ArrowUp: -0.2, ArrowDown: 0.2, PageUp: -0.9, PageDown: 0.9, Home: 0 };
+
 export class RaceHud {
   private view: RaceView | null = null;
   private seenKey: string | null = null; // the last card shown full (also kept in localStorage: a reload does not replay it)
@@ -101,6 +104,7 @@ export class RaceHud {
     addEventListener('keydown', (e) => {
       if (!this.open) return;
       if (e.code === 'Tab') e.preventDefault();
+      else if (this.bookOpen && SCROLL[e.code]) this.scrollBook(SCROLL[e.code]!); // pointer lock sends wheel + mouse to the canvas: keys scroll the book
       else if (e.repeat) return;
       else if (e.code === 'Escape' || (e.code === 'Space' && !this.bookOpen)) this.close();
       else if (e.code === 'Enter' && this.taskButtons.length === 1) this.taskButtons[0]!.btn.click();
@@ -127,6 +131,11 @@ export class RaceHud {
     if (!this.bookWaiting) return; // closed again before the answer came back
     this.bookWaiting = false;
     this.renderBook(bookEntries(cards));
+  }
+
+  private scrollBook(dy: number) {
+    const p = this.overlay.querySelector('.rc-book');
+    if (p) dy === 0 ? (p.scrollTop = 0) : (p.scrollTop += dy * p.clientHeight);
   }
 
   /** Tab (main.ts): open (→ actions.book) / close. */
@@ -268,7 +277,7 @@ export class RaceHud {
     if (s.clue) root.append(el('p', 'rc-text', s.clue));
     const live = buttons && s.active;
     s.blocks.forEach((b, i) => {
-      const blk = el('div', 'rc-task', undefined, el('div', 'rc-task-title', b.title), b.text ? el('div', 'rc-task-text', b.text) : null, b.place ? el('div', 'rc-task-meta', `Địa điểm: ${b.place}`) : null, b.limit ? el('div', 'rc-task-meta', b.limit) : null);
+      const blk = el('div', 'rc-task', undefined, el('div', 'rc-task-title', b.title, b.chosen ? el('span', 'rc-chosen', 'Đội đã chọn') : null), b.text ? el('div', 'rc-task-text', b.text) : null, b.place ? el('div', 'rc-task-meta', `Địa điểm: ${b.place}`) : null, b.limit ? el('div', 'rc-task-meta', b.limit) : null);
       if (live) blk.append(this.taskButton(card.step, b.branch ?? undefined, s.blocks.length > 1 ? `Hoàn thành: ${b.title} (tạm) [${i + 1}]` : 'Hoàn thành (tạm) [Enter]'));
       root.append(blk);
     });
