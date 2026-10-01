@@ -1,8 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { bike as B, bikeRules, notices, physics } from '../config.ts';
+import { bike as B, bikeRules, notices, physics, serverBikes } from '../config.ts';
 import { CharacterController } from '../player/CharacterController.ts';
-import { Bikes, canMount } from './Bikes.ts';
+import { Bikes, canMount, REMOTE_RIDER } from './Bikes.ts';
 
 beforeAll(() => RAPIER.init());
 
@@ -121,5 +121,98 @@ describe('Bikes.interact: why F did nothing (Phase 5 track C, SPEC §6.3)', () =
       Object.assign(c.state, saved);
     }
     expect(bikes.interact(c)).toBe('bikeTooFar');
+  });
+});
+
+describe('Bikes online: shared bikes from the server (Phase 6 track C, SPEC §6.2–6.3)', () => {
+  const info = (id: string, x: number, owner: string | null = null, rider = false) => ({ id, x, y: 0, z: 0, yaw: 0, owner, rider, parked: false });
+  function online() {
+    const s = setup();
+    const sent: unknown[] = [];
+    const notes: string[] = [];
+    Object.assign(s.bikes, { team: 't0', net: { send: (m: unknown) => sent.push(m) }, notify: (n: string) => notes.push(n) });
+    s.bikes.setTeams([{ slot: 1, id: 't1', name: 'Đội B', colour: '#00f', online: true }]);
+    const frame = () => s.bikes.update(1 / 60, s.c.state.position, s.c.riding, s.c.state.position, s.c.state.yaw);
+    return { ...s, sent, notes, frame };
+  }
+
+  it('applyServer: full list replaces, deltas update the same BikeState, gone removes; colours from the teams', () => {
+    const { bikes } = online();
+    bikes.add(5, 0, 5, 0); // a dev bike: gone with the first full list
+    bikes.applyServer([info('b1', 1), info('b2', 30, 't1')], [], true);
+    expect(bikes.list.map((b) => [b.id, b.owner, b.ownerColour])).toEqual([['b1', null, null], ['b2', 't1', '#00f']]);
+    const b1 = bikes.list[0]!;
+    bikes.applyServer([info('b1', 2, 't1', true)]);
+    expect(bikes.list[0]).toBe(b1);
+    expect([b1.position.x, b1.rider]).toEqual([2, REMOTE_RIDER]); // another team rides it: hidden, not takeable
+    bikes.applyServer([], ['b2']);
+    expect(bikes.list.map((b) => b.id)).toEqual(['b1']);
+  });
+
+  it('F on a free bike asks the server; granted → mounted; refused → "Chậm một bước!" and still on foot', () => {
+    const { c, bikes, sent, notes } = online();
+    bikes.applyServer([info('b1', 1), info('b2', -1.5)], [], true);
+    expect(bikes.interact(c)).toBeNull();
+    expect(sent).toEqual([{ t: 'bike', op: 'claim', id: 'b1' }]);
+    expect(c.riding).toBeNull();
+    expect(bikes.interact(c)).toBeNull(); // waiting for the answer: no second claim
+    expect(sent).toHaveLength(1);
+    bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: false, reason: 'taken' });
+    expect([c.riding, notes]).toEqual([null, ['bikeLost']]);
+    bikes.interact(c);
+    bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: true });
+    expect(c.riding?.id).toBe('b1');
+    expect(bikes.list.find((b) => b.id === 'b1')!.owner).toBe('t0');
+  });
+
+  it('own bike: get off / crash → dismount with where it stands; a lost claim answer frees F after claimTimeoutMs', () => {
+    const { c, bikes, sent, frame } = online();
+    bikes.applyServer([info('b1', 1)], [], true);
+    bikes.interact(c);
+    bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: true });
+    bikes.applyServer([info('b1', 1, 't0', true)]);
+    frame();
+    expect(sent).toHaveLength(1); // server already knows it is ridden
+    expect(bikes.interact(c)).toBe('dismount');
+    frame();
+    expect(sent[1]).toMatchObject({ t: 'bike', op: 'dismount', id: 'b1', x: c.riding?.position.x ?? expect.any(Number) });
+    frame();
+    expect(sent).toHaveLength(2); // once
+    bikes.interact(c); // own bike: claim again (the server says yes even when walk-only is off)
+    bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: true });
+    expect(c.riding?.id).toBe('b1');
+    c.crash();
+    frame();
+    expect(sent.at(-1)).toMatchObject({ t: 'bike', op: 'dismount', id: 'b1' });
+    for (let i = 0; i < 60 * (serverBikes.claimTimeoutMs / 1000) + 1; i++) frame();
+    c.state.action = 'none';
+    const n = sent.length;
+    bikes.interact(c);
+    for (let i = 0; i < 60 * (serverBikes.claimTimeoutMs / 1000) + 1; i++) frame(); // no answer
+    bikes.interact(c);
+    expect(sent.length).toBe(n + 2);
+  });
+
+  it('the server takes the ridden bike away (parked / released / removed) → the rider is off it', () => {
+    const { c, bikes } = online();
+    bikes.applyServer([info('b1', 1)], [], true);
+    bikes.interact(c);
+    bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: true });
+    bikes.applyServer([info('b1', 1, null)]);
+    expect(c.riding).toBeNull();
+    bikes.interact(c);
+    bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: true });
+    bikes.applyServer([], ['b1']);
+    expect([c.riding, bikes.list]).toEqual([null, []]);
+  });
+
+  it('server bikes (y unknown) wait for the ground near the player, hidden until then', () => {
+    const { bikes, frame } = online();
+    const asked: number[][] = [];
+    bikes.ground = (x, z, y) => (asked.push([x, z, y]), x < 100 ? 0.25 : null);
+    bikes.applyServer([info('near', 3), info('far', 500)], [], true);
+    frame();
+    expect(asked).toEqual([[3, 0, 0]]); // 500 m is beyond serverBikes.groundRadius
+    expect(bikes.list.map((b) => b.position.y)).toEqual([0.25, 0]);
   });
 });

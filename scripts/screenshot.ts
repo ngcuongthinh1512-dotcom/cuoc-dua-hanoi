@@ -209,7 +209,10 @@ Object.assign(PRESETS, {
   'p6-peers': `/?player&npc=0&wait=2&peers=${PEERS}`, // in front of the spawn: walking across, riding (leaning), waving at us
   'p6-debug': `/?player&npc=0&wait=2&debug=1&peers=${PEERS}`, // F3 "Mạng:" line (offline: stand-in count)
   'p6-boxes': '/?player&npc=0&boxes=L2,-18,-10.9;L1,-25.2,-7.7,opened', // SPEC §17.10: current box (flag, glow) + an opened one
-  // [C] shared bikes: free (sparkle), another team's (lock), own; claim refused toast
+  // [C] shared bikes: free (sparkle), another team's (lock), own; claim refused toast. ?bikes=<kind,…> turns the dev
+  // bikes (bike.devSpawns) into server-like stand-ins in order (vehicle/Bikes.ts applyStandIns).
+  'p6-bikes': '/?player&bikes=free,mine,other&camMode=far&orbit=-64&wait=1', // looking north: free (3 m E, sparkle), Đội Xanh's (blue lock, back right), own (red lock, bottom left)
+  'p6-bike-lost': '/?player&bikes=lost&orbit=-50&wait=1', // toast "Chậm một bước!" once main.ts wires bikes.notify = notice (track B's codes)
   // [D] Host page: team codes, online status, counters
 });
 
