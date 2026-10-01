@@ -79,7 +79,7 @@ describe.concurrent('RaceRoom live', () => {
     const c0 = hostStates(await host.drain(1200)).at(-1)!.counters;
     const seq0 = await snapSeq(race);
     const T = 6; // s at 5 Hz, 2.5 m/s
-    const [ax] = await Promise.all([walk(a!, 0, 0, 0.5, T * 5), walk(b!, 0, 50, 0.5, T * 5)]);
+    const [ax] = await Promise.all([walk(a!, 0, 0, 0.5, T * 5), walk(b!, 0, 5, 0.5, T * 5)]); // both near the leg start
     const c1: QuotaCounters = hostStates(await host.drain(2500)).at(-1)!.counters;
     const snaps = (await snapSeq(race)) - seq0;
     expect(snaps).toBeGreaterThanOrEqual(2);
@@ -113,12 +113,12 @@ describe.concurrent('RaceRoom live', () => {
     await Promise.all([
       walk(a!, 0, 0, 4, 15), // 20 m/s
       (async () => {
-        const x = await walk(b!, 1000, 0, 0.6, 8); // 3 m/s
+        const x = await walk(b!, 0, 0, 0.6, 8); // 3 m/s
         b!.send(respawn(x + 300, 0));
         await sleep(200);
         await walk(b!, x + 300, 0, 0.6, 8);
       })(),
-      walk(c!, -1000, 0, 1.1, 15, 'bike'), // 5.5 m/s ≤ 4 × 1.3 × 1.25
+      walk(c!, 0, 0, 1.1, 15, 'bike'), // 5.5 m/s ≤ 4 × 1.3 × 1.25
     ]);
     const st = (await host.until((m) => m.t === 'host.state' && m.teams[0].flagged)) as unknown as HostState;
     expect(st.teams.map((t) => t.flagged)).toEqual([true, false, false]);
@@ -128,6 +128,36 @@ describe.concurrent('RaceRoom live', () => {
       [teams[1]!.id, 'respawn', { how: 'safe', d: 300 }],
     ]);
     for (const s of [a, b, c, host]) s!.close();
+  }, 20_000);
+
+  it('a reconnect or a first pose is no free teleport, walking while offline is; chained / spammed respawns are flagged', async () => {
+    const race = 'live-teleport';
+    const { host, teams } = await setupRace(server, race, 4);
+    const [a, b, c, d] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
+    a!.send(pose(0, 0)); // the leg start (Concorde = world origin)
+    b!.send(pose(0, 0));
+    d!.send(pose(1500, 0)); // never seen before: 1.5 km from the leg start
+    await sleep(300);
+    a!.close();
+    b!.close();
+    await sleep(1000);
+    const [a2, b2] = await Promise.all([teams[0]!, teams[1]!].map((t) => joinTeam(server, race, t.code)));
+    a2!.send(pose(2000, 0)); // 2 km after ≈ 1.3 s offline
+    b2!.send(pose(5, 0)); // 5 m: walked on while the socket was down
+    for (let i = 1; i <= 8; i++) {
+      c!.send(respawn(390 * i, 0)); // each < NET.maxRespawnJump, 3.1 km in 2 s
+      await sleep(250);
+    }
+    const st = (await host.until((m) => m.t === 'host.state' && m.teams.filter((t: { flagged: boolean }) => t.flagged).length === 3)) as unknown as HostState;
+    expect(st.teams.map((t) => t.flagged)).toEqual([true, false, true, true]);
+    const ev = (await (await sqlOf(race)).exec('SELECT team, type, data FROM events WHERE type IN (?, ?) ORDER BY id', 'jump', 'respawn')) as { team: string; type: string; data: string }[];
+    const of = (i: number) => ev.filter((e) => e.team === teams[i]!.id).map((e) => [e.type, JSON.parse(e.data)]);
+    expect(of(0)).toEqual([['jump', expect.objectContaining({ d: 2000, suspicious: true })]]);
+    expect(of(1)).toEqual([]);
+    expect(of(3)).toEqual([['jump', expect.objectContaining({ d: 1500, suspicious: true })]]);
+    // C: 6 events (the cap), suspicious from the 2nd (780 m in all); respawns 7–8 flagged but not written
+    expect(of(2)).toEqual([1, 2, 3, 4, 5, 6].map((i) => ['respawn', { how: 'safe', d: 390, ...(i > 1 ? { suspicious: true } : {}) }]));
+    for (const s of [a2, b2, c, d, host]) s!.close();
   }, 20_000);
 
   it('reveals the current box within 150 m to that team only, hides it beyond 170 m', async () => {

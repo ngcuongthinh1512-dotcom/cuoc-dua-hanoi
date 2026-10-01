@@ -114,6 +114,8 @@ describe('RaceRoom', () => {
       [[1, 1.5, 0, 0, 0, 0, 0], CLOSE.badMessage], // pose numbers must be integers (cm)
       [[1, 0, 0, 0, 0, 9, 0], CLOSE.badMessage], // unknown move mode
       [{ t: 'respawn', x: 'a' }, CLOSE.badMessage],
+      [{ t: 'respawn', x: 10, y: 5000, z: 0, yaw: 0, how: 'safe' }, CLOSE.badMessage], // would break every tick (decodeTick)
+      [{ t: 'respawn', x: 500_000, y: 0, z: 0, yaw: 0, how: 'safe' }, CLOSE.badMessage],
       [{ t: 'nope' }, CLOSE.badMessage],
       ['x'.repeat(NET.maxPlayerBytes + 1), CLOSE.tooBig],
     ];

@@ -19,8 +19,16 @@ export const NET = {
    *  KCC steps reach 4.8 m/s at footSpeed 4; judge a window, not a step). */
   speedWindowMs: 3_000,
   speedTolerance: 1.25,
-  /** A `respawn` jump longer than this (m) is logged as suspicious (quay stairs / "Kẹt?" spots are nearer). */
+  /** Speed-window stamps (server ms) may run this far ahead of the server clock: a burst of poses after a network stall
+   *  of up to this long is spread back over the time it covered; a client sending faster than sendHz banks no more. */
+  speedLeadMs: 2_000,
+  /** Teleports = `respawn`s + the part of a (re)connect / first pose's jump the time unseen does not explain (at bike
+   *  speed). Within respawnWindowMs, more than maxRespawns of them or more than maxRespawnJump m in all → suspicious
+   *  (flagged); events only up to maxRespawns (a client spamming respawns cannot burn the SQLite row budget). Quay
+   *  stairs / "Kẹt?" spots and the spawn offset are far nearer. */
   maxRespawnJump: 400,
+  maxRespawns: 6,
+  respawnWindowMs: 60_000,
   /** SPEC §17.10: the server compares each online team's last pose with its current clue box this often (one sqrt per
    *  team, no SQLite); radius + hysteresis come from the leg file (boxReveal). */
   boxCheckMs: 2_000,

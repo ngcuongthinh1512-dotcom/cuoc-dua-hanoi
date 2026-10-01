@@ -42,12 +42,16 @@ interface Live {
   pose: PoseSample;
   /** Last one that passed the speed check: snapshot, welcome, boxes. */
   valid: PoseSample;
-  /** Undefined → the next pose starts a new window (connect, restart, respawn). */
+  /** Server ms the team was last known to stand at `valid` (its arrival; on a disconnect the socket's last sign of life). */
+  validAt: number;
+  /** Undefined → the next pose opens a new window, judged against `valid` / `validAt` (connect, disconnect, wake). */
   win?: SpeedWindow;
   /** Last pose in 'bike' mode (the bike limit applies for one window after). */
   bikeAt: number;
   /** Over the limit right now (one `speed` event per episode). */
   over: boolean;
+  /** Teleports in the current NET.respawnWindowMs: count, summed length (m). Memory only (a wake starts a new one). */
+  tp?: { start: number; n: number; d: number };
 }
 
 const TEAM = 'team';
@@ -86,12 +90,12 @@ export class RaceRoom extends DurableObject<Env> {
     this.sql = ctx.storage.sql;
     migrate(this.sql);
     const snap = this.sql.exec<{ t: number; data: string }>('SELECT t, data FROM snapshot WHERE id = 1').toArray()[0];
-    const data = (snap ? JSON.parse(snap.data) : {}) as { seq?: number; poses?: Record<string, unknown>; counters?: Counters };
+    const data = (snap ? JSON.parse(snap.data) : {}) as { seq?: number; poses?: Record<string, unknown>; at?: Record<string, number>; counters?: Counters };
     this.counters = QuotaCounters.from(data.counters);
     this.snapSeq = data.seq ?? 0;
     for (const [team, arr] of Object.entries(data.poses ?? {})) {
       const p = decodePose(arr);
-      if (p) this.live.set(team, { pose: p, valid: p, bikeAt: 0, over: false });
+      if (p) this.live.set(team, { pose: p, valid: p, validAt: data.at?.[team] ?? snap!.t, bikeAt: 0, over: false });
     }
     this.bikes = new BikeService({
       sql: this.sql,
@@ -122,10 +126,10 @@ export class RaceRoom extends DurableObject<Env> {
   /** SPEC §7 / §8.10: team code → token + a summary for the "Chào mừng trở lại" screen. */
   private async login(request: Request): Promise<Response> {
     const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
-    const now = Date.now();
-    const fails = this.loginFails.get(ip);
-    if (fails && fails.until > now) return json({ ok: false, error: 'locked', retryMs: fails.until - now }, 429);
     const body = (await request.json().catch(() => null)) as { code?: unknown } | null;
+    const now = Date.now();
+    const fails = this.loginFails.get(ip); // read after the await: parallel attempts see each other's count
+    if (fails && fails.until > now) return json({ ok: false, error: 'locked', retryMs: fails.until - now }, 429);
     const code = typeof body?.code === 'string' ? body.code.trim().toUpperCase() : '';
     const team = code ? this.teams().find((t) => t.code === code) : undefined;
     if (!team) {
@@ -194,7 +198,7 @@ export class RaceRoom extends DurableObject<Env> {
     if (typeof message === 'string' && message.length > max) return this.close(ws, CLOSE.tooBig, 'too big');
     const m = parseFrame(message, max);
     const pose = decodePose(m);
-    if (pose) return this.onPose(a, pose, now);
+    if (pose) return this.onPose(ws, a, pose, now);
     if (!isClientMessage(m, a.role)) return this.close(ws, CLOSE.badMessage, 'bad message');
     this.onMessage(ws, a, m as ClientMessage, now);
   }
@@ -217,24 +221,56 @@ export class RaceRoom extends DurableObject<Env> {
 
   // ── handlers ──
   /** A pose: speed window (SPEC §13.9: flag only), last valid pose, dirty slot, due snapshot / replay / host.state. */
-  private onPose(a: Attachment, pose: PoseSample, now: number) {
+  private onPose(ws: WebSocket, a: Attachment, pose: PoseSample, now: number) {
     const t = a.role === TEAM ? this.team(a.team) : undefined;
     if (!t) return;
-    const l = this.live.get(t.id) ?? { pose, valid: pose, bikeAt: 0, over: false };
-    this.live.set(t.id, l);
-    if (l.win) l.win.push(now, pose.x, pose.z);
-    else (l.win = new SpeedWindow()).reset(now, pose.x, pose.z);
-    if (pose.mode === 'bike') l.bikeAt = now;
+    const l = this.liveOf(t.id, a.since, pose);
     const { footSpeed, bikeSpeedMultiplier } = legRules().movement;
-    const over = overSpeed(l.win, footSpeed * (now - l.bikeAt <= NET.speedWindowMs ? bikeSpeedMultiplier : 1));
-    if (over && !l.over) {
-      this.event(now, t.id, 'speed', { v: Math.round(l.win.speed * 10) / 10, x: Math.round(pose.x), z: Math.round(pose.z) });
-      this.flag(t);
+    if (pose.mode === 'bike') l.bikeAt = now;
+    let over = false;
+    if (l.win) {
+      l.win.push(now, pose.x, pose.z);
+      over = overSpeed(l.win, footSpeed * (now - l.bikeAt <= NET.speedWindowMs ? bikeSpeedMultiplier : 1));
+      if (over && !l.over) {
+        this.event(now, t.id, 'speed', { v: Math.round(l.win.speed * 10) / 10, x: Math.round(pose.x), z: Math.round(pose.z) });
+        this.flag(t);
+      }
+    } else {
+      // New window (first pose, (re)connect, wake), SPEC §8.10: the way from the last valid pose may take the time the team
+      // was unseen at bike speed — offline, plus since its last ping on this socket (a connected client that sends no pose
+      // stands still). The rest is a teleport.
+      const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
+      const s = (Math.max(0, a.since - l.validAt) + Math.max(0, now - Math.max(a.since, l.validAt, pinged))) / 1000;
+      const d = Math.hypot(pose.x - l.valid.x, pose.z - l.valid.z);
+      const excess = d - footSpeed * bikeSpeedMultiplier * NET.speedTolerance * s;
+      if (excess > 0) this.teleport(t, l, excess, now, 'jump', { d: Math.round(d), s: Math.round(s) });
+      (l.win = new SpeedWindow()).reset(now, pose.x, pose.z);
     }
     l.over = over;
-    if (!over) l.valid = pose;
+    if (!over) Object.assign(l, { valid: pose, validAt: now });
     l.pose = pose;
     this.moved(t.slot, now);
+  }
+
+  /** The team's poses; a team never seen yet stands at the leg start from the moment its socket opened. */
+  private liveOf(team: string, since: number, pose: PoseSample): Live {
+    let l = this.live.get(team);
+    if (!l) {
+      const start = legPoints()[0]!;
+      this.live.set(team, (l = { pose, valid: { ...pose, x: start.x, z: start.z }, validAt: since, bikeAt: 0, over: false }));
+    }
+    return l;
+  }
+
+  /** A respawn or an unexplained jump: logged, and counted per NET.respawnWindowMs — more than NET.maxRespawns or more
+   *  than NET.maxRespawnJump m in all → suspicious + flagged; events stop at the cap (SQLite row budget). */
+  private teleport(t: TeamRow, l: Live, d: number, now: number, type: string, data: object) {
+    const r = l.tp && now - l.tp.start < NET.respawnWindowMs ? l.tp : (l.tp = { start: now, n: 0, d: 0 });
+    r.n++;
+    r.d += d;
+    const suspicious = r.n > NET.maxRespawns || r.d > NET.maxRespawnJump;
+    if (r.n <= NET.maxRespawns) this.event(now, t.id, type, { ...data, ...(suspicious ? { suspicious } : {}) });
+    if (suspicious) this.flag(t);
   }
 
   private onMessage(ws: WebSocket, a: Attachment, m: ClientMessage, now: number) {
@@ -248,6 +284,7 @@ export class RaceRoom extends DurableObject<Env> {
         this.bikes.onHost(m, now);
         return this.soon(now);
       case 'bike': {
+        if (a.role !== TEAM) return;
         const l = this.live.get(a.team);
         return this.bikes.onTeam(a.team, l ? { team: a.team, x: l.pose.x, z: l.pose.z } : null, m, false /* Phase 7: current step transport */, now);
       }
@@ -259,16 +296,13 @@ export class RaceRoom extends DurableObject<Env> {
       case 'respawn': {
         const t = a.role === TEAM ? this.team(a.team) : undefined;
         if (!t) return;
-        // A legal teleport (stairs / "Kẹt?" / fell through): new window from here; far jumps are logged and flagged.
-        const prev = this.live.get(t.id)?.valid;
-        const d = prev ? Math.round(Math.hypot(m.x - prev.x, m.z - prev.z)) : 0;
-        const suspicious = d > NET.maxRespawnJump;
-        this.event(now, t.id, 'respawn', { how: m.how, d, ...(suspicious ? { suspicious } : {}) });
-        if (suspicious) this.flag(t);
+        // A legal teleport (stairs / "Kẹt?" / fell through), counted with the others: new window from here.
         const pose: PoseSample = { x: m.x, y: m.y, z: m.z, yaw: m.yaw, mode: 'walk', action: 'none' };
-        const win = new SpeedWindow();
-        win.reset(now, m.x, m.z);
-        this.live.set(t.id, { pose, valid: pose, win, bikeAt: 0, over: false });
+        const l = this.liveOf(t.id, a.since, pose);
+        const d = Math.hypot(m.x - l.valid.x, m.z - l.valid.z);
+        this.teleport(t, l, d, now, 'respawn', { how: m.how, d: Math.round(d) });
+        (l.win = new SpeedWindow()).reset(now, m.x, m.z);
+        Object.assign(l, { pose, valid: pose, validAt: now, bikeAt: 0, over: false });
         return this.moved(t.slot, now);
       }
     }
@@ -280,11 +314,13 @@ export class RaceRoom extends DurableObject<Env> {
     this.gone.add(ws);
     const a = att(ws);
     const team = a?.role === TEAM ? this.team(a.team) : undefined;
+    const l = team && this.live.get(team.id);
+    // It stood at its last valid pose until the socket's last sign of life (poses and pings share one ordered stream).
+    if (l && !l.over) l.validAt = Math.max(l.validAt, this.lastHeard(ws));
     if (!team || this.sockets(team.id).length) return;
     const now = Date.now();
     this.saveTeamState(team, { ...this.teamState(team), lastSeen: now });
     this.event(now, team.id, 'disconnect');
-    const l = this.live.get(team.id);
     if (l) Object.assign(l, { win: undefined, over: false });
     this.writeSnapshot(now); // SPEC §8.10: where it stood, at once
     this.broadcast({ t: 'team', slot: team.slot, online: false });
@@ -367,7 +403,8 @@ export class RaceRoom extends DurableObject<Env> {
     this.snapshotAt = null;
     this.counters.rows += 1;
     const poses = Object.fromEntries([...this.live].map(([id, l]) => [id, encodePose(l.valid)]));
-    const data = JSON.stringify({ seq: ++this.snapSeq, poses, counters: this.counters });
+    const at = Object.fromEntries([...this.live].map(([id, l]) => [id, l.validAt]));
+    const data = JSON.stringify({ seq: ++this.snapSeq, poses, at, counters: this.counters });
     this.sql.exec('INSERT INTO snapshot (id, t, data) VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET t = excluded.t, data = excluded.data', now, data);
   }
 
@@ -390,10 +427,12 @@ export class RaceRoom extends DurableObject<Env> {
 
   /** Close sockets silent for NET.deadSocketMs (no message, no auto-answered ping). */
   private closeDead(now: number) {
-    for (const ws of this.sockets()) {
-      const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
-      if (now - Math.max(att(ws).since, pinged, this.seen.get(ws)?.last ?? 0) > NET.deadSocketMs) this.close(ws, CLOSE.silent, 'silent');
-    }
+    for (const ws of this.sockets()) if (now - this.lastHeard(ws) > NET.deadSocketMs) this.close(ws, CLOSE.silent, 'silent');
+  }
+
+  /** A socket's last sign of life: accepted, a message, or an auto-answered ping. */
+  private lastHeard(ws: WebSocket): number {
+    return Math.max(att(ws).since, this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0, this.seen.get(ws)?.last ?? 0);
   }
 
   private tooFast(ws: WebSocket, now: number): boolean {

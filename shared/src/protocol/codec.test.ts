@@ -86,6 +86,14 @@ describe('frames and JSON messages', () => {
     expect(isClientMessage({ t: 'respawn', x: 1, y: 2, z: 3, yaw: 0, how: 'stairs' }, 'team')).toBe(true);
     expect(isClientMessage({ t: 'respawn', x: 1, y: 2, z: 3, yaw: 0, how: 'teleport' }, 'team')).toBe(false);
     expect(isClientMessage({ t: 'respawn', x: 1, y: 2, z: 3, how: 'safe' }, 'team')).toBe(false); // yaw missing
+    // metre bounds = the pose codec's: anything accepted encodes to a pose decodePose / decodeTick take back
+    for (const [x, y] of [[9_999.999, -100], [-10_000, 1_000]] as const) {
+      expect(isClientMessage({ t: 'respawn', x, y, z: 0, yaw: 7, how: 'safe' }, 'team')).toBe(true);
+      expect(decodePose(encodePose({ x, y, z: 0, yaw: 7, mode: 'walk', action: 'none' }))).not.toBeNull();
+    }
+    for (const [x, y] of [[10_000.01, 0], [500_000, 0], [0, 5_000], [0, -101]] as const) {
+      expect(isClientMessage({ t: 'respawn', x, y, z: 0, yaw: 0, how: 'safe' }, 'team')).toBe(false);
+    }
     expect(isClientMessage({ t: 'gesture', g: 'bell' }, 'team')).toBe(true);
     expect(isClientMessage({ t: 'gesture', g: 'dance' }, 'team')).toBe(false);
     expect(isClientMessage({ t: 'bike', op: 'claim', id: 'b1' }, 'team')).toBe(true);
