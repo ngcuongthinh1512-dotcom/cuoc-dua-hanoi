@@ -256,6 +256,7 @@ Object.assign(PRESETS, {
   ),
   // [D] leg format + validator: no screenshots
   // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
+  'p7-host': '/host.html?demo=1',
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline

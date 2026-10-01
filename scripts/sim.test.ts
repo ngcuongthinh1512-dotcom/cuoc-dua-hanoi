@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
+import { parseLeg, stepZones } from '@race/shared/leg';
+import { decodePose, type HostState, type RaceView, type ServerMessage, type Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { runSim } from './sim.ts';
+import { answersOf, type Bot, legArg, playLeg, runSim } from './sim.ts';
 
 // Real workerd + Durable Object (createTestHarness) and real WebSockets: 3 bots walk 30 simulated seconds on the A* road graph.
 // speedup 2 (10 msg/s per bot) leaves margin under the server's 15 msg/s socket limit (1 s window) and is the CLI maximum;
@@ -25,5 +30,137 @@ describe('sim bots (docs/plans/phase6.md §6 D)', () => {
 
   it('speedup above 2 is refused (the server drops sockets above 15 msg/s)', async () => {
     await expect(runSim({ bots: 1, seconds: 1, speedup: 3, rejoinGapMs: 0, race: 'sim-x', password: 'x', log: () => {} })).rejects.toThrow('speedup');
+  });
+});
+
+// Phase 7 (docs/plans/phase7.md track E): bots play a whole leg. `mini` is ~2.4 km (≈ 6 min real time at the trusted-point speed), so the
+// test squeezes the same steps, branches, answers and Pit Stop onto the Bir-Hakeim bridge deck (35 m apart, FAKE content as in mini).
+const mini = readFileSync(join(import.meta.dirname, '../worker/legs/test/mini.json'), 'utf8');
+function compactMini(): string {
+  const spots = new Map<string, number>();
+  const at = (o: { lat: number; lon: number }) => {
+    const k = `${o.lat},${o.lon}`;
+    if (!spots.has(k)) spots.set(k, spots.size);
+    return spots.get(k)!;
+  };
+  // NW along the bridge from its centre (start): 35 m per spot
+  const put = (o: { lat: number; lon: number }, i: number, extra = 0) => ((o.lat = 48.85569 + 0.000262 * i + extra), (o.lon = 2.28758 - 0.000263 * i + extra));
+  const walk = (o: unknown): void => {
+    if (Array.isArray(o)) return o.forEach(walk);
+    if (!o || typeof o !== 'object') return;
+    const r = o as Record<string, unknown> & { lat?: number; lon?: number };
+    if (typeof r.lat === 'number' && typeof r.lon === 'number') {
+      const i = at(r as { lat: number; lon: number });
+      const parking = r.bikeParking as { lat: number; lon: number } | undefined;
+      put(r as { lat: number; lon: number }, i);
+      if (parking) put(parking, i, 0.00005);
+      return;
+    }
+    Object.values(r).forEach(walk);
+  };
+  const leg = JSON.parse(mini);
+  walk(leg);
+  return JSON.stringify(leg);
+}
+// ponytail: the full-leg test is skipped while worker/src/race/engine.ts is still the foundation stub (no race engine = nothing for the
+// bots to play); the integrator merges track A first, after which it runs.
+const engineReady = !readFileSync(join(import.meta.dirname, '../worker/src/race/engine.ts'), 'utf8').includes('FOUNDATION STUB');
+
+/** A minimal stand-in for the race engine (the real one is track A): steps by the plan's table, judged on the last pose sent. */
+function fakeEngine(legJson: string) {
+  const r = parseLeg(JSON.parse(legJson));
+  if (!r.ok) throw new Error('leg');
+  const leg = r.leg;
+  const zones = stepZones(leg);
+  const answers = answersOf(legJson);
+  const log: ServerMessage[] = [];
+  const ops: string[] = [];
+  let step = 0, finished = false, at = { x: 0, z: 0 };
+  const view = (): RaceView => ({ status: 'running', startAt: 1, finishAt: finished ? 2 : null, penaltyMinutes: 0, card: { step: leg.steps[step]!.id, type: leg.steps[step]!.type, label: '', text: '', status: 'active', receivedAt: 0, completedAt: null }, checkinAt: null, officialMs: null });
+  const inZone = (z: { x: number; z: number; r: number }) => Math.hypot(at.x - z.x, at.z - z.z) <= z.r;
+  const push = () => log.push({ t: 'race', view: view() });
+  const advance = () => {
+    if (finished) return;
+    const st = leg.steps[step]!;
+    if (st.type === 'route_info' && leg.steps[step + 1]?.type === 'pit_stop' && inZone(zones[step]!)) step++;
+    else if (st.type === 'pit_stop' && inZone(zones[step]!)) finished = true;
+    else return;
+    push();
+    advance();
+  };
+  const sock = {
+    log,
+    send(m: unknown) {
+      const pose = decodePose(m);
+      if (pose) return void ((at = pose), advance());
+      const op = m as { op: string; step?: string; branch?: string; answer?: string };
+      ops.push(op.op);
+      const st = leg.steps[step]!;
+      const ok =
+        op.op === 'checkin' ? st.type === 'pit_stop' && inZone(zones[step]!)
+        : op.step !== st.id || !inZone(zones[step]!) ? false
+        : op.op === 'open' ? st.type === 'route_info'
+        : (st.type === 'challenge' || (st.type === 'detour' && op.branch !== undefined)) && (op.answer === undefined || [...answers.values()].includes(op.answer));
+      if (!ok) return void log.push({ t: 'notice', code: 'boxFar' });
+      if (op.op === 'checkin') finished = true;
+      else step++;
+      push();
+    },
+    until: async (pred: (m: ServerMessage) => boolean, _t = 0, from = 0) => {
+      for (let k = 0; k < 60; k++) {
+        const hit = log.slice(from).find(pred);
+        if (hit) return hit;
+        await new Promise((res) => setTimeout(res, 5));
+      }
+      throw new Error('timeout');
+    },
+  };
+  return { leg, sock: sock as never as Bot['s'], ops, state: () => ({ step, finished }) };
+}
+
+describe('sim bot against a stand-in engine (no workerd)', () => {
+  it('walks the compacted leg step by step: open, task with the right answer, enter the mat, check in', async () => {
+    const json = compactMini();
+    const eng = fakeEngine(json);
+    const graph = RoadGraph.decode(JSON.parse(readFileSync(join(import.meta.dirname, '../shared/data/roadgraph.json'), 'utf8')) as RoadGraphFile);
+    const zones = stepZones(eng.leg);
+    const legState = {
+      id: 'mini', title: '', timezone: 'Asia/Ho_Chi_Minh', start: { x: zones[0]!.x, z: zones[0]!.z }, bundled: [], issues: [], vehicles: eng.leg.vehicles,
+      steps: eng.leg.steps.map((s, i) => ({ id: s.id, type: s.type, label: s.label, name: '', x: zones[i]!.x, z: zones[i]!.z, r: zones[i]!.r })),
+    } as NonNullable<HostState['leg']>;
+    const welcome = { movement: { footSpeed: 400, bikeSpeedMultiplier: 1.3 }, start: { x: legState.start.x, z: legState.start.z, yaw: 0 }, pose: null, view: { card: { step: 'L1' }, finishAt: null } } as unknown as Welcome;
+    const refused: string[] = [];
+    const t = await playLeg({ i: 0, s: eng.sock, welcome }, legState, answersOf(json), graph, { speedup: 1, deadline: Date.now() + 60_000, refused });
+    expect(t).toBe(2);
+    expect(eng.state()).toEqual({ step: 5, finished: true });
+    expect(eng.ops.filter((o) => o === 'open')).toHaveLength(2); // L1, L2 (L3 is done by entering the mat)
+    expect(eng.ops.filter((o) => o === 'task')).toHaveLength(2); // T1, D1
+  });
+});
+
+describe('sim --leg (Phase 7)', () => {
+  it('reads the right answers from the leg file and nothing else', () => {
+    const a = answersOf(mini);
+    expect(a.get('T1')).toBe('42');
+    expect(a.get('D1/A')).toBe('7');
+    expect(a.has('D1/B')).toBe(false); // host_approval branch: no answer to send
+    expect(a.has('L1')).toBe(false);
+  });
+
+  it('--leg <id> finds the test leg file; unknown id says so', () => {
+    expect(legArg('mini')).toMatchObject({ id: 'mini' });
+    expect(() => legArg('khong-co')).toThrow('khong-co');
+  });
+
+  it('the compacted leg stays a valid leg with the same steps', () => {
+    const r = parseLeg(JSON.parse(compactMini()));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.leg.steps.map((s) => s.id)).toEqual(['L1', 'T1', 'L2', 'D1', 'L3', 'PS']);
+  });
+
+  it.skipIf(!engineReady)('3 bots finish the whole leg: all checked in, ranking has 3 rows, ≤ 110 SQLite rows per team', { timeout: 300_000 }, async () => {
+    const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-leg', password: 'test-secret', log: () => {}, leg: { json: compactMini() } });
+    expect(r.leg).toMatchObject({ id: 'mini', steps: 6, finished: 3, ranked: 3 });
+    expect(r.leg!.rowsPerTeam).toBeLessThanOrEqual(110);
   });
 });

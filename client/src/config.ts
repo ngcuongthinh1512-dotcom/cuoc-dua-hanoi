@@ -1047,9 +1047,8 @@ export const hostPage = {
   refreshMs: 1000, // how often the DOM table is rewritten from host.state (SPEC §13: ≤ 1 s)
   reconnectMs: 2000, // Host socket: wait before reconnecting (the token stays valid 24 h)
   colours: ['#2c6bd8', '#d8342c', '#e0b020', '#2c9a4a', '#8a3fc4', '#e07a20', '#20a8b8', '#c0408a'], // team shirt colours, round-robin
-  // ponytail: copy of the leg file's `vehicles` corridor numbers (worker/legs/*.json) because host.state does not carry them;
-  // upgrade: send them with the leg (Phase 7) so the Host cannot drift from the server's rules.
-  corridor: { corridorMeters: 150, minDistanceFromCheckpoint: 100 },
+  noticeMs: 15_000, // how long a host.notice (a refused / warned Host op) stays on the page
+  maxLegBytes: 256 * 1024, // leg file the Host may send (host.leg json; the server refuses more)
   addBikeOffset: 3, // m east of the team: "Thêm xe" in the team table puts a shared bike this close to the team's last pose
 };
 
