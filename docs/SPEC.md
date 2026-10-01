@@ -978,3 +978,4 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 ### 17.12 Điểm xuất phát và giờ vào của các đội (chốt 2026-10-01; ghi đè §17.4 "xuất phát tại obelisk, các đội đặt ngoài hàng rào")
 - Điểm bắt đầu của chặng này là **cầu Bir-Hakeim**, không phải obelisk Concorde. Điểm xuất phát luôn lấy từ file chặng, không gắn cứng trong code (§17.9).
 - Các đội **không xuất phát cùng một lúc tại một chỗ**: có đội tới trước, có đội tới sau. Server phải xử lý mỗi đội vào thế giới ở thời điểm khác nhau; không giả định "tiếng súng xuất phát chung".
+- **Đồng hồ của mỗi đội tính từ lúc đội nhận mật thư đầu tiên ở NGOÀI trò chơi** (chốt 2026-10-01). Host nhập thời điểm bắt đầu cho từng đội (Phase 7/10); server tính giờ đội = hiện tại − giờ bắt đầu của đội đó, không phụ thuộc lúc đội vào game hay tới điểm xuất phát. Giờ trước khi vào game vẫn được tính.
