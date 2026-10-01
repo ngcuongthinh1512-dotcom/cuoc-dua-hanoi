@@ -53,6 +53,7 @@ export function spawnCandidates(g: RoadGraph, points: readonly XZ[], checkpoints
   };
   const inCorridor = new Set<number>();
   const polys: number[][] = [];
+  const bp = g.file.bikeParking;
 
   const segments = points.slice(1).map((to, i) => {
     const from = points[i]!;
@@ -63,7 +64,6 @@ export function spawnCandidates(g: RoadGraph, points: readonly XZ[], checkpoints
     const edges = corridorEdges(g, path, rules.corridorMeters, 'walk');
     edges.forEach((e) => inCorridor.add(e));
     const out: number[] = [];
-    const bp = g.file.bikeParking;
     for (let k = 0; k + 1 < bp.length; k += 2) {
       const [x, z] = [bp[k]! / 10, bp[k + 1]! / 10];
       if (clear(x, z) && project(poly, x, z).d <= half) out.push(x, z);
@@ -81,20 +81,27 @@ export function spawnCandidates(g: RoadGraph, points: readonly XZ[], checkpoints
     return out;
   });
 
-  // Decoys (SPEC §6.2 (6)): same kind of spot on streets the route does not use, near enough to be met.
+  // Decoys (SPEC §6.2 (6)): same kind of spot on streets the route does not use, near enough to be met — a rack first, as
+  // on the route (else "a bike at a rack" would mean "route"), then a pavement point.
   const all = polys.flat();
   const [xs, zs] = [all.filter((_, k) => k % 2 === 0), all.filter((_, k) => k % 2 === 1)];
   const [x0, x1, z0, z1] = [Math.min(...xs) - C.decoyMargin, Math.max(...xs) + C.decoyMargin, Math.min(...zs) - C.decoyMargin, Math.max(...zs) + C.decoyMargin];
+  const inBox = (x: number, z: number) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
   const cells = new Set<number>();
   const decoys: number[] = [];
+  const decoy = (x: number, z: number) => {
+    const cell = Math.floor(x / C.decoyCell) * 100_000 + Math.floor(z / C.decoyCell);
+    if (!inBox(x, z) || cells.has(cell) || !clear(x, z)) return;
+    cells.add(cell);
+    decoys.push(dm(x), dm(z));
+  };
+  for (let k = 0; k + 1 < bp.length; k += 2) {
+    const [x, z] = [bp[k]! / 10, bp[k + 1]! / 10];
+    if (inBox(x, z) && polys.every((poly) => project(poly, x, z).d > half)) decoy(x, z);
+  }
   for (let e = 0; e < g.edgeA.length; e++) {
     if (inCorridor.has(e) || g.flags(e) & NO_SPAWN || !isPave(e)) continue;
-    for (const p of along(e, C.candidateStep)) {
-      const cell = Math.floor(p.x / C.decoyCell) * 100_000 + Math.floor(p.z / C.decoyCell);
-      if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1 || cells.has(cell) || !clear(p.x, p.z)) continue;
-      cells.add(cell);
-      decoys.push(dm(p.x), dm(p.z));
-    }
+    for (const p of along(e, C.candidateStep)) decoy(p.x, p.z);
   }
   return { segments, decoys };
 }

@@ -43,6 +43,9 @@ export type ClaimResult = { ok: true } | { ok: false; reason: 'taken' | 'far' | 
 
 /** m between the claimer's last pose and the bike: bikeRules.interactRadius (2.5, client) + 1 m for a 5 Hz pose lag. */
 export const CLAIM_REACH = 3.5;
+/** m: how far the team's own standing bike may be from its last pose — where a dismount put it (believed within this,
+ *  BikeService) or where the last 1 s tick left it when the team dropped offline (≤ 1 s at bikeTopSpeed 5.2 m/s). */
+export const OWN_REACH = 10;
 /** m: no new bike this close to another one. */
 const MIN_GAP = 3;
 /** mulberry32's increment: draw n of rng(seed) = the first draw of rng(seed + n · K). */
@@ -128,8 +131,10 @@ export function claim(bike: ServerBike | undefined, team: string, at: PlayerSpot
   if (!bike) return { ok: false, reason: 'gone' };
   if (bike.owner !== null && bike.owner !== team) return { ok: false, reason: 'taken' };
   if (walkOnly) return { ok: false, reason: 'walkOnly' };
-  // The own bike follows its rider on the server (BikeService.tick), so only a free bike checks the distance.
-  if (bike.owner === null && (!at || Math.hypot(at.x - bike.x, at.z - bike.z) > CLAIM_REACH)) return { ok: false, reason: 'far' };
+  // A ridden bike (here only ever the claimer's own) follows its rider on the server (BikeService.tick); a standing one,
+  // own included, must be in reach of the claimer's last pose: nobody summons a bike from afar.
+  const reach = bike.owner === team ? OWN_REACH : CLAIM_REACH;
+  if (!bike.rider && (!at || Math.hypot(at.x - bike.x, at.z - bike.z) > reach)) return { ok: false, reason: 'far' };
   return { ok: true };
 }
 

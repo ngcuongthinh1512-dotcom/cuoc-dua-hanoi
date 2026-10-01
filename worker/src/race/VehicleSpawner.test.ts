@@ -1,7 +1,7 @@
 // Phase 6 track C: the pure spawner / claim / abandonment rules (SPEC §6.2–6.3), demo leg `vehicles` block.
 import { describe, expect, it } from 'vitest';
 import { legRules } from './leg.ts';
-import { abandoned, claim, CLAIM_REACH, initialSpawn, newBike, periodicSpawn, rng, type ServerBike, type SpawnCandidates, type SpawnerState, stream } from './VehicleSpawner.ts';
+import { abandoned, claim, CLAIM_REACH, initialSpawn, newBike, OWN_REACH, periodicSpawn, rng, type ServerBike, type SpawnCandidates, type SpawnerState, stream } from './VehicleSpawner.ts';
 
 const cfg = legRules().vehicles;
 /** 6 segments (a 500 m line of points every 10 m, 1 km apart) + a decoy line far from all of them. */
@@ -91,8 +91,11 @@ describe('claim (SPEC §6.3, §6.5)', () => {
     expect(claim(undefined, 't0', at(1), false)).toEqual({ ok: false, reason: 'gone' });
   });
 
-  it('the own bike re-mounts from anywhere (the server moves it with its rider)', () => {
-    expect(claim(bike('t0'), 't0', at(50), false)).toEqual({ ok: true });
+  it('the own bike: ridden → ok from anywhere (it follows its rider); standing → within OWN_REACH only', () => {
+    expect(claim({ ...bike('t0'), rider: true }, 't0', at(50), false)).toEqual({ ok: true });
+    expect(claim(bike('t0'), 't0', at(OWN_REACH - 0.1), false)).toEqual({ ok: true });
+    expect(claim(bike('t0'), 't0', at(190), false)).toEqual({ ok: false, reason: 'far' });
+    expect(claim(bike('t0'), 't0', null, false)).toEqual({ ok: false, reason: 'far' });
   });
 });
 

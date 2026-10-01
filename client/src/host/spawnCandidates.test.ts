@@ -55,8 +55,9 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates
     expect(pairs(c.segments[2]!).some(([x, z]) => parking.has(`${x},${z}`))).toBe(false);
   });
 
-  it('decoys lie outside every corridor and away from the route points; same input → same output', () => {
+  it('decoys lie outside every corridor and away from the route points, racks among them; same input → same output', () => {
     expect(c.decoys.length / 2).toBeGreaterThan(20);
+    expect(pairs(c.decoys).filter(([x, z]) => parking.has(`${x},${z}`)).length).toBeGreaterThan(20); // a rack ≠ the route
     for (const [x, z] of pairs(c.decoys)) {
       for (const poly of polys) expect(toPath(poly, x, z)).toBeGreaterThan(leg.vehicles.corridorMeters / 2);
       for (const p of points) expect(Math.hypot(p.x - x, p.z - z)).toBeGreaterThanOrEqual(leg.vehicles.minDistanceFromCheckpoint);
