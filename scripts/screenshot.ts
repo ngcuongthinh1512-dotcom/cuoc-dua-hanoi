@@ -240,6 +240,20 @@ Object.assign(PRESETS, {
   'p7-mat': `/?player=${PIT.x - 4},${PIT.z + 9},-24&boxes=PS,${PIT.x},${PIT.z}&mat&wait=1.5&camMode=far&npc=0`, // mat + host NPC waving at the team
   'p7-celebrate': `/?player=${PIT.x},${PIT.z + 0.5},180&boxes=PS,${PIT.x},${PIT.z}&mat&action=celebrate&wait=1.2&orbit=160&npc=0`,
   // [C] clue card (each step type), full card popup, Sổ mật thư, "Xuất phát ở vị trí thứ n", Pit Stop line, clock --:-- / penalty
+  ...Object.fromEntries(
+    Object.entries({
+      'p7-card': 'card=route', // top-left mission card, route clue (yellow, bike icon)
+      'p7-card-detour': 'card=detour',
+      'p7-card-challenge': 'card=challenge',
+      'p7-card-full': 'card=challenge&full', // the full card popup (envelope animation finished)
+      'p7-book': 'book', // Sổ mật thư: current card pinned, then the earlier ones
+      'p7-start-order': 'startOrder=3', // "Xuất phát ở vị trí thứ 3" (right)
+      'p7-finish': 'card=pit&finish&raceTime=6135', // host NPC line after the check-in
+      'p7-pit': 'card=pit&checkin=134&penalty=3&raceTime=3725', // Pit Stop penalty countdown + clock + PHẠT row
+      'p7-clock': 'raceTime=--', // clock "--:--": the Host has not entered the start time yet
+      'p7-zone': 'card=route&zone', // "Tại điểm này"
+    }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
+  ),
   // [D] leg format + validator: no screenshots
   // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
 });

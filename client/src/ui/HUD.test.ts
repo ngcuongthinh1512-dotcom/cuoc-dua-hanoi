@@ -8,6 +8,7 @@ describe('HUD (pure parts)', () => {
     expect(formatClock(37.9)).toBe('00:37');
     expect(formatClock(3725)).toBe('1:02:05');
     expect(formatClock(-1)).toBe('00:00');
+    expect(formatClock(null)).toBe('--:--'); // Phase 7: no start time entered yet
     expect(formatSpeed(5.2)).toBe('19 km/h');
     expect(formatSpeed(0)).toBe('0 km/h');
   });
