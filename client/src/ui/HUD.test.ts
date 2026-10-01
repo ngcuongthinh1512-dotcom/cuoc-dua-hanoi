@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hudWidgets as W } from '../config.ts';
-import { formatClock, formatSpeed, PlaceLabel } from './HUD.ts';
+import { formatClock, formatSpeed, PlaceLabel, statusLabel } from './HUD.ts';
 
 describe('HUD (pure parts)', () => {
   it('clock mm:ss, h:mm:ss past an hour; speed in km/h', () => {
@@ -11,6 +11,10 @@ describe('HUD (pure parts)', () => {
     expect(formatClock(null)).toBe('--:--'); // Phase 7: no start time entered yet
     expect(formatSpeed(5.2)).toBe('19 km/h');
     expect(formatSpeed(0)).toBe('0 km/h');
+  });
+
+  it('race status badge (review2 F4): lobby / paused / finished say why F is refused; nothing while running or offline', () => {
+    expect(['lobby', 'paused', 'finished', 'running', undefined].map((s) => statusLabel(s as never))).toEqual(['Chưa bắt đầu', 'Tạm dừng', 'Đã kết thúc', null, null]);
   });
 
   it('place label: a new street shows it for streetSeconds; same street not again; a new district again', () => {

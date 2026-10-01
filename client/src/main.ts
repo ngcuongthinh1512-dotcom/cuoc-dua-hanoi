@@ -193,9 +193,11 @@ async function start() {
     if (import.meta.env.DEV && !session && st?.length === 3 && st.every(Number.isFinite)) spawnAt(st[0]!, st[1]!, (st[2]! * Math.PI) / 180);
   }
   let flying = !player;
-  let spectating = false; // D19: the team checked in → free-fly spectator (V back to the body)
+  let spectating = false; // D19: the team checked in (or the Host ended the race) → free-fly spectator for good
   let spectateAt = Infinity; // player.simTime then
-  const canFly = () => !session || host || spectating; // V: offline tests and the Host (F3 open); a finished team (any time)
+  // V (F3 open): offline tests only. Never in a race: a finished team must not get its body back and take a shared bike
+  // (review2 F9); the Host has no body.
+  const canFly = () => !session;
   // Remote players: online, or DEV ?peers=slot,x,z,yawDeg,mode[,action];… stand-ins (p6-peers) offline.
   const peers = import.meta.env.DEV && !session ? parsePeers(query.get('peers')) : [];
   const assets = player?.assets ?? (host ? { character: await loadCharacterAsset(), bike: await loadBikeAsset() } : undefined);
@@ -438,8 +440,8 @@ async function start() {
     update: (dt) => {
       input.poll();
       if (input.wasPressed('debug')) debug.toggle();
-      // V: player ⇄ free-fly (debug only, SPEC §17.2 "camera bay tự do"); the body stays frozen where it was. Not for a
-      // team in a race (Phase 6: Host / spectators / offline only).
+      // V: player ⇄ free-fly (debug only, SPEC §17.2 "camera bay tự do"); the body stays frozen where it was. Offline only
+      // (canFly): a team in a race flies only as the D19 spectator, and stays one.
       if (player && !spectating && player.simTime >= spectateAt) {
         spectating = true; // D19: after the celebration (or at once on re-entry after the finish), the camera flies
         if (!flying) {
@@ -450,7 +452,7 @@ async function start() {
           $('help-fly').hidden = false;
         }
       }
-      if (player && canFly() && (debug.visible || spectating) && input.wasPressed('flyToggle')) {
+      if (player && canFly() && debug.visible && input.wasPressed('flyToggle')) {
         flying = !flying;
         euler.setFromQuaternion(camera.quaternion, 'YXZ');
         if (flying) fly.setPose(camera.position.x, camera.position.y, camera.position.z, euler.y / (Math.PI / 180), euler.x / (Math.PI / 180));
@@ -499,7 +501,7 @@ async function start() {
           x, z, heading: Math.atan2(-view.x, -view.z), bodyYaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z),
           riding: !!player.controller.riding, swimming: s.moveMode === 'swim', time: Math.max(0, player.simTime),
           street: streets?.at(x, z), district: districtAt(water?.districts, x, z),
-          raceTime: race ? race.raceTime() : undefined, penaltyMinutes: race?.view?.penaltyMinutes,
+          raceTime: race ? race.raceTime() : undefined, penaltyMinutes: race?.view?.penaltyMinutes, raceStatus: race?.view?.status,
         } satisfies HudFrame);
         const riding = !!player.controller.riding;
         const inZone = !player.active ? false : race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone : !riding && !!boxInReach(boxes.boxes, x, z);

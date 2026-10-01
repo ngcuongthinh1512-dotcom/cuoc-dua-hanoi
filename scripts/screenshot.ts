@@ -250,7 +250,7 @@ Object.assign(PRESETS, {
       'p7-start-order': 'startOrder=3', // "Xuất phát ở vị trí thứ 3" (right)
       'p7-finish': 'card=pit&finish&raceTime=6135', // host NPC line after the check-in
       'p7-pit': 'card=pit&checkin=134&penalty=3&raceTime=3725', // Pit Stop penalty countdown + clock + PHẠT row
-      'p7-clock': 'raceTime=--', // clock "--:--": the Host has not entered the start time yet
+      'p7-clock': 'raceTime=--&raceStatus=lobby', // clock "--:--" (no start time entered yet) + "Chưa bắt đầu" badge above it
       'p7-zone': 'card=route&zone', // "Tại điểm này"
     }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
   ),

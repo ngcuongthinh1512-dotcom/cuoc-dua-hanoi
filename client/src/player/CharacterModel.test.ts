@@ -99,10 +99,16 @@ describe('CharacterModel', () => {
     m.setName(null);
     expect(m.root.children.some((o) => o instanceof THREE.LOD)).toBe(false);
     // the Pit Stop host: dark suit, its own readable tag colour (visual review: #23262d text was unreadable)
-    const host = new CharacterModel(prepareAsset(fixture(), []), { shirt: raceClient.host.shirt, name: raceClient.host.name, tag: raceClient.host.tag });
+    const H = raceClient.host;
+    const host = new CharacterModel(prepareAsset(fixture(), []), { shirt: H.shirt, name: H.name, tag: H.tag, tagDistance: H.tagDistance });
     const hsl = tagColour(host).getHSL({ h: 0, s: 0, l: 0 });
     expect(hsl.l).toBeGreaterThan(0.5);
     expect(host.shirt.getHSL({ h: 0, s: 0, l: 0 }).l).toBeLessThan(0.3);
+    // …and it hides beyond tagDistance (screen-size tags: from afar it lay on the team's own tag, p7-mat review)
+    const hostLod = host.root.children.find((o): o is THREE.LOD => o instanceof THREE.LOD)!;
+    expect(H.tagDistance).toBeLessThan(20);
+    expect(hostLod.levels[1]!.distance).toBe(H.tagDistance);
+    expect(lod.levels[1]!.distance).toBe(C.nameTag.maxDistance); // teams keep the long one
   });
 
   it('missing files → console.warn and a capsule in the shirt colour (all-shirt mask), no clips', async () => {

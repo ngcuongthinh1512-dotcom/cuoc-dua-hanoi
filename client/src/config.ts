@@ -807,6 +807,7 @@ export const traffic = {
   roundaboutGap: 18, // m of free ring before the entry point (cars entering yield, §17.11)
   ringJoin: { speed: 4, maxSeconds: 6 }, // an entering car reaches the ring at ≈ speed m/s: the ring must stay clear that long (capped)
   queued: 8, // m before a node: a standing car this close still counts as approaching it (yield / ring checks)
+  zoneLook: 400, // m: a route choice is refused when it runs into an ExclusionZone without a turn-off within this (an avenue runs 300 m between turn-offs) (traffic.ts intoZone)
   lights: { reach: 30, green: 18, amber: 3, allRed: 2, pedGreen: 8, pedCycle: 40, midStop: 3, kerb: 0.5 }, // m; s (2 phases, 46 s cycle); midStop = m before a lone signal node; kerb = m outside the carriageway the signal pole stands
   bodyRadius: 0.4, // m: the player's body as an obstacle (beside the pedestrians' crowd.bodyRadius)
   stopMargin: 0.3, // m short of a stop line the front bumper halts
@@ -1067,8 +1068,9 @@ export const raceClient = {
   spectateAfterS: 4.5, // s after the check-in (celebrate ≈ 4 s) the finished team becomes a spectator (free-fly, D19)
   // Pit Stop (SPEC §8.6): a red mat with yellow stripes at the zone centre (the check-in zone is the whole radius) + the host NPC
   mat: { length: 7, width: 3.2, colour: '#b3201c', stripe: '#f2c230', stripeWidth: 0.25, lift: 0.04 },
-  // offset [side, along] m from the mat centre; tag: name tag colour (the dark suit colour was unreadable, visual review)
-  host: { shirt: '#23262d', tag: '#ffd75e', name: 'Người dẫn chương trình', offset: [2.4, 0.6], waveEveryS: 6, waveRadius: 25 },
+  // offset [side, along] m from the mat centre; tag: name tag colour (the dark suit colour was unreadable, visual review);
+  // tagDistance: m from the camera beyond which its tag hides (screen-size tags: farther away it sat on the team's own, p7-mat)
+  host: { shirt: '#23262d', tag: '#ffd75e', tagDistance: 12, name: 'Người dẫn chương trình', offset: [2.4, 0.6], waveEveryS: 6, waveRadius: 25 },
 };
 
 // ── C · race HUD widgets (race/ui/*: clue card, Sổ mật thư, start-order banner, Pit Stop line, zone panel; ui/HUD.ts clock) ──

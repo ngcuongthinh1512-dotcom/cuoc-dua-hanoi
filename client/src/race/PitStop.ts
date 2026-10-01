@@ -49,7 +49,8 @@ export class PitHost {
   private since = Infinity; // s since the last wave (first one as soon as the team is near)
 
   constructor(asset: CharacterAsset) {
-    this.model = new CharacterModel(asset, { shirt: raceClient.host.shirt, name: raceClient.host.name, tag: raceClient.host.tag });
+    const H = raceClient.host;
+    this.model = new CharacterModel(asset, { shirt: H.shirt, name: H.name, tag: H.tag, tagDistance: H.tagDistance });
     this.model.root.visible = false;
     this.animator = new CharacterAnimator(this.model);
   }

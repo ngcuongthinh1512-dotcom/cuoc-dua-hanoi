@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { latLonToWorld } from '@race/shared';
 import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, segPoint, WayFlag } from '@race/shared/graph';
 import { describe, expect, it } from 'vitest';
-import { traffic } from '../config.ts';
+import { npc, traffic } from '../config.ts';
 import type { WaterData } from '../geo/chunkData.ts';
 import { heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
 import { carveRiver } from '../world/Terrain.ts';
@@ -234,6 +234,34 @@ describe('Traffic (fixture)', () => {
     expect(tr2.cars.length).toBeGreaterThan(0);
     for (const c of tr2.cars) expect(Math.hypot(c.x, c.z)).toBeGreaterThanOrEqual(60 + 3);
   });
+
+  it('exclusion zone over a lit junction is a keep-clear box: red → wait at its edge, already inside → drive through (§17.5)', () => {
+    const { g, roads } = fixture([[0, 0], [-100, 0], [100, 0], [0, -100], [0, 100]], [[0, CAR, 0, 1, 0], [0, CAR, 0, 0, 2], [0, CAR, 0, 3, 0], [0, CAR, 0, 0, 4]], [0]);
+    const e = edgeBetween(g, 1, 0), cont = edgeBetween(g, 0, 2), fwd = g.edgeA[e] === 1, deE = 2 * cont + (g.edgeA[cont] === 0 ? 0 : 1);
+    const R = 12 + npc.zoneMargin; // zone edge R m before the node; the stop line ≈ 5 m before it (inside)
+    const redAt = (tr: Traffic) => {
+      for (let prev = 'x'; ; prev = tr.lights.car(0, e)) {
+        tr.step(DT, anchor(), 0, NOPEDS);
+        if (tr.lights.car(0, e) === 'red' && prev !== 'red') return;
+      }
+    };
+    const tr = new Traffic(roads, 1);
+    tr.zones = [{ x: 0, z: 0, r: 12 }];
+    redAt(tr);
+    const out = tr.addCar('hatchback', e, fwd, 40, 0, 8, [deE]);
+    const ins = tr.addCar('city', e, fwd, 100 - R + 4, 0, 6, [deE]); // front already over the zone edge
+    let insStopped = false, insCrossed = false;
+    for (let k = 0; k < HZ * 10; k++) {
+      tr.step(DT, anchor(), 0, NOPEDS);
+      if (ins.route[0] === deE) insCrossed = true;
+      else if (ins.speed < 0.1) insStopped = true;
+    }
+    expect(tr.lights.car(0, e)).toBe('red');
+    expect([insStopped, insCrossed]).toEqual([false, true]); // through the red, not standing in the zone
+    expect(out.speed).toBeLessThan(0.05);
+    expect(out.s + out.len / 2).toBeLessThanOrEqual(100 - R + 0.01); // waits outside the zone, not at the line
+    expect(out.s + out.len / 2).toBeGreaterThan(100 - R - 2);
+  });
 });
 
 // ── real graph ──
@@ -415,6 +443,37 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(lo).toBeGreaterThan(-0.1);
     expect(hi).toBeLessThan(0.3);
   });
+
+  // review2-complete F2: a box zone on the Rue de Rivoli × Castiglione lights (oneway: no way round once on Rivoli) made
+  // cars queue inside it (151 → 480 samples, 77 → 252 standing). Sampled every 0.5 s, cars within 20 m of the centre.
+  it('box zone on Rue de Rivoli: after 15 s no car stands in it and almost none drive through (seeds 1, 5)', () => {
+    const p = latLonToWorld(48.8648, 2.3262), zone = { x: 454.2, z: 16.9, r: 20 }; // player 100 m away, zone on the lit junction
+    const a = anchor(p.x, p.z);
+    for (const seed of [1, 5]) {
+      const tr = new Traffic(roads, seed), cr = new Crowd(roads, seed);
+      cr.lights = tr.lights;
+      const step = (fill = false) => (tr.step(DT, a, 1, cr.peds, fill), cr.step(DT, a, 1, tr.cars, fill));
+      const sample = (secs: number) => {
+        let inside = 0, still = 0;
+        for (let k = 0; k < secs * HZ; k++) {
+          step();
+          if (k % 30) continue;
+          for (const c of tr.cars) if (Math.hypot(c.x - zone.x, c.z - zone.z) < zone.r) (inside++, c.speed < 0.3 && still++);
+        }
+        return { inside, still };
+      };
+      step(true);
+      sample(20);
+      const control = sample(90);
+      tr.zones = cr.zones = [zone];
+      sample(15); // cars already committed to the junction drive through
+      const zoned = sample(90);
+      console.log(`Rivoli zone seed ${seed}: cars in 20 m ${control.inside} → ${zoned.inside}, standing ${control.still} → ${zoned.still}`);
+      expect(control.still).toBeGreaterThan(20); // the spot does queue without a zone
+      expect(zoned.still).toBe(0);
+      expect(zoned.inside).toBeLessThanOrEqual(control.inside * 0.1);
+    }
+  }, 60_000);
 
   it('60 cars: ms per step', () => {
     const tr = new Traffic(roads, 1);

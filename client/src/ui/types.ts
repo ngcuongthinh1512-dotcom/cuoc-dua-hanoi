@@ -1,5 +1,5 @@
 // Phase 5 contract between the tracks (docs/plans/phase5.md §5). Changing it needs the integrator.
-import type { ServerNotice } from '@race/shared/protocol';
+import type { RaceStatus, ServerNotice } from '@race/shared/protocol';
 import type { BikeRefusal } from '../vehicle/types.ts';
 
 /** What every HUD widget reads, built once per frame by main.ts (player mode only: the spectator has no HUD). */
@@ -23,6 +23,8 @@ export interface HudFrame {
   raceTime?: number | null;
   /** Phase 7: total penalty minutes (SPEC §12: next to the clock). */
   penaltyMinutes?: number;
+  /** Phase 7: the race's status (a badge above the clock unless running: why F / check-in are refused). */
+  raceStatus?: RaceStatus;
   /** Street under / nearest the feet (geo/locate.ts, with hysteresis); undefined = none within locate.maxDistance. */
   street: string | undefined;
   /** Arrondissement 1…20 (geo/districts.ts), 0 = none. */

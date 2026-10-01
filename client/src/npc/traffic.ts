@@ -11,7 +11,7 @@ import { arrives, carEdges, farNode, stopDistance, TrafficLights } from './light
 import { mulberry32, pickWeighted } from './rng.ts';
 import type { NpcRoads } from './roads.ts';
 import type { CarKind, CarPose, ExclusionZone, NpcAnchor, PedPose } from './types.ts';
-import { WayFlag } from '@race/shared/graph';
+import { segPoint, WayFlag } from '@race/shared/graph';
 
 const SEED = 0x7a11c;
 
@@ -84,7 +84,7 @@ const cap2 = (vEnd: number, d: number) => Math.sqrt(vEnd * vEnd + 2 * traffic.br
 export class Traffic {
   readonly cars: SimCar[] = [];
   readonly lights: TrafficLights;
-  zones: readonly ExclusionZone[] = [];
+  private zs: readonly ExclusionZone[] = [];
   private t = 0;
   private nextId = 0;
   private readonly rng: () => number;
@@ -102,6 +102,9 @@ export class Traffic {
   private nearAt = -Infinity;
   private nearX = 1e9;
   private nearZ = 1e9;
+  private zIn = Infinity; // zoneSpan of the car being decided
+  private zOut = Infinity;
+  private leadV = 0; // speed of what gapAhead found nearest (obstacles 0)
   private target = 0;
   private spawnAt = 0;
   private readonly out: PathOut = { x: 0, z: 0, yaw: 0 };
@@ -123,6 +126,19 @@ export class Traffic {
 
   get time(): number {
     return this.t;
+  }
+
+  get zones(): readonly ExclusionZone[] {
+    return this.zs;
+  }
+  /** Phase 7 zones (Npc.setExclusionZones). Routes already chosen into one are cut back to the edge before the run that
+   *  enters it (route[0], route[1] stay: the car may be committed to them) and chosen again. */
+  set zones(zones: readonly ExclusionZone[]) {
+    this.zs = zones;
+    if (zones.length) for (const c of this.cars) {
+      const i = c.route.findIndex((d, k) => k >= 2 && this.intoZone(d));
+      if (i > 0) (c.route.length = i), this.ensureRoute(c);
+    }
   }
 
   // ── directed edge helpers (de = 2e forward edgeA → edgeB, 2e + 1 backward) ──
@@ -177,6 +193,29 @@ export class Traffic {
   private inZone(x: number, z: number, pad = 0): boolean {
     for (const q of this.zones) if (Math.hypot(x - q.x, z - q.z) < q.r + npc.zoneMargin + pad) return true;
     return false;
+  }
+  /** First stretch of the car's lane line inside a zone ahead, as m from its front bumper into zIn / zOut (zIn ≤ 0: the
+   *  front is in it; Infinity: none within lookAhead). The zone is a keep-clear box (§17.5, plan D20): a car enters only
+   *  when it can drive through, a junction line inside it moves to its edge, a car inside ignores that line.
+   *  ponytail: straight lane lines (corners not traced), only the first contiguous stretch; upgrade: walk the Béziers. */
+  private zoneSpan(car: SimCar): void {
+    this.zIn = this.zOut = Infinity;
+    if (!this.zones.length) return;
+    let base = -car.s - car.len / 2;
+    for (let j = 0; j < car.route.length && base <= traffic.lookAhead; j++) {
+      const de = car.route[j]!, o = this.seg(de, this.sa), off = this.laneOff(de, this.laneIn(de, car));
+      for (const q of this.zones) {
+        const R = q.r + npc.zoneMargin, rx = o.x - o.dz * off - q.x, rz = o.z + o.dx * off - q.z;
+        const b = rx * o.dx + rz * o.dz, disc = b * b - (rx * rx + rz * rz - R * R);
+        if (disc <= 0) continue;
+        const a = base + Math.max(0, -b - Math.sqrt(disc)), e = base + Math.min(o.len, -b + Math.sqrt(disc));
+        if (e <= a || e <= -car.len) continue; // misses this edge / already behind the car
+        if (this.zIn === Infinity) (this.zIn = a), (this.zOut = e);
+        else if (a <= this.zOut + 1) (this.zIn = Math.min(this.zIn, a)), (this.zOut = Math.max(this.zOut, e));
+      }
+      if (this.zIn !== Infinity && this.zOut < base + o.len) return; // the stretch ends on this edge
+      base += this.shift(de, car.route[j + 1], car.lane);
+    }
   }
 
   // ── junction control ──
@@ -289,8 +328,11 @@ export class Traffic {
       const de = car.route[j]!, L = this.len(de);
       if (base - car.len / 2 > traffic.lookAhead) break;
       const n = this.endNode(de), e = de >> 1, ctl = this.ctl(n);
-      if (ctl.kind !== 'none') {
-        const dFront = base + L - this.stopAt(n, e, ctl) - car.len / 2;
+      // a line inside a keep-clear zone (zoneSpan): ignored from inside it, moved to its edge from before it
+      const dReal = ctl.kind === 'none' ? 0 : base + L - this.stopAt(n, e, ctl) - car.len / 2;
+      const inZ = this.zIn < Infinity && dReal >= this.zIn - 0.001 && dReal <= this.zOut;
+      if (ctl.kind !== 'none' && !(inZ && this.zIn <= 0)) {
+        const dFront = inZ ? this.zIn : dReal;
         const nx = car.route[j + 1];
         const k = nx === undefined ? undefined : this.corner(de, nx, car.lane);
         const toCorner = k === undefined ? 0 : base + L - k.cA - car.len / 2; // front → where the corner starts
@@ -342,14 +384,14 @@ export class Traffic {
         if (o === car || Math.min(o.lane, nl - 1) !== lane) continue;
         const d = base + o.s;
         if (j === 0 && !(d > 0 || (d === 0 && o.id < car.id))) continue;
-        best = Math.min(best, d - (car.len + o.len) / 2);
+        if (d - (car.len + o.len) / 2 < best) (best = d - (car.len + o.len) / 2), (this.leadV = o.speed);
       }
       for (const o of this.arriving.get(de) ?? []) {
         // a car turning onto de from another arm (or from a lane that merges into this one), at its place in de's frame
         if (o === car || this.laneIn(de, o) !== lane) continue;
         const d = base + o.s - this.shift(o.route[0]!, de, o.lane);
         if (!(d > 0 || (d === 0 && o.id < car.id))) continue;
-        best = Math.min(best, d - (car.len + o.len) / 2);
+        if (d - (car.len + o.len) / 2 < best) (best = d - (car.len + o.len) / 2), (this.leadV = o.speed);
       }
       const o = this.seg(de, this.sa), off = this.laneOff(de, lane), ob = this.obs;
       for (let i = 0; i < ob.x.length; i++) {
@@ -358,7 +400,7 @@ export class Traffic {
         if (Math.abs(lat) > half + r || along > L + r) continue;
         const d = base + along;
         if (d < -car.len / 2 - r) continue; // behind the car
-        best = Math.min(best, d - car.len / 2 - r);
+        if (d - car.len / 2 - r < best) (best = d - car.len / 2 - r), (this.leadV = 0);
       }
       base += this.shift(de, car.route[j + 1], car.lane);
     }
@@ -376,6 +418,22 @@ export class Traffic {
     return out;
   }
 
+  /** Does directed edge d's carriageway, from `from` m along it, cross a zone or lead into one without a choice
+   *  (≤ traffic.zoneLook m)? */
+  private intoZone(d: number, from = 0): boolean {
+    const g = this.roads.graph;
+    for (let run = -from; run <= traffic.zoneLook; from = 0) {
+      const e = d >> 1, a = this.startNode(d), b = this.endNode(d), L = this.len(d), t = L ? Math.min(1, from / L) : 0;
+      const ax = g.x[a]! + (g.x[b]! - g.x[a]!) * t, az = g.z[a]! + (g.z[b]! - g.z[a]!) * t, w = this.roads.halfWidth(g.edgeWay[e]!);
+      if (this.zones.some((q) => segPoint(q.x, q.z, ax, az, g.x[b]!, g.z[b]!)[1] < q.r + npc.zoneMargin + w)) return true;
+      run += L;
+      const next = this.outs(b).filter((o) => o >> 1 !== e);
+      if (next.length !== 1) return false;
+      d = next[0]!;
+    }
+    return false;
+  }
+
   private allowedOn(kind: CarKind, de: number): boolean {
     const r = npc.vehicles[kind].roads;
     return !r || r.includes(this.roads.kind(this.way(de)));
@@ -383,7 +441,7 @@ export class Traffic {
 
   /** Append the next directed edge the car takes at the end of its route (straight and big roads preferred). */
   private extend(car: SimCar): boolean {
-    const last = car.route[car.route.length - 1]!, n = this.endNode(last), g = this.roads.graph;
+    const last = car.route[car.route.length - 1]!, n = this.endNode(last);
     const all = this.outs(n);
     let cand = all.filter((d) => d >> 1 !== last >> 1);
     if (!cand.length) cand = all;
@@ -391,10 +449,7 @@ export class Traffic {
     const typed = cand.filter((d) => this.allowedOn(car.kind, d));
     if (typed.length) cand = typed;
     if (this.zones.length) {
-      const ok = cand.filter((d) => {
-        const e = d >> 1;
-        return !this.inZone((g.x[g.edgeA[e]!]! + g.x[g.edgeB[e]!]!) / 2, (g.z[g.edgeA[e]!]! + g.z[g.edgeB[e]!]!) / 2);
-      });
+      const ok = cand.filter((d) => !this.intoZone(d));
       if (ok.length) cand = ok;
     }
     const a = this.seg(last, this.sa), ah = Math.atan2(-a.dx, -a.dz), ring = this.isRing(last), T = traffic.turn;
@@ -543,8 +598,12 @@ export class Traffic {
     cap = Math.min(cap, cap2(Math.min(vc, this.speedOf(nx) * car.vf), Math.max(0, toCorner)));
     if (toCorner < 0 && car.s < L - k.cA + k.arc) cap = Math.min(cap, Math.max(vc, 0.5));
     // car ahead / obstacle: stop gap
+    this.zoneSpan(car);
     const gap = this.gapAhead(car);
     if (gap < Infinity) cap = Math.min(cap, stopSpeed(gap - traffic.minGap, dt));
+    // keep-clear zone: do not follow a standing car (or stop for an obstacle) inside it; wait at its edge
+    const stand = gap - traffic.minGap; // where the front would halt
+    if (this.zIn > 0 && this.zIn < Infinity && this.leadV < 0.5 && stand > this.zIn && stand < this.zOut + car.len) cap = Math.min(cap, stopSpeed(this.zIn - traffic.stopMargin, dt));
     cap = Math.min(cap, this.lineCap(car, dt, gap));
     // held up before the line of the node it was let through (a queue, a pedestrian): let another arm go first
     if (cap < 0.3 && car.grant >= 0 && this.toLine(car, car.grant) >= -0.001) this.release(car);
@@ -640,7 +699,7 @@ export class Traffic {
     const dims = npc.vehicles[kind].dims;
     const tmp = this.addCarRaw(kind, de, s, lane);
     const d = Math.hypot(tmp.x - anchor.x, tmp.z - anchor.z);
-    let ok = d >= 8 && d <= traffic.radius && !this.inZone(tmp.x, tmp.z);
+    let ok = d >= 8 && d <= traffic.radius && !this.inZone(tmp.x, tmp.z) && !(this.zones.length && this.intoZone(de, s)); // not in or bound for a zone
     if (ok && !fill) {
       const cone = (traffic.viewConeDeg * Math.PI) / 180;
       const inView = d < render.fog.near && angDiff(Math.atan2(-(tmp.x - anchor.x), -(tmp.z - anchor.z)), anchor.viewYaw) < cone;

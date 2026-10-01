@@ -92,6 +92,8 @@ export interface CharacterOptions {
   name?: string | null;
   /** Name tag colour; omitted = the shirt (team colour). The Pit Stop host's dark suit needs a readable one. */
   tag?: ColorRepresentation;
+  /** m from the camera beyond which the tag hides; omitted = character.nameTag.maxDistance. */
+  tagDistance?: number;
 }
 
 type OutfitUniforms = Record<'uShirt' | 'uPants' | 'uShoes', { value: Color }>;
@@ -113,7 +115,7 @@ function outfitShader(this: Material, shader: WebGLProgramParametersWithUniforms
 
 /** Canvas sprite, constant size on screen (character.nameTag), hidden beyond maxDistance by an LOD. STYLE_GUIDE:
  *  team-coloured text, no frame: white text × material.color (= the shirt uniform, so setShirt recolours it, or opts.tag). */
-function nameTag(text: string, y: number, colour: Color) {
+function nameTag(text: string, y: number, colour: Color, maxDistance: number) {
   const T = C.nameTag;
   const font = `700 ${T.fontPx}px system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`; // Vietnamese glyphs
   const canvas = document.createElement('canvas');
@@ -135,7 +137,7 @@ function nameTag(text: string, y: number, colour: Color) {
   const lod = new LOD();
   lod.position.y = y;
   lod.addLevel(sprite, 0);
-  lod.addLevel(new Object3D(), T.maxDistance);
+  lod.addLevel(new Object3D(), maxDistance);
   return { lod, sprite };
 }
 
@@ -156,6 +158,7 @@ export class CharacterModel {
   private readonly height: number;
   private tag: ReturnType<typeof nameTag> | undefined;
   private readonly tagColour: Color;
+  private readonly tagDistance: number;
 
   constructor(asset: CharacterAsset, opts: CharacterOptions) {
     const body = (this.body = cloneSkinned(asset.scene));
@@ -182,6 +185,7 @@ export class CharacterModel {
     this.clips = asset.clips;
     this.height = (asset.scene.userData.height as number | undefined) ?? 1.8;
     this.tagColour = opts.tag === undefined ? this.outfit.uShirt.value : new Color(opts.tag);
+    this.tagDistance = opts.tagDistance ?? C.nameTag.maxDistance;
     this.setShirt(opts.shirt);
     this.setName(opts.name ?? null);
   }
@@ -200,7 +204,7 @@ export class CharacterModel {
       this.tag.sprite.material.map?.dispose();
       this.tag.sprite.material.dispose();
     }
-    this.tag = text ? nameTag(text, this.height + C.nameTag.lift, this.tagColour) : undefined;
+    this.tag = text ? nameTag(text, this.height + C.nameTag.lift, this.tagColour, this.tagDistance) : undefined;
     if (this.tag) this.root.add(this.tag.lod);
   }
 
