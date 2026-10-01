@@ -1,6 +1,6 @@
 # Phase 6 – Track C: xe chung, nhận xe nguyên tử, xe bị bỏ
 
-Trạng thái: **TẠM DỪNG (checkpoint)** – mới đọc xong tài liệu + code, **chưa sửa file code nào**.
+Trạng thái: **ĐANG LÀM** – bước 1–2 xong (VehicleSpawner + BikeService + test, worker 34 test qua); đang làm bước 3 (ứng viên Host).
 
 ## Đã làm
 - Đọc: CLAUDE.md, `docs/plans/phase6.md` (toàn bộ), SPEC §6.1–6.6, `shared/src/protocol/*`, `worker/src/{RaceRoom,db,counters}.ts`,
