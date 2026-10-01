@@ -62,6 +62,8 @@ export class RaceRoom extends DurableObject<Env> {
   private readonly sql: SqlStorage;
   readonly counters: QuotaCounters;
   private readonly live = new Map<string, Live>();
+  /** Per team: bike ops / speed events in the current NET.respawnWindowMs (SQLite row budget). Memory only. */
+  private readonly ops = new Map<string, { start: number; bike: number; speed: number }>();
   /** Failed team-code logins per client address (SPEC §8.10: 5 → 60 s). ponytail: memory only, forgotten on eviction. */
   private readonly loginFails = new Map<string, { n: number; until: number }>();
   /** Shared bikes (track C) behind one seam. */
@@ -232,7 +234,7 @@ export class RaceRoom extends DurableObject<Env> {
       l.win.push(now, pose.x, pose.z);
       over = overSpeed(l.win, footSpeed * (now - l.bikeAt <= NET.speedWindowMs ? bikeSpeedMultiplier : 1));
       if (over && !l.over) {
-        this.event(now, t.id, 'speed', { v: Math.round(l.win.speed * 10) / 10, x: Math.round(pose.x), z: Math.round(pose.z) });
+        if (this.count(t.id, 'speed', now) <= NET.maxRespawns) this.event(now, t.id, 'speed', { v: Math.round(l.win.speed * 10) / 10, x: Math.round(pose.x), z: Math.round(pose.z) });
         this.flag(t);
       }
     } else {
@@ -273,6 +275,13 @@ export class RaceRoom extends DurableObject<Env> {
     if (suspicious) this.flag(t);
   }
 
+  /** One more `k` in the team's current NET.respawnWindowMs; returns the count so far. */
+  private count(team: string, k: 'bike' | 'speed', now: number): number {
+    let o = this.ops.get(team);
+    if (!o || now - o.start >= NET.respawnWindowMs) this.ops.set(team, (o = { start: now, bike: 0, speed: 0 }));
+    return ++o[k];
+  }
+
   private onMessage(ws: WebSocket, a: Attachment, m: ClientMessage, now: number) {
     if (Array.isArray(m)) return;
     switch (m.t) {
@@ -286,6 +295,8 @@ export class RaceRoom extends DurableObject<Env> {
       case 'bike': {
         if (a.role !== TEAM) return;
         const l = this.live.get(a.team);
+        // Each op may write a row: past the budget the socket goes (a real player never gets near it).
+        if (this.count(a.team, 'bike', now) > NET.maxBikeOps) return this.close(ws, CLOSE.tooFast, 'too many bike ops');
         return this.bikes.onTeam(a.team, l ? { team: a.team, x: l.pose.x, z: l.pose.z } : null, m, false /* Phase 7: current step transport */, now);
       }
       case 'gesture': {

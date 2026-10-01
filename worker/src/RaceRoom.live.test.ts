@@ -160,6 +160,23 @@ describe.concurrent('RaceRoom live', () => {
     for (const s of [a2, b2, c, d, host]) s!.close();
   }, 20_000);
 
+  it('SQLite row budget: speed events stop at NET.maxRespawns per window, bike-op spam closes the socket', async () => {
+    const race = 'live-budget';
+    const { host, teams } = await setupRace(server, race, 2);
+    const [a, b] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
+    for (let i = 0; i < 8; i++) {
+      a!.send(respawn(0, 100 * i)); // new window, `over` cleared
+      for (let k = 1; k <= 8; k++) a!.send(pose(10 * k, 100 * i)); // stamped 200 ms apart: 80 m in 1.6 s, a new episode
+      await sleep(1100); // ≤ NET.maxMessagesPerSec
+    }
+    await sleep(300);
+    const speed = (await (await sqlOf(race)).exec('SELECT id FROM events WHERE type = ? AND team = ?', 'speed', teams[0]!.id)) as unknown[];
+    expect(speed).toHaveLength(6);
+    for (let i = 0; i < 13; i++) b!.send({ t: 'bike', op: 'dismount', id: 'nope', x: 0, y: 0, z: 0, yaw: 0 }); // NET.maxBikeOps 12 (+ 0 ≤ 15 msgs/s)
+    expect(await b!.until(() => false, 3000)).toEqual({ closed: 4429 });
+    for (const s of [a, host]) s!.close();
+  }, 20_000);
+
   it('reveals the current box within 150 m to that team only, hides it beyond 170 m', async () => {
     const race = 'live-boxes';
     const { host, teams } = await setupRace(server, race, 2);

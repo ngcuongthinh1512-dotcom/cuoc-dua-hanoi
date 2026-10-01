@@ -29,6 +29,9 @@ export const NET = {
   maxRespawnJump: 400,
   maxRespawns: 6,
   respawnWindowMs: 60_000,
+  /** SQLite row budget vs a modified client: per team and respawnWindowMs, `speed` events stop after maxRespawns (still
+   *  flagged), and bike ops (claim / mount / dismount, each may write a row) past maxBikeOps close the socket (CLOSE.tooFast). */
+  maxBikeOps: 12,
   /** SPEC §17.10: the server compares each online team's last pose with its current clue box this often (one sqrt per
    *  team, no SQLite); radius + hysteresis come from the leg file (boxReveal). */
   boxCheckMs: 2_000,
