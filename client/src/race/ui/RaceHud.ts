@@ -104,7 +104,7 @@ export class RaceHud {
     addEventListener('keydown', (e) => {
       if (!this.open) return;
       if (e.code === 'Tab') e.preventDefault();
-      else if (this.bookOpen && SCROLL[e.code]) this.scrollBook(SCROLL[e.code]!); // pointer lock sends wheel + mouse to the canvas: keys scroll the book
+      else if (this.bookOpen && e.code in SCROLL) this.scrollBook(SCROLL[e.code]!); // pointer lock sends wheel + mouse to the canvas: keys scroll the book
       else if (e.repeat) return;
       else if (e.code === 'Escape' || (e.code === 'Space' && !this.bookOpen)) this.close();
       else if (e.code === 'Enter' && this.taskButtons.length === 1) this.taskButtons[0]!.btn.click();
