@@ -12,7 +12,13 @@ export interface Session {
   /** From /api/login (team) — the Host has none. */
   team?: { id: string; slot: number; name: string; colour: string };
   /** SPEC §8.10 "Chào mừng trở lại": filled by the login, shown before "Tiếp tục". */
-  summary?: { reconnects: number; lastSeen: number | null; raceTime: number | null };
+  summary?: {
+    reconnects: number;
+    lastSeen: number | null;
+    raceTime: number | null;
+    /** Phase 7 (RaceEngine.summary): the current step's label ("Lộ trình 3"; a number = its index), absent before Phase 7. */
+    step?: string | number | null;
+  };
   /** Set by NetClient on `welcome` (movement / presence / pose for the spawn). */
   welcome?: Welcome;
 }

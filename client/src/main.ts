@@ -2,7 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { unlockAudio } from './audio/sfx.ts';
 import { NET, type PoseSample } from '@race/shared/protocol';
-import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, ui } from './config.ts';
+import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, raceClient, remote as remoteCfg, render as R, roads, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
@@ -16,13 +16,15 @@ import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
 import { fakeTeams, fakeTick, parsePeers, RemotePlayers } from './net/RemotePlayers.ts';
 import { startSession } from './net/session.ts';
-import { RaceClient } from './race/RaceClient.ts';
+import { PitHost } from './race/PitStop.ts';
+import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
 import { Npc } from './npc/Npc.ts';
 import type { NpcAnchor } from './npc/types.ts';
 import { loadCharacterAsset } from './player/CharacterModel.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { parseOverrides, Player } from './player/Player.ts';
+import { castColumn, pickSurface, RailDecks } from './player/railDecks.ts';
 import { initCredits } from './ui/Credits.ts';
 import { createDebugOverlay } from './ui/DebugOverlay.ts';
 import { FullMap } from './ui/FullMap.ts';
@@ -177,8 +179,23 @@ async function start() {
   const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water };
   const overrides = parseOverrides(query, !!session);
   const player = camOk || host ? undefined : await Player.create(scene, world, camera, env, overrides, session?.team);
+  // D17: no spawn / clue box on top of a rail viaduct (the Bir-Hakeim metro deck over the leg start)
+  const rails = new RailDecks(new Set(hasIndex ? index.keys : []), new URL('data/', location.href).href);
+  /** (Re)spawn at the leg start / where the team stood (welcome), DEV ?start=x,z,yawDeg: the same path (p7-start). */
+  const spawnAt = (x: number, z: number, yaw: number, yHint?: number) => {
+    rails.at(x, z); // fetched long before activate() places the body
+    player?.setSpawn(x, z, yaw, yHint);
+  };
+  if (player) {
+    player.controller.railAt = (x, z) => rails.at(x, z);
+    rails.at(player.position.x, player.position.z);
+    const st = query.get('start')?.split(',').map(Number);
+    if (import.meta.env.DEV && !session && st?.length === 3 && st.every(Number.isFinite)) spawnAt(st[0]!, st[1]!, (st[2]! * Math.PI) / 180);
+  }
   let flying = !player;
-  const canFly = !session || host; // V (F3 open): offline tests and the Host. ponytail: Phase 7 adds teams that finished
+  let spectating = false; // D19: the team checked in → free-fly spectator (V back to the body)
+  let spectateAt = Infinity; // player.simTime then
+  const canFly = () => !session || host || spectating; // V: offline tests and the Host (F3 open); a finished team (any time)
   // Remote players: online, or DEV ?peers=slot,x,z,yawDeg,mode[,action];… stand-ins (p6-peers) offline.
   const peers = import.meta.env.DEV && !session ? parsePeers(query.get('peers')) : [];
   const assets = player?.assets ?? (host ? { character: await loadCharacterAsset(), bike: await loadBikeAsset() } : undefined);
@@ -186,9 +203,17 @@ async function start() {
   if (peers.length) remote?.setTeams(fakeTeams(peers));
   let nextFakeTick = 0; // ms of player.simTime
   const groundY = (x: number, z: number) => groundAt(world, x, z, env.heightAt(x, z) + 19); // 20 m ray: decks over the Seine bed too
+  // Boxes / mat: the same 20 m ray, but never on a rail viaduct top (D17; null while that is not known → retried)
+  const boxGround = (x: number, z: number) => {
+    const rail = rails.at(x, z);
+    if (rail === undefined) return null;
+    const from = env.heightAt(x, z) + 19 + (rail ? roads.bridge.railLayerStep : 0);
+    return pickSurface(castColumn(world, x, z, from, from - env.heightAt(x, z) + 1, rail, 0, undefined, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS), rail);
+  };
   // SPEC §17.10: this team's clue boxes, only from what the server sent (DEV ?boxes=step,x,z[,opened];… offline).
-  const boxes = new ClueBoxes(scene, groundY, env.heightAt);
-  if (import.meta.env.DEV && !session) boxes.reset(parseBoxes(query.get('boxes')));
+  const boxes = new ClueBoxes(scene, boxGround, env.heightAt);
+  if (import.meta.env.DEV && !session) boxes.reset(parseBoxes(query.get('boxes'), query.has('mat') ? 'mat' : undefined));
+  const pitHost = player && new PitHost(player.assets.character); // SPEC §8.6: at the mat once it is drawn
   const netPanel = $('net');
   let welcomed = !session; // the world waits for the first welcome (the spawn)
   // Track C's shared bikes: online the list is the server's (Player skips the dev bikes), F asks it (claim).
@@ -200,7 +225,36 @@ async function start() {
     ? new RaceHud({ task: (step, branch) => net?.send({ t: 'race', op: 'task', step, ...(branch ? { branch } : {}) }), book: () => net?.send({ t: 'race', op: 'book' }) })
     : undefined;
   if (import.meta.env.DEV && !session) raceHud?.demo(query);
-  const race = session && player ? new RaceClient({ hud: raceHud, send: (m) => net?.send(m), serverNow: () => (net ? net.serverNow() : Date.now()) }) : undefined;
+  const race =
+    session && player
+      ? new RaceClient({
+          hud: raceHud,
+          send: (m) => net?.send(m),
+          // D4: the pose first (the gate reset makes it go out now even if unchanged / within 200 ms), then the op
+          op: (m) => {
+            if (!net) return;
+            (net as unknown as { gate: { reset(): void } }).gate.reset(); // ponytail: NetClient's private gate, a NetClient.flushPose() when someone owns it
+            net.sendPose(poseOf());
+            net.send(m);
+          },
+          serverNow: () => (net ? net.serverNow() : Date.now()),
+          team: session.team?.name,
+          finished: (fresh) => {
+            if (spectating || spectateAt < Infinity) return;
+            if (fresh) player.controller.startAction('celebrate'), pitHost?.cheer();
+            spectateAt = fresh ? player.simTime + raceClient.spectateAfterS : 0;
+          },
+        })
+      : undefined;
+  if (player) {
+    // D23: F on foot asks the current box first; offline (DEV ?boxes=) it opens locally (manual tests)
+    player.onInteract = () => {
+      const [x, z] = [player.position.x, player.position.z];
+      if (race) return race.interact(boxes.boxes, x, z, performance.now());
+      const b = !session && boxInReach(boxes.boxes, x, z);
+      return !!b && (boxes.apply({ t: 'box', op: 'reveal', box: { ...b, opened: true } }), true);
+    };
+  }
   const net =
     session &&
     new NetClient(session, {
@@ -209,8 +263,10 @@ async function start() {
         remote?.setTeams(w.teams);
         if (remote) remote.renderRadius = w.presence.renderRadius;
         boxes.reset(w.boxes);
-        // SPEC §8.10: back where the team last stood (the first welcome only: after a reconnect the body stays put)
-        if (!welcomed && w.pose) player?.setSpawn(w.pose.x, w.pose.z, w.pose.yaw);
+        // SPEC §8.10: back where the team last stood, onto the surface it stood on (pose.y); first entry: its spot at the
+        // leg start (D17). The first welcome only: after a reconnect the body stays put.
+        if (!welcomed && w.pose) spawnAt(w.pose.x, w.pose.z, w.pose.yaw, w.pose.y);
+        else if (!welcomed && w.start) spawnAt(w.start.x, w.start.z, w.start.yaw);
         welcomed = true;
         bikeLink?.welcome(w); // w.bikes; w.pose.bikeId + mode 'bike' → mount again (SPEC §8.10)
         race?.welcome(w, player?.simTime ?? 0);
@@ -265,6 +321,9 @@ async function start() {
   // Phase 4B: NPC traffic + pedestrians around the body (the spectator: around the ground under the camera). They start
   // (fill + warm-up) with the world; __READY__ waits for that. ?npc=0 off.
   let npcs: Npc | undefined;
+  // D20 (SPEC §17.5): no NPC inside a box / mat zone (+ npc.zoneMargin); ?npcZone circles kept
+  const npcZones = () => [...(overrides.npcZones ?? []), ...boxes.boxes.map((b) => ({ x: b.x, z: b.z, r: b.r }))];
+  boxes.onChange = () => npcs?.setExclusionZones(npcZones());
   let npcReady = !(npcCfg.enabled && overrides.npc !== false);
   if (!npcReady) {
     void graph
@@ -276,7 +335,7 @@ async function start() {
           // screenshots / scripted runs (?wait=, headless = navigator.webdriver) keep a fixed density: the frame rate of the
           // capturing machine must not change the picture (review m1)
           auto: overrides.npcDensity === undefined && !query.has('wait') && !navigator.webdriver,
-          zones: overrides.npcZones ?? [],
+          zones: npcZones(),
           test: overrides.npcTest ?? [],
         });
       })
@@ -381,7 +440,17 @@ async function start() {
       if (input.wasPressed('debug')) debug.toggle();
       // V: player ⇄ free-fly (debug only, SPEC §17.2 "camera bay tự do"); the body stays frozen where it was. Not for a
       // team in a race (Phase 6: Host / spectators / offline only).
-      if (player && canFly && debug.visible && input.wasPressed('flyToggle')) {
+      if (player && !spectating && player.simTime >= spectateAt) {
+        spectating = true; // D19: after the celebration (or at once on re-entry after the finish), the camera flies
+        if (!flying) {
+          flying = true;
+          euler.setFromQuaternion(camera.quaternion, 'YXZ');
+          fly.setPose(camera.position.x, camera.position.y, camera.position.z, euler.y / (Math.PI / 180), euler.x / (Math.PI / 180));
+          $('help-player').hidden = true;
+          $('help-fly').hidden = false;
+        }
+      }
+      if (player && canFly() && (debug.visible || spectating) && input.wasPressed('flyToggle')) {
         flying = !flying;
         euler.setFromQuaternion(camera.quaternion, 'YXZ');
         if (flying) fly.setPose(camera.position.x, camera.position.y, camera.position.z, euler.y / (Math.PI / 180), euler.x / (Math.PI / 180));
@@ -412,13 +481,14 @@ async function start() {
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
       player?.update(dt, flying ? null : input, loop.alpha, modal());
       if (player?.active) bikeLink?.frame(dt, player.controller);
-      if (net && player?.active) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides)
+      if (net && player?.active && !flying) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); none while spectating
       if (peers.length && player?.active && player.simTime * 1000 >= nextFakeTick) {
         remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
         nextFakeTick += 1000 / NET.tickHz;
       }
       remote?.update(dt, net ? net.serverNow() : player ? player.simTime * 1000 : 0, camera.position);
       boxes.update();
+      if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
       // No HUD while loading or flying (V): hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
       document.body.classList.toggle('hud-off', !worldReady || flying);
       if (player && hud && minimap) {
@@ -431,7 +501,9 @@ async function start() {
           street: streets?.at(x, z), district: districtAt(water?.districts, x, z),
           raceTime: race ? race.raceTime() : undefined, penaltyMinutes: race?.view?.penaltyMinutes,
         } satisfies HudFrame);
-        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone: false /* track B */ });
+        const riding = !!player.controller.riding;
+        const inZone = !player.active ? false : race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone : !riding && !!boxInReach(boxes.boxes, x, z);
+        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone });
         gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
         hud.update(frame, dt);
         minimap.update(frame, gps ?? NO_GPS, dt);
