@@ -1,19 +1,16 @@
-// Minimal Host page (docs/plans/phase6.md §3.19, `/host.html`): password login → create teams → team codes, online
-// status, last positions, estimated quota counters, shared bikes (candidates, manual add, pause). Phase 10 replaces it with SPEC §13.
+// Minimal Host page (docs/plans/phase6.md §3.19, `/host.html`; Phase 7 track E adds the race controls): password login → leg
+// loading → teams, start times → race status → step_progress matrix + ranking, quota counters, shared bikes. Phase 10 replaces
+// it with SPEC §13.
 import type { RoadGraph, RoadGraphFile } from '@race/shared/graph';
 import graphUrl from '@race/shared/data/roadgraph.json?url';
-import { CLOSE, NET, type ClientMessage, type HostState, type ServerMessage } from '@race/shared/protocol';
+import { CLOSE, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { counterLines, demoState, parseTeamLines, teamRows } from './hostView.ts';
+import { corridorPoints, counterLines, demoState, inputToMs, legIssueLines, parseTeamLines, progressTable, startPreview, startRows, STATUS_LABEL, statusButtons, teamRows, warnings } from './hostView.ts';
 
-/** Phase 6 track A adds `steps` (start + step destinations, world m) to host.state; optional so older servers still work. */
-type State = HostState & { steps?: { id: string; x: number; z: number }[] };
-type XZ = { x: number; z: number };
-type SpawnCandidates = (g: RoadGraph, points: XZ[], checkpoints: XZ[], rules: typeof hostPage.corridor) => { segments: number[][]; decoys: number[] };
-// ponytail: glob instead of a static import so this page builds before track C's spawnCandidates.ts is merged (empty until then);
-// after the merge: `import { spawnCandidates } from './spawnCandidates.ts'` and call it directly.
-const spawnModule = Object.values(import.meta.glob<{ spawnCandidates: SpawnCandidates }>('./spawnCandidates.ts'))[0];
+type State = HostState;
+/** Lazy: the corridor code + road graph load only when candidates are computed (docs/plans/phase6.md §2.4). */
+const spawnModule = () => import('./spawnCandidates.ts');
 
 const q = new URLSearchParams(location.search);
 const app = document.getElementById('app')!;
@@ -67,10 +64,14 @@ function connect(token: string) {
   ws.onmessage = (e) => {
     if (e.data === NET.pong) return;
     const m = JSON.parse(String(e.data)) as ServerMessage;
-    if (Array.isArray(m) || m.t !== 'host.state') return;
+    if (Array.isArray(m)) return;
+    if (m.t === 'host.notice') return void addNotice(m.level, m.message);
+    if (m.t === 'host.legResult') return void ((legResult = m), (sigs.leg = ''), state && render(state));
+    if (m.t !== 'host.state') return;
     receivedAt = Date.now();
     render((state = m));
     if (pending && m.teams.length >= pending) (create.value = ''), (pending = 0);
+    void autoCandidates();
   };
   ws.onclose = (e) => {
     pending = 0;
@@ -83,24 +84,58 @@ function connect(token: string) {
 
 // ── main view ──
 const create = el('textarea', { placeholder: 'Mỗi dòng một đội: Tên đội; Tên người chơi\nĐội Xanh; An\nĐội Đỏ; Bình' });
+const banner = el('section', { className: 'alert' });
+const noticeBox = el('section');
+const statusBox = el('section');
+const legBox = el('section');
+const startBox = el('section');
+const matrixBox = el('section');
+const matrixMode = el('span', { className: 'row' });
 const teamsBox = el('section');
 const counters = el('section');
 const bikes = el('section');
 const candStatus = el('span', { className: 'note' }); // outlives render(): the status of the last "Tính hành lang" click
 let computing = false;
+let computedFor = ''; // leg id the candidates were last computed for (D11: recomputed by itself when it changes)
+let legResult: { ok: boolean; issues: LegIssueView[] } | null = null;
+let showT = false; // §13.6: real time ⇄ T+ on each team's own clock
+const notices: { level: 'error' | 'warning'; message: string; at: number }[] = [];
+const drafts = new Map<string, string>(); // team id → what the Host typed in its start-time input (survives a rebuild)
+const previews = new Map<string, { input: HTMLInputElement; out: HTMLElement }>();
+const sigs = { status: '', leg: '', start: '' };
+
+function addNotice(level: 'error' | 'warning', message: string) {
+  notices.push({ level, message, at: Date.now() });
+  drawNotices();
+  setTimeout(drawNotices, hostPage.noticeMs + 50);
+}
+function drawNotices() {
+  const live = notices.filter((n) => Date.now() - n.at < hostPage.noticeMs);
+  notices.splice(0, notices.length, ...live);
+  noticeBox.replaceChildren(...live.map((n) => el('div', { className: n.level === 'error' ? 'bad' : 'warn' }, n.message)));
+}
 
 function mainView() {
   const link = `${location.origin}/?race=${encodeURIComponent(race)}`;
+  const modeBtn = (label: string, t: boolean) => el('button', { className: `small${showT === t ? ' sel' : ''}`, onclick: () => ((showT = t), drawModes(), state && render(state)) }, label);
+  const drawModes = () => matrixMode.replaceChildren(modeBtn('Giờ thực', false), modeBtn('T+ (đồng hồ từng đội)', true));
+  drawModes();
+  sigs.status = sigs.leg = sigs.start = '';
   app.replaceChildren(
     el('h1', {}, `Cuộc đua Paris – Host · ${race}`),
     el('p', {}, 'Link cho người chơi: ', el('code', {}, link), ' ', el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(link) }, 'Sao chép')),
+    banner, noticeBox, err,
+    el('h2', {}, 'Cuộc đua'), statusBox,
+    el('h2', {}, 'Chặng'), legBox,
     el('h2', {}, 'Tạo đội'),
     el('section', {}, create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
-    err,
+    el('h2', {}, 'Giờ xuất phát'), startBox,
+    el('div', { className: 'row' }, el('h2', {}, 'Tiến trình & xếp hạng'), matrixMode), matrixBox,
     el('h2', {}, 'Các đội'), teamsBox,
     el('h2', {}, 'Hạn mức Cloudflare (ước tính)'), counters,
     el('h2', {}, 'Xe chung'), bikes,
   );
+  drawNotices();
   if (state) render(state);
   else teamsBox.textContent = 'Đang chờ dữ liệu từ máy chủ…';
 }
@@ -127,17 +162,20 @@ function loadGraph() {
   })().catch((e) => ((graph = undefined), Promise.reject(e))));
 }
 
-/** SPEC §3 / §6.2: corridors + candidate points are computed HERE (no A* in the Durable Object), which only picks among them. */
+/** SPEC §3 / §6.2: corridors + candidate points are computed HERE (no A* in the Durable Object), which only picks among them.
+ *  Route = start → every step's zone (both places of a detour) from `host.state.leg` (D11); checkpoints = every zone. */
 async function sendCandidates() {
-  const steps = state?.steps;
-  if (!spawnModule) return void (candStatus.textContent = 'Thiếu spawnCandidates.ts (chưa ghép Track C).');
-  if (!steps || steps.length < 2) return void (candStatus.textContent = 'Chặng chưa có đủ điểm (cần ≥ 2: xuất phát + đích) để tính hành lang.');
+  const leg = state?.leg;
+  if (!leg) return void (candStatus.textContent = 'Chưa nạp chặng nên chưa tính được hành lang.');
+  const { points, checkpoints } = corridorPoints(leg);
+  if (points.length < 2) return void (candStatus.textContent = 'Chặng chưa có đủ điểm (cần ≥ 2: xuất phát + đích) để tính hành lang.');
   computing = true;
+  computedFor = leg.id;
   candStatus.textContent = 'Đang tải đồ thị đường và tính hành lang…';
   if (state) render(state);
   try {
     const [{ spawnCandidates }, g] = await Promise.all([spawnModule(), loadGraph()]);
-    const { segments, decoys } = spawnCandidates(g, steps.map(({ x, z }) => ({ x, z })), [], hostPage.corridor);
+    const { segments, decoys } = spawnCandidates(g, points, checkpoints, { corridorMeters: leg.vehicles.corridorMeters, minDistanceFromCheckpoint: leg.vehicles.minDistanceFromCheckpoint });
     const msg = { t: 'host.candidates', segments, decoys } as const;
     const bytes = JSON.stringify(msg).length;
     if (bytes > NET.maxHostBytes) throw new Error(`tin ${bytes} B vượt giới hạn ${NET.maxHostBytes} B`);
@@ -151,9 +189,135 @@ async function sendCandidates() {
   if (state) render(state);
 }
 
+/** D11: a leg loaded (or none computed yet: the server drops the old candidates when it loads a leg) → compute by itself. */
+async function autoCandidates() {
+  const s = state;
+  if (!ws || computing || !s?.leg || s.leg.id === computedFor || s.spawning.candidates > 0) return;
+  await sendCandidates();
+}
+
+function loadLeg(msg: { id: string } | { json: string }) {
+  if (!send({ t: 'host.leg', ...msg })) return void addNotice('error', 'Đang mất kết nối, chưa nạp được chặng.');
+  legResult = null;
+}
+
+function pickFile(input: HTMLInputElement) {
+  const f = input.files?.[0];
+  input.value = '';
+  if (!f) return;
+  if (f.size > hostPage.maxLegBytes) return void addNotice('error', `File chặng ${(f.size / 1024).toFixed(0)} KB, quá giới hạn ${hostPage.maxLegBytes / 1024} KB.`);
+  void f.text().then((json) => loadLeg({ json }));
+}
+
+/** Rebuilds `box` only when `sig` changed (a button or input rewritten under the mouse every second would eat clicks and typing). */
+function once(key: keyof typeof sigs, sig: string, build: () => void) {
+  if (sigs[key] === sig) return;
+  sigs[key] = sig;
+  build();
+}
+
+function drawStatus(s: State) {
+  once('status', JSON.stringify([s.status, s.leg?.id, s.leg?.issues, s.teams.map((t) => [t.name, t.startAt === null])]), () => {
+    statusBox.replaceChildren(
+      el('div', { className: 'row' }, 'Trạng thái: ', el('b', { className: `st-${s.status}` }, STATUS_LABEL[s.status]),
+        ...statusButtons(s).map((b) =>
+          el('button', { className: b.danger ? 'danger' : '', onclick: () => {
+            const cur = state && statusButtons(state).find((x) => x.op === b.op);
+            if (!cur || (cur.confirm && !confirm(cur.confirm))) return;
+            if (!send({ t: 'host.race', op: b.op })) addNotice('error', 'Đang mất kết nối, chưa gửi được.');
+          } }, b.label))),
+      el('p', { className: 'note' }, 'Tạm dừng: đội vẫn đi lại được, đồng hồ vẫn chạy, thời gian tạm dừng không bị trừ.'),
+    );
+  });
+}
+
+function drawLeg(s: State) {
+  once('leg', JSON.stringify([s.leg?.id, s.leg?.bundled, s.leg?.issues, s.status, s.teams.some((t) => t.startOrder !== null), legResult]), () => {
+    const leg = s.leg;
+    const locked = s.status !== 'lobby' || s.teams.some((t) => t.startOrder !== null);
+    const sel = el('select', { disabled: locked }, ...(leg?.bundled ?? []).map((id) => el('option', { value: id, selected: id === leg?.id }, id)));
+    const file = el('input', { type: 'file', accept: '.json,application/json', disabled: locked, onchange: () => pickFile(file) });
+    const issues = legIssueLines([...(legResult?.issues ?? []), ...(legResult ? [] : (leg?.issues ?? []))]);
+    legBox.replaceChildren(
+      el('div', {}, leg ? el('b', {}, leg.title) : 'Chưa có chặng.', leg ? ` (mã ${leg.id}, múi giờ ${leg.timezone}, ${leg.steps.length} bước)` : ''),
+      el('div', { className: 'row' }, 'Chặng có sẵn: ', sel, el('button', { disabled: locked, onclick: () => loadLeg({ id: sel.value }) }, 'Nạp'), ' hoặc file trên máy: ', file),
+      locked ? el('p', { className: 'note' }, 'Chỉ nạp được khi cuộc đua chưa mở và chưa có đội nào vào game. Muốn đổi chặng: tạo cuộc đua mới (mã mới) → nạp chặng → tạo đội → phát mã → mở.') : '',
+      legResult ? el('div', { className: legResult.ok ? 'on' : 'bad' }, legResult.ok ? 'Đã nạp chặng.' : 'Không nạp được chặng:') : '',
+      ...(issues.length ? [el('ul', { className: 'issues' }, ...issues.map((i) => el('li', { className: i.level }, i.level === 'error' ? 'LỖI ' : i.level === 'warning' ? 'CẢNH BÁO ' : 'CÒN TRỐNG ', i.text)))] : []),
+    );
+  });
+}
+
+function drawStart(s: State) {
+  const tz = s.leg?.timezone ?? 'Asia/Ho_Chi_Minh';
+  const rows = startRows(s);
+  once('start', JSON.stringify([tz, rows]), () => {
+    previews.clear();
+    const tbl = rows.map((r) => {
+      const input = el('input', { type: 'datetime-local', step: '1', value: drafts.get(r.id) ?? r.input });
+      input.addEventListener('input', () => (drafts.set(r.id, input.value), updatePreviews()));
+      const out = el('span', { className: 'note' });
+      previews.set(r.id, { input, out });
+      const save = () => {
+        const at = inputToMs(input.value, tz);
+        if (at === null) return void addNotice('error', `${r.name}: chưa hiểu giờ đã nhập (cần ngày và giờ).`);
+        if (send({ t: 'host.team', op: 'startAt', team: r.id, at })) drafts.delete(r.id);
+        else addNotice('error', 'Đang mất kết nối, chưa gửi được.');
+      };
+      return el('tr', {},
+        el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
+        el('td', {}, r.startOrder),
+        el('td', {}, r.joined),
+        el('td', {}, input, ' ', el('button', { className: 'small', onclick: save }, 'Lưu'), ' ', el('button', { className: 'small', onclick: () => (drafts.delete(r.id), send({ t: 'host.team', op: 'startAt', team: r.id, at: 'now' })) }, 'Bây giờ'), ' ', el('button', { className: 'small', disabled: r.startAt === null, onclick: () => (drafts.delete(r.id), send({ t: 'host.team', op: 'startAt', team: r.id, at: null })) }, 'Xóa'), ' ', out),
+        el('td', {}, r.stepLabel),
+        el('td', {}, r.penalty),
+      );
+    });
+    startBox.replaceChildren(
+      el('p', { className: 'note' }, `Giờ nhập theo múi giờ của chặng: ${tz} (không phải múi giờ máy này). Đây là lúc đội nhận mật thư đầu tiên ngoài game.`),
+      tbl.length ? el('div', { className: 'scroll' }, el('table', {}, el('tr', {}, ...['Đội', 'Xuất phát thứ', 'Vào game lúc', 'Giờ xuất phát', 'Bước hiện tại', 'Phạt'].map((t) => el('th', {}, t))), ...tbl)) : 'Chưa có đội nào.',
+    );
+    updatePreviews();
+  });
+}
+
+/** "T+hh:mm:ss" under each input (the server's clock estimated now): a wrong time zone or day shows up before "Lưu". */
+function updatePreviews() {
+  const s = state;
+  if (!s) return;
+  const tz = s.leg?.timezone ?? 'Asia/Ho_Chi_Minh';
+  const now = s.serverMs + (Date.now() - receivedAt);
+  for (const { input, out } of previews.values()) {
+    const p = input.value ? startPreview(inputToMs(input.value, tz), now) : null;
+    out.textContent = p?.text ?? '';
+    out.className = `note ${p?.level ?? ''}`;
+  }
+}
+
+function drawMatrix(s: State, now: number) {
+  const { head, rows } = progressTable(s, now, showT ? 't' : 'real');
+  if (!rows.length) return void matrixBox.replaceChildren('Chưa có đội nào.');
+  const th = (t: string, title = '') => el('th', { title }, t);
+  matrixBox.replaceChildren(el('div', { className: 'scroll' }, el('table', { className: 'matrix' },
+    el('tr', {}, th('Hạng'), th('Đội'), ...head.map((h) => th(h.label, h.title)), th('Phạt'), th('Về đích'), th('Chính thức'), th('Cách')),
+    ...rows.map((r) => el('tr', {},
+      el('td', {}, r.rank),
+      el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
+      ...r.cells.map((c) => el('td', { className: `cell ${c.state}`, title: c.title }, c.text)),
+      el('td', {}, r.penalty), el('td', {}, r.finish), el('td', {}, r.official), el('td', {}, r.gap),
+    )),
+  )));
+}
+
 function render(s: State) {
   const th = (...h: string[]) => el('tr', {}, ...h.map((t) => el('th', {}, t)));
   const now = s.serverMs + (Date.now() - receivedAt);
+  banner.replaceChildren(...warnings(s).map((w) => el('div', {}, w)));
+  drawStatus(s);
+  drawLeg(s);
+  drawStart(s);
+  updatePreviews();
+  drawMatrix(s, now);
   const rows = teamRows(s, now).map((r) =>
     el('tr', {},
       el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
@@ -180,10 +344,12 @@ function render(s: State) {
 }
 
 // ponytail: rewrites the tables once per refreshMs (keeps "x giây trước" running), no diffing; fine for ≤ 100 teams.
+// Inputs and buttons (status, leg, start times) are rebuilt only when their data changes (`once`).
 setInterval(() => state && teamsBox.isConnected && render(state), hostPage.refreshMs);
 
 if (q.has('demo')) {
-  state = demoState();
+  state = demoState(Date.now());
+  receivedAt = Date.now();
   mainView();
 } else loginView();
 // DEV / tests: the page can be read back without a server.

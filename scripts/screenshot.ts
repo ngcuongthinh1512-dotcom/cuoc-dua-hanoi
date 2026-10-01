@@ -226,6 +226,7 @@ Object.assign(PRESETS, {
   // [C] clue card (each step type), full card popup, Sổ mật thư, "Xuất phát ở vị trí thứ n", Pit Stop line, clock --:-- / penalty
   // [D] leg format + validator: no screenshots
   // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
+  'p7-host': '/host.html?demo=1',
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline

@@ -3,10 +3,15 @@
 // createTestHarness by default, or a running `npm run dev:api` with --url): the Host socket creates the teams, every bot
 // logs in with its team code and walks an A* route on the real road graph at 0.9 × footSpeed, sending `pos` at 5 Hz.
 // Prints message / byte counts and the Host counters so the estimate can be compared with the §9 budget.
+// Phase 7: `--leg <id | file.json>` (e.g. `--leg mini`) plays the WHOLE leg instead: a Host bot loads it (host.leg), creates
+// the teams, enters every team's start time ('now') and opens the race; each bot walks the A* route to every step's zone
+// (5 Hz), opens the box / sends the task (the right answer from the leg file) / checks in at the Pit Stop, and the run ends
+// when every team finished; the report adds the finish count, the ranking and SQLite rows per team (budget ≤ 110).
+// The walk is capped at the server's trusted-point rate (D4), so a full `mini` run takes ~6 min at --speedup 2.
 // --speedup k plays k× faster (5k messages/s per bot, SAME messages per simulated minute; the server's speed check
 // then flags the bots (expected, flag only), and the server closes a socket beyond 15 msg/s in a 1 s window, so k ≤ 2:
 // 10 msg/s nominal leaves room for timer jitter; 15 would sit exactly on the limit).
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
@@ -21,6 +26,8 @@ export interface SimOptions {
   race: string;
   password: string;
   rejoinGapMs: number; // bot 0 drops its socket this long (simulated) mid-run, then logs in again (§8.10)
+  /** Phase 7: play a whole leg: `id` = a bundled leg (host.leg {id}), `json` = a leg file's text (host.leg {json}). Default: the Phase 6 random walk. */
+  leg?: { id?: string; json?: string };
   log: (s: string) => void;
 }
 
@@ -40,6 +47,8 @@ export interface SimReport {
   /** null = scenario not run / no bike service. */
   claim: { tried: number; ok: number } | null;
   rejoin: { ok: boolean; distance: number } | null;
+  /** Phase 7 `--leg` run: teams that checked in, ranking rows, SQLite rows per team (§9: ≤ 110), the steps played. null = random walk. */
+  leg: { id: string; steps: number; finished: number; ranked: number; rowsPerTeam: number; refused: string[] } | null;
   flagged: number;
   speedup: number;
 }
@@ -109,7 +118,7 @@ async function openSocket(base: string, race: string, token: string, stats: { se
     },
   };
 }
-type Sock = Awaited<ReturnType<typeof openSocket>>;
+export type Sock = Awaited<ReturnType<typeof openSocket>>;
 const isWelcome = (m: Msg): m is Welcome => m.t === 'welcome';
 const isState = (m: Msg): m is HostState => m.t === 'host.state';
 
@@ -117,6 +126,111 @@ const isState = (m: Msg): m is HostState => m.t === 'host.state';
 async function post(base: string, body: unknown) {
   const r = await fetch(`${base}/api/login`, { method: 'POST', body: JSON.stringify(body) });
   return (await r.json()) as { ok: boolean; token?: string; error?: string };
+}
+
+type LegState = NonNullable<HostState['leg']>;
+export type Bot = { i: number; s: Sock; welcome: Welcome };
+type RaceMsg = Extract<Msg, { t: 'race' }>;
+
+/** First right answer per task in a leg file's text: key "stepId" (challenge) or "stepId/branchId" (detour branch). Never invents one. */
+export function answersOf(json: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const leg = JSON.parse(json) as { steps?: { id: string; task?: { answers?: string[] }; branches?: { id: string; task?: { answers?: string[] } }[] }[] };
+  for (const st of leg.steps ?? []) {
+    const a = st.task?.answers?.[0];
+    if (a !== undefined) out.set(st.id, a);
+    for (const b of st.branches ?? []) if (b.task?.answers?.[0] !== undefined) out.set(`${st.id}/${b.id}`, b.task.answers[0]);
+  }
+  return out;
+}
+
+/** `--leg mini` → the bundled id and its file (for the answers); `--leg path/to/leg.json` → the file's text (host.leg {json}). */
+export function legArg(arg: string): { id?: string; json?: string; file: string } {
+  if (arg.endsWith('.json')) {
+    const json = readFileSync(arg, 'utf8');
+    return { json, file: arg };
+  }
+  const file = [`../worker/legs/test/${arg}.json`, `../worker/legs/${arg}.json`].map((f) => join(import.meta.dirname, f)).find(existsSync);
+  if (!file) throw new Error(`Không tìm thấy chặng "${arg}" trong worker/legs/ hoặc worker/legs/test/`);
+  return { id: arg, file };
+}
+
+/** One bot plays the whole leg (Phase 7): A* walk to each step's zone at 5 Hz × speedup, then the op of that step (open / task with the
+ *  right answer / check-in; the route before the Pit Stop is done by entering the mat zone) until the server's `race` view moves on.
+ *  Resolves with the check-in time (server ms). ponytail: a detour takes branch A / B alternately by bot (both exist in `mini`; the
+ *  host_approval branch B is only passable while verifyTask is the Phase 7 stub, Phase 8 sim must pick answerable branches). */
+export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, string>, graph: RoadGraph, o: { speedup: number; deadline: number; refused: string[] }): Promise<number> {
+  const { s: sock } = bot;
+  const start = bot.welcome.start ?? bot.welcome.pose ?? { x: leg.start.x, z: leg.start.z, yaw: 0 };
+  let [x, z, yaw] = [start.x, start.z, start.yaw];
+  const { footSpeed, bikeSpeedMultiplier } = bot.welcome.movement;
+  // sim m/s per tick-second; ×speedup = what the server sees, kept under its trusted-point rate (D4) so the bot is never held back
+  const v = Math.min(footSpeed * 0.9, (0.95 * footSpeed * bikeSpeedMultiplier * NET.speedTolerance) / o.speedup);
+  const stepMs = 1000 / NET.sendHz;
+  const sendPose = () => sock.send(encodePose({ x, y: 0, z, yaw, mode: 'walk', action: 'none' }));
+  const fail = (what: string) => new Error(`Bot ${bot.i + 1}: ${what}`);
+
+  const goto = async (tx: number, tz: number) => {
+    const a = graph.nearestNode(x, z, 'walk');
+    const b = graph.nearestNode(tx, tz, 'walk');
+    const path = a >= 0 && b >= 0 && a !== b ? shortestPath(graph, a, b, 'walk') : null;
+    const poly = [x, z, ...(path ? pathPolyline(graph, path) : []), tx, tz];
+    let seg = 0;
+    let due = Date.now();
+    while (2 * seg + 3 < poly.length) {
+      await sleep(due - Date.now());
+      let left = v * (stepMs / 1000);
+      while (left > 0 && 2 * seg + 3 < poly.length) {
+        const [nx, nz] = [poly[2 * seg + 2]!, poly[2 * seg + 3]!];
+        const d = Math.hypot(nx - x, nz - z);
+        if (d > 1e-6) yaw = wrap(Math.atan2(-(nx - x), -(nz - z)));
+        if (d <= left) (x = nx), (z = nz), (left -= d), seg++;
+        else (x += ((nx - x) / d) * left), (z += ((nz - z) / d) * left), (left = 0);
+      }
+      sendPose();
+      if (Date.now() > o.deadline) throw fail('hết giờ chạy chặng khi đang đi');
+      due = Math.max(due + stepMs / o.speedup, Date.now()); // never catch up (15 msg/s socket limit)
+    }
+  };
+  const latest = () => {
+    for (let k = sock.log.length - 1; k >= 0; k--) {
+      const m = sock.log[k]!;
+      if (m.t === 'race') return m.view;
+    }
+    return bot.welcome.view;
+  };
+  const moved = (id: string) => {
+    const v = latest();
+    return !v || v.finishAt !== null || (v.card !== null && v.card.step !== id);
+  };
+  /** Pose first (D4: the op is judged on the last valid pose), then the op; retry until the card moves on (the trusted point may lag behind). */
+  const settle = async (id: string, op: Record<string, unknown> | null) => {
+    for (let tries = 0; tries < 40 && Date.now() < o.deadline; tries++) {
+      if (moved(id)) return;
+      const mark = sock.log.length;
+      sendPose();
+      if (op) sock.send(op);
+      await sock.until((m): m is RaceMsg => m.t === 'race' && (m.view.finishAt !== null || (m.view.card !== null && m.view.card.step !== id)), 1500, mark).catch(() => null);
+      for (const m of sock.log.slice(mark)) if (m.t === 'notice') o.refused.push(`${id}: ${m.code}`);
+    }
+    if (!moved(id)) throw fail(`kẹt ở bước ${id} (${o.refused.filter((r) => r.startsWith(id + ':')).slice(-3).join(', ') || 'không có phản hồi'})`);
+  };
+
+  if (bot.welcome.view?.card?.step !== leg.steps[0]?.id) throw fail(`mật thư đầu là "${bot.welcome.view?.card?.step}", chặng bắt đầu ở "${leg.steps[0]?.id}"`);
+  sendPose();
+  for (const [i, st] of leg.steps.entries()) {
+    const next = leg.steps[i + 1];
+    const place = st.type === 'detour' && st.branches?.length ? st.branches[bot.i % st.branches.length]! : st;
+    await goto(place.x, place.z);
+    const branch = st.type === 'detour' ? (place as { id: string }).id : undefined;
+    const answer = answers.get(branch ? `${st.id}/${branch}` : st.id);
+    const op =
+      st.type === 'route_info' ? (next?.type === 'pit_stop' ? null : { t: 'race', op: 'open', step: st.id })
+      : st.type === 'pit_stop' ? { t: 'race', op: 'checkin' }
+      : { t: 'race', op: 'task', step: st.id, ...(branch && { branch }), ...(answer !== undefined && { answer }) };
+    await settle(st.id, op);
+  }
+  return latest()!.finishAt!;
 }
 
 export async function runSim(opts: SimOptions): Promise<SimReport> {
@@ -139,9 +253,20 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
     const hs = await openSocket(base, opts.race, host.token!, stats);
     sockets.push(hs);
     const existing = (await hs.until(isWelcome)).teams.length; // a pushed host.state may precede the reply: wait for the new teams
+    let answers = new Map<string, string>();
+    if (opts.leg) {
+      const json = opts.leg.json ?? readFileSync(legArg(opts.leg.id!).file, 'utf8');
+      answers = answersOf(json);
+      const mark = hs.log.length;
+      hs.send({ t: 'host.leg', ...(opts.leg.json ? { json: opts.leg.json } : { id: opts.leg.id }) });
+      const res = await hs.until((m): m is Extract<Msg, { t: 'host.legResult' }> => m.t === 'host.legResult', 10_000, mark);
+      if (!res.ok) throw new Error('Nạp chặng thất bại: ' + res.issues.filter((i) => i.level === 'error').map((i) => `${i.where}: ${i.message}`).join('; '));
+    }
     hs.send({ t: 'host.createTeams', teams: Array.from({ length: opts.bots }, (_, i) => ({ name: `Bot ${i + 1}`, colour: '#2c6bd8', player: `bot${i + 1}` })) });
     const created = await hs.until((m): m is HostState => isState(m) && m.teams.length >= existing + opts.bots);
     const codes = created.teams.slice(existing, existing + opts.bots).map((t) => t.code);
+    // SPEC §17.12: the first clue is handed over outside the game, the team clock starts at the Host's start time
+    if (opts.leg) for (const t of created.teams.slice(existing, existing + opts.bots)) hs.send({ t: 'host.team', op: 'startAt', team: t.id, at: 'now' });
 
     // ── Bots: login, socket, welcome ──
     const graph = RoadGraph.decode(JSON.parse(readFileSync(FILE, 'utf8')) as RoadGraphFile);
@@ -174,11 +299,11 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       throw new Error('Không tìm được tuyến đi bộ');
     };
     const spot = [(rand() - 0.5) * 300, (rand() - 0.5) * 300] as const;
-    const routes = bots.map((b) => (b.i < 2 ? planRoute(...spot) : planRoute((rand() - 0.5) * 300, (rand() - 0.5) * 300)));
+    const routes = opts.leg ? [] : bots.map((b) => (b.i < 2 ? planRoute(...spot) : planRoute((rand() - 0.5) * 300, (rand() - 0.5) * 300)));
 
     // ── Scenario: two bots claim the same bike in the same instant → exactly one ok (SPEC §6.3) ──
     let claim: SimReport['claim'] = null;
-    if (bots.length >= 2) {
+    if (!opts.leg && bots.length >= 2) {
       const [sx, sz] = [routes[0]![0]!, routes[0]![1]!];
       const pair = bots.slice(0, 2);
       for (const b of pair) b.s.send(encodePose({ x: sx, y: 0, z: sz, yaw: 0, mode: 'walk', action: 'none' }));
@@ -200,9 +325,21 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
     // ── Walk: 5 Hz × speedup ──
     const stepMs = 1000 / NET.sendHz;
     const steps = Math.round(opts.seconds * NET.sendHz);
+    let seconds = opts.seconds;
+    const refused: string[] = [];
+    let legId = '';
+    if (opts.leg) {
+      hs.send({ t: 'host.race', op: 'start' });
+      const run = await hs.until((m): m is HostState => isState(m) && m.status === 'running' && m.leg !== null, 10_000);
+      const leg = run.leg!;
+      legId = leg.id;
+      const t0 = Date.now();
+      await Promise.all(bots.map((b) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused })));
+      seconds = ((Date.now() - t0) / 1000) * opts.speedup;
+    }
     const dt = stepMs / 1000;
     let rejoin: SimReport['rejoin'] = null;
-    await Promise.all(
+    if (!opts.leg) await Promise.all(
       bots.map(async (bot) => {
         let poly = routes[bot.i]!;
         let seg = 0;
@@ -260,11 +397,11 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
     const final = await hs.until((m): m is HostState => isState(m) && m.counters.wsIn >= want, 3000, mark).catch(() => hs.log.slice(mark).filter(isState).at(-1));
     if (!final) throw new Error(`Host không nhận được host.state (socket ${hs.dropped === null ? 'còn mở' : 'bị server đóng, mã ' + hs.dropped})`);
     const c = final.counters;
-    const minutes = opts.seconds / 60;
+    const minutes = seconds / 60;
     const billable = c.http + c.alarms + Math.ceil(c.wsIn / 20);
     return {
       bots: opts.bots,
-      seconds: opts.seconds,
+      seconds,
       sent: stats.sent,
       bytesUp: stats.up,
       bytesDown: stats.down,
@@ -276,6 +413,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       rowsPerBotMinute: c.rows / opts.bots / minutes,
       claim,
       rejoin,
+      leg: opts.leg ? { id: legId, steps: final.leg?.steps.length ?? 0, finished: final.teams.filter((t) => t.finishAt !== null).length, ranked: final.ranking.length, rowsPerTeam: c.rows / opts.bots, refused } : null,
       flagged: final.teams.filter((t) => t.flagged).length,
       speedup: opts.speedup,
     };
@@ -292,6 +430,11 @@ function print(r: SimReport) {
   console.log(`  Host đếm: wsIn ${n(r.counters.wsIn)} · wsOut ${n(r.counters.wsOut)} · http ${n(r.counters.http)} · alarm ${n(r.counters.alarms)} · dòng SQLite ${n(r.counters.rows)}`);
   console.log(`  Request tính phí ≈ ${n(r.billableRequests)} = ${n(r.perBotMinute, 1)} / bot / phút  →  20 đội × 2 giờ (luôn di chuyển) ≈ ${n(r.extrapolated2h20)} (ngân sách < 40 000)`);
   console.log(`  Dòng ghi ≈ ${n(r.rowsPerBotMinute, 1)} / bot / phút (ngân sách < 20 000 / cuộc đua)`);
+  if (r.leg) {
+    const bad = r.leg.finished < r.bots || r.leg.ranked < r.bots || r.leg.rowsPerTeam > 110;
+    console.log(`  Chặng ${r.leg.id} (${r.leg.steps} bước): ${r.leg.finished} / ${r.bots} đội về đích · xếp hạng ${r.leg.ranked} dòng · dòng ghi / đội ${n(r.leg.rowsPerTeam, 1)} (ngân sách ≤ 110)${bad ? ' ← LỖI' : ''}`);
+    if (r.leg.refused.length) console.log(`  Thao tác bị từ chối (thử lại): ${r.leg.refused.length}, ví dụ ${r.leg.refused.slice(0, 3).join('; ')}`);
+  }
   console.log(`  Nhận xe cùng lúc: ${r.claim ? `${r.claim.ok} / ${r.claim.tried} thành công (đúng: đúng 1)` : 'bỏ qua'}`);
   console.log(`  Vào lại sau ngắt: ${r.rejoin ? (r.rejoin.ok ? 'đúng chỗ cũ' : `LỆCH ${r.rejoin.distance.toFixed(2)} m`) : 'bỏ qua'}`);
   console.log(`  Đội bị đánh dấu vượt tốc: ${r.flagged}${r.speedup > 1 ? ' (tua nhanh: bot đi nhanh hơn thật, bị đánh dấu là bình thường)' : ''}`);
@@ -299,12 +442,14 @@ function print(r: SimReport) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { values: v } = parseArgs({
-    options: { bots: { type: 'string', default: '3' }, minutes: { type: 'string', default: '2' }, speedup: { type: 'string', default: '1' }, url: { type: 'string' }, race: { type: 'string' }, password: { type: 'string' } },
+    options: { bots: { type: 'string', default: '3' }, minutes: { type: 'string' }, speedup: { type: 'string', default: '1' }, url: { type: 'string' }, leg: { type: 'string' }, race: { type: 'string' }, password: { type: 'string' } },
   });
+  const leg = v.leg ? legArg(v.leg) : undefined;
   const report = await runSim({
     url: v.url,
     bots: Number(v.bots),
-    seconds: Number(v.minutes) * 60,
+    seconds: Number(v.minutes ?? (leg ? 30 : 2)) * 60, // with --leg: the cap for the whole run
+    ...(leg && { leg: leg.json ? { json: leg.json } : { id: leg.id } }),
     speedup: Number(v.speedup),
     race: v.race ?? `sim-${Date.now().toString(36)}`,
     password: v.password ?? process.env.HOST_PASSWORD ?? 'test-secret',
@@ -312,6 +457,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     log: console.log,
   });
   print(report);
-  const bad = (report.claim && report.claim.ok !== 1) || (report.rejoin && !report.rejoin.ok);
+  const bad = (report.claim && report.claim.ok !== 1) || (report.rejoin && !report.rejoin.ok) || (report.leg && (report.leg.finished < report.bots || report.leg.ranked < report.bots || report.leg.rowsPerTeam > 110));
   process.exit(bad ? 1 : 0);
 }

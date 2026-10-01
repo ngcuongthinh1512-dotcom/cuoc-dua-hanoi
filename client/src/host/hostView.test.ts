@@ -1,6 +1,6 @@
 import { isClientMessage } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, billableRequests, counterLines, demoState, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, parseTeamLines, teamRows } from './hostView.ts';
+import { ago, billableRequests, corridorPoints, counterLines, demoState, fmtDuration, inputToMs, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, msToInput, openBlanks, parseTeamLines, progressTable, startPreview, startRows, statusButtons, teamRows, warnings } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -54,5 +54,92 @@ describe('Host view', () => {
   it('ago', () => {
     expect(ago(null, 5)).toBe('—');
     expect(ago(0, 7_200_000)).toBe('2 giờ trước');
+  });
+
+  it('start time input is read in the leg time zone, not the Host machine zone', () => {
+    // 14:05:30 in Ho Chi Minh (UTC+7) = 07:05:30 UTC, whatever zone this process runs in
+    expect(inputToMs('2026-10-03T14:05:30', 'Asia/Ho_Chi_Minh')).toBe(Date.UTC(2026, 9, 3, 7, 5, 30));
+    expect(inputToMs('2026-10-03T14:05', 'Asia/Ho_Chi_Minh')).toBe(Date.UTC(2026, 9, 3, 7, 5, 0));
+    // a Host machine in Paris typing a Vietnamese leg time gets the same instant; the Paris leg reads it 5 h earlier in October
+    expect(inputToMs('2026-10-03T14:05:30', 'Europe/Paris')).toBe(Date.UTC(2026, 9, 3, 12, 5, 30)); // CEST = UTC+2
+    expect(inputToMs('2026-01-15T14:00:00', 'Europe/Paris')).toBe(Date.UTC(2026, 0, 15, 13, 0, 0)); // CET = UTC+1
+    expect(inputToMs('hôm nay', 'Europe/Paris')).toBeNull();
+  });
+
+  it('msToInput is the inverse of inputToMs, also around a DST change', () => {
+    for (const [v, tz] of [['2026-10-03T14:05:30', 'Asia/Ho_Chi_Minh'], ['2026-03-29T03:30:00', 'Europe/Paris'], ['2026-10-25T01:30:00', 'Europe/Paris'], ['2026-12-31T23:59:59', 'America/New_York']] as const) {
+      expect(msToInput(inputToMs(v, tz)!, tz)).toBe(v);
+    }
+  });
+
+  it('preview: past time shows T+, > 60 s in the future is what the server refuses', () => {
+    const now = 10_000_000;
+    expect(startPreview(now - 3_725_000, now)).toEqual({ text: 'Đồng hồ đội sẽ hiện T+01:02:05.', level: 'ok' });
+    expect(startPreview(now + 30_000, now).level).toBe('ok');
+    expect(startPreview(now + 61_000, now).level).toBe('bad');
+    expect(startPreview(null, now).level).toBe('bad');
+    expect(fmtDuration(-61_000)).toBe('-00:01:01');
+  });
+
+  it('status buttons follow the race state machine (D9)', () => {
+    const s = demoState();
+    const labels = (status: typeof s.status) => statusButtons({ ...s, status }).map((b) => b.op);
+    expect(labels('lobby')).toEqual(['start']);
+    expect(labels('running')).toEqual(['pause', 'finish']);
+    expect(labels('paused')).toEqual(['resume', 'finish']);
+    expect(labels('finished')).toEqual([]);
+    // "Mở cuộc đua" lists what is still empty
+    expect(statusButtons({ ...s, status: 'lobby' })[0]!.confirm).toContain('Chưa nhập giờ xuất phát: Đội Lục');
+  });
+
+  it('red banner: lobby with teams online / start times, teams in game without a start time', () => {
+    const s = demoState();
+    expect(warnings({ ...s, status: 'lobby' }).join('\n')).toMatch(/chưa mở nhưng đã có 2 đội trong game[^]*Đã nhập giờ xuất phát khi cuộc đua chưa mở/);
+    expect(warnings(s)).toEqual([]); // running, only Đội Lục (never entered) has no start time
+    const t = s.teams.map((x) => (x.slot === 0 ? { ...x, startAt: null } : x));
+    expect(warnings({ ...s, teams: t })[0]).toContain('Đội Xanh');
+    expect(openBlanks({ ...s, leg: null })).toContain('Chưa nạp chặng.');
+  });
+
+  it('start rows show times in the leg zone', () => {
+    const s = demoState(Date.UTC(2026, 9, 3, 8, 0, 0));
+    const r = startRows(s)[0]!;
+    expect(r.input).toBe(msToInput(s.teams[0]!.startAt!, 'Asia/Ho_Chi_Minh'));
+    expect(r.input).toMatch(/^2026-10-03T14:\d\d:00$/); // 08:00 UTC − 50 min = 07:10 UTC = 14:10 ICT
+    expect(r.startOrder).toBe('1');
+    expect(startRows(s)[3]).toMatchObject({ input: '', joined: '—', startOrder: '—' });
+  });
+
+  it('step_progress matrix: done / active / todo cells, ranked rows, T+ mode', () => {
+    const now = 3_000_000_000;
+    const s = demoState(now);
+    const { head, rows } = progressTable(s, now, 'real');
+    expect(head.map((h) => h.label)).toEqual(['Lộ trình 1', 'Thử thách 1', 'Lộ trình 2', 'Lựa chọn kép', 'Lộ trình 3', 'Về đích']);
+    expect(rows.map((r) => [r.name, r.rank])).toEqual([['Đội Xanh', '1'], ['Đội Vàng', '2'], ['Đội Đỏ', '3'], ['Đội Lục', '—']]);
+    const blue = rows[0]!;
+    expect(blue.cells.every((c) => c.state === 'done')).toBe(true);
+    expect(blue.official).toBe('00:46:00');
+    expect(blue.cells[0]!.text).toMatch(/^\d\d:\d\d:\d\d · 15:00$/); // when · how long the step took
+    expect(blue.cells[3]!.text).toContain('(A)');
+    const red = rows[2]!;
+    expect(red.cells.map((c) => c.state)).toEqual(['done', 'done', 'done', 'active', 'todo', 'todo']);
+    expect(red.cells[3]!.text).toBe('08:00'); // 50 − 8 − 42 = 8 min since the clue of D1 reached it
+    expect(red.penalty).toBe('+2 phút');
+    expect(rows[3]!.cells.map((c) => c.state)).toEqual(['active', 'todo', 'todo', 'todo', 'todo', 'todo']); // holds clue 1 (D3), no times yet
+    // T+: each team on its own clock (Đội Xanh: step 1 done at +15 min)
+    expect(progressTable(s, now, 't').rows[0]!.cells[0]!.text).toMatch(/^T\+00:15:00 · 15:00$/);
+    expect(rows[0]!.cells[0]!.title).toContain('Tới điểm');
+  });
+
+  it('corridor points: start → every zone in order incl. both detour places; checkpoints = all zones, deduplicated', () => {
+    const leg = demoState().leg!;
+    const { points, checkpoints } = corridorPoints(leg);
+    const at = (x: number, z: number) => ({ x: expect.closeTo(x, 3), z: expect.closeTo(z, 3) });
+    const st = leg.steps;
+    expect(points[0]).toEqual(leg.start);
+    // L1, T1 (own location), L2 = D1 branch A (same place), Champ de Mars (branch B), L3 = PS
+    expect(points.slice(1)).toEqual([at(st[0]!.x, st[0]!.z), at(st[1]!.x, st[1]!.z), at(st[2]!.x, st[2]!.z), at(st[3]!.branches![1]!.x, st[3]!.branches![1]!.z), at(st[4]!.x, st[4]!.z)]);
+    expect(checkpoints).toHaveLength(5);
+    expect(checkpoints).toContainEqual(at(st[1]!.x, st[1]!.z)); // a challenge's own location is a checkpoint
   });
 });
