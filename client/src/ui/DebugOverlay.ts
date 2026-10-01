@@ -18,11 +18,13 @@ type DebugStats = {
   npc?: string;
   /** Phase 5: minimap tiles / raster time, GPS searches (player mode). */
   hud?: string;
+  /** Phase 6: connection, ping, remote players seen, messages sent (online mode). */
+  net?: string;
 };
 
 /** F3 / ` panel (SPEC §14), top right (Phase 5: the minimap has the bottom left), below the "Nhấp chuột để chơi" line
- *  (index.html #help, top 16 px, ≈ 46 px tall, centred: under it at 1024 px wide, review m5). Ping and visible players:
- *  TODO.md (Phase 6). */
+ *  (index.html #help, top 16 px, ≈ 46 px tall, centred: under it at 1024 px wide, review m5). Phase 6 track B fills the
+ *  `net` line (ping, visible players). */
 export function createDebugOverlay(visible: boolean) {
   const el = document.createElement('pre');
   el.style.cssText =
@@ -60,6 +62,7 @@ export function createDebugOverlay(visible: boolean) {
         ...(s.bike ? [s.bike] : []),
         ...(s.npc ? [s.npc] : []),
         ...(s.hud ? [s.hud] : []),
+        ...(s.net ? [s.net] : []),
       ].join('\n');
     },
   };

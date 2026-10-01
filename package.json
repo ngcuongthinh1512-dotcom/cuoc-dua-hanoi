@@ -15,6 +15,7 @@
     "test": "vitest run --dir scripts && npm run test --workspaces --if-present",
     "dev": "npm run dev -w client",
     "dev:worker": "npm run dev -w worker",
+    "dev:api": "npm run dev:api -w worker",
     "screenshot": "tsx scripts/screenshot.ts",
     "ride-check": "tsx scripts/ride-check.ts",
     "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts",

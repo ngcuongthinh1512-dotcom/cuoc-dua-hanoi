@@ -992,3 +992,40 @@ export const hudWidgets = {
   streetFade: 0.6, // s fade in / out
   bottom: 30, // px from the bottom edge: clears the attribution line (#credits, ~18 px)
 };
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// Phase 6 (docs/plans/phase6.md §5.3): server & presence. Each track edits ONLY its own block and adds no imports; the
+// foundation block belongs to the integrator. Wire rates / limits are in @race/shared/protocol (NET), race rules
+// (movement, presence, vehicles) come from the leg file via `welcome`.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+
+// ── Foundation · session (net/session.ts, main.ts) ──
+export const net = {
+  defaultRace: 'paris', // race id when the URL has no ?race= (the Host's link carries one); each race = one Durable Object
+  apiBase: '/api', // same origin (Workers Static Assets + Worker); the Vite dev server proxies it to wrangler dev (vite.config.ts)
+};
+
+// ── A · server (worker/src/*): no client tunables; NET in shared/src/protocol/constants.ts + the leg file ──
+
+// ── B · client net + remote players + login (net/NetClient.ts, net/RemotePlayers.ts, ui/Login.ts, main.ts) ──
+export const netClient = {
+  reconnectMs: [1000, 2000, 4000, 8000, 15000], // backoff per attempt, the last one repeats (SPEC §3: auto reconnect)
+  storageKey: 'cuoc-dua-paris.team-code', // localStorage: the team code is remembered (SPEC §8.10), try/catch
+};
+export const remote = {
+  interpolationMs: 200, // render this far behind the server clock (SPEC §7: buffer ~200 ms; ticks every 200 ms)
+  extrapolateMs: 150, // keep moving at the last velocity this long after the newest sample, then hold
+  snapDistance: 10, // m: a jump longer than this (respawn, reconnect) is not interpolated
+};
+
+// ── C · shared bikes (worker/src/race/VehicleSpawner.ts, vehicle/Bikes.ts server mode, host/spawnCandidates.ts) ──
+export const serverBikes = {
+  claimTimeoutMs: 2000, // F → claim sent; no answer by then → "Lại thử lần nữa" (the socket is probably reconnecting)
+  candidateStep: 25, // m between sampled sidewalk points of a corridor when it has too few bicycle_parking nodes
+  minCandidates: 12, // per segment, after the parking nodes
+};
+
+// ── D · dev tooling + minimal Host page (host.html, host/main.ts, scripts/sim.ts) ──
+export const hostPage = {
+  refreshMs: 1000, // how often the DOM table is rewritten from host.state (SPEC §13: ≤ 1 s)
+};

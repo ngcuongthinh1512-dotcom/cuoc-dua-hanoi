@@ -196,6 +196,16 @@ Object.assign(PRESETS, {
   'p5-debug': '/?player&debug=1',
 });
 
+// Phase 6 (docs/plans/phase6.md §7): p6-* presets. The screenshot server is Vite only (no wrangler), so online views use
+// dev-only stand-ins the tracks add as URL hooks (?peers=… fake remote players, ?login login screen, ?bikes=… server-bike
+// stand-ins, /host.html?demo=1). Each track adds its presets under its own line only.
+Object.assign(PRESETS, {
+  // [A] server: no screenshots (worker tests + `npm run sim`)
+  // [B] login screen, "Chào mừng trở lại", remote players (walking, riding, waving) around the spawn, F3 network line
+  // [C] shared bikes: free (sparkle), another team's (lock), own; claim refused toast
+  // [D] Host page: team codes, online status, counters
+});
+
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
 // point, camera `view` = [azimuth seen from the landmark, distance], raised ~ 0.35 × distance and looking at it.
 const worldCam = (x: number, y: number, z: number, tx: number, ty: number, tz: number) => {
@@ -265,7 +275,7 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3)-/.test(k))); // landmark / player views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6)-/.test(k))); // landmark / player / online views by name
 
 const outDir = join(root, 'screenshots');
 const errors: string[] = [];

@@ -1,14 +1,15 @@
 // Phase 3 contract between the tracks (docs/plans/phase3.md). Changing it needs the integrator.
 import type RAPIER from '@dimforge/rapier3d-compat';
+import type { MoveMode, PlayerAction } from '@race/shared/protocol';
 import type { Vector3 } from 'three';
 import type { WaterData } from '../geo/chunkData.ts';
 
 /** walk = standard on-foot speed (movement.footSpeed, "jog" clip), slow = walkSlow held ("walk" clip),
- *  swim = in the Seine, air = jumping or falling, bike = riding (Phase 4, "cycle" clip + leg IK; vehicle/types.ts). */
-export type MoveMode = 'walk' | 'slow' | 'swim' | 'air' | 'bike';
+ *  swim = in the Seine, air = jumping or falling, bike = riding (Phase 4, "cycle" clip + leg IK; vehicle/types.ts).
+ *  Phase 6: the lists live in @race/shared/protocol (MOVE_MODES / PLAYER_ACTIONS: the wire sends their indices). */
+export type { MoveMode, PlayerAction };
 
 /** One-shot gesture over the locomotion; the controller times it (config playerSetup.actions), the animator plays it. */
-export type PlayerAction = 'none' | 'wave' | 'openBox' | 'celebrate' | 'crash' | 'climbOut';
 export type Gesture = Exclude<PlayerAction, 'none'>;
 
 /** Everything the animator and the camera need about one character. The local controller writes it every physics step;

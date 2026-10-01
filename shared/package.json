@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./graph": "./src/graph/index.ts",
+    "./protocol": "./src/protocol/index.ts",
     "./data/*": "./data/*"
   },
   "scripts": {

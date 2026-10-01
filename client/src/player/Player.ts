@@ -8,12 +8,12 @@ import { bike as B, bikeModel, npc, playerSetup, thirdPersonCamera } from '../co
 import type { Input } from '../core/Input.ts';
 import type { CarKind, ExclusionZone, NpcAnchor } from '../npc/types.ts';
 import { notice } from '../ui/Toasts.ts';
-import { loadBikeAsset } from '../vehicle/BikeModel.ts';
+import { type BikeAsset, loadBikeAsset } from '../vehicle/BikeModel.ts';
 import { Bikes, groundAt } from '../vehicle/Bikes.ts';
 import type { RoadSurface } from '../vehicle/types.ts';
 import { CharacterAnimator } from './Animation.ts';
 import { CharacterController, haltIntent, newIntent, readMoveIntent } from './CharacterController.ts';
-import { CharacterModel, loadCharacterAsset } from './CharacterModel.ts';
+import { type CharacterAsset, CharacterModel, loadCharacterAsset } from './CharacterModel.ts';
 import { type CameraMode, ThirdPersonCamera } from './ThirdPersonCamera.ts';
 import type { CameraTarget, Gesture, PlayerEnv } from './types.ts';
 
@@ -102,6 +102,8 @@ export class Player {
   private constructor(
     readonly model: CharacterModel,
     readonly bikes: Bikes,
+    /** The loaded GLBs (shared geometry): Phase 6 RemotePlayers clone the same character and bike. */
+    readonly assets: { character: CharacterAsset; bike: BikeAsset },
     private readonly world: RAPIER.World,
     camera: PerspectiveCamera,
     env: PlayerEnv,
@@ -124,10 +126,11 @@ export class Player {
   }
 
   static async create(scene: Scene, world: RAPIER.World, camera: PerspectiveCamera, env: PlayerEnv, o: PlayerOverrides = {}) {
-    const model = new CharacterModel(await loadCharacterAsset(), { shirt: playerSetup.teamColour, name: playerSetup.teamName });
+    const [character, bike] = await Promise.all([loadCharacterAsset(), loadBikeAsset()]);
+    const model = new CharacterModel(character, { shirt: playerSetup.teamColour, name: playerSetup.teamName });
     scene.add(model.root);
-    const bikes = new Bikes(scene, await loadBikeAsset(), playerSetup.teamName, playerSetup.teamColour);
-    return new Player(model, bikes, world, camera, env, o);
+    const bikes = new Bikes(scene, bike, playerSetup.teamName, playerSetup.teamColour);
+    return new Player(model, bikes, { character, bike }, world, camera, env, o);
   }
 
   private get spawnPoint() {

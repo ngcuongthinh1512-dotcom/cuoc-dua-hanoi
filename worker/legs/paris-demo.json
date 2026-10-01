@@ -8,12 +8,16 @@
     "renderRadius": 300,
     "showOthersOnMinimap": false
   },
+  "boxReveal": {
+    "radius": 150,
+    "hysteresis": 20
+  },
   "penalties": {
     "walkOnlyViolationMinutes": 15,
     "quitTaskMinutes": 30
   },
   "movement": {
-    "footSpeed": 4.0,
+    "footSpeed": 4,
     "bikeSpeedMultiplier": 1.3
   },
   "vehicles": {
