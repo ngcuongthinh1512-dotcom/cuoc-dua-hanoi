@@ -115,11 +115,13 @@
   border-left: 5px solid #3fae5a;
 }
 
-/* Full card + Sổ mật thư: dimmed overlay, panel takes the clicks. z-index 0: the menu (z 1) always sits above. */
+/* Full card + Sổ mật thư: dimmed overlay, panel takes the clicks. z-index 1: above the HUD boxes (minimap, street, clock:
+   no z-index; visual review at 1024×640). The menu and the toasts (z 1 too) are built on first use, after RaceHud at start
+   (main.ts), so later in the DOM: they still paint above it; credits / net banner (2) and login (3) as well. */
 .rc-overlay {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

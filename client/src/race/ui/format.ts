@@ -45,16 +45,17 @@ export function summarize(card: ClueCard): CardSummary {
   return { type: card.type, label: card.label, clue, transport: transportLabel(card.transport), blocks, active: card.status === 'active' };
 }
 
-/** Whole-second duration: 125000 → "02:05", past an hour "1:02:05". */
+/** Duration rounded to the second like the Host page (hostView fmtDuration / fmtMinSec): 125000 → "02:05", past an hour "1:02:05". */
 export function formatDuration(ms: number): string {
-  const t = Math.max(0, Math.floor(ms / 1000));
+  const t = Math.max(0, Math.round(ms / 1000));
   const [h, m, s] = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60];
   return h ? `${h}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
 }
 
-/** "01:42:15" (hours always 2 digits): the host NPC's sentence. */
+/** "01:42:15" (hours always 2 digits): the host NPC's sentence. Rounded to the second like the Host table
+ *  (host/hostView.ts fmtDuration) and the stopped HUD clock (RaceClient.raceClock): the team and the Host read one time. */
 export const formatHms = (ms: number) => {
-  const t = Math.max(0, Math.floor(ms / 1000));
+  const t = Math.max(0, Math.round(ms / 1000));
   return `${pad2(Math.floor(t / 3600))}:${pad2(Math.floor(t / 60) % 60)}:${pad2(t % 60)}`;
 };
 
@@ -117,7 +118,7 @@ export const finishLine = (team: string, officialMs: number | null) =>
 /** Penalty wait at the Pit Stop (SPEC §8.6): "Còn 02:14 phút phạt…" until RaceView.checkinAt, null when nothing to wait for. */
 export function penaltyLine(v: RaceView | null, serverNow: number): string | null {
   if (!v || v.finishAt != null || v.checkinAt == null || serverNow >= v.checkinAt) return null;
-  return `Phạt chờ: còn ${formatDuration(v.checkinAt - serverNow + 999)} trước khi về đích`;
+  return `Phạt chờ: còn ${formatDuration(Math.ceil((v.checkinAt - serverNow) / 1000) * 1000)} trước khi về đích`; // a countdown: up
 }
 
 /** "Tại điểm này" lines, oldest arrival first: "Đội Xanh – đang làm Thử thách 2". */

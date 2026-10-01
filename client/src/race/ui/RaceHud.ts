@@ -275,7 +275,7 @@ export class RaceHud {
       root.append(t);
     }
     if (s.clue) root.append(el('p', 'rc-text', s.clue));
-    const live = buttons && s.active;
+    const live = buttons && s.active && this.view?.status !== 'finished'; // the Host ended the race: read-only (SPEC §8.10)
     s.blocks.forEach((b, i) => {
       const blk = el('div', 'rc-task', undefined, el('div', 'rc-task-title', b.title, b.chosen ? el('span', 'rc-chosen', 'Đội đã chọn') : null), b.text ? el('div', 'rc-task-text', b.text) : null, b.place ? el('div', 'rc-task-meta', `Địa điểm: ${b.place}`) : null, b.limit ? el('div', 'rc-task-meta', b.limit) : null);
       if (live) blk.append(this.taskButton(card.step, b.branch ?? undefined, s.blocks.length > 1 ? `Hoàn thành: ${b.title} (tạm) [${i + 1}]` : 'Hoàn thành (tạm) [Enter]'));

@@ -90,6 +90,8 @@ export interface CharacterOptions {
   shirt: ColorRepresentation;
   /** Name tag above the head; omitted / null = no tag (pedestrians). */
   name?: string | null;
+  /** Name tag colour; omitted = the shirt (team colour). The Pit Stop host's dark suit needs a readable one. */
+  tag?: ColorRepresentation;
 }
 
 type OutfitUniforms = Record<'uShirt' | 'uPants' | 'uShoes', { value: Color }>;
@@ -110,7 +112,7 @@ function outfitShader(this: Material, shader: WebGLProgramParametersWithUniforms
 }
 
 /** Canvas sprite, constant size on screen (character.nameTag), hidden beyond maxDistance by an LOD. STYLE_GUIDE:
- *  team-coloured text, no frame: white text × material.color (= the shirt uniform, so setShirt recolours it). */
+ *  team-coloured text, no frame: white text × material.color (= the shirt uniform, so setShirt recolours it, or opts.tag). */
 function nameTag(text: string, y: number, colour: Color) {
   const T = C.nameTag;
   const font = `700 ${T.fontPx}px system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`; // Vietnamese glyphs
@@ -153,6 +155,7 @@ export class CharacterModel {
   private readonly materials: Material[] = []; // per-instance clones (the shared eye / hair materials are the asset's)
   private readonly height: number;
   private tag: ReturnType<typeof nameTag> | undefined;
+  private readonly tagColour: Color;
 
   constructor(asset: CharacterAsset, opts: CharacterOptions) {
     const body = (this.body = cloneSkinned(asset.scene));
@@ -178,6 +181,7 @@ export class CharacterModel {
     this.mixer = new AnimationMixer(body);
     this.clips = asset.clips;
     this.height = (asset.scene.userData.height as number | undefined) ?? 1.8;
+    this.tagColour = opts.tag === undefined ? this.outfit.uShirt.value : new Color(opts.tag);
     this.setShirt(opts.shirt);
     this.setName(opts.name ?? null);
   }
@@ -196,7 +200,7 @@ export class CharacterModel {
       this.tag.sprite.material.map?.dispose();
       this.tag.sprite.material.dispose();
     }
-    this.tag = text ? nameTag(text, this.height + C.nameTag.lift, this.outfit.uShirt.value) : undefined;
+    this.tag = text ? nameTag(text, this.height + C.nameTag.lift, this.tagColour) : undefined;
     if (this.tag) this.root.add(this.tag.lod);
   }
 

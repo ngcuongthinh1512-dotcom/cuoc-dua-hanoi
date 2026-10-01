@@ -123,6 +123,12 @@ export class NetClient {
     if (a) this.write(JSON.stringify(a));
   }
 
+  /** D4: the pose now, past the gate (unchanged / within 1 / sendHz s too): a `race` op follows, judged on the last pose. */
+  flushPose(p: PoseSample) {
+    this.gate.reset();
+    this.sendPose(p);
+  }
+
   send(m: ClientMessage) {
     if (this.connected) this.write(JSON.stringify(m));
   }

@@ -18,8 +18,10 @@ export interface RaceDeps {
   finished?(fresh: boolean): void;
 }
 
-/** Race clock (s) of a view at server time `now`: since the team's start time, stopped at the check-in (SPEC §17.12). */
-export const raceClock = (v: RaceView | null, now: number): number | null => (v?.startAt == null ? null : Math.max(0, ((v.finishAt ?? now) - v.startAt) / 1000));
+/** Race clock (s) of a view at server time `now`: since the team's start time, stopped at the check-in (SPEC §17.12).
+ *  Stopped, it is rounded to whole seconds like the finish line's officialMs and the Host table (HUD floors the rest). */
+export const raceClock = (v: RaceView | null, now: number): number | null =>
+  v?.startAt == null ? null : v.finishAt == null ? Math.max(0, (now - v.startAt) / 1000) : Math.max(0, Math.round((v.finishAt - v.startAt) / 1000));
 
 /** The current, unopened clue box whose zone holds (x, z): F opens it (D23). Mats are not opened. */
 export const boxInReach = (boxes: readonly BoxInfo[], x: number, z: number): BoxInfo | undefined =>
@@ -41,15 +43,18 @@ export class RaceClient {
     this.teams = w.teams;
     this.setView(w.view);
     if (w.showStartOrder && w.startOrder) this.deps.hud?.startOrder(w.startOrder, simTime);
-    if (w.view?.finishAt != null) this.deps.finished?.(false); // SPEC §8.10: back after the finish → spectator at once
+    // SPEC §8.10: back after the check-in, or after the Host ended the race (read-only) → spectator at once
+    if (w.view?.finishAt != null || w.view?.status === 'finished') this.deps.finished?.(false);
   }
 
   /** Race messages → true (handled); anything else → false (main.ts routes it on). */
   message(m: Exclude<ServerMessage, TickArray | Welcome>): boolean {
     if (m.t === 'race') {
-      const fresh = this.view?.finishAt == null && m.view.finishAt != null;
+      const was = this.view;
+      const fresh = was?.finishAt == null && m.view.finishAt != null;
       this.setView(m.view);
       if (fresh) this.deps.hud?.finished(this.deps.team ?? '', m.view.officialMs), this.deps.finished?.(true);
+      else if (was?.status !== 'finished' && m.view.status === 'finished' && m.view.finishAt == null) this.deps.finished?.(false); // Host "Kết thúc": read-only
       return true;
     }
     if (m.t === 'book') return this.deps.hud?.showBook(m.cards), true;
@@ -79,8 +84,17 @@ export class RaceClient {
     return { inZone: !riding && !!boxInReach(boxes, x, z) };
   }
 
+  /** The full card's task button (Phase 7 stub; RaceHud locks it taskLockSeconds): the pose first, like every op (D4). */
+  task(step: string, branch?: string) {
+    this.op({ t: 'race', op: 'task', step, ...(branch ? { branch } : {}) });
+  }
+
   private sendOp(m: RaceOp, now: number) {
     this.opAt = now;
+    this.op(m);
+  }
+
+  private op(m: RaceOp) {
     (this.deps.op ?? this.deps.send)(m);
   }
 

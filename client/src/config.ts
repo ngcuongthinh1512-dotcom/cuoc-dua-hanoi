@@ -1067,7 +1067,8 @@ export const raceClient = {
   spectateAfterS: 4.5, // s after the check-in (celebrate ≈ 4 s) the finished team becomes a spectator (free-fly, D19)
   // Pit Stop (SPEC §8.6): a red mat with yellow stripes at the zone centre (the check-in zone is the whole radius) + the host NPC
   mat: { length: 7, width: 3.2, colour: '#b3201c', stripe: '#f2c230', stripeWidth: 0.25, lift: 0.04 },
-  host: { shirt: '#23262d', name: 'Người dẫn chương trình', offset: [2.4, 0.6], waveEveryS: 6, waveRadius: 25 }, // offset [side, along] m from the mat centre
+  // offset [side, along] m from the mat centre; tag: name tag colour (the dark suit colour was unreadable, visual review)
+  host: { shirt: '#23262d', tag: '#ffd75e', name: 'Người dẫn chương trình', offset: [2.4, 0.6], waveEveryS: 6, waveRadius: 25 },
 };
 
 // ── C · race HUD widgets (race/ui/*: clue card, Sổ mật thư, start-order banner, Pit Stop line, zone panel; ui/HUD.ts clock) ──

@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { character as C } from '../config.ts';
+import { character as C, raceClient } from '../config.ts';
 import { CharacterModel, loadCharacterAsset, OUTFIT_BONES, outfitMask, prepareAsset } from './CharacterModel.ts';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -94,8 +94,15 @@ describe('CharacterModel', () => {
       return lod.levels[0]!.object.visible;
     };
     expect([visibleAt(3), visibleAt(20), visibleAt(C.nameTag.maxDistance + 5)]).toEqual([true, true, false]);
+    const tagColour = (c: CharacterModel) => ((c.root.children.find((o) => o instanceof THREE.LOD) as THREE.LOD).levels[0]!.object as THREE.Sprite).material.color;
+    expect(tagColour(m).getHexString()).toBe(m.shirt.getHexString()); // team colour
     m.setName(null);
     expect(m.root.children.some((o) => o instanceof THREE.LOD)).toBe(false);
+    // the Pit Stop host: dark suit, its own readable tag colour (visual review: #23262d text was unreadable)
+    const host = new CharacterModel(prepareAsset(fixture(), []), { shirt: raceClient.host.shirt, name: raceClient.host.name, tag: raceClient.host.tag });
+    const hsl = tagColour(host).getHSL({ h: 0, s: 0, l: 0 });
+    expect(hsl.l).toBeGreaterThan(0.5);
+    expect(host.shirt.getHSL({ h: 0, s: 0, l: 0 }).l).toBeLessThan(0.3);
   });
 
   it('missing files → console.warn and a capsule in the shirt colour (all-shirt mask), no clips', async () => {

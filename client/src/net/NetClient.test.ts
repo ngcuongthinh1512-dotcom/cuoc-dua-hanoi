@@ -122,6 +122,14 @@ describe('NetClient (fake socket, fake timers)', () => {
     expect(last().sent).toEqual([JSON.stringify([1, 100, 0, 0, 0, 0, 0])]);
   });
 
+  it('flushPose (D4, before a race op) sends the unchanged pose at once; sendPose would not', () => {
+    connect();
+    client.sendPose(pose(1));
+    client.sendPose(pose(1));
+    client.flushPose(pose(1));
+    expect(last().sent).toEqual([JSON.stringify([1, 100, 0, 0, 0, 0, 0]), JSON.stringify([1, 100, 0, 0, 0, 0, 0])]);
+  });
+
   it('ticks reach the handler after the welcome; a malformed frame is skipped', () => {
     connect();
     last().push(encodeTick(Date.now(), [{ slot: 2, pose: pose(3) }]));

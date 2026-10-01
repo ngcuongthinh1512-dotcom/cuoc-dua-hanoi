@@ -219,8 +219,9 @@ async function start() {
   if (player) player.bikes.notify = notice; // a refused claim → toast (offline too: the p6-bike-lost stand-in)
   // Phase 7 (docs/plans/phase7.md §5.3): race HUD widgets (track C; DEV offline: stand-ins from the URL, p7-* presets) and
   // the team's race state from the server (track B).
+  // task goes through `race` (the pose first, D4; the book needs none); offline there is no race: Tab shows an empty book.
   const raceHud = player
-    ? new RaceHud({ task: (step, branch) => net?.send({ t: 'race', op: 'task', step, ...(branch ? { branch } : {}) }), book: () => net?.send({ t: 'race', op: 'book' }) })
+    ? new RaceHud({ task: (step, branch) => race?.task(step, branch), book: () => void (net ? net.send({ t: 'race', op: 'book' }) : raceHud?.showBook([])) })
     : undefined;
   if (import.meta.env.DEV && !session) raceHud?.demo(query);
   const race =
@@ -230,10 +231,8 @@ async function start() {
           send: (m) => net?.send(m),
           // D4: the pose first (the gate reset makes it go out now even if unchanged / within 200 ms), then the op
           op: (m) => {
-            if (!net) return;
-            (net as unknown as { gate: { reset(): void } }).gate.reset(); // ponytail: NetClient's private gate, a NetClient.flushPose() when someone owns it
-            net.sendPose(poseOf());
-            net.send(m);
+            net?.flushPose(poseOf());
+            net?.send(m);
           },
           serverNow: () => (net ? net.serverNow() : Date.now()),
           team: session.team?.name,
@@ -337,7 +336,10 @@ async function start() {
           test: overrides.npcTest ?? [],
         });
       })
-      .then((n) => void (npcs = n))
+      .then((n) => {
+        npcs = n;
+        n.setExclusionZones(npcZones()); // boxes that came (welcome / reveal) while the NPC assets loaded (review2 F3)
+      })
       .catch((err: unknown) => {
         console.warn('NPC disabled:', err);
         npcReady = true;
@@ -461,8 +463,8 @@ async function start() {
       // it): ignored.
       if (fullMap && input.wasPressed('map')) {
         if (fullMap.isOpen) fullMap.close(), input.lock();
-        else if (!flying) {
-          // not from the free-fly camera (V, debug): the map is the body's (review m14)
+        else if (!flying && !raceHud?.open) {
+          // not from the free-fly camera (V, debug): the map is the body's (review m14); not under the Sổ mật thư / card
           menu.close();
           fullMap.open(frame);
           if (fullMap.isOpen) document.exitPointerLock();

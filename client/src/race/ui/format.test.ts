@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ClueCard, RaceView, TaskView } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
+import { fmtDuration, fmtMinSec } from '../../host/hostView.ts';
+import { raceClock } from '../RaceClient.ts';
 import { bookEntries, finishLine, formatDuration, formatHms, penaltyLine, StartOrderBanner, summarize, transportLabel, zoneLines } from './format.ts';
 
 const task: TaskView = { title: 'Nhiệm vụ', description: 'Mô tả', media: [], kind: 'answer', verification: 'auto', proofInstruction: '', timeLimitMinutes: 20 };
@@ -74,8 +76,17 @@ describe('Pit Stop lines', () => {
     expect(finishLine('Đội Xanh', null)).toBe('Đội Xanh, các bạn đã về đích! Thứ hạng chính thức sẽ được Host công bố.');
     expect(formatHms(59_000)).toBe('00:00:59');
   });
+  it('the team reads the Host table time: NPC line, Host fmtDuration and the stopped HUD clock agree (e2e: 00:20:45 vs 00:20:46)', () => {
+    for (const ms of [1_245_909, 1_245_400, 483_873, 59_500, 6_135_000, 3_599_999]) {
+      expect(formatHms(ms)).toBe(fmtDuration(ms));
+      if (ms >= 60_000 && ms < 3_599_500) expect(formatDuration(ms)).toBe(fmtMinSec(ms)); // book "Thời gian làm" vs the Host step matrix (mm:ss)
+      expect(raceClock(view({ startAt: 7, finishAt: 7 + ms }), 0)).toBe(Math.round(ms / 1000));
+    }
+  });
   it('penalty countdown until checkinAt, then nothing', () => {
     expect(penaltyLine(view({ checkinAt: 134_000 }), 0)).toBe('Phạt chờ: còn 02:14 trước khi về đích');
+    expect(penaltyLine(view({ checkinAt: 134_000 }), 400)).toBe('Phạt chờ: còn 02:14 trước khi về đích'); // counts down: 133.6 s → 2:14
+    expect(penaltyLine(view({ checkinAt: 134_000 }), 133_999)).toBe('Phạt chờ: còn 00:01 trước khi về đích');
     expect(penaltyLine(view({ checkinAt: 134_000 }), 134_000)).toBeNull();
     expect(penaltyLine(view({ checkinAt: null }), 0)).toBeNull();
     expect(penaltyLine(view({ checkinAt: 9e9, finishAt: 5 }), 0)).toBeNull();

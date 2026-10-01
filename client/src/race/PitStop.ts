@@ -1,6 +1,6 @@
 // Phase 7 track B (SPEC §8.6, docs/plans/phase7.md D19): the Pit Stop as the team sees it. The mat (a red carpet with
 // yellow stripes, drawn by ClueBoxes for a `kind: 'mat'` box: the route leading to the Pit Stop and the Pit Stop itself)
-// and the host NPC beside it (the player's UBC character in a dark suit-coloured shirt, a name tag): idle, waving while
+// and the host NPC beside it (the player's UBC character in a dark suit-coloured shirt, a gold name tag): idle, waving while
 // the team is near and when it checks in. The check-in zone is the whole Pit Stop radius (BoxInfo.r), not the carpet.
 import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from 'three';
 import { raceClient } from '../config.ts';
@@ -49,7 +49,7 @@ export class PitHost {
   private since = Infinity; // s since the last wave (first one as soon as the team is near)
 
   constructor(asset: CharacterAsset) {
-    this.model = new CharacterModel(asset, { shirt: raceClient.host.shirt, name: raceClient.host.name });
+    this.model = new CharacterModel(asset, { shirt: raceClient.host.shirt, name: raceClient.host.name, tag: raceClient.host.tag });
     this.model.root.visible = false;
     this.animator = new CharacterAnimator(this.model);
   }

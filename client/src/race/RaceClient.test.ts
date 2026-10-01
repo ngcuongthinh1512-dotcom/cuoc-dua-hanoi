@@ -76,4 +76,28 @@ describe('F and the Pit Stop (D23, D19)', () => {
     back.c.welcome({ teams: [], view: pit({ finishAt: 5 }), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
     expect([finished, back.finished]).toEqual([[true], [false]]);
   });
+
+  it('Host "Kết thúc" (status finished) → read-only spectator for a team not checked in, live or at re-entry (SPEC §8.10)', () => {
+    const { c, finished } = client();
+    c.welcome({ teams: [], view: view(), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
+    c.message({ t: 'race', view: view({ status: 'finished' }) });
+    c.message({ t: 'race', view: view({ status: 'finished' }) }); // same state again: once
+    const back = client();
+    back.c.welcome({ teams: [], view: view({ status: 'finished' }), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
+    const done = client(); // checked in before the end: the celebration only, the end adds nothing
+    done.c.message({ t: 'race', view: pit({ finishAt: 5 }) });
+    done.c.message({ t: 'race', view: pit({ finishAt: 5, status: 'finished' }) });
+    expect([finished, back.finished, done.finished]).toEqual([[false], [false], [true]]);
+  });
+});
+
+describe('task button (D4)', () => {
+  it('goes through op (the pose first), never a bare send', () => {
+    const [ops, sent]: ClientMessage[][] = [[], []];
+    const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), op: (m) => ops.push(m), serverNow: () => 0 });
+    c.task('T1');
+    c.task('D2', 'B');
+    expect(ops).toEqual([{ t: 'race', op: 'task', step: 'T1' }, { t: 'race', op: 'task', step: 'D2', branch: 'B' }]);
+    expect(sent).toEqual([]);
+  });
 });

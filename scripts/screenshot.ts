@@ -254,6 +254,9 @@ Object.assign(PRESETS, {
       'p7-zone': 'card=route&zone', // "Tại điểm này"
     }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
   ),
+  // the book / full card over the minimap, street label and clock on a small window (VIEWPORT below; visual review)
+  'p7-book-small': '/?player&npc=0&wait=1&book',
+  'p7-card-full-small': '/?player&npc=0&wait=1&card=challenge&full',
   // [D] leg format + validator: no screenshots
   // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
   'p7-host': '/host.html?demo=1',
@@ -313,6 +316,7 @@ if (existsSync(join(dataDir, 'index.json'))) {
 }
 const TIMEOUT_MS: Record<string, number> = { topdown: 90_000, 'p4-graph': 90_000, 'p4-swim-exit': 90_000 }; // big views, long simulated waits
 const DEFAULT_TIMEOUT_MS = 30_000;
+const VIEWPORT: Record<string, { width: number; height: number }> = { 'p7-book-small': { width: 1024, height: 640 }, 'p7-card-full-small': { width: 1024, height: 640 } };
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { path: { type: 'string' }, name: { type: 'string' } } });
@@ -352,6 +356,7 @@ try {
     page.on('pageerror', (e) => void errors.push(`pageerror: ${e.message}`));
     await mkdir(outDir, { recursive: true });
     for (const [name, path] of Object.entries(jobs)) {
+      await page.setViewportSize(VIEWPORT[name] ?? { width: 1280, height: 720 }); // Playwright's default size otherwise
       await page.goto(`http://localhost:${PORT}${path}`);
       const timeout = TIMEOUT_MS[name] ?? (name.startsWith('p4b-') ? 90_000 : DEFAULT_TIMEOUT_MS); // p4b: NPCs make each frame heavier (review m7)
       await page
