@@ -104,22 +104,22 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - "Kẹt?": chọn chỗ cách ≥ 15 m theo đường thẳng, không xét đi tới được; một vùng kín rộng hơn 15 m vẫn có thể giữ người chơi. Camera chưa tự quay theo thân ở dịch chuyển ngắn dưới `snapDistance`. Phase 6: server phải biết lần dịch chuyển của `respawn()` để không tính là gian lận tốc độ.
 - Preset `p4-cobbles` cần tăng `TIMEOUT_MS` (mất ~38 s để READY khi máy tải).
 
-## Phase 6 – Server & presence
-- Thay `RaceRoom` tạm (chỉ có `SELECT 1`) bằng room thật: WebSocket, SQLite, Alarms; bỏ endpoint thử `/api/room/ping` và room cố định `"dev"`, định tuyến mỗi cuộc đua vào Durable Object riêng.
-- Đăng nhập mã đội / Host, token ký HMAC bằng `HOST_PASSWORD`.
-- Test Durable Object bằng `@cloudflare/vitest-pool-workers` (kiểm tra tương thích với Vitest 5 trước khi cài; hiện `worker/src/legs.test.ts` chạy trong môi trường Node vì chỉ kiểm tra dữ liệu).
-- Kết hợp Vite HMR với Worker/DO khi dev. Hai hướng: Vite proxy `/api` (và WebSocket) sang `wrangler dev`, hoặc dùng `@cloudflare/vite-plugin` 1.60.2. Hiện tại `npm run dev:worker` phải build lại client mỗi lần chạy.
-- `G` vẫy tay đã chạy trên máy mình (Phase 3); gửi `action` qua mạng cùng presence. `R` (chuông xe) chỉ kêu ở máy mình (Phase 4); gửi qua mạng cho người gần đó nghe.
-- Người chơi khác: dựng `PlayerState` từ snapshot (nội suy) rồi dùng lại `CharacterModel` + `CharacterAnimator` + bảng tên; `movement` lấy từ file chặng.
-- Kiểm tra tốc độ phía server: khi trượt dọc collider góc cạnh (bể Louvre), controller Rapier có vài bước lẻ tới khoảng 4,8 m/s (footSpeed 4). Đo trên cửa sổ vài giây và cho dư khoảng 25 %, đừng kiểm từng bước.
-- Bảng debug F3: thêm ping và số người chơi đang thấy (SPEC §14).
-- Camera bay tự do (`V` khi mở bảng debug): trong cuộc đua thật chỉ cho Host / khán giả / đội đã về đích; hiện ai mở bảng debug cũng bật được.
-- Bỏ qua các tham số URL thử nghiệm của Phase 3 (`?player=x,z,…`, `action`, `autoMove`, `jump`, `?cam=` = khán giả) khi đã vào cuộc đua (dịch chuyển tức thời = gian lận).
+## Phase 6 – Server & presence (phần còn lại)
+Đã xong: `RaceRoom` thật (WebSocket Hibernation, SQLite, Alarms, một Durable Object mỗi cuộc đua theo `?race=`), đăng nhập Host / mã đội (token HMAC), vào lại bằng mã đội ("Chào mừng trở lại"), đá thiết bị cũ, người chơi khác (nội suy, `G` vẫy, `R` chuông), xe chung (server đặt xe, nhận xe nguyên tử, xe bị bỏ biến mất, đội thấy người đạp chứ không thấy xe hai lần), hộp mật thư chỉ gửi tọa độ khi vào 150 m (SPEC §17.10), kiểm tra tốc độ chỉ đánh dấu, trang Host tối giản (`/host.html`), bot `npm run sim`, test Durable Object bằng `createTestHarness` (wrangler; `@cloudflare/vitest-pool-workers` không tương thích Vitest 5). Kiểm đủ 8 kịch bản end-to-end với client + server thật. Báo cáo: `docs/reports/phase6-*.md`; kế hoạch `docs/plans/phase6.md`.
+- Ngân sách quota (cuộc đua 2 giờ, 20 đội đi liên tục): khoảng 36 460 request (giới hạn 40 000, biên chỉ 9 %), khoảng 7 250 dòng SQLite (giới hạn 20 000). Nếu thấy sát khi đo thật ở Phase 12: gửi 2 mẫu mỗi tin ở 2,5 Hz (kế hoạch câu hỏi mở 2).
+- Bộ đếm quota của Host hụt khoảng 15–20 % (một sự kiện ghi 3 dòng chứ không phải 2; bộ đếm chỉ lưu cùng snapshot nên mất phần sau snapshot cuối khi Durable Object ngủ).
+- Xe bị bỏ chỉ biến mất khi có đội đang di chuyển (vòng lặp chỉ chạy khi có người gửi vị trí trong 10 s gần nhất; cache xe dựng lại đặt lại mốc 60 s) nên có thể sống lâu hơn 60 s (~107 s đo được); F của đội thua đôi khi im lặng khi độ trễ mạng ≈ 0 (server bỏ xe đang có người đạp khỏi danh sách của đội khác nên client không thấy xe để báo lý do).
+- Ghi chú ponytail của track A (xem `docs/reports/phase6-track-a.md`): khóa đăng nhập sai chỉ giữ trong bộ nhớ; kiểm tra bỏ xe / socket chết / hộp chỉ chạy khi vòng lặp chạy; đội tạo sau khi các đội khác đã online chỉ xuất hiện ở lần `welcome` kế; bộ đệm replay (tối đa 10 s) mất khi Durable Object bị đuổi; cờ `flagged` của speed check chưa có nút xóa trên Host (Phase 10).
+- Client: reconnect backoff về 0 sau mỗi `welcome`; ping bằng `setInterval` có thể bị Chrome giãn nhịp khi tab ẩn lâu; `ClockSync` dùng `Date.now()`; chưa kiểm tay trên GPU thật, Firefox / Safari; nhịp mượt của người chơi khác chỉ mới xem ở 2–5 FPS (SwiftShader).
+- Bảng tên và thân người chơi chồng lên nhau khi nhiều đội đứng cùng chỗ; bảng tên của bản thân nổi trên người đứng trước (xếp lại ở Phase 7: rải đội quanh điểm xuất phát).
+- Còn 17 lỗi nhỏ trong `docs/reports/phase6-review-*.md`.
 
 ## Phase 7 – Race engine lõi
+- Đồng hồ mỗi đội (SPEC §17.12): tính từ lúc đội nhận mật thư đầu tiên ngoài game; Host nhập giờ bắt đầu từng đội; `welcome.raceTime` (hiện `null`) = hiện tại − giờ bắt đầu của đội.
+- Server phải biết `respawn()` / dịch chuyển hợp lệ (cờ trong `pos` đã có); ZonePanel / ghost theo SPEC §7 dời sang đây.
 - Gọi `npc.setExclusionZones(...)` với geofence hộp mật thư + thảm về đích (Phase 4B đã có hàm). Hộp mật thư hiện dần theo từng bước (SPEC §17.10): server chỉ gửi hộp ≤ bước hiện tại cho từng đội, không gửi tọa độ hộp chưa tới.
 - Nội dung chặng thật (điểm lộ trình, thử thách) chưa chốt, anh sẽ gửi sau (SPEC §17.9); L1–L6 trong `paris-demo.json` chỉ là điểm kiểm thử. Khi có: thay file chặng, kiểm tra lại bán kính geofence 15–40 m.
-- Xuất phát: đặt các đội bên ngoài hàng rào obelisk, cách ≥ 8–10 m (SPEC §17.4). Geofence cho phép bán kính 15–40 m. (Phase 3 đã spawn một người chơi thử ở `playerSetup.spawn`, cách obelisk 14 m về phía Khải Hoàn Môn.)
+- Xuất phát (SPEC §17.12): điểm bắt đầu chặng là **cầu Bir-Hakeim** (lấy từ file chặng, thay `playerSetup.spawn` Concorde khi vào cuộc đua thật; chế độ offline giữ Concorde); các đội tới lần lượt, không xuất phát chung; rải đội tới cùng lúc quanh điểm. Đổi điểm đầu trong `paris-demo.json` sang Bir-Hakeim. Geofence cho phép bán kính 15–40 m.
 - `F` mở hộp mật thư (`openBox`), `celebrate` ở Pit Stop; `pickUp` (`PickUp_Table`) và `talk` (`Idle_Talking_Loop`) đã có clip nhưng chưa dùng (Phase 7–8).
 - Schema zod cho file chặng trong `/shared`; Worker import `worker/legs/paris-demo.json` để nạp lần đầu vào SQLite (hiện mới chỉ test import file này).
 - Quyết định thời gian Host tạm dừng có bị trừ khỏi thời gian chính thức không (SPEC §13.3 nói đồng hồ dừng, công thức §13.8 không trừ), rồi cập nhật `docs/RACE_RULES.md` mục 11.

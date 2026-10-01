@@ -1,36 +1,17 @@
-# Bàn giao phiên (cập nhật 2026-10-01) – đọc file này đầu tiên khi mở lại
+# Bàn giao phiên (cập nhật 2026-10-01, sau Phase 6) – đọc file này đầu tiên khi mở lại
 
 Mục đích: phiên mới không phải đọc lại hội thoại cũ. Đọc file này + `CLAUDE.md` + `TODO.md` là đủ; chỉ mở SPEC / kế hoạch phase khi cần.
 
 ## Trạng thái
-| Phase | Trạng thái | Commit |
-|---|---|---|
-| 0–2B | Xong | — |
-| 3 Nhân vật | Xong | — |
-| 4 Di chuyển + dọn | Xong | `2a898a3`, `bcbb452` |
-| 4B NPC xe + người | Xong | `3caa004` |
-| 5 HUD (minimap, bản đồ lớn, GPS, menu) | Xong | `5b4a7c4` |
-| 6 Server & presence | **Đang làm**: kế hoạch + nền xong (`e87a129`, SPEC `25d2543`); 4 track chạy trong worktree, đã checkpoint WIP khi tạm dừng | main @ `25d2543` + nhánh worktree |
-| 7–12 | Chưa làm | — |
+| Phase | Trạng thái |
+|---|---|
+| 0–2B, 3, 4, 4B, 5 | Xong (xem `git log`) |
+| 6 Server & presence | **Xong** (commit `feat(phase6)` trên main): Worker + RaceRoom, login mã đội, người chơi khác, xe chung, hộp mật thư trong 150 m, Host tối giản, bot `sim`; kiểm 8 kịch bản end-to-end thật |
+| 7 Race engine lõi | **Chưa làm — DỪNG chờ người dùng bảo** |
+| 8–12 | Chưa làm |
 
-## Phase 6 – đang dở
-Kế hoạch: `docs/plans/phase6.md` (21 quyết định, 4 track, ngân sách quota); báo cáo kế hoạch: `docs/reports/phase6-plan.md`. Chạy 9 câu hỏi mở theo MẶC ĐỊNH (người dùng chưa phản đối): 1 DO / cuộc đua tên theo `?race=` (mặc định `paris`), `pos` 5 Hz một mẫu / tin, Host tối giản, speed check chỉ đánh dấu, token 24 h, dev bằng Vite proxy, test DO bằng `createTestHarness` (wrangler 4.141; `@cloudflare/vitest-pool-workers` không tương thích Vitest 5; không cài package mới).
-
-Track (mỗi track một git worktree trong `.claude/worktrees/`, nhánh `worktree-agent-<id>`):
-| Track | Việc | Model | Worktree id |
-|---|---|---|---|
-| A | Worker + Durable Object `RaceRoom` | Opus | `a8a436f546bdaf2c2` |
-| B | Client: login, NetClient, người chơi khác, ghép | Opus | `a40c6c1edddf251c7` |
-| C | Xe chung: VehicleSpawner, nhận xe nguyên tử, xe bị bỏ | Opus | `a4d558ab8013a9a12` |
-| D | Dev tooling, Host tối giản, bot `npm run sim` | Sonnet | `a2011538fa3ba174b` |
-
-Mỗi track có `docs/reports/phase6-track-<x>.md` TRONG worktree của nó (WIP đã commit khi tạm dừng): đọc file đó để biết đã làm gì, còn gì. Worktree `agent-a1a48256a535b7a81` (Phase 4B, F3) bị khóa, đã merge từ lâu, cứ để.
-
-### Cách tiếp tục (rẻ nhất)
-1. `git worktree list` + `git log --oneline -3` trong từng worktree; đọc 4 báo cáo track.
-2. Track chưa xong: mở agent mới (cùng model) với prompt "tiếp tục track X trong worktree <đường dẫn>, đọc báo cáo `docs/reports/phase6-track-x.md`, làm nốt phần còn lại, commit", KHÔNG làm lại từ đầu.
-3. Khi cả 4 xong: merge A → B → C → D vào `main` (conflict dự kiến chỉ ở `config.ts` / `screenshot.ts` / `main.ts`), `npm run build && npm test`, `ride-check`, rồi 2 reviewer Opus (spec+code ∥ visual/UX) tự ghi báo cáo vào `docs/reports/phase6-review*.md`, sửa lỗi người chơi thấy trực tiếp, chụp lại preset, cập nhật TODO/CLAUDE.md, commit `feat(phase6): …`, dọn worktree.
-4. Sau Phase 6 DỪNG, chờ người dùng bảo tiếp (Phase 7 race engine).
+## Việc tiếp theo: Phase 7 (chỉ khi người dùng nói tiếp tục)
+Đọc `TODO.md` mục Phase 7, SPEC §8, §10, §13.8, §17.9–17.12. Điều kiện đầu vào đã chốt: điểm bắt đầu chặng = cầu Bir-Hakeim (lấy từ file chặng); các đội tới lần lượt; đồng hồ đội tính từ lúc nhận mật thư ngoài game (Host nhập giờ bắt đầu từng đội); hộp mật thư bước N+1 chỉ hiện khi bước N hoàn thành và tọa độ chỉ gửi khi vào 150 m. Nội dung chặng thật CHƯA có (SPEC §17.9): dùng chặng demo + bản test. Workflow: kế hoạch + nền (Fable/Opus) → track song song trong worktree → verify đối kháng → merge → 2 reviewer + e2e client/server thật → sửa → docs → commit (đã dùng cho Phase 6 bằng công cụ Workflow).
 
 ## Quy tắc làm việc đã chốt (xem thêm memory `~/.claude/projects/-Users-nguyencuongthinh-Documents-cuoc-dua-paris/memory/`)
 - Workflow mỗi phase: kế hoạch + nền (Opus; Fable cho thiết kế giao thức/server) → các track song song trong worktree (Sonnet cho việc cơ học spec rõ, Opus cho logic khó/ghép) → 2 reviewer Opus song song (spec+code ∥ visual) → chỉ sửa lỗi người chơi/đội đua thấy trực tiếp (tiết kiệm token) → chụp lại mọi preset → docs → commit → dọn worktree.
