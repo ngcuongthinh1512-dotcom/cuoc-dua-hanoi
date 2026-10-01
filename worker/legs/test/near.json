@@ -1,0 +1,35 @@
+{
+  "id": "near",
+  "title": "Chặng rất gần để test (NỘI DUNG GIẢ)",
+  "boxReveal": { "radius": 40, "hysteresis": 10 },
+  "hostApproval": { "contactUrl": "https://m.me/test-host-gia" },
+  "start": { "name": "Đại lộ Champs-Élysées, đầu quảng trường Concorde", "lat": 48.8656, "lon": 2.32053, "yawDeg": 0, "spreadMeters": 3 },
+  "steps": [
+    {
+      "id": "L1",
+      "type": "route_info",
+      "label": "Lộ trình 1",
+      "clue": "(GIẢ) Đi tới điểm thứ nhất trên quảng trường.",
+      "destination": { "name": "Quảng trường Concorde – điểm 1", "lat": 48.86601, "lon": 2.32039, "radius": 20 }
+    },
+    {
+      "id": "T1",
+      "type": "challenge",
+      "label": "Thử thách 1",
+      "task": { "title": "(GIẢ) Phép tính", "description": "(GIẢ) 6 × 7 = ?", "answers": ["42"] }
+    },
+    {
+      "id": "L2",
+      "type": "route_info",
+      "label": "Lộ trình 2",
+      "clue": "(GIẢ) Đi tới điểm thứ hai.",
+      "destination": { "name": "Quảng trường Concorde – điểm 2", "lat": 48.86587, "lon": 2.32094, "radius": 20 }
+    },
+    {
+      "id": "PS",
+      "type": "pit_stop",
+      "label": "Về đích",
+      "destination": { "name": "Quảng trường Concorde – điểm 2", "lat": 48.86587, "lon": 2.32094, "radius": 20 }
+    }
+  ]
+}
