@@ -2,7 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { unlockAudio } from './audio/sfx.ts';
 import { NET, type PoseSample } from '@race/shared/protocol';
-import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, raceClient, remote as remoteCfg, render as R, roads, ui } from './config.ts';
+import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, raceClient, remote as remoteCfg, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
@@ -24,7 +24,7 @@ import type { NpcAnchor } from './npc/types.ts';
 import { loadCharacterAsset } from './player/CharacterModel.ts';
 import { FreeFlyCamera } from './player/FreeFlyCamera.ts';
 import { parseOverrides, Player } from './player/Player.ts';
-import { castColumn, pickSurface, RailDecks } from './player/railDecks.ts';
+import { boxSurface, RailDecks } from './player/railDecks.ts';
 import { initCredits } from './ui/Credits.ts';
 import { createDebugOverlay } from './ui/DebugOverlay.ts';
 import { FullMap } from './ui/FullMap.ts';
@@ -206,9 +206,7 @@ async function start() {
   // Boxes / mat: the same 20 m ray, but never on a rail viaduct top (D17; null while that is not known → retried)
   const boxGround = (x: number, z: number) => {
     const rail = rails.at(x, z);
-    if (rail === undefined) return null;
-    const from = env.heightAt(x, z) + 19 + (rail ? roads.bridge.railLayerStep : 0);
-    return pickSurface(castColumn(world, x, z, from, from - env.heightAt(x, z) + 1, rail, 0, undefined, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS), rail);
+    return rail === undefined ? null : boxSurface(world, x, z, env.heightAt(x, z), rail);
   };
   // SPEC §17.10: this team's clue boxes, only from what the server sent (DEV ?boxes=step,x,z[,opened];… offline).
   const boxes = new ClueBoxes(scene, boxGround, env.heightAt);

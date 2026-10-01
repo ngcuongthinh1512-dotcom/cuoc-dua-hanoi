@@ -42,6 +42,9 @@ Trạng thái: **XONG** (phần client; luồng online đầy đủ chỉ thử 
 ## Còn lại (cần track A đã ghép)
 - Thử tay theo kế hoạch (`npm run dev:api` + 2 trình duyệt, chặng `mini`: vị trí 1 / 2 hiện một lần, giờ xuất phát → đồng hồ, mở hộp L1, T1 (tạm), lộ trình đi bộ chặn lấy xe, D1, về đích → NPC + ăn mừng + bay; F5 giữa chặng). Ở worktree này engine của A còn là stub (welcome.view / start rỗng) nên chưa chạy được; người tích hợp chạy sau khi ghép A → B.
 
+## Sửa sau kiểm tra độc lập
+- **(major) Hộp / thảm leo lên capsule người chơi:** tia đặt hộp (`boxGround` ở `main.ts`) không loại capsule KCC → người chơi đứng giữa hộp / thảm làm nó nhảy lên ≈ 1,8 m và không xuống lại (hộp chỉ dời lên), NPC dẫn chương trình bay theo. Sửa tận gốc: tia chuyển thành `boxSurface()` trong `player/railDecks.ts`, chỉ trúng collider tĩnh (`EXCLUDE_KINEMATIC | EXCLUDE_DYNAMIC | EXCLUDE_SENSORS`: bỏ capsule người chơi, xe NPC). Test `railDecks.test.ts` (Rapier thật, capsule trên cột hộp) trả 1,82 khi chưa sửa, 0 khi đã sửa.
+
 ## Cách chạy
 - `npm run build && npm test`
 - `SCREENSHOT_PORT=5402 npm run screenshot -- p7-start p7-start-island p7-openbox p7-mat p7-celebrate`

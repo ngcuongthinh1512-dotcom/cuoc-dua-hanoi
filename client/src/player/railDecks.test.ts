@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import RAPIER from '@dimforge/rapier3d-compat';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { physics } from '../config.ts';
+import { CharacterController } from './CharacterController.ts';
 import { latLonToWorld } from '@race/shared';
 import { chunkKey } from '../geo/chunkData.ts';
-import { inStrips, pickSurface, railStrips } from './railDecks.ts';
+import { boxSurface, inStrips, pickSurface, railStrips } from './railDecks.ts';
 
 const chunk = (x: number, z: number) => JSON.parse(readFileSync(new URL(`../../public/data/chunks/${chunkKey(x, z)}.json`, import.meta.url), 'utf8'));
 const strips = (x: number, z: number) => railStrips(chunk(x, z).bridges);
@@ -27,5 +30,18 @@ describe('spawn / box surface (D17: highest walkable, never a rail viaduct top)'
     expect(pickSurface([{ y: 7, walkable: true }, { y: 6, walkable: true }], true)).toBeNull();
     expect(pickSurface([{ y: 7, walkable: false }], false)).toBeNull();
     expect(pickSurface([], false)).toBeNull();
+  });
+});
+
+describe('boxSurface (clue box / mat ground)', () => {
+  beforeAll(() => RAPIER.init());
+  it('ignores the player capsule standing on the box column', () => {
+    const world = new RAPIER.World(physics.gravity);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(50, 0.5, 50).setTranslation(0, -0.5, 0));
+    const c = new CharacterController(world, { heightAt: () => 0, waterLevel: null, water: undefined });
+    c.spawn(0, 0, 0);
+    world.step();
+    expect(world.castRay(new RAPIER.Ray({ x: 0.001, y: 19, z: 0.001 }, { x: 0, y: -1, z: 0 }), 20, true)!.timeOfImpact).toBeLessThan(18.5); // the capsule is there
+    expect(boxSurface(world, 0, 0, 0, false)).toBeCloseTo(0, 3);
   });
 });

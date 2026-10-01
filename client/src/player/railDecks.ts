@@ -69,6 +69,14 @@ export function castColumn(
   return hits;
 }
 
+/** Clue box / Pit Stop mat surface (D17) at a column whose terrain is `ground`; rail: rails.at(). Only fixed (world)
+ *  colliders: a kinematic body (the player's capsule, a remote stand-in, an NPC car) passing over the box must not lift it. */
+export function boxSurface(world: RAPIER.World, x: number, z: number, ground: number, rail: boolean): number | null {
+  const from = ground + 19 + (rail ? R.bridge.railLayerStep : 0);
+  const F = RAPIER.QueryFilterFlags;
+  return pickSurface(castColumn(world, x, z, from, from - ground + 1, rail, 0, undefined, F.EXCLUDE_SENSORS | F.EXCLUDE_KINEMATIC | F.EXCLUDE_DYNAMIC), rail);
+}
+
 /** Upper rail strips per chunk, fetched on first use. at(): true / false, undefined while that chunk is loading. */
 export class RailDecks {
   private readonly chunks = new Map<ChunkKey, Strip[] | null>();
