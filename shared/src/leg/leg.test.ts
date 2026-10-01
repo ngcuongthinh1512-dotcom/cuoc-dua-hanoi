@@ -80,6 +80,11 @@ describe('leg schema', () => {
     expect(errors(j)).toEqual(['điểm xuất phát: (48.8049, 2.1204) nằm ngoài bản đồ đua (vĩ độ 48.845–48.878, kinh độ 2.285–2.36)']);
   });
 
+  it('refuses a time zone the Host page cannot format (review fix: Intl throws, the Host screen stopped drawing)', () => {
+    for (const tz of ['Paris', 'UTC+7', 'Europe/Paris ']) expect(errors({ ...mini(), timezone: tz })).toEqual([`múi giờ: "${tz}" không phải múi giờ hợp lệ; dùng tên IANA, ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"`]);
+    expect(errors({ ...mini(), timezone: 'Europe/Paris' })).toEqual([]);
+  });
+
   it('lists blanks the Host must still fill (a draft loads) and answers leaking into texts', () => {
     const j = mini() as Mini;
     Object.assign(j.steps[1]!, { task: { title: '', description: '', answers: [] } });

@@ -6,7 +6,7 @@ import { encodePose } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { QuotaCounters } from '../counters.ts';
 import { migrate, setMeta } from '../db.ts';
-import { login, openSocket, raceHarness, TEST_PASSWORD } from '../test/harness.ts';
+import { LEG_START, login, openSocket, raceHarness, TEST_PASSWORD } from '../test/harness.ts';
 import { BikeService } from './BikeService.ts';
 import { legRules } from './leg.ts';
 import type { ServerBike } from './VehicleSpawner.ts';
@@ -270,10 +270,12 @@ describe('BikeService through the Durable Object (createTestHarness)', () => {
     // Track A pushes host.state right after welcome too: wait for the one that already lists the two new teams.
     const st = await until<HostState>(host, (m) => m.t === 'host.state' && (m.teams as unknown[]).length === 2);
     const teams = await Promise.all(st.teams.map(async (t) => openSocket(server, RACE, (await login(server, RACE, { code: t.code })).body.token!)));
-    for (const t of teams) expect(await t.next()).toMatchObject({ t: 'welcome' });
-    host.send({ t: 'host.bike', op: 'add', x: 5, z: 5 });
+    const spots: { x: number; z: number }[] = [];
+    for (const t of teams) spots.push((await until<Welcome>(t, (m) => m.t === 'welcome')).start!);
+    // at the leg start, ≤ 2.2 m from both start spots (D4: claims reach from the trusted point, where a team first appears)
+    host.send({ t: 'host.bike', op: 'add', x: LEG_START.x, z: LEG_START.z });
     const id = (await until<{ list: { id: string }[] }>(host, (m) => m.t === 'bikes')).list[0]!.id; // teams: via their view
-    teams.forEach((t, i) => t.send(encodePose({ x: 5 + i, y: 0, z: 6, yaw: 0, mode: 'walk', action: 'none' })));
+    teams.forEach((t, i) => t.send(encodePose({ x: spots[i]!.x, y: 0, z: spots[i]!.z, yaw: 0, mode: 'walk', action: 'none' })));
     teams.forEach((t) => t.send({ t: 'bike', op: 'claim', id }));
     const answers = await Promise.all(teams.map((t) => until<{ ok: boolean; reason?: string }>(t, (m) => m.t === 'bike')));
     expect(answers.filter((a) => a.ok)).toHaveLength(1);

@@ -83,9 +83,17 @@ describe('TrustedPoint (Phase 7 geofence, docs/plans/phase7.md D4)', () => {
     expect(p.follow(3700, 2000, 0, rate, cap)).toBeGreaterThan(1900); // then at `rate` only
   });
 
-  it('a reconnect grant (time unseen at bike speed) and a short respawn pass at once', () => {
+  it('a reconnect (time unseen at bike speed) and a short respawn pass at once', () => {
     const p = new TrustedPoint(0, 0, 0);
-    expect(p.follow(10, 300, 0, rate, cap, 300)).toBe(0);
+    expect(p.follow(10, 300, 0, rate, cap, 0, 300)).toBe(0);
     expect(p.follow(20, 300 + NET.respawnTrust, 0, rate, cap, NET.respawnTrust)).toBe(0);
+  });
+
+  it('a reconnect pays the unseen seconds once, not refill + grant (review fix: churn doubled the rate)', () => {
+    const p = new TrustedPoint(0, 0, 0);
+    p.follow(2000, 1000, 0, rate, cap, 0, 2 * rate); // 2 s unseen = the 2 s refill
+    expect(p.x).toBeCloseTo(2 * rate);
+    p.follow(7000, 1000, 0, rate, cap, 0, 5 * rate); // 5 s unseen: past the cap
+    expect(p.x).toBeCloseTo(7 * rate);
   });
 });

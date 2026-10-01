@@ -3,9 +3,9 @@
 // and hibernation. Phase 7: teams move into zones only by walking (TrustedPoint, D4), so the box checks run on the
 // fake `nearLeg` (points 60 m apart, box within 40 m). Each race = its own Durable Object, so the first block runs concurrently; evictions stall the
 // harness (they wait for the tick loop to go idle), so they run afterwards, one by one, on the races left behind.
-import { decodeTick, encodePose, type BoxInfo, type HostState, type MoveMode, type QuotaCounters, type Welcome } from '@race/shared/protocol';
+import { decodeTick, encodePose, NET, type BoxInfo, type HostState, type MoveMode, type QuotaCounters, type Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { joinTeam, LEG_START, nearLeg, nearPoint, openSocket, raceHarness, setupRace, sleep, walkTo } from './test/harness.ts';
+import { joinTeam, LEG_START, login, nearLeg, nearPoint, openSocket, raceHarness, setupRace, sleep, walkTo } from './test/harness.ts';
 
 const server = raceHarness();
 beforeAll(async () => {
@@ -25,6 +25,9 @@ async function loadNear(host: { send(m: unknown): void; until: (m: (x: any) => b
   expect(await host.until((m) => m.t === 'host.legResult')).toMatchObject({ ok: true });
 }
 const pose = (x: number, z: number, mode: MoveMode = 'walk') => encodePose({ x: S.x + x, y: 0, z: S.z + z, yaw: 0, mode, action: 'none' });
+type Pt = { x: number; z: number };
+/** A walking pose at world x, z. */
+const abs = (p: Pt) => encodePose({ x: p.x, y: 0, z: p.z, yaw: 0, mode: 'walk', action: 'none' });
 const respawn = (x: number, z: number) => ({ t: 'respawn', x: S.x + x, y: 0, z: S.z + z, yaw: 0, how: 'safe' });
 /** A pose as it comes back from the wire (cm). */
 const wire = (x: number, z: number) => { const a = encodePose({ x: S.x + x, y: 0, z: S.z + z, yaw: 0, mode: 'walk', action: 'none' }); return { x: a[1]! / 100, z: a[3]! / 100 }; };
@@ -66,7 +69,9 @@ describe.concurrent('RaceRoom live', () => {
     const [ma, mb, mc, mh] = await Promise.all([a!.drain(600), b!.drain(600), c!.drain(600), host.drain(600)]);
     expect(slotsOf(ma)).toEqual([sb]);
     expect(slotsOf(mb)).toEqual([sa]);
-    expect(ticks(mc).every((t) => t.entries.length === 0)).toBe(true);
+    // C's own radius is measured from its trusted point (D4, review fix: no remote scan), still at the start after a
+    // first pose 900 m away; B's and C's own poses are what the others see
+    expect(slotsOf(mc)).toEqual([sa, sb]);
     expect(slotsOf(mh)).toEqual([sa, sb, sc]);
     // nobody moves → no tick at all
     expect((await Promise.all([a!.drain(700), b!.drain(700), host.drain(700)])).flatMap(ticks)).toEqual([]);
@@ -213,6 +218,60 @@ describe.concurrent('RaceRoom live', () => {
     expect(await a!.until((m) => m.t === 'box', 3000)).toEqual(reveal);
     boxTeam = a!;
     boxAt = p;
+  }, 30_000);
+
+  it('D4: bike claims and the interest radius go by the trusted point, not by a fake pose (review fix)', async () => {
+    const race = 'live-trust-bikes';
+    const { host, teams } = await setupRace(server, race, 2);
+    host.send({ t: 'host.leg', json: JSON.stringify(nearLeg(60, 4)) }); // trust rate 6.5 m/s
+    expect(await host.until((m) => m.t === 'host.legResult')).toMatchObject({ ok: true });
+    const [a, b] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
+    const [sa, sb] = [a!, b!].map((s) => (s.welcome as unknown as Welcome).start!);
+    a!.send(abs(sa!));
+    b!.send(abs(sb!));
+    host.send({ t: 'host.bike', op: 'add', x: S.x + 1500, z: S.z });
+    const bike = ((await host.until((m) => m.t === 'bikes' && m.list.length)) as { list: { id: string }[] }).list[0]!;
+    await a!.drain(600);
+    a!.send(abs({ x: S.x + 1501, z: S.z })); // a modified client: one pose next to the bike 1.5 km away
+    a!.send({ t: 'bike', op: 'claim', id: bike.id });
+    expect(await a!.until((m) => m.t === 'bike')).toMatchObject({ ok: false, reason: 'far' });
+    b!.send(abs({ x: sb!.x + 0.5, z: sb!.z }));
+    expect(decodeTick(await a!.until(Array.isArray))!.entries.map((e) => e.slot)).toEqual([teams[1]!.slot]); // B still in A's 500 m
+    for (const s of [a, b, host]) s!.close();
+  }, 20_000);
+
+  it('a reconnect loop pays the unseen time once (no 2× trust rate); past NET.maxConnects no rows (review fix)', async () => {
+    const race = 'live-churn';
+    const { host, teams } = await setupRace(server, race, 1);
+    host.send({ t: 'host.leg', json: JSON.stringify(nearLeg(60, 4)) });
+    expect(await host.until((m) => m.t === 'host.legResult')).toMatchObject({ ok: true });
+    const s = await joinTeam(server, race, teams[0]!.code); // connect 1, login 1
+    const p0 = (s.welcome as unknown as Welcome).start!;
+    const rate = 4 * 1.3 * NET.speedTolerance;
+    let x = p0.x;
+    s.send(abs(p0));
+    await sleep(50);
+    const t0 = Date.now();
+    for (let i = 0; i < 5; i++) {
+      await sleep(1000);
+      const s2 = await openSocket(server, race, s.token); // connects 2–6: kicks the one before
+      await s2.until((m) => m.t === 'welcome');
+      x += 2 * rate * 0.95; // in reach only if the 1 s unseen were paid twice (refill + grant)
+      s2.send(abs({ x, z: p0.z }));
+      await sleep(30);
+    }
+    const elapsed = (Date.now() - t0) / 1000;
+    const w = await openSocket(server, race, s.token); // connect 7
+    const covered = ((await w.until((m) => m.t === 'welcome')) as unknown as Welcome).pose!.x - p0.x;
+    expect(covered).toBeGreaterThan(rate * elapsed * 0.6);
+    expect(covered).toBeLessThan(rate * elapsed * 1.25);
+    for (let n = 8; n <= NET.maxConnects; n++) await openSocket(server, race, s.token);
+    const refused = await openSocket(server, race, s.token);
+    expect(await refused.next()).toEqual({ closed: 4429 }); // no welcome: closed before any row
+    for (let n = 2; n <= NET.maxConnects + 2; n++) expect((await login(server, race, { code: teams[0]!.code })).body.ok).toBe(true);
+    const ev = (await (await sqlOf(race)).exec('SELECT type, COUNT(*) AS n FROM events WHERE team = ? AND type IN (?, ?) GROUP BY type ORDER BY type', teams[0]!.id, 'connect', 'login')) as { type: string; n: number }[];
+    expect(ev).toEqual([{ type: 'connect', n: NET.maxConnects }, { type: 'login', n: NET.maxConnects }]);
+    host.close();
   }, 30_000);
 });
 

@@ -37,9 +37,10 @@ interface TeamState extends TeamRace {
 
 /** Poses of a team (memory; `valid` reaches the snapshot row). */
 interface Live {
-  /** Last received: ticks, bikes. */
+  /** Last received: what the others see (ticks, replay, Host). */
   pose: PoseSample;
-  /** Trusted position (D4): the last pose with x, z = `trust` — geofence, box channel, snapshot, welcome. */
+  /** Trusted position (D4): the last pose with x, z = `trust` — geofence, box channel, snapshot, welcome, bikes (claim
+   *  reach, ridden bike, view), the interest radius of its own ticks. */
   valid: PoseSample;
   /** Phase 7 (D4): follows the poses at no more than the bike speed × tolerance; nothing else moves `valid`. */
   trust: TrustedPoint;
@@ -61,6 +62,7 @@ interface Live {
 type RaceWelcome = ReturnType<RaceEngine['welcome']>;
 
 const TEAM = 'team';
+type Op = 'bike' | 'speed' | 'connect' | 'login';
 /** m: a lag of the trusted point that grows by less than this is not logged as a teleport (the client's spawn settling
  *  next to its start spot, rounding); faster drifts are the speed window's flag, and the trusted point stays honest. */
 const JUMP_NOISE_M = 5;
@@ -71,8 +73,9 @@ export class RaceRoom extends DurableObject<Env> {
   private readonly sql: SqlStorage;
   readonly counters: QuotaCounters;
   private readonly live = new Map<string, Live>();
-  /** Per team: bike ops / speed events in the current NET.respawnWindowMs (SQLite row budget). Memory only. */
-  private readonly ops = new Map<string, { start: number; bike: number; speed: number }>();
+  /** Per team: bike ops / speed events / socket upgrades / logins in the current NET.respawnWindowMs (SQLite row budget).
+   *  Memory only. */
+  private readonly ops = new Map<string, Record<Op, number> & { start: number }>();
   /** Failed team-code logins per client address (SPEC §8.10: 5 → 60 s). ponytail: memory only, forgotten on eviction. */
   private readonly loginFails = new Map<string, { n: number; until: number }>();
   /** Shared bikes (track C) behind one seam. */
@@ -178,7 +181,7 @@ export class RaceRoom extends DurableObject<Env> {
     }
     this.loginFails.delete(ip);
     const token = await signToken(this.env.HOST_PASSWORD, newClaims(this.race, team.id, now));
-    this.event(now, team.id, 'login', { ip });
+    if (this.count(team.id, 'login', now) <= NET.maxConnects) this.event(now, team.id, 'login', { ip });
     const s = this.teamState(team);
     return json({ ok: true, token, team: this.info(team, this.online()), summary: { reconnects: s.reconnects, lastSeen: s.lastSeen, ...this.engine.summary(team.id, now) } });
   }
@@ -191,13 +194,15 @@ export class RaceRoom extends DurableObject<Env> {
     const [client, server] = [pair[0], pair[1]];
     const role: Role = claims?.t === HOST ? HOST : TEAM;
     const team = role === TEAM && claims ? this.team(claims.t) : undefined;
-    if (!claims || (role === TEAM && !team)) {
+    const now = Date.now();
+    // A reconnect loop past NET.maxConnects: closed before any row (the older socket keeps the team).
+    const refused = !claims || (role === TEAM && !team) ? CLOSE.badToken : team && this.count(team.id, 'connect', now) > NET.maxConnects ? CLOSE.tooFast : 0;
+    if (refused) {
       // Accept, then close with the reason: the browser sees the code (a 401 response gives it only "failed").
       server.accept();
-      server.close(CLOSE.badToken, 'bad token');
+      server.close(refused, refused === CLOSE.badToken ? 'bad token' : 'too many reconnects');
       return new Response(null, { status: 101, webSocket: client });
     }
-    const now = Date.now();
     this.ctx.acceptWebSocket(server, [role, ...(team ? [team.id] : [])]);
     let race: RaceWelcome | null = null;
     if (team) {
@@ -271,7 +276,7 @@ export class RaceRoom extends DurableObject<Env> {
     const { footSpeed, bikeSpeedMultiplier } = this.engine.rules().movement;
     if (pose.mode === 'bike') l.bikeAt = now;
     let over = false;
-    let grant = 0;
+    let earned = 0;
     let unseen: number | null = null;
     if (l.win) {
       l.win.push(now, pose.x, pose.z);
@@ -283,15 +288,15 @@ export class RaceRoom extends DurableObject<Env> {
     } else {
       // New window (first pose, (re)connect, wake), SPEC §8.10: the way from the trusted point may take the time the team
       // was unseen at bike speed — offline, plus since its last ping on this socket (a connected client that sends no pose
-      // stands still). The rest is a teleport.
+      // stands still). The rest is a teleport. Not on top of the bucket's refill over the same seconds (TrustedPoint).
       const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
       unseen = (Math.max(0, a.since - l.validAt) + Math.max(0, now - Math.max(a.since, l.validAt, pinged))) / 1000;
-      grant = this.trustRate() * unseen;
+      earned = this.trustRate() * unseen;
       (l.win = new SpeedWindow()).reset(now, pose.x, pose.z);
     }
     l.over = over;
     const d = Math.hypot(pose.x - l.trust.x, pose.z - l.trust.z);
-    const grew = this.follow(l, pose, now, grant);
+    const grew = this.follow(l, pose, now, 0, earned);
     if (grew > JUMP_NOISE_M) this.teleport(t, l, grew, now, 'jump', unseen === null ? { d: Math.round(grew) } : { d: Math.round(d), s: Math.round(unseen) });
     this.moved(t.slot, now);
     this.engine.onPose(t.id, l.valid, now);
@@ -303,11 +308,11 @@ export class RaceRoom extends DurableObject<Env> {
     return footSpeed * bikeSpeedMultiplier * NET.speedTolerance;
   }
 
-  /** The trusted point towards `pose` (+ `grant` m): `valid` = the pose at the trusted x, z. Returns how much the lag
-   *  behind the client grew (> 0: part of this pose is out of reach). */
-  private follow(l: Live, pose: PoseSample, now: number, grant: number): number {
+  /** The trusted point towards `pose` (+ `grant` m, at least `earned` m: TrustedPoint.follow): `valid` = the pose at the
+   *  trusted x, z. Returns how much the lag behind the client grew (> 0: part of this pose is out of reach). */
+  private follow(l: Live, pose: PoseSample, now: number, grant: number, earned = 0): number {
     const rate = this.trustRate();
-    const left = l.trust.follow(now, pose.x, pose.z, rate, (rate * NET.speedLeadMs) / 1000, grant);
+    const left = l.trust.follow(now, pose.x, pose.z, rate, (rate * NET.speedLeadMs) / 1000, grant, earned);
     const grew = left - l.lag;
     l.lag = left;
     Object.assign(l, { pose, valid: { ...pose, x: l.trust.x, z: l.trust.z }, validAt: now });
@@ -340,9 +345,9 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   /** One more `k` in the team's current NET.respawnWindowMs; returns the count so far. */
-  private count(team: string, k: 'bike' | 'speed', now: number): number {
+  private count(team: string, k: Op, now: number): number {
     let o = this.ops.get(team);
-    if (!o || now - o.start >= NET.respawnWindowMs) this.ops.set(team, (o = { start: now, bike: 0, speed: 0 }));
+    if (!o || now - o.start >= NET.respawnWindowMs) this.ops.set(team, (o = { start: now, bike: 0, speed: 0, connect: 0, login: 0 }));
     return ++o[k];
   }
 
@@ -361,7 +366,8 @@ export class RaceRoom extends DurableObject<Env> {
         const l = this.live.get(a.team);
         // Each op may write a row: past the budget the socket goes (a real player never gets near it).
         if (this.count(a.team, 'bike', now) > NET.maxBikeOps) return this.close(ws, CLOSE.tooFast, 'too many bike ops');
-        return this.bikes.onTeam(a.team, l ? { team: a.team, x: l.pose.x, z: l.pose.z } : null, m, this.engine.walkOnly(a.team), now);
+        // D4: claim / dismount reach from the trusted point (a fake pose next to a bike 2 km away claims nothing)
+        return this.bikes.onTeam(a.team, l ? { team: a.team, x: l.valid.x, z: l.valid.z } : null, m, this.engine.walkOnly(a.team), now);
       }
       case 'gesture': {
         const team = a.role === TEAM ? this.team(a.team) : undefined;
@@ -465,7 +471,7 @@ export class RaceRoom extends DurableObject<Env> {
     const peers = this.peers();
     for (const ws of this.sockets()) {
       const a = att(ws);
-      const viewer = a.role === HOST ? null : { team: a.team, pose: this.live.get(a.team)?.pose ?? null };
+      const viewer = a.role === HOST ? null : { team: a.team, pose: this.live.get(a.team)?.valid ?? null }; // D4: no remote scan
       const entries = tickEntries(viewer, peers, NET.interestRadius);
       if (!needsTick(entries, this.dirty, this.sentKey.get(ws))) continue;
       this.sentKey.set(ws, tickKey(entries));
@@ -629,9 +635,13 @@ export class RaceRoom extends DurableObject<Env> {
     });
   }
 
-  /** Online teams with a known pose (bike spawning keeps clear of them, abandonment measures from them). */
+  /** Online teams at their trusted point (D4; bike spawning keeps clear of them, ridden bikes follow them, abandonment
+   *  and each team's bike view measure from them). */
   private players(): PlayerSpot[] {
-    return this.peers().map((p) => ({ team: p.team, x: p.pose.x, z: p.pose.z }));
+    return this.peers().map((p) => {
+      const v = this.live.get(p.team)!.valid;
+      return { team: p.team, x: v.x, z: v.z };
+    });
   }
 
   private info(t: TeamRow, online: Set<string>): TeamInfo {
@@ -643,7 +653,7 @@ export class RaceRoom extends DurableObject<Env> {
     const online = this.online();
     const l = team && this.live.get(team.id);
     // Track C: a team sees only its own bikes + free / standing ones near it (forTeam); the Host sees all.
-    const myBikes = team ? this.bikes.forTeam(team.id, l ? { team: team.id, x: l.pose.x, z: l.pose.z } : null) : this.bikes.list();
+    const myBikes = team ? this.bikes.forTeam(team.id, l ? { team: team.id, x: l.valid.x, z: l.valid.z } : null) : this.bikes.list();
     return {
       t: 'welcome', v: PROTOCOL_VERSION, race: this.race, serverMs: now, status: this.engine.status, role,
       teams: this.teams().map((t) => this.info(t, online)), movement,

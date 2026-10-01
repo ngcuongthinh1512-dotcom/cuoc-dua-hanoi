@@ -113,6 +113,13 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   const add = (level: LegIssue['level'], path: PropertyKey[], message: string) => out.push({ level, where: placeOf(leg, path), message });
   const steps = leg.steps;
 
+  // the Host page formats every time in this zone (Intl throws on an unknown one: review fix, was a CLI warning only)
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: leg.timezone });
+  } catch {
+    add('error', ['timezone'], `"${leg.timezone}" không phải múi giờ hợp lệ; dùng tên IANA, ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"`);
+  }
+
   // ids, order, Pit Stop
   const seen = new Set<string>();
   steps.forEach((s, i) => {
