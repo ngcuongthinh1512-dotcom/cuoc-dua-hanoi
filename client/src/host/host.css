@@ -21,3 +21,5 @@ code { font: 600 16px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 16px; margin: 0; }
 dd { margin: 0; font-variant-numeric: tabular-nums; }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.note { color: #8d99b0; font-size: 13px; }
+button:disabled { opacity: 0.5; cursor: default; }
