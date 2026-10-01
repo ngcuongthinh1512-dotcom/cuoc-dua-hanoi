@@ -351,7 +351,7 @@ export class RaceRoom extends DurableObject<Env> {
       this.slowAt = now + NET.slowTickMs;
       // ponytail: abandonment / dead sockets / boxes run only while the loop runs (someone moved within idleStopMs);
       // a standing team needs no box check, dead sockets are also swept by the bike alarm.
-      this.bikes.tick(this.players(), now);
+      this.bikes.tick(this.players(), this.online(), now);
       this.closeDead(now);
       if (now - this.lastPoseAt < NET.idleStopMs) this.replayBuf.push(encodeTick(now, this.peers()));
     }
@@ -549,15 +549,17 @@ export class RaceRoom extends DurableObject<Env> {
     const { movement, presence } = legRules();
     const online = this.online();
     const l = team && this.live.get(team.id);
+    // Track C: a team sees only its own bikes + free / standing ones near it (forTeam); the Host sees all.
+    const myBikes = team ? this.bikes.forTeam(team.id, l ? { team: team.id, x: l.pose.x, z: l.pose.z } : null) : this.bikes.list();
     return {
       t: 'welcome', v: PROTOCOL_VERSION, race: this.race, serverMs: now, status: this.status, role,
       teams: this.teams().map((t) => this.info(t, online)), movement,
       presence: { ...presence, interestRadius: NET.interestRadius },
       ...(team ? { team: { ...this.info(team, online), player: team.player } } : {}),
       // SPEC §8.10: last valid pose (from the snapshot row after a restart) + the bike it holds (track C's list).
-      pose: team && l ? { ...l.valid, bikeId: this.bikes.list().find((b) => b.owner === team.id)?.id ?? null } : null,
+      pose: team && l ? { ...l.valid, bikeId: myBikes.find((b) => b.owner === team.id)?.id ?? null } : null,
       raceTime: null,
-      bikes: this.bikes.list(),
+      bikes: myBikes,
       boxes,
     };
   }

@@ -264,7 +264,8 @@ describe('BikeService through the Durable Object (createTestHarness)', () => {
     const host = await openSocket(server, RACE, (await login(server, RACE, { host: TEST_PASSWORD })).body.token!);
     await host.next<Welcome>();
     host.send({ t: 'host.createTeams', teams: [{ name: 'Đội Xanh', colour: '#2c6bd8' }, { name: 'Đội Đỏ', colour: '#d8342c' }] });
-    const st = await until<HostState>(host, (m) => m.t === 'host.state');
+    // Track A pushes host.state right after welcome too: wait for the one that already lists the two new teams.
+    const st = await until<HostState>(host, (m) => m.t === 'host.state' && (m.teams as unknown[]).length === 2);
     const teams = await Promise.all(st.teams.map(async (t) => openSocket(server, RACE, (await login(server, RACE, { code: t.code })).body.token!)));
     for (const t of teams) expect(await t.next()).toMatchObject({ t: 'welcome' });
     host.send({ t: 'host.bike', op: 'add', x: 5, z: 5 });
