@@ -3,6 +3,7 @@ main { max-width: 64em; margin: 0 auto; padding: 20px 16px 40px; }
 h1 { font-size: 22px; margin: 0 0 12px; }
 h2 { font-size: 16px; margin: 24px 0 8px; color: #9cc7ff; }
 section { background: #141a26; border-radius: 10px; padding: 12px 16px; }
+section:empty { display: none; }
 label { display: block; margin: 6px 0; }
 input, textarea { font: inherit; color: inherit; background: #0b0f16; border: 1px solid #34405a; border-radius: 6px; padding: 6px 8px; }
 textarea { width: 100%; box-sizing: border-box; min-height: 5em; }

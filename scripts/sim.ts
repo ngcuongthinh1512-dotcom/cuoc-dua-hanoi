@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { RoadGraph, type RoadGraphFile, pathPolyline, shortestPath } from '@race/shared/graph';
-import { encodePose, NET, type BikeInfo, type HostState, type PoseSample, type ServerMessage, type Welcome } from '@race/shared/protocol';
+import { encodePose, NET, type HostState, type PoseSample, type ServerMessage, type Welcome } from '@race/shared/protocol';
 
 export interface SimOptions {
   url?: string; // running server (wrangler dev); default: in-process createTestHarness
@@ -32,7 +32,7 @@ export interface SimReport {
   bytesDown: number;
   counters: HostState['counters'];
   billableRequests: number;
-  /** Billable requests per bot per simulated minute, and the §9 extrapolation (20 teams, 2 h, same activity). */
+  /** Billable requests per bot per simulated minute, and the §9 extrapolation (20 teams, 2 h, bots always moving = worst case). */
   perBotMinute: number;
   extrapolated2h20: number;
   rowsPerBotMinute: number;
@@ -95,14 +95,15 @@ type Sock = Awaited<ReturnType<typeof openSocket>>;
 const isWelcome = (m: ServerMessage): m is Welcome => !Array.isArray(m) && m.t === 'welcome';
 const isState = (m: ServerMessage): m is HostState => !Array.isArray(m) && m.t === 'host.state';
 
-async function post(base: string, body: unknown, stats: { sent: number }) {
+/** HTTP logins are counted by the Durable Object itself (counters.http), not as WebSocket messages. */
+async function post(base: string, body: unknown) {
   const r = await fetch(`${base}/api/login`, { method: 'POST', body: JSON.stringify(body) });
-  stats.sent += 0; // HTTP logins are counted by the Durable Object itself (counters.http), not as WebSocket messages
   return (await r.json()) as { ok: boolean; token?: string; error?: string };
 }
 
 export async function runSim(opts: SimOptions): Promise<SimReport> {
   const { log } = opts;
+  if (!(opts.speedup >= 1 && opts.speedup <= 3)) throw new Error('--speedup phải trong 1…3 (server đóng socket quá 15 tin/giây)');
   let harness: { close(): Promise<void> } | null = null;
   let base = opts.url?.replace(/\/$/, '');
   if (!base) {
@@ -115,14 +116,14 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
   const sockets: Sock[] = [];
   try {
     // ── Host: teams and codes ──
-    const host = await post(base, { race: opts.race, host: opts.password }, stats);
+    const host = await post(base, { race: opts.race, host: opts.password });
     if (!host.ok) throw new Error(`Đăng nhập Host thất bại: ${host.error}`);
     const hs = await openSocket(base, opts.race, host.token!, stats);
     sockets.push(hs);
-    await hs.until(isWelcome);
+    const existing = (await hs.until(isWelcome)).teams.length; // a pushed host.state may precede the reply: wait for the new teams
     hs.send({ t: 'host.createTeams', teams: Array.from({ length: opts.bots }, (_, i) => ({ name: `Bot ${i + 1}`, colour: '#2c6bd8', player: `bot${i + 1}` })) });
-    const created = await hs.until(isState);
-    const codes = created.teams.slice(-opts.bots).map((t) => t.code);
+    const created = await hs.until((m): m is HostState => isState(m) && m.teams.length >= existing + opts.bots);
+    const codes = created.teams.slice(existing, existing + opts.bots).map((t) => t.code);
 
     // ── Bots: login, socket, welcome ──
     const graph = RoadGraph.decode(JSON.parse(readFileSync(FILE, 'utf8')) as RoadGraphFile);
@@ -130,7 +131,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
     const bots = await Promise.all(
       codes.map(async (code, i) => {
         const connect = async () => {
-          const l = await post(base!, { race: opts.race, code }, stats);
+          const l = await post(base!, { race: opts.race, code });
           if (!l.ok) throw new Error(`Bot ${i + 1}: đăng nhập thất bại (${l.error})`);
           const s = await openSocket(base!, opts.race, l.token!, stats);
           sockets.push(s);
@@ -145,17 +146,21 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
     // ── Scenario: two bots claim the same bike in the same instant → at most one ok (SPEC §6.3) ──
     let claim: SimReport['claim'] = null;
     if (bots.length >= 2) {
-      const [sx, sz] = [rand() * 100, -rand() * 100];
-      const first = bots[0]!;
-      for (const b of bots.slice(0, 2)) b.s.send(encodePose({ x: sx, y: 0, z: sz, yaw: 0, mode: 'walk', action: 'none' }));
+      const [sx, sz] = [Math.round(rand() * 100), -Math.round(rand() * 100)];
+      const pair = bots.slice(0, 2);
+      for (const b of pair) b.s.send(encodePose({ x: sx, y: 0, z: sz, yaw: 0, mode: 'walk', action: 'none' }));
+      const mark = pair[0]!.s.log.length;
       hs.send({ t: 'host.bike', op: 'add', x: sx, z: sz });
-      const bike: BikeInfo | undefined = await hs.until((m): m is HostState => isState(m) && m.bikes.length > 0, 1500).then((m) => m.bikes[0]).catch(() => undefined);
+      // the new bike reaches every socket in a `bikes` broadcast (the bots hear it, no host.state needed)
+      const bike = await pair[0]!.s
+        .until((m): m is Extract<ServerMessage, { t: 'bikes' }> => !Array.isArray(m) && m.t === 'bikes' && m.list.some((b) => Math.hypot(b.x - sx, b.z - sz) < 5), 1500, mark)
+        .then((m) => m.list.find((b) => Math.hypot(b.x - sx, b.z - sz) < 5)!)
+        .catch(() => undefined);
       if (bike) {
-        const marks = bots.slice(0, 2).map((b) => b.s.log.length);
-        for (const b of bots.slice(0, 2)) b.s.send({ t: 'bike', op: 'claim', id: bike.id });
-        const answers = await Promise.all(bots.slice(0, 2).map((b, k) => b.s.until((m): m is Extract<ServerMessage, { t: 'bike'; op: 'claim' }> => !Array.isArray(m) && m.t === 'bike' && m.op === 'claim', 3000, marks[k]).catch(() => null)));
+        const marks = pair.map((b) => b.s.log.length);
+        for (const b of pair) b.s.send({ t: 'bike', op: 'claim', id: bike.id });
+        const answers = await Promise.all(pair.map((b, k) => b.s.until((m): m is Extract<ServerMessage, { t: 'bike'; op: 'claim' }> => !Array.isArray(m) && m.t === 'bike' && m.op === 'claim', 3000, marks[k]).catch(() => null)));
         claim = { tried: 2, ok: answers.filter((a) => a?.ok).length };
-        void first;
       } else log('Xe chung: không có dịch vụ xe (Track C chưa nối), bỏ qua thử nhận xe.');
     }
 
@@ -219,10 +224,12 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
 
     // ── Host counters (estimated billing): ask once more after the bots are done ──
     // ponytail: the poll is an empty host.createTeams (no other message returns host.state on demand); costs 2 rows.
+    // A state that already counts every message we sent (poll included) is the exact total; else the newest one.
     await sleep(500);
     const mark = hs.log.length;
     hs.send({ t: 'host.createTeams', teams: [] });
-    const final = await hs.until(isState, 5000, mark);
+    const want = stats.sent;
+    const final = await hs.until((m): m is HostState => isState(m) && m.counters.wsIn >= want, 3000, mark).catch(() => hs.log.slice(mark).filter(isState).at(-1)!);
     const c = final.counters;
     const minutes = opts.seconds / 60;
     const billable = c.http + c.alarms + Math.ceil(c.wsIn / 20);
@@ -235,7 +242,8 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       counters: c,
       billableRequests: billable,
       perBotMinute: billable / opts.bots / minutes,
-      extrapolated2h20: Math.round((billable / opts.bots / minutes) * 120 * 20),
+      // WebSocket traffic scales with time × teams; logins / upgrades happen once per team (a short run must not repeat them every minute)
+      extrapolated2h20: Math.round((Math.ceil(c.wsIn / 20) / opts.bots / minutes) * 120 * 20 + (c.http / opts.bots) * 20),
       rowsPerBotMinute: c.rows / opts.bots / minutes,
       claim,
       rejoin,
@@ -252,7 +260,7 @@ function print(r: SimReport) {
   console.log(`\nSim: ${r.bots} bot, ${n(r.seconds)} s mô phỏng`);
   console.log(`  Tin gửi lên: ${n(r.sent)} (${n(r.bytesUp)} B) · tin nhận: ${n(r.bytesDown)} B`);
   console.log(`  Host đếm: wsIn ${n(r.counters.wsIn)} · wsOut ${n(r.counters.wsOut)} · http ${n(r.counters.http)} · alarm ${n(r.counters.alarms)} · dòng SQLite ${n(r.counters.rows)}`);
-  console.log(`  Request tính phí ≈ ${n(r.billableRequests)} = ${n(r.perBotMinute, 1)} / bot / phút  →  20 đội × 2 giờ ≈ ${n(r.extrapolated2h20)} (ngân sách < 40 000)`);
+  console.log(`  Request tính phí ≈ ${n(r.billableRequests)} = ${n(r.perBotMinute, 1)} / bot / phút  →  20 đội × 2 giờ (luôn di chuyển) ≈ ${n(r.extrapolated2h20)} (ngân sách < 40 000)`);
   console.log(`  Dòng ghi ≈ ${n(r.rowsPerBotMinute, 1)} / bot / phút (ngân sách < 20 000 / cuộc đua)`);
   console.log(`  Nhận xe cùng lúc: ${r.claim ? `${r.claim.ok} / ${r.claim.tried} thành công (đúng: ≤ 1)` : 'bỏ qua'}`);
   console.log(`  Vào lại sau ngắt: ${r.rejoin ? (r.rejoin.ok ? 'đúng chỗ cũ' : `LỆCH ${r.rejoin.distance.toFixed(2)} m`) : 'bỏ qua'}`);

@@ -203,7 +203,8 @@ Object.assign(PRESETS, {
   // [A] server: no screenshots (worker tests + `npm run sim`)
   // [B] login screen, "Chào mừng trở lại", remote players (walking, riding, waving) around the spawn, F3 network line
   // [C] shared bikes: free (sparkle), another team's (lock), own; claim refused toast
-  // [D] Host page: team codes, online status, counters
+  // [D] Host page: team codes, online status, counters (demo data, no server)
+  'p6-host': '/host.html?demo=1', // [D]
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
@@ -307,7 +308,7 @@ try {
       const stats = await page.evaluate(() => (globalThis as { __STATS__?: unknown }).__STATS__);
       if (stats !== undefined) console.log(`[${name}] __STATS__ ${JSON.stringify(stats)}`);
       const file = join(outDir, `${name}.png`);
-      await page.screenshot({ path: file });
+      await page.screenshot({ path: file, fullPage: path.startsWith('/host.html') }); // the Host page scrolls, game pages don't
       console.log(`Đã chụp ${file}`);
     }
   } finally {

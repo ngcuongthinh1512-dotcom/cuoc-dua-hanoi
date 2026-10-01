@@ -9,8 +9,10 @@ import { counterLines, demoState, parseTeamLines, teamRows } from './hostView.ts
 const q = new URLSearchParams(location.search);
 const app = document.getElementById('app')!;
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]) {
-  const e = Object.assign(document.createElement(tag), props);
+// ponytail: props are untyped (Partial<HTMLElementTagNameMap[K]> is a union too big for tsc); `style` strings forward to cssText.
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, unknown> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  Object.assign(e, props);
   e.append(...kids);
   return e;
 }
@@ -78,6 +80,7 @@ function mainView() {
     el('h2', {}, 'Xe chung'), bikes,
   );
   if (state) render(state);
+  else teamsBox.textContent = 'Đang chờ dữ liệu từ máy chủ…';
 }
 
 function render(s: HostState) {

@@ -18,6 +18,7 @@
     "dev:api": "npm run dev:api -w worker",
     "screenshot": "tsx scripts/screenshot.ts",
     "ride-check": "tsx scripts/ride-check.ts",
+    "sim": "tsx scripts/sim.ts",
     "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts",
     "build-chunks": "tsx scripts/build-chunks.ts",
     "build-graph": "tsx scripts/build-graph.ts",
