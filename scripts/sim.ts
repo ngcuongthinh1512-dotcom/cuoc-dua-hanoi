@@ -302,8 +302,12 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       }
       throw new Error('Không tìm được tuyến đi bộ');
     };
-    const spot = [(rand() - 0.5) * 300, (rand() - 0.5) * 300] as const;
-    const routes = opts.leg ? [] : bots.map((b) => (b.i < 2 ? planRoute(...spot) : planRoute((rand() - 0.5) * 300, (rand() - 0.5) * 300)));
+    // Phase 7 (D4): the server trusts a pose only within walking speed of the last trusted one, so bots start at the leg start from welcome
+    // (not somewhere near the Concorde obelisk, 2.5 km away = a refused teleport) and wander within ~150 m of it.
+    const origin = bots[0]!.welcome.start ?? bots[0]!.welcome.pose ?? { x: 0, z: 0 };
+    const near = () => [origin.x + (rand() - 0.5) * 150, origin.z + (rand() - 0.5) * 150] as const;
+    const spot = near();
+    const routes = opts.leg ? [] : bots.map((b) => (b.i < 2 ? planRoute(...spot) : planRoute(...near())));
 
     // ── Scenario: two bots claim the same bike in the same instant → exactly one ok (SPEC §6.3) ──
     let claim: SimReport['claim'] = null;
