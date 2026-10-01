@@ -6,6 +6,11 @@ const isTextField = (t: EventTarget | null) =>
   t instanceof HTMLElement &&
   (t.isContentEditable || t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement);
 
+/** Keys a focused button / link uses itself (Tab moves the focus, Space / Enter press it): theirs while the pointer is free
+ *  (Phase 5 menu, review m1). Esc and the rest still reach the game. */
+const NATIVE = new Set(['Tab', 'Space', 'Enter', 'NumpadEnter']);
+const isControl = (t: EventTarget | null) => t instanceof HTMLElement && t.matches('button, a[href]');
+
 // Unikey/EVKey (Windows) send the converted letter with no physical code; macOS/Windows IMEs compose (key "Process", 229).
 const looksLikeIme = (e: KeyboardEvent) =>
   e.isComposing ||
@@ -109,6 +114,7 @@ export class Input {
 
   private keydown(e: KeyboardEvent) {
     if (isTextField(e.target)) return; // future HUD fields type normally
+    if (!this.locked && NATIVE.has(e.code) && isControl(e.target)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return; // browser/OS shortcuts (Cmd+R, Ctrl+F…) stay theirs, SPEC §17.1
     if (looksLikeIme(e)) {
       if (!this.imeSuspected) this.onImeSuspected();

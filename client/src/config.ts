@@ -588,7 +588,6 @@ export const player = {
   fallDelay: 0.25, // s airborne without a jump before moveMode 'air' counts as a fall (small drops stay 'walk')
   respawnBelow: -40, // m: below this y (fell through the world) → back to the last safe ground
   fellThrough: 2, // m: feet this far below the terrain grid = fell through it → back to the last safe ground
-  safeEvery: 1, // s between lastSafe updates (on the ground, out of the water)
   spawnCastHeight: 12, // m above max(terrain, Seine) the spawn ray starts (highest walkable surface wins: bridge deck)
   spawnSearch: 20, // m: spiral search radius when the capsule overlaps something at the spawn point
 };
@@ -977,8 +976,12 @@ export const notices = {
   farReach: 6, // m: a takeable bike this close but beyond bikeRules.interactRadius → "tooFar" (else F stays silent)
 };
 export const respawnRules = {
-  history: 12, // dry spots remembered (one per player.safeEvery s, newest last)
-  minAge: 5, // s: "Kẹt? Về chỗ an toàn" goes back to a spot at least this old, so never to the place the player is stuck in
+  history: 30, // dry spots remembered (newest last), pairwise ≥ spacing apart: ≈ 120 m of fresh ground
+  spacing: 4, // m: a new dry spot once the body (on foot or riding) is this far from the newest; older ones this close dropped
+  // "Kẹt? Về chỗ an toàn" (and falling through the world) goes back to the newest spot at least minAge s old AND minDistance m
+  // away (none: the oldest), so never to the place the player is stuck in, even after standing still or pacing a small yard
+  minAge: 5, // s
+  minDistance: 15, // m, straight line
   stairsInland: 0.8, // m inland of the parapet gap at the top of the quay flight the swimmer is put on (swim.climbLand = 0.6 lands on the coping)
 };
 
