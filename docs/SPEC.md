@@ -974,3 +974,7 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - Đạp xe tông người đi đường → **người chơi ngã xe** (như tông xe NPC, §6.3); người bị tông lảo đảo.
 - Vòng xuyến Étoile: xe vào vòng nhường xe trên vòng (ngược ngoài đời, để không tắc cứng).
 - Camera khán giả (`?cam=`) **luôn có NPC**; `?npc=0` tắt (dùng cho kiểm thử vật lý).
+
+### 17.12 Điểm xuất phát và giờ vào của các đội (chốt 2026-10-01; ghi đè §17.4 "xuất phát tại obelisk, các đội đặt ngoài hàng rào")
+- Điểm bắt đầu của chặng này là **cầu Bir-Hakeim**, không phải obelisk Concorde. Điểm xuất phát luôn lấy từ file chặng, không gắn cứng trong code (§17.9).
+- Các đội **không xuất phát cùng một lúc tại một chỗ**: có đội tới trước, có đội tới sau. Server phải xử lý mỗi đội vào thế giới ở thời điểm khác nhau; không giả định "tiếng súng xuất phát chung".
