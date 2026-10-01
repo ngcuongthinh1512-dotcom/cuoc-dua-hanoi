@@ -1,0 +1,72 @@
+// Phase 6 track C: bike spawn candidates on the real shared/data/roadgraph.json for the 6 demo segments (start → L1 … L5 →
+// L6; docs/plans/phase6.md §2.4 measured L2 → L3 with 0 bicycle_parking nodes). Skipped when the data is missing.
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { latLonToWorld } from '@race/shared';
+import { pathPolyline, RoadGraph, type RoadGraphFile, segPoint, shortestPath } from '@race/shared/graph';
+import { describe, expect, it } from 'vitest';
+import { serverBikes } from '../config.ts';
+import { spawnCandidates } from './spawnCandidates.ts';
+
+const root = join(import.meta.dirname, '../../..');
+const graphFile = join(root, 'shared/data/roadgraph.json');
+const legFile = join(root, 'worker/legs/paris-demo.json'); // server-only content: read by this test, never bundled
+
+describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates (roadgraph.json, demo leg)', () => {
+  const file = JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile;
+  const leg = JSON.parse(readFileSync(legFile, 'utf8')) as {
+    start: { lat: number; lon: number };
+    steps: { destination?: { lat: number; lon: number } }[];
+    vehicles: { corridorMeters: number; minDistanceFromCheckpoint: number };
+  };
+  const g = RoadGraph.decode(file);
+  const points = [leg.start, ...leg.steps.flatMap((s) => (s.destination ? [s.destination] : []))]
+    .map((p) => latLonToWorld(p.lat, p.lon))
+    .filter((p, i, a) => i === 0 || Math.hypot(p.x - a[i - 1]!.x, p.z - a[i - 1]!.z) > 1); // the pit stop = L6
+  const t0 = performance.now();
+  const c = spawnCandidates(g, points, [], leg.vehicles);
+  const ms = performance.now() - t0;
+  const pairs = (a: number[]) => Array.from({ length: a.length / 2 }, (_, k) => [a[2 * k]!, a[2 * k + 1]!] as const);
+  const parking = new Set(pairs(file.bikeParking).map(([x, z]) => `${x / 10},${z / 10}`));
+  const polys = points.slice(1).map((b, i) => {
+    const a = points[i]!;
+    return pathPolyline(g, shortestPath(g, g.nearestNode(a.x, a.z, 'walk'), g.nearestNode(b.x, b.z, 'walk'), 'walk')!);
+  });
+  const toPath = (poly: number[], x: number, z: number) => {
+    let d = Infinity;
+    for (let i = 0; i + 3 < poly.length; i += 2) d = Math.min(d, segPoint(x, z, poly[i]!, poly[i + 1]!, poly[i + 2]!, poly[i + 3]!)[1]);
+    return d;
+  };
+
+  it('6 segments, each ≥ minCandidates points inside its corridor, all ≥ 100 m from every route point (L2 → L3 too)', () => {
+    console.log(`spawnCandidates: ${ms.toFixed(0)} ms, ${c.segments.map((s) => s.length / 2).join(' / ')} points, ${c.decoys.length / 2} decoys`);
+    expect(c.segments).toHaveLength(6);
+    c.segments.forEach((seg, i) => {
+      expect(seg.length / 2).toBeGreaterThanOrEqual(serverBikes.minCandidates);
+      for (const [x, z] of pairs(seg)) {
+        expect(toPath(polys[i]!, x, z)).toBeLessThanOrEqual(leg.vehicles.corridorMeters / 2 + 0.1);
+        for (const p of points) expect(Math.hypot(p.x - x, p.z - z)).toBeGreaterThanOrEqual(leg.vehicles.minDistanceFromCheckpoint);
+      }
+    });
+  });
+
+  it('bicycle parking first: L3 → L4 (16 racks) is all racks; L2 → L3 (none) falls back to sampled pavement points', () => {
+    expect(pairs(c.segments[3]!).every(([x, z]) => parking.has(`${x},${z}`))).toBe(true);
+    expect(pairs(c.segments[2]!).some(([x, z]) => parking.has(`${x},${z}`))).toBe(false);
+  });
+
+  it('decoys lie outside every corridor and away from the route points; same input → same output', () => {
+    expect(c.decoys.length / 2).toBeGreaterThan(20);
+    for (const [x, z] of pairs(c.decoys)) {
+      for (const poly of polys) expect(toPath(poly, x, z)).toBeGreaterThan(leg.vehicles.corridorMeters / 2);
+      for (const p of points) expect(Math.hypot(p.x - x, p.z - z)).toBeGreaterThanOrEqual(leg.vehicles.minDistanceFromCheckpoint);
+    }
+    expect(spawnCandidates(g, points, [], leg.vehicles)).toEqual(c);
+  });
+
+  it('a task location is avoided like a route point', () => {
+    const [x, z] = c.segments[0]!;
+    const moved = spawnCandidates(g, points.slice(0, 2), [{ x: x!, z: z! }], leg.vehicles);
+    for (const [px, pz] of pairs(moved.segments[0]!)) expect(Math.hypot(px - x!, pz - z!)).toBeGreaterThanOrEqual(leg.vehicles.minDistanceFromCheckpoint);
+  });
+});

@@ -192,6 +192,11 @@ describe('BikeService through the Durable Object (createTestHarness)', () => {
     const [row] = (await sql.exec('SELECT data FROM bikes')) as { data: string }[];
     expect(JSON.parse(row!.data)).toMatchObject({ id, owner: winner, rider: true });
     expect(await sql.exec("SELECT team FROM events WHERE type = 'bikeClaim'")).toEqual([{ team: winner }]);
+    // Candidates → ctx.storage.setAlarm(now) → alarm() → the first round reaches everyone (20 segments: P(no bike) ≈ 1e-6).
+    host.send({ ...candidates, segments: Array.from({ length: 20 }, (_, i) => line(1000 + 100 * i)) });
+    const round = await until<{ list: { id: string }[] }>(host, (m) => m.t === 'bikes' && (m.list as { id: string }[]).some((b) => b.id.startsWith('b')));
+    expect(round.list.length).toBeGreaterThan(0);
+    expect(await sql.exec("SELECT COUNT(*) AS n FROM events WHERE type = 'bikeSpawn'")).toEqual([{ n: 2 }]); // host add + first round
     for (const t of [host, ...teams]) t.close();
   });
 });

@@ -1,45 +1,66 @@
 # Phase 6 – Track C: xe chung, nhận xe nguyên tử, xe bị bỏ
 
-Trạng thái: **ĐANG LÀM** – bước 1–2 xong (VehicleSpawner + BikeService + test, worker 34 test qua); đang làm bước 3 (ứng viên Host).
+Trạng thái: **XONG** (chờ người tích hợp nối vào RaceRoom của A / main + Player của B / trang Host của D, xem cuối file).
+`npm run build && npm test` qua (scripts 18, shared 24, client 548, worker 34); `SCREENSHOT_PORT=5303 npm run ride-check` OK (offline, không đổi).
 
 ## Đã làm
-- Đọc: CLAUDE.md, `docs/plans/phase6.md` (toàn bộ), SPEC §6.1–6.6, `shared/src/protocol/*`, `worker/src/{RaceRoom,db,counters}.ts`,
-  `worker/src/race/{VehicleSpawner,BikeService,leg}.ts`, `worker/src/test/harness.ts`, `client/src/vehicle/{Bikes,types}.ts` + test,
-  `client/src/player/Player.ts` (placeBikes, interact), `client/src/main.ts` (NetClient nối sẵn), `shared/src/graph/*`.
-- Symlink trong worktree (không commit): `node_modules`, `client|shared|worker/node_modules`, `.cache` → repo gốc.
+| File | Nội dung |
+|---|---|
+| `worker/src/race/VehicleSpawner.ts` (+ test 9) | thuần, tất định: `rng` (mulberry32), `stream(state)` tiếp tục chuỗi từ `state.draws` bằng O(1) (`rng(seed + draws·K)`), `initialSpawn` (`initialPerSegment` [min, max] / đoạn), `periodicSpawn` (đoạn có < `maxAvailablePerSegment` xe trống ngoài bãi → xác suất `spawnChance`; tạm dừng → không), xe mồi: sau mỗi xe đoạn, rút tiếp khi `rand < decoyRatio` (kỳ vọng r/(1−r) → mồi/tổng ≈ r), trần mồi trống = số đoạn × `maxAvailablePerSegment`; chọn đều trong ứng viên cách mọi đội online ≥ `noSpawnNearPlayerMeters` và cách xe khác ≥ 3 m; id `b<draws>`; `claim` (gone → taken → walkOnly → far chỉ với xe trống, `CLAIM_REACH` 3,5 m = 2,5 + 1 m trễ pose); `abandoned` (cập nhật `nearOwnerAt`: đang đạp / chủ offline / gần → now) |
+| `worker/src/race/BikeService.ts` (+ test 8) | cache RAM nạp lười từ `bikes` (nạp lại → `nearOwnerAt = now`), meta `spawner` {seed, draws, paused, nextAt, initialDone} (1 dòng) + meta `candidates`; ghi SQLite **trước** khi gửi; `rows` đếm bằng `cursor.rowsWritten` (gồm index) |
+| `client/src/host/spawnCandidates.ts` (+ test 4 trên `roadgraph.json` thật) | A* đi bộ mỗi đoạn, `corridorEdges(corridorMeters, 'walk')`; bãi `bicycle_parking` trong hành lang trước; thiếu `minCandidates` → mẫu mỗi `candidateStep` m trên vỉa hè / footway / pedestrian (không cầu / bậc / vạch qua đường; không đủ thì mọi cạnh đi bộ), chọn đều theo chiều dài tuyến; mồi = 1 điểm vỉa hè / ô `decoyCell` ngoài mọi hành lang, trong `decoyMargin` quanh tuyến; mọi điểm cách điểm lộ trình + `checkpoints` ≥ `minDistanceFromCheckpoint`. Demo: 12 / 12 / 12 / 16 / 12 / 12 điểm, 527 mồi (≈ 8 KB), ≈ 125 ms (Node) |
+| `client/src/vehicle/Bikes.ts` (+ 5 test) | chế độ server khi `net` được gán (xem "Client" dưới); offline y như cũ |
+| `client/src/config.ts` khối C | `serverBikes` + `decoyCell` 150, `decoyMargin` 500, `groundRadius` 200 |
+| `scripts/screenshot.ts` `[C]` | `p6-bikes` (đã chụp, xem PNG: xe trống lấp lánh, xe Đội Xanh khóa xanh, xe mình khóa đỏ), `p6-bike-lost` (chụp được, toast chỉ hiện sau khi nối `bikes.notify`) |
 
-## Còn lại (theo thứ tự)
-1. `worker/src/race/VehicleSpawner.ts` (thuần) + `VehicleSpawner.test.ts`
-2. `worker/src/race/BikeService.ts` + `BikeService.test.ts` (harness thật: 2 socket claim cùng xe → đúng 1 ok)
-3. `client/src/host/spawnCandidates.ts` + test trên `shared/data/roadgraph.json` (6 đoạn demo)
-4. `client/src/vehicle/Bikes.ts` chế độ server + test
-5. preset `[C]` `p6-bikes`, `p6-bike-lost` trong `scripts/screenshot.ts`
-6. `npm run build && npm test`, `SCREENSHOT_PORT=5303 npm run ride-check`, commit `feat(phase6): track C – …`
+### Server (BikeService)
+- `host.candidates` → lưu, nếu chưa có đợt đầu: `setAlarm(now)` → `alarm()` chạy **đợt đầu** (kể cả khi chưa ai online) → 1 sự kiện `bikeSpawn` (id, đoạn, x, z, draws) + broadcast `bikes`. Sau đó mỗi `spawnIntervalMinutes` một đợt **chỉ khi có đội online** (`players.length > 0`) và không tạm dừng; không ai online → không gắn lại; `tick()` gắn lại khi đội quay lại.
+- `claim` / `mount` (mount = claim xe của chính đội): thắng → xe cũ của đội biến mất (gone), ghi `bikes` + `events bikeClaim` (chỉ khi đổi chủ) rồi mới `{t:'bike', op:'claim', ok:true}` cho đội + broadcast `bikes`; thua → `ok:false, reason`. Xe ở bãi: claim = lấy lại (rack null).
+- `dismount`: tin trong 10 m quanh pose cuối thì dùng x, y, z, yaw của tin, xa hơn → đặt ở pose; không có pose → giữ chỗ cũ.
+- `tick()` (~1 s): xe đang đạp đi theo chủ (RAM, không ghi), chủ không còn trong `players` → `rider:false` tại chỗ (1 dòng; vẫn khóa, §6.3), xe bị bỏ → xóa dòng + `bikeGone` + `notice bikeGone` cho chủ + broadcast `gone`.
+- Host: `add` (`h<now>`, x/z phải hữu hạn), `remove` / `release` theo `id` hoặc `team`, `spawning` (paused). `park(team, rack)` cho Phase 7 (chủ null, `parked`, `parkedAt`, bãi đầy `bikeParking.maxBikes` → xe để lâu nhất biến mất, `notice bikeParked`).
 
-## Thiết kế đã chốt (để người làm tiếp khỏi suy lại)
-**Spawner (thuần, tất định):**
-- `stream(state)`: `rng(seed)` tua qua `state.draws` lần rồi mỗi lần rút `draws++` → restart nối tiếp đúng chuỗi.
-- Id xe = `b<draws lúc tạo>` (duy nhất, tất định); Host thêm tay = `h<now>`, `segment −2`; mồi `segment −1`.
-- Chọn điểm: đều trong các ứng viên không trong `noSpawnNearPlayerMeters` của đội online nào và không cách xe đang có < 3 m; hết điểm → bỏ.
-- Đợt đầu: mỗi đoạn `n ∈ initialPerSegment` xe. Mồi **thêm** cho mỗi xe đoạn với kỳ vọng `r/(1−r)` (r = `decoyRatio`) → tỉ lệ mồi/tổng ≈ r, số xe mỗi đoạn vẫn đúng `initialPerSegment`. Trần xe mồi trống = số đoạn × `maxAvailablePerSegment` (không tích tụ).
-- Định kỳ: đoạn có < `maxAvailablePerSegment` xe trống ngoài bãi (owner null, rack null) → xác suất `spawnChance` thêm 1.
-- `claim(bike|undefined, team, at|null, walkOnly)`: undefined → `gone`; owner khác → `taken`; walkOnly → `walkOnly`; at null hoặc > 3,5 m (`bikeRules.interactRadius` 2,5 + 1 m trễ pose) → `far`.
-- `abandoned`: cập nhật `nearOwnerAt` (chủ gần / offline / không có pose → `now`), trả id xe có chủ online cách > `abandonMeters` liên tục ≥ `abandonSeconds`. Khi DO nạp lại bảng `bikes`, `nearOwnerAt = now` (restart không làm mất xe ngay).
+### Client (Bikes, chế độ server)
+- `applyServer(list, gone?, full?)`: tạo / cập nhật cùng `BikeState` (giữ model), xe đội khác đang đạp → `rider = REMOTE_RIDER` (ẩn model, RemotePlayers vẽ), xe mình đang đạp giữ pose local; server lấy mất xe đang đạp (bãi / Host thả / xóa) → xuống xe.
+- `interact` với xe trong tầm (trống hoặc của mình) → gửi `claim`, trả `null` (im lặng tới khi server trả lời; không thêm `'claiming'` để `Player.ts` của B khỏi đổi kiểu), chặn gửi lại trong `claimTimeoutMs`. `onClaimResult(m)`: ok → lên xe nếu còn đứng cạnh; thua → `notify('bikeLost' | 'bikeTooFar' | 'walkOnly')`, đang ngồi xe đó thì xuống.
+- `update()` mỗi khung: so trạng thái đạp thật (`controller.riding`) với điều server biết → tự gửi `dismount` (xuống, ngã, rơi sông, hồi sinh, được duyệt nhưng đã đi xa) hoặc `mount` (server thả rider khi tưởng đội offline); đặt xe server (y = 0 vì server không có DEM) lên mặt đất qua `ground` khi người chơi trong `groundRadius`, ẩn tới lúc đó.
+- DEV `?bikes=free,mine,other,ridden,lost`: 3 xe thử (`bike.devSpawns`) thành xe "kiểu server" theo thứ tự (preset p6).
 
-**BikeService:** cache `bikes` RAM nạp lười từ SQLite; meta `spawner` = `{seed, draws, paused, nextAt, initialDone}` (1 dòng), meta `candidates`.
-- `host.candidates` → lưu, nếu chưa đợt đầu: `setAlarm(now)` → `alarm()` làm đợt đầu (kể cả khi chưa ai online), sau đó chỉ gắn lại khi `players.length > 0`.
-- `tick()` (A gọi ~1 s): xe đang đạp theo vị trí chủ (RAM), xe bị bỏ → xóa dòng + event + `notice bikeGone` + broadcast `gone`; nếu có đội online, có ứng viên, không tạm dừng và `nextAt === null` → gắn alarm `spawnIntervalMinutes`.
-- `claim` thắng: xe cũ của đội xóa (gone), ghi `bikes` + `events` **rồi** mới gửi `{t:'bike', op:'claim', ok}` + broadcast `bikes`. claim = lấy + lên xe (`rider: true`). `mount` (xe của mình) / `dismount` (mang x,y,z,yaw) cập nhật rider + vị trí, ghi 1 dòng, broadcast.
-- Host `add` / `remove` / `release` (id hoặc theo `team`), `spawning` (paused). `park(team, rack)` cho Phase 7 (owner null, parked, sức chứa `bikeParking.maxBikes`, cũ nhất biến mất, `notice bikeParked`); ponytail: chưa dời xe tới tọa độ bãi (Phase 7 có tọa độ).
+## Test (`npm test`)
+- `VehicleSpawner.test.ts`: chuỗi seed nối tiếp qua "restart"; đợt đầu ≤ 1 xe / đoạn, đúng đoạn, ≥ 120 m quanh đội; tỉ lệ mồi 0,4 ± 0,03 trên 1 000 seed; 300 đợt định kỳ không vượt `maxAvailablePerSegment` (xe ở bãi không tính), xe bị nhận → đoạn có xe mới, tạm dừng → không; cùng seed + draws → cùng kết quả; `claim` đủ 5 lý do + xe mình từ xa; bỏ xe 59 s không / 61 s có, offline không, quay lại tính lại.
+- `BikeService.test.ts`: SQLite thật của Node (`node:sqlite`) sau đúng các lệnh `SqlStorage` dùng, đồng hồ điều khiển: alarm + gắn lại chỉ khi có người, tạm dừng; claim ghi trước khi trả lời, walkOnly, taken, xe thứ hai làm xe cũ biến mất, gone; dismount xa không tin; đi theo người đạp, offline đứng yên, bỏ 60 s → gone + notice; bãi đầy; Host release / remove / dữ liệu xấu; restart dựng lại. **Harness thật (workerd):** 2 đội `claim` cùng xe cùng lúc → đúng 1 `ok:true`, đội kia `taken`, dòng `bikes` + `events` của người thắng; `host.candidates` → `setAlarm` → alarm → đợt đầu tới Host.
+- `spawnCandidates.test.ts` (đồ thị thật): 6 đoạn ≥ 12 điểm trong hành lang, cách mọi điểm ≥ 100 m (L2 → L3 không có bãi → mẫu vỉa hè); L3 → L4 toàn bãi xe; mồi ngoài mọi hành lang; tất định; tránh điểm nhiệm vụ.
+- `Bikes.test.ts` (+5): applyServer giữ đối tượng / gone / full / màu đội; F → claim → ok lên xe, taken → `bikeLost`; xuống / ngã → `dismount` một lần; hết `claimTimeoutMs` thì F gửi lại; server lấy xe đang đạp → xuống; đặt xe lên đất trong `groundRadius`.
 
-**Client `Bikes` (chế độ server, chỉ khi `net` được gán):** `team` thành id đội (bỏ `readonly`), `setTeams(teams)` → màu khóa, `ground?(x, z)` móc để đặt xe server (y = 0) lên mặt đất khi tới gần, `applyServer(list, gone?, full?)`, `onClaimResult(m)` trả mã toast (`bikeLost` / `bikeTooFar` / `walkOnly`) hoặc null, `interact` với xe trống → gửi `claim`, trả `'claiming'` (chờ ≤ `serverBikes.claimTimeoutMs`); xe của mình → lên ngay; `update()` đối chiếu trạng thái rider local với server → tự gửi `mount` / `dismount` (gồm cả ngã xe trong `Player.onDismount`, file của B). Xe người khác đang đạp → ẩn model (RemotePlayers vẽ). Offline (`net` không gán): y như Phase 4/5, ride-check không đổi.
+## Ponytail / giới hạn đã biết
+- `park` không dời xe tới tọa độ giá để xe (Phase 7 có tọa độ bãi).
+- Claim khi server chưa có pose của đội (ngay sau khi DO thức dậy, người đứng im) → `far`; đi một bước là hết.
+- Hướng xe sinh ra ngẫu nhiên (DO không biết hướng phố); id Host `h<ms>` (2 lần thêm cùng 1 ms trùng id).
+- Xe đi theo người đạp chỉ trong RAM; DO bị đẩy khỏi bộ nhớ lúc đang đạp → xe ở chỗ ghi cuối cho tới tick kế.
 
-**Ứng viên Host (`client/src/host/spawnCandidates.ts`):** mỗi đoạn A* `walk` giữa 2 điểm liên tiếp, `corridorEdges(width = corridorMeters)`; bãi xe `graph.file.bikeParking` trong `corridorMeters/2` của đường và cách mọi điểm ≥ `minDistanceFromCheckpoint` trước; thiếu `minCandidates` → lấy mẫu mỗi `candidateStep` m trên cạnh `sidewalk`/footway (không `bridge`/`steps`/`crossing`), chọn đều; decoys = mẫu vỉa hè toàn bản đồ ngoài mọi hành lang.
+## Người tích hợp cần làm (không có file nào của A / B / D bị sửa)
+**RaceRoom (A):**
+- Gọi `this.bikes.tick(this.players(), now)` ~1 lần / s trong vòng tick (kế hoạch đã ghi). `players()` = đội online có pose (như nền).
+- `welcome.pose.bikeId` = `this.bikes.list().find((b) => b.owner === team.id)?.id ?? null` (C không cập nhật `TeamState.bikeId`).
+- `HostState` cho trang Host gọi `spawnCandidates`: các điểm lộ trình theo thứ tự `[start, destination…]` (x, z), điểm nhiệm vụ nếu có, và `vehicles.corridorMeters` / `minDistanceFromCheckpoint` từ file chặng.
 
-## Cần người tích hợp / track khác
-- RaceRoom (A): gọi `bikes.tick(players, now)` ~1 s (kế hoạch đã ghi); `welcome.pose.bikeId` nên lấy từ xe có `owner === team` trong `bikes.list()` (TeamState.bikeId của A không được C cập nhật).
-- main/Player (B): offline giữ `placeBikes`; online: bỏ `placeBikes`, `player.bikes.team = session.team.id`, `bikes.net = net`, `bikes.setTeams(w.teams)` + `applyServer(w.bikes, [], true)` ở welcome, `applyServer(m.list, m.gone, m.full)` ở `bikes`, `notice(bikes.onClaimResult(m))` ở `bike`, `bikes.ground = (x, z) => groundAt(world, x, z, env.heightAt(x, z) + 5)`.
-- Toast `bikeLost` "Chậm một bước! Xe đã có người lấy." thuộc B (`ui/Toasts.ts`).
+**main.ts / Player.ts (B)** — online chỉ khi có session:
+```ts
+// Player: online thì KHÔNG gọi placeBikes (xe đến từ server); offline giữ nguyên.
+const bikes = player.bikes;
+bikes.notify = notice;                         // cả offline (preset p6-bike-lost); cần NoticeCode 'bikeLost' + 'walkOnly' của B
+if (session) {
+  bikes.team = session.team.id; bikes.colour = session.team.colour; bikes.net = net;
+  bikes.ground = (x, z, y) => groundAt(world, x, z, Math.max(y, env.heightAt(x, z)) + 3);
+}
+// welcome: bikes.setTeams(w.teams); bikes.applyServer(w.bikes, [], true);
+// message 'bikes': bikes.applyServer(m.list, m.gone, m.full);   message 'bike': bikes.onClaimResult(m);
+```
+Toast (B, `ui/Toasts.ts`): `bikeLost` "Chậm một bước! Xe đã có người lấy.", `walkOnly` "Lộ trình này bắt buộc đi bộ". `notice bikeGone` / `bikeParked` từ server do B hiển thị.
+
+**Trang Host (D):** nút "Tính hành lang & gửi ứng viên" = `send({ t: 'host.candidates', ...spawnCandidates(await loadRoadGraph(), points, checkpoints, rules) })` (đồ thị qua `geo/roadGraph.ts`).
+
+**Preset:** chụp lại `p6-bikes`, `p6-bike-lost` sau khi nối `bikes.notify` (lúc đó toast "Chậm một bước!" hiện); `ride-check` mặc định.
 
 ## Cách chạy test
-`npm test` (worker: vitest + createTestHarness; client: vitest). Ride-check: `SCREENSHOT_PORT=5303 npm run ride-check`.
+`npm run build && npm test` (từ gốc worktree); `SCREENSHOT_PORT=5303 npm run screenshot -- p6-bikes p6-bike-lost`; `SCREENSHOT_PORT=5303 npm run ride-check`.
