@@ -91,7 +91,7 @@ describe('louvre task (schema + checkLeg rules 1–8)', () => {
     for (const license of ['CC-BY-ND', 'personal', '']) {
       const b = fresh();
       task(b).louvre.artworks[1].credit.license = license;
-      has(b, 'error', /giấy phép không được phép \(SPEC §17.20/);
+      has(b, 'error', license === '' ? /thiếu giấy phép/ : /giấy phép không được phép \(SPEC §17.20/);
     }
     const c = fresh();
     task(c).description += ' (GIẢ) Tác phẩm 3';

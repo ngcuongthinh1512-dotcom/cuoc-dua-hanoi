@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import { artLeaks, checkFile, compass, loadMap, scanLeaks, secretStrings } from './leg-check.ts';
+import { artLeaks, checkFile, compass, loadMap, louvreTable, scanLeaks, secretStrings } from './leg-check.ts';
 import { chunkKey, type ChunkData } from '../client/src/geo/chunkData.ts';
 import { inRing } from '../client/src/geo/districts.ts';
 import { demoState } from '../client/src/host/hostView.ts';
@@ -495,5 +495,33 @@ describe('leg:check Phase 8B (louvre room: static pictures, rule 9)', () => {
     expect(sec).toEqual(expect.arrayContaining(['(GIẢ) Tác phẩm 1', '(GIẢ) Tranh 2', '(GIẢ) Họa sĩ 2']));
     expect(sec.filter((x) => /^art-\d\d$/.test(x))).toEqual([]);
   });
-});
 
+  it('track D: generic words (image / mesh / node) of an English note do not flag a picture; the photographer and source link do flag credits.json', () => {
+    const leg = louvre();
+    const arts = (leg.steps.find((x) => x.type === 'challenge' && x.task.kind === 'louvre') as any).task.louvre.artworks;
+    arts[0].note = 'image mesh node scene';
+    arts[1].credit = { ...arts[1].credit, photo: 'Jane Photographer', source: 'https://example.org/wiki/File:Secret_Name.jpg', license: 'CC-BY' };
+    const dir = mkdtempSync(join(tmpdir(), 'legart2-'));
+    mkdirSync(join(dir, 'client/public/art'), { recursive: true });
+    writeFileSync(join(dir, 'client/public/art/art-06.glb'), Buffer.from('glTF {"nodes":[{"name":"art-06"}],"meshes":[],"scenes":[],"images":[],"materials":[]}', 'latin1'));
+    expect(artLeaks(leg, dir)).toEqual([]);
+    writeFileSync(join(dir, 'client/public/art/art-09.webp'), Buffer.from('EXIF Artist=Jane Photographer', 'latin1'));
+    writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ text: 'https://example.org/wiki/File:Secret_Name.jpg' }]));
+    const out = artLeaks(leg, dir).map((i) => `${i.where}: ${i.message}`).join('\n');
+    expect(out).toMatch(/credits.json: chứa tên.*example.org/);
+    expect(out).toMatch(/art-09.webp: chứa chữ "jane"/);
+  });
+
+  it('track D: the report prints the 23-file table with present / missing / size and no artwork name', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'legart3-'));
+    mkdirSync(join(dir, 'client/public/art'), { recursive: true });
+    writeFileSync(join(dir, 'client/public/art/art-02.webp'), Buffer.alloc(2048, 1));
+    const lines = louvreTable(louvre(), dir).join('\n');
+    expect(lines).toContain('23 tác phẩm = 15 tranh + 8 tượng');
+    expect(lines).toMatch(/art-02\s+tranh\s+art-02.webp\s+có\s+2 KB/);
+    expect(lines).toMatch(/art-06\s+tranh\s+art-06.webp\s+THIẾU/);
+    expect(lines).toMatch(/art-01\s+tranh\s+—\s+chưa gán/);
+    expect(lines).toContain('Có 1 / 23 tệp');
+    expect(lines).not.toMatch(/\(GIẢ\) (Tác phẩm|Tranh)/); // titles / notes never printed
+  });
+});

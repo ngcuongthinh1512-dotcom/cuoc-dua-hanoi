@@ -6,7 +6,7 @@ import graphUrl from '@race/shared/data/roadgraph.json?url';
 import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { checkMediaFile, corridorPoints, counterLines, demoState, freshAlerts, freshQueue, inputToMs, legIssueLines, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startPreview, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, warnings } from './hostView.ts';
+import { checkMediaFile, corridorPoints, counterLines, demoState, freshAlerts, freshQueue, inputToMs, legIssueLines, legPenaltyLine, louvreLines, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startPreview, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, warnings, withLouvreDemo } from './hostView.ts';
 
 type State = HostState;
 /** Lazy: the corridor code + road graph load only when candidates are computed (docs/plans/phase6.md §2.4). */
@@ -253,6 +253,7 @@ function drawLeg(s: State) {
     legBox.replaceChildren(
       el('div', {}, leg ? el('b', {}, leg.title) : 'Chưa có chặng.', leg ? ` (mã ${leg.id}, múi giờ ${leg.timezone}, ${leg.steps.length} bước)` : ''),
       leg ? el('div', { className: 'note' }, legPenaltyLine(leg)) : '',
+      ...(leg ? louvreLines(leg).map((l) => el('div', { className: 'note' }, l)) : []),
       el('div', { className: 'row' }, 'Chặng có sẵn: ', sel, el('button', { disabled: locked, onclick: () => loadLeg({ id: sel.value }) }, 'Nạp'), ' · Nạp chặng từ file: ', file),
       locked ? el('p', { className: 'note' }, 'Chỉ nạp được khi cuộc đua chưa mở và chưa có đội nào vào game. Muốn đổi chặng: tạo cuộc đua mới (mã mới) → nạp chặng → tạo đội → phát mã → mở.') : '',
       legResult ? el('div', { className: legResult.ok ? 'on' : 'bad' }, legResult.ok ? 'Đã nạp chặng.' : 'Không nạp được chặng:') : '',
@@ -341,7 +342,7 @@ function drawMatrix(s: State, now: number) {
             const td = el('td', { className: `cell ${c.state}`, title: c.title }, text);
             const group: HTMLButtonElement[] = [];
             for (const b of c.buttons) {
-              const btn = el('button', { className: `small ${b.op === 'approve' ? 'ok' : 'danger'}`, title: b.title, onclick: () => fire(reviewMessage(b.team, b.step, b.op, b.id, ''), group) }, b.label);
+              const btn = el('button', { className: `small ${b.op === 'approve' ? 'ok' : 'danger'}`, title: b.title, onclick: () => { if (!b.confirm || confirm(b.confirm)) fire(reviewMessage(b.team, b.step, b.op, b.id, ''), group); } }, b.label);
               group.push(btn);
               td.append(el('div', {}, btn));
             }
@@ -566,7 +567,7 @@ function render(s: State) {
 setInterval(() => state && teamsBox.isConnected && render(state), hostPage.refreshMs);
 
 if (q.has('demo')) {
-  state = demoState(Date.now());
+  state = q.has('louvre') ? withLouvreDemo(demoState(Date.now())) : demoState(Date.now());
   receivedAt = Date.now();
   soundNewQueue(state); // the baseline: the demo queue is not "new"
   mediaStat.set('test-gia.jpg', { s: 'ok', size: 245_760 }); // canned (no server): one image uploaded, one missing

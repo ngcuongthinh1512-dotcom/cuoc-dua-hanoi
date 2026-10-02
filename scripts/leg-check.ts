@@ -193,21 +193,26 @@ const artworksOf = (s: Leg['steps'][number]): Artwork[] => (s.type === 'challeng
 /** Phase 8B rule 9 (docs/plans/phase8b.md §B): no artwork title / artist / Host note in the static "Ghi nguồn" file (whole
  *  text, ≥ 4 characters, plain + JSON-escaped) nor in the bytes of the room's pictures client/public/art/* (every word of ≥ 4
  *  letters: EXIF / XMP / GLB node names): the room's secret is only the 5 ids. ERROR (the file reaches every team). */
+/** Words every GLB / WebP carries by itself (glTF keys, container tags) or that say nothing about a work: an English note such
+ *  as "image of …" must not flag a picture for them. */
+const GENERIC = new Set(['image', 'images', 'mesh', 'meshes', 'node', 'nodes', 'scene', 'scenes', 'material', 'materials', 'texture', 'textures', 'model', 'webp', 'glb', 'gltf', 'photo', 'picture', 'painting', 'sculpture', 'statue', 'with', 'from', 'this', 'that', 'work', 'copy', 'public', 'domain', 'license', 'source', 'title', 'artist', 'version', 'creative', 'commons', 'note', 'test', 'tranh', 'tuong', 'tượng', 'giả']);
+
 export function artLeaks(leg: Leg, root = ROOT): LegIssue[] {
   const arts = leg.steps.flatMap(artworksOf);
   const out: LegIssue[] = [];
   const credits = join(root, 'client/public/credits.json');
   if (existsSync(credits)) {
     const text = readFileSync(credits, 'utf8').toLowerCase();
-    const hits = [...new Set(arts.flatMap((a) => [a.note, a.credit?.title ?? '', a.credit?.artist ?? '']).map((x) => x.trim()).filter((x) => x.length >= 4))]
+    // track D: also the photographer and the source link (a Commons URL carries the original file name)
+    const hits = [...new Set(arts.flatMap((a) => [a.note, a.credit?.title ?? '', a.credit?.artist ?? '', a.credit?.photo ?? '', a.credit?.source ?? '']).map((x) => x.trim()).filter((x) => x.length >= 4 && !GENERIC.has(x.toLowerCase())))]
       .filter((x) => text.includes(x.toLowerCase()) || text.includes(JSON.stringify(x).slice(1, -1).toLowerCase()));
     if (hits.length) out.push({ level: 'error', where: relative(root, credits), message: `chứa tên / ghi chú tác phẩm phòng Louvre ${hits.map((h) => `"${h.slice(0, 40)}"`).join(', ')}: file này tới máy mọi đội; chỉ một dòng chung, ghi nguồn chi tiết nằm trong chặng (gửi sau khi về đích)` });
   }
   const dir = join(root, 'client/public/art');
   if (existsSync(dir)) {
-    const text = (a: Artwork) => `${a.note} ${a.credit?.title ?? ''} ${a.credit?.artist ?? ''}`;
+    const text = (a: Artwork) => `${a.note} ${a.credit?.title ?? ''} ${a.credit?.artist ?? ''} ${a.credit?.photo ?? ''}`;
     // as written (UTF-8 metadata keeps the accents) and without diacritics (ASCII metadata)
-    const toks = [...new Set(arts.flatMap((a) => [...text(a).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4), ...words(text(a))]))];
+    const toks = [...new Set(arts.flatMap((a) => [...text(a).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4), ...words(text(a))]))].filter((w) => !GENERIC.has(w));
     const latin = (s: string) => Buffer.from(s, 'utf8').toString('latin1').toLowerCase();
     for (const n of readdirSync(dir)) {
       const f = join(dir, n);
@@ -430,6 +435,28 @@ function mapReport(leg: Leg, map: MapData) {
   return { issues, lines };
 }
 
+/** Phase 8B: the room's 23 static files at a glance (id, type, file, present?, size, licence, credit?): never a work's real name. */
+export function louvreTable(leg: Leg, root = ROOT): string[] {
+  const lines: string[] = [];
+  leg.steps.forEach((s, i) => {
+    const arts = artworksOf(s);
+    if (!arts.length) return;
+    const size = (f: string) => ((p) => (existsSync(p) ? statSync(p).size : null))(join(root, 'client/public/art', f));
+    const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} KB`;
+    const rows = arts.map((a) => {
+      const sz = a.image ? size(a.image) : null;
+      return { a, sz, state: a.image === '' ? 'chưa gán' : sz === null ? 'THIẾU' : 'có' };
+    });
+    lines.push('', `Phòng Louvre (bước ${i + 1}, ${s.id}): ${arts.length} tác phẩm = ${arts.filter((a) => a.type === 'painting').length} tranh + ${arts.filter((a) => a.type === 'sculpture').length} tượng. Hình / mô hình là TỆP TĨNH có sẵn trong game (client/public/art/), không cần tải lên trang Host.`);
+    lines.push('  mã      loại    tệp          tệp có?   dung lượng  giấy phép    ghi nguồn');
+    for (const { a, sz, state } of rows)
+      lines.push(`  ${a.id.padEnd(7)} ${(a.type === 'painting' ? 'tranh' : 'tượng').padEnd(7)} ${(a.image || '—').padEnd(12)} ${state.padEnd(9)} ${(sz === null ? '—' : kb(sz)).padEnd(11)} ${(a.credit?.license ?? '—').padEnd(12)} ${a.credit ? 'có' : a.image ? 'THIẾU' : '—'}`);
+    const have = rows.filter((r) => r.sz !== null);
+    lines.push(`  Có ${have.length} / ${arts.length} tệp (${kb(have.reduce((n, r) => n + r.sz!, 0))}); thiếu ${rows.filter((r) => r.state === 'THIẾU').length}, chưa gán ${rows.filter((r) => r.state === 'chưa gán').length}. Tệp tạo bằng: npm run process-assets -- --assets .cache/assets louvre`);
+  });
+  return lines;
+}
+
 export interface CheckResult { ok: boolean; issues: LegIssue[]; report: string }
 
 /** Runs every check on `file`; `scanDirs` = static-asset folders to search for leaked texts (default client/public + client/dist). */
@@ -464,7 +491,7 @@ export function checkFile(file: string, opts: { root?: string; scanDirs?: string
     issues.push(...media.issues);
     issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(leg), root, answerStrings(leg)));
     issues.push(...artLeaks(leg, root));
-    lines.push(...media.lines, ...rep.lines);
+    lines.push(...media.lines, ...rep.lines, ...louvreTable(leg, root));
   }
   // SPEC §3: leg content never in client/ (shipped to every player); a real leg is best kept outside the project (no git)
   const inside = (dir: string) => ((rel) => !rel.startsWith('..') && !isAbsolute(rel))(relative(join(root, dir), resolve(file)));

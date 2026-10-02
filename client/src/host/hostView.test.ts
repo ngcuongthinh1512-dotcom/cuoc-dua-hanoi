@@ -1,6 +1,6 @@
 import { isClientMessage, MEDIA, NET, type HostState } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, billableRequests, checkMediaFile, corridorPoints, counterLines, demoState, fmtDuration, fmtMinSec, freshAlerts, freshQueue, inputToMs, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, msToInput, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startPreview, startRows, statusButtons, stuckAlerts, teamRows, warnings } from './hostView.ts';
+import { ago, billableRequests, checkMediaFile, corridorPoints, counterLines, demoState, fmtDuration, fmtMinSec, freshAlerts, freshQueue, inputToMs, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, msToInput, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startPreview, startRows, statusButtons, stuckAlerts, teamRows, warnings, withLouvreDemo, louvreLines } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -381,5 +381,46 @@ describe('R2 images and the leg line (D14, D16 (4) (5))', () => {
     const states = progressTable(s, NOW, 'real').rows.flatMap((r) => r.cells.map((c) => c.state));
     expect(states).toContain('pending');
     expect(states).toContain('locked');
+  });
+});
+
+// ── Phase 8B track D: louvre cell ──
+describe('louvre cell (phase8b §H)', () => {
+  const s = withLouvreDemo(demoState(NOW));
+  const cellOf = (state: HostState, name: string, now = NOW) => rowOf(state, name, now).cells[5]!;
+
+  it('shows picks / misses / the 70 min hint with the live x, a countdown while locked, and the exit button', () => {
+    const c = cellOf(s, 'Đội Lục');
+    expect(c.state).toBe('locked');
+    expect(c.text).toBe('⏳ 02:10 · chọn 5/23 · ✗2 · 💡70 (3/5)');
+    expect(c.buttons.map((b) => [b.op, b.id, b.step])).toEqual([['approve', undefined, 'T3']]); // approve without id = the way out
+    expect(c.buttons[0]!.confirm).toContain('Đội Lục');
+    expect(c.title).toContain('Đang chọn (5): art-04, art-09, art-11, art-15, art-20');
+    expect(c.title).toContain('đúng 2/5');
+    expect(c.title).toContain('đúng 3/5');
+  });
+
+  it('hint marks follow the clock: nothing, 40, then 70 (x only when the server sent it)', () => {
+    const at = (min: number, more: Partial<Row> = {}) => cellOf(withRow(s, 't3', 'T3', { lockedUntil: null, startedAt: NOW - min * MIN, ...more }), 'Đội Lục');
+    expect(at(10).text).toBe('chọn 5/23 · ✗2');
+    expect(at(41).text).toBe('chọn 5/23 · ✗2 · 💡40');
+    expect(at(71, { hintCorrect: 0 }).text).toBe('chọn 5/23 · ✗2 · 💡70 (0/5)');
+    expect(at(71, { hintCorrect: null }).text).toBe('chọn 5/23 · ✗2 · 💡70');
+    expect(at(10).state).toBe('active');
+  });
+
+  it('a finished louvre step is an ordinary done cell; teams before it have no button', () => {
+    expect(cellOf(s, 'Đội Xanh').state).toBe('done');
+    expect(cellOf(s, 'Đội Đỏ').buttons).toEqual([]);
+  });
+
+  it('the stuck warning still fires for a team in the room', () => {
+    const late = withRow(s, 't3', 'T3', { startedAt: NOW - 50 * MIN, lockedUntil: null });
+    expect(stuckAlerts(late, NOW).find((a) => a.team === 't3')?.step).toBe('T3');
+  });
+
+  it('the leg box line; no answers or artwork names anywhere in the demo', () => {
+    expect(louvreLines(s.leg!)).toEqual(['Thử thách 3: phòng Louvre, 23 tác phẩm (ảnh / mô hình có sẵn trong game, không cần tải lên), gợi ý phút 40 / 70.']);
+    expect(louvreLines(demoState(NOW).leg!)).toEqual([]);
   });
 });

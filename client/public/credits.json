@@ -108,5 +108,11 @@
   "licence": "MIT",
   "url": "https://github.com/microsoft/Microsoft-Rocketbox",
   "author": "Microsoft"
+ },
+ {
+  "title": "Phòng Louvre",
+  "text": "Ảnh / mô hình tác phẩm phòng Louvre: xem bảng Ghi nguồn sau khi về đích",
+  "licence": "xem bảng Ghi nguồn sau khi về đích",
+  "url": "https://creativecommons.org/licenses/"
  }
 ]

@@ -387,7 +387,7 @@ Object.assign(PRESETS, {
     }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
   ),
   // [D] Host page: a louvre cell "chọn k/23 · ✗n · 💡40 / 💡70 (x/5)" + its title history (demoState)
-  'p8b-host': '/host.html?demo=1',
+  'p8b-host': '/host.html?demo=1&louvre=1',
 });
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 
