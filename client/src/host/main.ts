@@ -3,10 +3,10 @@
 // it with SPEC §13.
 import type { RoadGraph, RoadGraphFile } from '@race/shared/graph';
 import graphUrl from '@race/shared/data/roadgraph.json?url';
-import { CLOSE, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
+import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { corridorPoints, counterLines, demoState, inputToMs, legIssueLines, parseTeamLines, progressTable, startPreview, startRows, STATUS_LABEL, statusButtons, teamRows, warnings } from './hostView.ts';
+import { checkMediaFile, corridorPoints, counterLines, demoState, freshAlerts, freshQueue, inputToMs, legIssueLines, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startPreview, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, warnings } from './hostView.ts';
 
 type State = HostState;
 /** Lazy: the corridor code + road graph load only when candidates are computed (docs/plans/phase6.md §2.4). */
@@ -27,6 +27,7 @@ let state: State | null = null;
 let receivedAt = Date.now(); // when `state` arrived: the server's clock now ≈ state.serverMs + (Date.now() − receivedAt)
 let ws: WebSocket | null = null;
 let race = q.get('race') ?? net.defaultRace;
+let hostToken = ''; // Authorization of the R2 image requests (D14); '' = demo / not logged in
 /** True when the frame went out; false while the socket is down (the caller keeps what the Host typed). */
 const send = (m: ClientMessage) => (ws?.readyState === WebSocket.OPEN ? (ws.send(JSON.stringify(m)), true) : false);
 
@@ -59,7 +60,8 @@ function loginView() {
 let pending = 0;
 
 function connect(token: string) {
-  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${net.apiBase}/race/${encodeURIComponent(race)}/ws?token=${encodeURIComponent(token)}`;
+  hostToken = token;
+  const url =`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${net.apiBase}/race/${encodeURIComponent(race)}/ws?token=${encodeURIComponent(token)}`;
   ws = new WebSocket(url);
   ws.onmessage = (e) => {
     if (e.data === NET.pong) return;
@@ -69,7 +71,8 @@ function connect(token: string) {
     if (m.t === 'host.legResult') return void ((legResult = m), (sigs.leg = ''), state && render(state));
     if (m.t !== 'host.state') return;
     receivedAt = Date.now();
-    render((state = m));
+    soundNewQueue((state = m));
+    render(m);
     if (pending && m.teams.length >= pending) (create.value = ''), (pending = 0);
     void autoCandidates();
   };
@@ -90,6 +93,12 @@ const statusBox = el('section');
 const legBox = el('section');
 const startBox = el('section');
 const matrixBox = el('section');
+const mediaBox = el('section');
+const queueHead = el('h2');
+const notifyBtn = el('button', { className: 'small', onclick: () => void askNotify() });
+const queueBox = el('section', { className: 'review-list' });
+/** "Chờ duyệt (n)": sticky at the top while something waits (D16 (1)). */
+const queueWrap = el('div', { className: 'queue-wrap' }, el('div', { className: 'row' }, queueHead, notifyBtn), queueBox);
 const matrixMode = el('span', { className: 'row' });
 const teamsBox = el('section');
 const counters = el('section');
@@ -102,7 +111,7 @@ let showT = false; // §13.6: real time ⇄ T+ on each team's own clock
 const notices: { level: 'error' | 'warning'; message: string; at: number }[] = [];
 const drafts = new Map<string, string>(); // team id → what the Host typed in its start-time input (survives a rebuild)
 const previews = new Map<string, { input: HTMLInputElement; out: HTMLElement }>();
-const sigs = { status: '', leg: '', start: '' };
+const sigs = { status: '', leg: '', start: '', queue: '', matrix: '', media: '' };
 
 function addNotice(level: 'error' | 'warning', message: string) {
   notices.push({ level, message, at: Date.now() });
@@ -120,13 +129,15 @@ function mainView() {
   const modeBtn = (label: string, t: boolean) => el('button', { className: `small${showT === t ? ' sel' : ''}`, onclick: () => ((showT = t), drawModes(), state && render(state)) }, label);
   const drawModes = () => matrixMode.replaceChildren(modeBtn('Giờ thực', false), modeBtn('T+ (đồng hồ từng đội)', true));
   drawModes();
-  sigs.status = sigs.leg = sigs.start = '';
+  sigs.status = sigs.leg = sigs.start = sigs.queue = sigs.matrix = sigs.media = '';
+  drawNotify();
   app.replaceChildren(
     el('h1', {}, `Cuộc đua Paris – Host · ${race}`),
     el('p', {}, 'Link cho người chơi: ', el('code', {}, link), ' ', el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(link) }, 'Sao chép')),
-    banner, noticeBox, err,
+    banner, noticeBox, err, queueWrap,
     el('h2', {}, 'Cuộc đua'), statusBox,
     el('h2', {}, 'Chặng'), legBox,
+    el('h2', {}, 'Hình mật thư (R2)'), mediaBox,
     el('h2', {}, 'Tạo đội'),
     el('section', {}, create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
     el('h2', {}, 'Giờ xuất phát'), startBox,
@@ -233,7 +244,7 @@ function drawStatus(s: State) {
 }
 
 function drawLeg(s: State) {
-  once('leg', JSON.stringify([s.leg?.id, s.leg?.bundled, s.leg?.issues, s.status, s.teams.some((t) => t.startOrder !== null), legResult]), () => {
+  once('leg', JSON.stringify([s.leg?.id, s.leg?.bundled, s.leg?.issues, s.leg?.penalties, s.leg?.stuckMinutes, s.status, s.teams.some((t) => t.startOrder !== null), legResult]), () => {
     const leg = s.leg;
     const locked = s.status !== 'lobby' || s.teams.some((t) => t.startOrder !== null);
     const sel = el('select', { disabled: locked }, ...(leg?.bundled ?? []).map((id) => el('option', { value: id, selected: id === leg?.id }, id)));
@@ -241,6 +252,7 @@ function drawLeg(s: State) {
     const issues = legIssueLines([...(legResult?.issues ?? []), ...(legResult ? [] : (leg?.issues ?? []))]);
     legBox.replaceChildren(
       el('div', {}, leg ? el('b', {}, leg.title) : 'Chưa có chặng.', leg ? ` (mã ${leg.id}, múi giờ ${leg.timezone}, ${leg.steps.length} bước)` : ''),
+      leg ? el('div', { className: 'note' }, legPenaltyLine(leg)) : '',
       el('div', { className: 'row' }, 'Chặng có sẵn: ', sel, el('button', { disabled: locked, onclick: () => loadLeg({ id: sel.value }) }, 'Nạp'), ' · Nạp chặng từ file: ', file),
       locked ? el('p', { className: 'note' }, 'Chỉ nạp được khi cuộc đua chưa mở và chưa có đội nào vào game. Muốn đổi chặng: tạo cuộc đua mới (mã mới) → nạp chặng → tạo đội → phát mã → mở.') : '',
       legResult ? el('div', { className: legResult.ok ? 'on' : 'bad' }, legResult.ok ? 'Đã nạp chặng.' : 'Không nạp được chặng:') : '',
@@ -296,27 +308,231 @@ function updatePreviews() {
   }
 }
 
+/** Review buttons: after one press the group stays off for hostPage.reviewLockMs (the answer leaves the queue when host.state
+ *  arrives; a double click is idempotent on the server). A down socket keeps them on and says so. */
+function fire(msg: ClientMessage, group: HTMLButtonElement[]) {
+  if (!send(msg)) return void addNotice('error', 'Đang mất kết nối, chưa gửi được.');
+  for (const b of group) b.disabled = true;
+  setTimeout(() => group.forEach((b) => (b.disabled = false)), hostPage.reviewLockMs);
+}
+
+const cellTexts: HTMLElement[][] = []; // matrix: per team row, per step: the text span (rewritten every second; the buttons are not)
 function drawMatrix(s: State, now: number) {
   const { head, rows } = progressTable(s, now, showT ? 't' : 'real');
-  if (!rows.length) return void matrixBox.replaceChildren('Chưa có đội nào.');
-  const th = (t: string, title = '') => el('th', { title }, t);
-  // team (pinned) + ranking columns before the step columns: the result is readable at 1024 px without scrolling sideways
-  matrixBox.replaceChildren(el('div', { className: 'scroll' }, el('table', { className: 'matrix pin' },
-    el('tr', {}, th('Đội'), th('Hạng'), th('Chính thức'), th('Cách'), th('Phạt'), th('Về đích'), ...head.map((h) => th(h.label, h.title))),
-    ...rows.map((r) => el('tr', {},
-      el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
-      el('td', {}, r.rank), el('td', {}, r.official), el('td', {}, r.gap), el('td', {}, r.penalty), el('td', {}, r.finish),
-      ...r.cells.map((c) => el('td', { className: `cell ${c.state}`, title: c.title }, c.text)),
-    )),
-  )));
+  if (!rows.length) return void ((sigs.matrix = ''), matrixBox.replaceChildren('Chưa có đội nào.'));
+  const th = (t: string, title = '', className = '') => el('th', { title, className }, t);
+  // Buttons in cells (D16 (3)): the table is rebuilt only when something but the running clocks changed, else a click that
+  // lands while it is rebuilt is lost. The clocks ("chờ duyệt mm:ss", "⏳ mm:ss") are written in place below.
+  const sig = JSON.stringify([head, rows.map((r) => [r.team, r.name, r.colour, r.rank, r.official, r.gap, r.penalty, r.approvalWait, r.finish, r.cells.map((c) => [c.state, c.title, c.buttons])])]);
+  once('matrix', sig, () => {
+    cellTexts.length = 0;
+    // team (pinned) + ranking columns before the step columns: the result is readable at 1024 px without scrolling sideways
+    matrixBox.replaceChildren(el('div', { className: 'scroll' }, el('table', { className: 'matrix pin' },
+      el('tr', {}, th('Đội'), th('Hạng'), th('Chính thức'), th('Cách'), th('Phạt'), th('Bù giờ chờ duyệt', 'Tổng thời gian đội chờ Host duyệt (trừ khỏi giờ chính thức khi chặng không tính thời gian chờ)', 'wrap'), th('Về đích'), ...head.map((h) => th(h.label, h.title))),
+      ...rows.map((r) => {
+        const texts: HTMLElement[] = [];
+        cellTexts.push(texts);
+        return el('tr', {},
+          el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
+          el('td', {}, r.rank), el('td', {}, r.official), el('td', {}, r.gap), el('td', {}, r.penalty), el('td', {}, r.approvalWait), el('td', {}, r.finish),
+          ...r.cells.map((c) => {
+            const text = el('span', {}, c.text);
+            texts.push(text);
+            const td = el('td', { className: `cell ${c.state}`, title: c.title }, text);
+            const group: HTMLButtonElement[] = [];
+            for (const b of c.buttons) {
+              const btn = el('button', { className: `small ${b.op === 'approve' ? 'ok' : 'danger'}`, title: b.title, onclick: () => fire(reviewMessage(b.team, b.step, b.op, b.id, ''), group) }, b.label);
+              group.push(btn);
+              td.append(el('div', {}, btn));
+            }
+            return td;
+          }),
+        );
+      }),
+    )));
+  });
+  rows.forEach((r, ri) => r.cells.forEach((c, ci) => { const t = cellTexts[ri]?.[ci]; if (t && t.textContent !== c.text) t.textContent = c.text; }));
 }
+
+// ── Phase 8 (docs/plans/phase8.md D16, track E): review queue, sounds, notifications, stuck teams, R2 images ──
+
+let actx: AudioContext | null = null;
+/** A beep needs an AudioContext started by a user gesture: the first click / key (the login) does it. */
+const unlockAudio = () => { try { actx ??= new AudioContext(); void actx.resume(); } catch { /* no audio: the banner and the queue still show */ } };
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, unlockAudio, { once: true });
+/** queue = a rising pair; stuck = four falling beeps (SPEC §8.9 (6) / D11). */
+function beep(kind: 'queue' | 'stuck') {
+  if (!actx || actx.state !== 'running') return;
+  const notes = kind === 'queue' ? [880, 1320] : [520, 390, 520, 390];
+  const t = actx.currentTime;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(hostPage.beepVolume, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + notes.length * 0.18 + 0.1);
+  g.connect(actx.destination);
+  notes.forEach((f, i) => {
+    const o = actx!.createOscillator();
+    o.frequency.value = f;
+    o.connect(g);
+    o.start(t + i * 0.18);
+    o.stop(t + i * 0.18 + 0.15);
+  });
+}
+const canNotify = () => typeof Notification !== 'undefined';
+function notify(title: string, body: string, tag: string) {
+  if (!canNotify() || Notification.permission !== 'granted') return;
+  try { new Notification(title, { body, tag }); } catch { /* some mobile browsers only allow it from a service worker */ }
+}
+function drawNotify() {
+  const p = canNotify() ? Notification.permission : 'unsupported';
+  notifyBtn.textContent = p === 'granted' ? 'Thông báo: đã bật' : p === 'denied' ? 'Thông báo bị chặn (mở khóa trong cài đặt trình duyệt)' : p === 'unsupported' ? 'Trình duyệt không có thông báo' : 'Bật thông báo';
+  notifyBtn.disabled = p !== 'default';
+}
+async function askNotify() {
+  unlockAudio();
+  if (canNotify()) await Notification.requestPermission().catch(() => null);
+  drawNotify();
+}
+
+const seenQueue = new Set<string>(); // team|step|id of every answer seen so far: only a new one sounds
+let queueBaseline = true; // the first state of a page load is not "new"
+const noteDrafts = new Map<string, string>(); // queue key → the Host's note box (survives a rebuild of the queue)
+const queueWaits = new Map<string, HTMLElement>(); // queue key → its "chờ mm:ss" (ticks every second)
+function soundNewQueue(s: State) {
+  const fresh = freshQueue(seenQueue, queueRows(s, s.serverMs), queueBaseline);
+  queueBaseline = false;
+  if (!fresh.length || !hostPage.queueBeep) return;
+  beep('queue');
+  for (const r of fresh) notify(`${r.name}: chờ duyệt`, `${r.label}${r.branch ? ` (nhánh ${r.branch})` : ''} · ${r.text ? `«${r.text}»` : 'đã gửi bài qua Messenger'}`, r.key);
+}
+
+function drawQueue(s: State, now: number) {
+  const rows = queueRows(s, now);
+  queueHead.textContent = `Chờ duyệt (${rows.length})`;
+  queueWrap.classList.toggle('has', rows.length > 0);
+  once('queue', queueSig(s), () => {
+    queueWaits.clear();
+    queueBox.replaceChildren(...rows.map((r) => {
+      const note = el('textarea', { rows: 1, maxLength: NET.noteMax, placeholder: 'Ghi chú của Host (đội không thấy)', value: noteDrafts.get(r.key) ?? r.note });
+      note.addEventListener('input', () => noteDrafts.set(r.key, note.value));
+      const wait = el('b', {}, r.waiting);
+      queueWaits.set(r.key, wait);
+      const group: HTMLButtonElement[] = [];
+      const btn = (label: string, className: string, op: 'approve' | 'penalize' | 'note') => {
+        const b = el('button', { className, onclick: () => {
+          fire(reviewMessage(r.team, r.step, op, op === 'note' ? undefined : r.id, note.value), group);
+          if (op !== 'note') noteDrafts.delete(r.key); // the answer leaves the queue; the note went with the decision
+        } }, label);
+        group.push(b);
+        return b;
+      };
+      return el('div', { className: 'review' },
+        el('div', { className: 'row' },
+          el('span', { className: 'dot', style: `background:${r.colour}` }), el('b', {}, r.name), ` · ${r.label}${r.branch ? ` · nhánh ${r.branch}` : ''} · mã `,
+          el('code', { className: 'code' }, r.code), el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(r.code) }, 'Sao chép'), ' · chờ ', wait),
+        el('div', { className: 'answer' }, r.text ? `«${r.text}»` : 'Đội báo đã gửi bài qua Messenger (đối chiếu ảnh với mã trên).'),
+        r.reference.length ? el('div', { className: 'ref' }, el('b', {}, 'Đáp án tham khảo: '), r.reference.join(' | ')) : '',
+        el('div', { className: 'row' }, note, btn('Duyệt', 'ok', 'approve'), btn(`Phạt ${String(r.lockMinutes).replace('.', ',')} phút`, 'danger', 'penalize'), btn('Lưu ghi chú', 'small', 'note')),
+      );
+    }));
+  });
+  for (const r of rows) {
+    const w = queueWaits.get(r.key);
+    if (w && w.textContent !== r.waiting) w.textContent = r.waiting;
+  }
+}
+
+const alerted = new Map<string, number>(); // team|step → the stuck period already sounded (D11: tải lại trang thì báo lại một lần)
+/** Red lines for the stuck teams + one beep / Notification per team and period. */
+function stuckLines(s: State, now: number): string[] {
+  const alerts = stuckAlerts(s, now);
+  const fresh = freshAlerts(alerted, alerts, hostPage.alertRepeat);
+  if (fresh.length) {
+    beep('stuck');
+    for (const a of fresh) notify('Đội làm lâu một thử thách', a.text, `stuck|${a.key}`);
+  }
+  return alerts.map((a) => `⏰ ${a.text}`);
+}
+
+type MediaStat = { s: 'checking' | 'ok' | 'missing' | 'error'; size?: number; msg?: string };
+const mediaStat = new Map<string, MediaStat>();
+const mediaEls = new Map<string, HTMLElement>();
+const mediaUrl = (name: string) => mediaPath(net.apiBase, race, name);
+const auth = () => ({ Authorization: `Bearer ${hostToken}` });
+function paintMedia(name: string) {
+  const m = mediaStat.get(name);
+  const e = mediaEls.get(name);
+  if (!e) return;
+  e.textContent = !m ? '…' : m.s === 'checking' ? 'đang kiểm tra…' : m.s === 'ok' ? `✓ đã có${m.size ? ` (${Math.max(1, Math.round(m.size / 1024))} KB)` : ''}` : m.s === 'missing' ? '✗ chưa tải lên' : `? ${m.msg ?? 'lỗi'}`;
+  e.className = m?.s === 'ok' ? 'on' : m?.s === 'missing' ? 'bad' : 'warn';
+}
+/** HEAD one image: exists? `quiet` = a periodic re-check of a missing one (no "đang kiểm tra" flicker). */
+async function headMedia(name: string, quiet = false) {
+  if (!hostToken) return; // demo: statuses are canned
+  if (!quiet) (mediaStat.set(name, { s: 'checking' }), paintMedia(name));
+  try {
+    const r = await fetch(mediaUrl(name), { method: 'HEAD', headers: auth() });
+    mediaStat.set(name, r.ok ? { s: 'ok', size: Number(r.headers.get('Content-Length')) || undefined } : r.status === 404 ? { s: 'missing' } : { s: 'error', msg: mediaErrorText(r.status) });
+  } catch {
+    mediaStat.set(name, { s: 'error', msg: 'Không kết nối được máy chủ.' });
+  }
+  paintMedia(name);
+}
+async function uploadMedia(name: string, file: File) {
+  const bad = checkMediaFile(file);
+  if (bad) return void addNotice('error', `${name}: ${bad}`);
+  mediaStat.set(name, { s: 'checking' });
+  paintMedia(name);
+  try {
+    const r = await fetch(mediaUrl(name), { method: 'PUT', headers: { ...auth(), 'Content-Type': file.type }, body: file });
+    if (!r.ok) addNotice('error', `${name}: ${mediaErrorText(r.status)}`);
+  } catch {
+    addNotice('error', `${name}: không kết nối được máy chủ.`);
+  }
+  await headMedia(name);
+}
+async function viewMedia(name: string) {
+  const w = window.open('', '_blank'); // opened now (a click), filled when the image arrives: a popup blocker allows only the first
+  try {
+    const r = await fetch(mediaUrl(name), { headers: auth() });
+    if (!r.ok) throw new Error(mediaErrorText(r.status));
+    const url = URL.createObjectURL(await r.blob());
+    if (w) w.location.href = url;
+    else window.open(url, '_blank');
+  } catch (e) {
+    w?.close();
+    addNotice('error', `${name}: ${e instanceof Error ? e.message : 'không xem được hình'}`);
+  }
+}
+function drawMedia(s: State) {
+  const names = mediaNames(s);
+  for (const n of names) if (!mediaStat.has(n)) void headMedia(n);
+  once('media', names.join('|'), () => {
+    mediaEls.clear();
+    mediaBox.replaceChildren(
+      el('p', { className: 'note' }, `Hình của chặng ("r2:<tên>") tải lên theo từng cuộc đua (mã ${race}): đổi mã cuộc đua thì tải lại. Tối đa ${MEDIA.maxBytes / 1048576} MB, jpg / png / webp; chỉ đội đã mở mật thư đó mới xem được.`),
+      ...(names.length ? names.map((n) => {
+        const status = el('span', {});
+        mediaEls.set(n, status);
+        const file = el('input', { type: 'file', accept: MEDIA.types.join(','), disabled: !hostToken, onchange: () => { const f = file.files?.[0]; file.value = ''; if (f) void uploadMedia(n, f); } });
+        return el('div', { className: 'row' }, el('code', { className: 'code' }, n), status, file, el('button', { className: 'small', disabled: !hostToken, onclick: () => void viewMedia(n) }, 'Xem'));
+      }) : [el('p', { className: 'note' }, 'Chặng này không có hình tải lên (không có "r2:…").')]),
+    );
+    for (const n of names) paintMedia(n);
+  });
+}
+setInterval(() => {
+  if (document.hidden || !state) return;
+  for (const n of mediaNames(state)) if (mediaStat.get(n)?.s === 'missing') void headMedia(n, true);
+}, hostPage.mediaHeadRetryMs);
 
 function render(s: State) {
   const th = (...h: string[]) => el('tr', {}, ...h.map((t) => el('th', {}, t)));
   const now = s.serverMs + (Date.now() - receivedAt);
-  banner.replaceChildren(...warnings(s).map((w) => el('div', {}, w)));
+  banner.replaceChildren(...[...warnings(s), ...stuckLines(s, now)].map((w) => el('div', {}, w)));
+  drawQueue(s, now);
   drawStatus(s);
   drawLeg(s);
+  drawMedia(s);
   drawStart(s);
   updatePreviews();
   drawMatrix(s, now);
@@ -352,6 +568,9 @@ setInterval(() => state && teamsBox.isConnected && render(state), hostPage.refre
 if (q.has('demo')) {
   state = demoState(Date.now());
   receivedAt = Date.now();
+  soundNewQueue(state); // the baseline: the demo queue is not "new"
+  mediaStat.set('test-gia.jpg', { s: 'ok', size: 245_760 }); // canned (no server): one image uploaded, one missing
+  mediaStat.set('test-gia-2.jpg', { s: 'missing' });
   mainView();
 } else loginView();
 // DEV / tests: the page can be read back without a server.

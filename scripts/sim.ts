@@ -5,10 +5,16 @@
 // Prints message / byte counts and the Host counters so the estimate can be compared with the §9 budget.
 // Phase 7: `--leg <id | file.json>` (e.g. `--leg mini`) plays the WHOLE leg instead: a Host bot loads it (host.leg), creates
 // the teams, enters every team's start time ('now') and opens the race; each bot walks the A* route to every step's zone
-// (5 Hz), opens the box / sends the task (the right answer from the leg file) / checks in at the Pit Stop, and the run ends
-// when every team finished; the report adds the finish count, the ranking and the SQLite rows per team written while the race
-// ran, without the shared snapshot / replay rows (budget legRowBudget: 110 up to 10 steps; measured in the in-process harness only).
-// The walk is capped at the server's trusted-point rate (D4), so a full `mini` run takes ~6 min at --speedup 2.
+// (5 Hz), opens the box / plays the challenge / checks in at the Pit Stop, and the run ends when every team finished; the
+// report adds the finish count, the ranking and the SQLite rows per team written while the race ran, without the shared
+// snapshot / replay rows (budget legRowBudget: 160 up to 10 steps; measured in the in-process harness only).
+// Phase 8 (docs/plans/phase8.md D18): a challenge → "Nhận thử thách" if it has a teaser, then the answer from the leg file
+// (answers[0], else referenceAnswers[0]; '' for a photo task); a detour → the branch `i % n`; ONE bot switches branch right
+// after choosing (waits out the countdown, walks to the other box, `open {branch}`); a Host bot approves every answer in
+// host.state.queue, except the first answer of one bot at the first challenge, which it penalizes once (that bot waits out
+// the countdown and answers again). The leg is loaded with its penalties shortened to 6 s / 12 s (SIM_PENALTIES) so a
+// rehearsal does not wait 3 + 10 minutes. The walk is capped at the server's trusted-point rate (D4), so a full `mini` run
+// takes ~6 min at --speedup 2.
 // --speedup k plays k× faster (5k messages/s per bot, SAME messages per simulated minute; the server's speed check
 // then flags the bots (expected, flag only), and the server closes a socket beyond 15 msg/s in a 1 s window, so k ≤ 2:
 // 10 msg/s nominal leaves room for timer jitter; 15 would sit exactly on the limit).
@@ -17,7 +23,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { RoadGraph, type RoadGraphFile, pathPolyline, shortestPath } from '@race/shared/graph';
-import { encodePose, NET, type HostState, type PoseSample, type ServerMessage, type ServerNotice, type Welcome } from '@race/shared/protocol';
+import { encodePose, NET, type CardStatus, type ClueCard, type HostReview, type HostState, type PoseSample, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
 
 export interface SimOptions {
   url?: string; // running server (wrangler dev); default: in-process createTestHarness
@@ -51,20 +57,30 @@ export interface SimReport {
   /** Phase 7 `--leg` run: teams that checked in, ranking rows, the steps played; SQLite rows per team written while the race ran
    *  WITHOUT the shared snapshot / replay rows (`sharedRows`, they do not grow with the team count), vs `rowBudget`. Rows are only
    *  measured in the in-process harness (null with --url). null = random walk. */
-  leg: { id: string; steps: number; finished: number; ranked: number; rowsPerTeam: number | null; sharedRows: number | null; rowBudget: number; refused: string[] } | null;
+  leg: { id: string; steps: number; finished: number; ranked: number; rowsPerTeam: number | null; sharedRows: number | null; rowBudget: number; refused: string[]; stats: LegStats } | null;
   flagged: number;
   speedup: number;
 }
 
 const FILE = join(import.meta.dirname, '../shared/data/roadgraph.json');
 
-/** docs/plans/phase7.md §9: ≈ 100 rows per team for a 10-step leg (step_progress, teams.state, events, parking) + 10 %; longer legs
- *  scale per step. Snapshot / replay rows are budgeted apart (independent of the team count). */
-export const legRowBudget = (steps: number) => 11 * Math.max(10, steps);
+/** docs/plans/phase8.md §9 / D18: ≈ 145 rows per team for a 10-step leg with 2 typed answers, a penalty and a branch switch
+ *  (step_progress, teams.state, events, parking) + 10 %; longer legs scale per step (Phase 7: 11 × steps). Snapshot / replay
+ *  rows are budgeted apart (independent of the team count). */
+export const legRowBudget = (steps: number) => 16 * Math.max(10, steps);
 /** The leg run failed: a team did not finish / rank, or wrote more rows than the budget. */
 export const legFailed = (r: SimReport) => !!r.leg && (r.leg.finished < r.bots || r.leg.ranked < r.bots || (r.leg.rowsPerTeam ?? 0) > r.leg.rowBudget);
-/** Notices that refuse a race op (Toasts.ts texts); the others only inform (clueNew = "Mật thư mới đã vào Sổ mật thư"). */
-const REFUSALS = new Set<ServerNotice>(['raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'penaltyWait']);
+/** Notices that refuse a race op (Toasts.ts texts); the others only inform (clueNew = "Mật thư mới đã vào Sổ mật thư",
+ *  approved / penalized / answerSent / answerWrong / branchChosen / branchSwitched = what the op did). */
+const REFUSALS = new Set<ServerNotice>(['raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'penaltyWait', 'taskNotStarted', 'answerPending', 'answerLocked', 'branchPending']);
+/** The penalties a rehearsal runs with (6 s / 12 s): the leg's own 3 / 10 minutes would make a sim wait 13 minutes (D18). */
+export const SIM_PENALTIES = { retryLockMinutes: 0.1, branchSwitchLockMinutes: 0.2 };
+/** The leg file's text with the penalties shortened to SIM_PENALTIES (sent as host.leg {json}). A task's own retryLockMinutes stays. */
+export function fastPenalties(json: string): string {
+  const leg = JSON.parse(json) as { penalties?: Record<string, unknown> };
+  leg.penalties = { ...leg.penalties, ...SIM_PENALTIES };
+  return JSON.stringify(leg);
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -143,16 +159,96 @@ type LegState = NonNullable<HostState['leg']>;
 export type Bot = { i: number; s: Sock; welcome: Welcome };
 type RaceMsg = Extract<Msg, { t: 'race' }>;
 
-/** First right answer per task in a leg file's text: key "stepId" (challenge) or "stepId/branchId" (detour branch). Never invents one. */
+/** First right answer per task in a leg file's text: key "stepId" (challenge) or "stepId/branchId" (detour branch): answers[0],
+ *  else referenceAnswers[0] (a host_approval task may have only those). Never invents one. */
 export function answersOf(json: string): Map<string, string> {
   const out = new Map<string, string>();
-  const leg = JSON.parse(json) as { steps?: { id: string; task?: { answers?: string[] }; branches?: { id: string; task?: { answers?: string[] } }[] }[] };
+  type T = { answers?: string[]; referenceAnswers?: string[] };
+  const leg = JSON.parse(json) as { steps?: { id: string; task?: T; branches?: { id: string; task?: T }[] }[] };
+  const first = (t?: T) => t?.answers?.[0] ?? t?.referenceAnswers?.[0];
   for (const st of leg.steps ?? []) {
-    const a = st.task?.answers?.[0];
+    const a = first(st.task);
     if (a !== undefined) out.set(st.id, a);
-    for (const b of st.branches ?? []) if (b.task?.answers?.[0] !== undefined) out.set(`${st.id}/${b.id}`, b.task.answers[0]);
+    for (const b of st.branches ?? []) {
+      const x = first(b.task);
+      if (x !== undefined) out.set(`${st.id}/${b.id}`, x);
+    }
   }
   return out;
+}
+
+/** The card state as the game client shows it at `now`: a countdown that has run out (+ slack) is over although the server only
+ *  says so on the next change (D9: the client flips the card itself 1 s after lockedUntil). */
+export function effectiveStatus(card: ClueCard, now: number, slackMs = 1000): CardStatus {
+  if (card.lockedUntil !== null && now >= card.lockedUntil + slackMs) {
+    if (card.status === 'locked') return 'active';
+    if (card.status === 'switchLocked') return 'goToBranch';
+  }
+  return card.status;
+}
+
+/** What a bot is: its index, whether it switches branch once (right after choosing), and whether it already did. */
+export interface BotRole { i: number; switches: boolean; switched: boolean }
+/** One thing to send; `walk` = go to the chosen branch's place first; `switched` = this move is the branch switch. null = wait. */
+export type BotMove = { op: Record<string, unknown>; walk?: true; switched?: true } | null;
+/** D18, pure: what a bot does about the card of a challenge / detour it holds. teaser → accept; choose → branch `i % n`;
+ *  goToBranch → the one switcher switches to the other branch, else walk there and `open {branch}`; active → the answer
+ *  ('' for a photo task; "(bot) trả lời" when the leg file has none); pending / locked / switchLocked / done → wait. */
+export function botMove(card: ClueCard, now: number, bot: BotRole, answers: Map<string, string>, slackMs = 1000): BotMove {
+  const step = card.step;
+  const ids = (card.branches ?? []).map((b) => b.id);
+  switch (effectiveStatus(card, now, slackMs)) {
+    case 'teaser': return { op: { t: 'race', op: 'accept', step } };
+    case 'choose': return ids.length ? { op: { t: 'race', op: 'branch', step, branch: ids[bot.i % ids.length]! } } : null;
+    case 'goToBranch': {
+      const cur = card.branch ?? '';
+      const other = ids[(ids.indexOf(cur) + 1) % ids.length];
+      if (bot.switches && !bot.switched && other !== undefined && other !== cur) return { op: { t: 'race', op: 'branch', step, branch: other }, switched: true };
+      return { op: { t: 'race', op: 'open', step, branch: cur }, walk: true };
+    }
+    case 'active': {
+      const task = card.task ?? card.branches?.find((b) => b.id === card.branch)?.task;
+      const text = task?.input === 'proof' ? '' : (answers.get(card.branch ? `${step}/${card.branch}` : step) ?? '(bot) trả lời');
+      return { op: { t: 'race', op: 'answer', step, text } };
+    }
+    default: return null;
+  }
+}
+
+/** The Host bot, pure: a host.review for every answer in `state.queue` (approve; `penalizeKey` = "team|step|id" → penalize once,
+ *  with a note). `sent` (key → ms) keeps an answer from being decided twice; one still queued `retryMs` later is sent again
+ *  (the server answers "đã được xử lý" to a repeat, so it is safe). */
+export function reviewsFor(state: Pick<HostState, 'queue'>, sent: Map<string, number>, penalizeKey: string | null, now: number, retryMs = 5000): HostReview[] {
+  const out: HostReview[] = [];
+  for (const q of state.queue) {
+    const key = `${q.team}|${q.step}|${q.id}`;
+    if (now - (sent.get(key) ?? -Infinity) < retryMs) continue;
+    sent.set(key, now);
+    out.push(key === penalizeKey ? { t: 'host.review', team: q.team, step: q.step, id: q.id, op: 'penalize', note: '(bot) thử phạt' } : { t: 'host.review', team: q.team, step: q.step, id: q.id, op: 'approve' });
+  }
+  return out;
+}
+
+/** The Host bot's loop on the Host socket: every ~150 ms look at the newest host.state (one is pushed on every change) and decide
+ *  what waits in its queue (reviewsFor). Runs while `running()`. */
+export async function runHostBot(hs: Pick<Sock, 'log' | 'send'>, penalizeKey: string | null, running: () => boolean, pollMs = 150): Promise<void> {
+  const sent = new Map<string, number>();
+  let from = hs.log.length;
+  let cur: HostState | undefined;
+  while (running()) {
+    cur = hs.log.slice(from).filter(isState).at(-1) ?? cur;
+    from = hs.log.length;
+    if (cur) for (const m of reviewsFor(cur, sent, penalizeKey, Date.now())) hs.send(m);
+    await sleep(pollMs);
+  }
+}
+
+/** What the server says happened (host.state.progress): answers by status and branch switches, the numbers of the report. */
+export interface LegStats { answers: number; approved: number; penalized: number; wrong: number; switches: number }
+export function legStats(progress: StepProgressView[]): LegStats {
+  const all = progress.flatMap((p) => p.answers);
+  const n = (s: string) => all.filter((a) => a.status === s).length;
+  return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), switches: progress.reduce((t, p) => t + p.branchSwitches, 0) };
 }
 
 /** `--leg mini` → the bundled id and its file (for the answers; `paris-demo-filled` = test/paris-demo.filled.json, the id the Host
@@ -168,11 +264,25 @@ export function legArg(arg: string): { id?: string; json?: string; file: string 
   return { id: arg, file };
 }
 
-/** One bot plays the whole leg (Phase 7): A* walk to each step's zone at 5 Hz × speedup, then the op of that step (open / task with the
- *  right answer / check-in; the route before the Pit Stop is done by entering the mat zone) until the server's `race` view moves on.
- *  Resolves with the check-in time (server ms). ponytail: a detour takes branch A / B alternately by bot (both exist in `mini`; the
- *  host_approval branch B is only passable while verifyTask is the Phase 7 stub, Phase 8 sim must pick answerable branches). */
-export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, string>, graph: RoadGraph, o: { speedup: number; deadline: number; refused: string[] }): Promise<number> {
+export interface PlayOptions {
+  speedup: number;
+  deadline: number;
+  refused: string[];
+  /** This bot switches branch once, right after choosing (D18). */
+  switches?: boolean;
+  /** ms after `lockedUntil` the bot treats a countdown as over (the client's lockEndSlackMs, D9). */
+  lockSlackMs?: number;
+  /** A step whose card did not change for this long (a countdown running does not count) fails the bot: the Host bot is dead / a refusal repeats. */
+  stallMs?: number;
+}
+
+/** One bot plays the whole leg (docs/plans/phase8.md D18): A* walk to each step's zone at 5 Hz × speedup; then, until the
+ *  server's `race` view moves on, route: `open` (the route before the Pit Stop is done by entering the mat zone), Pit Stop:
+ *  `checkin`, challenge / detour: whatever `botMove` says for the card it holds (accept / answer / branch / switch / `open
+ *  {branch}`; D8: none of those but `open` needs a position, so each is sent when the card asks), waiting out the Host's
+ *  decision and the countdowns. Resolves with the check-in time (server ms). Needs the server's clock to match this machine's
+ *  (a countdown is judged on `Date.now()`); a bot that answers a moment early is refused `answerLocked` and tries again. */
+export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, string>, graph: RoadGraph, o: PlayOptions): Promise<number> {
   const { s: sock } = bot;
   const start = bot.welcome.start ?? bot.welcome.pose ?? { x: leg.start.x, z: leg.start.z, yaw: 0 };
   let [x, z, yaw] = [start.x, start.z, start.yaw];
@@ -182,6 +292,8 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
   const stepMs = 1000 / NET.sendHz;
   const sendPose = () => sock.send(encodePose({ x, y: 0, z, yaw, mode: 'walk', action: 'none' }));
   const settleGapMs = 400;
+  const slack = o.lockSlackMs ?? 1000;
+  const stall = o.stallMs ?? 120_000;
   const fail = (what: string) => new Error(`Bot ${bot.i + 1}: ${what}`);
 
   const goto = async (tx: number, tz: number) => {
@@ -218,34 +330,47 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
     const v = latest();
     return !v || v.finishAt !== null || (v.card !== null && v.card.step !== id);
   };
-  /** Pose first (D4: the op is judged on the last valid pose), then the op; retry until the card moves on (the trusted point may lag behind). */
-  const settle = async (id: string, op: Record<string, unknown> | null) => {
-    for (let tries = 0; tries < 40 && Date.now() < o.deadline; tries++) {
-      if (moved(id)) return;
-      await sleep(settleGapMs / o.speedup); // pace: pose + op right after the last goto pose would break the 15 msg/s limit
-      if (sock.dropped != null) throw fail(`server đã đóng socket (mã ${sock.dropped})`);
-      const mark = sock.log.length;
-      sendPose();
-      if (op) sock.send(op);
-      await sock.until((m): m is RaceMsg => m.t === 'race' && (m.view.finishAt !== null || (m.view.card !== null && m.view.card.step !== id)), 1500, mark).catch(() => null);
-      for (const m of sock.log.slice(mark)) if (m.t === 'notice' && REFUSALS.has(m.code)) o.refused.push(`${id}: ${m.code}`);
-    }
-    if (!moved(id)) throw fail(`kẹt ở bước ${id} (${o.refused.filter((r) => r.startsWith(id + ':')).slice(-3).join(', ') || 'không có phản hồi'})`);
+  /** Pose first when the op is judged on the position (D4: open / checkin), then the op; wait for the server's `race` answer. A
+   *  refused op comes back as a notice only: the caller's loop looks at the card again. */
+  const act = async (op: Record<string, unknown> | null, withPose: boolean) => {
+    await sleep(settleGapMs / o.speedup); // pace: pose + op right after the last goto pose would break the 15 msg/s limit
+    if (sock.dropped != null) throw fail(`server đã đóng socket (mã ${sock.dropped})`);
+    const mark = sock.log.length;
+    if (withPose || !op) sendPose();
+    if (op) sock.send(op);
+    await sock.until((m): m is RaceMsg => m.t === 'race', 1500, mark).catch(() => null);
+    for (const m of sock.log.slice(mark)) if (m.t === 'notice' && REFUSALS.has(m.code)) o.refused.push(`${(op?.step as string | undefined) ?? '-'}: ${m.code}`);
   };
 
   if (bot.welcome.view?.card?.step !== leg.steps[0]?.id) throw fail(`mật thư đầu là "${bot.welcome.view?.card?.step}", chặng bắt đầu ở "${leg.steps[0]?.id}"`);
   sendPose();
   for (const [i, st] of leg.steps.entries()) {
     const next = leg.steps[i + 1];
-    const place = st.type === 'detour' && st.branches?.length ? st.branches[bot.i % st.branches.length]! : st;
-    await goto(place.x, place.z);
-    const branch = st.type === 'detour' ? (place as { id: string }).id : undefined;
-    const answer = answers.get(branch ? `${st.id}/${branch}` : st.id);
-    const op =
-      st.type === 'route_info' ? (next?.type === 'pit_stop' ? null : { t: 'race', op: 'open', step: st.id })
-      : st.type === 'pit_stop' ? { t: 'race', op: 'checkin' }
-      : { t: 'race', op: 'task', step: st.id, ...(branch && { branch }), ...(answer !== undefined && { answer }) };
-    await settle(st.id, op);
+    if (st.type !== 'detour') await goto(st.x, st.z); // a detour: the choice needs no place, the branch's place comes after it
+    const role: BotRole = { i: bot.i, switches: !!o.switches, switched: false };
+    let seen = latest();
+    let changedAt = Date.now();
+    while (!moved(st.id)) {
+      if (Date.now() > o.deadline) throw fail(`hết giờ chạy chặng ở bước ${st.id}`);
+      const card = latest()?.card;
+      if (latest() !== seen || (card?.lockedUntil != null && Date.now() < card.lockedUntil + slack)) (seen = latest()), (changedAt = Date.now());
+      if (Date.now() - changedAt > stall) throw fail(`kẹt ở bước ${st.id} (${o.refused.filter((r) => r.startsWith(st.id + ':')).slice(-3).join(', ') || 'không có phản hồi'})`);
+      if (st.type === 'route_info' || st.type === 'pit_stop' || !card) {
+        await act(st.type === 'pit_stop' ? { t: 'race', op: 'checkin' } : st.type === 'route_info' && next?.type !== 'pit_stop' ? { t: 'race', op: 'open', step: st.id } : null, true);
+        continue;
+      }
+      const move = botMove(card, Date.now(), role, answers, slack);
+      if (!move) {
+        await sleep(settleGapMs / o.speedup); // the Host decides / a countdown runs: nothing to send
+        continue;
+      }
+      if (move.walk) {
+        const b = st.branches?.find((x) => x.id === card.branch);
+        if (b) await goto(b.x, b.z);
+      }
+      if (move.switched) role.switched = true;
+      await act(move.op, move.op.op === 'open');
+    }
   }
   return latest()!.finishAt!;
 }
@@ -284,7 +409,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       const json = opts.leg.json ?? readFileSync(legArg(opts.leg.id!).file, 'utf8');
       answers = answersOf(json);
       const mark = hs.log.length;
-      hs.send({ t: 'host.leg', ...(opts.leg.json ? { json: opts.leg.json } : { id: opts.leg.id }) });
+      hs.send({ t: 'host.leg', json: fastPenalties(json) }); // the same leg, penalties 6 s / 12 s (a bundled one too: host.leg {id} cannot change them)
       const res = await hs.until((m): m is Extract<Msg, { t: 'host.legResult' }> => m.t === 'host.legResult', 10_000, mark);
       if (!res.ok) throw new Error('Nạp chặng thất bại: ' + res.issues.filter((i) => i.level === 'error').map((i) => `${i.where}: ${i.message}`).join('; '));
     }
@@ -369,8 +494,20 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       legId = leg.id;
       const shared = await sharedRows(); // no pose yet: nothing timed is pending
       if (shared !== null) atStart = { rows: run.counters.rows, shared };
+      // D18 roles: the bot after the first one is penalized once at the first challenge; the third (else the last) switches branch once
+      const penalized = created.teams[existing + Math.min(1, opts.bots - 1)]!.id;
+      const switcher = Math.min(2, opts.bots - 1);
+      const firstChallenge = leg.steps.find((s) => s.type === 'challenge')?.id;
+      const penalizeKey = firstChallenge ? `${penalized}|${firstChallenge}|1` : null;
+      let hostBotOn = true;
+      const hostDone = runHostBot(hs, penalizeKey, () => hostBotOn);
       const t0 = Date.now();
-      await Promise.all(bots.map((b) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused })));
+      try {
+        await Promise.all(bots.map((b) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused, switches: b.i === switcher })));
+      } finally {
+        hostBotOn = false;
+        await hostDone;
+      }
       seconds = ((Date.now() - t0) / 1000) * opts.speedup;
       if (atStart) await sleep(NET.replayMs + 1000); // the last poses' snapshot / replay rows land up to NET.replayMs later
     }
@@ -454,7 +591,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       rejoin,
       leg: opts.leg ? {
         id: legId, steps: legSteps, finished: final.teams.filter((t) => t.finishAt !== null).length, ranked: final.ranking.length,
-        rowsPerTeam: atStart && (c.rows - atStart.rows - shared!) / opts.bots, sharedRows: shared, rowBudget: legRowBudget(legSteps), refused,
+        rowsPerTeam: atStart && (c.rows - atStart.rows - shared!) / opts.bots, sharedRows: shared, rowBudget: legRowBudget(legSteps), refused, stats: legStats(final.progress),
       } : null,
       flagged: final.teams.filter((t) => t.flagged).length,
       speedup: opts.speedup,
@@ -477,6 +614,8 @@ function print(r: SimReport) {
       ? 'dòng ghi / đội: chỉ đo được khi chạy không có --url'
       : `dòng ghi / đội ${n(r.leg.rowsPerTeam, 1)} (ngân sách ≤ ${r.leg.rowBudget}; không tính ${n(r.leg.sharedRows ?? 0)} dòng vị trí + replay chung cho mọi đội)`;
     console.log(`  Chặng ${r.leg.id} (${r.leg.steps} bước): ${r.leg.finished} / ${r.bots} đội về đích · xếp hạng ${r.leg.ranked} dòng · ${rows}${legFailed(r) ? ' ← LỖI' : ''}`);
+    const s = r.leg.stats;
+    console.log(`  Thử thách: ${s.answers} câu trả lời · Host duyệt ${s.approved}, phạt ${s.penalized}${s.wrong ? `, sai (tự chấm) ${s.wrong}` : ''} · đổi nhánh ${s.switches} lần (phạt rút còn ${SIM_PENALTIES.retryLockMinutes * 60} s / ${SIM_PENALTIES.branchSwitchLockMinutes * 60} s)`);
     if (r.leg.refused.length) console.log(`  Thao tác bị từ chối (thử lại): ${r.leg.refused.length}, ví dụ ${r.leg.refused.slice(0, 3).join('; ')}`);
   }
   console.log(`  Nhận xe cùng lúc: ${r.claim ? `${r.claim.ok} / ${r.claim.tried} thành công (đúng: đúng 1)` : 'bỏ qua'}`);
@@ -487,6 +626,9 @@ function print(r: SimReport) {
 export const USAGE = `Cách dùng: npm run sim -- [tùy chọn]   (bot chơi thử qua WebSocket thật; hướng dẫn: docs/LEG_FORMAT.md mục "Chơi thử tự động")
   --leg <mã | file.json>  chơi HẾT một chặng: mã chặng có sẵn (mini, paris-demo-filled, paris-demo) hoặc đường dẫn file chặng
                           (vd. --leg ~/Documents/chang-that/paris-1.json). Không có --leg: bot đi bộ ngẫu nhiên (đo lưu lượng).
+                          Bot nhận thử thách, gõ đáp án (đáp án hoặc đáp án tham khảo trong file; nhánh ảnh: "đã gửi bài"), chọn nhánh,
+                          một bot đổi nhánh một lần; một Host bot tự duyệt mọi bài chờ và phạt một lần (bài đầu của bot thứ 2 ở thử
+                          thách đầu). Phạt được rút còn 6 giây / 12 giây để chạy nhanh (chặng thật vẫn giữ 3 / 10 phút khi đua).
   --bots <n>              số đội bot (mặc định 3)
   --speedup <1…2>         tua nhanh (mặc định 1; 2 = nhanh gấp đôi, tối đa vì máy chủ ngắt quá 15 tin/giây)
   --minutes <n>           thời gian chạy tối đa, phút mô phỏng (mặc định 2; với --leg: 30)

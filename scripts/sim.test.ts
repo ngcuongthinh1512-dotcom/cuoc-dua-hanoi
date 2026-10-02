@@ -2,10 +2,10 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
-import { parseLeg, stepZones } from '@race/shared/leg';
-import { decodePose, type HostState, type RaceView, type ServerMessage, type Welcome } from '@race/shared/protocol';
+import { branchZone, normalizeAnswer, parseLeg, stepZones, type Task } from '@race/shared/leg';
+import { decodePose, type CardStatus, type ClueCard, type HostReview, type HostState, type RaceView, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { answersOf, type Bot, legArg, legFailed, legRowBudget, playLeg, runSim } from './sim.ts';
+import { answersOf, type Bot, botMove, effectiveStatus, fastPenalties, legArg, legFailed, legRowBudget, legStats, playLeg, reviewsFor, runHostBot, runSim, SIM_PENALTIES } from './sim.ts';
 
 // Real workerd + Durable Object (createTestHarness) and real WebSockets: 3 bots walk 30 simulated seconds on the A* road graph.
 // speedup 2 (10 msg/s per bot) leaves margin under the server's 15 msg/s socket limit (1 s window) and is the CLI maximum;
@@ -65,94 +65,285 @@ function compactMini(): string {
   walk(leg);
   return JSON.stringify(leg);
 }
-// ponytail: the full-leg test is skipped while worker/src/race/engine.ts is still the foundation stub (no race engine = nothing for the
-// bots to play); the integrator merges track A first, after which it runs.
-const engineReady = !readFileSync(join(import.meta.dirname, '../worker/src/race/engine.ts'), 'utf8').includes('FOUNDATION STUB');
+// ponytail: the full-leg test below needs the real race engine (track A). While engine.ts / steps.ts still carry their
+// "TODO(phase8 track A" markers (the foundation stubs: answer / branch / review do nothing) there is nothing for the bots to
+// play, so it is skipped by itself; the integrator merges track A first, after which it runs (docs/reports/phase8-track-e.md).
+const engineReady = !/TODO\(phase8 track A/.test(['../worker/src/race/engine.ts', '../worker/src/race/steps.ts'].map((f) => readFileSync(join(import.meta.dirname, f), 'utf8')).join('\n'));
 
-/** A minimal stand-in for the race engine (the real one is track A): steps by the plan's table, judged on the last pose sent. */
-function fakeEngine(legJson: string) {
+/** A card with only what the test sets. */
+const card = (o: Partial<ClueCard> = {}): ClueCard => ({ step: 'D1', type: 'detour', label: 'Lựa chọn kép', text: '', media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: 0, completedAt: null, ...o });
+const branches = [{ id: 'A', name: 'Tính', summary: '' }, { id: 'B', name: 'Ảnh', summary: '' }];
+const taskOf = (input: 'text' | 'proof') => ({ title: '', description: '', media: [], kind: input === 'proof' ? 'free' : 'answer', verification: 'host_approval', input, proofInstruction: '', timeLimitMinutes: null }) as unknown as NonNullable<ClueCard['task']>;
+const role = (i: number, switches = false, switched = false) => ({ i, switches, switched });
+const ANS = new Map([['T1', '42'], ['D1/A', '7'], ['D1/B', '(GIẢ) Ảnh']]);
+
+describe('bot moves (docs/plans/phase8.md D18, pure)', () => {
+  it('a countdown that ran out (+ slack) is over although the server said nothing: locked → active, switchLocked → goToBranch', () => {
+    const until = 10_000;
+    expect(effectiveStatus(card({ status: 'locked', lockedUntil: until }), until + 999)).toBe('locked');
+    expect(effectiveStatus(card({ status: 'locked', lockedUntil: until }), until + 1000)).toBe('active');
+    expect(effectiveStatus(card({ status: 'switchLocked', lockedUntil: until }), until + 1000)).toBe('goToBranch');
+    expect(effectiveStatus(card({ status: 'switchLocked', lockedUntil: until }), until + 50, 50)).toBe('goToBranch'); // a shorter slack
+    expect(effectiveStatus(card({ status: 'pending' }), 1e12)).toBe('pending'); // only the Host ends this
+    expect(effectiveStatus(card({ status: 'teaser' }), 1e12)).toBe('teaser');
+  });
+
+  it('teaser → accept; choose → branch i % n; active → the answer from the leg file, "" for a photo task, a filler when the file has none', () => {
+    expect(botMove(card({ step: 'T1', type: 'challenge', status: 'teaser' }), 0, role(0), ANS)).toEqual({ op: { t: 'race', op: 'accept', step: 'T1' } });
+    const choose = card({ status: 'choose', branches });
+    expect([0, 1, 2, 3].map((i) => (botMove(choose, 0, role(i), ANS)!.op as { branch: string }).branch)).toEqual(['A', 'B', 'A', 'B']);
+    expect(botMove(card({ step: 'T1', type: 'challenge', status: 'active', task: taskOf('text') }), 0, role(0), ANS)).toEqual({ op: { t: 'race', op: 'answer', step: 'T1', text: '42' } });
+    expect(botMove(card({ step: 'T9', type: 'challenge', status: 'active', task: taskOf('text') }), 0, role(0), ANS)!.op).toMatchObject({ text: '(bot) trả lời' });
+    const inA = card({ status: 'active', branch: 'A', branches: [{ ...branches[0]!, task: taskOf('text') }, branches[1]!], branchOpened: true });
+    expect(botMove(inA, 0, role(0), ANS)!.op).toMatchObject({ op: 'answer', text: '7' });
+    const inB = card({ status: 'active', branch: 'B', branches: [branches[0]!, { ...branches[1]!, task: taskOf('proof') }], branchOpened: true });
+    expect(botMove(inB, 0, role(1), ANS)!.op).toMatchObject({ op: 'answer', text: '' }); // the reference text of B is for the Host, never typed
+  });
+
+  it('goToBranch: the one switcher switches ONCE to the other branch, everybody else (and the switcher after) walks there and opens', () => {
+    const go = card({ status: 'goToBranch', branch: 'A', branches });
+    expect(botMove(go, 0, role(0), ANS)).toEqual({ op: { t: 'race', op: 'open', step: 'D1', branch: 'A' }, walk: true });
+    expect(botMove(go, 0, role(2, true), ANS)).toEqual({ op: { t: 'race', op: 'branch', step: 'D1', branch: 'B' }, switched: true });
+    expect(botMove(card({ status: 'goToBranch', branch: 'B', branches }), 0, role(2, true, true), ANS)).toEqual({ op: { t: 'race', op: 'open', step: 'D1', branch: 'B' }, walk: true });
+    // after the switch the card says switchLocked: wait, then (countdown over) go to the new box
+    const locked = card({ status: 'switchLocked', branch: 'B', branches, lockedUntil: 5000, lockKind: 'switch' });
+    expect(botMove(locked, 5500, role(2, true, true), ANS)).toBeNull();
+    expect(botMove(locked, 6000, role(2, true, true), ANS)).toMatchObject({ op: { op: 'open', branch: 'B' }, walk: true });
+  });
+
+  it('waits while the Host decides or a penalty runs, answers again when it is over; nothing to do when done', () => {
+    expect(botMove(card({ step: 'T1', type: 'challenge', status: 'pending' }), 0, role(0), ANS)).toBeNull();
+    const locked = card({ step: 'T1', type: 'challenge', status: 'locked', lockedUntil: 6000, lockKind: 'retry', task: taskOf('text') });
+    expect(botMove(locked, 6500, role(0), ANS)).toBeNull();
+    expect(botMove(locked, 7000, role(0), ANS)!.op).toMatchObject({ op: 'answer', text: '42' });
+    expect(botMove(card({ status: 'done' }), 0, role(0), ANS)).toBeNull();
+  });
+});
+
+describe('Host bot (D18, pure)', () => {
+  const q = (team: string, step: string, id: number) => ({ team, step, label: step, branch: null, id, text: '42', at: 0, reference: [], note: '', lockMinutes: 0.1 });
+
+  it('approves everything in the queue, penalizes the one key once (with a note), and does not decide twice', () => {
+    const sent = new Map<string, number>();
+    const state = { queue: [q('t0', 'T1', 1), q('t1', 'T1', 1)] };
+    expect(reviewsFor(state, sent, 't1|T1|1', 1000)).toEqual([
+      { t: 'host.review', team: 't0', step: 'T1', id: 1, op: 'approve' },
+      { t: 'host.review', team: 't1', step: 'T1', id: 1, op: 'penalize', note: '(bot) thử phạt' },
+    ]);
+    expect(reviewsFor(state, sent, 't1|T1|1', 2000)).toEqual([]); // still queued 1 s later: not sent again
+    // the bot's second answer is a new item (id 2): approved, not penalized
+    expect(reviewsFor({ queue: [q('t1', 'T1', 2)] }, sent, 't1|T1|1', 3000)).toEqual([{ t: 'host.review', team: 't1', step: 'T1', id: 2, op: 'approve' }]);
+    // an item still queued after retryMs (the decision got lost) goes out again; the server answers "đã được xử lý" to a repeat
+    expect(reviewsFor(state, sent, 't1|T1|1', 6001).map((m) => m.op)).toEqual(['approve', 'penalize']);
+    expect(reviewsFor({ queue: [] }, sent, null, 1e9)).toEqual([]);
+  });
+
+  it('every message it makes passes the server codec', async () => {
+    const { isClientMessage } = await import('@race/shared/protocol');
+    for (const m of reviewsFor({ queue: [q('t0', 'T1', 1), q('t1', 'D1', 2)] }, new Map(), 't1|D1|2', 0)) expect(isClientMessage(m, 'host')).toBe(true);
+  });
+});
+
+describe('sim report numbers (D18)', () => {
+  const row = (team: string, step: string, answers: StepProgressView['answers'], branchSwitches = 0): StepProgressView => ({
+    team, step, arrivedAt: null, openedAt: null, startedAt: null, completedAt: null, branch: null, submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers, note: '',
+  });
+  const a = (id: number, status: StepProgressView['answers'][number]['status']) => ({ id, text: 'x', at: 0, status, branch: null });
+
+  it('answers, approvals, penalties and switches are read from host.state.progress', () => {
+    const progress = [row('t0', 'T1', [a(1, 'approved')]), row('t1', 'T1', [a(1, 'penalized'), a(2, 'approved')]), row('t2', 'D1', [a(1, 'correct'), a(2, 'wrong')], 1), row('t1', 'D1', [], 2)];
+    expect(legStats(progress)).toEqual({ answers: 5, approved: 2, penalized: 1, wrong: 1, switches: 3 });
+    expect(legStats([])).toEqual({ answers: 0, approved: 0, penalized: 0, wrong: 0, switches: 0 });
+  });
+
+  it('the row budget is 16 per step (a 10-step leg: 160), never fewer than 10 steps', () => {
+    expect([legRowBudget(4), legRowBudget(10), legRowBudget(12)]).toEqual([160, 160, 192]);
+  });
+
+  it('the leg is sent with 6 s / 12 s penalties and nothing else changed (a bundled leg too)', () => {
+    const out = JSON.parse(fastPenalties(mini)) as { penalties: Record<string, number>; steps: unknown[]; id: string };
+    expect(out.penalties).toMatchObject(SIM_PENALTIES);
+    expect(out.penalties).toEqual({ ...(JSON.parse(mini).penalties ?? {}), retryLockMinutes: 0.1, branchSwitchLockMinutes: 0.2 });
+    expect(out.id).toBe('mini');
+    expect(out.steps).toEqual(JSON.parse(mini).steps);
+    expect(parseLeg(JSON.parse(fastPenalties(mini))).ok).toBe(true); // a warning ("phạt dưới 1 phút"), not an error
+  });
+});
+
+// ── a stand-in for ONE team's engine + the Host (statuses by the plan's D5 / D6 table), so the bots run without workerd.
+// The real engine is track A's: the full-leg run below plays against it once it is merged. ──
+function fakeRace(legJson: string, o: { teamId: string; lockMs: number }) {
   const r = parseLeg(JSON.parse(legJson));
   if (!r.ok) throw new Error('leg');
   const leg = r.leg;
   const zones = stepZones(leg);
-  const answers = answersOf(legJson);
-  const log: ServerMessage[] = [];
-  const ops: string[] = [];
-  let step = 0, finished = false, at = { x: 0, z: 0 };
-  const view = (): RaceView => ({ status: 'running', startAt: 1, finishAt: finished ? 2 : null, penaltyMinutes: 0, card: { step: leg.steps[step]!.id, type: leg.steps[step]!.type, label: '', text: '', media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: 0, completedAt: null }, checkinAt: null, officialMs: null });
+  const botLog: ServerMessage[] = [];
+  const hostLog: ServerMessage[] = [];
+  const ops: Record<string, unknown>[] = [];
+  const reviews: HostReview[] = [];
+  const fresh = () => ({ started: false, branch: null as string | null, opened: false, lockedUntil: null as number | null, pending: null as { id: number; text: string } | null, nextId: 1 });
+  let step = 0, switches = 0, finished = false, at = { x: 0, z: 0 }, row = fresh();
   const inZone = (z: { x: number; z: number; r: number }) => Math.hypot(at.x - z.x, at.z - z.z) <= z.r;
-  const push = () => log.push({ t: 'race', view: view() });
-  const advance = () => {
-    if (finished) return;
+  const locked = () => row.lockedUntil !== null && row.lockedUntil > Date.now();
+  const taskNow = (): Task | undefined => {
     const st = leg.steps[step]!;
-    if (st.type === 'route_info' && leg.steps[step + 1]?.type === 'pit_stop' && inZone(zones[step]!)) step++;
-    else if (st.type === 'pit_stop' && inZone(zones[step]!)) finished = true;
-    else return;
-    push();
-    advance();
+    return st.type === 'challenge' ? st.task : st.type === 'detour' ? st.branches.find((b) => b.id === row.branch)?.task : undefined;
+  };
+  const status = (): CardStatus => {
+    const st = leg.steps[step]!;
+    if (st.type === 'detour' && !row.opened) return row.branch === null ? 'choose' : locked() ? 'switchLocked' : 'goToBranch';
+    if (st.type !== 'challenge' && st.type !== 'detour') return 'active';
+    if (row.pending) return 'pending';
+    if (locked()) return 'locked';
+    return st.type === 'challenge' && st.teaser !== '' && !row.started ? 'teaser' : 'active';
+  };
+  const view = (): RaceView => {
+    const st = leg.steps[step]!;
+    const s = status();
+    const tv = (t: Task) => ({ input: t.kind === 'free' ? 'proof' : 'text' });
+    const c = {
+      step: st.id, type: st.type, label: st.label, text: '', media: [], status: s, answers: [], receivedAt: 0, completedAt: null,
+      lockedUntil: s === 'locked' || s === 'switchLocked' ? row.lockedUntil : null,
+      lockKind: s === 'locked' ? 'retry' : s === 'switchLocked' ? 'switch' : null,
+      ...(st.type === 'challenge' && s !== 'teaser' ? { task: tv(st.task) } : {}),
+      ...(st.type === 'detour' ? { branch: row.branch, branches: st.branches.map((b) => ({ id: b.id, name: b.name, summary: '', ...(row.opened && b.id === row.branch ? { task: tv(b.task) } : {}) })) } : {}),
+    } as unknown as ClueCard;
+    return { status: 'running', startAt: 1, finishAt: finished ? 2 : null, penaltyMinutes: 0, card: c, checkinAt: null, officialMs: null };
+  };
+  const push = () => botLog.push({ t: 'race', view: view() });
+  const pushHost = () => {
+    const st = leg.steps[step]!;
+    const queue = row.pending ? [{ team: o.teamId, step: st.id, label: st.label, branch: row.branch, id: row.pending.id, text: row.pending.text, at: Date.now(), reference: [], note: '', lockMinutes: 0.1 }] : [];
+    hostLog.push({ t: 'host.state', queue } as unknown as ServerMessage);
+  };
+  const complete = () => ((step += 1), (row = fresh()), push());
+  const settle = () => {
+    while (!finished && leg.steps[step]!.type === 'route_info' && leg.steps[step + 1]?.type === 'pit_stop' && inZone(zones[step]!)) complete(); // the route before the Pit Stop: entering the mat zone
+  };
+  const notice = (code: ServerNotice) => botLog.push({ t: 'notice', code });
+  const until = async (pred: (m: ServerMessage) => boolean, _t = 0, from = 0) => {
+    for (let k = 0; k < 400; k++) {
+      const hit = botLog.slice(from).find(pred);
+      if (hit) return hit;
+      await new Promise((res) => setTimeout(res, 5));
+    }
+    throw new Error('timeout');
   };
   const sock = {
-    log,
+    log: botLog,
+    dropped: null,
+    until,
     send(m: unknown) {
       const pose = decodePose(m);
-      if (pose) return void ((at = pose), advance());
-      const op = m as { op: string; step?: string; branch?: string; answer?: string };
-      ops.push(op.op);
+      if (pose) return void ((at = pose), settle());
+      const op = m as { op: string; step?: string; branch?: string; text?: string };
+      ops.push(op);
       const st = leg.steps[step]!;
-      const ok =
-        op.op === 'checkin' ? st.type === 'pit_stop' && inZone(zones[step]!)
-        : op.step !== st.id || !inZone(zones[step]!) ? false
-        : op.op === 'open' ? st.type === 'route_info'
-        : (st.type === 'challenge' || (st.type === 'detour' && op.branch !== undefined)) && (op.answer === undefined || [...answers.values()].includes(op.answer));
-      if (!ok) return void log.push({ t: 'notice', code: 'boxFar' });
-      if (op.op === 'checkin') finished = true;
-      else step++;
-      push();
-      if (!finished) log.push({ t: 'notice', code: 'clueNew' }); // like engine.ts: news, not a refusal
-    },
-    until: async (pred: (m: ServerMessage) => boolean, _t = 0, from = 0) => {
-      for (let k = 0; k < 60; k++) {
-        const hit = log.slice(from).find(pred);
-        if (hit) return hit;
-        await new Promise((res) => setTimeout(res, 5));
+      if (op.op === 'checkin') {
+        if (st.type === 'pit_stop' && inZone(zones[step]!)) ((finished = true), push());
+        else notice('boxFar');
+        return;
       }
-      throw new Error('timeout');
+      if (op.step !== st.id) return;
+      const s = status();
+      if (op.op === 'open') {
+        if (st.type === 'route_info') return inZone(zones[step]!) ? (complete(), notice('clueNew')) : notice('boxFar');
+        if (st.type === 'detour' && s === 'goToBranch' && op.branch === row.branch) return inZone(branchZone(leg, zones, step, op.branch!)!) ? ((row.opened = true), push()) : notice('boxFar');
+      } else if (op.op === 'accept') {
+        if (s === 'teaser') ((row.started = true), push());
+      } else if (op.op === 'branch' && st.type === 'detour') {
+        if (row.branch === null) ((row.branch = op.branch!), push());
+        else if (op.branch !== row.branch && s !== 'pending') ((row.branch = op.branch!), (row.opened = false), switches++, (row.lockedUntil = Date.now() + o.lockMs), push());
+      } else if (op.op === 'answer') {
+        if (s === 'pending') return notice('answerPending');
+        if (s === 'locked') return notice('answerLocked');
+        const t = taskNow();
+        if (s !== 'active' || !t) return notice('taskNotStarted');
+        if (t.verification === 'host_approval') ((row.pending = { id: row.nextId++, text: op.text ?? '' }), push(), pushHost());
+        else if (t.answers.some((a) => normalizeAnswer(a) === normalizeAnswer(op.text ?? ''))) (complete(), notice('approved'));
+        else notice('answerWrong');
+      }
     },
   };
-  return { leg, sock: sock as never as Bot['s'], ops, state: () => ({ step, finished }) };
+  const host = {
+    log: hostLog,
+    send(m: unknown) {
+      const rv = m as HostReview;
+      reviews.push(rv);
+      if (!row.pending || row.pending.id !== rv.id) return;
+      row.pending = null;
+      if (rv.op === 'approve') complete();
+      else ((row.lockedUntil = Date.now() + o.lockMs), push());
+      pushHost();
+    },
+  };
+  return { leg, sock: sock as never as Bot['s'], host: host as never as Parameters<typeof runHostBot>[0], ops, reviews, switches: () => switches, state: () => ({ step, finished }) };
 }
 
-describe('sim bot against a stand-in engine (no workerd)', () => {
-  it('walks the compacted leg step by step: open, task with the right answer, enter the mat, check in', async () => {
+describe('sim bots against a stand-in engine + Host (no workerd)', () => {
+  it('3 bots play the compacted leg: accept, answers, one penalty, a photo branch, one branch switch, all reach the Pit Stop', { timeout: 120_000 }, async () => {
     const json = compactMini();
-    const eng = fakeEngine(json);
     const graph = RoadGraph.decode(JSON.parse(readFileSync(join(import.meta.dirname, '../shared/data/roadgraph.json'), 'utf8')) as RoadGraphFile);
-    const zones = stepZones(eng.leg);
+    const runs = [0, 1, 2].map((i) => fakeRace(json, { teamId: `t${i}`, lockMs: 120 }));
+    const leg = runs[0]!.leg;
+    const zones = stepZones(leg);
     const legState = {
-      id: 'mini', title: '', timezone: 'Asia/Ho_Chi_Minh', start: { x: zones[0]!.x, z: zones[0]!.z }, bundled: [], issues: [], vehicles: eng.leg.vehicles,
-      steps: eng.leg.steps.map((s, i) => ({ id: s.id, type: s.type, label: s.label, name: '', x: zones[i]!.x, z: zones[i]!.z, r: zones[i]!.r, proof: false })),
-      media: [], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45,
+      id: 'mini', title: '', timezone: 'Asia/Ho_Chi_Minh', start: { x: zones[0]!.x, z: zones[0]!.z }, bundled: [], issues: [], vehicles: leg.vehicles,
+      steps: leg.steps.map((s, i) => ({
+        id: s.id, type: s.type, label: s.label, name: '', x: zones[i]!.x, z: zones[i]!.z, r: zones[i]!.r, proof: false,
+        ...(s.type === 'detour' ? { branches: s.branches.map((b) => ({ id: b.id, name: b.name, ...(({ x, z, r }) => ({ x, z, r }))(branchZone(leg, zones, i, b.id)!), proof: b.task.kind === 'free' })) } : {}),
+      })),
+      media: [], penalties: { retryLockMinutes: 0.1, branchSwitchLockMinutes: 0.2 }, stuckMinutes: 45,
     } as NonNullable<HostState['leg']>;
     const welcome = { movement: { footSpeed: 400, bikeSpeedMultiplier: 1.3 }, start: { x: legState.start.x, z: legState.start.z, yaw: 0 }, pose: null, view: { card: { step: 'L1' }, finishAt: null } } as unknown as Welcome;
+    let on = true;
+    const hostLoops = runs.map((f, i) => runHostBot(f.host, i === 1 ? 't1|T1|1' : null, () => on, 10)); // bot 1: its first answer at T1 is penalized
     const refused: string[] = [];
-    const t = await playLeg({ i: 0, s: eng.sock, welcome }, legState, answersOf(json), graph, { speedup: 1, deadline: Date.now() + 60_000, refused });
-    expect(t).toBe(2);
-    expect(eng.state()).toEqual({ step: 5, finished: true });
-    expect(eng.ops.filter((o) => o === 'open')).toHaveLength(2); // L1, L2 (L3 is done by entering the mat)
-    expect(eng.ops.filter((o) => o === 'task')).toHaveLength(2); // T1, D1
-    // organiser review: "Mật thư mới đã vào Sổ mật thư" (clueNew) was printed as a refused op
-    expect(eng.sock.log.some((m) => !Array.isArray(m) && m.t === 'notice' && m.code === 'clueNew')).toBe(true);
+    let finishes: number[];
+    try {
+      finishes = await Promise.all(runs.map((f, i) => playLeg({ i, s: f.sock, welcome }, legState, answersOf(json), graph, { speedup: 1, deadline: Date.now() + 100_000, refused, switches: i === 2, lockSlackMs: 30, stallMs: 15_000 })));
+    } finally {
+      on = false;
+      await Promise.all(hostLoops);
+    }
+    expect(finishes).toEqual([2, 2, 2]);
+    expect(runs.map((f) => f.state())).toEqual([{ step: 5, finished: true }, { step: 5, finished: true }, { step: 5, finished: true }]);
+    // what each bot sent besides routes and poses: [op, step, branch | text]
+    const sent = (f: ReturnType<typeof fakeRace>) => f.ops.filter((o) => ['accept', 'answer', 'branch'].includes(o.op as string) || (o.op === 'open' && o.branch)).map((o) => [o.op, o.step, o.branch ?? o.text]);
+    expect(sent(runs[0]!)).toEqual([['accept', 'T1', undefined], ['answer', 'T1', '42'], ['branch', 'D1', 'A'], ['open', 'D1', 'A'], ['answer', 'D1', '7']]); // typed branch: auto, no Host
+    expect(sent(runs[1]!)).toEqual([['accept', 'T1', undefined], ['answer', 'T1', '42'], ['answer', 'T1', '42'], ['branch', 'D1', 'B'], ['open', 'D1', 'B'], ['answer', 'D1', '']]); // penalized once, then a photo branch ("đã gửi bài")
+    expect(sent(runs[2]!)).toEqual([['accept', 'T1', undefined], ['answer', 'T1', '42'], ['branch', 'D1', 'A'], ['branch', 'D1', 'B'], ['open', 'D1', 'B'], ['answer', 'D1', '']]); // chose A, switched to B once
+    expect(runs.map((f) => f.switches())).toEqual([0, 0, 1]);
+    // the Host bot: penalty (with its note) then approvals for bot 1, approvals only for bot 2; bot 0's typed branch needs no Host
+    expect(runs[1]!.reviews.map((m) => m.op)).toEqual(['penalize', 'approve', 'approve']);
+    expect(runs[1]!.reviews[0]).toMatchObject({ note: '(bot) thử phạt', step: 'T1', id: 1 });
+    expect(runs[2]!.reviews.map((m) => m.op)).toEqual(['approve', 'approve']);
+    expect(runs[0]!.reviews.map((m) => m.op)).toEqual(['approve']); // T1 only
+    // the clue notice is news, not a refusal (organiser review); the stand-in refuses nothing the bots should not have tried
     expect(refused.filter((r) => r.endsWith('clueNew'))).toEqual([]);
+    expect(refused).toEqual([]);
+  });
+
+  it('a bot whose card never changes (no Host to decide) fails with the step, not after the whole run time', { timeout: 30_000 }, async () => {
+    const json = compactMini();
+    const graph = RoadGraph.decode(JSON.parse(readFileSync(join(import.meta.dirname, '../shared/data/roadgraph.json'), 'utf8')) as RoadGraphFile);
+    const f = fakeRace(json, { teamId: 't0', lockMs: 120 });
+    const zones = stepZones(f.leg);
+    const legState = { start: { x: zones[0]!.x, z: zones[0]!.z }, steps: f.leg.steps.map((s, i) => ({ id: s.id, type: s.type, x: zones[i]!.x, z: zones[i]!.z, r: zones[i]!.r })) } as unknown as NonNullable<HostState['leg']>;
+    const welcome = { movement: { footSpeed: 400, bikeSpeedMultiplier: 1.3 }, start: { x: zones[0]!.x, z: zones[0]!.z, yaw: 0 }, pose: null, view: { card: { step: 'L1' }, finishAt: null } } as unknown as Welcome;
+    await expect(playLeg({ i: 0, s: f.sock, welcome }, legState, answersOf(json), graph, { speedup: 1, deadline: Date.now() + 25_000, refused: [], lockSlackMs: 30, stallMs: 1500 })).rejects.toThrow(/Bot 1: kẹt ở bước T1/);
   });
 });
 
-describe('sim --leg (Phase 7)', () => {
-  it('reads the right answers from the leg file and nothing else', () => {
+describe('sim --leg (Phase 7 / 8)', () => {
+  it('reads the right answers from the leg file: answers[0], else referenceAnswers[0], nothing invented', () => {
     const a = answersOf(mini);
-    expect(a.get('T1')).toBe('42');
+    expect(a.get('T1')).toBe('42'); // answers[0] wins over referenceAnswers
     expect(a.get('D1/A')).toBe('7');
-    expect(a.has('D1/B')).toBe(false); // host_approval branch: no answer to send
+    expect(a.get('D1/B')).toBe('(GIẢ) Ảnh thấy rõ chân tháp phía sau'); // only referenceAnswers: kept (the bot types "" for a photo task anyway)
     expect(a.has('L1')).toBe(false);
+    const only = JSON.stringify({ steps: [{ id: 'X', task: { referenceAnswers: ['tham khảo'] } }, { id: 'Y', task: {} }] });
+    expect([...answersOf(only)]).toEqual([['X', 'tham khảo']]);
   });
 
   it('--leg <id> finds the test leg file; unknown id says so', () => {
@@ -180,9 +371,13 @@ describe('sim --leg (Phase 7)', () => {
     if (r.ok) expect(r.leg.steps.map((s) => s.id)).toEqual(['L1', 'T1', 'L2', 'D1', 'L3', 'PS']);
   });
 
-  it.skipIf(!engineReady)('3 bots finish the whole leg: all checked in, ranking has 3 rows, ≤ 110 SQLite rows per team', { timeout: 300_000 }, async () => {
+  // Phase 8 integration (docs/plans/phase8.md §6 Track E, critic N9c): NOT run before track A is merged (engineReady, above).
+  it.skipIf(!engineReady)('3 bots finish the whole leg: all checked in, ranking has 3 rows, ≥ 1 penalty and ≥ 1 branch switch in the report, ≤ 160 SQLite rows per team', { timeout: 300_000 }, async () => {
     const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-leg', password: 'test-secret', log: () => {}, leg: { json: compactMini() } });
-    expect(r.leg).toMatchObject({ id: 'mini', steps: 6, finished: 3, ranked: 3, rowBudget: 110 });
+    expect(r.leg).toMatchObject({ id: 'mini', steps: 6, finished: 3, ranked: 3, rowBudget: 160 });
+    expect(r.leg!.stats.penalized).toBeGreaterThanOrEqual(1);
+    expect(r.leg!.stats.switches).toBeGreaterThanOrEqual(1);
+    expect(r.leg!.stats.answers).toBeGreaterThanOrEqual(7); // 3 × T1 + 1 retry + 3 × D1
     // per team = rows written while the race ran minus the shared snapshot / replay rows (they do not grow with the team count)
     expect(r.leg!.sharedRows).toBeGreaterThan(0);
     expect(r.leg!.rowsPerTeam).toBeGreaterThan(10);
@@ -194,12 +389,11 @@ describe('sim --leg (Phase 7)', () => {
   it('a long leg is not reported as LỖI for the shared rows: the budget counts per-team race rows (organiser review)', () => {
     // the organiser's 4-step leg, 2 bots, 826 s at speedup 2: 324 rows = 2 × 40 race rows + 244 snapshot / replay rows (413 s real,
     // one every 2 s + one every 10 s); the old check divided all 324 by 2 → "162 > 110 ← LỖI"
-    const leg = { id: 'x', steps: 4, finished: 2, ranked: 2, rowsPerTeam: 40, sharedRows: 244, rowBudget: legRowBudget(4), refused: [] };
+    const leg = { id: 'x', steps: 4, finished: 2, ranked: 2, rowsPerTeam: 40, sharedRows: 244, rowBudget: legRowBudget(4), refused: [], stats: legStats([]) };
     const r = { bots: 2, counters: { wsIn: 0, wsOut: 0, http: 0, alarms: 0, rows: 324 }, leg } as unknown as Parameters<typeof legFailed>[0];
     expect(legFailed(r)).toBe(false);
-    expect(legFailed({ ...r, leg: { ...leg, rowsPerTeam: 111 } })).toBe(true);
+    expect(legFailed({ ...r, leg: { ...leg, rowsPerTeam: 161 } })).toBe(true);
     expect(legFailed({ ...r, leg: { ...leg, finished: 1 } })).toBe(true);
     expect(legFailed({ ...r, leg: { ...leg, rowsPerTeam: null } })).toBe(false); // --url: not measured, not a failure
-    expect([legRowBudget(4), legRowBudget(10), legRowBudget(12)]).toEqual([110, 110, 132]);
   });
 });
