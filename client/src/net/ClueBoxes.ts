@@ -42,7 +42,7 @@ function makeParts() {
   return {
     beam,
     beamMat: new MeshBasicMaterial({ color: c.post, vertexColors: true, transparent: true, depthWrite: false, opacity: 0 }), // normal blending: stays yellow on a bright sky
-    body: mergeGeometries([box(B.size, B.height, B.size, 0), box(H.size, H.height, H.size, B.height + P.height)])!,
+    body: mergeGeometries([box(B.size, B.height + B.sink, B.size, -B.sink), box(H.size, H.height, H.size, B.height + P.height)])!,
     post: box(P.size, P.height, P.size, B.height),
     stripes: mergeGeometries([box(P.stripe, P.height, across, B.height), box(across, P.height, P.stripe, B.height)])!, // a "+" through the post: one stripe per face
     lid: box(L.size, L.height, L.size, 0).translate(0, 0, L.size / 2), // hinge (its back edge) at the origin

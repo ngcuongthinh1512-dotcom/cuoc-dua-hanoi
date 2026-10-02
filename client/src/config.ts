@@ -1029,7 +1029,7 @@ export const remote = {
 // organiser's real prop (reference photo, docs/reports/phase7-clue-box-model.md): grey base plate, yellow post with a red
 // stripe down every face, grey box on top under a flat lid overhanging it on all sides. Sizes in m (total ≈ 1.6 m).
 export const clueBox = {
-  base: { size: 0.65, height: 0.06 },
+  base: { size: 0.65, height: 0.06, sink: 0.3 }, // sink: the plate also extends this far BELOW the placement point so it never floats on a slope or stair edge
   post: { size: 0.32, height: 1.0, stripe: 0.17, proud: 0.006 }, // stripe: width on each face, `proud` m out of the face (no z-fight)
   head: { size: 0.52, height: 0.5 },
   lid: { size: 0.58, height: 0.05, openDeg: 100 }, // opened box: the lid swung up this far about its back (−z) edge

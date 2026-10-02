@@ -1001,3 +1001,7 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - **Lựa chọn kép (Lửa / Nước)**: Host duyệt thủ công qua ảnh chụp màn hình gửi Facebook (§8.9), vì đội gửi ảnh, không gõ chữ.
 - Mật thư có thể kèm liên kết (ví dụ video, hình) hiện trên thẻ mật thư và trong Sổ mật thư.
 - Tự chấm trong game (danh sách đáp án chấp nhận được) là tùy chọn bật sau cho từng thử thách, không dùng ở chặng này.
+
+### 17.15 Hình dạng hòm mật thư trong game (2026-10-02; thay "cờ vàng–đỏ + ánh sáng nhẹ" của §8.2)
+- Hòm mật thư dựng giống mô hình thật người dùng đưa (ảnh): **đế xám vuông, cột vàng vuông có dải đỏ dọc, hộp xám trên cùng với nắp phẳng nhô ra bốn phía**, cao ≈ 1,6 m; hòm đã mở: nắp lật lên, dải đỏ chuyển màu xám đỏ.
+- Chi tiết thêm của bản dựng (chờ người dùng xác nhận): dải đỏ ở cả 4 mặt cột (ảnh chỉ thấy mặt trước); **cột sáng vàng mảnh** phía trên hòm chưa mở để nhìn thấy ở 150 m (hòm chỉ cao ≈ 6 px ở khoảng đó), mờ dần trong 35 → 12 m; kích thước theo ảnh (cột 0,32 m, dải 0,17 m).
