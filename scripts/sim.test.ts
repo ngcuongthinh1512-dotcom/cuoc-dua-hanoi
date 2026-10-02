@@ -67,7 +67,9 @@ function compactMini(): string {
 }
 // ponytail: the full-leg test is skipped while worker/src/race/engine.ts is still the foundation stub (no race engine = nothing for the
 // bots to play); the integrator merges track A first, after which it runs.
-const engineReady = !readFileSync(join(import.meta.dirname, '../worker/src/race/engine.ts'), 'utf8').includes('FOUNDATION STUB');
+// Phase 8 track A: also skipped while the bot still plays the Phase 7 `race task` op (the server ignores it now; track E
+// moves the bot to accept / answer / branch / open{branch} + a Host bot).
+const engineReady = !readFileSync(join(import.meta.dirname, '../worker/src/race/engine.ts'), 'utf8').includes('FOUNDATION STUB') && !readFileSync(join(import.meta.dirname, 'sim.ts'), 'utf8').includes("op: 'task'");
 
 /** A minimal stand-in for the race engine (the real one is track A): steps by the plan's table, judged on the last pose sent. */
 function fakeEngine(legJson: string) {

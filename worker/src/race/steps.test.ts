@@ -1,24 +1,34 @@
-// SPEC §8.1 state machine (docs/plans/phase7.md D2–D8, D18), pure: the fake `mini` leg (worker/legs/test/mini.json):
-// L1 route → T1 challenge elsewhere (host_approval) → L2 walk-only route → D1 detour (A 55 m off, B elsewhere) → L3 → PS.
+// SPEC §8.1 state machine (docs/plans/phase7.md D2–D8, D18; docs/plans/phase8.md D5–D8, D10, D13), pure: the fake `mini`
+// leg (worker/legs/test/mini.json): L1 route → T1 challenge elsewhere (teaser, host_approval) → L2 walk-only route → D1
+// detour (A auto 55 m off, B a photo task elsewhere) → L3 → PS.
 import { branchZone, parseLeg, stepZones, type Leg, type Zone } from '@race/shared/leg';
-import { NET } from '@race/shared/protocol';
+import { NET, type HostReview } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
 import miniRaw from '../../legs/test/mini.json';
-import { emptyProgress } from '../db.ts';
+import { emptyProgress, parseAnswers, type StepProgressRow } from '../db.ts';
 import { bundledLeg } from './leg.ts';
-import { advance, boxesOf, cardOf, placesOf, taskState, type Progress, type RaceInput, type Verify } from './steps.ts';
+import { advance, boxesOf, cardOf, mediaAllowed, placesOf, review, taskState, type Progress, type RaceInput, type StandAt } from './steps.ts';
 import { verifyAuto } from './tasks.ts';
 
 const mini = bundledLeg('mini')!;
 const Z = stepZones(mini);
-const pass: Verify = () => 'pass';
-const P = (step: number, more: Partial<Progress> = {}): Progress => ({ step, arrivedAt: null, startedAt: null, branch: null, finishAt: null, penaltyMinutes: 0, branchOpenedAt: null, lockedUntil: null, pendingId: null, ...more });
+const P = (step: number, more: Partial<Progress> = {}): Progress => ({ step, arrivedAt: null, startedAt: null, branch: null, finishAt: null, penaltyMinutes: 0, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, ...more });
 const ZA = branchZone(mini, Z, 3, 'A')!;
 const ZB = branchZone(mini, Z, 3, 'B')!;
 const at = (z: Zone, dx = 0) => ({ x: z.x + dx, z: z.z });
 const pose = (z: Zone, dx = 0, riding = false): RaceInput => ({ kind: 'pose', ...at(z, dx), riding });
-const run = (p: Progress, input: RaceInput, now = 1000, verify = pass, leg: Leg = mini, running = true) => advance(leg, stepZones(leg), p, input, now, verify, running);
+const stand = (z: Zone, dx = 0, riding = false): StandAt => ({ ...at(z, dx), riding });
+const run = (p: Progress, input: RaceInput, now = 1000, leg: Leg = mini, running = true) => advance(leg, stepZones(leg), p, input, now, running);
 const park = (z: Zone) => ({ kind: 'park', rack: z.rack, at: z.parking });
+const MIN = 60_000;
+/** mini with its steps edited (still a valid leg). */
+const variant = (edit: (steps: any[]) => void): Leg => {
+  const raw = structuredClone(miniRaw) as any;
+  edit(raw.steps);
+  const r = parseLeg(raw);
+  if (!r.ok) throw new Error(JSON.stringify(r.issues));
+  return r.leg;
+};
 
 describe('advance: route_info (L1)', () => {
   it('arrives once by position, opens on foot inside the zone only, then holds the next clue', () => {
@@ -37,71 +47,228 @@ describe('advance: route_info (L1)', () => {
     expect(run(o.p, open(0)).effects).toEqual([{ kind: 'refuse', code: 'boxOpened' }]);
   });
 
-  it('open / task inside the zone before any pose there records the arrival first', () => {
+  it('open inside the zone before any pose there records the arrival first', () => {
     expect(run(P(0), { kind: 'open', step: 'L1', ...at(Z[0]!), riding: false }).effects).toEqual([{ kind: 'arrive', step: 0 }, { kind: 'complete', step: 0 }]);
-    expect(run(P(1), { kind: 'task', step: 'T1', ...at(Z[1]!) }).effects.slice(0, 2)).toEqual([{ kind: 'arrive', step: 1 }, park(Z[1]!)]);
   });
 
   it('outside "running" a pose records the arrival only (D9), nothing moves on', () => {
-    expect(run(P(0), pose(Z[0]!), 1000, pass, mini, false).effects).toEqual([{ kind: 'arrive', step: 0 }]);
-    expect(run(P(4), pose(Z[4]!), 1000, pass, mini, false)).toEqual({ p: P(4, { arrivedAt: 1000 }), effects: [{ kind: 'arrive', step: 4 }] });
-  });
-});
-
-describe('advance: tasks', () => {
-  it('a challenge elsewhere: rack when the team ENTERS its place, task only inside, then the next clue', () => {
-    expect(run(P(1), { kind: 'task', step: 'T1', ...at(Z[1]!, 60) }).effects).toEqual([{ kind: 'refuse', code: 'taskFar' }]);
-    const a = run(P(1), pose(Z[1]!));
-    expect(a.effects).toEqual([{ kind: 'arrive', step: 1 }, park(Z[1]!)]);
-    expect(run(a.p, { kind: 'task', step: 'T1', ...at(Z[1]!), riding: true })).toEqual({ p: a.p, effects: [{ kind: 'refuse', code: 'boxRiding' }] }); // D4
-    const t = run(a.p, { kind: 'task', step: 'T1', answer: '42', ...at(Z[1]!) }, 3000);
-    // L2 is walk-only: the bike goes to the rack of the point the team STANDS at (T1's place), not L2's (D18)
-    expect(t).toEqual({ p: P(2), effects: [{ kind: 'start', step: 1, branch: null }, { kind: 'complete', step: 1 }, park(Z[1]!)] });
-    expect(Z[1]!.rack).not.toBe(Z[2]!.rack);
+    expect(run(P(0), pose(Z[0]!), 1000, mini, false).effects).toEqual([{ kind: 'arrive', step: 0 }]);
+    expect(run(P(4), pose(Z[4]!), 1000, mini, false)).toEqual({ p: P(4, { arrivedAt: 1000 }), effects: [{ kind: 'arrive', step: 4 }] });
   });
 
   it('a walk-only route received at a route point parks at THAT point (L1), not at the destination ahead', () => {
-    const leg = parseLeg({ ...miniRaw, steps: miniRaw.steps.filter((s) => s.id !== 'T1') });
-    if (!leg.ok) throw new Error(JSON.stringify(leg.issues));
-    const z = stepZones(leg.leg);
-    const r = advance(leg.leg, z, P(0), { kind: 'open', step: 'L1', ...at(z[0]!), riding: false }, 1, pass);
+    const leg = variant((s) => s.splice(1, 1)); // no T1: L1 → L2 (walk-only)
+    const z = stepZones(leg);
+    const r = advance(leg, z, P(0), { kind: 'open', step: 'L1', ...at(z[0]!), riding: false }, 1);
     expect(r.effects).toEqual([{ kind: 'arrive', step: 0 }, { kind: 'complete', step: 0 }, { kind: 'park', rack: z[0]!.rack, at: z[0]!.parking }]);
     expect(z[0]!.parking).not.toBeNull();
   });
+});
 
-  it('verify "wrong" / "pending" change nothing (Phase 8 relies on it)', () => {
-    const a = P(1, { arrivedAt: 5 });
-    for (const v of ['wrong', 'pending'] as const) expect(run(a, { kind: 'task', step: 'T1', ...at(Z[1]!) }, 9, () => v)).toEqual({ p: a, effects: [] });
+describe('advance: a challenge (D5, D8, D21, D22)', () => {
+  const answer = (text: string, p: StandAt = null): RaceInput => ({ kind: 'answer', step: 'T1', text, pose: p });
+
+  it('teaser → accept → active → answer (from anywhere) → pending; refusals per state; done / later steps silent', () => {
+    const t0 = P(1);
+    expect(run(t0, answer('42'))).toEqual({ p: t0, effects: [{ kind: 'refuse', code: 'taskNotStarted' }] });
+    const acc = run(t0, { kind: 'accept', step: 'T1' }, 500);
+    expect(acc).toEqual({ p: P(1, { startedAt: 500 }), effects: [{ kind: 'accept', step: 1 }] });
+    expect(run(acc.p, { kind: 'accept', step: 'T1' }).effects).toEqual([]); // twice: nothing written
+    const a = run(acc.p, answer('41'), 600); // no position needed (gap 6)
+    expect(a).toEqual({ p: P(1, { startedAt: 500, pendingId: 1, lastAnswerId: 1 }), effects: [{ kind: 'answer', step: 1, rec: { id: 1, b: null, text: '41', at: 600, s: 'pending' }, verdict: 'pending' }] });
+    expect(run(a.p, answer('42')).effects).toEqual([{ kind: 'refuse', code: 'answerPending' }]);
+    // the Host's "Phạt": locked until lockedUntil (read against now), then the next answer is #2
+    const locked = P(1, { startedAt: 500, lockedUntil: 5000, lastAnswerId: 1 });
+    expect(run(locked, answer('42'), 4999).effects).toEqual([{ kind: 'refuse', code: 'answerLocked' }]);
+    expect(run(locked, answer('42'), 5000).effects).toEqual([{ kind: 'answer', step: 1, rec: { id: 2, b: null, text: '42', at: 5000, s: 'pending' }, verdict: 'pending' }]);
+    for (const text of ['', '   ']) expect(run(acc.p, answer(text)).effects).toEqual([]); // the client never sends it
+    expect(run(P(2), answer('42')).effects).toEqual([]); // T1 done
+    expect(run(P(0), answer('42')).effects).toEqual([]); // T1 not reached
+    expect(run(P(1), { kind: 'accept', step: 'L1' }).effects).toEqual([]);
   });
 
-  it('detour (Phase 7 `task` op, until track A): a branch is required, each branch is done in its own place, the branch is recorded', () => {
-    const p = P(3, { arrivedAt: 1 });
-    expect(run(p, { kind: 'task', step: 'D1', ...at(Z[3]!) }).effects).toEqual([]);
-    expect(run(p, { kind: 'task', step: 'D1', branch: 'X', ...at(Z[3]!) }).effects).toEqual([]);
-    expect(run(p, { kind: 'task', step: 'D1', branch: 'B', ...at(Z[3]!) }).effects).toEqual([{ kind: 'refuse', code: 'taskFar' }]);
-    expect(run(p, { kind: 'task', step: 'D1', branch: 'B', ...at(ZB) }).effects).toEqual([{ kind: 'start', step: 3, branch: 'B' }, { kind: 'complete', step: 3 }]);
-    expect(run(p, { kind: 'task', step: 'D1', branch: 'A', ...at(ZA) }).effects).toEqual([{ kind: 'start', step: 3, branch: 'A' }, { kind: 'complete', step: 3 }]);
+  it('auto (D21): wrong → recorded, no lock; right → done from anywhere', () => {
+    const leg = variant((s) => Object.assign(s[1], { teaser: '' }, { task: { ...s[1].task, verification: 'auto' } }));
+    const p = P(1, { lastAnswerId: 3 });
+    expect(run(p, answer('41'), 1000, leg).effects).toEqual([{ kind: 'answer', step: 1, rec: { id: 4, b: null, text: '41', at: 1000, s: 'wrong' }, verdict: 'wrong' }]);
+    const r = run(p, answer(' 42 ', stand(Z[1]!, 300)), 1000, leg);
+    expect(r.effects).toEqual([{ kind: 'answer', step: 1, rec: { id: 4, b: null, text: ' 42 ', at: 1000, s: 'correct' }, verdict: 'correct' }, { kind: 'complete', step: 1 }]); // 300 m away: no rack
+    expect(r.p).toEqual(P(2));
   });
 
-  it('a detour is "the team\'s point" only at the chosen branch\'s place (Phase 8 critic C1): no arrival / rack before a choice or at the other branch', () => {
-    const r = run(P(2, { arrivedAt: 1 }), { kind: 'open', step: 'L2', ...at(Z[2]!), riding: false });
-    expect(r).toEqual({ p: P(3), effects: [{ kind: 'complete', step: 2 }] }); // both branches have a place: no rack at L2
-    expect(placesOf(mini, Z, 3, null)).toEqual([]);
-    expect(run(P(3), pose(ZB)).effects).toEqual([]);
-    expect(run(P(3, { branch: 'A' }), pose(ZB)).effects).toEqual([]); // riding past B's place while on A: the bike stays
-    expect(run(P(3, { branch: 'A' }), pose(ZA)).effects).toEqual([{ kind: 'arrive', step: 3 }, park(ZA)]);
-    expect(run(P(3, { branch: 'B' }), pose(ZB)).effects).toEqual([{ kind: 'arrive', step: 3 }, park(ZB)]);
+  it('approve (S3): the bike goes to T1\'s rack (L2 is walk-only) only if the team stands there on foot', () => {
+    const p = P(1, { startedAt: 5, pendingId: 1, lastAnswerId: 1, arrivedAt: 5 });
+    const approve = (s: StandAt) => run(p, { kind: 'approve', step: 'T1', pose: s }).effects;
+    expect(approve(stand(Z[1]!, 5))).toEqual([{ kind: 'complete', step: 1 }, park(Z[1]!)]);
+    expect(approve(stand(Z[1]!, 300))).toEqual([{ kind: 'complete', step: 1 }]);
+    expect(approve(stand(Z[1]!, 0, true))).toEqual([{ kind: 'complete', step: 1 }]); // riding through: the bike stays under it
+    expect(approve(null)).toEqual([{ kind: 'complete', step: 1 }]);
+    expect(run(p, { kind: 'approve', step: 'T1', pose: null }).p).toEqual(P(2));
+    expect(run(P(2), { kind: 'approve', step: 'T1', pose: null }).effects).toEqual([]); // already done
   });
 
-  it('Phase 8 ops are typed stubs until track A: nothing happens, nothing is written', () => {
-    for (const input of [{ kind: 'accept', step: 'T1' }, { kind: 'answer', step: 'T1', text: '42' }, { kind: 'branch', step: 'D1', branch: 'A' }, { kind: 'approve', step: 'T1', pose: null }, { kind: 'open', step: 'D1', branch: 'A', ...at(ZA), riding: false }] as RaceInput[])
-      expect(run(P(3), input)).toEqual({ p: P(3), effects: [] });
+  it('approve: a next task right at that point is arrived at by the same pose (settle), also while paused', () => {
+    // T2 = a second challenge with no place of its own: done where T1 is
+    const leg = variant((s) => s.splice(2, 0, { id: 'T2', type: 'challenge', label: 'Thử thách 2', task: { description: '(GIẢ)', verification: 'host_approval' } }));
+    const z = stepZones(leg);
+    const p = P(1, { pendingId: 1, lastAnswerId: 1, arrivedAt: 5 });
+    for (const running of [true, false]) expect(run(p, { kind: 'approve', step: 'T1', pose: stand(z[1]!) }, 1000, leg, running).effects).toEqual([{ kind: 'complete', step: 1 }, park(z[1]!), { kind: 'arrive', step: 2 }]);
+  });
+
+  it('a challenge elsewhere: rack when the team ENTERS its place', () => {
+    expect(run(P(1), pose(Z[1]!)).effects).toEqual([{ kind: 'arrive', step: 1 }, park(Z[1]!)]);
+    expect(Z[1]!.rack).not.toBe(Z[2]!.rack);
   });
 
   it('verifyAuto (D21): one of the answers, ignoring case / diacritics / đ / spaces', () => {
     const t = mini.steps[3]!.type === 'detour' ? mini.steps[3].branches[0]!.task : null;
     expect(['7', ' BẢY ', 'bay'].map((x) => verifyAuto(t!, x))).toEqual(['correct', 'correct', 'correct']);
     expect(['8', '', '77'].map((x) => verifyAuto(t!, x))).toEqual(['wrong', 'wrong', 'wrong']);
+  });
+});
+
+describe('advance: a detour (D6)', () => {
+  const branch = (b: string): RaceInput => ({ kind: 'branch', step: 'D1', branch: b });
+  const open = (b: string, z: Zone, dx = 0, riding = false): RaceInput => ({ kind: 'open', step: 'D1', branch: b, ...at(z, dx), riding });
+
+  it('choose (no lock) → goToBranch → open the chosen branch\'s box only (on foot, in its place) → its task', () => {
+    expect(run(P(3), branch('X')).effects).toEqual([]);
+    const c = run(P(3), branch('A'));
+    expect(c).toEqual({ p: P(3, { branch: 'A' }), effects: [{ kind: 'branch', step: 3, branch: 'A' }] });
+    expect(run(c.p, branch('A')).effects).toEqual([]); // the same branch again
+    expect(run(P(3), open('A', ZA)).effects).toEqual([]); // no branch chosen
+    expect(run(c.p, open('B', ZB)).effects).toEqual([]); // never confirm the other branch's box
+    expect(run(c.p, open('A', ZA, 0, true)).effects).toEqual([{ kind: 'refuse', code: 'boxRiding' }]);
+    expect(run(c.p, open('A', ZA, ZA.r + NET.geofenceSlack + 1)).effects).toEqual([{ kind: 'refuse', code: 'boxFar' }]);
+    const o = run(c.p, open('A', ZA), 2000);
+    expect(o).toEqual({ p: P(3, { branch: 'A', arrivedAt: 2000, branchOpenedAt: 2000, startedAt: 2000 }), effects: [{ kind: 'arrive', step: 3 }, park(ZA), { kind: 'openBranch', step: 3, branch: 'A' }] });
+    expect(run(o.p, open('A', ZA)).effects).toEqual([{ kind: 'refuse', code: 'boxOpened' }]);
+    expect(run(P(4), open('A', ZA)).effects).toEqual([{ kind: 'refuse', code: 'boxOpened' }]);
+    // answers only once the box is opened; A is auto: right = done (L3 next: no rack rule)
+    expect(run(c.p, { kind: 'answer', step: 'D1', text: '7', pose: null }).effects).toEqual([]);
+    expect(run(o.p, { kind: 'answer', step: 'D1', text: 'bảy', pose: stand(ZA) }, 3000).effects).toEqual([{ kind: 'answer', step: 3, rec: { id: 1, b: 'A', text: 'bảy', at: 3000, s: 'correct' }, verdict: 'correct' }, { kind: 'complete', step: 3 }]);
+    // B is a photo task: '' = "Tôi đã gửi bài" → pending
+    const ob = P(3, { branch: 'B', branchOpenedAt: 5, startedAt: 5 });
+    expect(run(ob, { kind: 'answer', step: 'D1', text: '', pose: null }).effects).toEqual([{ kind: 'answer', step: 3, rec: { id: 1, b: 'B', text: '', at: 1000, s: 'pending' }, verdict: 'pending' }]);
+  });
+
+  it('switch: the old box hidden, a branchSwitchLockMinutes lock, the old branch\'s progress gone; refused only while pending', () => {
+    const go = P(3, { branch: 'A', arrivedAt: 7 });
+    const sw = run(go, branch('B'), 1000);
+    expect(sw).toEqual({
+      p: P(3, { branch: 'B', lockedUntil: 1000 + 10 * MIN }),
+      effects: [{ kind: 'switch', step: 3, from: 'A', to: 'B', lockedUntil: 1000 + 10 * MIN }, { kind: 'hideBox', step: 3, branch: 'A' }],
+    });
+    expect(run(sw.p, open('B', ZB), 2000).effects).toEqual([]); // switchLocked: no box yet
+    expect(run(sw.p, open('B', ZB), 1000 + 10 * MIN).effects).toEqual([{ kind: 'arrive', step: 3 }, park(ZB), { kind: 'openBranch', step: 3, branch: 'B' }]);
+    const opened = P(3, { branch: 'A', branchOpenedAt: 5, startedAt: 5, arrivedAt: 5, lastAnswerId: 2 });
+    expect(run({ ...opened, pendingId: 2 }, branch('B')).effects).toEqual([{ kind: 'refuse', code: 'branchPending' }]);
+    // M1: during a "Phạt" countdown the switch is allowed and its lock replaces the old one
+    const s2 = run({ ...opened, lockedUntil: 1000 + 3 * MIN }, branch('B'), 1000);
+    expect(s2.p).toEqual(P(3, { branch: 'B', lockedUntil: 1000 + 10 * MIN, lastAnswerId: 2 }));
+    expect(s2.effects[0]).toMatchObject({ kind: 'switch', from: 'A', to: 'B' });
+    // A → B → A: each switch one lock
+    expect(run(sw.p, branch('A'), 2000).effects).toEqual([{ kind: 'switch', step: 3, from: 'B', to: 'A', lockedUntil: 2000 + 10 * MIN }, { kind: 'hideBox', step: 3, branch: 'B' }]);
+    const fast = { ...mini, penalties: { ...mini.penalties, branchSwitchLockMinutes: 0 } }; // 0 = no countdown
+    expect(run(go, branch('B'), 1000, fast).p.lockedUntil).toBe(1000);
+  });
+
+  it('a detour is "the team\'s point" only at the chosen branch\'s place (critic C1): no arrival / rack before a choice or at the other branch', () => {
+    const r = run(P(2, { arrivedAt: 1 }), { kind: 'open', step: 'L2', ...at(Z[2]!), riding: false });
+    expect(r).toEqual({ p: P(3), effects: [{ kind: 'complete', step: 2 }] }); // both branches have a place: no rack at L2
+    expect(placesOf(mini, Z, 3, null)).toEqual([]);
+    expect(run(P(3), pose(ZB)).effects).toEqual([]);
+    expect(run(P(3, { branch: 'A' }), pose(ZB)).effects).toEqual([]); // riding past B's place while on A: the bike stays
+    expect(run(P(3, { branch: 'A' }), pose(ZA)).effects).toEqual([{ kind: 'arrive', step: 3 }, park(ZA)]);
+    // after a switch to B (arrivedAt cleared): B's place is the team's now
+    const sw = run(P(3, { branch: 'A', arrivedAt: 1 }), branch('B')).p;
+    expect(run(sw, pose(ZB)).effects).toEqual([{ kind: 'arrive', step: 3 }, park(ZB)]);
+  });
+});
+
+describe('review (D5, D10)', () => {
+  const T1 = (more: Partial<StepProgressRow> = {}): StepProgressRow => ({ ...emptyProgress('t', 'T1'), clue_opened_at: 1, task_started_at: 2, ...more });
+  const recs = (...a: object[]) => JSON.stringify(a);
+  const pend = (id = 1, at = 1000) => ({ id, b: null, text: 'x', at, s: 'pending' });
+  const m = (op: HostReview['op'], id?: number, note?: string, step = 'T1'): HostReview => ({ t: 'host.review', team: 't', step, op, ...(id !== undefined ? { id } : {}), ...(note !== undefined ? { note } : {}) });
+  const ok = (r: ReturnType<typeof review>) => {
+    if ('refuse' in r) throw new Error(r.refuse);
+    return { ...r, answers: parseAnswers(r.row) };
+  };
+
+  it('approve the pending answer: decided, the wait counted (SPEC §8.9), a note on the answer AND the step', () => {
+    const r = ok(review(mini, 1, T1({ answers: recs(pend(1, 1000)) }), m('approve', 1, 'đúng rồi'), 31_000));
+    expect(r).toMatchObject({ approve: true, id: 1, row: { decided_at: 31_000, decided_by: 'host', approval_wait_seconds: 30, host_note: 'đúng rồi', locked_until: null, completed_at: null } });
+    expect(r.answers).toEqual([{ id: 1, b: null, text: 'x', at: 1000, s: 'approved', d: 31_000, n: 'đúng rồi' }]);
+  });
+
+  it('penalize: locked for task.retryLockMinutes ?? penalties.retryLockMinutes (0 = none), rejections + 1, no penalty minutes', () => {
+    const r = ok(review(mini, 1, T1({ answers: recs(pend(1, 1000)) }), m('penalize'), 11_000)); // no id: the pending one
+    expect(r).toMatchObject({ approve: false, id: 1, row: { rejections: 1, locked_until: 11_000 + 3 * MIN, approval_wait_seconds: 10, penalty_minutes: 0, host_note: '' } });
+    expect(r.answers[0]).toMatchObject({ s: 'penalized', d: 11_000 });
+    expect(r.answers[0]!.n).toBeUndefined();
+    const one = variant((s) => (s[1].task.retryLockMinutes = 1));
+    expect(ok(review(one, 1, T1({ answers: recs(pend()) }), m('penalize', 1), 2000)).row.locked_until).toBe(2000 + MIN);
+    const zero = variant((s) => (s[1].task.retryLockMinutes = 0));
+    const z = ok(review(zero, 1, T1({ answers: recs(pend()) }), m('penalize', 1), 2000)).row;
+    expect([z.locked_until, taskState(zero, 1, z, 2000)]).toEqual([null, 'active']);
+  });
+
+  it('refusals in Vietnamese: a decided answer, a wrong id, nothing sent, a done step (idempotent: two Hosts, a double click)', () => {
+    const decided = recs({ ...pend(1), s: 'approved', d: 5 });
+    expect(review(mini, 1, T1({ answers: decided }), m('approve', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
+    expect(review(mini, 1, T1({ answers: recs(pend(1)) }), m('approve', 2), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' });
+    expect(review(mini, 1, T1(), m('approve'), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // a typed task: no id, nothing pending
+    expect(review(mini, 1, T1({ answers: recs(pend(1)), completed_at: 8 }), m('approve', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
+    expect(review(mini, 1, T1({ answers: recs({ ...pend(1), s: 'penalized' }) }), m('penalize', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
+    expect(review(mini, 0, T1(), m('approve', 1), 9)).toMatchObject({ refuse: expect.stringContaining('không có thử thách') });
+    expect(review(mini, 3, { ...emptyProgress('t', 'D1'), clue_opened_at: 1 }, m('approve', undefined, undefined, 'D1'), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // no branch
+  });
+
+  it('N4: "Duyệt" on the answer just penalized clears the lock; not once a newer answer was sent', () => {
+    const pen = { ...pend(1, 1000), s: 'penalized', d: 2000, n: 'sai' };
+    const r = ok(review(mini, 1, T1({ answers: recs(pen), locked_until: 9 * MIN, approval_wait_seconds: 1, rejections: 1 }), m('approve', 1), 5000));
+    expect(r).toMatchObject({ approve: true, row: { locked_until: null, approval_wait_seconds: 1, rejections: 1 } });
+    expect(r.answers[0]).toMatchObject({ s: 'approved', d: 5000, n: 'sai' });
+    expect(review(mini, 1, T1({ answers: recs(pen, pend(2)) }), m('approve', 1), 5000)).toEqual({ refuse: 'Bài này đã được xử lý.' });
+  });
+
+  it('approve without id (M2): a photo task active / locked (Host got it on Messenger) → a new approved answer; a typed task → refused', () => {
+    const d1 = (more: Partial<StepProgressRow>) => ({ ...emptyProgress('t', 'D1'), clue_opened_at: 1, branch: 'B', branch_opened_at: 2, task_started_at: 2, ...more });
+    const approve = m('approve', undefined, undefined, 'D1');
+    const r = ok(review(mini, 3, d1({ answers: recs({ id: 1, b: 'A', text: '8', at: 1, s: 'wrong' }) }), approve, 50));
+    expect(r).toMatchObject({ approve: true, id: 2 });
+    expect(r.answers[1]).toEqual({ id: 2, b: 'B', text: '', at: 50, s: 'approved', d: 50 });
+    expect(ok(review(mini, 3, d1({ locked_until: 99 }), approve, 50)).approve).toBe(true);
+    expect(review(mini, 3, d1({ branch_opened_at: null }), approve, 50)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // box not opened
+    expect(review(mini, 3, d1({ branch: 'A' }), approve, 50)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // typed
+  });
+
+  it('note: the step\'s Host note only ("" clears it), any step the team holds', () => {
+    expect(ok(review(mini, 0, T1({ host_note: 'cũ' }), m('note', undefined, 'mới'), 9))).toMatchObject({ approve: false, id: null, row: { host_note: 'mới' } });
+    expect(ok(review(mini, 1, T1({ host_note: 'cũ', completed_at: 3 }), m('note', undefined, ''), 9)).row.host_note).toBe('');
+  });
+});
+
+describe('mediaAllowed (D13)', () => {
+  const leg = variant((s) => {
+    s[3].branches[0].task.media = ['r2:nhanh-a.jpg'];
+    s[3].branches[1].task.media = ['r2:nhanh-b.jpg'];
+  });
+  const rows = (o: Record<string, Partial<StepProgressRow>>) => new Map(Object.entries(o).map(([k, v]) => [k, { ...emptyProgress('t', k), ...v } as StepProgressRow]));
+  const can = (step: number, r: Record<string, Partial<StepProgressRow>>, name: string) => mediaAllowed(leg, step, rows(r), name);
+
+  it('only images of clues the team has opened: the next step / an unaccepted task / an unopened branch → no', () => {
+    expect(can(0, {}, 'test-gia.jpg')).toBe(true); // L1: held from the start
+    expect(can(0, {}, 'test-gia-2.jpg')).toBe(false); // T1's task: a later step
+    expect(can(1, {}, 'test-gia-2.jpg')).toBe(false); // T1 behind its teaser
+    expect(can(1, { T1: { task_started_at: 5 } }, 'test-gia-2.jpg')).toBe(true);
+    expect(can(3, { T1: { completed_at: 5 } }, 'test-gia-2.jpg')).toBe(true);
+    expect(can(3, { D1: { branch: 'A' } }, 'nhanh-a.jpg')).toBe(false); // chosen, box not opened
+    expect(can(3, { D1: { branch: 'A', branch_opened_at: 5 } }, 'nhanh-a.jpg')).toBe(true);
+    expect(can(3, { D1: { branch: 'A', branch_opened_at: 5 } }, 'nhanh-b.jpg')).toBe(false); // the other branch
+    expect(can(4, { D1: { branch: 'B', completed_at: 5 } }, 'nhanh-b.jpg')).toBe(true); // the branch it did
+    expect(can(5, {}, 'khong-co.jpg')).toBe(false);
   });
 });
 

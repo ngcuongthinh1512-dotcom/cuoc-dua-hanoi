@@ -3,10 +3,10 @@
 // bikes, the row budget; then the trusted point (D4: a teleport / respawn into a zone opens nothing) and a restart
 // mid-leg. Teams move only by walking (5 Hz poses) on the fake `nearLeg` (points 60 m apart, fast foot speed).
 import { stepZones } from '@race/shared/leg';
-import { NET, type HostState, type RaceView, type Welcome } from '@race/shared/protocol';
+import { NET, type ClueCard, type HostState, type RaceView, type Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { bundledLeg } from './race/leg.ts';
-import { joinTeam, LEG_START, login, nearLeg, nearPoint, raceHarness, setupRace, sleep, walkTo } from './test/harness.ts';
+import { answer, joinTeam, LEG_START, login, nearLeg, nearPoint, raceHarness, review, setupRace, sleep, walkTo } from './test/harness.ts';
 
 const server = raceHarness();
 beforeAll(async () => {
@@ -16,12 +16,15 @@ afterAll(() => server.close());
 
 type Sock = Awaited<ReturnType<typeof joinTeam>>;
 type Host = Awaited<ReturnType<typeof setupRace>>['host'];
-const P = [0, 1, 2, 3, 4, 5].map((k) => nearPoint(k));
+const P = [0, 1, 2, 3, 4, 5, 6].map((k) => nearPoint(k));
 const sqlOf = (race: string) => server.getWorker().getDurableObjectStorage('RaceRoom', { name: race });
 const W = (s: Sock) => s.welcome as unknown as Welcome;
 const view = (s: Sock, match: (v: RaceView) => boolean) => s.until((m) => m.t === 'race' && match(m.view)) as Promise<{ view: RaceView }>;
 const step = (s: Sock, id: string) => view(s, (v) => v.card?.step === id);
 const notice = (s: Sock, code: string) => s.until((m) => m.t === 'notice' && m.code === code);
+const card = async (s: Sock, match: (c: ClueCard) => boolean) => (await view(s, (v) => !!v.card && match(v.card))).view.card!;
+/** Waits out a card's countdown (server and test share the machine clock) + a little. */
+const waitLock = (c: ClueCard) => sleep(c.lockedUntil! - Date.now() + 300);
 const hostSays = (h: Host, t: string) => h.until((m) => m.t === t);
 
 async function newRace(race: string, n: number, leg: unknown = nearLeg()) {
@@ -32,20 +35,56 @@ async function newRace(race: string, n: number, leg: unknown = nearLeg()) {
   return { ...r, socks };
 }
 
-/** Walks a team through the whole near leg from `from` (open L1, T1, open L2, D1 branch A, the mat). */
-async function runLeg(s: Sock, from: { x: number; z: number }) {
+/** T1 (Phase 8): accept, answer where the team stands, the Host decides (`penalize`: the first answer, the lock waited
+ *  out, then answered again) → L2. */
+async function doT1(s: Sock, host: Host, team: string, penalize = false) {
+  s.send({ t: 'race', op: 'accept', step: 'T1' });
+  answer(s, 'T1', penalize ? '41' : '42');
+  await card(s, (c) => c.step === 'T1' && c.status === 'pending');
+  if (penalize) {
+    review(host, team, 'T1', 'penalize');
+    await waitLock(await card(s, (c) => c.status === 'locked'));
+    answer(s, 'T1', '42');
+    await card(s, (c) => c.status === 'pending' && c.answers.length === 2);
+  }
+  review(host, team, 'T1', 'approve');
+  await step(s, 'L2');
+}
+
+/** D1 from L2's point (Phase 8): branch A (`switch`: then B, its lock waited out), walk to the branch box, open it, answer
+ *  (A auto '7'; B a photo task: "Tôi đã gửi bài", the Host approves) → L3. Returns where the team stands. */
+async function doD1(s: Sock, host: Host, team: string, from: { x: number; z: number }, switchToB = false) {
+  s.send({ t: 'race', op: 'branch', step: 'D1', branch: 'A' });
+  await card(s, (c) => c.branch === 'A');
+  const b = switchToB ? 'B' : 'A';
+  if (switchToB) {
+    s.send({ t: 'race', op: 'branch', step: 'D1', branch: 'B' });
+    await waitLock(await card(s, (c) => c.status === 'switchLocked'));
+  }
+  const p = await walkTo(s, from, P[b === 'A' ? 4 : 5]!);
+  s.send({ t: 'race', op: 'open', step: 'D1', branch: b });
+  await card(s, (c) => !!c.branchOpened);
+  answer(s, 'D1', b === 'A' ? '7' : '');
+  if (b === 'B') {
+    await card(s, (c) => c.status === 'pending');
+    review(host, team, 'D1', 'approve');
+  }
+  await step(s, 'L3');
+  return p;
+}
+
+/** Walks a team through the whole near leg from `from` (open L1, T1, open L2, D1, the mat). */
+async function runLeg(s: Sock, from: { x: number; z: number }, host: Host, team: string, o: { penalize?: boolean; switchToB?: boolean } = {}) {
   let p = await walkTo(s, from, P[1]!);
   s.send({ t: 'race', op: 'open', step: 'L1' });
   await step(s, 'T1');
   p = await walkTo(s, p, P[2]!);
-  s.send({ t: 'race', op: 'task', step: 'T1', answer: '42' });
-  await step(s, 'L2');
+  await doT1(s, host, team, o.penalize);
   p = await walkTo(s, p, P[3]!);
   s.send({ t: 'race', op: 'open', step: 'L2' });
   await step(s, 'D1');
-  s.send({ t: 'race', op: 'task', step: 'D1', branch: 'A', answer: '7' });
-  await step(s, 'L3');
-  p = await walkTo(s, p, P[5]!);
+  p = await doD1(s, host, team, p, o.switchToB);
+  p = await walkTo(s, p, P[6]!);
   return { p, done: await view(s, (v) => v.finishAt !== null) };
 }
 
@@ -103,7 +142,10 @@ describe.concurrent('race engine (workerd)', () => {
     expect(JSON.parse(state[0]!.state)).toMatchObject({ step: 1 });
     expect(seen).toContainEqual({ t: 'box', op: 'reveal', box: expect.objectContaining({ step: 'L1', opened: true }) }); // D5: before the new card
     pa = await walkTo(a!, pa, P[2]!);
-    a!.send({ t: 'race', op: 'task', step: 'T1', answer: '42' });
+    a!.send({ t: 'race', op: 'accept', step: 'T1' });
+    answer(a!, 'T1', '42');
+    await until((m) => m.t === 'race' && m.view.card.status === 'pending');
+    review(host, teams[0]!.id, 'T1', 'approve');
     await until((m) => m.t === 'race' && m.view.card.step === 'L2');
     const l2 = JSON.stringify(Math.round(P[3]!.x * 100) / 100);
     expect(seen.filter((m) => JSON.stringify(m).includes('"L2"') && (m as { t: string }).t !== 'race')).toEqual([]);
@@ -137,11 +179,12 @@ describe.concurrent('race engine (workerd)', () => {
     pa = await walkTo(a!, pa, P[3]!);
     a!.send({ t: 'race', op: 'open', step: 'L2' });
     await step(a!, 'D1');
-    a!.send({ t: 'race', op: 'task', step: 'D1', branch: 'A' });
-    await step(a!, 'L3');
-    pa = await walkTo(a!, pa, P[5]!);
+    pa = await doD1(a!, host, teams[0]!.id, pa);
+    pa = await walkTo(a!, pa, P[6]!);
     const fin = (await view(a!, (v) => v.finishAt !== null)).view;
-    expect(fin.officialMs).toBe(fin.finishAt! - startA);
+    const waits = ((await sqlOf(race).then((q) => q.exec('SELECT approval_wait_seconds AS w FROM step_progress WHERE team = ?', teams[0]!.id))) as { w: number }[]).reduce((n, r) => n + r.w, 0);
+    expect(waits).toBeGreaterThan(0);
+    expect(fin.officialMs).toBe(fin.finishAt! - startA - Math.round(waits * 1000)); // D23: the Host's approval time is not the team's
     expect(fin.card).toMatchObject({ step: 'PS', status: 'done' });
     const st = (await host.until((m) => m.t === 'host.state' && m.ranking[0]?.finishAt)) as unknown as HostState;
     expect(st.ranking.map((r) => [r.team, r.rank, r.officialMs])).toEqual([[teams[0]!.id, 1, fin.officialMs], [teams[1]!.id, 2, null]]);
@@ -155,7 +198,7 @@ describe.concurrent('race engine (workerd)', () => {
     // a later welcome: the clock stopped at the check-in
     const a2 = await joinTeam(server, race, teams[0]!.code);
     expect(W(a2).raceTime).toBeCloseTo(fin.officialMs! / 1000, 0);
-    expect(W(a2).boxes.map((x) => [x.step, x.opened])).toEqual([['L1', true], ['L2', true], ['PS', false]]);
+    expect(W(a2).boxes.map((x) => [x.step, x.branch ?? '', x.opened])).toEqual([['L1', '', true], ['L2', '', true], ['D1', 'A', true], ['PS', '', false]]);
     const again = (await login(server, race, { code: teams[0]!.code })).body as unknown as { summary: { raceTime: number; step: string } };
     expect(again.summary).toMatchObject({ raceTime: expect.closeTo(fin.officialMs! / 1000, 0), step: 'Về đích' }); // "Chào mừng trở lại"
 
@@ -185,37 +228,36 @@ describe.concurrent('race engine (workerd)', () => {
     expect(await b!.until((m) => m.t === 'zone')).toEqual({ t: 'zone', teams: [{ slot: W(a!).team!.slot, label: 'Lộ trình 1', type: 'route_info', branch: null, since: expect.any(Number) }] });
     expect((await a!.drain(1500)).filter((m) => m.t === 'zone')).toEqual([]);
 
-    b!.send({ t: 'race', op: 'task', step: 'T1' });
-    await step(b!, 'L2');
+    await doT1(b!, host, W(b!).team!.id);
     pb = await walkTo(b!, pb, P[3]!);
     b!.send({ t: 'race', op: 'open', step: 'L2' });
     await step(b!, 'D1');
-    b!.send({ t: 'race', op: 'task', step: 'D1', branch: 'A' });
-    await step(b!, 'L3');
+    pb = await doD1(b!, host, W(b!).team!.id, pb);
     host.send({ t: 'host.race', op: 'pause' });
     await view(b!, (v) => v.status === 'paused');
-    await walkTo(b!, pb, P[5]!);
+    await walkTo(b!, pb, P[6]!);
     expect((await b!.drain(1500)).filter((m) => m.t === 'race' && m.view.finishAt !== null)).toEqual([]);
     host.send({ t: 'host.race', op: 'resume' });
     expect((await view(b!, (v) => v.finishAt !== null)).view).toMatchObject({ status: 'running', card: { step: 'PS', status: 'done' } });
     for (const s of [a!, b!, host]) s.close();
   }, 60_000);
 
-  it('rows written for a whole leg stay ≤ 110 per team (rowsWritten measured)', async () => {
+  it('rows written for a whole leg with one "Phạt" and one branch switch stay ≤ 160 per team (rowsWritten measured)', async () => {
     const race = 'race-rows';
-    const { host, socks: [a] } = await newRace(race, 1);
+    const { host, teams, socks: [a] } = await newRace(race, 1);
     host.send({ t: 'host.race', op: 'start' });
     const c0 = ((await host.until((m) => m.t === 'host.state' && m.status === 'running')) as unknown as HostState).counters.rows;
     const sql = await sqlOf(race);
     const seq = async () => JSON.parse(((await sql.exec('SELECT data FROM snapshot')) as { data: string }[])[0]?.data ?? '{"seq":0}').seq as number;
     const replays = async () => ((await sql.exec('SELECT COUNT(*) AS n FROM replay')) as { n: number }[])[0]!.n;
     const [s0, r0] = [await seq(), await replays()];
-    await runLeg(a!, W(a!).start!);
+    await runLeg(a!, W(a!).start!, host, teams[0]!.id, { penalize: true, switchToB: true });
     await sleep(NET.slowTickMs + 200);
     const c1 = ((await host.drain(1500)).filter((m) => m.t === 'host.state').at(-1) as HostState).counters.rows;
     const race_rows = c1 - c0 - ((await seq()) - s0) - ((await replays()) - r0);
     expect(race_rows).toBeGreaterThan(20);
-    expect(race_rows).toBeLessThanOrEqual(110);
+    expect(race_rows).toBeLessThanOrEqual(160);
+    console.log(`[race-rows] ${race_rows} rows for one team (1 Phạt, 1 switch)`);
     for (const s of [a!, host]) s.close();
   }, 60_000);
 

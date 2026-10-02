@@ -92,10 +92,11 @@ export async function joinTeam(server: Harness, race: string, code: string) {
 /** Phase 7: the leg start (Pont de Bir-Hakeim) in world m: every leg here starts there. */
 export const LEG_START = latLonToWorld(mini.start.lat, mini.start.lon);
 
-/** Phase 7 test leg "near" (FAKE content, never a real leg): the `mini` steps — route, challenge elsewhere, walk-only
- *  route, detour (A at the point, B elsewhere), route to the Pit Stop, Pit Stop — with every point `gap` m east of the
- *  one before (radius 15, a rack 25 m south of each), the box revealed within 40 m (hidden beyond 50) and a fast foot
- *  speed so tests can walk between points in seconds (trust rate = footSpeed × 1.3 × 1.25). Load with host.leg {json}. */
+/** Test leg "near" (FAKE content, never a real leg): the `mini` steps — route, challenge elsewhere (teaser, Host
+ *  approval), walk-only route, detour (branch A auto, branch B a photo task, each at a place of its own), route to the Pit
+ *  Stop, Pit Stop — with every point `gap` m east of the one before (radius 15, a rack 25 m south of each but L2's), the
+ *  box revealed within 40 m (hidden beyond 50), a fast foot speed so tests can walk between points in seconds (trust rate
+ *  = footSpeed × 1.3 × 1.25) and fast Phase 8 locks (6 s "Phạt", 12 s branch switch). Load with host.leg {json}. */
 export function nearLeg(gap = 60, footSpeed = 20) {
   const pt = (k: number, dz = 0) => {
     const { lat, lon } = worldToLatLon(LEG_START.x + gap * k, LEG_START.z + dz);
@@ -107,11 +108,9 @@ export function nearLeg(gap = 60, footSpeed = 20) {
   l1.destination = dest(1, 'Điểm 1 (GIẢ)');
   t1.task.location = dest(2, 'Nơi thử thách (GIẢ)');
   l2.destination = { ...dest(3, 'Điểm 3 (GIẢ)'), bikeParking: undefined };
-  // ponytail: branch A stays at point 3 (L2's point), the Phase 7 layout the `race task` tests walk; Phase 8 track A moves
-  // it to a place of its own (docs/plans/phase8.md §4: 3 = L2, 4 = A, 5 = B, 6 = Pit Stop) with its new harness tests
-  d1.branches[0].task.location = dest(3, 'Nơi nhánh A (GIẢ)');
-  d1.branches[1].task.location = dest(4, 'Nơi nhánh B (GIẢ)');
-  l3.destination = ps.destination = dest(5, 'Thảm (GIẢ)');
+  d1.branches[0].task.location = dest(4, 'Nơi nhánh A (GIẢ)');
+  d1.branches[1].task.location = dest(5, 'Nơi nhánh B (GIẢ)');
+  l3.destination = ps.destination = dest(6, 'Thảm (GIẢ)');
   return {
     ...leg, id: 'near', title: 'Chặng gần (NỘI DUNG GIẢ)', boxReveal: { radius: 40, hysteresis: 10 }, movement: { footSpeed, bikeSpeedMultiplier: 1.3 },
     // Phase 8: 6 s after a "Phạt", 12 s after a branch switch (a leg:check warning: test legs only)
@@ -119,8 +118,8 @@ export function nearLeg(gap = 60, footSpeed = 20) {
   };
 }
 
-/** World position of point k of nearLeg (0 = start, 1 = L1, 2 = T1, 3 = L2 / D1 branch A, 4 = branch B, 5 = Pit Stop). The
- *  `mini` it copies has T1 = host_approval (typed answer), D1 A = auto, D1 B = a photo task (free). */
+/** World position of point k of nearLeg (0 = start, 1 = L1, 2 = T1, 3 = L2, 4 = D1 branch A, 5 = branch B, 6 = Pit Stop).
+ *  The `mini` it copies has T1 = host_approval (typed answer, teaser), D1 A = auto, D1 B = a photo task (free). */
 export const nearPoint = (k: number, gap = 60) => {
   const { lat, lon } = worldToLatLon(LEG_START.x + gap * k, LEG_START.z);
   return latLonToWorld(Math.round(lat * 1e7) / 1e7, Math.round(lon * 1e7) / 1e7);
@@ -136,3 +135,10 @@ export async function walkTo(s: { send(m: unknown): void }, from: { x: number; z
   }
   return to;
 }
+
+/** Phase 8: a typed answer ('' = "Tôi đã gửi bài" of a photo task) from a team socket. */
+export const answer = (s: { send(m: unknown): void }, step: string, text: string) => s.send({ t: 'race', op: 'answer', step, text });
+
+/** Phase 8: a Host decision on a team's answer (`id` absent: the pending one / a photo task already received). */
+export const review = (host: { send(m: unknown): void }, team: string, step: string, op: 'approve' | 'penalize' | 'note', id?: number, note?: string) =>
+  host.send({ t: 'host.review', team, step, op, ...(id !== undefined ? { id } : {}), ...(note !== undefined ? { note } : {}) });
