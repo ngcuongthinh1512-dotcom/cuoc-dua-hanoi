@@ -1022,7 +1022,7 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 
 ### 17.19 Thử thách 3 tại Louvre: phòng 30 tác phẩm, chọn 5 món thật (2026-10-03; người dùng nêu, một số điểm chờ xác nhận)
 - Một **căn phòng mô phỏng một phòng trong Louvre** chứa **30 tranh / tượng nổi tiếng**; chỉ **5** món là **độc bản duy nhất đang trưng bày ở Louvre**, 25 món còn lại nổi tiếng nhưng ở nơi khác.
-- **Cách chơi:** dưới mỗi tác phẩm có **một nút chọn**; chọn thì **đèn sáng**. Chọn xong, đội bấm **một nút chốt ở giữa phòng**. Sai → **phạt 2 phút đếm ngược** rồi mới được trả lời lại.
+- **Cách chơi:** dưới mỗi tác phẩm có **một nút chọn**; chọn thì **đèn sáng**. Chọn xong, đội bấm **một nút chốt ở giữa phòng**. Sai → **phạt 3 phút đếm ngược** (sửa 2026-10-03, trước ghi 2 phút) rồi mới được trả lời lại.
 - **Gợi ý theo giờ:** sau **40 phút** đội được gợi ý về số tác phẩm đúng. **30 phút sau đó** (70 phút) nếu chưa xong: thông báo đã đúng bao nhiêu / 5 và thông báo này **công khai cho các đội khác**.
 - **Mỗi đội / người chơi có bộ nút hiển thị khác nhau** (chống chép đáp án giữa các đội).
 - **Đội khác thấy** khi một đội trả lời sai, và số câu đúng /5 khi được công bố: hiện như **một đoạn chat nhỏ ở góc dưới màn hình**.
