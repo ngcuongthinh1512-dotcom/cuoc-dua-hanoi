@@ -332,6 +332,28 @@ if (existsSync(join(dataDir, 'index.json'))) {
 const TIMEOUT_MS: Record<string, number> = { topdown: 90_000, 'p4-graph': 90_000, 'p4-swim-exit': 90_000 }; // big views, long simulated waits
 const DEFAULT_TIMEOUT_MS = 30_000;
 const VIEWPORT: Record<string, { width: number; height: number }> = { 'p7-book-small': { width: 1024, height: 640 }, 'p7-card-full-small': { width: 1024, height: 640 } };
+// Phase 8 (docs/plans/phase8.md §7): p8-* presets, offline stand-ins only; each track adds its own block here (own line). Not in the default run.
+// [C] challenge / Lựa chọn kép card states (RaceHud.demo: ?card=…, ?full, ?book=media, ?lock=<s left>); 1024 × 640 for -small
+Object.assign(PRESETS, {
+  ...Object.fromEntries(
+    Object.entries({
+      'p8-card-answer': 'card=answer&full', // typed answer box + history (Bị phạt 3 phút)
+      'p8-card-answer-pending': 'card=answer-pending&full', // "Đang chờ Host duyệt · 01:12", no input
+      'p8-card-answer-locked': 'card=answer-locked&lock=160', // centre countdown + the state line on the top-left card
+      'p8-card-answer-locked-full': 'card=answer-locked&lock=160&full', // the same, card open
+      'p8-card-detour-choose': 'card=detour-choose&full', // two "Chọn nhánh" buttons [1] [2]
+      'p8-card-detour-chosen': 'card=detour-chosen&full', // "Đang làm nhánh Tính", "Đổi lựa chọn kép"
+      'p8-card-detour-locked': 'card=detour-locked&lock=540&full', // switch countdown, no box until it ends
+      'p8-card-branch-task': 'card=branch-task&full', // branch box opened: its task, answer box, "Đổi lựa chọn kép"
+      'p8-card-proof': 'card=proof&full', // photo branch: submission code + Copy + contact + "Tôi đã gửi bài"
+      'p8-card-teaser': 'card=teaser&full', // "Nhận thử thách"
+      'p8-card-media': 'card=media&full', // R2 image (stand-in data: URI) + https links
+      'p8-book-media': 'book=media', // Sổ mật thư: images / links, submission code, no answer history
+      'p8-card-answer-small': 'card=answer&full', // 1024 × 640
+    }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
+  ),
+});
+Object.assign(VIEWPORT, { 'p8-card-answer-small': { width: 1024, height: 640 } });
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { path: { type: 'string' }, name: { type: 'string' } } });
@@ -347,7 +369,7 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7)-/.test(k))); // landmark / player / online views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8)-/.test(k))); // landmark / player / online views by name
 
 const outDir = join(root, 'screenshots');
 const errors: string[] = [];

@@ -225,7 +225,6 @@ async function start() {
   const raceHud = player
     ? new RaceHud(
         {
-          task: (step, branch) => race?.task(step, branch),
           book: () => void (net ? net.send({ t: 'race', op: 'book' }) : raceHud?.showBook([])),
           // Phase 8 (track B wires the rest: pointer lock on onOpenChange, Enter → openCurrent, resolveMedia)
           answer: (step, text) => race?.answer(step, text),
