@@ -991,9 +991,12 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - Nhiệm vụ ở Phase 7 cho qua bằng nút "Hoàn thành (tạm)" (Phase 8 thay bằng chấm thật).
 
 ### 17.14 Chặng thật: luật thử thách do người dùng nêu (2026-10-02; áp dụng ở Phase 8)
-- Thử thách 1 và 2 và Lựa chọn kép (Lửa / Nước) của chặng này đều **do Host duyệt thủ công** (§8.9): đội trả lời hoặc gửi ảnh chụp màn hình ở NGOÀI game (tin nhắn Facebook cho Host). Đúng → Host bấm nút **hoàn thành thử thách** trên màn hình quản lý. Sai → Host bấm nút **phạt**; trên màn hình đội hiện **đồng hồ đếm ngược 3 phút** trước khi được trả lời lại.
+- **Thử thách 1 và 2: đáp án GÕ TRONG GAME**, server tự chấm (không gửi qua Facebook). Đáp án chỉ ở máy chủ; client gửi câu trả lời, nhận lại đúng / sai. Server so khớp có chuẩn hóa (không phân biệt hoa thường và dấu) với danh sách đáp án chấp nhận được trong file chặng. Thử thách 1: đội gõ **4 địa điểm** (mỗi địa điểm phải nằm trong danh sách hợp lệ, không trùng nhau).
+- **Sai → tự phạt 3 phút**: trên màn hình đội hiện **đồng hồ đếm ngược 3 phút** trước khi được trả lời lại. Đúng → hoàn thành thử thách ngay. Host vẫn có nút **ghi đè** (duyệt tay / phạt) trên màn hình Host/admin, phòng khi đội viết đúng nhưng lệch cách gọi tên.
+- **Mọi câu trả lời gõ trong game được lưu** (đội, bước, nội dung, giờ, kết quả) để Host xem trên màn hình Host; Host có ô ghi chú cho mỗi lần duyệt.
 - Thử thách có **gợi ý theo giờ**: sau mỗi 45 phút chưa hoàn thành, đội nhận thêm gợi ý (nội dung gợi ý do người dùng nhập).
-- Thử thách 1 → Thử thách 2: **mật thư của Thử thách 2 xuất hiện ngay** khi Host duyệt xong Thử thách 1 (không cần đi tới đâu).
+- Thử thách 1 → Thử thách 2: **mật thư của Thử thách 2 xuất hiện ngay** khi Thử thách 1 hoàn thành (không cần đi tới đâu).
 - Thử thách 2: sau khi trả lời đúng địa điểm trong hình, đội **di chuyển tới chính địa điểm đã trả lời** để nhận mật thư tiếp theo (hộp mật thư kế tiếp đặt tại địa điểm đáp án; vị trí lấy từ file chặng).
+- **Ngoại lệ: Lựa chọn kép (Lửa / Nước) vẫn do Host duyệt thủ công** qua ảnh chụp màn hình gửi Facebook (§8.9), vì không chấm tự động được.
 - Mật thư có thể kèm liên kết (ví dụ video, hình) hiện trên thẻ mật thư và trong Sổ mật thư.
-- Thử thách 1: **không có đáp án tự chấm trong game**; Host (người dùng) xem câu trả lời của đội ở tin nhắn Facebook và **duyệt trực tiếp trên màn hình Host/admin** (nút "Hoàn thành thử thách" / "Phạt 3 phút"). File chặng không cần lưu đáp án cho bước này (chốt 2026-10-02).
+- (Lịch sử: sáng 2026-10-02 người dùng từng chọn Thử thách 1 do Host duyệt qua Facebook; sau đó đổi sang gõ trong game như trên.)
