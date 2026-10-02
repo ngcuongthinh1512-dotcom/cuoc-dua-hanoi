@@ -1,5 +1,5 @@
 // Track B (docs/plans/phase4.md §3.12): synthesised placeholder sounds (SPEC §6.6): bell (R), tyre noise (louder on
-// cobbles), crash. The AudioContext opens on the first click (browsers block audio before a user gesture); until then
+// cobbles), crash; Phase 8: the Host's approve / penalize chime. The AudioContext opens on the first click (browsers block audio before a user gesture); until then
 // every call is a no-op.
 // ponytail: WebAudio synthesis, no files; real recordings in Phase 12.
 import { bike as B, bikeTopSpeed } from '../config.ts';
@@ -42,6 +42,27 @@ export function bell() {
     o.start(t);
     o.stop(t + B.bellSeconds);
   }
+}
+
+/** Phase 8 (SPEC §8.9 (6)): the Host's verdict on an answer: approved = rising three-note chime, penalized = two falling
+ *  low buzzes. */
+export function reviewSound(approved: boolean) {
+  const c = ctx;
+  if (!c) return;
+  const notes = approved ? [880, 1109, 1319] : [330, 247];
+  notes.forEach((f, i) => {
+    const at = c.currentTime + i * 0.13;
+    const g = c.createGain();
+    g.gain.setValueAtTime(approved ? 0.2 : 0.15, at);
+    g.gain.exponentialRampToValueAtTime(0.001, at + 0.35);
+    g.connect(c.destination);
+    const o = c.createOscillator();
+    o.type = approved ? 'sine' : 'square';
+    o.frequency.value = f;
+    o.connect(g);
+    o.start(at);
+    o.stop(at + 0.35);
+  });
 }
 
 /** Short low noise burst. */

@@ -3,6 +3,8 @@
 // boxReveal.radius of the current one, `box hide` when it walks away again (opened boxes stay). The client never knows
 // a box before that. Phase 7 (track B): an opened box opens its lid in place (F → `race open` → reveal opened: true); a
 // `kind: 'mat'` box is the Pit Stop mat (race/PitStop.ts); every change reports the zones (NPC exclusion, D20).
+// Phase 8 (docs/plans/phase8.md D7): boxes keyed by step|branch (a detour branch's box), `box remove` after a branch
+// switch, the box's front turned to BoxInfo.yaw.
 import { matMesh } from '../race/PitStop.ts';
 import type { BoxInfo, ServerMessage } from '@race/shared/protocol';
 import { BoxGeometry, CylinderGeometry, Float32BufferAttribute, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, type Scene, type Vector3 } from 'three';
@@ -11,19 +13,31 @@ import { clueBox as C } from '../config.ts';
 
 export type BoxMessage = Extract<ServerMessage, { t: 'box' }>;
 
-/** The visible boxes after a `box` message: reveal adds / replaces that step, hide drops it unless opened. Pure. */
+/** Phase 8 (D7): a box is one step's, or one detour branch's ("D1|A"): two branches of a step may stand at once. */
+const keyOf = (b: { step: string; branch?: string }) => `${b.step}|${b.branch ?? ''}`;
+
+/** The visible boxes after a `box` message, pure: reveal adds / replaces that step|branch; hide drops that step's box
+ *  unless opened; remove (a branch switch, §17.16) drops that branch's box even when opened. */
 export function nextBoxes(list: readonly BoxInfo[], m: BoxMessage): BoxInfo[] {
-  if (m.op === 'reveal') return [...list.filter((b) => b.step !== m.box.step), m.box];
+  if (m.op === 'reveal') return [...list.filter((b) => keyOf(b) !== keyOf(m.box)), m.box];
+  if (m.op === 'remove') return list.filter((b) => keyOf(b) !== keyOf(m));
   return list.filter((b) => b.step !== m.step || b.opened);
 }
 
-/** DEV ?boxes=step,x,z[,opened];… (p6-boxes): stand-in boxes without a server (zone radius 20 m); `kind` 'mat' (?mat,
- *  p7-mat): Pit Stop mats instead. */
+/** root.rotation.y of a box whose front (the side the team reads it from) faces `yaw` (BoxInfo.yaw: 0 = north, + = west).
+ *  The model's front is +z (the lid hinges at −z), so + π, like CharacterModel. */
+export const boxRotation = (yaw = 0) => yaw + Math.PI;
+
+/** DEV ?boxes=step[|branch],x,z[,opened][,yawDeg];… (p6-boxes, p8-box-*): stand-in boxes without a server (zone radius
+ *  20 m); `kind` 'mat' (?mat, p7-mat): Pit Stop mats instead. */
 export function parseBoxes(v: string | null, kind?: 'mat'): BoxInfo[] {
   return (v ?? '').split(';').flatMap((g) => {
-    const [step, x, z, opened] = g.split(',');
-    const [px, pz] = [Number(x), Number(z)];
-    return step && Number.isFinite(px) && Number.isFinite(pz) && x?.trim() && z?.trim() ? [{ step, x: px, z: pz, opened: opened === 'opened', r: 20, ...(kind && { kind }) }] : [];
+    const [id, x, z, opened, yawDeg] = g.split(',');
+    const [step, branch] = (id ?? '').split('|');
+    const [px, pz, yd] = [Number(x), Number(z), Number(yawDeg)];
+    if (!step || !Number.isFinite(px) || !Number.isFinite(pz) || !x?.trim() || !z?.trim()) return [];
+    const yaw = yawDeg?.trim() && Number.isFinite(yd) ? { yaw: (yd * Math.PI) / 180 } : {};
+    return [{ step, x: px, z: pz, opened: opened === 'opened', r: 20, ...(kind && { kind }), ...(branch && { branch }), ...yaw }];
   });
 }
 
@@ -138,22 +152,24 @@ export class ClueBoxes {
   }
 
   private sync() {
-    for (const [step, d] of this.drawn) {
-      const b = this.list.find((x) => x.step === step);
-      if (b && b.x === d.info.x && b.z === d.info.z && b.kind === d.info.kind) {
+    for (const [key, d] of this.drawn) {
+      const b = this.list.find((x) => keyOf(x) === key);
+      if (b && b.x === d.info.x && b.z === d.info.z && b.kind === d.info.kind && b.yaw === d.info.yaw) {
         if (b.opened !== d.info.opened && b.kind !== 'mat') paint(d.root, b.opened); // opened: same box, faded
         d.info = b;
         continue;
       }
       d.root.removeFromParent(); // shared geometry / materials: nothing to dispose
-      this.drawn.delete(step);
+      this.drawn.delete(key);
     }
     for (const b of this.list) {
-      if (this.drawn.has(b.step)) continue;
+      const key = keyOf(b);
+      if (this.drawn.has(key)) continue;
       const root = b.kind === 'mat' ? matMesh() : boxMesh(b.opened);
       root.position.set(b.x, this.terrainAt(b.x, b.z), b.z);
+      if (b.kind !== 'mat') root.rotation.y = boxRotation(b.yaw); // ponytail: the mat keeps its Phase 7 heading (PitHost stands at a fixed offset)
       this.scene.add(root);
-      this.drawn.set(b.step, { root, info: b, placed: false });
+      this.drawn.set(key, { root, info: b, placed: false });
     }
     this.update();
     this.onChange?.(this.list);

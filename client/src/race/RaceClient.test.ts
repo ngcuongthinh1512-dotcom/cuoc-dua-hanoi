@@ -91,17 +91,41 @@ describe('F and the Pit Stop (D23, D19)', () => {
   });
 });
 
-describe('task button (D4)', () => {
-  it('goes through op (the pose first), never a bare send', () => {
+describe('Phase 8 ops (D7, D8, D9)', () => {
+  it('F at a branch box: open carries its branch, the pose first (op); a route box: no branch', () => {
     const [ops, sent]: ClientMessage[][] = [[], []];
     const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), op: (m) => ops.push(m), serverNow: () => 0 });
-    c.task('T1');
-    c.task('D2', 'B');
-    expect(ops).toEqual([{ t: 'race', op: 'task', step: 'T1' }, { t: 'race', op: 'task', step: 'D2', branch: 'B' }]);
+    const a: BoxInfo = { ...box, step: 'D1', branch: 'A' };
+    expect(boxInReach([{ ...a, branch: 'B', opened: true }, a], 1, 1)).toBe(a);
+    expect(c.interact([a], 1, 1, 0)).toBe(true);
+    expect(c.interact([box], 1, 1, 10_000)).toBe(true);
+    expect(ops).toEqual([{ t: 'race', op: 'open', step: 'D1', branch: 'A' }, { t: 'race', op: 'open', step: 'L1' }]);
     expect(sent).toEqual([]);
   });
 
-  it('Phase 8 answer / branch / accept go out at once from anywhere: no pose first (D8)', () => {
+  it('countdown end: lockEndSlackMs after lockedUntil (server clock) the pose goes out once, again only for a new countdown', () => {
+    let now = 100_000;
+    let poses = 0;
+    const c = new RaceClient({ hud: undefined, send: () => {}, serverNow: () => now, pose: () => poses++ });
+    const locked = (until: number | null) => pit({ card: { ...pit().card!, step: 'D1', type: 'detour', status: until ? 'switchLocked' : 'goToBranch', lockedUntil: until, lockKind: until ? 'switch' : null } });
+    c.message({ t: 'race', view: locked(112_000) });
+    for (now = 100_000; now < 112_000 + raceClient.lockEndSlackMs; now += 250) c.frame([], 0, 0, false, now);
+    expect(poses).toBe(0);
+    for (let i = 0; i < 20; i++, now += 250) c.frame([], 0, 0, false, now);
+    expect(poses).toBe(1);
+    c.message({ t: 'race', view: locked(112_000) }); // the same countdown again (another `race` while it ran): no second pose
+    c.frame([], 0, 0, false, now);
+    c.message({ t: 'race', view: locked(null) });
+    c.frame([], 0, 0, false, now);
+    expect(poses).toBe(1);
+    c.message({ t: 'race', view: locked(now + 6000) }); // the Host's "Phạt" later: its own end
+    now += 6000 + raceClient.lockEndSlackMs;
+    c.frame([], 0, 0, true, now); // riding or not: a pose is a pose
+    c.frame([], 0, 0, true, now + 1000);
+    expect(poses).toBe(2);
+  });
+
+  it('answer / branch / accept go out at once from anywhere: no pose first (D8)', () => {
     const [ops, sent]: ClientMessage[][] = [[], []];
     const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), op: (m) => ops.push(m), serverNow: () => 0 });
     c.answer('T1', 'bảy');

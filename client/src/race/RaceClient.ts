@@ -10,6 +10,8 @@ export interface RaceDeps {
   send(m: ClientMessage): void;
   /** A `race` op, the current pose sent right before it (D4: the server checks the zone / riding on its last pose). */
   op?(m: RaceOp): void;
+  /** Phase 8 (D9): the current pose now, past the send gate (a countdown ended: the server checks the branch box again). */
+  pose?(): void;
   /** ms, server clock estimate (NetClient.serverNow). */
   serverNow(): number;
   /** The team's name (the host NPC's line). */
@@ -35,6 +37,7 @@ export class RaceClient {
   view: RaceView | null = null;
   private teams: TeamInfo[] = [];
   private opAt = -Infinity; // ms (performance clock) of the last F / check-in op
+  private lockDone: number | null = null; // the card.lockedUntil whose end already re-sent the pose (D9)
 
   constructor(readonly deps: RaceDeps) {}
 
@@ -67,27 +70,25 @@ export class RaceClient {
     return raceClock(this.view, this.deps.serverNow());
   }
 
-  /** F on foot (Player.onInteract): the current box in reach → `race open` (true: the openBox gesture plays). */
+  /** F on foot (Player.onInteract): the current box in reach → `race open` (+ its detour branch) (true: the openBox gesture plays). */
   interact(boxes: readonly BoxInfo[], x: number, z: number, now: number): boolean {
     const b = boxInReach(boxes, x, z);
     if (!b) return false;
-    if (now - this.opAt >= C.opMinGapMs) this.sendOp({ t: 'race', op: 'open', step: b.step }, now);
+    if (now - this.opAt >= C.opMinGapMs) this.sendOp({ t: 'race', op: 'open', step: b.step, ...(b.branch && { branch: b.branch }) }, now);
     return true;
   }
 
   /** Every frame → the HUD's "Bấm F" flag. On the Pit Stop mat zone, racing, on foot, not finished: `race checkin`
-   *  every raceClient.checkinEveryMs once a penalty wait is over (standing still sends no pose: D9, D19). */
+   *  every raceClient.checkinEveryMs once a penalty wait is over (standing still sends no pose: D9, D19).
+   *  Phase 8 (D9): lockEndSlackMs after the card's countdown ends, the pose once (a team standing still sends none, the
+   *  server's tick loop sleeps: this wakes it to reveal the branch box). */
   frame(boxes: readonly BoxInfo[], x: number, z: number, riding: boolean, now: number): { inZone: boolean } {
     const v = this.view;
     const due = v && v.status === 'running' && v.finishAt == null && v.card?.type === 'pit_stop' && (v.checkinAt ?? 0) <= this.deps.serverNow();
     if (due && !riding && matAt(boxes, x, z) && now - this.opAt >= C.checkinEveryMs) this.sendOp({ t: 'race', op: 'checkin' }, now);
+    const until = v?.card?.lockedUntil;
+    if (until != null && until !== this.lockDone && this.deps.serverNow() >= until + C.lockEndSlackMs) (this.lockDone = until), this.deps.pose?.();
     return { inZone: !riding && !!boxInReach(boxes, x, z) };
-  }
-
-  /** The full card's task button (Phase 7 stub; RaceHud locks it taskLockSeconds): the pose first, like every op (D4).
-   *  Phase 8 track B removes it with the `race task` op (answer / branch / accept below replace it). */
-  task(step: string, branch?: string) {
-    this.op({ t: 'race', op: 'task', step, ...(branch ? { branch } : {}) });
   }
 
   // Phase 8 (docs/plans/phase8.md D8): from anywhere, so no pose first (only open / checkin are judged at the pose).

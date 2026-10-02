@@ -1,7 +1,7 @@
 // Phase 6 track B (docs/plans/phase6.md §5.2): online or offline? Online = a race id (URL ?race=<id> from the Host's
 // link, else config net.defaultRace in a PROD build) and a team / Host token from the login screen (ui/Login.ts, SPEC §7,
 // §8.10). Offline (null) = the Phase 1–5 test world: dev server without ?race=, ?offline=1, screenshots, ride-check.
-import type { Role, Welcome } from '@race/shared/protocol';
+import { MEDIA, type Role, type Welcome } from '@race/shared/protocol';
 import { net } from '../config.ts';
 import { login, previewLogin } from '../ui/Login.ts';
 
@@ -33,6 +33,32 @@ export const isOnline = (q: URLSearchParams, prod: boolean = import.meta.env.PRO
 export function raceId(q: URLSearchParams): string {
   const r = q.get('race') ?? '';
   return RACE_ID.test(r) ? r : net.defaultRace;
+}
+
+/** Phase 8 (D13): where the Worker serves a clue image of this race (the token goes in a header, never in the URL). */
+export const mediaUrl = (race: string, name: string) => `${net.apiBase}/race/${encodeURIComponent(race)}/media/${encodeURIComponent(name)}`;
+
+// ponytail: blob URLs kept (never revoked) for the page's life, ≤ ~10 images per leg; revoke on a new leg if that grows
+const media = new Map<string, Promise<string | null>>();
+
+/** A clue image ("r2:<name>" or "<name>") → a blob URL for <img>, fetched once with the team token (D13); null offline, for
+ *  a bad name, or when the Worker says no (404: not uploaded yet / clue not opened: asked again next time). */
+export function fetchMedia(s: Pick<Session, 'race' | 'token'> | null | undefined, ref: string, get: typeof fetch = fetch): Promise<string | null> {
+  const name = ref.startsWith(MEDIA.prefix) ? ref.slice(MEDIA.prefix.length) : ref;
+  if (!s || !MEDIA.name.test(name)) return Promise.resolve(null);
+  const key = `${s.race}/${name}`;
+  let p = media.get(key);
+  if (!p) {
+    p = get(mediaUrl(s.race, name), { headers: { Authorization: `Bearer ${s.token}` } })
+      .then(async (r) => (r.ok ? URL.createObjectURL(await r.blob()) : null))
+      .catch(() => null)
+      .then((url) => {
+        if (!url) media.delete(key); // only a success is kept
+        return url;
+      });
+    media.set(key, p);
+  }
+  return p;
 }
 
 /** Offline → null at once. Online → the login screen (resolves once logged in, after "Tiếp tục" on a return).
