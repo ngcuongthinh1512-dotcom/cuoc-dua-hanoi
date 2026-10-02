@@ -1033,3 +1033,4 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
   - Tin công khai (đoạn chat nhỏ góc dưới màn hình) khi một đội trả lời sai: chỉ "Đội X trả lời sai và bị phạt 3 phút". Khi đội đó đã qua 70 phút ở thử thách này, MỖI LẦN chốt đáp án thì công khai thêm số đáp án đúng ("Đội X đúng x/5").
   - Tên tác phẩm KHÔNG hiện. Vào phòng bằng phím F ở hòm Louvre. Chọn bao nhiêu tác phẩm cũng được trước khi chốt. Phạt sai 3 phút, đồng hồ đua vẫn chạy.
   - Nút chọn: đỏ = chưa chọn, xanh lá = đã chọn; bấm lại để bỏ chọn. Sau khi bị phạt, lựa chọn (đèn) giữ nguyên, đội vẫn bấm / bỏ chọn được (mặc định: chỉ không chốt được tới khi hết phạt).
+  - **Sửa (2026-10-03):** "Đúng x/5" từ phút 70 CẬP NHẬT THEO LỰA CHỌN HIỆN TẠI của đội (hiện sống khi đội bấm / bỏ chọn, không chốt một lần), vì mỗi lần chốt sai đã bị phạt 3 phút. Công khai số đúng cho các đội khác vẫn chỉ ở mỗi lần chốt sau 70 phút của đội đó.
