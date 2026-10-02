@@ -22,7 +22,7 @@ interface Attachment {
   team: string;
   /** ms the socket was accepted (dead-socket check before its first ping). */
   since: number;
-  /** Step id of the clue box this socket was last told is revealed (SPEC §17.10), null = none. */
+  /** Key (boxKey: step|branch) of the clue box this socket was last told is revealed (SPEC §17.10), null = none. */
   box: string | null;
 }
 
@@ -60,9 +60,11 @@ interface Live {
 }
 
 type RaceWelcome = ReturnType<RaceEngine['welcome']>;
+/** Phase 8 (D6): a box is a step's, or a detour branch's (`D1|A`): the attachment key. */
+const boxKey = (b: { step: string; branch?: string }) => `${b.step}|${b.branch ?? ''}`;
 
 const TEAM = 'team';
-type Op = 'bike' | 'speed' | 'connect' | 'login';
+type Op = 'bike' | 'speed' | 'connect' | 'login' | 'race';
 /** m: a lag of the trusted point that grows by less than this is not logged as a teleport (the client's spawn settling
  *  next to its start spot, rounding); faster drifts are the speed window's flag, and the trusted point stays honest. */
 const JUMP_NOISE_M = 5;
@@ -135,6 +137,13 @@ export class RaceRoom extends DurableObject<Env> {
       pose: (id) => this.live.get(id)?.valid ?? null,
       park: (team, rack, at, now) => this.bikes.park(team, rack, at, now),
       legLoaded: (now) => this.bikes.resetForLeg(now),
+      hideBox: (team, step, branch) => {
+        // S1: forget the revealed box first, so the box of the branch switched back to is revealed again
+        for (const ws of this.sockets(team)) {
+          ws.serializeAttachment({ ...att(ws), box: null } satisfies Attachment);
+          this.send(ws, { t: 'box', op: 'remove', step, branch });
+        }
+      },
     });
     const engine = this.engine;
     this.bikes = new BikeService({
@@ -162,6 +171,8 @@ export class RaceRoom extends DurableObject<Env> {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname === '/login') return this.login(request);
     if (request.method === 'GET' && url.pathname === '/ws') return this.upgrade(request, url.searchParams.get('token'));
+    // Phase 8 (D13): the Worker asks whether team `team` may load image `name` (it streams R2 itself): 204 yes / 404 no
+    if (request.method === 'GET' && url.pathname === '/media') return new Response(null, { status: this.engine.mediaAllowed(url.searchParams.get('team') ?? '', url.searchParams.get('name') ?? '') ? 204 : 404 });
     return json({ ok: false, error: 'not_found' }, 404);
   }
 
@@ -213,7 +224,8 @@ export class RaceRoom extends DurableObject<Env> {
       const l = this.live.get(team.id);
       this.saveTeamState(team, { ...s, reconnects: s.reconnects + 1, lastSeen: now, ...(e.first ? { startOrder: e.startOrder, joinedAt: now } : {}) });
       race = this.engine.welcome(team.id, l?.valid ?? null, e.first, now);
-      server.serializeAttachment({ role, team: team.id, since: now, box: race.boxes.find((b) => !b.opened)?.step ?? null } satisfies Attachment);
+      const shown = race.boxes.find((b) => !b.opened);
+      server.serializeAttachment({ role, team: team.id, since: now, box: shown ? boxKey(shown) : null } satisfies Attachment);
       // Newer device wins (accepted first, so the old socket's close does not take the team offline).
       for (const old of this.sockets(team.id)) {
         if (old === server) continue;
@@ -347,7 +359,7 @@ export class RaceRoom extends DurableObject<Env> {
   /** One more `k` in the team's current NET.respawnWindowMs; returns the count so far. */
   private count(team: string, k: Op, now: number): number {
     let o = this.ops.get(team);
-    if (!o || now - o.start >= NET.respawnWindowMs) this.ops.set(team, (o = { start: now, bike: 0, speed: 0, connect: 0, login: 0 }));
+    if (!o || now - o.start >= NET.respawnWindowMs) this.ops.set(team, (o = { start: now, bike: 0, speed: 0, connect: 0, login: 0, race: 0 }));
     return ++o[k];
   }
 
@@ -396,9 +408,12 @@ export class RaceRoom extends DurableObject<Env> {
         return this.engine.onPose(t.id, l.valid, now);
       }
       case 'race':
+        if (a.role !== TEAM) return;
+        // Phase 8 (D20): the ops that may write a row are budgeted like bike ops (not checkin / book: the mat check-in
+        // runs every 2 s, critic S4)
+        if ((m.op === 'answer' || m.op === 'accept' || m.op === 'branch' || m.op === 'open') && this.count(a.team, 'race', now) > NET.maxRaceOps) return this.close(ws, CLOSE.tooFast, 'too many race ops');
         // D4: judged at the trusted pose (the client sends its pose right before the op, on the same socket)
-        if (a.role === TEAM) this.engine.onOp(a.team, m, this.live.get(a.team)?.valid ?? null, now);
-        return;
+        return this.engine.onOp(a.team, m, this.live.get(a.team)?.valid ?? null, now);
       case 'host.race':
       case 'host.team':
       case 'host.leg':
@@ -458,7 +473,7 @@ export class RaceRoom extends DurableObject<Env> {
     }
     if (now >= this.boxAt) {
       this.boxAt = now + NET.boxCheckMs;
-      this.checkBoxes();
+      this.checkBoxes(now);
     }
     if (this.snapshotAt !== null && now >= this.snapshotAt) this.writeSnapshot(now);
     if (this.replayAt !== null && now >= this.replayAt) this.writeReplay(now);
@@ -482,19 +497,21 @@ export class RaceRoom extends DurableObject<Env> {
     this.dirty.clear();
   }
 
-  /** SPEC §17.10: the current step's box to that team only, within radius; hidden beyond radius + hysteresis. */
-  private checkBoxes() {
+  /** SPEC §17.10: the current step's box to that team only, within radius; hidden beyond radius + hysteresis. An opened
+   *  box (a detour branch's, until the Host approves) is never hidden (Phase 8 critic S2). */
+  private checkBoxes(now: number) {
     const r = this.engine.rules().boxReveal;
     for (const ws of this.sockets(TEAM)) {
       const a = att(ws);
       const l = this.live.get(a.team);
-      const box = this.engine.currentBox(a.team);
-      if (!l || !box) continue;
-      const was = a.box === box.step;
+      const box = this.engine.currentBox(a.team, now);
+      if (!l || !box || box.opened) continue;
+      const key = boxKey(box);
+      const was = a.box === key;
       const vis = boxVisible(was, Math.hypot(l.valid.x - box.x, l.valid.z - box.z), r);
       if (vis === was) continue;
-      ws.serializeAttachment({ ...a, box: vis ? box.step : null } satisfies Attachment);
-      this.send(ws, vis ? { t: 'box', op: 'reveal', box: { ...box, opened: false } } : { t: 'box', op: 'hide', step: box.step });
+      ws.serializeAttachment({ ...a, box: vis ? key : null } satisfies Attachment);
+      this.send(ws, vis ? { t: 'box', op: 'reveal', box } : { t: 'box', op: 'hide', step: box.step });
     }
   }
 

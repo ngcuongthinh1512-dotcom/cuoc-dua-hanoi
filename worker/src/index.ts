@@ -1,6 +1,6 @@
 import { ORIGIN } from '@race/shared';
-import { PROTOCOL_VERSION } from '@race/shared/protocol';
-import { constantTimeEqual, HOST, newClaims, signToken } from './auth.ts';
+import { MEDIA, PROTOCOL_VERSION } from '@race/shared/protocol';
+import { constantTimeEqual, HOST, newClaims, signToken, verifyToken } from './auth.ts';
 
 export { RaceRoom } from './RaceRoom.ts';
 
@@ -44,9 +44,43 @@ export default {
       if (request.headers.get('Upgrade') !== 'websocket') return json({ ok: false, error: 'expected_websocket' }, 426);
       return env.RACE_ROOM.getByName(race).fetch(new Request(`${url.origin}/ws${url.search}`, request));
     }
-    // Phase 8 (docs/plans/phase8.md D13 / D14): clue images on R2. PUT / HEAD = Host token, R2 directly; GET = team or Host
-    // token in `Authorization: Bearer`, a team only for an image it has opened (the DO says 204 / 404). TODO(phase8 track A).
-    if (/^\/api\/race\/[^/]+\/media\/[^/]+$/.test(pathname)) return json({ ok: false, error: 'not_implemented' }, 501);
+    const media = /^\/api\/race\/([^/]+)\/media\/([^/]+)$/.exec(pathname);
+    if (media) return serveMedia(request, env, decodeURIComponent(media[1]!), decodeURIComponent(media[2]!));
     return json({ ok: false, error: 'not_found' }, 404);
   },
 } satisfies ExportedHandler<Env>;
+
+/** Phase 8 (docs/plans/phase8.md D12–D14): clue images on R2 (private bucket MEDIA, key `<race>/<name>`), the token in
+ *  `Authorization: Bearer` (never in the URL). PUT / HEAD: Host token, R2 directly (no DO). GET: the Host always; a team
+ *  only for an image of a clue it has opened (its DO answers 204 / 404, the Worker streams R2 itself) — "missing" and "not
+ *  yet yours" are the same 404, so a later step's image name leaks nothing. */
+async function serveMedia(request: Request, env: Env, race: string, name: string): Promise<Response> {
+  if (!RACE_ID.test(race) || !MEDIA.name.test(name)) return json({ ok: false, error: 'bad_name' }, 400);
+  const token = /^Bearer (.+)$/.exec(request.headers.get('Authorization') ?? '')?.[1];
+  const claims = await verifyToken(env.HOST_PASSWORD, token, race);
+  if (!claims) return json({ ok: false, error: 'bad_token' }, 401);
+  const key = `${race}/${name}`;
+  const host = claims.t === HOST;
+  if (request.method === 'GET') {
+    const allowed = host || (await env.RACE_ROOM.getByName(race).fetch(`https://do/media?name=${encodeURIComponent(name)}&team=${encodeURIComponent(claims.t)}`)).status === 204;
+    const obj = allowed ? await env.MEDIA.get(key) : null;
+    if (!obj) return json({ ok: false, error: 'not_found' }, 404);
+    const headers = new Headers({ 'Cache-Control': `private, max-age=${MEDIA.cacheSeconds}`, ETag: obj.httpEtag });
+    obj.writeHttpMetadata(headers);
+    return new Response(obj.body, { headers });
+  }
+  if (!host) return json({ ok: false, error: 'host_only' }, 403);
+  if (request.method === 'HEAD') {
+    const h = await env.MEDIA.head(key);
+    return new Response(null, { status: h ? 200 : 404, headers: h ? { 'Content-Length': String(h.size), 'Content-Type': h.httpMetadata?.contentType ?? '' } : {} });
+  }
+  if (request.method !== 'PUT') return json({ ok: false, error: 'method' }, 405);
+  const type = (request.headers.get('Content-Type') ?? '').split(';')[0]!.trim().toLowerCase();
+  if (!(MEDIA.types as readonly string[]).includes(type)) return json({ ok: false, error: 'bad_type', types: MEDIA.types }, 415);
+  const length = request.headers.get('Content-Length');
+  if (length === null || !request.body) return json({ ok: false, error: 'length_required' }, 411); // R2 put(stream) needs it
+  const size = Number(length);
+  if (!(size > 0 && size <= MEDIA.maxBytes)) return json({ ok: false, error: 'too_big', maxBytes: MEDIA.maxBytes }, 413);
+  await env.MEDIA.put(key, request.body, { httpMetadata: { contentType: type } });
+  return json({ ok: true, size });
+}

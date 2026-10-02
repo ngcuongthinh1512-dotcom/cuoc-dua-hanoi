@@ -5,13 +5,16 @@
 // host.state parts.
 import { branchZone, jsonProblem, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
 import { latLonToWorld } from '@race/shared';
-import type { BoxInfo, HostMessage, HostState, PoseSample, RaceOp, RaceStatus, RaceView, ServerMessage, StepProgressView, Welcome, ZoneMember } from '@race/shared/protocol';
+import type { BoxInfo, HostMessage, HostState, PoseSample, RaceOp, RaceStatus, RaceView, ReviewItem, ServerMessage, ServerNotice, StepProgressView, Welcome, ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { officialMs, ranking } from './ranking.ts';
-import { advance, boxesOf, cardOf, review, type Progress, type RaceEffect, type RaceInput } from './steps.ts';
-import { verifyTask } from './tasks.ts';
+import { advance, boxesOf, cardOf, mediaAllowed, retryLockMinutes, review, rowFacts, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
+
+/** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
+ *  `auto` answers a minute for hours would grow one row and every host.state); raise it if a Host needs the whole log. */
+const ANSWERS_KEPT = 50;
 
 /** Race fields of teams.state (JSON; RaceRoom keeps reconnects / lastSeen / flagged next to them). */
 export interface TeamRace {
@@ -53,6 +56,9 @@ export interface RaceIO {
   park(team: string, rack: string, at: { x: number; z: number } | null, now: number): void;
   /** A new leg was loaded (lobby, no team entered): the bikes start again from its `vehicles` block. */
   legLoaded(now: number): void;
+  /** Phase 8 (D6, critic S1): the team switched away from `branch` of detour `step` (id): every socket of the team forgets
+   *  its revealed box (attachment), then gets {t:'box', op:'remove', step, branch} (dropped even if opened). */
+  hideBox(team: string, step: string, branch: string): void;
 }
 
 export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.team' | 'host.leg' | 'host.review' }>;
@@ -126,12 +132,14 @@ export class RaceEngine {
     const view = this.view(team, now);
     const boxes: BoxInfo[] = [];
     for (let i = 0; i < r.step; i++) {
-      // TODO(phase8 track A, D6): a done detour's chosen branch box, opened
-      const b = this.boxes[i]?.[0];
-      if (b && !b.kind && !b.branch && !boxes.some((o) => o.step === b.step)) boxes.push({ ...b, opened: true });
+      // done routes' boxes and done detours' chosen branch box, opened (where the team has been); never a mat
+      const branch = this.teamRows(team).get(this.legV.steps[i]!.id)?.branch;
+      const b = this.boxes[i]?.find((x) => x.branch === (branch ?? undefined));
+      if (b && !b.kind && !boxes.some((o) => o.step === b.step && o.branch === b.branch)) boxes.push({ ...b, opened: true });
     }
-    const cur = this.currentBox(team);
-    if (cur && pose && Math.hypot(pose.x - cur.x, pose.z - cur.z) <= this.legV.boxReveal.radius) boxes.push({ ...cur, opened: false });
+    // the current box: once opened (a branch box until the Host approves, S2), else within boxReveal.radius (§17.10)
+    const cur = this.currentBox(team, now);
+    if (cur && (cur.opened || (pose && Math.hypot(pose.x - cur.x, pose.z - cur.z) <= this.legV.boxReveal.radius))) boxes.push(cur);
     return { view, raceTime: raceTime(r, now), boxes, startOrder: r.startOrder, showStartOrder: first, start: pose ? null : startSpot(this.legV, r.startOrder ?? 1) };
   }
 
@@ -159,13 +167,14 @@ export class RaceEngine {
     }
     // Phase 8 (D8, critic N2): answer / accept / branch from anywhere, no trusted pose needed (a team typing right after a reload)
     if (m.op === 'accept') return this.step(team, { kind: 'accept', step: m.step }, now);
-    if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text }, now);
+    if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text, pose: stand(at) }, now);
     if (m.op === 'branch') return this.step(team, { kind: 'branch', step: m.step, branch: m.branch }, now);
-    if (!at) return this.io.send(team, { t: 'notice', code: m.op === 'task' ? 'taskFar' : 'boxFar' });
+    // ponytail: the Phase 7 `task` op is ignored until the integrator drops it from the protocol (Phase 8 adjustment)
+    if (m.op === 'task') return;
+    if (!at) return this.io.send(team, { t: 'notice', code: 'boxFar' });
     const riding = at.mode === 'bike';
     const input: RaceInput =
       m.op === 'open' ? { kind: 'open', step: m.step, ...(m.branch !== undefined ? { branch: m.branch } : {}), x: at.x, z: at.z, riding }
-      : m.op === 'task' ? { kind: 'task', step: m.step, ...(m.branch !== undefined ? { branch: m.branch } : {}), ...(m.answer !== undefined ? { answer: m.answer } : {}), x: at.x, z: at.z, riding }
       : { kind: 'checkin', x: at.x, z: at.z, riding };
     this.step(team, input, now);
   }
@@ -203,14 +212,21 @@ export class RaceEngine {
       return this.io.changed(now);
     }
     if (m.t === 'host.review') {
-      // Phase 8 (D5, D10, D24): any status but finished; idempotent (a second decision is refused, nothing written)
+      // Phase 8 (D5, D10, D24): any status but finished (paused too); idempotent (a second decision is refused, nothing written)
       if (this.statusV === 'finished') return notice('error', 'Cuộc đua đã kết thúc.');
-      if (!this.io.team(m.team)) return notice('error', 'Không có đội này.');
+      const r = this.io.team(m.team);
+      if (!r) return notice('error', 'Không có đội này.');
       const i = this.legV.steps.findIndex((s) => s.id === m.step);
-      const res = review(this.legV, i, this.teamRows(m.team).get(m.step), m, now);
+      if (i < 0) return notice('error', 'Không có bước này trong chặng.');
+      if (i > r.step) return notice('warning', 'Đội chưa tới bước này.');
+      const res = review(this.legV, i, this.teamRows(m.team).get(m.step) ?? emptyProgress(m.team, m.step), m, now);
       if ('refuse' in res) return notice('warning', res.refuse);
-      // TODO(phase8 track A, D5 / D10): write res.row + event 'review' in one transaction, then `race` + notice approved /
-      // penalized to the team; approve → this.step(m.team, { kind: 'approve', step: m.step, pose }) (complete + settle, S3)
+      const decision: RaceEffect = { kind: 'review', step: i, row: res.row, op: m.op, id: res.id };
+      // approve: complete + settle through the machine at the team's trusted pose (S3: racked only if it stands there)
+      const { p, effects } = res.approve
+        ? advance(this.legV, this.zones, this.progress(m.team, r), { kind: 'approve', step: m.step, pose: stand(this.io.pose(m.team)) }, now, this.statusV === 'running')
+        : { p: this.progress(m.team, r), effects: [] };
+      this.apply(m.team, r, p, [decision, ...effects], now);
       return;
     }
     // host.leg (D11): lobby only, and only before any team entered the game
@@ -240,11 +256,27 @@ export class RaceEngine {
     this.io.changed(now);
   }
 
-  /** SPEC §17.10: the box of the team's current step (checkBoxes), null = none. TODO(phase8 track A, D6): a detour → the
-   *  chosen branch's box when not locked (+ `opened`); none yet. */
-  currentBox(team: string): Omit<BoxInfo, 'opened'> | null {
+  /** SPEC §17.10: the box of the team's current step (checkBoxes, welcome), null = none. A detour (D6): the chosen
+   *  branch's box, none before a choice or during a switch countdown; `opened` once its box was opened. */
+  currentBox(team: string, now: number): BoxInfo | null {
     const r = this.io.team(team);
-    return (r && this.boxes[r.step]?.find((b) => b.branch === undefined)) ?? null;
+    const s = r && this.legV.steps[r.step];
+    if (!s) return null;
+    if (s.type !== 'detour') {
+      const b = this.boxes[r.step]?.[0];
+      return b ? { ...b, opened: false } : null;
+    }
+    const row = this.teamRows(team).get(s.id);
+    const opened = row?.branch_opened_at != null;
+    if (!row?.branch || (!opened && (row.locked_until ?? 0) > now)) return null;
+    const b = this.boxes[r.step]!.find((x) => x.branch === row.branch);
+    return b ? { ...b, opened } : null;
+  }
+
+  /** Phase 8 (D13): may this team load the R2 image `name` (RaceRoom GET /media → 204 / 404)? */
+  mediaAllowed(team: string, name: string): boolean {
+    const r = this.io.team(team);
+    return !!r && mediaAllowed(this.legV, r.step, this.teamRows(team), name);
   }
 
   /** Why the team may not take a bike now (BikeService.onTeam), false = it may: checked in or the race is over (a
@@ -283,9 +315,22 @@ export class RaceEngine {
           answers: answers.map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, branch: a.b, ...(a.n ? { note: a.n } : {}) })), note: row.host_note,
         });
       }
-      const wait = [...this.teamRows(id).values()].reduce((n, x) => n + x.approval_wait_seconds * 1000, 0);
-      return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, startAt: r.startAt, finishAt: r.finishAt, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null, approvalWaitMs: wait }];
+      return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, startAt: r.startAt, finishAt: r.finishAt, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null, approvalWaitMs: this.waitMs(id) }];
     });
+    // D10: every answer waiting for the Host, oldest first (the reference answers are Host-only, like this whole message)
+    const queue: ReviewItem[] = [];
+    for (const id of this.io.teamIds())
+      for (const row of this.teamRows(id).values()) {
+        const a = parseAnswers(row).at(-1);
+        const i = leg.steps.findIndex((s) => s.id === row.step);
+        const t = a?.s === 'pending' && i >= 0 && row.completed_at == null ? taskOf(leg.steps[i]!, a.b) : null;
+        if (!a || !t) continue;
+        queue.push({
+          team: id, step: row.step, label: leg.steps[i]!.label, branch: a.b, id: a.id, text: a.text, at: a.at,
+          reference: t.referenceAnswers.length ? t.referenceAnswers : t.answers, note: row.host_note, lockMinutes: retryLockMinutes(leg, t),
+        });
+      }
+    queue.sort((a, b) => a.at - b.at);
     return {
       leg: {
         id: leg.id, title: leg.title, timezone: leg.timezone, start: { x: s0.x, z: s0.z },
@@ -299,9 +344,7 @@ export class RaceEngine {
       },
       progress,
       ranking: ranking(ranks, leg.hostApproval.approvalWaitCounts),
-      // TODO(phase8 track A, D10): every pending answer of every team, oldest first (ReviewItem: reference =
-      // task.referenceAnswers || task.answers, lockMinutes = retryLockMinutes(leg, task))
-      queue: [],
+      queue,
     };
   }
 
@@ -337,12 +380,16 @@ export class RaceEngine {
   }
 
   private progress(team: string, r: TeamRace): Progress {
-    const row = this.teamRows(team).get(this.legV.steps[r.step]?.id ?? '');
-    const last = parseAnswers(row).at(-1);
-    return {
-      step: r.step, arrivedAt: row?.arrived_at ?? null, startedAt: row?.task_started_at ?? null, branch: row?.branch ?? null, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
-      branchOpenedAt: row?.branch_opened_at ?? null, lockedUntil: row?.locked_until ?? null, pendingId: last?.s === 'pending' ? last.id : null,
-    };
+    return { step: r.step, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes, ...rowFacts(this.teamRows(team).get(this.legV.steps[r.step]?.id ?? '')) };
+  }
+
+  /** D23: ms the team waited for Host decisions (SPEC §8.9), deducted from its official time unless approvalWaitCounts. */
+  private waitMs(team: string): number {
+    return Math.round([...this.teamRows(team).values()].reduce((n, x) => n + x.approval_wait_seconds * 1000, 0));
+  }
+
+  private official(team: string, r: TeamRace): number | null {
+    return officialMs({ ...r, approvalWaitMs: this.waitMs(team) }, this.legV.hostApproval.approvalWaitCounts);
   }
 
   private view(team: string, now: number): RaceView {
@@ -353,7 +400,7 @@ export class RaceEngine {
       status: this.statusV, startAt: r.startAt, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
       card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now) : null,
       checkinAt: pit && r.finishAt === null && r.penaltyMinutes > 0 && p.arrivedAt !== null ? p.arrivedAt + r.penaltyMinutes * 60_000 : null,
-      officialMs: officialMs({ ...r, approvalWaitMs: 0 }, true),
+      officialMs: this.official(team, r),
     };
   }
 
@@ -368,7 +415,7 @@ export class RaceEngine {
     const r = this.io.team(team);
     // SPEC §8.10: after the Host's "Kết thúc" the race is read-only (no arrival, no bike moved to a rack)
     if (!r || this.statusV === 'finished') return;
-    const { p, effects } = advance(this.legV, this.zones, this.progress(team, r), input, now, verifyTask, this.statusV === 'running');
+    const { p, effects } = advance(this.legV, this.zones, this.progress(team, r), input, now, this.statusV === 'running');
     if (effects.length) this.apply(team, r, p, effects, now);
   }
 
@@ -384,25 +431,59 @@ export class RaceEngine {
     const events: [string, object][] = [];
     const out: ServerMessage[] = [];
     const parks: Extract<RaceEffect, { kind: 'park' }>[] = [];
+    const hides: Extract<RaceEffect, { kind: 'hideBox' }>[] = [];
+    const notice = (code: ServerNotice) => out.push({ t: 'notice', code });
+    // M8: an approval says "Host đã duyệt! Mật thư mới…" once (no clueNew next to it); a note alone changes no card
+    const approved = effects.some((e) => e.kind === 'review' && e.op === 'approve');
+    const quiet = effects.every((e) => e.kind === 'review' && e.op === 'note');
+    const sid = (i: number) => steps[i]!.id;
     for (const e of effects) {
-      if (e.kind === 'refuse') out.push({ t: 'notice', code: e.code });
+      if (e.kind === 'refuse') notice(e.code);
       else if (e.kind === 'park') parks.push(e);
+      else if (e.kind === 'hideBox') hides.push(e);
       else if (e.kind === 'arrive') {
         edit(e.step).arrived_at = now;
-        events.push(['arrive', { step: steps[e.step]!.id }]);
-      } else if (e.kind === 'start') Object.assign(edit(e.step), { task_started_at: now, branch: e.branch });
-      // TODO(phase8 track A, D4–D6): accept / answer / branch / switch / openBranch / hideBox (rows + events here, the
-      // hideBox through RaceIO.hideBox before the `race` message)
-      else if (e.kind === 'complete') {
+        events.push(['arrive', { step: sid(e.step) }]);
+      } else if (e.kind === 'accept') {
+        edit(e.step).task_started_at = now;
+        events.push(['accept', { step: sid(e.step) }]);
+      } else if (e.kind === 'answer') {
+        // one answer = this row's upsert, no event (D4); the auto `wrong` one neither
+        const row = edit(e.step);
+        row.answers = JSON.stringify([...parseAnswers(row), e.rec].slice(-ANSWERS_KEPT));
+        if (e.verdict === 'pending') (row.submitted_at = now), notice('answerSent');
+        if (e.verdict === 'wrong') (row.wrong_answers += 1), notice('answerWrong');
+      } else if (e.kind === 'review') {
+        Object.assign(edit(e.step), e.row);
+        events.push(['review', { step: sid(e.step), op: e.op, id: e.id, by: 'host' }]);
+        if (e.op !== 'note') notice(e.op === 'approve' ? 'approved' : 'penalized');
+      } else if (e.kind === 'branch') {
+        edit(e.step).branch = e.branch;
+        events.push(['branch', { step: sid(e.step), branch: e.branch }]);
+        notice('branchChosen');
+      } else if (e.kind === 'switch') {
+        // D6: the old branch's progress is gone (its answers stay in the JSON with b = from, for the Host)
+        const row = edit(e.step);
+        Object.assign(row, { branch: e.to, branch_switches: row.branch_switches + 1, branch_opened_at: null, task_started_at: null, arrived_at: null, locked_until: e.lockedUntil });
+        events.push(['switch', { step: sid(e.step), from: e.from, to: e.to }]);
+        notice('branchSwitched');
+      } else if (e.kind === 'openBranch') {
+        Object.assign(edit(e.step), { branch_opened_at: now, task_started_at: now });
+        events.push(['open', { step: sid(e.step), branch: e.branch }]);
+        const box = this.boxes[e.step]?.find((b) => b.branch === e.branch);
+        if (box) out.push({ t: 'box', op: 'reveal', box: { ...box, opened: true } });
+      } else if (e.kind === 'complete') {
         edit(e.step).completed_at = now;
-        if (steps[e.step + 1]) edit(e.step + 1).clue_opened_at = now;
-        events.push(['complete', { step: steps[e.step]!.id }]);
+        const n = steps[e.step + 1];
+        if (n) edit(e.step + 1).clue_opened_at = now;
+        if (n?.type === 'challenge' && n.teaser === '') edit(e.step + 1).task_started_at = now; // D5: started with its clue
+        events.push(['complete', { step: sid(e.step) }]);
         const box = this.boxes[e.step]?.[0];
         if (box && !box.kind && !box.branch) out.push({ t: 'box', op: 'reveal', box: { ...box, opened: true } }); // D5: opened at once
-        if (steps[e.step + 1]) out.push({ t: 'notice', code: 'clueNew' });
+        if (n && !approved) notice('clueNew');
       } else if (e.kind === 'finish') {
         edit(p.step).completed_at = now;
-        events.push(['finish', { officialMs: officialMs({ ...r, finishAt: now, approvalWaitMs: 0 }, true) }]);
+        events.push(['finish', { officialMs: this.official(team, { ...r, finishAt: now }) }]);
       }
     }
     const next: TeamRace = { ...r, step: p.step, finishAt: p.finishAt };
@@ -414,8 +495,9 @@ export class RaceEngine {
         if (teamChanged) this.io.saveTeam(team, next); // last: RaceRoom patches its cache only after this write
       });
       for (const row of dirty.values()) this.teamRows(team).set(row.step, row); // committed: patch the cache
-      out.push({ t: 'race', view: this.view(team, now) });
+      if (!quiet) out.push({ t: 'race', view: this.view(team, now) });
     }
+    for (const h of hides) this.io.hideBox(team, sid(h.step), h.branch); // before the card that says "switched"
     for (const k of parks) this.io.park(team, k.rack, k.at, now);
     for (const m of out) this.io.send(team, m);
     if (dirty.size) {
@@ -496,3 +578,6 @@ export class RaceEngine {
 const raceTime = (r: TeamRace, now: number) => (r.startAt === null ? null : Math.max(0, ((r.finishAt ?? now) - r.startAt) / 1000));
 
 const pick = (z: Zone) => ({ name: z.name, x: z.x, z: z.z, r: z.r });
+
+/** A trusted pose as the machine's StandAt (null = none yet). */
+const stand = (p: PoseSample | null): StandAt => p && { x: p.x, z: p.z, riding: p.mode === 'bike' };
