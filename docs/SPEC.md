@@ -1018,3 +1018,4 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 
 ### 17.18 Chặng này bỏ các yếu tố đặc biệt (2026-10-03)
 - Chặng này KHÔNG dùng: Quay đầu (U-Turn), Nhường đường (Yield), Vé vượt (Express Pass), Vé ưu tiên (Priority Pass), Gờ giảm tốc (Speed Bump). Không làm trong Phase 9; các mục §9.x liên quan để TẠM hoãn (ghi TODO), có thể làm lại khi người dùng cần.
+- (2026-10-03, bổ sung) Chặng này cũng KHÔNG có lộ trình bắt buộc đi bộ (`transport.mandatory = "walk"`) và không có phạt đi bộ sai luật (`walkOnlyViolationMinutes`); mọi lộ trình đi bộ hoặc xe đạp tự do. Phase 9 vì vậy không còn việc bắt buộc: phạt bỏ cuộc thử thách (`quitTaskMinutes`) cũng không dùng (Lựa chọn kép đã có phạt đổi nhánh riêng, §17.16). Chuyển thẳng sang Phase 10.
