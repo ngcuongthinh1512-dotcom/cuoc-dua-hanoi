@@ -1057,7 +1057,10 @@ async function npcPedAnims() {
 
 mkdirSync(out, { recursive: true });
 // Phase 8B: the Louvre room's 23 artworks (own input folder <src>/louvre, own output client/public/art; scripts/assets/louvre.ts)
-if (only.includes('louvre')) await processLouvre(join(src, 'louvre'), join(root, 'client/public/art'));
+if (only.includes('louvre')) {
+  await processLouvre(join(src, 'louvre'), join(root, 'client/public/art'));
+  if (only.length === 1) process.exit(0); // credits.json's one Louvre line is fixed: a louvre-only run needs no <src>/manifest.json
+}
 const BUILDS = [['eiffel', eiffel], ['arc', arc], ['player', player], ['player-anims', playerAnims], ['bike', bike], ['npc-vehicles', npcVehicles], ['npc-peds', npcPeds], ['npc-ped-anims', npcPedAnims]] as const;
 for (const [name, build] of BUILDS.filter(([n]) => !only.length || only.includes(n))) {
   const doc = await build();

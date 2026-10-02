@@ -12,8 +12,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { Document, NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, meshopt, prune, textureCompress } from '@gltf-transform/functions';
-import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
+import { compactPrimitive, dedup, meshopt, prune, simplify, textureCompress, weld } from '@gltf-transform/functions';
+import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
 export interface ManifestItem { file: string; kind: 'photo' | 'scan'; type?: 'painting' | 'sculpture'; title: string; artist?: string; photo?: string; license: string; source?: string; real?: boolean }
@@ -76,19 +76,39 @@ export function anonymize(doc: Document, name: string) {
   asset.extras = {};
 }
 
-/** A scanned statue → GLB: textures ≤ edge (shrunk 2048 → 1024 → 512 until the file ≤ maxBytes), names anonymised, Meshopt. */
+/** A scanned statue → GLB: textures 2048 → 1024, then the mesh simplified (ratio halved, ≤ 1 cm of a 1 m statue) until the
+ *  file ≤ maxBytes (below a ratio of 0.1 up to 3 cm, the last try 8 cm); names anonymised, Meshopt. Real scans are 20–50 MB of triangles: textures alone never get them under 1 MB. */
 export async function scanToGlb(input: Buffer, name: string, maxBytes = LIMITS.glbBytes): Promise<Buffer> {
   const io = ioFor();
-  await MeshoptEncoder.ready;
+  await Promise.all([MeshoptEncoder.ready, MeshoptSimplifier.ready]);
   let last: Buffer = Buffer.alloc(0);
-  for (const edge of [LIMITS.textureEdge, 1024, 512]) {
+  for (const [edge, ratio] of [[LIMITS.textureEdge, 1], [1024, 1], [1024, 0.5], [1024, 0.25], [1024, 0.12], [1024, 0.06], [512, 0.03], [512, -0.1], [512, -0.05]] as const) {
     const doc = await io.readBinary(new Uint8Array(input));
-    await doc.transform(dedup(), prune(), textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [edge, edge], quality: 80 }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+    // the room draws scans unlit with the base colour map on UV 0 (LouvreRoom): normals / tangents / UV 1 only split vertices
+    // (a scan's per-face normals = nothing to weld, nothing to simplify)
+    for (const m of doc.getRoot().listMeshes())
+      for (const p of m.listPrimitives()) for (const sem of p.listSemantics()) if (!['POSITION', 'TEXCOORD_0', 'COLOR_0'].includes(sem)) p.setAttribute(sem, null);
+    if (ratio < 0) sloppy(doc, -ratio); // the last tries: seams everywhere (photogrammetry), the regular simplifier stalls
+    const shrink = ratio < 1 && ratio > 0 ? [weld(), simplify({ simplifier: MeshoptSimplifier, ratio, error: ratio < 0.02 ? 0.08 : ratio < 0.1 ? 0.03 : 0.01, lockBorder: false })] : [];
+    await doc.transform(dedup(), ...shrink, prune(), textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [edge, edge], quality: 80 }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
     anonymize(doc, name);
     last = Buffer.from(await io.writeBinary(doc));
     if (last.length <= maxBytes) return last;
   }
   return last;
+}
+
+/** meshopt's sloppy simplifier on every primitive (`ratio` of its triangles; ignores topology, keeps the vertices' UVs), then
+ *  the unused vertices dropped. */
+function sloppy(doc: Document, ratio: number) {
+  for (const m of doc.getRoot().listMeshes())
+    for (const p of m.listPrimitives()) {
+      const [idx, pos] = [p.getIndices(), p.getAttribute('POSITION')];
+      if (!idx || !pos || p.getMode() !== 4) continue;
+      const [out] = MeshoptSimplifier.simplifySloppy(Uint32Array.from(idx.getArray()!), Float32Array.from(pos.getArray()!), 3, null, Math.max(3, Math.floor((idx.getCount() * ratio) / 3) * 3), 0.05);
+      idx.setArray(Uint32Array.from(out));
+      compactPrimitive(p);
+    }
 }
 
 /** Whole job. `dir` = the louvre input folder (…/louvre), `out` = client/public/art. Throws on a missing file / > 8 MB. */
@@ -103,20 +123,26 @@ export async function processLouvre(dir: string, out: string, log: (s: string) =
   for (const n of readdirSync(out)) if (/^art-\d{2}\.(webp|glb)$/.test(n)) rmSync(join(out, n)); // a new seed must not leave stale files
   const files: LouvreResult['files'] = [];
   const snippet: SnippetItem[] = [];
-  for (const [k, item] of order.entries()) {
+  // photos first, then the scans share what is left of the folder budget (each still ≤ glbBytes)
+  const jobs = [...order.entries()].sort(([, a], [, b]) => Number(a.kind === 'scan') - Number(b.kind === 'scan'));
+  const scans = jobs.filter(([, it]) => it.kind === 'scan').length;
+  for (const [k, item] of jobs) {
     const id = `art-${String(k + 1).padStart(2, '0')}`;
     const from = join(dir, item.file);
     if (!existsSync(from)) throw new Error(`process-assets louvre: missing ${item.file}`);
     const bytes = readFileSync(from);
     const glb = item.kind === 'scan';
-    const data = glb ? await scanToGlb(bytes, id) : await photoToWebp(bytes);
+    const used = files.reduce((n, f) => n + f.bytes, 0);
+    const cap = glb ? Math.min(LIMITS.glbBytes, Math.floor((LIMITS.totalBytes - used) / Math.max(1, scans - files.filter((f) => f.file.endsWith('.glb')).length))) : LIMITS.webpBytes;
+    const data = glb ? await scanToGlb(bytes, id, cap) : await photoToWebp(bytes);
     const file = `${id}.${glb ? 'glb' : 'webp'}`;
     writeFileSync(join(out, file), data);
-    const cap = glb ? LIMITS.glbBytes : LIMITS.webpBytes;
-    if (data.length > cap) warnings.push(`${file} nặng ${Math.round(data.length / 1024)} KB, quá ${cap / 1024} KB`);
+    if (data.length > cap) warnings.push(`${file} nặng ${Math.round(data.length / 1024)} KB, quá ${Math.round(cap / 1024)} KB`);
     files.push({ id, file, bytes: data.length, from: item.file });
     snippet.push({ id, type: item.type ?? (glb ? 'sculpture' : 'painting'), image: file, credit: { title: item.title, artist: item.artist ?? '', photo: item.photo ?? '', license: item.license, source: item.source ?? '' } });
   }
+  files.sort((a, b) => a.id.localeCompare(b.id));
+  snippet.sort((a, b) => a.id.localeCompare(b.id));
   const total = files.reduce((n, f) => n + f.bytes, 0);
   if (total > LIMITS.totalBytes) throw new Error(`process-assets louvre: client/public/art ${(total / 2 ** 20).toFixed(2)} MB > 8 MB`);
   writeFileSync(join(dir, 'credits-snippet.json'), `${JSON.stringify(snippet, null, 1)}\n`);
