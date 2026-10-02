@@ -2,6 +2,7 @@
 // bottom-left, right of the minimap so it never covers it nor the toasts), GTA chat style: "14:05 · Đội X trả lời sai và bị
 // phạt 3 phút[ · đúng 2/5]" / "Đội X đúng 5/5". Lines come from welcome.feed + `{t:'feed'}` (RaceClient → RaceHud.feed).
 // Never takes the mouse (pointer-events none); fades after feed.seconds, a new line shows it again.
+import { LOUVRE } from '@race/shared';
 import type { FeedMessage, TeamInfo } from '@race/shared/protocol';
 import { feed as F, hud } from '../config.ts';
 import { fmtMin, formatTimeOfDay } from '../race/ui/format.ts';
@@ -11,7 +12,7 @@ import './menu.css';
  *  (a team's own 70-minute mark), so a wrong lock before it never says how close the team was. */
 export function feedText(m: FeedMessage, teams: readonly TeamInfo[]): string {
   const name = teams.find((t) => t.slot === m.slot)?.name ?? `Đội ${m.slot}`;
-  const count = m.n == null ? '' : `${m.n}/${m.of ?? 5}`;
+  const count = m.n == null ? '' : `${m.n}/${m.of ?? LOUVRE.answers}`;
   if (m.ok) return count ? `${name} đúng ${count}` : `${name} đã trả lời đúng`;
   return `${name} trả lời sai và bị phạt ${fmtMin(m.minutes ?? 0)} phút${count ? ` · đúng ${count}` : ''}`;
 }

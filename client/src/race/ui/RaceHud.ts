@@ -41,7 +41,11 @@ export interface RaceHudFrame {
   serverNow: number;
   /** The body stands inside the current, unopened box's zone, on foot: show "Bấm F để mở hòm mật thư". */
   inZone: boolean;
+  /** Phase 8B: the Louvre room's prompt (LouvreRoom.roomPrompt / "Bấm F để vào phòng Louvre"), shown instead of the box one. */
+  prompt?: string | null;
 }
+
+const BOX_PROMPT = 'Bấm F để mở hòm mật thư';
 
 const ICONS = {
   route: '<path d="M4 19c7 0 4-13 11-13h3M15 3l4 3-4 3"/>',
@@ -131,7 +135,7 @@ export class RaceHud {
   private readonly zonePanel = el('div', 'rc-zone hud-box');
   private readonly bannerEl = el('div', 'rc-banner hud-hand');
   private readonly penaltyEl = el('div', 'rc-penalty hud-box');
-  private readonly promptEl = el('div', 'rc-prompt hud-box', 'Bấm F để mở hòm mật thư');
+  private readonly promptEl = el('div', 'rc-prompt hud-box', BOX_PROMPT);
   private readonly npcEl = el('div', 'rc-npc hud-box');
   private readonly overlay = el('div', 'rc-overlay');
   private readonly zoomEl = html('div', 'rc-zoom', '<img alt="">');
@@ -265,7 +269,9 @@ export class RaceHud {
     const pen = lock ?? penaltyLine(this.view, this.now);
     this.penaltyEl.hidden = pen == null || (lock != null && this.timerEl != null); // the open card shows the same countdown (visual#7)
     if (pen) setTime(this.penaltyEl, pen);
-    this.promptEl.hidden = !f.inZone || this.open;
+    const prompt = f.prompt || (f.inZone ? BOX_PROMPT : '');
+    this.promptEl.hidden = !prompt || this.open;
+    if (prompt) setText(this.promptEl, prompt);
     this.npcEl.hidden = f.simTime - this.finishSince >= C.finishSeconds;
     const card = this.view?.card;
     if (!card) return;

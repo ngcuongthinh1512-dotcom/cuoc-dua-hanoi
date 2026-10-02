@@ -449,15 +449,19 @@ describe('louvre bot (phase8b §I, pure)', () => {
   });
 });
 
-// Integration: needs track A's engine (pick / lock). Until A is merged advance() answers silently to both and the bots would stall.
-const trackAMerged = !/input\.kind === 'pick' \|\| input\.kind === 'lock'\) return silent/.test(readFileSync(join(import.meta.dirname, '../worker/src/race/steps.ts'), 'utf8'));
-describe('sim --leg louvre (needs track A)', () => {
-  it.skipIf(!trackAMerged)('3 bots finish: ≥ 3 wrong locks, every bot sees ≥ 3 public feed messages, ≤ 16 × steps rows per team', { timeout: 300_000 }, async () => {
-    const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-louvre', password: 'test-secret', log: () => {}, leg: { id: 'louvre' } });
+// Integration: the in-process server + the louvre test leg, 3 bots (wrong lock → countdown → right lock). The start moves from
+// Bir-Hakeim (≈ 3.5 km, longer than the test's 600 s) to the Jardin du Carrousel, ≈ 250 m from the room.
+describe('sim --leg louvre', () => {
+  const nearLouvre = () => {
+    const leg = JSON.parse(readFileSync(join(import.meta.dirname, '../worker/legs/test/louvre.json'), 'utf8'));
+    Object.assign(leg.start, { lat: 48.8617, lon: 2.3314 });
+    return JSON.stringify(leg);
+  };
+  it('3 bots finish: ≥ 3 wrong locks, every bot sees ≥ 3 public feed messages, ≤ 16 × steps rows per team', { timeout: 300_000 }, async () => {
+    const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-louvre', password: 'test-secret', log: () => {}, leg: { json: nearLouvre() } });
     expect(r.leg).toMatchObject({ id: 'louvre', finished: 3, ranked: 3 });
     expect(r.leg!.stats.wrong).toBeGreaterThanOrEqual(3);
     expect(r.leg!.feed).toBeGreaterThanOrEqual(3);
     expect(r.leg!.rowsPerTeam!).toBeLessThanOrEqual(r.leg!.rowBudget);
   });
-  it.skipIf(trackAMerged)('NOT RUN: track A (pick / lock in worker/src/race/steps.ts) is not merged in this worktree', () => {});
 });

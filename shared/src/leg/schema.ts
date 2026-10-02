@@ -3,6 +3,7 @@
 // never leaves the Worker (SPEC §3). docs/plans/phase7.md §3 D11–D13; the user-facing description is docs/LEG_FORMAT.md.
 // Every block except id / title / start / steps has defaults (the demo leg's values), so a hand-written leg stays short.
 import { z } from 'zod';
+import { LOUVRE } from '../constants.ts';
 
 /** Sanity limits shared by the schema, the server and `npm run leg:check` (SPEC §17.4: geofence radius 15–40 m). */
 export const LEG_LIMITS = {
@@ -55,19 +56,7 @@ export const destinationSchema = z.strictObject({
 
 /** Phase 8B (SPEC §17.19, docs/plans/phase8b.md §B): the Louvre room ("Thử thách 3"). The 5 right ids are task.answers
  *  (server-only); notes and credits never reach a team before it finished (§17.20). */
-export const LOUVRE = {
-  /** 5 Louvre originals + 18 decoys around the walls. */
-  artworks: 23,
-  answers: 5,
-  /** §17.19 (c): from hints.countAtMinutes on, at most this many lit buttons at once (switching off always works). */
-  maxPicks: 5,
-  artId: /^[A-Za-z0-9_-]{1,16}$/,
-  /** A static client asset client/public/art/<name>: a photo (webp) or, for a statue with a licensed 3D scan, a GLB. */
-  artFile: /^art-\d{2}\.(webp|glb)$/,
-  /** CLI (leg:check) size limits of those files. */
-  maxWebpBytes: 300 * 1024,
-  maxGlbBytes: 1024 * 1024,
-} as const;
+export { LOUVRE }; // Phase 8B: lives in ../constants.ts (zod-free: the client reads the counts too)
 /** SPEC §17.19 (a) / §17.20: allowed licences of an artwork's picture / scan. Never ND, "personal use only" or unknown. */
 export const ART_LICENSES = ['PD', 'PD-Art', 'CC0', 'CC-BY', 'CC-BY-SA', 'CC-BY-NC', 'CC-BY-NC-SA', 'MIT'] as const;
 export type ArtLicense = (typeof ART_LICENSES)[number];

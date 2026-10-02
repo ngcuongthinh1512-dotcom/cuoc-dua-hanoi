@@ -35,7 +35,7 @@ import { netDownText } from './ui/Login.ts';
 import { MapTiles } from './ui/MapTiles.ts';
 import { Menu } from './ui/Menu.ts';
 import { Minimap } from './ui/Minimap.ts';
-import { notice, toast } from './ui/Toasts.ts';
+import { lockWrongText, notice, toast } from './ui/Toasts.ts';
 import { type HudFrame, NO_GPS } from './ui/types.ts';
 import { loadBikeAsset } from './vehicle/BikeModel.ts';
 import { groundAt } from './vehicle/Bikes.ts';
@@ -252,6 +252,7 @@ async function start() {
           answer: (step, text) => race?.answer(step, text),
           branch: (step, id) => race?.branch(step, id),
           accept: (step) => race?.accept(step),
+          credits: () => race?.credits(), // Phase 8B: "Ghi nguồn" after the finish (Credits.ts asks through RaceHud)
           ...(session && { resolveMedia: (name: string) => fetchMedia(session, name) }), // none offline: "Hình chỉ tải được trong cuộc đua"
         },
         session?.team?.name ?? '',
@@ -362,8 +363,8 @@ async function start() {
         if (m.t === 'team') remote?.setOnline(m.slot, m.online);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') {
-          const min = race?.view?.card?.retryPenaltyMinutes; // Phase 8B: the wrong lock's minutes (0.1 in a test leg: never "3")
-          if (m.code === 'lockWrong' && min != null) toast(`Chưa đúng! Phạt ${String(+min.toFixed(1)).replace('.', ',')} phút – lựa chọn vẫn giữ, bấm / bỏ được, chốt lại khi hết đếm ngược`);
+          // Phase 8B: the wrong lock's minutes from the card (0.1 in a test leg: never "3")
+          if (m.code === 'lockWrong') toast(lockWrongText(race?.view?.card?.retryPenaltyMinutes));
           else notice(m.code);
           if (m.code === 'approved' || m.code === 'penalized') reviewSound(m.code === 'approved'); // SPEC §8.9 (6)
           if (m.code === 'lockWrong' || (m.code === 'clueNew' && room?.active)) reviewSound(m.code === 'clueNew'); // Phase 8B: the lock's verdict
@@ -531,13 +532,9 @@ async function start() {
     box.hidden = false;
     setTimeout(() => void (box.hidden = true), ui.imeNoticeMs);
   };
-  // Phase 8B (§17.20): in a race "Ghi nguồn" asks the server (items after the finish, else notice creditsLocked); offline
-  // the static credits.json as before.
-  // ponytail: a cast until track C's initCredits(ask?) lands, then a plain call.
-  (initCredits as (ask?: () => void) => void)(race ? () => race.credits() : undefined);
-  // Phase 8B: the room's prompt ("Bấm F: chọn tác phẩm này"…), styled like RaceHud's box prompt
-  const roomPromptEl = Object.assign(document.createElement('div'), { className: 'rc-prompt hud-box', hidden: true });
-  document.body.append(roomPromptEl);
+  // Phase 8B (§17.20): in a race "Ghi nguồn" is gated by RaceHud.setView and asks through actions.credits; offline the
+  // static credits.json as before.
+  initCredits();
   let preloaded: string | null = null; // the louvre step whose pictures are loading
   const edge = $('edge');
   const loading = $('loading');
@@ -625,8 +622,7 @@ async function start() {
           prompt = d <= roomCfg.enterReach ? 'Bấm F để vào phòng Louvre' : d <= rc.lv.room.r ? 'Phòng Louvre: tới sát hòm mật thư rồi bấm F để vào' : null;
         }
       }
-      roomPromptEl.hidden = !prompt;
-      if (prompt && roomPromptEl.textContent !== prompt) roomPromptEl.textContent = prompt;
+      raceHud?.setRoom(!!room?.active); // the louvre card says "Đang trong phòng"
       boxes.update(camera.position);
       if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
       // No HUD while loading or flying (V): hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
@@ -644,7 +640,7 @@ async function start() {
         const riding = !!player.controller.riding;
         // (race.frame runs in the Louvre room too: the hint marks' `view`; no box prompt from under the ground)
         const inZone = !player.active ? false : (race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone : !riding && !!boxInReach(boxes.boxes, x, z)) && !room?.active;
-        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone });
+        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone, prompt });
         gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
         hud.update(frame, dt);
         minimap.update(frame, gps ?? NO_GPS, dt);

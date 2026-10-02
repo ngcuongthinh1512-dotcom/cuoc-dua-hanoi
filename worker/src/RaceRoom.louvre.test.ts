@@ -5,7 +5,7 @@
 import type { ClueCard, FeedMessage, HostState, RaceView, Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import louvre from '../legs/test/louvre.json';
-import { answer, joinTeam, lock, nearLouvreLeg, nearPoint, openSocket, pick, raceHarness, setupRace, sleep, viewAgain, walkTo } from './test/harness.ts';
+import { answer, joinTeam, lock, nearLouvreLeg, nearPoint, openSocket, pick, raceHarness, review, setupRace, sleep, viewAgain, walkTo } from './test/harness.ts';
 
 const server = raceHarness();
 beforeAll(async () => {
@@ -188,6 +188,16 @@ describe.concurrent('Phase 8B louvre room (workerd)', () => {
     for (const s of [a!, host]) s.close();
   }, 90_000);
 
+  it('Host "Cho qua" (hostView louvre exit = host.review approve, no id): a stuck team gets the next card; a penalty without id stays refused', async () => {
+    const race = 'p8b-exit';
+    const { host, teams, socks: [a] } = await newRace(race, 1);
+    const id = teams[0]!.id;
+    await toRoom(a!);
+    review(host, id, 'T3', 'penalize'); // no id: refused, nothing written
+    review(host, id, 'T3', 'approve'); // the exact message of the "Cho qua" button (client/src/host/hostView.ts reviewMessage)
+    expect((await card(a!, (c) => c.step !== 'T3')).step).toBe('L3');
+    expect(await rowOf(race, id, 'T3')).toMatchObject({ completed_at: expect.any(Number) });
+  });
   it('lobby / paused: pick / lock refused, 0 rows, view answers; 31 locks a minute → 4429', async () => {
     const race = 'p8b-ops';
     const { host, teams } = await setupRace(server, race, 1);

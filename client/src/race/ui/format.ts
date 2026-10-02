@@ -1,5 +1,6 @@
 // Phase 7 track C: pure helpers of the race HUD (no DOM, tested in Node). Everything here works only from what the server
 // sent (ClueCard / RaceView / ZoneMember): never answers, destination names or a later step.
+import { LOUVRE } from '@race/shared';
 import { type AnswerStatus, type CardStatus, type ClueCard, type LouvreView, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
 import { raceClient, raceHud as C } from '../../config.ts';
 import { looksLikeIme } from '../../core/Input.ts';
@@ -209,7 +210,7 @@ export function answerLines(card: ClueCard): AnswerLine[] {
 }
 
 /** The "of" of x/5: 5 once the first hint is out, else the room's own limit (LOUVRE.maxPicks, SPEC §17.19). */
-const louvreOf = (lv: LouvreView) => lv.maxPicks ?? lv.hintCount ?? 5;
+const louvreOf = (lv: LouvreView) => lv.maxPicks ?? lv.hintCount ?? LOUVRE.maxPicks;
 
 /** The louvre card's lines (Phase 8B, SPEC §17.19), from the card alone: where the team is, how many lights are on, the two
  *  hints. Another team's state never reaches the card, so "Đúng x/5" is only ever the team's own live count. `inRoom` is the

@@ -197,7 +197,7 @@ export class RaceEngine {
     if (m.op === 'accept') return this.step(team, { kind: 'accept', step: m.step }, now);
     if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text, pose: stand(at) }, now);
     if (m.op === 'branch') return this.step(team, { kind: 'branch', step: m.step, branch: m.branch }, now);
-    // Phase 8B: a pick from anywhere; a lock judged at the trusted pose inside the step's zone (TODO track A: advance + apply)
+    // Phase 8B: a pick from anywhere; a lock judged at the trusted pose inside the step's zone (steps.ts advance; engine.apply writes the lock)
     if (m.op === 'pick') return this.step(team, { kind: 'pick', step: m.step, art: m.art, on: m.on }, now);
     if (m.op === 'lock') return this.step(team, { kind: 'lock', step: m.step, pose: stand(at) }, now);
     if (!at) return this.io.send(team, { t: 'notice', code: 'boxFar' });

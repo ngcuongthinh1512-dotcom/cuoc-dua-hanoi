@@ -1,5 +1,6 @@
 // Minimal Host page, pure part (docs/plans/phase6.md §3.19): host.state → table rows / counter lines. No DOM, so it is
 // testable in Node. Phase 10 replaces the page with SPEC §13; keep the page thin.
+import { LOUVRE } from '@race/shared';
 import { latLonToWorld, worldToLatLon } from '@race/shared';
 import { MEDIA, NET, submitCode, type AnswerStatus, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type StepProgressView } from '@race/shared/protocol';
 
@@ -258,7 +259,7 @@ export function progressTable(state: HostState, now: number, mode: 'real' | 't')
         doneAt != null && `Xong: ${when(doneAt)}`,
         p?.branch && `Nhánh: ${branchTag(state, s.id, p.branch)}`,
         s.louvre && `Đang chọn (${p?.picks.length ?? 0}): ${p?.picks.join(', ') || '—'}`,
-        ...(p?.answers ?? []).map((a) => `${a.branch ? `[${a.branch}] ` : ''}${a.text ? `«${a.text}»` : '(đã gửi bài)'} · ${when(a.at)} · ${ANSWER_LABEL[a.status]}${a.correct !== undefined ? ` · đúng ${a.correct}/5` : ''}${a.note ? ` · ghi chú: ${a.note}` : ''}`),
+        ...(p?.answers ?? []).map((a) => `${a.branch ? `[${a.branch}] ` : ''}${a.text ? `«${a.text}»` : '(đã gửi bài)'} · ${when(a.at)} · ${ANSWER_LABEL[a.status]}${a.correct !== undefined ? ` · đúng ${a.correct}/${LOUVRE.answers}` : ''}${a.note ? ` · ghi chú: ${a.note}` : ''}`),
         p?.note && `Ghi chú Host: ${p.note}`,
         p?.approvalWaitSeconds && `Đã chờ duyệt: ${fmtMinSec(p.approvalWaitSeconds * 1000)}`,
       ].filter(Boolean).join('\n');
@@ -274,10 +275,10 @@ export function progressTable(state: HostState, now: number, mode: 'real' | 't')
         // Phase 8B: the Host never reviews (the server marks); the cell shows picks / misses / hint marks, and a way out for a stuck team.
         const base = p?.startedAt ?? p?.openedAt ?? null;
         const [m1, m2] = s.louvre.hints;
-        const hint = base === null ? '' : now >= base + m2 * 60_000 ? ` · 💡${fmtNum(m2)}${p?.hintCorrect != null ? ` (${p.hintCorrect}/5)` : ''}` : now >= base + m1 * 60_000 ? ` · 💡${fmtNum(m1)}` : '';
+        const hint = base === null ? '' : now >= base + m2 * 60_000 ? ` · 💡${fmtNum(m2)}${p?.hintCorrect != null ? ` (${p.hintCorrect}/${LOUVRE.answers})` : ''}` : now >= base + m1 * 60_000 ? ` · 💡${fmtNum(m1)}` : '';
         const locked = p?.lockedUntil != null && p.lockedUntil > now;
         const exit: CellButton[] = [{ op: 'approve', team: t.id, step: s.id, label: 'Cho qua', title: 'Lối thoát: đội kẹt trong phòng Louvre (lỗi, mất kết nối…) được qua bước, nhận mật thư kế', confirm: `Cho ${t.name} qua phòng Louvre mà không cần chọn đúng?` }];
-        const text = `chọn ${p?.picks.length ?? 0}/23${p?.rejections ? ` · ✗${p.rejections}` : ''}${hint}`;
+        const text = `chọn ${p?.picks.length ?? 0}/${LOUVRE.artworks}${p?.rejections ? ` · ✗${p.rejections}` : ''}${hint}`;
         return locked ? { state: 'locked', text: `⏳ ${fmtMinSec(p!.lockedUntil! - now)} · ${text}`, title, buttons: exit } : { state: 'active', text, title, buttons: exit };
       }
       if (p?.pending && last) {
@@ -422,7 +423,7 @@ export const legPenaltyLine = (leg: Leg): string => `Phạt ${fmtNum(leg.penalti
 
 /** Phase 8B: one line per louvre step of the leg for the leg box (no artwork data reaches the Host page bundle). */
 export const louvreLines = (leg: Leg): string[] =>
-  leg.steps.flatMap((s) => (s.louvre ? [`${s.label}: phòng Louvre, 23 tác phẩm (ảnh / mô hình có sẵn trong game, không cần tải lên), gợi ý phút ${fmtNum(s.louvre.hints[0])} / ${fmtNum(s.louvre.hints[1])}.`] : []));
+  leg.steps.flatMap((s) => (s.louvre ? [`${s.label}: phòng Louvre, ${LOUVRE.artworks} tác phẩm (ảnh / mô hình có sẵn trong game, không cần tải lên), gợi ý phút ${fmtNum(s.louvre.hints[0])} / ${fmtNum(s.louvre.hints[1])}.`] : []));
 
 export interface XZ { x: number; z: number }
 /** SPEC §6.2 / D11: corridor points = start → every step's zone in order (both places of a detour); checkpoints = every zone
@@ -451,7 +452,7 @@ export function demoState(now = 1_000_000): HostState {
   const t0 = now - 50 * min;
   const row = (team: string, step: string, o: number | null, a: number | null, c: number | null, branch: string | null = null, more: Partial<StepProgressView> = {}): StepProgressView => ({
     team, step, openedAt: o, arrivedAt: a, startedAt: c, completedAt: c, branch,
-    submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches: 0, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers: [], note: '', picks: [], hintCorrect: null, // Phase 8B: TODO(phase8b track D) a louvre cell
+    submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches: 0, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers: [], note: '', picks: [], hintCorrect: null, // Phase 8B: the louvre cell's fields (demoState sets them on its T3 rows)
     ...more,
   });
   const ans = (id: number, text: string, at: number, status: StepProgressView['answers'][number]['status'], branch: string | null = null, note?: string) => ({ id, text, at, status, branch, ...(note ? { note } : {}) });
