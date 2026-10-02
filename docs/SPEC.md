@@ -989,3 +989,10 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - Xếp hạng theo thời gian chính thức (giờ xuất phát riêng của từng đội, §17.12); hòa → check-in sớm hơn → thứ tự xuất phát. Đội chưa về đích xếp theo bước xa nhất.
 - Server chỉ dùng vị trí đã qua kiểm tra tốc độ (`TrustedPoint`) cho geofence, mở hộp, vùng, nhận xe; dịch chuyển tức thời bị từ chối và đánh dấu cho Host.
 - Nhiệm vụ ở Phase 7 cho qua bằng nút "Hoàn thành (tạm)" (Phase 8 thay bằng chấm thật).
+
+### 17.14 Chặng thật: luật thử thách do người dùng nêu (2026-10-02; áp dụng ở Phase 8)
+- Thử thách 1 và 2 và Lựa chọn kép (Lửa / Nước) của chặng này đều **do Host duyệt thủ công** (§8.9): đội trả lời hoặc gửi ảnh chụp màn hình ở NGOÀI game (tin nhắn Facebook cho Host). Đúng → Host bấm nút **hoàn thành thử thách** trên màn hình quản lý. Sai → Host bấm nút **phạt**; trên màn hình đội hiện **đồng hồ đếm ngược 3 phút** trước khi được trả lời lại.
+- Thử thách có **gợi ý theo giờ**: sau mỗi 45 phút chưa hoàn thành, đội nhận thêm gợi ý (nội dung gợi ý do người dùng nhập).
+- Thử thách 1 → Thử thách 2: **mật thư của Thử thách 2 xuất hiện ngay** khi Host duyệt xong Thử thách 1 (không cần đi tới đâu).
+- Thử thách 2: sau khi trả lời đúng địa điểm trong hình, đội **di chuyển tới chính địa điểm đã trả lời** để nhận mật thư tiếp theo (hộp mật thư kế tiếp đặt tại địa điểm đáp án; vị trí lấy từ file chặng).
+- Mật thư có thể kèm liên kết (ví dụ video, hình) hiện trên thẻ mật thư và trong Sổ mật thư.
