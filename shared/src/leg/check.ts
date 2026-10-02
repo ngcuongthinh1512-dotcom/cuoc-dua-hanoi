@@ -223,13 +223,17 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   }
 
   // SPEC §3 / §8.3: an answer written into a text the team reads before solving it gives it away. Phase 8 (gap 9): only
-  // the texts it can read by then — every step up to this one; of this detour both branch names / summaries but only its
-  // own branch's task (the other branch's is in that branch's box).
-  const textsOf = (i: number, own?: number): [string, PropertyKey[]][] => {
+  // the texts it can read by then: every step up to this one (card label, clue, teaser, task text, proof instruction, the
+  // Messenger button label, link labels, the place name). Of a detour: BOTH branches' texts, the other branch's task
+  // included: it sits in the other branch's box, but §17.16 lets a team open that box, read it and switch branch ("Đổi
+  // lựa chọn kép") before answering (verify-foundation S2).
+  const textsOf = (i: number): [string, PropertyKey[]][] => {
     const s = steps[i]!;
-    const out: [string, PropertyKey[]][] = [];
+    const out: [string, PropertyKey[]][] = [[s.label, ['steps', i, 'label']]];
     const task = (t: Task, p: PropertyKey[]) => {
       out.push([t.title, [...p, 'title']], [t.description, [...p, 'description']], [t.location?.name ?? '', [...p, 'location', 'name']]); // the place name is on the card ("Địa điểm: …")
+      out.push([t.proofInstruction, [...p, 'proofInstruction']]); // on a photo task's card
+      if (t.kind === 'free') out.push([leg.hostApproval.contactLabel, ['hostApproval', 'contactLabel']]); // that card's Messenger button
       t.media.forEach((m, k) => out.push([m.label, [...p, 'media', k, 'label']]));
     };
     if (s.type === 'route_info' || s.type === 'detour') {
@@ -240,18 +244,18 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
     if (s.type === 'detour')
       s.branches.forEach((b, k) => {
         out.push([b.name, ['steps', i, 'branches', k, 'name']], [b.summary, ['steps', i, 'branches', k, 'summary']]);
-        if (own === undefined || own === k) task(b.task, ['steps', i, 'branches', k, 'task']);
+        task(b.task, ['steps', i, 'branches', k, 'task']);
       });
     return out;
   };
   steps.forEach((s, i) => {
-    const tasks = s.type === 'detour' ? s.branches.map((b, k) => [b.task, k] as const) : s.type === 'challenge' ? [[s.task, undefined] as const] : [];
-    for (const [t, own] of tasks) {
-      const texts = [...steps.slice(0, i).flatMap((_, j) => textsOf(j)), ...textsOf(i, own)];
+    const tasks = s.type === 'detour' ? s.branches.map((b) => [b.task, b.id] as const) : s.type === 'challenge' ? [[s.task, null] as const] : [];
+    if (!tasks.length) return;
+    const texts = [...new Map(steps.slice(0, i + 1).flatMap((_, j) => textsOf(j)).map((x) => [x[1].join('/'), x] as const)).values()]; // the shared button label once
+    for (const [t, branch] of tasks)
       for (const [list, what] of [[t.answers, 'đáp án'], [t.referenceAnswers, 'đáp án tham khảo']] as const)
         for (const a of list.filter((x) => !held(x)).map(normalizeAnswer).filter((a) => a.length >= 3))
-          for (const [x, p] of texts) if (normalizeAnswer(x).includes(a)) add('warning', p, `chứa ${what} "${a}" của bước ${i + 1} (${s.id}): đội đọc được trước khi giải`);
-    }
+          for (const [x, p] of texts) if (normalizeAnswer(x).includes(a)) add('warning', p, `chứa ${what} "${a}" của bước ${i + 1} (${s.id}${branch ? `, nhánh ${branch}` : ''}): đội đọc được trước khi giải`);
   });
 
   // map data (CLI only): every point a team must reach (step zones, each detour branch's own place) is outside buildings

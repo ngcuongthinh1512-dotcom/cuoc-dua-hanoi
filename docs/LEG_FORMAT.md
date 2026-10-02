@@ -63,7 +63,7 @@ Quy tắc viết JSON: chữ nằm trong dấu ngoặc kép `"..."`; số không
 | `vehicles` | không | xem dưới | Xe đạp dùng chung trên đường |
 | `hostAlerts` | không | `{stuckMinutes 45}` | Trang Host **cảnh báo** (âm báo + dòng đỏ) khi một đội làm cùng một thử thách / nhánh quá `stuckMinutes` phút, lặp lại mỗi `stuckMinutes` phút tới khi xong. Không có gì hiện trong game: gợi ý cho đội thì Host gửi riêng qua Messenger |
 | `clueBook` | không | `{showLockedSlots false}` | `true` = Sổ mật thư hiện cả ô khóa của bước chưa tới (không khuyến khích: lộ số bước; chưa có tác dụng) |
-| `hostApproval` | không | `{contactLabel "Gửi bài qua Facebook cho Host", contactUrl "", approvalWaitCounts false}` | Cho nhiệm vụ Host duyệt: chữ trên nút, **link nhận bài** (bắt buộc điền nếu có nhiệm vụ **nộp ảnh** `kind: "free"` + `host_approval`, vd. `"https://m.me/ten-trang"`: nút "Mở Facebook / Messenger gửi bài" trên thẻ; nhiệm vụ **gõ đáp án trong game** không cần), `approvalWaitCounts`: `false` (mặc định) = thời gian chờ Host duyệt **được trừ** khỏi thời gian chính thức; `true` = không trừ |
+| `hostApproval` | không | `{contactLabel "Gửi bài qua Facebook cho Host", contactUrl "", approvalWaitCounts false}` | Cho nhiệm vụ Host duyệt: `contactLabel` = chữ trên nút gửi bài của thẻ; `contactUrl` = **link nhận bài** (bắt buộc điền nếu có nhiệm vụ **nộp ảnh** `kind: "free"` + `host_approval`, vd. `"https://m.me/ten-trang"`: nút gửi bài trên thẻ mở link này ở tab mới; nhiệm vụ **gõ đáp án trong game** không cần); `approvalWaitCounts`: `false` (mặc định) = thời gian chờ Host duyệt **được trừ** khỏi thời gian chính thức (đồng hồ đếm ngược sau khi bị Phạt hay đổi nhánh thì **không** được trừ); `true` = không trừ |
 | `specials` | không | `expressPass` bật, còn lại tắt | Yếu tố đặc biệt (phase 9, chưa có tác dụng): `uTurn`, `yield`, `fastForward`, `speedBump`, `expressPass`, mỗi cái `{ "enabled": true/false }` |
 
 `vehicles` (mặc định = chặng demo, hiếm khi cần sửa): `corridorMeters 150` (xe chỉ đặt cách đường đi dự kiến ≤ ngần này), `minDistanceFromCheckpoint 100` (xe không đặt gần điểm nhận mật thư), `initialPerSegment [0, 1]`, `spawnIntervalMinutes 3`, `spawnChance 0.3`, `maxAvailablePerSegment 1`, `decoyRatio 0.4`, `noSpawnNearPlayerMeters 120`, `abandonMeters 200`, `abandonSeconds 60` (xe bị bỏ lại > 200 m trong 60 s thì thu hồi), `bikeParking { offsetMeters 20, maxBikes 6 }` (bãi xe cạnh điểm: mục 7).
@@ -100,7 +100,9 @@ Mỗi bước có `id` (tên ngắn, chữ + số, gạch ngang / dưới, ≤ 1
 
 ### 5.2 `challenge`: Thử thách
 
-Đội làm một nhiệm vụ. Hộp mật thư kế tiếp đứng **ngay tại điểm vừa tới**, hoặc tại một nơi khác nếu `task.location` có giá trị. Câu trả lời thì đội **gõ được ở bất kỳ đâu** sau khi thử thách bắt đầu (ô gõ trên thẻ thử thách); Host duyệt / phạt trên trang Host khi `verification` là `host_approval` (mục 7.1).
+Đội làm một nhiệm vụ. Câu trả lời đội **gõ được ở bất kỳ đâu** sau khi thử thách bắt đầu (ô gõ trên thẻ thử thách, không cần đứng ở điểm, không cần xuống xe); mọi câu trả lời được lưu và hiện lại trên thẻ cho chính đội (mở lại bằng `Enter`; không có trong Sổ mật thư). Host duyệt / phạt trên trang Host khi `verification` là `host_approval` (mục 7.1, 7.4). Duyệt xong thì đội nhận **ngay** mật thư của bước kế (ví dụ Thử thách 2 hiện ngay khi Thử thách 1 được duyệt), không phải đi tới đâu.
+
+`task.location` (nếu có) là nơi thẻ ghi "Địa điểm: …": nơi đội được hướng dẫn tới làm nhiệm vụ. Đội tới vùng đó thì Host thấy "đã tới" và xe của đội vào bãi của nơi đó; không có `location` = làm tại điểm vừa tới. Thử thách **không có hòm riêng** (hòm mật thư đứng ở các bước `route_info` và nhánh Lựa chọn kép), nên `yawDeg` của `task.location` ở thử thách không có tác dụng.
 
 | Trường | Bắt buộc? | Mặc định | Ý nghĩa |
 |---|---|---|---|
@@ -109,7 +111,7 @@ Mỗi bước có `id` (tên ngắn, chữ + số, gạch ngang / dưới, ≤ 1
 
 ### 5.3 `detour`: Lựa chọn kép
 
-Đội chọn **một trong hai nhánh** (`branches`, đúng 2 phần tử) bằng **hai nút trên thẻ** (bấm ở đâu cũng được). Mỗi nhánh có **hòm riêng** đứng tại `task.location` của nhánh; chỉ hòm của nhánh đã chọn hiện (theo luật 150 m như hộp mật thư). **Đề bài của nhánh nằm trong hòm**: đội chỉ đọc được `task` (tiêu đề, mô tả, hình) sau khi tới mở hòm; trước đó chỉ thấy `name` + `summary` của hai nhánh. Nút **"Đổi lựa chọn kép"** (bấm ở đâu cũng được, trừ lúc đang chờ Host duyệt): hòm nhánh đang chọn biến mất, tiến độ nhánh cũ mất, đội chờ `penalties.branchSwitchLockMinutes` phút (đếm ngược trên màn hình) rồi hòm nhánh kia mới hiện.
+Đội chọn **một trong hai nhánh** (`branches`, đúng 2 phần tử) bằng **hai nút trên thẻ** (bấm ở đâu cũng được). Mỗi nhánh có **hòm riêng** đứng tại `task.location` của nhánh; chỉ hòm của nhánh đã chọn hiện (theo luật 150 m như hộp mật thư). **Đề bài của nhánh nằm trong hòm**: đội chỉ đọc được `task` (tiêu đề, mô tả, hình) sau khi tới mở hòm; trước đó chỉ thấy `name` + `summary` của hai nhánh. Nút **"Đổi lựa chọn kép"** (bấm ở đâu cũng được; **chỉ** lúc đang chờ Host duyệt thì không đổi được; có **hộp xác nhận** ghi rõ số phút phạt): hòm nhánh đang chọn biến mất, tiến độ nhánh cũ mất, đội chờ `penalties.branchSwitchLockMinutes` phút (đồng hồ **đếm ngược** giữa màn hình; đồng hồ đua vẫn chạy) rồi hòm nhánh kia mới hiện (khi đội tới gần). Mỗi lần đổi chịu một lần phạt (A → B → A là hai lần); đang bị khóa phạt của thử thách (`retryLockMinutes`) vẫn đổi được, đếm ngược đổi nhánh thay cho đếm ngược cũ.
 
 **Nên cho mỗi nhánh một `task.location` riêng**: nhánh không có nơi riêng thì hòm nhánh đứng đúng chỗ hộp mật thư trước (chồng lên nhau), `leg:check` CẢNH BÁO (nhánh còn trống nội dung thì chưa báo). Chỉ nơi của nhánh **đã chọn** mới là "điểm của đội" (tới vùng mới tính "đã tới", xe vào bãi, "Tại điểm này"); đi ngang nơi của nhánh kia không có tác dụng gì.
 
@@ -133,7 +135,7 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
   - **Mật thư 1 dẫn tới một nơi khác:** đội vào game ở `start`, rồi tự đi (trong game) tới điểm đến của bước 1.
 - **Một** `pit_stop`, ở cuối; bước **ngay trước** nó phải là `route_info` (lộ trình dẫn tới thảm). Lộ trình cuối này hoàn thành ngay khi đội vào vùng Chặng dừng, nên điểm đến của nó nên **trùng** điểm Chặng dừng (lệch > 5 m thì cảnh báo).
 - Các bước khác (`challenge`, `detour`, `route_info`) xen kẽ tùy ý. `id` không trùng.
-- Hộp mật thư bước N+1 chỉ xuất hiện khi bước N đã xong ở điểm của nó; tọa độ hộp chỉ tới máy đội khi họ cách hộp ≤ `boxReveal.radius` (150 m).
+- Mật thư bước N+1 chỉ tới đội khi bước N đã xong: **lộ trình** xong khi đội mở hộp ở điểm đến (xuống xe, đứng trong vùng, bấm `F`); **thử thách** và **nhánh Lựa chọn kép** xong khi Host duyệt (hoặc máy chấm đúng, với `auto`), đội ở đâu cũng được; đội nhận mật thư kế ngay lúc đó. Tọa độ hộp chỉ tới máy đội khi họ cách hộp ≤ `boxReveal.radius` (150 m).
 - Giờ nghỉ khi Host tạm dừng cuộc đua **không** bị trừ khỏi đồng hồ đội.
 
 ## 7. Điểm đến, vùng và bãi xe (`destination`, `task.location`)
@@ -171,7 +173,7 @@ Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 
 | `title` | không (trống = CÒN TRỐNG) | `""` | Tiêu đề nhiệm vụ |
 | `description` | không (trống = CÒN TRỐNG) | `""` | Đề bài đội đọc. **Không chứa đáp án** |
 | `media` | không | `[]` | Hình / liên kết của đề bài (mục 7.2); chỉ tới máy đội khi đề bài đã mở (sau "Nhận thử thách"; nhánh: sau khi mở hòm nhánh) |
-| `location` | không | `null` | `null` = làm tại điểm vừa tới; hoặc một khối điểm như ở đầu mục 7 (tên, tọa độ, vùng, bãi xe) = đội phải tới đó làm |
+| `location` | không | `null` | `null` = làm tại điểm vừa tới; hoặc một khối điểm như ở đầu mục 7 (tên, tọa độ, vùng, bãi xe) = nơi thẻ ghi "Địa điểm: …" để đội tới làm (câu trả lời vẫn gõ được ở bất kỳ đâu). Của một **nhánh Lựa chọn kép** thì đó cũng là nơi đứng của hòm nhánh |
 | `kind` | không | `"answer"` | Kiểu nhiệm vụ, xem dưới |
 | `verification` | không | `"auto"` | `"host_approval"` = **Host duyệt tay** trên trang Host (cách của chặng thật): `kind: "answer"` → đội gõ đáp án trong game, Host thấy câu trả lời + đáp án tham khảo, bấm **Duyệt** (đội nhận mật thư kế ngay) hoặc **Phạt** (đội chờ `retryLockMinutes` phút rồi trả lời lại); `kind: "free"` → đội gửi ảnh qua Messenger kèm **mã bài nộp** `<tên đội>-<mã bước>[-<mã nhánh>]`, bấm "Tôi đã gửi bài", Host duyệt. `"auto"` (tùy chọn) = máy so với `answers`: đúng thì xong ngay, sai thì "Chưa đúng" (không khóa) |
 | `answers` | khi `auto` (trống = CÒN TRỐNG) | `[]` | Các đáp án chấp nhận (không phân biệt hoa thường, dấu, khoảng trắng thừa: `"Bảy"`, `"BAY"`, `"bảy "` coi như nhau). `["7", "bảy"]`. Với `host_approval`: Host thấy chúng làm đáp án tham khảo nếu `referenceAnswers` trống. **Không bao giờ** gửi cho đội |
@@ -179,7 +181,7 @@ Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 
 | `retryLockMinutes` | không | `null` | Số phút đội phải chờ sau khi Host bấm **Phạt** nhiệm vụ này; `null` = theo `penalties.retryLockMinutes` (3); `0` = không khóa |
 | `proofInstruction` | khi `kind: "free"` + `host_approval` | `""` | Hướng dẫn đội gửi bài (vd. "Chụp màn hình và gửi Messenger cho Host kèm mã bài nộp"). Nhiệm vụ gõ đáp án trong game (`kind: "answer"`) không cần |
 | `timeLimitMinutes` | không | `null` | Giới hạn thời gian làm (phút), số dương; `null` = không giới hạn. Hiện tại chỉ hiện chữ "giới hạn N phút" trên thẻ, chưa tính giờ |
-| `params` | không | (không có) | Tham số mini-game cho các kiểu khác (vị trí vật, ảnh đích, hướng...). Lưu nguyên, **chưa kiểm** và **không gửi** cho đội ở Phase 7 |
+| `params` | không | (không có) | Tham số mini-game cho các kiểu khác (vị trí vật, ảnh đích, hướng...). Lưu nguyên, **chưa kiểm** và **không bao giờ gửi** cho đội (các kiểu mini-game chưa có trong game) |
 
 **Kiểu nhiệm vụ (`kind`)**: `answer` (đội **gõ câu trả lời trong game**: ô gõ trên thẻ thử thách, gõ được ở bất kỳ đâu, mọi câu trả lời được lưu và hiện lại trên thẻ cho chính đội), `free` (đội **nộp ảnh** qua Messenger cho Host duyệt). Các kiểu mini-game `find_objects`, `delivery`, `observe_answer`, `cipher`, `photo_match`, `binocular_scan`, `timed_drive`, `memory_ui` **chưa có trong game** (hoãn): `leg:check` CẢNH BÁO và máy chủ xử lý như `answer`; hãy dùng liên kết ngoài (`media`) + `answer`. Tham số (nếu đã biết) để vào `params`: file vẫn hợp lệ, **không cần viết lại** sau này. `kind: "free"` với `verification: "auto"` bị cảnh báo (không có đáp án để chấm): dùng `host_approval`.
 
@@ -187,7 +189,7 @@ Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 
 
 `media` là danh sách, mỗi mục là **một chuỗi** hoặc `{ "url": "...", "label": "..." }` (`label` = chữ hiện trên link, trống thì hiện tên trang web). Có ở `route_info`, `detour` và mọi `task`.
 
-- **Liên kết** `"https://…"` (video YouTube, trang web, mini-game ngoài…): đội bấm được trên thẻ và trong Sổ mật thư, mở **tab mới** (không nhúng vào game). Chuỗi không bắt đầu bằng `http://` / `https://` (và không phải `r2:`): LỖI.
+- **Liên kết** `"https://…"` (video YouTube, trang web, mini-game ngoài…): đội bấm được trên thẻ và trong Sổ mật thư, mở **tab mới** (không nhúng vào game). Chuỗi không bắt đầu bằng `http://` / `https://` (và không phải `r2:`): LỖI. Link trỏ thẳng tới một file hình (`….jpg`, `….png`…) vẫn chỉ là link: `leg:check` CẢNH BÁO vì hình **không** hiện trên thẻ; muốn hiện hình thì dùng `r2:` (dưới).
 - **Hình** `"r2:<tên hình>"`, vd. `"r2:lua-hinh-1.jpg"`: hình hiện ngay trên thẻ (bấm để xem lớn). Tên chỉ gồm chữ **không dấu**, số, `.` `_` `-`, tối đa 64 ký tự, đuôi `.jpg` / `.jpeg` / `.png` / `.webp` (sai: LỖI). Một tên dùng hai lần trong chặng: CẢNH BÁO (nhầm hình?).
 - **Tải hình lên:** sau khi nạp chặng, trang Host có mục **"Hình mật thư (R2)"** liệt kê mọi tên `r2:` của chặng: chọn file cho từng tên (jpg / png / webp, **tối đa 5 MB**: nén trước nếu lớn hơn). Hình được lưu **theo mã cuộc đua**: diễn tập ở một mã cuộc đua khác thì tải lên lại. `leg:check` in danh sách hình cần tải.
 - Hình nằm trong kho riêng tư: máy chủ chỉ trả hình cho **đội đã mở** mật thư / nhiệm vụ chứa nó (đội khác hay đội chưa tới bước đó không tải được, kể cả khi biết tên).
@@ -195,6 +197,17 @@ Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 
 ### 7.3 Ô giữ chỗ `[CHƯA NHẬP …]`
 
 Khi soạn nháp, viết `"[CHƯA NHẬP tên điểm]"`, `"[CHƯA NHẬP đáp án]"`… cho chỗ chưa có nội dung: mọi chữ bắt đầu bằng `[CHƯA NHẬP` (hoa thường như nhau) được `leg:check` và trang Host liệt kê là **CÒN TRỐNG** ("còn giữ chỗ"), nên không bị mở cuộc đua nhầm. Nhãn bước (`label`) trùng nhau: CẢNH BÁO (đội và Host khó phân biệt; không bắt buộc đánh số theo quy tắc nào).
+
+### 7.4 Host duyệt và cảnh báo kẹt trên trang Host
+
+Chặng thật dùng `"verification": "host_approval"`: game không tự chấm, bài của đội tới trang Host.
+
+- **Hàng chờ duyệt** (đầu trang Host, "Chờ duyệt (n)"): mỗi bài chờ hiện tên đội, bước (và nhánh), **mã bài nộp**, câu trả lời (hoặc "đã gửi bài qua Messenger" với nhiệm vụ ảnh), thời gian chờ, **đáp án tham khảo** (`referenceAnswers`; trống thì `answers`; chỉ Host thấy) và ô ghi chú. Nút **Duyệt**, **Phạt n phút** (n = `task.retryLockMinutes` của nhiệm vụ, hoặc `penalties.retryLockMinutes`) và **Lưu ghi chú**. Bài mới tới có âm báo, và thông báo của trình duyệt nếu bạn bấm "Bật thông báo".
+- **Duyệt** → đội nhận ngay mật thư kế (có âm báo). **Phạt** → đội thấy đồng hồ đếm ngược `retryLockMinutes` rồi gửi lại được; không cộng phút phạt ở thảm và không trừ giờ. Lỡ bấm Phạt nhầm thì bấm Duyệt cho đúng câu đó vẫn được (không có nút Hoàn tác). Host duyệt được cả khi cuộc đua đang tạm dừng.
+- **Ghi chú của Host không gửi cho đội.** Mọi câu trả lời của đội, giờ gửi, quyết định và ghi chú đều được lưu (hiện khi rê chuột vào ô của ma trận tiến độ).
+- Nhiệm vụ ảnh (`kind: "free"`): Host nhận ảnh qua Messenger rồi có thể bấm **"Duyệt (đã nhận ảnh)"** ở ô của bước / nhánh trong ma trận tiến độ, không cần chờ đội bấm "Tôi đã gửi bài".
+- **Cảnh báo kẹt:** đội làm cùng một thử thách / nhánh quá `hostAlerts.stuckMinutes` (mặc định 45) phút thì trang Host hiện dòng đỏ + âm báo "Đội X làm Thử thách Y đã n phút", lặp lại mỗi chu kỳ tới khi đội xong (đội đang chờ Host duyệt không bị coi là kẹt: bài đã nằm trong hàng chờ). Để Host gửi **gợi ý riêng cho đội qua Messenger**. Tính ngay trên trang Host nên trang phải đang mở; tải lại trang thì báo lại một lần. **Game không có gợi ý nào** và file chặng không chứa nội dung gợi ý.
+- **Hình mật thư (R2):** mục tải hình lên (mục 7.2).
 
 ## 8. Cách lấy tọa độ và xem điểm đã đặt đúng chỗ chưa
 
@@ -206,21 +219,26 @@ Khi soạn nháp, viết `"[CHƯA NHẬP tên điểm]"`, `"[CHƯA NHẬP đáp 
 **Xem điểm đã đặt (vì chưa có trình soạn bản đồ, làm ở Phase 10):** sau mỗi lần `npm run leg:check`, bảng cuối in **từng điểm** (xuất phát, mỗi bước, nơi riêng của từng nhánh, kèm đường đi bộ ước tính từ điểm trước). Ví dụ thật của `mini`:
 
 ```
-• Bước 2 (T1, challenge): Vườn Trocadéro (phía dưới) — vùng 30 m — đi bộ ≈ 340 m từ điểm trước
-    Avenue Albert 1er de Monaco, Quận 16 — 48.86050, 2.29030
-    Bãi xe: 48.86010, 2.28990 (cách tâm 53 m)
-    Bản đồ: https://www.openstreetmap.org/?mlat=48.86050&mlon=2.29030#map=19/48.86050/2.29030
-    Vệ tinh: https://www.google.com/maps?q=48.86050,2.29030&t=k&z=19
-    Xem: npm run screenshot -- --path "/?cam=-2263.6,55.3,586.3,0,-60&boxes=T1,-2263.6,553.8&mat&npc=0" --name leg-T1
-    Trong game: http://localhost:5173/?start=-2273.3,546.9,-125&boxes=T1,-2263.6,553.8
+• Bước 4 (D1/A, detour): Phía bắc chân tháp, lối ra sông — hòm nhánh A — vùng 15 m — đi bộ ≈ 57 m từ điểm trước
+    không có tên đường gần đó, Quận 7 — 48.85878, 2.29469
+    Hướng hòm: mặt trước quay về la bàn 225° (tây nam), đội đứng phía đó mới đọc được — "yawDeg": 135; muốn quay về la bàn B° thì ghi "yawDeg": -B
+    Bãi xe: 48.85899, 2.29478 (cách tâm 24 m)
+    Bản đồ: https://www.openstreetmap.org/?mlat=48.85878&mlon=2.29469#map=19/48.85878/2.29469
+    Vệ tinh: https://www.google.com/maps?q=48.85878,2.29469&t=k&z=19
+    Xem: npm run screenshot -- --path "/?cam=-1941.6,64.4,777.6,0,-60&boxes=D1-A,-1941.6,745.1&mat&npc=0" --name leg-D1-A
+    Trong game: http://localhost:5173/?start=-1940.9,757,3&boxes=D1-A,-1941.6,745.1,,135
 ```
 
 - **Tên đường + quận** cho biết ngay nếu gõ nhầm số (nhầm 2 chữ số vẫn nằm trong bản đồ nhưng sai tên đường / quận).
+- **`hòm nhánh A`:** điểm là nơi riêng của nhánh A (hòm của nhánh đứng ở đây). Mỗi nhánh có `task.location` riêng đều có một dòng như vậy; nhánh không có nơi riêng thì không có dòng (và có CẢNH BÁO, mục 5.3).
+- **`Hướng hòm:`** phía mặt trước của hòm (nơi đội đứng đọc) theo la bàn, kèm giá trị `yawDeg` đang dùng (không ghi `yawDeg` = 0 = mặt trước quay về bắc). Chỉ có ở điểm có hòm: lộ trình, nơi của nhánh Lựa chọn kép (thử thách và Chặng dừng không có). Muốn quay mặt trước về la bàn B° thì ghi `"yawDeg": -B`. Link `Trong game:` đã mang sẵn hướng này (trường thứ 5 của `boxes=`).
 - **`Bãi xe:`** tọa độ bãi bạn đã đặt và khoảng cách tới tâm (điểm chưa có bãi: dòng "Gợi ý bãi xe" hoặc "Chưa có bãi xe").
+- **"Hình cần tải lên trang Host":** danh sách các tên `r2:` của chặng (dùng ở đâu) phải tải lên sau khi nạp chặng (mục 7.2). Không có `r2:` thì không in.
+- **"Gợi ý: nhiệm vụ Host duyệt … chưa có `referenceAnswers`":** một dòng nhắc (không phải cảnh báo): thêm đáp án tham khảo cho Host nếu có.
 - **Link `Bản đồ:`** mở OpenStreetMap (bản đồ vẽ) có ghim đúng điểm.
 - **Link `Vệ tinh:`** mở Google Maps **ảnh vệ tinh** có ghim đúng điểm: thấy ngay điểm nằm trên mái nhà, trong sân, trên vỉa hè hay giữa đường.
 - **Dòng `Xem:`** là lệnh sẵn: copy, dán vào Terminal, chạy (≈ 1 phút) → ảnh `screenshots/leg-<mã bước>.png` chụp **thế giới 3D của game** xiên từ trên cao, nhìn về hướng bắc, khung ≈ 160 × 105 m, **điểm nằm giữa ảnh**, đánh dấu bằng một tấm thảm đỏ viền vàng (3 × 7 m) đặt đúng tâm. Ảnh **chưa vẽ vòng bán kính**; điểm dưới mái / dưới cầu cạn thì thảm bị che (vẫn ở giữa ảnh).
-- **Link `Trong game:`** để **đứng thử tại điểm**: mở một Terminal khác, chạy `npm run dev` (giữ chạy), rồi mở link trong Chrome. Bạn xuất hiện cách tâm 12 m trên đường đi bộ từ điểm trước, nhìn thẳng về hộp mật thư cắm cờ ở tâm (Chặng dừng: thảm đỏ; điểm trùng điểm trước: 12 m về phía nam, nhìn về bắc). Điểm xuất phát: đúng chỗ và hướng nhìn của đội đầu tiên vào game. Đây là thế giới thử, không cần cuộc đua, không cần mật khẩu: đi lại bằng `W` `A` `S` `D` để xem đáp án có nhìn thấy được không. Tắt bằng `Ctrl`+`C` trong Terminal đang chạy `npm run dev`.
+- **Link `Trong game:`** để **đứng thử tại điểm**: mở một Terminal khác, chạy `npm run dev` (giữ chạy), rồi mở link trong Chrome. Bạn xuất hiện cách tâm 12 m trên đường đi bộ từ điểm trước, nhìn thẳng về hòm mật thư ở tâm (quay mặt trước đúng `yawDeg` của điểm; Chặng dừng: thảm đỏ; điểm trùng điểm trước: 12 m về phía nam, nhìn về bắc). Điểm xuất phát: đúng chỗ và hướng nhìn của đội đầu tiên vào game. Đây là thế giới thử, không cần cuộc đua, không cần mật khẩu: đi lại bằng `W` `A` `S` `D` để xem đáp án có nhìn thấy được không. Tắt bằng `Ctrl`+`C` trong Terminal đang chạy `npm run dev`.
 - "đi bộ ≈ N m": quãng đường đi bộ thật theo đồ thị đường. Quá dài so với dự kiến = điểm sai chỗ. "KHÔNG đi bộ tới được" = LỖI.
 
 ## 9. Đáp án nằm đâu, và không bao giờ tới máy người chơi
@@ -232,7 +250,8 @@ Khi soạn nháp, viết `"[CHƯA NHẬP tên điểm]"`, `"[CHƯA NHẬP đáp 
   - chỗ khác trong thư mục dự án: CẢNH BÁO (dễ bị đưa lên git cùng mã nguồn);
   - trong `worker/legs/`: không báo (thư mục của các chặng demo / test có sẵn, nằm trong git). Đừng để chặng thật ở đây: file mới bỏ vào đây **không** tự thành "chặng có sẵn" trên trang Host, và sẽ bị đưa lên git cùng mã nguồn.
 - `leg:check` cũng quét `client/public`, `client/dist` và báo LỖI nếu có mật thư / mô tả / đáp án / đáp án tham khảo (từ 12 ký tự) lọt vào, hoặc từ 2 chuỗi bí mật nằm chung một file (bản chép của chặng). Một đáp án đơn lẻ trùng tên đường / địa danh có sẵn trong bản đồ chỉ bị CẢNH BÁO (bình thường, bỏ qua).
-- Đáp án và **đáp án tham khảo** (`referenceAnswers`, chỉ Host thấy) **không được xuất hiện** trong chữ đội đọc **trước khi giải** (mật thư, tiêu đề, mô tả, gợi ý, nhãn hình / liên kết, và tên `task.location` vì đội thấy nó): `leg:check` cảnh báo nếu thấy (từ 3 ký tự) trong chữ của **bước đó và các bước trước** (chữ của bước sau, đọc sau khi đã giải, được phép nhắc lại đáp án). Với Lựa chọn kép: tên + mô tả ngắn của cả hai nhánh tính là đọc được; đề bài nhánh kia (nằm trong hòm nhánh kia) thì không.
+- Đáp án và **đáp án tham khảo** (`referenceAnswers`, chỉ Host thấy) **không được xuất hiện** trong chữ đội đọc **trước khi giải**: tên bước (`label`), mật thư, câu gợi ý, tiêu đề, mô tả, hướng dẫn gửi bài (`proofInstruction`), chữ trên nút gửi bài (`hostApproval.contactLabel`), nhãn hình / liên kết, và tên `task.location` (đội thấy nó trên thẻ). `leg:check` cảnh báo nếu thấy (từ 3 ký tự) trong chữ của **bước đó và các bước trước** (chữ của bước sau, đọc sau khi đã giải, được phép nhắc lại đáp án).
+- **Lựa chọn kép: quét cả hai nhánh với nhau.** Đề bài của nhánh nằm trong hòm của nhánh đó, nhưng đội có thể mở hòm B, đọc đề B, bấm "Đổi lựa chọn kép" (phạt 10 phút) rồi làm nhánh A. Vì vậy đáp án (và đáp án tham khảo) của **mỗi** nhánh không được xuất hiện trong chữ của **cả hai** nhánh: tên, mô tả ngắn, đề bài, hình / liên kết, hướng dẫn gửi bài. Thông báo ghi rõ nhánh nào (`… của bước 4 (D1, nhánh A)`).
 - **Đáp án phải dựa trên thứ có trong game** (chữ trên biển tên đường, hình dáng công trình, số trên tượng...). Game dựng từ dữ liệu OpenStreetMap: không có biển hiệu cửa hàng, thực đơn, chữ trong nhà, hoặc vật mà bản đồ không có. Hãy **vào game đứng ở đó** (link `Trong game:` của mục 8) kiểm tra đáp án có thấy được không trước khi chốt.
 
 ## 10. Ví dụ đầy đủ
@@ -295,7 +314,7 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
         "title": "(GIẢ) Câu hỏi ở vườn Trocadéro",
         "description": "(GIẢ) 6 × 7 = ?",
         "media": [
-          "https://example.invalid/gia/vuon-trocadero.jpg",
+          "https://example.invalid/gia/vuon-trocadero",
           "r2:test-gia-2.jpg"
         ],
         "location": {
@@ -447,12 +466,13 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `bãi xe cách tâm N m, xa hơn 300 m (gõ nhầm tọa độ?)` | CẢNH BÁO | Bãi xe vẫn trong bản đồ nhưng quá xa điểm: thường là gõ nhầm một chữ số. Sửa lại cho bãi ở ngay ngoài vùng |
 | `đường đi bộ gần nhất cách tâm N m, xa hơn bán kính` | CẢNH BÁO | Đường đi bộ ở xa tâm: đội phải ra khỏi vùng để tới đường; dời tâm gần đường hơn hoặc tăng bán kính (mục 7) |
 | `cách thảm Chặng dừng N m ...` | CẢNH BÁO | Điểm đến của lộ trình cuối nên trùng điểm Chặng dừng |
-| `chứa đáp án "..." của bước N` | CẢNH BÁO | Đáp án bị lộ trong chữ đội đọc trước (kể cả tên nơi làm nhiệm vụ, `› nơi làm nhiệm vụ › tên`); sửa chữ |
+| `chứa đáp án "..." của bước N (D1, nhánh A)` | CẢNH BÁO | Đáp án bị lộ trong chữ đội đọc trước: mật thư, tên bước, mô tả, hướng dẫn gửi bài, chữ trên nút gửi bài, nhãn hình, tên nơi làm nhiệm vụ (`› nơi làm nhiệm vụ › tên`); với Lựa chọn kép: cả chữ của **nhánh kia** (đội có thể mở hòm nhánh kia rồi đổi nhánh); sửa chữ |
 | `nhiệm vụ "free" không tự chấm được` | CẢNH BÁO | Đổi sang `"verification": "host_approval"` |
 | `chứa đáp án tham khảo "..." của bước N` | CẢNH BÁO | Đáp án tham khảo (chỉ Host) lộ trong chữ đội đọc trước: sửa chữ |
 | `tên hình "..." không hợp lệ: ...` | LỖI | Đổi tên hình (và tên file khi tải lên): chữ không dấu, số, `.` `_` `-`, đuôi `.jpg` / `.png` / `.webp` (mục 7.2) |
 | `"..." không phải liên kết hợp lệ: phải bắt đầu bằng https://` | LỖI | Viết đủ `https://…`, hoặc `r2:<tên hình>` cho hình tải lên trang Host |
 | `hình "..." đã dùng ở ...` | CẢNH BÁO | Một hình dùng hai lần: kiểm tra có nhầm tên không |
+| `"https://….png" là liên kết tới một file hình: đội chỉ thấy link bấm mở tab mới, hình không hiện trên thẻ` | CẢNH BÁO | Chỉ `r2:<tên hình>` mới hiện thành hình trên thẻ. Muốn hiện hình: tải hình lên trang Host và ghi `r2:<tên hình>`; còn nếu chỉ muốn một đường link thì bỏ qua cảnh báo (mục 7.2) |
 | `nhánh không có nơi riêng: hòm nhánh đứng cùng chỗ hòm lộ trình trước` | CẢNH BÁO | Cho nhánh một `task.location` riêng (mục 5.3) |
 | `kiểu "..." chưa có trong game (hoãn)` | CẢNH BÁO | Kiểu mini-game chưa làm: máy chủ chấm như `answer`; dùng `answer` + liên kết ngoài |
 | `tên bước "..." trùng với bước N` | CẢNH BÁO | Đặt nhãn khác nhau cho các bước |
@@ -482,7 +502,7 @@ Mẹo khác: thiếu dấu phẩy **giữa** hai mục cũng báo lỗi ở dòn
 
 ## 13. Chơi thử tự động (`npm run sim`)
 
-Sau khi `leg:check` ra "Hợp lệ", cho **bot** chơi hết chặng để chắc mọi bước đi được, mọi hộp mở được, đội về đích và có xếp hạng. Không cần chạy máy chủ hay trang Host: lệnh tự dựng một máy chủ tạm trong máy (y như máy chủ thật), nạp chặng, tạo đội bot, nhập giờ xuất phát "bây giờ", mở cuộc đua, rồi mỗi bot đi bộ theo đường đi bộ tới từng điểm, mở hộp, làm nhiệm vụ bằng đáp án đầu tiên trong file và check-in ở thảm.
+Sau khi `leg:check` ra "Hợp lệ", cho **bot** chơi hết chặng để chắc mọi bước đi được, mọi hộp mở được, đội về đích và có xếp hạng. Không cần chạy máy chủ hay trang Host: lệnh tự dựng một máy chủ tạm trong máy (y như máy chủ thật), nạp chặng, tạo đội bot, nhập giờ xuất phát "bây giờ", mở cuộc đua, rồi mỗi bot đi bộ theo đường đi bộ tới từng điểm, mở hộp, làm nhiệm vụ (bấm "Nhận thử thách" nếu có câu gợi ý; **gõ** đáp án đầu tiên trong `answers`, không có thì trong `referenceAnswers`, không có nữa thì "(bot) trả lời"; nhiệm vụ ảnh thì gửi bài rỗng) và check-in ở thảm. Một **Host ảo** duyệt bài của các bot.
 
 ```
 npm run sim -- --leg ~/Documents/chang-that/paris-1.json --bots 2 --speedup 2
@@ -492,6 +512,8 @@ npm run sim -- --leg ~/Documents/chang-that/paris-1.json --bots 2 --speedup 2
 - `--bots`: số đội bot (2 là đủ). `--speedup 2`: nhanh gấp đôi (tối đa 2). Chặng 4 bước ≈ 2,3 km mất ≈ 7 phút ở `--speedup 2` (đo thật); lệnh tự dừng sau `--minutes` phút mô phỏng (mặc định 30) nếu bot chưa xong.
 - `npm run sim -- --help` in mọi tùy chọn.
 - Đọc kết quả: dòng `Chặng <mã> (N bước): 2 / 2 đội về đích · xếp hạng 2 dòng` là đạt. `← LỖI` ở cuối dòng hoặc mã thoát khác 0 = có đội không về đích / quá ngân sách ghi dữ liệu. "Thao tác bị từ chối (thử lại)" là các lần bot bấm F / gửi bài khi máy chủ chưa nhận vị trí mới nhất (thử lại là qua): chỉ đáng lo khi kèm "kẹt ở bước …". "Đội bị đánh dấu vượt tốc" khi tua nhanh là bình thường.
-- Nhánh Host duyệt và các nhiệm vụ không có đáp án được bot "Hoàn thành (tạm)" như nút tạm trong game (Phase 7).
+- **Host ảo:** mọi bài chờ duyệt (câu gõ lẫn bài ảnh) được duyệt tự động; riêng câu đầu tiên của bot thứ hai ở thử thách đầu tiên bị **Phạt** một lần (bot chờ hết đếm ngược rồi gửi lại). Với Lựa chọn kép, bot thứ i chọn nhánh số i chia 2 lấy dư (bot đầu nhánh đầu, bot hai nhánh sau, …); bot thứ hai còn **đổi nhánh một lần** ngay sau khi chọn (chờ hết đếm ngược, đi tới hòm nhánh kia, mở và làm). Vì vậy một lần chạy `--bots 2` thử đủ: gõ đáp án, Host duyệt, Host phạt, hai nhánh, đổi nhánh. Chặng thật thì **Host thật duyệt**, không có bot.
+- **Thời gian chờ:** để không phải chờ 3 và 10 phút thật, `sim` nạp chặng với hai đồng hồ đếm ngược rút xuống còn 6 và 12 giây (chỉ trong lần chạy thử; file của bạn không bị sửa). Chặng test đã có (`mini`, `paris-demo-filled`) vẫn khai báo phạt 3 và 10 phút như mặc định.
+- Báo cáo thêm số câu trả lời, số lần Duyệt / Phạt và số lần đổi nhánh.
 
 Chơi thử bằng tay (một mình đóng vai Host và đội): chạy `npm run dev:worker`, mở `http://localhost:8787/host.html` (mật khẩu Host là `HOST_PASSWORD` trong `worker/.dev.vars`, xem README), làm như mục 2 với một mã cuộc đua riêng, rồi mở link `/?race=<mã>` ở một cửa sổ khác và nhập mã đội.

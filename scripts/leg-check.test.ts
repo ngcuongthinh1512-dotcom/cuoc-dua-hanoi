@@ -69,7 +69,8 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const xz = `${+p.x.toFixed(1)},${+p.z.toFixed(1)}`;
     expect(report).toMatch(new RegExp(`Xem: npm run screenshot -- --path "/\\?cam=${p.x.toFixed(1)},[\\d.]+,${(p.z + 32.5).toFixed(1)},0,-60&boxes=L1,${xz}&mat&npc=0" --name leg-L1\n`));
     // in game: the clue box, the player 12 m back on the walking route from the start, facing it (verify3 m6: not inside the box)
-    const g = new RegExp(`Trong game: http://localhost:5173/\\?start=([-\\d.]+),([-\\d.]+),(-?\\d+)&boxes=L1,${xz}\n`).exec(report)!;
+    // (L1's box faces yawDeg 150: the 5th field of boxes=, docs/plans/phase8.md D17)
+    const g = new RegExp(`Trong game: http://localhost:5173/\\?start=([-\\d.]+),([-\\d.]+),(-?\\d+)&boxes=L1,${xz},,150\n`).exec(report)!;
     const [sx, sz, yaw] = [Number(g[1]), Number(g[2]), (Number(g[3]) * Math.PI) / 180];
     const d = Math.hypot(p.x - sx, p.z - sz);
     expect(d).toBeGreaterThan(8);
@@ -308,5 +309,145 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const r = checkFile(put('bad.json', '{ "id": "x", }'), { root: tmp, map, scanDirs: [] });
     expect(r.ok).toBe(false);
     expect(r.report).toContain('không phải JSON hợp lệ: lỗi cú pháp (dòng 1, cột'); // the same Vietnamese text as the Host / server
+  });
+});
+
+// Phase 8 track D (docs/plans/phase8.md D2 / D17): the new rules, seen the way an organiser sees them (the whole CLI run)
+describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
+  const lvl = (r: { issues: { level: string; where: string; message: string }[] }, level: string) => r.issues.filter((i) => i.level === level).map((i) => `${i.where}: ${i.message}`);
+  type Step = { id: string; [k: string]: any };
+  const step = (j: { steps: Step[] }, id: string) => j.steps.find((s) => s.id === id)!;
+  const branch = (j: { steps: Step[] }, id: string) => step(j, 'D1').branches.find((b: { id: string }) => b.id === id);
+
+  it('the bundled legs: mini (0 warning) / filled / near have no error; paris-demo only blanks (+ the known L6 warning)', () => {
+    for (const f of ['test/mini.json', 'test/paris-demo.filled.json', 'test/near.json']) expect(lvl(run(legs(f)), 'error')).toEqual([]);
+    expect(run(legs('test/mini.json')).issues).toEqual([]);
+    const demo = run(legs('paris-demo.json'));
+    expect(lvl(demo, 'error')).toEqual([]);
+    expect(lvl(demo, 'warning')).toHaveLength(1);
+    expect(lvl(demo, 'blank').length).toBeGreaterThan(10);
+  });
+
+  it('host_approval + a typed answer needs no proofInstruction (not a blank); a photo task (free) without one is a blank', () => {
+    const j = miniJson();
+    expect(step(j, 'T1').task).toMatchObject({ verification: 'host_approval' }); // kind not written = answer
+    expect(step(j, 'T1').task.proofInstruction).toBeUndefined();
+    expect(runT('p1.json', j).issues).toEqual([]);
+    delete branch(j, 'B').task.proofInstruction; // D1/B: free + host_approval
+    const r = runT('p2.json', j);
+    expect(lvl(r, 'blank')).toEqual(['Bước 4 (D1) › nhánh B › nhiệm vụ › hướng dẫn gửi bài: hướng dẫn gửi bài còn trống']);
+    expect(r.ok).toBe(true);
+  });
+
+  it('answer leaks are judged in step order: after the step is fine, before it (or in its own text) warns', () => {
+    const j = miniJson();
+    step(j, 'T1').task.answers = ['cầu Iéna']; // T1 = step 2
+    step(j, 'L3').clue += ' Hãy nhớ: cầu Iéna.'; // step 5: read after T1 is solved
+    expect(runT('o1.json', j).issues).toEqual([]);
+    step(j, 'L2').clue += ' Gần cầu Iéna.'; // step 3: also after
+    expect(runT('o2.json', j).issues).toEqual([]);
+    step(j, 'L1').clue += ' Nơi ấy có cầu Iéna.'; // step 1: before
+    expect(lvl(runT('o3.json', j), 'warning')).toEqual(['Bước 1 (L1) › mật thư: chứa đáp án "cau iena" của bước 2 (T1): đội đọc được trước khi giải']);
+  });
+
+  it('a reference answer (Host only) in a text the team reads is a warning; so is an answer in the other branch\'s task (switch branch, answer)', () => {
+    const j = miniJson();
+    step(j, 'T1').task.description += ' (đáp án gần như: bốn mươi hai)'; // reference answer of T1: "42 (bốn mươi hai) – GIẢ"
+    step(j, 'T1').task.referenceAnswers = ['bốn mươi hai'];
+    expect(lvl(runT('r1.json', j), 'warning')).toEqual(['Bước 2 (T1) › nhiệm vụ › mô tả: chứa đáp án tham khảo "bon muoi hai" của bước 2 (T1): đội đọc được trước khi giải']);
+    const k = miniJson();
+    branch(k, 'B').task.description += ' Nhánh kia ra: bảy.'; // A's answer sits in B's box: a team may open B's box, read it, switch to A and answer
+    expect(lvl(runT('r2.json', k), 'warning')).toEqual(['Bước 4 (D1) › nhánh B › nhiệm vụ › mô tả: chứa đáp án "bay" của bước 4 (D1, nhánh A): đội đọc được trước khi giải']);
+  });
+
+  it('proofInstruction, the step label and the Messenger button label are scanned (verify-foundation S2 / M1)', () => {
+    const j = miniJson();
+    branch(j, 'B').task.proofInstruction = '(GIẢ) Gửi ảnh, đáp án là bảy.'; // A's answer in B's card
+    j.hostApproval.contactLabel = 'Gửi bảy cho Host'; // B is a photo task: this is its button
+    step(j, 'T1').label = 'Thử thách bốn mươi hai';
+    step(j, 'T1').task.referenceAnswers = ['bốn mươi hai'];
+    expect(lvl(runT('m1.json', j), 'warning')).toEqual([
+      'Bước 2 (T1) › tên bước: chứa đáp án tham khảo "bon muoi hai" của bước 2 (T1): đội đọc được trước khi giải',
+      'Bước 4 (D1) › nhánh B › nhiệm vụ › hướng dẫn gửi bài: chứa đáp án "bay" của bước 4 (D1, nhánh A): đội đọc được trước khi giải',
+      'Host duyệt › chữ trên nút gửi bài: chứa đáp án "bay" của bước 4 (D1, nhánh A): đội đọc được trước khi giải',
+    ]);
+  });
+
+  it('"[CHƯA NHẬP …]" is a blank, a repeated step label a warning, a strange kind a warning', () => {
+    const j = miniJson();
+    step(j, 'L1').destination.name = '[CHƯA NHẬP tên điểm]';
+    step(j, 'T1').task.answers = ['[CHƯA NHẬP đáp án]'];
+    step(j, 'L3').label = 'Lộ trình 1';
+    step(j, 'T1').task.kind = 'cipher';
+    const r = runT('b3.json', j);
+    expect(lvl(r, 'blank')).toEqual([
+      'Bước 1 (L1) › điểm đến › tên: còn giữ chỗ "[CHƯA NHẬP tên điểm]": nhập nội dung thật',
+      'Bước 2 (T1) › nhiệm vụ › đáp án › mục 1: còn giữ chỗ "[CHƯA NHẬP đáp án]": nhập nội dung thật',
+    ]);
+    expect(lvl(r, 'warning')).toEqual([
+      expect.stringMatching(/^Bước 2 \(T1\) › nhiệm vụ › kiểu nhiệm vụ: kiểu "cipher" chưa có trong game/),
+      'Bước 5 (L3) › tên bước: tên bước "Lộ trình 1" trùng với bước 1: đội và Host khó phân biệt',
+    ]);
+  });
+
+  it('media: a wrong r2 name and a broken https link are errors; an https link to a picture file is a warning', () => {
+    const j = miniJson();
+    step(j, 'L1').media = ['r2:có dấu.jpg', 'https:/hong', { url: 'https://example.invalid/gia/anh.png', label: '(GIẢ) ảnh' }];
+    const r = runT('md.json', j);
+    expect(r.ok).toBe(false);
+    expect(errors(r)).toEqual([
+      expect.stringMatching(/^Bước 1 \(L1\) › hình \/ liên kết › mục 1 › liên kết: tên hình "có dấu.jpg" không hợp lệ/),
+      expect.stringMatching(/^Bước 1 \(L1\) › hình \/ liên kết › mục 2 › liên kết: "https:\/hong" không phải liên kết hợp lệ/),
+    ]);
+    expect(lvl(r, 'warning')).toEqual([expect.stringMatching(/^Bước 1 \(L1\) › hình \/ liên kết › mục 3 › liên kết: "https:\/\/example\.invalid\/gia\/anh\.png" là liên kết tới một file hình.*r2:<tên hình>/)]);
+  });
+
+  it('a detour branch without a place of its own is a warning (its box would stand on the previous one)', () => {
+    const j = miniJson();
+    delete branch(j, 'A').task.location;
+    expect(lvl(runT('np.json', j), 'warning')).toEqual([expect.stringMatching(/^Bước 4 \(D1\) › nhánh A › nhiệm vụ › nơi làm nhiệm vụ: nhánh không có nơi riêng: hòm nhánh đứng cùng chỗ hòm lộ trình trước/)]);
+  });
+
+  it('the table: branch boxes, the way each box faces, the images to upload, the reference-answer hint', () => {
+    const { report } = run(legs('test/mini.json'));
+    expect(report).toMatch(/• Bước 4 \(D1\/A, detour\): Phía bắc chân tháp, lối ra sông — hòm nhánh A — vùng 15 m/);
+    expect(report).toMatch(/• Bước 4 \(D1\/B, detour\): Bãi cỏ Champ de Mars — hòm nhánh B — vùng 30 m/);
+    expect(report).not.toMatch(/• Bước 2 \(T1, challenge\)[^\n]*hòm/); // no box at a challenge place
+    expect(report).toContain('Hướng hòm: mặt trước quay về la bàn 210° (tây nam), đội đứng phía đó mới đọc được — "yawDeg": 150'); // L1
+    expect(report).toContain('Hướng hòm: mặt trước quay về la bàn 225° (tây nam), đội đứng phía đó mới đọc được — "yawDeg": 135'); // D1/A
+    expect(report).toContain('Hướng hòm: mặt trước quay về la bàn 0° (bắc), đội đứng phía đó mới đọc được — "yawDeg": 0 (mặc định)'); // D1/B
+    expect(report).toMatch(/Trong game: [^\n]+&boxes=D1-A,[-\d.]+,[-\d.]+,,135\n/);
+    expect(report).toMatch(/Trong game: [^\n]+&boxes=D1-B,[-\d.]+,[-\d.]+\n/); // yawDeg 0: not written
+    expect(report).toContain('Hình cần tải lên trang Host (mục "Hình mật thư (R2)", sau khi nạp chặng; tải riêng cho từng cuộc đua; jpg / png / webp, tối đa 5 MB mỗi hình): 2 hình');
+    expect(report).toContain('  • test-gia.jpg — dùng ở Bước 1 (L1) › hình / liên kết › mục 2');
+    expect(report).toContain('  • test-gia-2.jpg — dùng ở Bước 2 (T1) › nhiệm vụ › hình / liên kết › mục 2');
+    expect(report).not.toContain('chưa có "referenceAnswers"'); // mini's typed-answer task has one
+    const j = miniJson();
+    step(j, 'T1').task.referenceAnswers = [];
+    const r = runT('hint.json', j);
+    expect(r.report).toContain('chưa có "referenceAnswers" ở Bước 2 (T1).');
+    expect(r.issues).toEqual([]); // a hint, not a warning
+    const k = miniJson();
+    step(k, 'L1').media = [];
+    step(k, 'T1').task.media = [];
+    expect(runT('nomedia.json', k).report).not.toContain('Hình cần tải');
+  });
+
+  it('static scan: reference answers copied into a shipped folder are found (a lone one = warning, two = error)', () => {
+    const parsed = parseLeg(miniJson());
+    if (!parsed.ok) throw new Error('mini invalid');
+    const secrets = secretStrings(parsed.leg);
+    const refs = ['42 (bốn mươi hai) – GIẢ', '(GIẢ) Ảnh thấy rõ chân tháp phía sau'];
+    for (const x of refs) expect(secrets).toContain(x);
+    const lone = mkdtempSync(join(tmpdir(), 'legref1-'));
+    writeFileSync(join(lone, 'x.json'), JSON.stringify({ a: refs[0] }));
+    const r1 = checkFile(legs('test/mini.json'), { root, map, scanDirs: [lone] });
+    expect(r1.ok).toBe(true);
+    expect(r1.issues.map((i) => i.level)).toEqual(['warning']);
+    const both = mkdtempSync(join(tmpdir(), 'legref2-'));
+    writeFileSync(join(both, 'x.json'), JSON.stringify(refs));
+    const r2 = checkFile(legs('test/mini.json'), { root, map, scanDirs: [both] });
+    expect(r2.ok).toBe(false);
+    expect(errors(r2)).toEqual([expect.stringContaining('chứa nguyên văn')]);
   });
 });
