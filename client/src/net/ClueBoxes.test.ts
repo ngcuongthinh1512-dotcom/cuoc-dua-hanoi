@@ -2,7 +2,7 @@ import type { BoxInfo } from '@race/shared/protocol';
 import { type BufferGeometry, type Mesh, type MeshStandardMaterial, type Object3D, Scene, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { clueBox } from '../config.ts';
-import { ClueBoxes, nextBoxes, parseBoxes } from './ClueBoxes.ts';
+import { boxRotation, ClueBoxes, nextBoxes, parseBoxes } from './ClueBoxes.ts';
 
 const box = (step: string, opened = false): BoxInfo => ({ step, x: 10, z: -20, opened, r: 20 });
 
@@ -20,9 +20,39 @@ describe('clue boxes (SPEC §17.10: drawn only from what the server sent)', () =
     expect(nextBoxes(list, { t: 'box', op: 'hide', step: 'L1' })).toEqual(list);
   });
 
-  it('DEV ?boxes=step,x,z[,opened];… stand-ins', () => {
+  it('DEV ?boxes=step[|branch],x,z[,opened][,yawDeg];… stand-ins', () => {
     expect(parseBoxes('L1,10,-20,opened;L2,5,6;bad;L3,,1')).toEqual([box('L1', true), { step: 'L2', x: 5, z: 6, opened: false, r: 20 }]);
     expect(parseBoxes(null)).toEqual([]);
+    expect(parseBoxes('L1,10,-20,,90;D1|A,10,-20,opened;D1|B,30,-20,,x')).toEqual([
+      { ...box('L1'), yaw: Math.PI / 2 },
+      { ...box('D1', true), branch: 'A' },
+      { ...box('D1'), x: 30, branch: 'B' }, // a bad yaw = none
+    ]);
+  });
+
+  // Phase 8 (D7, §17.16)
+  const br = (branch: string, opened = false): BoxInfo => ({ ...box('D1', opened), branch });
+  it('two branches of one step are two boxes; reveal replaces only its own step|branch', () => {
+    let list = nextBoxes([br('A', true)], { t: 'box', op: 'reveal', box: br('B') });
+    expect(list).toEqual([br('A', true), br('B')]);
+    list = nextBoxes(list, { t: 'box', op: 'reveal', box: { ...br('B'), x: 12 } });
+    expect(list).toEqual([br('A', true), { ...br('B'), x: 12 }]);
+  });
+
+  it('remove (branch switch) drops that branch box even opened; hide still never drops an opened box', () => {
+    const list = [box('L1', true), br('A', true), br('B')];
+    expect(nextBoxes(list, { t: 'box', op: 'remove', step: 'D1', branch: 'A' })).toEqual([box('L1', true), br('B')]);
+    expect(nextBoxes(list, { t: 'box', op: 'remove', step: 'D1', branch: 'C' })).toEqual(list);
+    expect(nextBoxes(list, { t: 'box', op: 'hide', step: 'D1' })).toEqual([box('L1', true), br('A', true)]);
+    expect(nextBoxes(list, { t: 'box', op: 'hide', step: 'L1' })).toEqual(list);
+  });
+
+  it('boxRotation: yaw 0 turns the front (+z of the model) north (−z), π/2 west (−x); no yaw = north', () => {
+    const front = (yaw?: number) => new Vector3(0, 0, 1).applyAxisAngle(new Vector3(0, 1, 0), boxRotation(yaw));
+    for (const [yaw, x, z] of [[0, 0, -1], [Math.PI / 2, -1, 0], [Math.PI, 0, 1], [undefined, 0, -1]] as const) {
+      const f = front(yaw);
+      expect([f.x, f.z].map((v) => +v.toFixed(6) + 0)).toEqual([x, z]);
+    }
   });
 });
 
@@ -49,10 +79,25 @@ describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', 
     cb.dispose();
   });
 
+  it('Phase 8: branch boxes of one step drawn side by side, turned to yaw; remove takes the opened one off the scene and out of the NPC zones', () => {
+    const scene = new Scene();
+    const cb = new ClueBoxes(scene, () => 0, () => 0);
+    const zones: string[][] = [];
+    cb.onChange = (l) => zones.push(l.map((b) => `${b.step}|${b.branch}`));
+    cb.reset([{ ...box('D1', true), branch: 'A', yaw: Math.PI / 2 }, { ...box('D1'), x: 30, branch: 'B' }]);
+    const [a, b] = scene.children;
+    expect([scene.children.length, a!.rotation.y, b!.rotation.y]).toEqual([2, Math.PI * 1.5, Math.PI]);
+    cb.apply({ t: 'box', op: 'remove', step: 'D1', branch: 'A' });
+    expect([scene.children.length, scene.children[0]]).toEqual([1, b]);
+    expect(zones).toEqual([['D1|A', 'D1|B'], ['D1|B']]);
+    cb.dispose();
+  });
+
   it('the prop: 4 meshes, 3 materials (+ the light column), all shared by every box; opened = lid up, stripes dimmed', () => {
     const scene = new Scene();
     const cb = new ClueBoxes(scene, () => 0, () => 0);
-    cb.reset([box('L1'), { ...box('L2', true), x: 30 }]);
+    const south = { yaw: -Math.PI }; // front +z: world axes = the model's (rotation 0)
+    cb.reset([{ ...box('L1'), ...south }, { ...box('L2', true), x: 30, ...south }]);
     const [shut, open] = scene.children;
     expect(meshes(shut!).map((m) => m.name)).toEqual(['body', 'lid', 'post', 'stripes', 'beam']);
     for (const g of [shut!, open!]) expect(new Set(meshes(g).flatMap((m) => (m.name === 'beam' ? [] : [m.material]))).size).toBe(3);

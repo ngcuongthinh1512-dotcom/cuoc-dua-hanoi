@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { unlockAudio } from './audio/sfx.ts';
+import { reviewSound, unlockAudio } from './audio/sfx.ts';
 import { NET, type PoseSample } from '@race/shared/protocol';
 import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, raceClient, remote as remoteCfg, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
@@ -15,7 +15,7 @@ import { BikeLink } from './net/bikeLink.ts';
 import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
 import { fakeTeams, fakeTick, parsePeers, RemotePlayers } from './net/RemotePlayers.ts';
-import { startSession } from './net/session.ts';
+import { fetchMedia, startSession } from './net/session.ts';
 import { PitHost } from './race/PitStop.ts';
 import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
@@ -221,16 +221,17 @@ async function start() {
   if (player) player.bikes.notify = notice; // a refused claim → toast (offline too: the p6-bike-lost stand-in)
   // Phase 7 (docs/plans/phase7.md §5.3): race HUD widgets (track C; DEV offline: stand-ins from the URL, p7-* presets) and
   // the team's race state from the server (track B).
-  // task goes through `race` (the pose first, D4; the book needs none); offline there is no race: Tab shows an empty book.
+  // Offline there is no race: Tab shows an empty book, an "r2:" image resolves to null (the card's placeholder).
+  // Phase 8 (D8): answer / branch / accept from anywhere, no pose first; images with the team token (D13).
   const raceHud = player
     ? new RaceHud(
         {
-          task: (step, branch) => race?.task(step, branch),
+          task: () => {}, // TODO(phase8 integrator): delete with RaceHudActions.task (track C); RaceClient.task is gone (track B)
           book: () => void (net ? net.send({ t: 'race', op: 'book' }) : raceHud?.showBook([])),
-          // Phase 8 (track B wires the rest: pointer lock on onOpenChange, Enter → openCurrent, resolveMedia)
           answer: (step, text) => race?.answer(step, text),
           branch: (step, id) => race?.branch(step, id),
           accept: (step) => race?.accept(step),
+          resolveMedia: (name) => fetchMedia(session, name),
         },
         session?.team?.name ?? '',
       )
@@ -246,6 +247,7 @@ async function start() {
             net?.flushPose(poseOf());
             net?.send(m);
           },
+          pose: () => net?.flushPose(poseOf()), // D9: a countdown ended (the branch box may be due)
           serverNow: () => (net ? net.serverNow() : Date.now()),
           team: session.team?.name,
           finished: (fresh) => {
@@ -285,7 +287,10 @@ async function start() {
         if (race?.message(m)) return; // race / book / zone (Phase 7)
         if (m.t === 'team') remote?.setOnline(m.slot, m.online);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
-        else if (m.t === 'notice') notice(m.code);
+        else if (m.t === 'notice') {
+          notice(m.code);
+          if (m.code === 'approved' || m.code === 'penalized') reviewSound(m.code === 'approved'); // SPEC §8.9 (6)
+        }
         else if (m.t === 'box') boxes.apply(m);
         else bikeLink?.message(m); // 'bikes' / 'bike' (claim result)
       },
@@ -406,24 +411,39 @@ async function start() {
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing. SPEC §17.2: the menu opens
-  // by itself when the pointer is released (not at start: nothing was locked yet), except when M released it for the map.
+  // by itself when the pointer is released (not at start: nothing was locked yet), except when M released it for the map
+  // or a clue card / the Sổ mật thư did (Phase 8 B1).
   const help = $('help');
   help.hidden = false;
   let unlockedAt = -Infinity;
+  let cardClosed = false; // a clue card / the Sổ closed since the last frame: its Esc / Enter press opens no menu / card
   input.onPointerLockChange = (locked) => {
     if (locked) menu.close();
     else {
       unlockedAt = performance.now();
-      if (!fullMap?.isOpen) menu.open();
+      if (!fullMap?.isOpen && !raceHud?.open) menu.open();
     }
     help.hidden = locked || modal();
   };
+  // Phase 8 B1 (critic): links, images, buttons and the answer box of a card / the Sổ take the mouse, so the pointer is free
+  // while one is open (no menu: above), and locked again on close, right inside the key / click handler that closed it
+  // (Firefox grants the lock only there; Tab closes in the frame loop: locked in the keydown below).
+  if (raceHud) {
+    raceHud.onOpenChange = (open) => {
+      if (open) return void document.exitPointerLock();
+      cardClosed = true;
+      input.lock();
+    };
+    // the dimmed backdrop lets clicks through to the canvas, which locks the pointer (Input): close the card first
+    renderer.domElement.addEventListener('click', () => raceHud.open && raceHud.toggleBook());
+  }
   // Firefox (and Safari) grant pointer lock only inside an input event handler, not in the frame loop that handles M /
   // Esc below: a key that will close the map or the menu locks right here (the loop closes it next frame; its own
   // lock() is then a no-op, or a rejected request that Input swallows). Chrome allows both.
   addEventListener('keydown', (e) => {
     if (e.repeat || input.locked || performance.now() - unlockedAt <= 300) return;
     if ((fullMap?.isOpen && (keys.map.includes(e.code) || keys.menu.includes(e.code))) || (menu.isOpen && keys.menu.includes(e.code))) input.lock();
+    else if (raceHud?.open && keys.clueBook.includes(e.code) && !(e.target instanceof HTMLInputElement)) input.lock(); // Tab: the loop closes it (not from the answer box: core/Input.ts leaves text fields alone)
   });
   input.onImeSuspected = () => {
     const box = $('ime');
@@ -483,7 +503,9 @@ async function start() {
         }
       }
       if (raceHud && input.wasPressed('clueBook') && !menu.isOpen && !fullMap?.isOpen) raceHud.toggleBook(); // Tab: Sổ mật thư (SPEC §8.11)
-      if (input.wasPressed('menu') && performance.now() - unlockedAt > 300) {
+      // Phase 8 (§17.14): Enter with nothing open → the current card again (answer history, input box)
+      if (raceHud && input.wasPressed('clueCard') && !modal() && !flying && !cardClosed) raceHud.openCurrent();
+      if (input.wasPressed('menu') && performance.now() - unlockedAt > 300 && !cardClosed) {
         if (fullMap?.isOpen) fullMap.close(), input.lock();
         else if (menu.isOpen) menu.close(), input.lock();
         else if (!input.locked) menu.open();
@@ -491,7 +513,7 @@ async function start() {
       }
       if (flying) fly.update(dt, input);
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
-      player?.update(dt, flying ? null : input, loop.alpha, modal());
+      player?.update(dt, flying ? null : input, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
       if (player?.active) bikeLink?.frame(dt, player.controller);
       if (net && player?.active && !flying) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); none while spectating
       if (peers.length && player?.active && player.simTime * 1000 >= nextFakeTick) {
@@ -527,6 +549,7 @@ async function start() {
         npcs.zoneRings.visible = debug.visible;
       }
       input.endFrame();
+      cardClosed = false;
       const p = player && !flying ? player.position : camera.position; // streaming + colliders follow the body
       sky.update();
       waterObj?.update(dt);

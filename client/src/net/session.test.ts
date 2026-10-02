@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { net, netClient } from '../config.ts';
 import { errorText, normalizeCode, readStoredCode, storeCode, summaryLines } from '../ui/Login.ts';
-import { isOnline, raceId, startSession } from './session.ts';
+import { fetchMedia, isOnline, mediaUrl, raceId, startSession } from './session.ts';
 
 describe('online or offline (docs/plans/phase6.md §3.17)', () => {
   it('offline unless a ?race= link (or PROD); ?offline=1 always wins', () => {
@@ -20,6 +20,41 @@ describe('online or offline (docs/plans/phase6.md §3.17)', () => {
     expect(raceId(new URLSearchParams('race=paris-2026'))).toBe('paris-2026');
     expect(raceId(new URLSearchParams(''))).toBe(net.defaultRace);
     expect(raceId(new URLSearchParams('race=Paris!'))).toBe(net.defaultRace);
+  });
+});
+
+describe('clue images (Phase 8 D13)', () => {
+  const s = { race: 'paris', token: 'tok' };
+  const fake = (status: number) => {
+    const calls: [string, RequestInit | undefined][] = [];
+    const get = (async (url: string, init?: RequestInit) => (calls.push([url, init]), new Response(status === 200 ? new Blob(['img'], { type: 'image/png' }) : null, { status }))) as typeof fetch;
+    return { calls, get };
+  };
+
+  it('no session (offline) or a bad name → null, nothing fetched', async () => {
+    const { calls, get } = fake(200);
+    expect(await fetchMedia(null, 'r2:test-gia.jpg', get)).toBeNull();
+    expect(await fetchMedia(undefined, 'test-gia.jpg', get)).toBeNull();
+    expect(await fetchMedia(s, 'r2:../secret.jpg', get)).toBeNull();
+    expect(await fetchMedia(s, 'r2:x.gif', get)).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('the token in a header (never the URL) → one blob URL per name; a 404 is asked again next time', async () => {
+    const ok = fake(200);
+    const a = await fetchMedia(s, 'r2:hinh-1.png', ok.get);
+    expect(a).toMatch(/^blob:/);
+    expect(await fetchMedia(s, 'hinh-1.png', ok.get)).toBe(a); // with or without the r2: prefix
+    expect(ok.calls).toEqual([[mediaUrl('paris', 'hinh-1.png'), { headers: { Authorization: 'Bearer tok' } }]]);
+    expect(ok.calls[0]![0]).toBe(`${net.apiBase}/race/paris/media/hinh-1.png`);
+    const no = fake(404);
+    expect(await fetchMedia(s, 'hinh-2.png', no.get)).toBeNull();
+    expect(await fetchMedia(s, 'hinh-2.png', ok.get)).toMatch(/^blob:/);
+    expect(no.calls.length).toBe(1);
+    const down = (async () => {
+      throw new TypeError('offline');
+    }) as typeof fetch;
+    expect(await fetchMedia(s, 'hinh-3.png', down)).toBeNull();
   });
 });
 

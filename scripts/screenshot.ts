@@ -229,8 +229,9 @@ const startAt = (n: number) => {
  *  walkway under the metro, Passy side). */
 const ISLAND_SPOT = 4;
 const PIT = (({ x, z }) => ({ x: +x.toFixed(1), z: +z.toFixed(1) }))(latLonToWorld(48.8596, 2.29243));
-/** Clue box on the Concorde (p6-boxes' current one), camera 3 m away 35° right of its front (+z), eye 1.9 m, looking down at it. */
-const boxView = (opened: string) => camAt(-18 + 3 * Math.sin(0.61), -10.9 + 3 * Math.cos(0.61), 1.9, 35, -19) + `&npc=0&boxes=L2,-18,-10.9${opened}`;
+/** Clue box on the Concorde (p6-boxes' current one), camera 3 m away 35° right of its front (+z: yawDeg 180, Phase 8 D7),
+ *  eye 1.9 m, looking down at it. */
+const boxView = (opened: string) => camAt(-18 + 3 * Math.sin(0.61), -10.9 + 3 * Math.cos(0.61), 1.9, 35, -19) + `&npc=0&boxes=L2,-18,-10.9,${opened},180`;
 /** The `street` view (Champs-Élysées centre line, facing the Arc) with a box 150 m ahead on that line. */
 const FAR = (() => {
   const [a, b] = [latLonToWorld(48.8703, 2.306), latLonToWorld(48.8738, 2.295)];
@@ -246,7 +247,7 @@ Object.assign(PRESETS, {
   // ?start=x,z,yawDeg = welcome.start of the demo leg's n-th team (same spawn path); F3: feet ≈ 1.3, not 7.2 (metro top)
   'p7-start': `/?start=${startAt(1)}&wait=1&debug=1&camMode=far&npc=0`,
   'p7-start-island': `/?start=${startAt(ISLAND_SPOT)}&wait=1&debug=1&orbit=120&npc=0`, // the spot nearest the Île aux Cygnes vault: open walkway, the deck under the metro
-  'p7-openbox': `/?player=${PIT.x},${PIT.z + 4},0&boxes=L6,${PIT.x + 0.9},${PIT.z + 2.6}&action=openBox&wait=0.9&orbit=140&npc=0`, // box ahead, opening it, "Bấm F" prompt
+  'p7-openbox': `/?player=${PIT.x},${PIT.z + 4},0&boxes=L6,${PIT.x + 0.9},${PIT.z + 2.6},,180&action=openBox&wait=0.9&orbit=140&npc=0`, // box ahead (front to the team), opening it, "Bấm F" prompt
   'p7-mat': `/?player=${PIT.x - 4},${PIT.z + 9},-24&boxes=PS,${PIT.x},${PIT.z}&mat&wait=1.5&camMode=far&npc=0`, // mat + host NPC waving at the team
   'p7-celebrate': `/?player=${PIT.x},${PIT.z + 0.5},180&boxes=PS,${PIT.x},${PIT.z}&mat&action=celebrate&wait=1.2&orbit=160&npc=0`,
   // the organiser's prop (config clueBox): 3/4 front view from 3 m, closed / opened (the lid hinges at the back, −z), and
@@ -275,6 +276,15 @@ Object.assign(PRESETS, {
   // [D] leg format + validator: no screenshots
   // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
   'p7-host': '/host.html?demo=1',
+});
+
+// Phase 8 (docs/plans/phase8.md §7): p8-* presets, offline stand-ins only. Each track adds its presets under its own line.
+Object.assign(PRESETS, {
+  // [B] box heading (?boxes=…,yawDeg; opened: a shut box looks the same from every side), two branch boxes of one detour
+  // (?boxes=D1|A…), an r2: image offline (RaceHud resolveMedia → null: the card's placeholder, drawn by track C)
+  'p8-box-yaw': camAt(-16.75, -10.9 + 3.5, 5.5, 0, -55) + '&npc=0&boxes=L2,-18,-10.9,opened;L1,-15.5,-10.9,opened,90', // facing north from above: left = no yaw, front north (lid up at the back = south, near us); right = yawDeg 90, front west (lid up at the east)
+  'p8-box-branch': camAt(-28, -1, 3, 0, -14) + '&npc=0&boxes=D1|A,-38,-10.9,opened,180;D1|B,-18,-10.9,,180', // branch A opened (left), branch B shut 20 m east
+  'p8-media-offline': '/?player&npc=0&wait=1&card=media&full',
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
