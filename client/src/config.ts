@@ -1133,7 +1133,8 @@ export const louvreRoom = {
 
 // ── C · public feed (ui/Feed.ts): "Đội X trả lời sai và bị phạt 3 phút" (SPEC §17.19 (b): bottom corner, configurable) ──
 export const feed = {
-  corner: 'bottom-left' as 'bottom-left' | 'bottom-center' | 'bottom-right', // default: above the minimap, GTA chat style (waiting for the user's confirmation)
+  corner: 'bottom-left' as 'bottom-left' | 'bottom-center' | 'bottom-right', // default: bottom-left, right of the minimap (it never covers the minimap or the toasts above it), GTA chat style (waiting for the user's confirmation)
+  bottomLift: 26, // px above the screen margin (clears the attribution line at the very bottom)
   lines: 5, // newest lines shown
   seconds: 90, // a line fades after this (s); a new line shows the box again
 };
