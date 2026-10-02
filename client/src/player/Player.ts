@@ -102,7 +102,8 @@ export class Player {
   simTime = -1;
   private readonly intent = newIntent();
   private readonly target: CameraTarget;
-  private bikesPlaced = false;
+  /** Dev bikes placed (or not wanted: DEV ?louvre=1 starts in the Louvre room, no bikes in there). */
+  bikesPlaced = false;
   private waved = false; // G since the last npcAnchor()
   private blocked = false; // menu / full map open (update → fixedUpdate)
   /** Surface under the bike this frame (tyre sound, debug line). */
@@ -115,8 +116,11 @@ export class Player {
   private stepping = false; // inside controller.fixedUpdate: a respawn there = fell through the world
   private spawnHint: number | undefined; // setSpawn's yHint (re-entry: welcome.pose.y)
   /** Phase 7 (D23): F on foot asks this first (main.ts: RaceClient.interact, the current box in reach → `race open`);
-   *  true = handled (the openBox gesture plays, no bike), false = F goes to the bikes as before. */
-  onInteract?: () => boolean;
+   *  true = handled (the openBox gesture plays, no bike), false = F goes to the bikes as before. Phase 8B: 'quiet' =
+   *  handled, no gesture (a button / the lock / the door in the Louvre room: the pose's action reaches every team in the
+   *  room, which must not see which button was pressed). */
+  onInteract?: () => boolean | 'quiet';
+  private quiet = false; // moveTo(): the placement it waits for is no respawn (Phase 8B room in / out: no `respawn` sent)
 
   private constructor(
     readonly model: CharacterModel,
@@ -173,6 +177,16 @@ export class Player {
     this.position.copy(this.controller.state.position);
   }
 
+  /** Phase 8B (docs/plans/phase8b.md §F, critic S5): into / out of the Louvre room — feet at (x, z) on the surface the
+   *  controller's env gives there (the room floor while LouvreRoom.active), facing `yaw`. Same x, z as the box (± inset):
+   *  only y changes, so no `respawn` is sent (5 in / out a minute would flag the team: NET.maxRespawns). */
+  moveTo(x: number, z: number, yaw: number) {
+    this.quiet = true;
+    this.controller.spawn(x, z, yaw);
+    this.camera.yaw = yaw;
+    this.position.copy(this.controller.state.position);
+  }
+
   private get spawnPoint() {
     return this.o.spawn ?? playerSetup.spawn;
   }
@@ -200,7 +214,8 @@ export class Player {
     this.stepping = true;
     this.controller.fixedUpdate(dt, this.intent);
     this.stepping = false;
-    if (!placed && this.controller.placed) this.onRespawn?.('safe'); // spawn() found its ground (Phase 6: legit jump)
+    if (!placed && this.controller.placed && !this.quiet) this.onRespawn?.('safe'); // spawn() found its ground (Phase 6: legit jump)
+    if (this.controller.placed) this.quiet = false;
     this.simTime += dt;
   }
 
@@ -242,8 +257,9 @@ export class Player {
       if (this.o.autoMove) [this.intent.forward, this.intent.right, this.intent.slow] = [1, 0, this.o.autoMove === 'slow'];
       if (this.o.autoTurn) this.intent.right = this.o.autoTurn === 'left' ? -1 : 1;
       if (this.o.holdJump) this.intent.jump = true;
-      if (input.wasPressed('interact') && !this.controller.riding && this.onInteract?.()) this.controller.startAction('openBox');
-      else if (input.wasPressed('interact')) {
+      const handled = input.wasPressed('interact') && !this.controller.riding ? this.onInteract?.() : false;
+      if (handled === true) this.controller.startAction('openBox');
+      else if (!handled && input.wasPressed('interact')) {
         const r = this.bikes.interact(this.controller);
         if (r && r !== 'mount' && r !== 'dismount') notice(r); // Phase 5: why F did nothing
       }

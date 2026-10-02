@@ -3,7 +3,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { bike, remote } from '../config.ts';
 import type { PlayerState } from '../player/types.ts';
-import { fakeTick, inView, leanFor, newRemotePose, parsePeers, Track, updateState } from './RemotePlayers.ts';
+import { fakeTick, inView, underground, leanFor, newRemotePose, parsePeers, Track, updateState } from './RemotePlayers.ts';
 
 const P = (x: number, z = 0, yaw = 0, extra: Partial<PoseSample> = {}): PoseSample => ({ x, y: 0, z, yaw, mode: 'walk', action: 'none', ...extra });
 
@@ -127,14 +127,23 @@ describe('DEV ?peers stand-ins', () => {
   });
 });
 
-describe('Phase 8B: height cull (Louvre room 30 m under the box)', () => {
-  it('within renderRadius and remote.hideDy of the feet only; no feet height (spectator) = distance only', () => {
+describe('Phase 8B: height cull (Louvre room 30 m under the box; verify-foundation #1)', () => {
+  it('hidden only when one side is underground (feet > remote.hideDy under the grid) and the other is not', () => {
     const v = { x: 0, z: 0 };
-    expect(inView({ x: 10, y: 0, z: 0 }, v, 300, 0)).toBe(true);
-    expect(inView({ x: 10, y: -25, z: 0 }, v, 300, 5)).toBe(false); // in the room, seen from the court
-    expect(inView({ x: 10, y: 5, z: 0 }, v, 300, -25)).toBe(false); // on the court, seen from the room
-    expect(inView({ x: 10, y: -24, z: 0 }, v, 300, -25)).toBe(true); // both in the room
-    expect(inView({ x: 10, y: -25, z: 0 }, v, 300)).toBe(true); // spectator
-    expect(inView({ x: 400, y: 0, z: 0 }, v, 300, 0)).toBe(false);
+    const flat = () => 5;
+    expect(inView({ x: 10, y: 5, z: 0 }, v, 300, false, flat)).toBe(true);
+    expect(inView({ x: 10, y: -25, z: 0 }, v, 300, false, flat)).toBe(false); // in the room, seen from the court
+    expect(inView({ x: 10, y: 5, z: 0 }, v, 300, true, flat)).toBe(false); // on the court, seen from the room
+    expect(inView({ x: 10, y: -24, z: 0 }, v, 300, true, flat)).toBe(true); // both in the room
+    expect(inView({ x: 10, y: -25, z: 0 }, v, 300, undefined, flat)).toBe(true); // spectator
+    expect(inView({ x: 400, y: 5, z: 0 }, v, 300, false, flat)).toBe(false);
+  });
+  it('slopes hide nobody: Trocadéro esplanade (+29.6) and the fountain (−0.9) 275 m apart see each other', () => {
+    const slope = (x: number) => (x < 100 ? 29.6 : -0.9);
+    const ground = (x: number) => slope(x);
+    // viewer on the esplanade (not underground), remote at the fountain on its own ground
+    expect(inView({ x: 275, y: -0.9, z: 0 }, { x: 0, z: 0 }, 300, false, ground)).toBe(true);
+    expect(underground({ x: 275, y: -0.9, z: 0 }, ground)).toBe(false);
+    expect(underground({ x: 0, y: 29.6 - 30, z: 0 }, ground)).toBe(true); // a room under the esplanade
   });
 });

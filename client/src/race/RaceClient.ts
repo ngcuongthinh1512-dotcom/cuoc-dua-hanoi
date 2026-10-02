@@ -2,7 +2,7 @@
 // (welcome.view, `race`, `book`, `zone`): drives the race HUD (track C's RaceHud), the clock, F on the current box (D23),
 // the periodic Pit Stop check-in (D19), the finish (celebrate, host NPC line, then spectator: main.ts).
 import type { BoxInfo, ClientMessage, RaceOp, RaceView, ServerMessage, TeamInfo, TickArray, Welcome } from '@race/shared/protocol';
-import { raceClient as C } from '../config.ts';
+import { louvreRoom, raceClient as C } from '../config.ts';
 import type { RaceHud } from './ui/RaceHud.ts';
 
 export interface RaceDeps {
@@ -38,6 +38,8 @@ export class RaceClient {
   private teams: TeamInfo[] = [];
   private opAt = -Infinity; // ms (performance clock) of the last F / check-in op
   private lockDone: number | null = null; // the card.lockedUntil whose end already re-sent the pose (D9)
+  private hintsAsked = new Set<string>(); // Phase 8B: "<step>@<hintAt[i]>" marks whose `view` went out (once each)
+  private pickAt = -Infinity; // ms (performance clock) of the last pick
 
   constructor(readonly deps: RaceDeps) {}
 
@@ -93,6 +95,16 @@ export class RaceClient {
     if (due && !riding && matAt(boxes, x, z) && now - this.opAt >= C.checkinEveryMs) this.sendOp({ t: 'race', op: 'checkin' }, now);
     const until = v?.card?.lockedUntil;
     if (until != null && until !== this.lockDone && this.deps.serverNow() >= until + C.lockEndSlackMs) (this.lockDone = until), this.deps.pose?.();
+    // Phase 8B (§E, no server timer): lockEndSlackMs after each hint mark the card again, once (a team standing still in
+    // the room gets "5 tác phẩm" / "Đúng x/5"); a card that already has that hint asks nothing
+    const lv = v?.card?.task?.louvre;
+    if (lv && v.status === 'running') {
+      lv.hintAt.forEach((at, i) => {
+        const key = `${v.card!.step}@${at}`;
+        const has = i === 0 ? lv.hintCount !== null : lv.hintCorrect !== null;
+        if (!has && !this.hintsAsked.has(key) && this.deps.serverNow() >= at + C.lockEndSlackMs) this.hintsAsked.add(key), this.refresh();
+      });
+    }
     return { inZone: !riding && !!boxInReach(boxes, x, z) };
   }
 
@@ -110,15 +122,21 @@ export class RaceClient {
     this.deps.send({ t: 'race', op: 'accept', step });
   }
 
-  // Phase 8B (docs/plans/phase8b.md §C, §G): the Louvre room. TODO(phase8b track B): frame() sends refresh() once at each
-  // card.task.louvre.hintAt[i] + lockEndSlackMs (like lockDone) unless the card already has that hint.
-  /** A button under an artwork (on = light it); from anywhere: no pose first. */
-  pick(step: string, art: string, on: boolean) {
+  // Phase 8B (docs/plans/phase8b.md §C, §G): the Louvre room (frame() above asks the card again at each hint mark).
+  /** A button under an artwork (on = light it); from anywhere: no pose first. At most one per louvreRoom.pickGapMs (F
+   *  mashing must not trip the server's 15 msg/s: verify-foundation #10); false = dropped. */
+  pick(step: string, art: string, on: boolean, now: number): boolean {
+    if (now - this.pickAt < louvreRoom.pickGapMs) return false;
+    this.pickAt = now;
     this.deps.send({ t: 'race', op: 'pick', step, art, on });
+    return true;
   }
-  /** The lock button in the middle of the room: the pose first (the server checks it stands in the step's zone). */
-  lock(step: string) {
-    this.op({ t: 'race', op: 'lock', step });
+  /** The lock button in the middle of the room: the pose first (the server checks it stands in the step's zone). At most
+   *  one per raceClient.opMinGapMs like F at a box (each lock counts in NET.maxRaceOps); false = dropped. */
+  lock(step: string, now = -Infinity): boolean {
+    if (now - this.opAt < C.opMinGapMs) return false;
+    this.sendOp({ t: 'race', op: 'lock', step }, now);
+    return true;
   }
   /** The card again (`race view`, 0 rows): at a hint mark, the team standing still. */
   refresh() {
