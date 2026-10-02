@@ -2,7 +2,7 @@
 // the race message" harness check, which the DO output gate makes unable to fail): rows first, messages after; a failing
 // write sends nothing and leaves the cache as it was.
 import { branchZone, stepZones, type Leg } from '@race/shared/leg';
-import type { PoseSample, RaceOp, RaceView, ServerMessage } from '@race/shared/protocol';
+import type { FeedMessage, PoseSample, RaceOp, RaceView, ServerMessage } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
 import { QuotaCounters } from '../counters.ts';
 import { bundledLeg } from './leg.ts';
@@ -16,6 +16,8 @@ function fake() {
   /** [first, end) log indexes of each transaction. */
   const txs: [number, number][] = [];
   const sent: [string, ServerMessage][] = [];
+  const events: [string, unknown][] = [];
+  const feeds: FeedMessage[] = [];
   const teams = new Map<string, TeamRace>([['t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1 }]]);
   const meta = new Map<string, string>();
   let fail = false;
@@ -39,9 +41,10 @@ function fake() {
     },
     send: (team: string, m: ServerMessage) => (log.push(`send ${(m as { t: string }).t}`), sent.push([team, m])),
     changed: () => {},
-    event: (_t: number, _team: string | null, type: string) => {
+    event: (_t: number, _team: string | null, type: string, data?: unknown) => {
       if (fail) throw new Error('disk');
       log.push(`event ${type}`);
+      events.push([type, data]);
     },
     team: (id: string) => teams.get(id),
     saveTeam: (id: string, r: TeamRace) => {
@@ -56,8 +59,10 @@ function fake() {
     park: () => log.push('park'),
     legLoaded: () => {},
     hideBox: (team: string, step: string, branch: string) => log.push(`hideBox ${team} ${step} ${branch}`),
+    feed: (m: FeedMessage) => (log.push('feed'), feeds.push(m)),
+    touchSnapshot: () => log.push('touchSnapshot'),
   };
-  return { io, log, txs, sent, teams, setFail: (v: boolean) => (fail = v) };
+  return { io, log, txs, sent, teams, events, feeds, setFail: (v: boolean) => (fail = v) };
 }
 
 const at = (i: number, mode: PoseSample['mode'] = 'walk'): PoseSample => ({ x: Z[i]!.x, y: 0, z: Z[i]!.z, yaw: 0, mode, action: 'none' });
@@ -469,5 +474,111 @@ describe('RaceEngine', () => {
     const zones = (team: string) => f.sent.filter(([t, m]) => t === team && (m as { t: string }).t === 'zone').map(([, m]) => m);
     expect(zones('t1')).toEqual([{ t: 'zone', teams: [] }]);
     expect(zones('t0').at(-1)).toEqual({ t: 'zone', teams: [{ slot: 1, label: 'Thử thách 1', type: 'challenge', branch: null, since: 11 }] });
+  });
+});
+
+describe('RaceEngine: louvre room (docs/plans/phase8b.md §D, §E)', () => {
+  const leg = bundledLeg('louvre')!;
+  const LZ = stepZones(leg);
+  const right = (leg.steps[1] as { task: { answers: string[] } }).task.answers;
+  const wrong = ['art-01', 'art-02', 'art-04'];
+  const room: PoseSample = { x: LZ[0]!.x, y: 0, z: LZ[0]!.z, yaw: 0, mode: 'walk', action: 'none' };
+  const T0 = 100; // L-LV opened: hints at T0 + 3 s / 6 s, a wrong lock = 6 s
+  /** Two teams, louvre leg running, t0 in the room (L-LV opened at T0), t1 still on L-LV. */
+  function inRoom() {
+    const f = fake();
+    f.teams.set('t0', { ...NEW_TEAM_RACE }).set('t1', { ...NEW_TEAM_RACE });
+    const e = new RaceEngine(f.io);
+    e.onHost({ t: 'host.leg', id: 'louvre' }, () => {}, 0);
+    f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1 }).set('t1', { ...NEW_TEAM_RACE, startOrder: 2, joinedAt: 1 });
+    e.onHost({ t: 'host.race', op: 'start' }, () => {}, 1);
+    e.onOp('t0', { t: 'race', op: 'open', step: 'L-LV' }, room, T0);
+    f.log.length = 0;
+    f.sent.length = 0;
+    f.events.length = 0;
+    const op = (m: RaceOp, now: number, team = 't0') => e.onOp(team, m, room, now);
+    const pick = (art: string, now: number, on = true) => op({ t: 'race', op: 'pick', step: 'T3', art, on }, now);
+    const lock = (now: number) => op({ t: 'race', op: 'lock', step: 'T3' }, now);
+    const card = (team = 't0') => (f.sent.filter(([t, m]) => t === team && (m as { t: string }).t === 'race').at(-1)?.[1] as { view: RaceView } | undefined)?.view.card;
+    return { f, e, op, pick, lock, card };
+  }
+
+  it('a pick writes 0 rows: the card goes back (lights, live x/5) + the snapshot is due; livePicks has it', () => {
+    const { f, e, pick, card } = inRoom();
+    pick(right[0]!, T0 + 1);
+    pick(wrong[0]!, T0 + 2);
+    expect(f.log).toEqual(['touchSnapshot', 'send race', 'touchSnapshot', 'send race']);
+    expect(card()!.task!.louvre).toMatchObject({ picks: [right[0], wrong[0]], hintCorrect: null });
+    expect(e.livePicks()).toEqual({ t0: { T3: [right[0], wrong[0]] } }); // t1 is not in a room
+    pick(right[1]!, T0 + 6000); // past 70: x follows the picks
+    expect(card()!.task!.louvre!.hintCorrect).toBe(2);
+    expect(f.feeds).toEqual([]); // a pick is never public
+  });
+
+  it('a wrong lock: its row + event BEFORE any message, then the feed to everyone (no n before 70, n after)', () => {
+    const { f, pick, lock, card } = inRoom();
+    for (const id of [right[0]!, right[1]!, wrong[0]!]) pick(id, T0 + 1);
+    f.log.length = 0;
+    lock(T0 + 10);
+    expect(f.log).toEqual(['sql INSERT INTO step_progress', 'event louvre.lock', 'send notice', 'send race', 'feed']);
+    expect(f.events).toEqual([['louvre.lock', { step: 'T3', ok: false, k: 3, c: 2, public: false, slot: 0, minutes: 0.1 }]]);
+    expect(f.sent.find(([, m]) => (m as { t: string }).t === 'notice')![1]).toEqual({ t: 'notice', code: 'lockWrong' });
+    expect(f.feeds).toEqual([{ t: 'feed', at: T0 + 10, slot: 0, ok: false, minutes: 0.1 }]);
+    expect(card()).toMatchObject({ status: 'locked', lockedUntil: T0 + 10 + 6000, answers: [{ id: 1, text: '3 tác phẩm', status: 'wrong' }] });
+    expect(card()!.answers[0]).not.toHaveProperty('correct');
+    expect(card()!.task!.louvre).toMatchObject({ attempts: 1, picks: [right[0], right[1], wrong[0]] });
+    // locked: still picks, no lock
+    pick(right[2]!, T0 + 20);
+    expect(card()!.task!.louvre!.picks).toHaveLength(4);
+    f.log.length = 0;
+    lock(T0 + 30);
+    expect(f.log).toEqual(['send notice']); // answerLocked, nothing written
+    // past the countdown and the 70-minute mark: the line carries n / of
+    lock(T0 + 10 + 6000);
+    expect(f.feeds.at(-1)).toEqual({ t: 'feed', at: T0 + 6010, slot: 0, ok: false, minutes: 0.1, n: 3, of: 5 });
+    expect(card()!.answers.at(-1)).toMatchObject({ status: 'wrong', correct: 3 });
+  });
+
+  it('the right 5: lock + complete in one transaction → clueNew, L3; feed n 5/5 after 70, no line before', () => {
+    const before = inRoom();
+    for (const id of right) before.pick(id, T0 + 1);
+    before.f.log.length = 0;
+    before.lock(T0 + 2);
+    expect(before.f.feeds).toEqual([]);
+    expect(before.f.log.slice(0, 6)).toEqual(['sql INSERT INTO step_progress', 'sql INSERT INTO step_progress', 'event louvre.lock', 'event complete', 'saveTeam', 'send notice']);
+    expect(before.f.sent.filter(([, m]) => (m as { t: string }).t === 'notice').map(([, m]) => m)).toEqual([{ t: 'notice', code: 'clueNew' }]);
+    expect(before.card()).toMatchObject({ step: 'L3' });
+    expect(before.e.livePicks()).toEqual({});
+    const after = inRoom();
+    for (const id of right) after.pick(id, T0 + 1);
+    after.lock(T0 + 7000);
+    expect(after.f.feeds).toEqual([{ t: 'feed', at: T0 + 7000, slot: 0, ok: true, n: 5, of: 5 }]);
+  });
+
+  it('restorePicks: the newer of the snapshot and the last lock wins; a done step keeps its own', () => {
+    const { e, pick, lock, card, op } = inRoom();
+    for (const id of [right[0]!, wrong[0]!]) pick(id, T0 + 1);
+    lock(T0 + 50); // row picks = [r0, w0] at T0 + 50
+    e.restorePicks({ t0: { T3: [right[1]!] } }, T0 + 40); // older snapshot: ignored
+    op({ t: 'race', op: 'view' }, T0 + 60);
+    expect(card()!.task!.louvre!.picks).toEqual([right[0], wrong[0]]);
+    e.restorePicks({ t0: { T3: [right[1]!] } }, T0 + 50); // a snapshot as new as the lock (or newer): its picks
+    op({ t: 'race', op: 'view' }, T0 + 61);
+    expect(card()!.task!.louvre!.picks).toEqual([right[1]]);
+    e.restorePicks({ t1: { T3: right }, nobody: { T3: right } }, T0 + 99); // no row there: nothing
+    op({ t: 'race', op: 'view' }, T0 + 62, 't1');
+    expect(card('t1')!.step).toBe('L-LV');
+  });
+
+  it('pick / lock outside "running": refused (racePaused), nothing written; view still answers', () => {
+    const { f, e, pick, lock, op } = inRoom();
+    e.onHost({ t: 'host.race', op: 'pause' }, () => {}, T0 + 1);
+    f.log.length = 0;
+    f.sent.length = 0;
+    pick(right[0]!, T0 + 2);
+    lock(T0 + 3);
+    op({ t: 'race', op: 'view' }, T0 + 4);
+    expect(f.log).toEqual(['send notice', 'send notice', 'send race']);
+    expect(f.sent.slice(0, 2).map(([, m]) => m)).toEqual([{ t: 'notice', code: 'racePaused' }, { t: 'notice', code: 'racePaused' }]);
   });
 });

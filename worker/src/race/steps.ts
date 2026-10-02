@@ -6,7 +6,7 @@
 // come from the row + now (taskState): no timer, nothing in memory.
 // Phase 8B foundation (docs/plans/phase8b.md §E): the louvre contract — inputs pick / lock, effects pick / lock, guard C1,
 // louvreView (what a team sees of the room, x/5 live), creditsOf. Track A implements the pick / lock transitions.
-import { branchZone, LOUVRE, stepZones, type Leg, type MediaItem, type Step, type Task, type Zone } from '@race/shared/leg';
+import { branchZone, LOUVRE, stepZones, type Leg, type LouvreTask, type MediaItem, type Step, type Task, type Zone } from '@race/shared/leg';
 import { MEDIA, NET, type AnswerView, type BoxInfo, type CardStatus, type ClueCard, type CreditItem, type HostReview, type LouvreView, type MediaView, type ServerNotice, type TaskView } from '@race/shared/protocol';
 import { parseAnswers, parsePicks, type AnswerRec, type StepProgressRow } from '../db.ts';
 import { verifyAuto } from './tasks.ts';
@@ -31,6 +31,8 @@ export interface Progress {
   pendingId: number | null;
   /** id of the step's last answer (0 = none): the next answer gets + 1. */
   lastAnswerId: number;
+  /** Phase 8B: a louvre step's lit artwork ids (the engine's row cache: live picks), [] elsewhere. */
+  picks: string[];
 }
 
 /** The team's trusted pose handed to an input judged from anywhere (bike rack rule, critic S3), null = none yet. */
@@ -55,12 +57,13 @@ export type RaceInput =
   | { kind: 'approve'; step: string; pose: StandAt }
   /** Standing on the Pit Stop mat after the penalty wait (SPEC §8.6); on a bike → boxRiding. */
   | { kind: 'checkin'; x: number; z: number; riding?: boolean }
-  // Phase 8B (docs/plans/phase8b.md §E; TODO track A: the transitions below are not implemented yet → silent)
+  // Phase 8B (docs/plans/phase8b.md §E)
   /** A button under an artwork, from anywhere (active or locked; teaser → taskNotStarted; unknown art / same state → silent;
    *  on with ≥ LOUVRE.maxPicks lit and now ≥ hintAt[0] → pickLimit). */
   | { kind: 'pick'; step: string; art: string; on: boolean }
-  /** The lock button: `pose` must stand in zones[i] (else boxFar; null = none yet → boxFar); locked → answerLocked; right =
-   *  exactly the 5 answers (picks.length === 5) → done(pose); wrong → rejections + 1, locked_until. */
+  /** The lock button: `pose` must stand in zones[i] + slack (else boxFar; null = none yet → boxFar); locked → answerLocked;
+   *  no pick → silent (the client blocks it); right = exactly the 5 answers (picks.length === 5) → done(pose); wrong →
+   *  rejections + 1, locked_until. */
   | { kind: 'lock'; step: string; pose: StandAt };
 
 export type RaceEffect =
@@ -91,13 +94,13 @@ export type RaceEffect =
   | { kind: 'openBranch'; step: number; branch: string }
   /** The switched-away branch's box: RaceIO.hideBox (socket attachments cleared, then {t:'box', op:'remove'}). */
   | { kind: 'hideBox'; step: number; branch: string }
-  // Phase 8B (TODO track A: RaceEngine.apply)
+  // Phase 8B (RaceEngine.apply)
   /** Memory only (the engine's row cache .picks + the snapshot row within NET.snapshotMs): 0 rows. */
   | { kind: 'pick'; step: number; picks: string[] }
   /** A lock: rec (text "k tác phẩm", s wrong / correct, c = right ones) appended to answers; picks written; wrong →
    *  rejections + 1, locked_until = lockedUntil; event louvre.lock {ok, k, c, public, slot}; `public` = at ≥ hintAt[1]
-   *  (the feed line carries n); ok → a `complete` follows. */
-  | { kind: 'lock'; step: number; rec: AnswerRec; ok: boolean; correct: number; public: boolean; lockedUntil: number | null; picks: string[] };
+   *  (the feed line carries n); `minutes` = the countdown of a wrong lock (feed); ok → a `complete` follows. */
+  | { kind: 'lock'; step: number; rec: AnswerRec; ok: boolean; correct: number; public: boolean; lockedUntil: number | null; minutes: number; picks: string[] };
 
 const inside = (zn: Zone, x: number, z: number, slack: number) => Math.hypot(x - zn.x, z - zn.z) <= zn.r + slack;
 
@@ -144,7 +147,7 @@ export function rowFacts(row: StepProgressRow | undefined): Omit<Progress, 'step
   const last = parseAnswers(row).at(-1);
   return {
     arrivedAt: row?.arrived_at ?? null, startedAt: row?.task_started_at ?? null, branch: row?.branch ?? null, branchOpenedAt: row?.branch_opened_at ?? null,
-    lockedUntil: row?.locked_until ?? null, pendingId: last?.s === 'pending' ? last.id : null, lastAnswerId: last?.id ?? 0,
+    lockedUntil: row?.locked_until ?? null, pendingId: last?.s === 'pending' ? last.id : null, lastAnswerId: last?.id ?? 0, picks: parsePicks(row),
   };
 }
 
@@ -173,7 +176,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   const complete = (i: number, at: Zone, standing: boolean) => {
     fx.push({ kind: 'complete', step: i });
     if (standing && parksOnReceive(leg, i)) fx.push({ kind: 'park', rack: at.rack, at: at.parking });
-    p = { ...p, step: i + 1, arrivedAt: null, startedAt: null, branch: null, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0 };
+    p = { ...p, step: i + 1, arrivedAt: null, startedAt: null, branch: null, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, picks: [] };
   };
   /** A trusted position: arrivals, then whatever completes by standing there (route → Pit Stop zone, check-in). */
   const settle = (x: number, z: number, riding: boolean) => {
@@ -266,8 +269,37 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     p = { ...p, branch: input.branch, branchOpenedAt: null, startedAt: null, arrivedAt: null, lockedUntil };
     return { p, effects: [{ kind: 'switch', step: i, from, to: input.branch, lockedUntil }, { kind: 'hideBox', step: i, branch: from }] };
   }
-  // TODO(phase8b track A): pick / lock transitions (docs/plans/phase8b.md §E); silent until then
-  if (input.kind === 'pick' || input.kind === 'lock') return silent;
+  if (input.kind === 'pick' || input.kind === 'lock') {
+    // Phase 8B (docs/plans/phase8b.md §E, SPEC §17.19): the louvre room. Picks while active or locked (a wrong lock's
+    // countdown: still pick / unpick), from anywhere (only a state); the lock inside the room (= the step's zone).
+    const t = s.type === 'challenge' ? s.task : null;
+    if (t?.kind !== 'louvre' || !t.louvre) return silent;
+    const state = stateOf(leg, i, p, now);
+    if (state === 'teaser') return refuse('taskNotStarted');
+    const [h40, h70] = marks(t.louvre, p.startedAt ?? now);
+    if (input.kind === 'pick') {
+      const on = p.picks.includes(input.art);
+      if (on === input.on || !t.louvre.artworks.some((a) => a.id === input.art)) return silent;
+      // §17.19 (c): from the 40-minute mark at most LOUVRE.maxPicks lit at once (switching off always works; more lit
+      // before the mark stay until the team unpicks them)
+      if (input.on && p.picks.length >= LOUVRE.maxPicks && now >= h40) return refuse('pickLimit');
+      p.picks = input.on ? [...p.picks, input.art] : p.picks.filter((x) => x !== input.art);
+      return { p, effects: [{ kind: 'pick', step: i, picks: p.picks }] };
+    }
+    if (state === 'locked') return refuse('answerLocked');
+    if (!input.pose || !inside(zones[i]!, input.pose.x, input.pose.z, slack)) return refuse('boxFar');
+    if (!p.picks.length) return silent; // the client never locks nothing (no row, no penalty)
+    const correct = p.picks.filter((x) => t.answers.includes(x)).length;
+    const ok = correct === t.answers.length && p.picks.length === t.answers.length;
+    const minutes = ok ? 0 : retryLockMinutes(leg, t);
+    const lockedUntil = minutes > 0 ? now + minutes * 60_000 : null;
+    const rec: AnswerRec = { id: p.lastAnswerId + 1, b: null, text: `${p.picks.length} tác phẩm`, at: now, s: ok ? 'correct' : 'wrong', c: correct };
+    fx.push({ kind: 'lock', step: i, rec, ok, correct, public: now >= h70, lockedUntil, minutes, picks: p.picks });
+    p.lastAnswerId = rec.id;
+    if (ok) done(input.pose);
+    else p.lockedUntil = lockedUntil;
+    return { p, effects: fx };
+  }
   // answer. Phase 8B guard C1: a louvre room is solved by picks + a lock only (an `answer` with one right id would pass
   // verifyAuto: silent, nothing written)
   if (taskOf(s, p.branch)?.kind === 'louvre') return silent;
@@ -332,14 +364,15 @@ export const retryLockMinutes = (leg: Leg, t: Task) => t.retryLockMinutes ?? leg
 const answerViews = (row: StepProgressRow | undefined, branch: string | null, correctFrom = Infinity): AnswerView[] =>
   parseAnswers(row).filter((a) => a.b === branch).slice(-NET.answerHistory).map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, ...(a.c !== undefined && a.at >= correctFrom ? { correct: a.c } : {}) }));
 
+/** Server ms of the 40 / 70-minute marks of a louvre room started at t0. */
+const marks = (lv: LouvreTask, t0: number): [number, number] => [t0 + lv.hints.countAtMinutes * 60_000, t0 + lv.hints.correctAtMinutes * 60_000];
+
 /** Phase 8B: server ms of the two hints of a louvre step (task_started_at = the previous route's box opened: a louvre
  *  challenge has no teaser), null = not a louvre step. */
 export function hintAt(leg: Leg, i: number, row: StepProgressRow | undefined, now: number): [number, number] | null {
   const s = leg.steps[i];
   const lv = s?.type === 'challenge' && s.task.kind === 'louvre' ? s.task.louvre : undefined;
-  if (!lv) return null;
-  const t0 = row?.task_started_at ?? row?.clue_opened_at ?? now;
-  return [t0 + lv.hints.countAtMinutes * 60_000, t0 + lv.hints.correctAtMinutes * 60_000];
+  return lv ? marks(lv, row?.task_started_at ?? row?.clue_opened_at ?? now) : null;
 }
 
 /** Phase 8B (docs/plans/phase8b.md §C, §E): the room as THIS team sees it — artworks without note / credit, the step's zone
@@ -431,8 +464,9 @@ export function review(leg: Leg, i: number, row: StepProgressRow, m: HostReview,
   const decided = { decided_at: now, decided_by: 'host', ...(m.note ? { host_note: m.note } : {}) };
   const id = m.id ?? (last?.s === 'pending' ? last.id : undefined);
   if (id === undefined) {
-    // approve without id (critic M2): a photo task the Host got on Messenger before the team pressed "Tôi đã gửi bài"
-    if (m.op !== 'approve' || t.kind !== 'free' || (state !== 'active' && state !== 'locked')) return { refuse: NOTHING };
+    // approve without id (critic M2): a photo task the Host got on Messenger before the team pressed "Tôi đã gửi bài";
+    // Phase 8B: the Host's way out for a team stuck in the louvre room (a client fault, verify-foundation #9)
+    if (m.op !== 'approve' || (t.kind !== 'free' && t.kind !== 'louvre') || (state !== 'active' && state !== 'locked')) return { refuse: NOTHING };
     const rec: AnswerRec = { id: (last?.id ?? 0) + 1, b, text: '', at: now, s: 'approved', d: now, ...n };
     return { row: { ...row, ...decided, answers: JSON.stringify([...answers, rec]), locked_until: null }, approve: true, id: rec.id };
   }

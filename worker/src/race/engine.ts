@@ -3,9 +3,9 @@
 // step_progress (cache + writes) and the team race fields in teams.state; it applies steps.ts effects — SQLite first,
 // in one transaction, the cache patched only once it committed, THEN the answers (SPEC §3) — and builds the welcome /
 // host.state parts.
-import { branchZone, jsonProblem, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
+import { branchZone, jsonProblem, LOUVRE, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
 import { latLonToWorld } from '@race/shared';
-import type { BoxInfo, HostMessage, HostState, PoseSample, RaceOp, RaceStatus, RaceView, ReviewItem, ServerMessage, ServerNotice, StepProgressView, Welcome, ZoneMember } from '@race/shared/protocol';
+import type { BoxInfo, FeedMessage, HostMessage, HostState, PoseSample, RaceOp, RaceStatus, RaceView, ReviewItem, ServerMessage, ServerNotice, StepProgressView, Welcome, ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
@@ -59,6 +59,29 @@ export interface RaceIO {
   /** Phase 8 (D6, critic S1): the team switched away from `branch` of detour `step` (id): every socket of the team forgets
    *  its revealed box (attachment), then gets {t:'box', op:'remove', step, branch} (dropped even if opened). */
   hideBox(team: string, step: string, branch: string): void;
+  /** Phase 8B: a public feed line to every socket (teams + Hosts), kept for the welcome (the event is written already). */
+  feed(m: FeedMessage): void;
+  /** Phase 8B: a louvre pick changed live picks (memory only): the snapshot row goes out within NET.snapshotMs. */
+  touchSnapshot(now: number): void;
+}
+
+/** Data of a `louvre.lock` event (enough to rebuild its feed line when the Durable Object wakes). */
+export interface LockEvent {
+  step: string;
+  ok: boolean;
+  /** picks locked / right ones among them. */
+  k: number;
+  c: number;
+  /** At or past the team's correctAtMinutes mark: the line carries n. */
+  public: boolean;
+  slot: number;
+  minutes: number;
+}
+
+/** The public line of a lock (SPEC §17.19 "Chốt thêm"), null = none (right before the 70-minute mark). */
+export function feedLine(at: number, e: LockEvent): FeedMessage | null {
+  if (e.ok && !e.public) return null;
+  return { t: 'feed', at, slot: e.slot, ok: e.ok, ...(e.ok ? {} : { minutes: e.minutes }), ...(e.public ? { n: e.c, of: LOUVRE.answers } : {}) };
 }
 
 export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.team' | 'host.leg' | 'host.review' }>;
@@ -363,6 +386,29 @@ export class RaceEngine {
     };
   }
 
+  /** Phase 8B (§D): live picks of every team's current, unfinished louvre step, for the snapshot row: team → step → ids. */
+  livePicks(): Record<string, Record<string, string[]>> {
+    const out: Record<string, Record<string, string[]>> = {};
+    for (const id of this.io.teamIds()) {
+      const s = this.legV.steps[this.io.team(id)?.step ?? -1];
+      const row = s?.type === 'challenge' && s.task.kind === 'louvre' ? this.teamRows(id).get(s.id) : undefined;
+      if (row && row.completed_at == null) out[id] = { [s!.id]: parsePicks(row) };
+    }
+    return out;
+  }
+
+  /** Phase 8B (verify-foundation #2): live picks back from the snapshot row written at `snapT` — the newer one wins: a
+   *  step's row whose last lock is later than the snapshot (it wrote its picks) or that is done keeps its own. */
+  restorePicks(saved: Record<string, Record<string, string[]>> | undefined, snapT: number): void {
+    for (const [team, steps] of Object.entries(saved ?? {}))
+      for (const [step, ids] of Object.entries(steps)) {
+        const row = this.rows.get(team)?.get(step);
+        if (!row || row.completed_at != null || !Array.isArray(ids)) continue;
+        if (Math.max(0, ...parseAnswers(row).map((a) => a.at)) > snapT) continue;
+        this.teamRows(team).set(step, { ...row, picks: JSON.stringify(ids.filter((x) => typeof x === 'string')) });
+      }
+  }
+
   // ── internals ──
   private setLeg(leg: Leg, issues: LegIssue[]) {
     this.legV = leg;
@@ -446,6 +492,8 @@ export class RaceEngine {
     const events: [string, object][] = [];
     const out: ServerMessage[] = [];
     const parks: Extract<RaceEffect, { kind: 'park' }>[] = [];
+    const feeds: FeedMessage[] = [];
+    let picked = false;
     const hides: Extract<RaceEffect, { kind: 'hideBox' }>[] = [];
     const notice = (code: ServerNotice) => out.push({ t: 'notice', code });
     // M8: an approval says "Host đã duyệt! Mật thư mới…" once (no clueNew next to it); a note alone changes no card
@@ -496,6 +544,21 @@ export class RaceEngine {
         const box = this.boxes[e.step]?.[0];
         if (box && !box.kind && !box.branch) out.push({ t: 'box', op: 'reveal', box: { ...box, opened: true } }); // D5: opened at once
         if (n && !approved) notice('clueNew');
+      } else if (e.kind === 'pick') {
+        // Phase 8B (§D): memory only — the row cache (cardOf / hostView read it) + the snapshot row; a lock writes them
+        const id = sid(e.step);
+        this.teamRows(team).set(id, { ...(this.teamRows(team).get(id) ?? emptyProgress(team, id)), picks: JSON.stringify(e.picks) });
+        picked = true;
+      } else if (e.kind === 'lock') {
+        const row = edit(e.step);
+        row.answers = JSON.stringify([...parseAnswers(row), e.rec].slice(-ANSWERS_KEPT));
+        row.picks = JSON.stringify(e.picks);
+        if (!e.ok) Object.assign(row, { rejections: row.rejections + 1, locked_until: e.lockedUntil });
+        const data: LockEvent = { step: sid(e.step), ok: e.ok, k: e.picks.length, c: e.correct, public: e.public, slot: this.io.slot(team), minutes: e.minutes };
+        events.push(['louvre.lock', data]);
+        const line = feedLine(now, data);
+        if (line) feeds.push(line);
+        if (!e.ok) notice('lockWrong'); // right: the `complete` after it says clueNew
       } else if (e.kind === 'finish') {
         edit(p.step).completed_at = now;
         events.push(['finish', { officialMs: this.official(team, { ...r, finishAt: now }) }]);
@@ -511,10 +574,16 @@ export class RaceEngine {
       });
       for (const row of dirty.values()) this.teamRows(team).set(row.step, row); // committed: patch the cache
       if (!quiet) out.push({ t: 'race', view: this.view(team, now) });
+    } else if (picked) {
+      // nothing written: the team's new card (its lights, the live x/5) goes out all the same; the Host's soon
+      out.push({ t: 'race', view: this.view(team, now) });
+      this.io.touchSnapshot(now);
+      this.io.changed(now);
     }
     for (const h of hides) this.io.hideBox(team, sid(h.step), h.branch); // before the card that says "switched"
     for (const k of parks) this.io.park(team, k.rack, k.at, now);
     for (const m of out) this.io.send(team, m);
+    for (const m of feeds) this.io.feed(m);
     if (dirty.size) {
       this.io.changed(now);
       // its lists change with a new step, an arrival where it already stands (moveZone sees no move), or a branch switch

@@ -161,6 +161,15 @@ export async function walkTo(s: { send(m: unknown): void }, from: { x: number; z
 /** Phase 8: a typed answer ('' = "Tôi đã gửi bài" of a photo task) from a team socket. */
 export const answer = (s: { send(m: unknown): void }, step: string, text: string) => s.send({ t: 'race', op: 'answer', step, text });
 
+/** Phase 8B: a louvre button (on = light it, false = put it out). */
+export const pick = (s: { send(m: unknown): void }, step: string, art: string, on = true) => s.send({ t: 'race', op: 'pick', step, art, on });
+
+/** Phase 8B: the louvre lock button (judged at the team's trusted pose). */
+export const lock = (s: { send(m: unknown): void }, step: string) => s.send({ t: 'race', op: 'lock', step });
+
+/** Phase 8B: ask for the team's race view again (read-only, every status). */
+export const viewAgain = (s: { send(m: unknown): void }) => s.send({ t: 'race', op: 'view' });
+
 /** Phase 8: a Host decision on a team's answer (`id` absent: the pending one / a photo task already received). */
 export const review = (host: { send(m: unknown): void }, team: string, step: string, op: 'approve' | 'penalize' | 'note', id?: number, note?: string) =>
   host.send({ t: 'host.review', team, step, op, ...(id !== undefined ? { id } : {}), ...(note !== undefined ? { note } : {}) });
