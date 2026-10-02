@@ -5,13 +5,15 @@ Mục đích: phiên mới không phải đọc lại hội thoại cũ. Đọc 
 ## Trạng thái
 | Phase | Trạng thái |
 |---|---|
-| 0–2B, 3, 4, 4B, 5 | Xong (xem `git log`) |
-| 6 Server & presence | **Xong** (commit `feat(phase6)` trên main): Worker + RaceRoom, login mã đội, người chơi khác, xe chung, hộp mật thư trong 150 m, Host tối giản, bot `sim`; kiểm 8 kịch bản end-to-end thật |
-| 7 Race engine lõi | **Chưa làm — DỪNG chờ người dùng bảo** |
-| 8–12 | Chưa làm |
+| 0–2B, 3, 4, 4B, 5, 6 | Xong (xem `git log`) |
+| 7 Race engine lõi | **Xong** (commit `feat(phase7)` trên main): schema chặng + `leg:check` + `docs/LEG_FORMAT.md`, máy trạng thái từng đội, hộp mật thư, Sổ mật thư, Chặng dừng, xếp hạng, đồng hồ đội, anti-teleport, trang Host, bot `sim --leg`; 3 vòng review + e2e client/server thật |
+| 8 Thử thách (mini-game, kiểm đáp án, Host duyệt) | **Chưa làm — DỪNG chờ người dùng bảo** |
+| 9–12 | Chưa làm |
 
-## Việc tiếp theo: Phase 7 (chỉ khi người dùng nói tiếp tục)
-Đọc `TODO.md` mục Phase 7, SPEC §8, §10, §13.8, §17.9–17.12. Điều kiện đầu vào đã chốt: điểm bắt đầu chặng = cầu Bir-Hakeim (lấy từ file chặng); các đội tới lần lượt; đồng hồ đội tính từ lúc nhận mật thư ngoài game (Host nhập giờ bắt đầu từng đội); hộp mật thư bước N+1 chỉ hiện khi bước N hoàn thành và tọa độ chỉ gửi khi vào 150 m. Nội dung chặng thật CHƯA có (SPEC §17.9): dùng chặng demo + bản test. Workflow: kế hoạch + nền (Fable/Opus) → track song song trong worktree → verify đối kháng → merge → 2 reviewer + e2e client/server thật → sửa → docs → commit (đã dùng cho Phase 6 bằng công cụ Workflow).
+## Việc tiếp theo
+1. **Người dùng nhập chặng thật** (lộ trình + thử thách) theo `docs/LEG_FORMAT.md` hoặc gửi cho tôi; LT2 đã nhận (xem memory `leg-content-draft`, điểm Palais de Tokyo dùng sân trước 48.86470, 2.29690). Đừng tự bịa nội dung chặng thật.
+2. Phase 8 chỉ khi người dùng nói tiếp tục: đọc `TODO.md` mục Phase 7 + 8, SPEC §8.4–8.9, §11 (thư viện thử thách), §17.9–17.13. Điều kiện đã chốt: không Vượt rào; nhiệm vụ Phase 7 đang là "Hoàn thành (tạm)"; Phase 8 chỉ thay `verifyTask` và thêm op, không đổi schema chặng hay `step_progress`.
+3. Workflow đã dùng cho Phase 6–7 (công cụ Workflow): kế hoạch + nền (Opus) → critic → track song song trong worktree → verifier đối kháng → merge → review (spec/code ∥ visual ∥ e2e thật) → skeptic → sửa → vòng 2 (kiểm lại bản sửa + critic độ đầy đủ + thử người tổ chức) → vòng 3 → dọn → cổng cuối.
 
 ## Quy tắc làm việc đã chốt (xem thêm memory `~/.claude/projects/-Users-nguyencuongthinh-Documents-cuoc-dua-paris/memory/`)
 - Workflow mỗi phase: kế hoạch + nền (Opus; Fable cho thiết kế giao thức/server) → các track song song trong worktree (Sonnet cho việc cơ học spec rõ, Opus cho logic khó/ghép) → 2 reviewer Opus song song (spec+code ∥ visual) → chỉ sửa lỗi người chơi/đội đua thấy trực tiếp (tiết kiệm token) → chụp lại mọi preset → docs → commit → dọn worktree.
