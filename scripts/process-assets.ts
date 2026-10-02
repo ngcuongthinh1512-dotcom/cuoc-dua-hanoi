@@ -21,6 +21,7 @@ import sharp from 'sharp';
 import { bikeModel, landmarks, npc, npcAssets } from '../client/src/config.ts';
 import { UAL_CLIPS } from '../client/src/player/Animation.ts';
 import { footprintFrame } from '../client/src/world/landmarks/kit.ts';
+import { processLouvre } from './assets/louvre.ts';
 import { inChrome, readFbxAvatar, readFbxClip, type RawAvatar, type RawClip, readFbxSoup, unb64 } from './fbx.ts';
 
 const G = landmarks.g1;
@@ -1055,6 +1056,8 @@ async function npcPedAnims() {
 }
 
 mkdirSync(out, { recursive: true });
+// Phase 8B: the Louvre room's 23 artworks (own input folder <src>/louvre, own output client/public/art; scripts/assets/louvre.ts)
+if (only.includes('louvre')) await processLouvre(join(src, 'louvre'), join(root, 'client/public/art'));
 const BUILDS = [['eiffel', eiffel], ['arc', arc], ['player', player], ['player-anims', playerAnims], ['bike', bike], ['npc-vehicles', npcVehicles], ['npc-peds', npcPeds], ['npc-ped-anims', npcPedAnims]] as const;
 for (const [name, build] of BUILDS.filter(([n]) => !only.length || only.includes(n))) {
   const doc = await build();
@@ -1114,6 +1117,8 @@ const credits = [
     url: 'https://github.com/tilezen/joerd/blob/master/docs/attribution.md',
   },
   ...manifest.map(credit),
+  // Phase 8B (SPEC §17.19 / §17.20): ONE general line; titles, authors and links of the 23 artworks come from the server after the finish
+  { title: 'Phòng Louvre', text: 'Ảnh / mô hình tác phẩm phòng Louvre: xem bảng Ghi nguồn sau khi về đích', licence: 'xem bảng Ghi nguồn sau khi về đích', url: 'https://creativecommons.org/licenses/' },
 ];
 writeFileSync(join(root, 'client/public/credits.json'), `${JSON.stringify(credits, null, 1)}\n`);
 console.log(`client/public/credits.json: ${credits.length} mục`);

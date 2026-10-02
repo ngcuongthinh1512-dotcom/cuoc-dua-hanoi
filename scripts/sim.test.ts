@@ -5,7 +5,7 @@ import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
 import { branchZone, normalizeAnswer, parseLeg, stepZones, type Task } from '@race/shared/leg';
 import { decodePose, type CardStatus, type ClueCard, type HostReview, type HostState, type RaceView, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { answersOf, type Bot, botMove, effectiveStatus, fastPenalties, legArg, legFailed, legRowBudget, legStats, playLeg, reviewsFor, runHostBot, runSim, SIM_PENALTIES } from './sim.ts';
+import { answersOf, type Bot, botMove, louvreAnswersOf, louvreMove, effectiveStatus, fastPenalties, legArg, legFailed, legRowBudget, legStats, playLeg, reviewsFor, runHostBot, runSim, SIM_PENALTIES } from './sim.ts';
 
 // Real workerd + Durable Object (createTestHarness) and real WebSockets: 3 bots walk 30 simulated seconds on the A* road graph.
 // speedup 2 (10 msg/s per bot) leaves margin under the server's 15 msg/s socket limit (1 s window) and is the CLI maximum;
@@ -148,8 +148,9 @@ describe('sim report numbers (D18)', () => {
 
   it('answers, approvals, penalties and switches are read from host.state.progress', () => {
     const progress = [row('t0', 'T1', [a(1, 'approved')]), row('t1', 'T1', [a(1, 'penalized'), a(2, 'approved')]), row('t2', 'D1', [a(1, 'correct'), a(2, 'wrong')], 1), row('t1', 'D1', [], 2)];
-    expect(legStats(progress)).toEqual({ answers: 5, approved: 2, penalized: 1, wrong: 1, switches: 3 });
-    expect(legStats([])).toEqual({ answers: 0, approved: 0, penalized: 0, wrong: 0, switches: 0 });
+    expect(legStats(progress)).toEqual({ answers: 5, approved: 2, penalized: 1, wrong: 1, correct: 1, louvre: false, switches: 3 });
+    expect(legStats([])).toEqual({ answers: 0, approved: 0, penalized: 0, wrong: 0, correct: 0, louvre: false, switches: 0 });
+    expect(legStats([row('t0', 'T3', [a(1, 'wrong')])], new Set(['T3'])).louvre).toBe(true);
   });
 
   it('the row budget is 16 per step (a 10-step leg: 160), never fewer than 10 steps', () => {
@@ -392,4 +393,71 @@ describe('sim --leg (Phase 7 / 8)', () => {
     expect(legFailed({ ...r, leg: { ...leg, finished: 1 } })).toBe(true);
     expect(legFailed({ ...r, leg: { ...leg, rowsPerTeam: null } })).toBe(false); // --url: not measured, not a failure
   });
+});
+
+// ── Phase 8B track D: the louvre bot ──
+describe('louvre bot (phase8b §I, pure)', () => {
+  const louvreLeg = readFileSync(join(import.meta.dirname, '../worker/legs/test/louvre.json'), 'utf8');
+  const RIGHT = louvreAnswersOf(louvreLeg).get('T3')!;
+  const arts = Array.from({ length: 23 }, (_, k) => ({ id: `art-${String(k + 1).padStart(2, '0')}`, type: 'painting' as const, image: '' }));
+  const lv = (o: Partial<NonNullable<NonNullable<ClueCard['task']>['louvre']>> = {}) => ({ artworks: arts, room: { x: 0, z: 0, r: 25, yaw: 0 }, picks: [], attempts: 0, hintAt: [0, 0] as [number, number], hintCount: null, hintCorrect: null, maxPicks: null, ...o });
+  const lcard = (l: ReturnType<typeof lv>, o: Partial<ClueCard> = {}) => card({ step: 'T3', type: 'challenge', status: 'active', task: { ...taskOf('text'), input: 'room', louvre: l } as never, ...o });
+
+  it('reads the 5 right ids of the louvre step from the leg file (the test leg: fake ids)', () => {
+    expect(RIGHT).toHaveLength(5);
+    expect([...louvreAnswersOf(louvreLeg).keys()]).toEqual(['T3']);
+    expect(louvreAnswersOf(mini).size).toBe(0);
+  });
+
+  it('wrong set first: 5 decoys picked one by one, then a lock; never one of the right ids, windows differ per bot', () => {
+    let picks: string[] = [];
+    const sent: string[] = [];
+    for (let k = 0; k < 20; k++) {
+      const m = louvreMove('T3', lv({ picks }), 0, RIGHT)!;
+      sent.push(String(m.op.op));
+      if (m.op.op === 'lock') break;
+      expect(m.op).toMatchObject({ t: 'race', op: 'pick', step: 'T3', on: true });
+      picks = [...picks, m.op.art as string];
+    }
+    expect(sent).toEqual(['pick', 'pick', 'pick', 'pick', 'pick', 'lock']);
+    expect(picks.some((id) => RIGHT.includes(id))).toBe(false);
+    expect(louvreMove('T3', lv(), 0, RIGHT)!.op.art).not.toBe(louvreMove('T3', lv(), 1, RIGHT)!.op.art);
+  });
+
+  it('after a wrong lock (attempts 1): unpick the wrong ones BEFORE picking a right one (never > 5 lit), then the 5 right, then lock', () => {
+    let picks = ['art-01', 'art-02', 'art-04', 'art-05', 'art-06']; // 5 decoys (the right ones are art-17 / 03 / 21 / 08 / 12)
+    const log: string[] = [];
+    for (let k = 0; k < 30; k++) {
+      expect(picks.length).toBeLessThanOrEqual(5);
+      const m = louvreMove('T3', lv({ picks, attempts: 1 }), 0, RIGHT)!;
+      if (m.op.op === 'lock') break;
+      log.push(`${m.op.on ? '+' : '-'}${m.op.art}`);
+      picks = m.op.on ? [...picks, m.op.art as string] : picks.filter((x) => x !== m.op.art);
+    }
+    expect(log.filter((x) => x.startsWith('-'))).toHaveLength(5);
+    expect(log.findIndex((x) => x.startsWith('+'))).toBeGreaterThan(log.lastIndexOf(log.filter((x) => x.startsWith('-')).at(-1)!) - 1);
+    expect([...picks].sort()).toEqual([...RIGHT].sort());
+  });
+
+  it('botMove routes a louvre card (locked → wait, then active after the countdown), and knows nothing → waits instead of spamming', () => {
+    const rooms = new Map([['T3', RIGHT]]);
+    expect(botMove(lcard(lv()), 0, role(0), new Map(), 1000, rooms)!.op).toMatchObject({ op: 'pick', on: true });
+    const locked = lcard(lv({ picks: ['art-01'], attempts: 1 }), { status: 'locked', lockedUntil: 6000 });
+    expect(botMove(locked, 5500, role(0), new Map(), 1000, rooms)).toBeNull();
+    expect(botMove(locked, 7000, role(0), new Map(), 1000, rooms)!.op).toMatchObject({ op: 'pick', art: 'art-01', on: false });
+    expect(botMove(lcard(lv()), 0, role(0), new Map())).toBeNull(); // no right ids known
+  });
+});
+
+// Integration: needs track A's engine (pick / lock). Until A is merged advance() answers silently to both and the bots would stall.
+const trackAMerged = !/input\.kind === 'pick' \|\| input\.kind === 'lock'\) return silent/.test(readFileSync(join(import.meta.dirname, '../worker/src/race/steps.ts'), 'utf8'));
+describe('sim --leg louvre (needs track A)', () => {
+  it.skipIf(!trackAMerged)('3 bots finish: ≥ 3 wrong locks, every bot sees ≥ 3 public feed messages, ≤ 16 × steps rows per team', { timeout: 300_000 }, async () => {
+    const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-louvre', password: 'test-secret', log: () => {}, leg: { id: 'louvre' } });
+    expect(r.leg).toMatchObject({ id: 'louvre', finished: 3, ranked: 3 });
+    expect(r.leg!.stats.wrong).toBeGreaterThanOrEqual(3);
+    expect(r.leg!.feed).toBeGreaterThanOrEqual(3);
+    expect(r.leg!.rowsPerTeam!).toBeLessThanOrEqual(r.leg!.rowBudget);
+  });
+  it.skipIf(trackAMerged)('NOT RUN: track A (pick / lock in worker/src/race/steps.ts) is not merged in this worktree', () => {});
 });
