@@ -42,6 +42,7 @@ Game chỉ dùng những phím có trên cả bàn phím Windows lẫn Mac. Game
 - `Space`: nhảy; khi đang bơi sát tường kè sông Seine: leo lên bờ
 - `F`: tương tác (mở hộp mật thư, lấy xe, lên/xuống xe, nhặt đồ vật)
 - `Tab`: mở Sổ mật thư
+- `Enter`: mở lại **thẻ mật thư hiện tại** (khi không có thẻ, Sổ, Menu hay bản đồ nào đang mở). Thẻ thử thách có ô gõ câu trả lời và lịch sử các câu bạn đã gửi (mục 6)
 - `M`: bản đồ lớn
 - `C`: đổi góc camera (gần → xa → góc nhìn thứ nhất)
 - `B`: ống nhòm (chỉ dùng được khi thử thách cho phép)
@@ -52,6 +53,7 @@ Game chỉ dùng những phím có trên cả bàn phím Windows lẫn Mac. Game
 ### Chuột
 - **Nhấp vào màn hình game** để khóa con trỏ, sau đó di chuột để nhìn quanh.
 - Bấm `Esc` để nhả chuột và mở Menu. Menu cũng tự mở mỗi khi chuột bị nhả khỏi game.
+- **Ngoại lệ:** khi **thẻ mật thư, Sổ mật thư hoặc bản đồ lớn đang mở**, chuột được thả tự do (không có Menu) để bạn bấm liên kết, hình, nút và ô gõ câu trả lời trên thẻ. Đóng thẻ (`Tab`, `Esc`, `Space` hoặc nút **Đóng**) thì chuột tự khóa lại vào game.
 
 ### Tay cầm
 - Game có hỗ trợ tay cầm chơi game (gamepad): stick trái đi, stick phải nhìn quanh, `A` nhảy, giữ `LB` đi chậm, `View` đổi camera.
@@ -90,15 +92,17 @@ Sau khi về đích (hoặc khi Host đã kết thúc chặng), bạn trở thà
 - **Mỗi người chơi giữ tối đa 1 xe.** Lấy xe khác thì chiếc cũ biến mất.
 
 ### Giữ xe của mình
-- Bạn **phải xuống xe** mới mở được hộp mật thư và làm nhiệm vụ.
+- Bạn **phải xuống xe** mới mở được hộp mật thư (kể cả hòm của nhánh Lựa chọn kép). Gõ câu trả lời của thử thách thì **không cần xuống xe** và không cần đứng ở điểm (mục 6).
 - Ở các lộ trình "tự chọn", bạn xuống xe mở hộp mật thư rồi lên xe đi tiếp, xe vẫn là của bạn.
 - Bỏ xe ngoài đường và **ở xa xe liên tục quá lâu** (ví dụ cách xe hơn 200 m suốt 1 phút) thì xe sẽ **biến mất**.
 - **Thoát game hay mất mạng không làm mất xe**: xe đứng yên tại chỗ và vẫn khóa theo đội bạn. Nếu đội vắng mặt quá lâu, Host có thể giải phóng xe.
 
 ### Bãi xe cạnh điểm
 Các điểm thường có một **bãi xe đạp** ngay bên cạnh.
-- Khi bạn **mở mật thư của một nhiệm vụ tại điểm** (Lựa chọn kép, Thử thách, Gờ giảm tốc, Vé vượt), hoặc **nhận một lộ trình bắt buộc đi bộ**, xe của bạn tự động vào bãi. Màn hình báo *"Xe của bạn đã được để ở bãi xe cạnh điểm. Trong lúc bạn làm thử thách, đội khác có thể lấy mất!"*
+- Khi bạn **mở mật thư của một nhiệm vụ tại điểm** (Thử thách tại điểm, Lựa chọn kép mà cả hai nhánh làm tại điểm, Gờ giảm tốc, Vé vượt), hoặc **nhận một lộ trình bắt buộc đi bộ**, xe của bạn tự động vào bãi. Màn hình báo *"Xe của bạn đã được để ở bãi xe cạnh điểm. Trong lúc bạn làm thử thách, đội khác có thể lấy mất!"*
 - Nhiệm vụ làm ở **nơi khác** (thẻ ghi *"Địa điểm: …"*): xe vào bãi của nơi đó khi bạn **tới** nơi đó, không phải lúc mở mật thư.
+- **Lựa chọn kép:** mỗi nhánh có hòm và nơi riêng; chỉ nơi của **nhánh bạn đã chọn** mới tính là điểm của đội (tới đó thì xe vào bãi của nơi đó). Đạp xe ngang nơi của nhánh kia thì không có chuyện gì xảy ra.
+- **Trả lời từ xa thì xe không vào bãi:** khi Host duyệt câu trả lời (hoặc game chấm đúng) lúc bạn đang ở xa vùng của thử thách, ví dụ đang đạp xe giữa đường, xe vẫn là của bạn, không bị đưa vào bãi. Xe chỉ vào bãi khi bạn đang đứng trong vùng của điểm.
 - Điểm không có bãi: xe dừng lại ngay chỗ bạn đứng, nhưng vẫn theo luật bãi xe bên dưới.
 - Xe ở bãi đứng thành một hàng và **không còn là của riêng ai: bất kỳ đội nào cũng lấy được**, kể cả chính bạn. Ai tới trước được trước!
 - Làm xong nhiệm vụ mà xe vẫn còn ở bãi, bấm `F` để lấy lại như lấy xe mới. Nếu xe đã bị lấy mất, hãy đi bộ hoặc lấy chiếc khác đang có ở bãi.
@@ -112,9 +116,10 @@ Mỗi mật thư lộ trình ghi rõ luật phương tiện, và màn hình luô
 ## 4. Nguyên tắc tuần tự
 
 - Chặng đua là **một chuỗi bước theo đúng thứ tự**. Bạn chỉ nhận mật thư bước tiếp theo khi máy chủ xác nhận bạn đã xong bước hiện tại. **Không thể nhảy cóc.**
-- Tại mỗi điểm có một **hộp mật thư cắm cờ vàng–đỏ**, phát sáng nhẹ để dễ thấy khi tới gần.
-- Chỉ hộp của mật thư bạn **đang giữ** mới hiện, và chỉ khi bạn tới gần (khoảng 150 m). Hộp của các bước sau chưa hiện, nên không thể tìm trước. Hộp đã mở vẫn còn đó (màu nhạt) để bạn định hướng.
-- Bước vào vùng quanh hộp mật thư, **xuống xe**: màn hình hiện *"Bấm F để mở hộp mật thư"*. Bấm `F` để mở. Thẻ mật thư mới mở ra đầy đủ (bấm `Tab`, `Esc` hoặc `Space` để đóng) và tự vào Sổ mật thư; thẻ rút gọn của mật thư đang giữ luôn nằm ở góc trên bên trái.
+- Tại mỗi điểm có một **hòm mật thư**: đế xám vuông, cột vàng có dải đỏ, hộp xám trên cùng với nắp phẳng, cao khoảng 1,6 m. Hòm chưa mở có một **cột sáng vàng mảnh** phía trên để nhìn thấy từ xa; hòm đã mở thì nắp lật lên.
+- Chỉ hòm của mật thư bạn **đang giữ** mới hiện, và chỉ khi bạn tới gần (khoảng 150 m). Hòm của các bước sau chưa hiện, nên không thể tìm trước. Hòm đã mở vẫn còn đó để bạn định hướng. Ở **Lựa chọn kép**, chỉ hòm của **nhánh bạn đã chọn** hiện (mục 5).
+- Bước vào vùng quanh hòm mật thư, **xuống xe**: màn hình hiện *"Bấm F để mở hộp mật thư"*. Bấm `F` để mở. Thẻ mật thư mới mở ra đầy đủ (bấm `Tab`, `Esc` hoặc `Space` để đóng) và tự vào Sổ mật thư; thẻ mở ra thì chuột được thả để bạn bấm liên kết, hình, nút (mục 2). Thẻ rút gọn của mật thư đang giữ luôn nằm ở góc trên bên trái; đóng thẻ rồi muốn xem lại thì bấm `Enter`.
+- Thẻ rút gọn có thêm một **dòng trạng thái** khi cần: *Chờ Host duyệt · mm:ss*, *Phạt: còn mm:ss*, *Nhánh X · tới hòm nhánh*, *Đổi nhánh: còn mm:ss*.
 
 ### Xuất phát
 - Mỗi đội nhận **mật thư đầu tiên ở ngoài trò chơi**, mỗi đội vào một lúc khác nhau: không có tiếng súng xuất phát chung. **Đồng hồ của đội bạn chạy từ lúc đó** (Host ghi lại giờ này), kể cả khoảng thời gian trước khi bạn vào game.
@@ -129,21 +134,32 @@ Mỗi loại thẻ có tiêu đề và màu riêng, nhìn là nhận ra ngay.
 ### Thông tin lộ trình
 - Cho biết nơi bạn cần tới tiếp theo: có thể là chỉ dẫn rõ ràng, cũng có thể là **một câu đố về địa điểm**.
 - Hoàn thành khi bạn tới đúng điểm và mở hộp mật thư ở đó. Riêng lộ trình dẫn tới Chặng dừng thì chỉ cần bước vào khu vực Chặng dừng.
+- Mật thư có thể kèm **hình** (bấm vào hình để xem lớn) và **liên kết** (bấm để mở tab mới, ví dụ video). Hình chỉ hiện cho đội đã mở mật thư đó.
 
 ### Lựa chọn kép
-- Thẻ giới thiệu **2 nhánh** (tên và mô tả ngắn). Bạn chọn **1 trong 2** để làm.
-- Bấm nút **"Đổi lựa chọn kép"** (bỏ nhánh đang làm): bạn **bị phạt 10 phút** (đồng hồ đếm ngược trên màn hình) và **mất toàn bộ tiến độ** của nhánh cũ; đếm ngược xong, hòm mật thư của nhánh kia mới hiện để bạn làm nhánh đó.
-- Không đổi nhánh được khi đang chờ Host duyệt bài.
+- Thẻ giới thiệu **2 nhánh** (tên và mô tả ngắn) với **hai nút chọn nhánh** (hoặc phím `1` / `2`). Bạn bấm **1 trong 2** nút để chọn, bấm ở đâu cũng được.
+- Sau khi chọn, **chỉ hòm của nhánh bạn đã chọn mới hiện** (khi bạn tới gần, khoảng 150 m, như mọi hòm mật thư); hòm của nhánh kia không hiện. Mỗi nhánh có hòm và nơi làm riêng.
+- **Đề bài của nhánh nằm trong hòm của nhánh**: tới hòm, bấm `F` để mở thì mới thấy mô tả, hình và liên kết của nhiệm vụ. Làm nhiệm vụ (gõ câu trả lời, hoặc gửi ảnh chụp màn hình cho Host qua Messenger / Facebook) rồi chờ Host duyệt (mục 7); duyệt xong thì nhận mật thư tiếp theo.
+- Bấm nút **"Đổi lựa chọn kép"** (bỏ nhánh đang làm) từ bất kỳ đâu, sau khi đã chọn: một **hộp xác nhận** ghi rõ số phút phạt. Nếu đồng ý: hòm của nhánh đang chọn biến mất, bạn **mất toàn bộ tiến độ** của nhánh đó và **bị phạt 10 phút** (chặng có thể quy định số khác): giữa màn hình hiện **đồng hồ đếm ngược** *"Đổi lựa chọn kép: còn mm:ss"*; đếm ngược xong thì hòm của nhánh kia mới hiện (khi bạn tới gần) để bạn làm nhánh đó.
+- Đồng hồ đua vẫn chạy trong lúc đếm ngược, nên 10 phút là thời gian mất thật. **Mỗi lần đổi chịu một lần phạt** (đổi qua rồi đổi lại là 20 phút).
+- **Không đổi nhánh được khi đang chờ Host duyệt bài** (đây là điều kiện duy nhất). Đang bị phạt đếm ngược 3 phút của thử thách thì vẫn đổi được; đếm ngược 10 phút thay cho đếm ngược cũ.
 - Xong nhánh đã chọn thì nhận mật thư tiếp theo.
 
 ### Thử thách
-- Nhiệm vụ bắt buộc tại một điểm, không có nhánh để chọn.
-- Có thể có câu gợi ý trước; khi đó bấm **"Nhận thử thách"** để xem nội dung.
-- Bỏ qua được bằng cách **bỏ cuộc** (bị phạt giờ) hoặc dùng **Vé ưu tiên**.
+- Nhiệm vụ bắt buộc, không có nhánh để chọn.
+- Có thể có câu gợi ý trước; khi đó bấm **"Nhận thử thách"** (hoặc `Enter`) để xem nội dung.
+- Đội **gõ câu trả lời ngay trong game**, ở ô nhập trên thẻ thử thách, và **gõ được ở bất kỳ đâu** sau khi đã nhận thử thách (mục 6). Game không tự chấm: **Host xem câu trả lời rồi bấm Duyệt hoặc Phạt** (mục 7).
+- Thẻ liệt kê **lịch sử các câu trả lời của chính đội bạn** ở thử thách đó (nội dung, giờ gửi, trạng thái). Lịch sử chỉ có trên thẻ thử thách, **không** nằm trong Sổ mật thư; đóng thẻ rồi muốn xem lại thì bấm `Enter`.
+- Thử thách này được Host duyệt thì **mật thư của thử thách kế tiếp hiện ngay**, bạn không phải đi tới đâu (ví dụ Thử thách 2 hiện ngay khi Thử thách 1 được duyệt).
+- **Không có gợi ý trong game.** Nếu đội làm một thử thách quá lâu (mặc định 45 phút, chặng có thể quy định khác), trang Host báo cho Host; Host có thể gửi gợi ý **riêng cho đội bạn qua Messenger**.
+- Bỏ qua thử thách bằng cách **bỏ cuộc** (bị phạt giờ) hoặc dùng **Vé ưu tiên**: chưa có trong bản game này.
 
-Nhiệm vụ có thể làm ngay tại điểm vừa tới, hoặc ở một khu vực khác ghi trên thẻ. Kết quả luôn do máy chủ chấm, hoặc do Host duyệt (xem mục 7).
+Nhiệm vụ ghi *"Địa điểm: …"* trên thẻ là nơi bạn được hướng dẫn tới làm nhiệm vụ (tới đó thì Host thấy đội đã tới, và xe vào bãi của nơi đó, mục 3); nhiệm vụ không ghi địa điểm thì làm ngay tại điểm vừa tới. Dù vậy câu trả lời vẫn gõ được ở bất kỳ đâu. Kết quả do Host duyệt (mục 7); chặng có thể bật **tự chấm** cho một số thử thách, khi đó game báo đúng hay sai ngay.
 
 ### Các kiểu nhiệm vụ bạn có thể gặp
+
+**Bản game hiện tại có hai kiểu:** *gõ câu trả lời trong game* và *gửi ảnh cho Host* (mục 6, 7). Các kiểu mini-game trong danh sách dưới đây chưa có trong game (hoãn); khi chặng cần, thẻ dẫn bạn tới một **liên kết bên ngoài** (video, trang web, mini-game bên ngoài) ngay trên thẻ.
+
 - Tìm và nhặt đồ vật trong một khu vực (bấm `F` để nhặt).
 - Chở hàng tới các điểm trong thời gian giới hạn; va chạm mạnh làm rơi hàng, phải quay lại lấy.
 - Quan sát thế giới xung quanh (đếm đồ vật, đọc biển tên đường) rồi nhập đáp án.
@@ -164,35 +180,52 @@ Xe dùng trong nhiệm vụ chở hàng hay đạp xe qua cổng là **xe riêng
 
 ## 6. Nhập đáp án
 
-- Đừng lo về chữ hoa hay chữ thường, có dấu hay không dấu, hay khoảng trắng thừa: tất cả đều được bỏ qua khi so đáp án.
-- Trả lời sai sẽ thấy *"Chưa đúng, hãy thử lại!"*
-- Theo mặc định, **sai 3 lần liên tiếp** thì ô nhập bị **khóa 30 giây** (chặng có thể quy định khác). Hãy suy nghĩ kỹ trước khi gõ!
+- Câu trả lời của thử thách gõ vào **ô nhập trên thẻ thử thách** (tối đa 200 ký tự). Bấm `Enter` hoặc nút **"Gửi câu trả lời"** để gửi. Thẻ đang đóng thì bấm `Enter` để mở lại. Trong ô gõ, `Space` và phím số chỉ là chữ bạn gõ (không đóng thẻ); `Esc` lần đầu bỏ con trỏ khỏi ô, lần hai đóng thẻ.
+- **Gõ được ở bất kỳ đâu** sau khi thử thách đã bắt đầu: không cần đứng ở điểm thử thách, không cần xuống xe, đang đạp xe cũng gõ được (thử thách có câu gợi ý thì phải bấm **"Nhận thử thách"** trước).
+- **Mọi câu trả lời đều được lưu.** Thẻ hiện danh sách các lần bạn đã gửi ở thử thách đó: nội dung đã gõ, giờ gửi và trạng thái (*Chờ Host duyệt*, *Đã duyệt*, *Bị phạt 3 phút*). Đội vừa bị phạt xem lại lần trước đã gõ gì để khỏi gõ lại y nguyên. Chỉ có lịch sử của **chính đội bạn**, và chỉ ở thẻ thử thách, không ở Sổ mật thư.
+- Game **không tự chấm** đúng hay sai: câu trả lời tới tay Host, Host quyết định (mục 7). Mỗi lúc chỉ có **một câu chờ duyệt**: khi câu trước chưa có quyết định, bạn thấy *"Câu trả lời trước đang chờ Host duyệt"* và chưa gửi thêm được. Đang bị phạt đếm ngược thì chưa gửi được (*"Đang bị phạt, chờ hết đếm ngược rồi trả lời lại"*).
+- Số lần gửi **không giới hạn**; **không có luật "sai 3 lần thì khóa"**. Hậu quả duy nhất của một câu chưa được là đếm ngược trước khi gửi lại (mục 7).
+- Chặng có thể bật **tự chấm** cho một số thử thách: khi đó chữ hoa hay chữ thường, có dấu hay không dấu, khoảng trắng thừa đều được bỏ qua khi so đáp án; trả lời sai sẽ thấy *"Chưa đúng, hãy thử lại!"* và gõ lại ngay, không bị khóa.
 
 ## 7. Nhiệm vụ Host duyệt
 
-Có những nhiệm vụ game không tự chấm được. Khi đó bạn gửi bằng chứng (ảnh, video, ảnh chụp màn hình) cho Host qua Facebook:
+Game không tự chấm các nhiệm vụ của chặng: **Host xem bài của đội bạn và quyết định**. Có hai kiểu bài.
 
-1. Tới điểm, đọc nhiệm vụ trên thẻ: mô tả, ảnh/video minh họa và hướng dẫn gửi bài.
-2. Thẻ có một **mã bài nộp** riêng cho đội bạn và nhiệm vụ này. Bấm **Copy** rồi dán kèm tin nhắn để Host biết bài của đội nào, nhiệm vụ nào.
-3. Bấm **"Mở Facebook gửi bài"**: trang Facebook của Host mở ra ở tab mới.
+### Gõ câu trả lời trong game (ví dụ Thử thách 1 và 2)
+1. Bấm **"Nhận thử thách"** nếu thẻ có câu gợi ý, đọc đề, gõ câu trả lời vào ô trên thẻ rồi bấm `Enter` (mục 6). Gõ được ở bất kỳ đâu.
+2. Màn hình hiện **"Đang chờ Host duyệt"** kèm đồng hồ đếm lên; ô gõ tạm ẩn. Câu trả lời của bạn hiện ngay trên màn hình Host, kèm đáp án tham khảo mà **chỉ Host thấy** để duyệt nhanh.
+3. Host bấm **Duyệt**: có âm báo cùng thông báo *"Host đã duyệt! Mật thư mới đã vào Sổ mật thư."* và bạn nhận **ngay** mật thư tiếp theo, không phải đi tới đâu. Ví dụ Thử thách 2 hiện ngay khi Thử thách 1 được duyệt.
+4. Host bấm **Phạt**: có âm báo cùng thông báo *"Host chưa duyệt: chờ hết đếm ngược rồi trả lời lại"*, và giữa màn hình hiện **đồng hồ đếm ngược** *"Phạt: còn mm:ss trước khi trả lời lại"* (mặc định **3 phút**; chặng hoặc từng thử thách có thể quy định số khác). Hết đếm ngược thì gõ lại được; **không giới hạn số lần**. Thẻ ghi rõ lần gửi nào *"Bị phạt n phút"*. Bấm `Enter` để xem lại lần trước bạn đã gõ gì rồi sửa.
+5. **Ghi chú của Host không gửi cho đội**: bạn chỉ thấy đếm ngược, không thấy lý do.
+6. Đồng hồ đua **vẫn chạy** trong lúc chờ duyệt và lúc đếm ngược, kể cả khi Host tạm dừng cuộc đua.
+
+### Gửi ảnh cho Host qua Messenger (ví dụ nhánh của Lựa chọn kép)
+Có nhiệm vụ cần bằng chứng (ảnh chụp màn hình) gửi cho Host qua Facebook / Messenger:
+
+1. Mở hòm, đọc nhiệm vụ trên thẻ: mô tả, hình / liên kết minh họa và hướng dẫn gửi bài.
+2. Thẻ có một **mã bài nộp** riêng cho đội bạn và nhiệm vụ này, dạng `<tên đội>-<bước>[-<nhánh>]`, ví dụ `Đội Xanh-D1-A`. Bấm **Copy** rồi dán kèm tin nhắn để Host biết bài của đội nào, nhiệm vụ nào.
+3. Bấm nút gửi bài của thẻ: trang Facebook / Messenger của Host mở ra ở tab mới.
 4. Làm xong và gửi bài, quay lại game bấm **"Tôi đã gửi bài – chờ Host duyệt"**.
-5. Màn hình hiện **"Đang chờ Host duyệt"** kèm đồng hồ đếm lên. Trong lúc chờ, bạn chưa nhận được mật thư tiếp theo và không đổi nhánh Lựa chọn kép được.
-6. Host bấm **Duyệt**: có âm báo cùng thông báo *"Host đã duyệt! Mật thư mới đã vào Sổ mật thư."* và bạn nhận ngay mật thư tiếp theo.
-7. Host bấm **Chưa đạt**: bạn thấy lý do, nhiệm vụ quay về trạng thái "đang làm". Làm lại và gửi lại, **không giới hạn số lần**.
+5. Từ đây giống như trên: **"Đang chờ Host duyệt"** kèm đồng hồ đếm lên; Host bấm **Duyệt** (bạn nhận mật thư tiếp theo ngay) hoặc **Phạt** (đồng hồ đếm ngược, rồi gửi lại bài mới). Host cũng có thể duyệt ngay khi nhận được ảnh, kể cả trước khi bạn bấm "Tôi đã gửi bài".
+
+Trong lúc **chờ Host duyệt**, bạn chưa nhận được mật thư tiếp theo và **không đổi nhánh** Lựa chọn kép được.
 
 ### Bù giờ chờ duyệt
-- Nếu chặng có bù giờ, mọi khoảng thời gian từ lúc bạn gửi bài tới lúc Host quyết định (Duyệt hay Chưa đạt) được **trừ khỏi thời gian chính thức**. Đội bạn không bị thiệt nếu Host duyệt chậm.
+- Nếu chặng có bù giờ (mặc định có), mọi khoảng thời gian từ lúc bạn gửi bài tới lúc Host quyết định (Duyệt hay Phạt) được **trừ khỏi thời gian chính thức**. Đội bạn không bị thiệt nếu Host duyệt chậm.
+- **Đồng hồ đếm ngược sau khi bị Phạt và đếm ngược khi đổi Lựa chọn kép không được trừ**: đó là hình phạt, là thời gian mất thật. Chúng cũng không cộng vào dòng **PHẠT +n phút** (mục 10).
 - Vì vậy (và vì mỗi đội xuất phát một lúc khác nhau), thứ tự các đội bước lên thảm **có thể khác thứ hạng chính thức**. Thứ hạng chính thức do Host công bố.
 
 ## 8. Sổ mật thư
 
 - Bấm `Tab` để mở (thẻ mật thư ở góc trên bên trái luôn nhắc *"Tab: Sổ mật thư"*); bấm `Tab` hoặc `Esc` lần nữa để đóng. Trong sổ: `↑` `↓` `PageUp` `PageDown` để cuộn, `Home` về mật thư hiện tại.
 - Sổ **mở được mọi lúc**: khi đi bộ, khi làm thử thách, khi chờ Host duyệt, sau khi về đích, và cả sau khi thoát ra vào lại. Đang đạp xe mà mở sổ thì xe tự dừng lại.
-- Sổ liệt kê **theo thứ tự mọi mật thư đội bạn đã nhận** trong chặng: nội dung đầy đủ, ảnh/video minh họa, luật phương tiện.
+- Sổ mở ra thì chuột được thả để bạn bấm liên kết, hình và nút; đóng sổ thì chuột khóa lại (mục 2).
+- Sổ liệt kê **theo thứ tự mọi mật thư đội bạn đã nhận** trong chặng: nội dung đầy đủ, hình và liên kết minh họa (bấm hình để xem lớn, bấm liên kết để mở tab mới), luật phương tiện.
 - Theo mặc định, sổ **chỉ hiện những mật thư đã nhận**. Không có ô khóa hay thanh tiến độ, nên bạn **không biết chặng còn bao nhiêu bước**. Cứ đua hết sức!
-- Mỗi mục có trạng thái: đang làm, chờ Host duyệt, "Chưa đạt" (kèm lý do), hoặc đã xong (giờ hoàn thành và thời gian làm bước đó).
-- Mục Lựa chọn kép hiện cả 2 nhánh, nhánh bạn đã chọn (nhãn *"Đội đã chọn"*) và lịch sử đổi nhánh.
-- Mục nhiệm vụ Host duyệt có hướng dẫn gửi bài, **mã bài nộp** kèm nút **Copy**, và nút mở Facebook của Host.
+- Mỗi mục có trạng thái: đang làm, chờ Host duyệt, bị phạt (còn đếm ngược), hoặc đã xong (giờ hoàn thành và thời gian làm bước đó).
+- Mục Lựa chọn kép hiện **tên và mô tả ngắn của 2 nhánh**, nhánh bạn đã chọn (nhãn *"Đội đã chọn"*) và số lần bạn đã đổi nhánh. **Đề bài của nhánh chỉ có sau khi bạn mở hòm của nhánh đó**: đề bài của nhánh bạn chưa mở thì không hiện.
+- Mục nhiệm vụ gửi ảnh cho Host có hướng dẫn gửi bài, **mã bài nộp** (`<tên đội>-<bước>[-<nhánh>]`) kèm nút **Copy**, và nút mở Facebook của Host.
+- Sổ **không** có lịch sử các câu trả lời bạn đã gõ (kể cả mục được ghim). Muốn xem lại, đóng sổ rồi bấm `Enter` để mở thẻ thử thách hiện tại (mục 6).
 - Mật thư đang làm được ghim trên đầu; nút **"Về mật thư hiện tại"** đưa bạn quay lại ngay.
 - Sổ luôn **tải lại từ máy chủ** mỗi lần mở, nên đổi sang máy khác vẫn đủ mật thư.
 - Nếu Host sửa lỗi chính tả trong một mật thư, sổ cập nhật ngay và mục đó có nhãn **"đã cập nhật"**.
@@ -229,10 +262,12 @@ Mỗi chặng tự quyết định bật hay tắt từng yếu tố dưới đ�
 
 Bạn bị cộng phút phạt khi:
 - **Di chuyển nhanh hơn tốc độ đi bộ trong lộ trình bắt buộc đi bộ**, phát hiện bằng tốc độ di chuyển.
-- **Bỏ cuộc một nhiệm vụ**: bấm **"Bỏ cuộc"** ở Lựa chọn kép hoặc Thử thách để nhận luôn mật thư tiếp theo.
-- **Host phạt trực tiếp**, luôn kèm lý do.
+- **Bỏ cuộc một nhiệm vụ**: bấm **"Bỏ cuộc"** ở Lựa chọn kép hoặc Thử thách để nhận luôn mật thư tiếp theo (chưa có trong bản game này).
+- **Host phạt trực tiếp**, luôn kèm lý do (công cụ riêng của Host, khác nút **Phạt** khi duyệt bài).
 
 Số phút phạt do từng chặng quy định, ví dụ 15 phút cho vi phạm đi bộ, 30 phút cho bỏ cuộc.
+
+**Không phải phút phạt:** nút **Phạt** của Host khi duyệt bài (mục 7) và nút **"Đổi lựa chọn kép"** (mục 5) chỉ tạo **đồng hồ đếm ngược** trên màn hình (mặc định 3 phút và 10 phút). Đó là thời gian mất thật vì phải chờ: không cộng vào dòng PHẠT +n phút, không phải chờ thêm ở thảm, và cũng không được trừ khỏi thời gian chính thức.
 
 Khi đội bạn có phút phạt, tổng số phút hiện ở **góc dưới bên phải, ngay dưới đồng hồ đua** (dòng **PHẠT +n phút**; không có phạt thì dòng này ẩn). Phạt được "trả" tại **Chặng dừng**: bạn đứng chờ cạnh thảm cho hết số phút phạt rồi mới được check-in (mục 5).
 
@@ -240,7 +275,7 @@ Khi đội bạn có phút phạt, tổng số phút hiện ở **góc dưới b
 
 - **Đồng hồ đua** (góc dưới bên phải, dòng **THỜI GIAN**) chạy từ lúc đội bạn **nhận mật thư đầu tiên ở ngoài trò chơi** (giờ xuất phát của đội, Host ghi lại), kể cả khoảng thời gian trước khi bạn vào game. Khi Host chưa ghi giờ này, đồng hồ hiện `--:--`. Đồng hồ dừng lại lúc bạn check-in.
 - **Thời gian chính thức** = giờ check-in trên thảm − giờ xuất phát của đội bạn − thời gian chờ Host duyệt (nếu chặng có bù giờ).
-- Thời gian đứng chờ hết phạt **đã nằm trong** thời gian chính thức.
+- Thời gian đứng chờ hết phạt **đã nằm trong** thời gian chính thức. Đồng hồ đếm ngược sau khi bị Phạt bài hay khi đổi Lựa chọn kép cũng vậy (mục 7): không được trừ, và vẫn chạy cả khi Host tạm dừng cuộc đua.
 - Mỗi đội tính từ giờ xuất phát riêng của mình.
 - **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hộp mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục (phía trên đồng hồ hiện nhãn **"Tạm dừng"**; bấm `F` sẽ thấy *"Cuộc đua đang tạm dừng"*). **Khi Host kết thúc chặng**, bạn chuyển **ngay** sang chế độ khán giả (camera bay tự do, bảng thông tin trên màn hình tắt hẳn, không có lời nhắn riêng): đó là dấu hiệu chặng đã khép lại; từ lúc này không mở hộp, làm nhiệm vụ hay lấy xe được nữa. **Đồng hồ vẫn chạy và thời gian tạm dừng không được trừ** khỏi thời gian chính thức. Việc bạn **tới** một điểm trong lúc tạm dừng vẫn được ghi đúng giờ. Hệ quả: đội đang đi đường gần như không mất gì (vẫn đi tiếp được), còn đội đang đứng ở hộp mật thư hoặc trên thảm thì phải chờ hết thời gian tạm dừng. Khi Host cho tiếp tục, đội đang đứng trên thảm được check-in ngay, không cần di chuyển.
 - Thời gian chính thức càng ngắn, thứ hạng càng cao. Host bấm **"Công bố kết quả"** để gửi thứ hạng chính thức tới mọi người chơi.
@@ -264,9 +299,10 @@ Lỡ tải lại trang (`F5` trên Windows, `Cmd`+`R` trên Mac), tắt tab, m�
 
 ### Nhiệm vụ đang làm dở
 - Tìm và nhặt đồ vật: giữ nguyên những vật đã nhặt.
-- Nhập đáp án, giải mã, quan sát, ống nhòm: giữ nguyên số lần nhập sai và thời gian bị khóa.
+- Thử thách gõ câu trả lời: giữ nguyên **lịch sử các câu bạn đã gửi** (bấm `Enter` để xem trên thẻ), câu đang chờ Host duyệt và **đồng hồ đếm ngược phạt**. Đếm ngược chạy cả lúc bạn offline: còn bao nhiêu thì vào lại thấy đúng bấy nhiêu, hết thì gõ lại được.
+- Lựa chọn kép: giữ nguyên nhánh đã chọn, hòm nhánh đã mở, số lần đã đổi nhánh và **đồng hồ đếm ngược đổi nhánh**. Hòm nhánh hiện lại khi bạn tới gần (hòm của nhánh vừa đổi hiện khi hết đếm ngược).
 - Nhiệm vụ bấm giờ (chở hàng, đạp xe qua cổng, mini-game trên màn hình): lượt đang chạy bị hủy, vào lại làm lại từ đầu lượt đó.
-- Đang chờ Host duyệt: vẫn tiếp tục chờ. Nếu Host duyệt trong lúc bạn vắng mặt, vào lại bạn sẽ thấy *"Bạn có 1 mật thư mới"*, mật thư đã nằm sẵn trong Sổ.
+- Đang chờ Host duyệt: vẫn tiếp tục chờ. Nếu Host duyệt trong lúc bạn vắng mặt, vào lại thì **mật thư mới tự mở** trên màn hình, và đã nằm sẵn trong Sổ.
 
 ### Sau khi về đích
 - Vào lại sẽ thấy màn hình kết quả và chế độ khán giả.
@@ -274,8 +310,9 @@ Lỡ tải lại trang (`F5` trên Windows, `Cmd`+`R` trên Mac), tắt tab, m�
 
 ## 13. Chơi đẹp
 
-- **Máy chủ quyết định mọi kết quả**: mở mật thư, chấm đáp án, tính giờ, tính phạt, xếp hạng, nhận xe.
-- Mật thư chỉ được gửi tới máy của bạn khi đội bạn mở khóa, nên **không có cách nào đọc trước**. Ảnh/video của nhiệm vụ cũng chỉ mở được cho đội đã nhận mật thư đó.
+- **Máy chủ quyết định mọi kết quả**: mở mật thư, lưu câu trả lời và quyết định của Host (Duyệt / Phạt), tính giờ, tính phạt, xếp hạng, nhận xe.
+- Mật thư chỉ được gửi tới máy của bạn khi đội bạn mở khóa, nên **không có cách nào đọc trước**. Đề bài của từng nhánh Lựa chọn kép chỉ được gửi khi bạn mở hòm của nhánh đó. **Hình** của mật thư và nhiệm vụ nằm trong kho riêng tư và chỉ tải được cho đội đã mở mật thư đó (biết tên hình cũng không tải được); video và trang web là liên kết bên ngoài.
+- Host duyệt bằng mắt: **đáp án và đáp án tham khảo không bao giờ được gửi tới máy đội**, và đội không xem được câu trả lời của đội khác.
 - Hệ thống luôn kiểm tra tốc độ di chuyển. Di chuyển bất thường được **đánh dấu để Host xem xét**.
 - Ra khỏi khu vực đua sẽ bị chặn lại kèm cảnh báo *"Bạn đang rời khu vực đua"*.
 - Mỗi mã đội chỉ chơi trên một thiết bị. Hãy giữ mã đội của mình thật cẩn thận!

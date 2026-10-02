@@ -120,7 +120,7 @@ describe('leg schema', () => {
       'blank Bước 2 (T1) › nhiệm vụ › đáp án: đáp án (cách xác nhận "auto") còn trống',
       `warning ${NO_PLACE_A}`,
       'blank Host duyệt › link Facebook của Host: link Facebook của Host còn trống (có nhiệm vụ Host duyệt)',
-      'warning Bước 1 (L1) › mật thư: chứa đáp án "xanh la" của bước 3 (D1): đội đọc được trước khi giải',
+      'warning Bước 1 (L1) › mật thư: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải',
     ]);
   });
 
@@ -261,10 +261,38 @@ describe('Phase 8 leg fields and rules (docs/plans/phase8.md D2)', () => {
     k.steps[0].clue = 'Đi tới cột đèn xanh';
     expect(lines(k)).toEqual(['warning Bước 1 (L1) › mật thư: chứa đáp án tham khảo "cot den xanh" của bước 2 (T1): đội đọc được trước khi giải']);
     const d = j();
-    d.steps[2].branches[1].task.description = 'Nhánh kia trả lời Xanh lá'; // in B's box: a team on A never reads it
-    expect(lines(d)).toEqual([]);
     d.steps[2].branches[1].summary = 'Không phải xanh lá'; // both summaries are on the card
-    expect(lines(d)).toEqual(['warning Bước 3 (D1) › nhánh B › mô tả ngắn: chứa đáp án "xanh la" của bước 3 (D1): đội đọc được trước khi giải']);
+    expect(lines(d)).toEqual(['warning Bước 3 (D1) › nhánh B › mô tả ngắn: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải']);
+  });
+
+  it('a detour answer in the OTHER branch\'s task text leaks too (a team may open that box, read it, switch branch and answer)', () => {
+    const k = j();
+    k.steps[2].branches[1].task.description = 'Nhánh kia trả lời Xanh lá'; // B's box, A's answer
+    k.steps[2].branches[1].task.referenceAnswers = ['gửi ảnh chụp chân tháp']; // B's own reference answer
+    k.steps[2].branches[0].task.description = 'Làm xong thì gửi ảnh chụp chân tháp'; // ...in A's box
+    k.steps[2].branches[1].task.media = [{ url: 'https://example.invalid/v', label: 'Đáp án A là Xanh lá' }];
+    expect(lines(k)).toEqual([
+      'warning Bước 3 (D1) › nhánh B › nhiệm vụ › mô tả: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải',
+      'warning Bước 3 (D1) › nhánh B › nhiệm vụ › hình / liên kết › mục 1 › nhãn liên kết: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải',
+      'warning Bước 3 (D1) › nhánh A › nhiệm vụ › mô tả: chứa đáp án tham khảo "gui anh chup chan thap" của bước 3 (D1, nhánh B): đội đọc được trước khi giải',
+    ]);
+  });
+
+  it('the proof instruction, the step label and the Messenger button label are texts a team reads: an answer in them leaks', () => {
+    const k = j();
+    k.steps[1].label = 'Thử thách BẢY'; // T1's own answer
+    k.steps[3].label = 'Lộ trình bảy'; // a later step: read after T1 is solved, fine
+    k.steps[2].branches[1].task.proofInstruction = 'Chụp ảnh cột đèn xanh lá'; // B's photo card, A's answer
+    Object.assign(k.hostApproval, { contactLabel: 'Gửi xanh lá qua Facebook' }); // B is a photo task: its button
+    expect(lines(k)).toEqual([
+      'warning Bước 2 (T1) › tên bước: chứa đáp án "bay" của bước 2 (T1): đội đọc được trước khi giải',
+      'warning Bước 3 (D1) › nhánh B › nhiệm vụ › hướng dẫn gửi bài: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải',
+      'warning Host duyệt › chữ trên nút gửi bài: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải',
+    ]);
+    const n = j(); // no photo task before the answer: the button is not on any card the team has read
+    n.steps[2].branches[1].task = { title: 'B', description: 'b', answers: ['đỏ'], location: dest(48.867, 2.318, 30) };
+    Object.assign(n.hostApproval, { contactLabel: 'Gửi xanh lá qua Facebook' });
+    expect(lines(n)).toEqual([]);
   });
 
   it('"[CHƯA NHẬP …]" anywhere is a blank (gap 10, critic M4); duplicate labels, unplayed kinds, sub-minute penalties warn', () => {

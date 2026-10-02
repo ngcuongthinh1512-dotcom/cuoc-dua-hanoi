@@ -14,7 +14,12 @@
   },
   "penalties": {
     "walkOnlyViolationMinutes": 15,
-    "quitTaskMinutes": 30
+    "quitTaskMinutes": 30,
+    "retryLockMinutes": 3,
+    "branchSwitchLockMinutes": 10
+  },
+  "hostAlerts": {
+    "stuckMinutes": 45
   },
   "movement": {
     "footSpeed": 4,

@@ -9,7 +9,8 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { latLonToWorld, RACE_BBOX, worldToLatLon } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, WayFlag, pathPolyline, segPoint, shortestPath } from '@race/shared/graph';
-import { type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, parseLeg, placeOf, startSpot } from '@race/shared/leg';
+import { MEDIA } from '@race/shared/protocol';
+import { type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, mediaItems, parseLeg, placeOf, r2Names, startSpot } from '@race/shared/leg';
 import { landmarks, roads, traffic } from '../client/src/config.ts';
 import { CHUNK_SIZE, type ChunkData, type WaterData } from '../client/src/geo/chunkData.ts';
 import { districtAt, inRing } from '../client/src/geo/districts.ts';
@@ -224,21 +225,56 @@ export function scanLeaks(dirs: string[], strings: string[], root = ROOT, weak: 
   return out;
 }
 
-interface Pt { path: PropertyKey[]; x: number; z: number; r: number; lat: number; lon: number; id: string; label: string; step: number; rack: { lat: number; lon: number } | null }
+/** `box`: a clue box stands here (a route's destination, a detour branch's own place) and faces `yawDeg`; not at a challenge
+ *  place (no box: the next step's box stands at its own point) nor the Pit Stop (the mat). `branch`: the detour branch it is the box of. */
+interface Pt { path: PropertyKey[]; x: number; z: number; r: number; lat: number; lon: number; id: string; label: string; step: number; rack: { lat: number; lon: number } | null; box: boolean; yawDeg: number; branch: string | null }
 
 /** Every place the team is sent to (start, route / Pit Stop destinations, challenge / branch places), in play order. */
 function points(leg: Leg): Pt[] {
-  const mk = (path: PropertyKey[], d: { lat: number; lon: number; radius: number; name: string; bikeParking?: { lat: number; lon: number } | null }, id: string, step: number): Pt => {
+  const mk = (path: PropertyKey[], d: { lat: number; lon: number; radius: number; name: string; bikeParking?: { lat: number; lon: number } | null; yawDeg?: number }, id: string, step: number, box = false, branch: string | null = null): Pt => {
     const w = latLonToWorld(d.lat, d.lon);
-    return { path, x: w.x, z: w.z, r: d.radius, lat: d.lat, lon: d.lon, id, label: d.name, step, rack: d.bikeParking ?? null };
+    return { path, x: w.x, z: w.z, r: d.radius, lat: d.lat, lon: d.lon, id, label: d.name, step, rack: d.bikeParking ?? null, box, yawDeg: d.yawDeg ?? 0, branch };
   };
   const out: Pt[] = [mk(['start'], { ...leg.start, radius: 0 }, 'xuất phát', 0)];
   leg.steps.forEach((s, i) => {
-    if (s.type === 'route_info' || s.type === 'pit_stop') out.push(mk(['steps', i, 'destination'], s.destination, s.id, i + 1));
+    if (s.type === 'route_info' || s.type === 'pit_stop') out.push(mk(['steps', i, 'destination'], s.destination, s.id, i + 1, s.type === 'route_info' && leg.steps[i + 1]?.type !== 'pit_stop'));
     if (s.type === 'challenge' && s.task.location) out.push(mk(['steps', i, 'task', 'location'], s.task.location, s.id, i + 1));
-    if (s.type === 'detour') s.branches.forEach((b, k) => b.task.location && out.push(mk(['steps', i, 'branches', k, 'task', 'location'], b.task.location, `${s.id}/${b.id}`, i + 1)));
+    if (s.type === 'detour') s.branches.forEach((b, k) => b.task.location && out.push(mk(['steps', i, 'branches', k, 'task', 'location'], b.task.location, `${s.id}/${b.id}`, i + 1, true, b.id)));
   });
   return out;
+}
+
+/** An https link to a picture file: it shows as a link, not as a picture (only "r2:<name>" is drawn on the card). */
+const IMAGE_LINK = /\.(jpe?g|png|webp|gif|avif|bmp)([?#].*)?$/i;
+
+/** What the organiser must do about media: the R2 images to upload on the Host page (docs/plans/phase8.md D14, D17), https
+ *  links that look like pictures (warning), a one-line hint when a typed-answer task has no reference answer (D2 rule 9). */
+function mediaReport(leg: Leg) {
+  const issues: LegIssue[] = [];
+  const lines: string[] = [];
+  const used = new Map<string, string>(); // r2 name → where it is first used
+  for (const { item, path } of mediaItems(leg)) {
+    if (item.url.startsWith(MEDIA.prefix)) {
+      const name = item.url.slice(MEDIA.prefix.length);
+      if (!used.has(name)) used.set(name, placeOf(leg, path));
+    } else if (IMAGE_LINK.test(item.url))
+      issues.push({ level: 'warning', where: placeOf(leg, [...path, 'url']), message: `"${item.url}" là liên kết tới một file hình: đội chỉ thấy link bấm mở tab mới, hình không hiện trên thẻ. Muốn hiện hình trên thẻ: tải hình lên trang Host và ghi "r2:<tên hình>" (docs/LEG_FORMAT.md mục 7.2)` });
+  }
+  const names = r2Names(leg);
+  if (names.length)
+    lines.push(
+      '',
+      `Hình cần tải lên trang Host (mục "Hình mật thư (R2)", sau khi nạp chặng; tải riêng cho từng cuộc đua; jpg / png / webp, tối đa ${MEDIA.maxBytes / 1024 / 1024} MB mỗi hình): ${names.length} hình`,
+      ...names.map((n) => `  • ${n} — dùng ở ${used.get(n)}`),
+    );
+  const bare: string[] = [];
+  leg.steps.forEach((s, i) => {
+    const tasks = s.type === 'detour' ? s.branches.map((b) => [b.task, `Bước ${i + 1} (${s.id}) › nhánh ${b.id}`] as const) : s.type === 'challenge' ? [[s.task, `Bước ${i + 1} (${s.id})`] as const] : [];
+    for (const [t, where] of tasks) if (t.verification === 'host_approval' && t.kind !== 'free' && !t.referenceAnswers.length) bare.push(where);
+  });
+  if (bare.length)
+    lines.push('', `Gợi ý: nhiệm vụ Host duyệt (đội gõ đáp án) chưa có "referenceAnswers" ở ${bare.join(', ')}. Đáp án tham khảo chỉ Host thấy cạnh câu trả lời của đội ở hàng chờ duyệt (để trống thì Host thấy "answers", cả hai trống thì không có gợi ý); thêm nếu có.`);
+  return { issues, lines };
 }
 
 /** "Trong game" spawn: APPROACH m back from p along the walking route from `from`, facing p (yawDeg: 0 = north, + = left);
@@ -281,6 +317,7 @@ function mapReport(leg: Leg, map: MapData) {
     'Các điểm trên bản đồ. "Bản đồ" / "Vệ tinh": mở trong trình duyệt, có ghim đúng điểm. "Xem": dán vào Terminal → ảnh screenshots/leg-<mã>.png',
     'chụp xiên từ trên cao, khung ≈ 160 × 105 m, điểm ở GIỮA ảnh, đánh dấu bằng tấm thảm đỏ viền vàng (3 × 7 m, như thảm Chặng dừng) đặt đúng tâm; ảnh chưa vẽ vòng bán kính.',
     `"Trong game": mở khi máy đang chạy npm run dev → đứng cách điểm ${APPROACH} m trên đường đi bộ từ điểm trước, nhìn về phía điểm (thế giới thử, không cần cuộc đua).`,
+    '"Hòm nhánh X": nơi riêng của nhánh X của Lựa chọn kép (chỉ hòm của nhánh đội đã chọn hiện, đề bài nằm trong hòm). "Hướng hòm": phía mặt trước của hòm, nơi đội đứng đọc (ghi "yawDeg" của điểm đó).',
   );
   let cur: Pt[] = [];
   const pts = points(leg);
@@ -298,12 +335,16 @@ function mapReport(leg: Leg, map: MapData) {
     const walks = prev.map((q) => (Math.hypot(q.x - p.x, q.z - p.z) < 1 ? { meters: 0, snapA: 0, snapB: 0 } : map.geo.walk(q, p))).filter((w) => w !== null);
     const walk = walks.length ? `đi bộ ≈ ${Math.round(Math.min(...walks.map((w) => w.meters + w.snapA + w.snapB)))} m từ điểm trước` : p.step === 0 ? 'điểm xuất phát' : 'KHÔNG đi bộ tới được';
     const step = p.step === 0 ? null : leg.steps[p.step - 1]!;
-    lines.push(`• ${step ? `Bước ${p.step} (${p.id}, ${step.type})` : 'Xuất phát'}: ${p.label || '(chưa đặt tên)'}${p.r ? ` — vùng ${p.r} m` : ''} — ${walk}`);
+    lines.push(`• ${step ? `Bước ${p.step} (${p.id}, ${step.type})` : 'Xuất phát'}: ${p.label || '(chưa đặt tên)'}${p.branch ? ` — hòm nhánh ${p.branch}` : ''}${p.r ? ` — vùng ${p.r} m` : ''} — ${walk}`);
     lines.push(`    ${street ?? 'không có tên đường gần đó'}${dis ? `, Quận ${dis}` : ''} — ${lat}, ${lon}`);
     const xz = (x: number, z: number) => `${+x.toFixed(1)},${+z.toFixed(1)}`;
     if (!step) {
       const c = compass(leg.start.yawDeg);
       lines.push(`    Hướng nhìn lúc vào: la bàn ${c.deg}° (${c.name}) — "yawDeg": ${leg.start.yawDeg}; muốn nhìn hướng la bàn B° thì ghi "yawDeg": -B`);
+    }
+    if (p.box) {
+      const c = compass(p.yawDeg);
+      lines.push(`    Hướng hòm: mặt trước quay về la bàn ${c.deg}° (${c.name}), đội đứng phía đó mới đọc được — "yawDeg": ${p.yawDeg}${p.yawDeg ? '' : ' (mặc định)'}; muốn quay về la bàn B° thì ghi "yawDeg": -B`);
     }
     if (step && p.step === 1 && Math.hypot(p.x - s0.x, p.z - s0.z) <= p.r)
       lines.push('    Điểm xuất phát nằm trong vùng này: đội vào game là đã tới, mở được hộp ngay (đúng kiểu mật thư 1 phát ngoài game dẫn tới chính nơi xuất phát).');
@@ -319,7 +360,8 @@ function mapReport(leg: Leg, map: MapData) {
     // the Pit Stop mat as the marker: seen from 65 m a 0.6 m clue box is a few pixels (checked on screenshots)
     lines.push(`    Xem: npm run screenshot -- --path "/?cam=${cam}&boxes=${name},${xz(p.x, p.z)}&mat&npc=0" --name leg-${name}`);
     // in game: what the team will find there (the clue box; the mat at the Pit Stop)
-    const marker = step ? `&boxes=${name},${xz(p.x, p.z)}${step.type === 'pit_stop' ? '&mat' : ''}` : '';
+    // the box's facing as the 5th field (`boxes=<name>,x,z,<opened?>,<yawDeg>`; omitted at 0 = the default, north)
+    const marker = step ? `&boxes=${name},${xz(p.x, p.z)}${p.box && p.yawDeg ? `,,${p.yawDeg}` : ''}${step.type === 'pit_stop' ? '&mat' : ''}` : '';
     const spawn = step ? approach(map, prev.find((q) => Math.hypot(q.x - p.x, q.z - p.z) >= 1), p) : { ...startSpot(leg, 1), yawDeg: leg.start.yawDeg };
     lines.push(`    Trong game: ${DEV_URL}/?start=${xz(spawn.x, spawn.z)},${spawn.yawDeg}${marker}`);
     const where = p.path;
@@ -382,8 +424,10 @@ export function checkFile(file: string, opts: { root?: string; scanDirs?: string
     issues.push(...checkLeg(leg, map.geo)); // checkLeg without geo already ran inside parseLeg: duplicates dropped below
     const rep = mapReport(leg, map);
     issues.push(...rep.issues);
+    const media = mediaReport(leg);
+    issues.push(...media.issues);
     issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(leg), root, answerStrings(leg)));
-    lines.push(...rep.lines);
+    lines.push(...media.lines, ...rep.lines);
   }
   // SPEC §3: leg content never in client/ (shipped to every player); a real leg is best kept outside the project (no git)
   const inside = (dir: string) => ((rel) => !rel.startsWith('..') && !isAbsolute(rel))(relative(join(root, dir), resolve(file)));
