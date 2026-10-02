@@ -1027,3 +1027,9 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - **Mỗi đội / người chơi có bộ nút hiển thị khác nhau** (chống chép đáp án giữa các đội).
 - **Đội khác thấy** khi một đội trả lời sai, và số câu đúng /5 khi được công bố: hiện như **một đoạn chat nhỏ ở góc dưới màn hình**.
 - Chờ xác nhận (ghi ở báo cáo): gợi ý 40 phút khác gì thông báo 70 phút; "bộ nút khác" theo đội hay theo người; tin sai công khai có kèm số đúng /5 không; tên tác phẩm có hiện không; cách vào phòng; chọn đúng 5 hay tối đa; tải tài nguyên cần duyệt.
+- **Chốt thêm (2026-10-03):**
+  - Gợi ý phút 40 (riêng cho đội): chữ "Đáp án bao gồm 5 tác phẩm". Gợi ý phút 70: "Đúng x/5" (x = số tác phẩm đúng trong lựa chọn hiện tại của đội).
+  - Bộ nút giống nhau cho mọi đội; **đèn / nút chỉ hiện cho chính đội bấm** (đội khác không thấy đèn của mình sáng). Người chơi ở chung phòng thấy nhau (nhân vật) nhưng không thấy nút / đèn của nhau.
+  - Tin công khai (đoạn chat nhỏ góc dưới màn hình) khi một đội trả lời sai: chỉ "Đội X trả lời sai và bị phạt 3 phút". Khi đội đó đã qua 70 phút ở thử thách này, MỖI LẦN chốt đáp án thì công khai thêm số đáp án đúng ("Đội X đúng x/5").
+  - Tên tác phẩm KHÔNG hiện. Vào phòng bằng phím F ở hòm Louvre. Chọn bao nhiêu tác phẩm cũng được trước khi chốt. Phạt sai 3 phút, đồng hồ đua vẫn chạy.
+  - Nút chọn: đỏ = chưa chọn, xanh lá = đã chọn; bấm lại để bỏ chọn. Sau khi bị phạt, lựa chọn (đèn) giữ nguyên, đội vẫn bấm / bỏ chọn được (mặc định: chỉ không chốt được tới khi hết phạt).
