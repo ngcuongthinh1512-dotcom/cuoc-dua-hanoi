@@ -1093,5 +1093,8 @@ export const raceHud = {
   clueLines: 5, // lines of clue text kept on the compact card (the full card / book show everything)
   fullWidth: 520, // px, full card popup + Sổ mật thư
   finishSeconds: 14, // s (sim clock) the host NPC's finish line stays on screen
-  taskLockSeconds: 2, // s the "Hoàn thành (tạm)" buttons stay disabled after a click (the answer comes back as a new `race` view)
+  taskLockSeconds: 2, // s the card's server buttons (Nhận thử thách, Chọn / Đổi nhánh, Gửi) stay disabled after a click (the answer comes back as a new `race` view)
+  // Phase 8 (docs/plans/phase8.md D9 / D15). Typed-answer / history limits are NET.answerMax / NET.answerHistory (shared: the server cuts at the same numbers).
+  lockFlipSlackMs: 1000, // ms after card.lockedUntil (server clock estimate) before the card flips to active / goToBranch: a client clock 1–2 s early would send `answer` into answerLocked (D9)
+  mediaMaxHeight: 260, // px, tallest an image on a card / in the Sổ gets (click = full-screen)
 };

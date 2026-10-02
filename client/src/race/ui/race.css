@@ -306,3 +306,215 @@
   background: var(--c);
   color: #fff;
 }
+
+/* ── Phase 8 track C: challenge / Lựa chọn kép card ── */
+/* One state line on the top-left card (hud.css boxes are click-through; this is only text). */
+.rc-state {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.rc-state[data-k='wait'] { color: #ffd37a; }
+.rc-state[data-k='lock'] { color: #ffb3a8; }
+/* Reopened with Enter / redrawn in place: no envelope, no rise (the card is already there). */
+.rc-full.quick {
+  animation: none;
+}
+.rc-note {
+  font-size: 13px;
+  color: var(--hud-fg);
+}
+.rc-task.dim {
+  opacity: 0.55;
+}
+/* Waiting for the Host / the Host's "Phạt" or a branch switch counting down. */
+.rc-timer {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 3px;
+  font-size: 16px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.35);
+}
+.rc-timer.wait { color: #ffd37a; border-left: 4px solid #ffb830; }
+.rc-timer.lock { color: #ffb3a8; border-left: 4px solid #f0643c; }
+
+/* Typed answer */
+.rc-answer {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.rc-answer .rc-task-btn {
+  margin-top: 0;
+  white-space: nowrap;
+}
+.rc-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  font: inherit;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  padding: 6px 10px;
+}
+.rc-input:focus {
+  outline: 2px solid var(--c);
+  outline-offset: 1px;
+}
+.rc-switch {
+  margin-top: 10px;
+  border-color: rgba(255, 140, 120, 0.7);
+}
+
+/* Photo task */
+.rc-proof {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.rc-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.rc-code-label {
+  font-size: 13px;
+  color: var(--hud-dim);
+}
+.rc-code {
+  padding: 3px 10px;
+  border-radius: 3px;
+  font: 700 15px/1.4 ui-monospace, 'SF Mono', Consolas, monospace;
+  user-select: all;
+  background: rgba(255, 255, 255, 0.14);
+}
+.rc-proof-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.rc-proof-btns .rc-task-btn {
+  margin-top: 0;
+}
+a.rc-btn {
+  display: inline-block;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+/* The team's own answers (card only, never the Sổ) */
+.rc-history {
+  margin-top: 12px;
+}
+.rc-hist-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+.rc-ans {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+}
+.rc-ans-time {
+  color: var(--hud-dim);
+  font-variant-numeric: tabular-nums;
+}
+.rc-ans-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rc-ans-state {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rc-ans.pending .rc-ans-state { color: #ffd37a; }
+.rc-ans.approved .rc-ans-state,
+.rc-ans.correct .rc-ans-state { color: #7be08f; }
+.rc-ans.penalized .rc-ans-state,
+.rc-ans.wrong .rc-ans-state { color: #ff9a8a; }
+
+/* Clue / task media: R2 images (click = full screen), https links (new tab) */
+.rc-media {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+.rc-fig {
+  margin: 0;
+  max-width: 100%;
+}
+.rc-fig img {
+  display: block;
+  max-width: 100%;
+  max-height: var(--media-h, 260px);
+  border-radius: 4px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.rc-fig figcaption {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--hud-dim);
+}
+.rc-ph {
+  box-sizing: border-box;
+  min-width: 180px;
+  padding: 26px 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--hud-dim);
+}
+.rc-link {
+  display: inline-block;
+  padding: 3px 12px;
+  border: 1px solid rgba(142, 197, 255, 0.55);
+  border-radius: 14px;
+  color: #9fd0ff;
+  font-size: 14px;
+  text-decoration: none;
+}
+.rc-link:hover {
+  background: rgba(142, 197, 255, 0.16);
+}
+.rc-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.88);
+  cursor: zoom-out;
+}
+.rc-zoom[hidden] {
+  display: none !important;
+}
+.rc-zoom img {
+  max-width: 94vw;
+  max-height: 92vh;
+  object-fit: contain;
+}
+.rc-detail .rc-note {
+  margin-top: 8px;
+}
+.rc-detail .rc-task.dim + .rc-task.dim,
+.rc-detail > .rc-switch {
+  margin-top: 8px;
+}

@@ -12,7 +12,7 @@ const NATIVE = new Set(['Tab', 'Space', 'Enter', 'NumpadEnter']);
 const isControl = (t: EventTarget | null) => t instanceof HTMLElement && t.matches('button, a[href]');
 
 // Unikey/EVKey (Windows) send the converted letter with no physical code; macOS/Windows IMEs compose (key "Process", 229).
-const looksLikeIme = (e: KeyboardEvent) =>
+export const looksLikeIme = (e: KeyboardEvent) =>
   e.isComposing ||
   e.key === 'Process' ||
   e.keyCode === 229 ||

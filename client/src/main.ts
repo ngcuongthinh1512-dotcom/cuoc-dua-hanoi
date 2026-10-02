@@ -226,7 +226,6 @@ async function start() {
   const raceHud = player
     ? new RaceHud(
         {
-          task: () => {}, // TODO(phase8 integrator): delete with RaceHudActions.task (track C); RaceClient.task is gone (track B)
           book: () => void (net ? net.send({ t: 'race', op: 'book' }) : raceHud?.showBook([])),
           answer: (step, text) => race?.answer(step, text),
           branch: (step, id) => race?.branch(step, id),

@@ -1,7 +1,8 @@
 // Phase 7 track C: pure helpers of the race HUD (no DOM, tested in Node). Everything here works only from what the server
 // sent (ClueCard / RaceView / ZoneMember): never answers, destination names or a later step.
-import type { ClueCard, RaceView, StepType, TeamInfo, Transport, ZoneMember } from '@race/shared/protocol';
+import { type AnswerStatus, type CardStatus, type ClueCard, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
+import { looksLikeIme } from '../../core/Input.ts';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -25,7 +26,7 @@ export interface CardSummary {
   label: string;
   clue: string;
   transport: ReturnType<typeof transportLabel>;
-  blocks: { branch: string | null; title: string; text: string; place: string | null; limit: string | null; chosen: boolean }[];
+  blocks: { branch: string | null; title: string; text: string; place: string | null; limit: string | null; chosen: boolean; media: MediaItem[] }[];
   active: boolean;
 }
 
@@ -35,14 +36,15 @@ export function summarize(card: ClueCard): CardSummary {
   const blocks: CardSummary['blocks'] = [];
   if (card.task) {
     const t = card.task;
-    blocks.push({ branch: null, title: t.title, text: t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes), chosen: false });
+    blocks.push({ branch: null, title: t.title, text: t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes), chosen: false, media: mediaViews(t.media) });
   }
   for (const b of card.branches ?? []) {
-    const t = b.task; // Phase 8: only the chosen branch's, once its box is opened
-    blocks.push({ branch: b.id, title: b.name, text: b.summary || (t?.description ?? ''), place: t?.place ?? null, limit: limitText(t?.timeLimitMinutes ?? null), chosen: b.id === card.branch });
+    const t = b.task; // Phase 8: only the chosen branch's, once its box is opened (its description replaces the summary)
+    const chosen = b.id === card.branch;
+    blocks.push({ branch: b.id, title: b.name, text: chosen && t ? t.description : b.summary || (t?.description ?? ''), place: t?.place ?? null, limit: limitText(t?.timeLimitMinutes ?? null), chosen, media: mediaViews(t?.media) });
   }
   const clue = card.text || (card.type === 'pit_stop' ? 'Hãy về Chặng dừng và đứng trên thảm để về đích.' : '');
-  return { type: card.type, label: card.label, clue, transport: transportLabel(card.transport), blocks, active: card.status !== 'done' }; // Phase 8: every state but done is "Đang làm" (track C draws them)
+  return { type: card.type, label: card.label, clue, transport: transportLabel(card.transport), blocks, active: card.status !== 'done' }; // Phase 8: every state but done is "Đang làm"
 }
 
 /** Duration rounded to the second like the Host page (hostView fmtDuration / fmtMinSec): 125000 → "02:05", past an hour "1:02:05". */
@@ -126,4 +128,167 @@ export function zoneLines(members: readonly ZoneMember[], teams: readonly TeamIn
   return [...members]
     .sort((a, b) => a.since - b.since)
     .map((m) => `${teams.find((t) => t.slot === m.slot)?.name ?? `Đội ${m.slot}`} – đang làm ${m.label}`);
+}
+
+// ── Phase 8 (docs/plans/phase8.md D15): the challenge / Lựa chọn kép card. A pure view model: RaceHud only draws it. ──
+
+/** Minutes as people write them: 3 → "3", 0.1 → "0,1". */
+export const fmtMin = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
+
+/** The state the screen shows at `now` (ms, server clock estimate): a countdown that ran out flips the card by itself,
+ *  lockFlipSlackMs late (D9: a client clock a second early would send `answer` into answerLocked). */
+export function liveStatus(card: ClueCard, now: number): CardStatus {
+  if (card.lockedUntil == null || now < card.lockedUntil + C.lockFlipSlackMs) return card.status;
+  return card.status === 'locked' ? 'active' : card.status === 'switchLocked' ? 'goToBranch' : card.status;
+}
+
+/** ms left of the card's countdown (the Host's "Phạt" or a branch switch), null = none running. */
+export function lockLeft(card: ClueCard, now: number): number | null {
+  const lock = card.status === 'locked' || card.status === 'switchLocked';
+  return lock && card.lockedUntil != null && liveStatus(card, now) === card.status ? Math.max(0, card.lockedUntil - now) : null;
+}
+
+const branchName = (card: ClueCard, id: string | null | undefined) => card.branches?.find((b) => b.id === id)?.name ?? '';
+const countDown = (ms: number) => formatDuration(Math.ceil(ms / 1000) * 1000); // a countdown rounds up
+const countUp = (ms: number) => formatDuration(Math.floor(Math.max(0, ms) / 1000) * 1000); // a stopwatch rounds down
+
+/** The big countdown (screen centre via penaltyEl, and on the card): the Host's "Phạt" or a branch switch. */
+function lockText(c: ClueCard, now: number): string | null {
+  const left = lockLeft(c, now);
+  if (left == null) return null;
+  return c.lockKind === 'switch' ? `Đổi lựa chọn kép: còn ${countDown(left)} · hòm nhánh ${branchName(c, c.branch)} hiện khi hết giờ` : `Phạt: còn ${countDown(left)} trước khi trả lời lại`;
+}
+export const lockLine = (v: RaceView | null, now: number): string | null => (!v?.card || v.finishAt != null || v.status === 'finished' ? null : lockText(v.card, now));
+
+/** "Đang chờ Host duyệt · 01:12": counts up from the pending answer's send time. null unless the card is pending. */
+export function pendingLine(card: ClueCard, now: number): string | null {
+  if (card.status !== 'pending') return null;
+  const at = card.answers.filter((a) => a.status === 'pending').at(-1)?.at;
+  return `Đang chờ Host duyệt${at == null ? '' : ` · ${countUp(now - at)}`}`;
+}
+
+/** The open full card's pending stopwatch / countdown line (RaceHud.update redraws its text every frame). */
+export function timerLine(card: ClueCard, now: number): { kind: 'wait' | 'lock'; text: string } | null {
+  const lock = lockText(card, now);
+  const wait = pendingLine(card, now);
+  return lock ? { kind: 'lock', text: lock } : wait ? { kind: 'wait', text: wait } : null;
+}
+
+/** One short state line of the top-left card: waiting for the Host / countdown / which branch. */
+export function statusLine(card: ClueCard, now: number): { kind: 'wait' | 'lock' | 'info'; text: string } | null {
+  const left = lockLeft(card, now);
+  if (left != null) return { kind: 'lock', text: card.lockKind === 'switch' ? `Đổi nhánh: còn ${countDown(left)}` : `Phạt: còn ${countDown(left)}` };
+  const wait = pendingLine(card, now);
+  if (wait) return { kind: 'wait', text: wait.replace('Đang chờ', 'Chờ') };
+  return liveStatus(card, now) === 'goToBranch' ? { kind: 'info', text: `Nhánh ${branchName(card, card.branch)} · tới hòm nhánh` } : null;
+}
+
+/** "Đổi lựa chọn kép" confirm: names the penalty and what is lost (SPEC §17.16). */
+export const branchConfirmText = (card: ClueCard, to: string) =>
+  `Đổi sang nhánh ${branchName(card, to)}? Đội bị phạt ${fmtMin(card.switchPenaltyMinutes ?? 0)} phút (đếm ngược trên màn hình), mất tiến độ nhánh ${branchName(card, card.branch)}, hòm nhánh ${branchName(card, to)} chỉ hiện khi hết đếm ngược.`;
+
+const ANSWER_LABEL: Record<AnswerStatus, string> = { pending: 'Chờ Host duyệt', approved: 'Đã duyệt', penalized: 'Bị phạt', wrong: 'Chưa đúng', correct: 'Đúng' };
+export interface AnswerLine {
+  time: string;
+  text: string;
+  status: AnswerStatus;
+  label: string;
+}
+/** The team's answers on the card, newest first, at most NET.answerHistory: "14:05:09 · «…» · Bị phạt 3 phút". The minutes are
+ *  the card's (a test leg may say 0,1): never hard-coded. */
+export function answerLines(card: ClueCard): AnswerLine[] {
+  const pen = card.retryPenaltyMinutes;
+  return card.answers
+    .slice(-NET.answerHistory)
+    .reverse()
+    .map((a) => ({ time: formatTimeOfDay(a.at), text: a.text === '' ? 'đã gửi bài' : `«${a.text}»`, status: a.status, label: a.status === 'penalized' && pen ? `Bị phạt ${fmtMin(pen)} phút` : ANSWER_LABEL[a.status] }));
+}
+
+/** A clue / task attachment: an R2 image (fetched with the team token) or an https link (new tab, never embedded). */
+export type MediaItem = { kind: 'image'; name: string; label: string } | { kind: 'link'; href: string; label: string };
+const HTTP = /^https?:\/\/\S+$/i;
+const hostOf = (u: string) => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '');
+  } catch {
+    return u;
+  }
+};
+/** `r2:<name>` → image, `https://…` → link labelled with its host when it has no label; anything else is dropped (it is a click target). */
+export function mediaViews(items: readonly MediaView[] | undefined): MediaItem[] {
+  return (items ?? []).flatMap((m): MediaItem[] => {
+    if (m.url.startsWith(MEDIA.prefix)) {
+      const name = m.url.slice(MEDIA.prefix.length);
+      return MEDIA.name.test(name) ? [{ kind: 'image', name, label: m.label }] : [];
+    }
+    return HTTP.test(m.url) ? [{ kind: 'link', href: m.url, label: m.label || hostOf(m.url) }] : [];
+  });
+}
+
+/** What a full card (popup / Sổ entry) shows and which controls it has, from the card alone. mode 'book' = a Sổ mật thư entry:
+ *  read-only, no timers, never the answer history (SPEC §17.14: only on the challenge card); `live` false = the Host ended the race. */
+export interface CardPanel {
+  status: CardStatus;
+  clue: string;
+  media: MediaItem[];
+  blocks: CardSummary['blocks'];
+  /** Detour: "Đang làm nhánh Tính – tới hòm nhánh để nhận đề bài · Đã đổi nhánh 1 lần". */
+  note: string | null;
+  /** The pending stopwatch / countdown line (ticks in RaceHud.update). */
+  line: { kind: 'wait' | 'lock'; text: string } | null;
+  /** "Nhận thử thách". */
+  accept: boolean;
+  /** Branch ids that get a "Chọn nhánh" button. */
+  choose: string[];
+  /** The typed-answer box + "Gửi câu trả lời". */
+  answerBox: boolean;
+  /** Photo task: instruction + submission code (+ contact button and "Tôi đã gửi bài" when `actions`). */
+  proof: { instruction: string; code: string; contactUrl: string | null; contactLabel: string; actions: boolean } | null;
+  /** "Đổi lựa chọn kép": the other branches (none while pending, in choose / switchLocked, or read-only). */
+  switchTo: { id: string; name: string }[];
+  history: AnswerLine[];
+}
+
+export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mode: 'card' | 'book'; live?: boolean }): CardPanel {
+  const s = summarize(card);
+  const status = liveStatus(card, o.now);
+  const book = o.mode === 'book';
+  const act = !book && o.live !== false && status !== 'done';
+  const chosen = card.branches?.find((b) => b.id === card.branch);
+  const task = card.task ?? chosen?.task;
+  const proofTask = task?.input === 'proof' && (status === 'active' || status === 'pending' || status === 'locked') ? task : null;
+  const switches = card.switches ?? 0;
+  const note = [status === 'goToBranch' && chosen && `Đang làm nhánh ${chosen.name} – tới hòm nhánh để nhận đề bài`, switches > 0 && `Đã đổi nhánh ${switches} lần`].filter(Boolean).join(' · ');
+  return {
+    status,
+    clue: s.clue,
+    media: mediaViews(card.media),
+    blocks: s.blocks,
+    note: note || null,
+    line: book ? null : timerLine(card, o.now),
+    accept: act && status === 'teaser',
+    choose: act && status === 'choose' ? (card.branches ?? []).map((b) => b.id) : [],
+    answerBox: act && status === 'active' && task?.input === 'text',
+    proof: proofTask && {
+      instruction: proofTask.proofInstruction,
+      code: submitCode(o.teamName, card.step, card.branch),
+      contactUrl: proofTask.contactUrl && HTTP.test(proofTask.contactUrl) ? proofTask.contactUrl : null,
+      contactLabel: proofTask.contactLabel || 'Mở Facebook / Messenger gửi bài',
+      actions: act && status === 'active',
+    },
+    switchTo: act && chosen && (status === 'goToBranch' || status === 'active' || status === 'locked') ? (card.branches ?? []).filter((b) => b.id !== chosen.id).map((b) => ({ id: b.id, name: b.name })) : [],
+    history: book ? [] : answerLines(card),
+  };
+}
+
+export type HudKey = 'submit' | 'blur' | 'close' | 'primary' | 'choose1' | 'choose2';
+/** What a key does on an open card / Sổ. `typing` = the focus is in the answer box: it keeps Space / digits (Esc only leaves
+ *  the box, the next Esc closes the card) and Enter submits unless an IME (Telex / Unikey) is still composing. */
+export function hudKey(e: KeyboardEvent, typing: boolean, bookOpen: boolean): HudKey | null {
+  const enter = e.code === 'Enter' || e.code === 'NumpadEnter';
+  if (typing) return looksLikeIme(e) ? null : enter ? 'submit' : e.code === 'Escape' ? 'blur' : null;
+  if (e.code === 'Escape' || (e.code === 'Space' && !bookOpen)) return 'close';
+  if (enter) return 'primary';
+  const n = /^(?:Digit|Numpad)([12])$/.exec(e.code)?.[1];
+  return n ? (`choose${n}` as HudKey) : null;
 }
