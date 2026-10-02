@@ -1024,7 +1024,7 @@ export const remote = {
   clockSlewMs: 1, // ms the server-clock offset estimate sinks per tick (≈ 5 ms/s): drift and one lucky fast tick wear off
   renderRadius: 300, // m: until welcome.presence.renderRadius arrives (DEV ?peers stand-ins)
   bellRadius: 60, // m: another team's bell (R) is heard this close
-  hideDy: 10, // m: Phase 8B (docs/plans/phase8b.md §E): a remote player this far above / below the viewer's feet is hidden (a team in the Louvre room 30 m under the box: no ghost under the street, no tag through the ground)
+  hideDy: 10, // m: Phase 8B: feet this far under the terrain grid = underground (the Louvre room 30 m under its box); a remote player is hidden only when one side is underground and the other not (no ghost under the street; slopes hide nobody)
   leanSmoothing: 0.15, // s: a remote rider's lean (derived from the turn rate, not on the wire) follows with this lag
 };
 // SPEC §17.10: the team's clue box, drawn only once the server sent its position (within boxReveal.radius). Shaped like the
@@ -1117,15 +1117,18 @@ export const louvreRoom = {
   minFloorY: player.respawnBelow + 5, // m: floor never lower (respawn would fire); codec MIN_Y is −100
   size: { width: 26, depth: 16, height: 5 }, // m, closed box; `width` along the door wall
   door: { width: 2, height: 2.6 }, // middle of the front wall (facing room.yaw), standing at the box's x, z: going in / out only changes y
-  slots: { back: 9, side: 5, frontEachSide: 2, minSpacing: 2.6 }, // 9 + 5 + 5 + 2 + 2 = 23 places along the walls, leg order
-  painting: { width: 1.2, height: 0.9, centreY: 1.7, frame: 0.06 }, // m: frame on the wall, the picture inside
-  plinth: { size: 0.6, height: 1.0, fromWall: 0.5, photo: [0.8, 1.0], glbBox: [0.8, 1.2, 0.8] }, // a sculpture: photo standing on it, or its .glb fitted in glbBox
-  button: { radius: 0.125, postHeight: 0.9, fromWall: 0.8, reach: 2.2, aimDot: 0.2 }, // under each artwork; F picks the nearest within reach the camera faces (dot > aimDot)
-  lock: { plinthRadius: 0.3, buttonRadius: 0.2, reach: 2.5 }, // the lock button in the middle of the room (= the box's x, z ± the door offset)
+  // 9 + 5 + 5 + 2 + 2 = 23 places along the walls, leg order; cornerMargin: m kept free at each corner (and beside the door)
+  slots: { back: 9, side: 5, frontEachSide: 2, minSpacing: 2.6, cornerMargin: 1.2 },
+  painting: { width: 1.6, height: 1.2, centreY: 1.85, frame: 0.07 }, // m: frame on the wall, the picture inside
+  plinth: { size: 0.6, height: 1.0, fromWall: 0.4, photo: [0.8, 1.0], glbBox: [0.8, 1.2, 0.8] }, // a sculpture: plinth `fromWall` m off the wall, photo standing on it, or its .glb fitted in glbBox
+  button: { radius: 0.125, postHeight: 0.9, fromWall: 1.6, reach: 2.2, aimDot: 0.2 }, // under each artwork, in front of a plinth; F picks the nearest within reach the camera faces (dot > aimDot)
+  lock: { plinthRadius: 0.35, buttonRadius: 0.26, reach: 2.5 }, // the lock button in the middle of the room
   doorReach: 2, // m: F at the door → back up to the court
+  enterReach: 3, // m from the box: F enters (closer than the zone radius: entering moves the feet to the door, x, z ± ≤ enterReach + inset only)
+  inset: 0.8, // m: entering, the feet land this far inside the door; leaving, this far in front of the box (both ≤ 2 m from it: only y changes much)
   ceilingLights: 6,
-  colours: { wall: '#efe6d2', floor: '#8a5a35', ceiling: '#9a9a9a', frame: '#b8902f', plinth: '#e8e2d6', off: '#c8281e', on: '#2fbf4a', lock: '#f2c230', light: '#fff6dc' },
-  dimSun: true, // N6: lower the sun / raise the ambient while inside (checked on the p8b-room preset)
+  pickGapMs: 150, // a pick is sent at most this often (the server's 15 msg/s limit counts poses too: verify-foundation #10)
+  colours: { wall: '#efe6d2', floor: '#8a5a35', floorLine: '#6e4527', ceiling: '#c9c2b4', frame: '#b8902f', plinth: '#e8e2d6', post: '#55504a', door: '#5a3b22', off: '#c8281e', on: '#2fbf4a', lock: '#f2c230', light: '#fff6dc' },
 };
 
 // ── C · public feed (ui/Feed.ts): "Đội X trả lời sai và bị phạt 3 phút" (SPEC §17.19 (b): bottom corner, configurable) ──

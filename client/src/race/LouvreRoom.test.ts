@@ -1,0 +1,123 @@
+import RAPIER from '@dimforge/rapier3d-compat';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { louvreRoom as C } from '../config.ts';
+import { addColliders, buttonStates, demoLouvre, roomFrame, roomPrompt, targetAt, toLocal, toWorld, wallSlots } from './LouvreRoom.ts';
+
+const lv = demoLouvre(100, -50, 1.1);
+const slots = wallSlots(lv.artworks);
+const { width: W, depth: D } = C.size;
+
+describe('wallSlots (docs/plans/phase8b.md §F)', () => {
+  it('23 places in leg order, inside the room, ≥ minSpacing apart, none at the door', () => {
+    expect(slots.map((s) => s.id)).toEqual(lv.artworks.map((a) => a.id));
+    expect(slots.filter((s) => s.type === 'sculpture')).toHaveLength(8);
+    for (const [i, a] of slots.entries()) {
+      expect(Math.abs(a.x)).toBeLessThanOrEqual(W / 2 + 1e-9);
+      expect(Math.abs(a.z)).toBeLessThanOrEqual(D / 2 + 1e-9);
+      if (a.z === -D / 2) expect(Math.abs(a.x)).toBeGreaterThan(C.door.width / 2 + 1); // door wall: clear of the door
+      for (const b of slots.slice(i + 1)) {
+        expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThanOrEqual(C.slots.minSpacing);
+        expect(Math.hypot(a.button.x - b.button.x, a.button.z - b.button.z)).toBeGreaterThan(1); // buttons apart
+      }
+    }
+  });
+  it('buttons button.fromWall off the wall, in front of (not inside) a plinth, facing into the room', () => {
+    const P = C.plinth;
+    for (const s of slots) {
+      expect(Math.hypot(s.button.x - s.x, s.button.z - s.z)).toBeCloseTo(C.button.fromWall);
+      expect(Math.hypot(s.nx, s.nz)).toBeCloseTo(1);
+      expect(Math.sin(s.yaw)).toBeCloseTo(s.nx);
+      expect(Math.cos(s.yaw)).toBeCloseTo(s.nz);
+      expect(Math.abs(s.x + s.nx) < W / 2 && Math.abs(s.z + s.nz) < D / 2).toBe(true); // the normal points inward
+      if (s.type === 'sculpture') expect(C.button.fromWall - C.button.radius).toBeGreaterThan(P.fromWall + P.size); // the plinth does not hide the button
+    }
+  });
+});
+
+describe('room frame: door straight under the box, in / out keep x, z (critic S5)', () => {
+  const f = roomFrame(lv.room, 13.7);
+  it('the door is at the box, the room behind it, the floor below.m under the ground (≥ minFloorY)', () => {
+    const door = toWorld(f, 0, -D / 2);
+    expect(door.x).toBeCloseTo(lv.room.x);
+    expect(door.z).toBeCloseTo(lv.room.z);
+    expect(f.floorY).toBeCloseTo(13.7 - C.below);
+    expect(roomFrame(lv.room, -20).floorY).toBe(C.minFloorY);
+    const back = toLocal(f, f.cx - Math.sin(f.yaw) * 3, f.cz - Math.cos(f.yaw) * 3); // 3 m towards the box's front from the centre
+    expect(back.z).toBeCloseTo(-3);
+  });
+  it('enter / exit within louvreRoom.inset (≤ 2 m) of the box: only y changes; enter is inside, exit outside', () => {
+    expect(Math.hypot(f.enter.x - lv.room.x, f.enter.z - lv.room.z)).toBeCloseTo(C.inset);
+    expect(Math.hypot(f.exit.x - lv.room.x, f.exit.z - lv.room.z)).toBeCloseTo(C.inset);
+    expect(C.inset).toBeLessThanOrEqual(2);
+    const e = toLocal(f, f.enter.x, f.enter.z);
+    expect(Math.abs(e.x)).toBeLessThan(0.01);
+    expect(e.z).toBeGreaterThan(-D / 2);
+    expect(toLocal(f, f.exit.x, f.exit.z).z).toBeLessThan(-D / 2);
+    // entering faces into the room (body yaw: forward = (−sin, −cos))
+    const fwd = toLocal(f, f.cx - Math.sin(f.enter.yaw), f.cz - Math.cos(f.enter.yaw));
+    expect(fwd.z).toBeCloseTo(1);
+  });
+  it('toLocal ∘ toWorld = identity', () => {
+    const w = toWorld(f, 3.2, -4.5);
+    const l = toLocal(f, w.x, w.z);
+    expect(l.x).toBeCloseTo(3.2);
+    expect(l.z).toBeCloseTo(-4.5);
+  });
+});
+
+describe('F in the room: targetAt (button → lock → door)', () => {
+  const s = slots[10]!;
+  it('the nearest button within reach the view faces; facing away: not that one', () => {
+    const [x, z] = [s.button.x + s.nx * 1, s.button.z + s.nz * 1];
+    expect(targetAt(slots, x, z, -s.nx, -s.nz)).toEqual({ kind: 'button', id: s.id });
+    expect(targetAt(slots, x, z, s.nx, s.nz)).toBeNull();
+    expect(targetAt(slots, s.button.x + s.nx * 3, s.button.z + s.nz * 3, -s.nx, -s.nz)).toBeNull(); // out of reach
+  });
+  it('the lock button in the middle, the door at the door wall', () => {
+    expect(targetAt(slots, 1, 0, 0, 1)).toEqual({ kind: 'lock' });
+    expect(targetAt(slots, 0, -D / 2 + C.inset, 0, -1)).toEqual({ kind: 'door' });
+    expect(targetAt(slots, 0, -3, 0, 1)).toBeNull();
+  });
+});
+
+describe('lights from this team only (SPEC §17.19)', () => {
+  it('green = in the card picks, red otherwise; nothing else feeds them', () => {
+    const on = buttonStates(slots, ['art-04', 'art-11']);
+    expect(on.filter(Boolean)).toHaveLength(2);
+    expect(on[3]).toBe(true);
+    expect(on[10]).toBe(true);
+    expect(buttonStates(slots, [])).toEqual(slots.map(() => false));
+  });
+  it('prompts: choose / unpick / full at 5 / lock / door', () => {
+    const o = { done: false, locked: false };
+    expect(roomPrompt({ kind: 'button', id: 'art-01' }, lv, o)).toBe('Bấm F: chọn tác phẩm này');
+    expect(roomPrompt({ kind: 'button', id: 'art-04' }, lv, o)).toBe('Bấm F: bỏ chọn');
+    const five = { ...lv, picks: ['a', 'b', 'c', 'd', 'e'], maxPicks: 5 };
+    expect(roomPrompt({ kind: 'button', id: 'art-01' }, five, o)).toBe('Đã đủ 5 – bỏ một tác phẩm trước');
+    expect(roomPrompt({ kind: 'lock' }, lv, o)).toBe('Bấm F để chốt (đang chọn 2)');
+    expect(roomPrompt({ kind: 'lock' }, { ...lv, picks: [] }, o)).toBe('Chưa chọn tác phẩm nào');
+    expect(roomPrompt({ kind: 'button', id: 'art-01' }, lv, { done: true, locked: false })).toBeNull();
+    expect(roomPrompt({ kind: 'door' }, lv, { done: true, locked: false })).toBe('Đã xong – bấm F để ra');
+  });
+});
+
+describe('colliders: floor + walls + plinths, NO ceiling (critic C2)', () => {
+  beforeAll(() => RAPIER.init());
+  it('a ray from above lands on the floor (surface() / "Kẹt?" stay in the room), the walls hold', () => {
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+    const f = roomFrame(lv.room, 13.7);
+    const cs = addColliders(world, f, slots);
+    world.step();
+    expect(cs.length).toBe(6 + 23 + 8);
+    const down = (x: number, z: number, from: number) => world.castRay(new RAPIER.Ray({ x, y: from, z }, { x: 0, y: -1, z: 0 }), 100, true);
+    const hit = down(f.enter.x, f.enter.z, f.floorY + 12);
+    expect(hit && f.floorY + 12 - hit.timeOfImpact).toBeCloseTo(f.floorY);
+    const lock = down(f.cx, f.cz, f.floorY + 12);
+    expect(lock && f.floorY + 12 - lock.timeOfImpact).toBeCloseTo(f.floorY + C.plinth.height);
+    // walking out of the back wall: a horizontal ray from the centre hits it
+    const dir = { x: Math.sin(f.yaw), y: 0, z: Math.cos(f.yaw) }; // towards the back wall (away from the box)
+    const p = toWorld(f, 0, 2);
+    const wall = world.castRay(new RAPIER.Ray({ x: p.x, y: f.floorY + 2.5, z: p.z }, dir), 50, true);
+    expect(wall?.timeOfImpact).toBeCloseTo(D / 2 - 2);
+  });
+});

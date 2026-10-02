@@ -169,16 +169,16 @@ export class RemotePlayers {
 
   /** Every frame: interpolate, animate, cull by distance from `viewer`. Animation time follows the render clock (≤ the
    *  frame time): gestures replay on the sender's timeline, also when the clock is simulated (DEV ?peers).
-   *  Phase 8B: `feetY` = the local player's feet (player mode; undefined = spectator / free-fly: no height cull). TODO(phase8b
-   *  track B): main.ts passes it. */
-  update(frameDt: number, serverNow: number, viewer: Vector3, feetY?: number) {
+   *  Phase 8B: `under` = the local player's feet are underground (the Louvre room; undefined = spectator / free-fly: no
+   *  height cull), `heightAt` the shared terrain grid (inView). */
+  update(frameDt: number, serverNow: number, viewer: Vector3, under?: boolean, heightAt?: (x: number, z: number) => number) {
     this.viewer.copy(viewer);
     const t = serverNow - R.interpolationMs;
     const dt = Number.isNaN(this.lastT) ? 0 : MathUtils.clamp((t - this.lastT) / 1000, 0, frameDt);
     this.lastT = t;
     this.drawn = 0;
     for (const r of this.slots.values()) {
-      const shown = r.live && r.track.sample(t, pose) && inView(pose, viewer, this.renderRadius, feetY);
+      const shown = r.live && r.track.sample(t, pose) && inView(pose, viewer, this.renderRadius, under, heightAt);
       r.model.root.visible = shown;
       if (r.bike) r.bike.model.root.visible = shown && pose.mode === 'bike';
       if (!shown) continue;
@@ -255,11 +255,16 @@ export interface FakePeer {
   action: PlayerAction;
 }
 
+/** Phase 8B: feet more than remote.hideDy under the terrain grid = underground (the Louvre room, 30 m under its box). */
+export const underground = (p: { x: number; y: number; z: number }, heightAt: (x: number, z: number) => number) => p.y < heightAt(p.x, p.z) - R.hideDy;
+
+/** Drawn: within `radius` m (x, z) of the viewer and (Phase 8B, verify-foundation #1) on the same side of the ground: a
+ *  team in the Louvre room is no ghost for a team on the street and the other way round, while slopes (Trocadéro ≈ 36 m,
+ *  Bir-Hakeim / Passy ≈ 18 m) hide nobody. `viewerUnder` undefined (spectator) = distance only. */
+export const inView = (p: { x: number; y: number; z: number }, viewer: { x: number; z: number }, radius: number, viewerUnder?: boolean, heightAt?: (x: number, z: number) => number) =>
+  Math.hypot(p.x - viewer.x, p.z - viewer.z) <= radius && (viewerUnder === undefined || !heightAt || underground(p, heightAt) === viewerUnder);
+
 /** "0,10,-5,90,walk;1,…,bike;2,…,walk,wave" → peers (invalid groups dropped). */
-/** Drawn: within `radius` m (x, z) of the viewer and, with the local feet height known, within remote.hideDy m of it (Phase 8B:
- *  a team in the Louvre room 30 m under the box is no ghost for a team on the street, and the other way round). */
-export const inView = (p: { x: number; y: number; z: number }, viewer: { x: number; z: number }, radius: number, feetY?: number) =>
-  Math.hypot(p.x - viewer.x, p.z - viewer.z) <= radius && (feetY === undefined || Math.abs(p.y - feetY) <= R.hideDy);
 
 export function parsePeers(v: string | null): FakePeer[] {
   return (v ?? '').split(';').flatMap((g) => {

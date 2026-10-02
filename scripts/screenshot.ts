@@ -377,7 +377,7 @@ Object.assign(PRESETS, {
   ...Object.fromEntries(
     Object.entries({
       // [B] the room (?louvre=1: the room at the spawn point, 23 placeholders, stand-in card ?card=louvre)
-      'p8b-room': 'louvre=1&card=louvre', // from the door looking in: 23 numbered placeholders (15 frames + 8 plinths), lock button in the middle
+      'p8b-room': 'louvre=1&card=louvre&roomAt=view', // from the door looking in: 23 numbered placeholders (15 frames + 8 plinths), lock button in the middle
       'p8b-room-button': 'louvre=1&card=louvre&roomAt=button', // next to a green (picked) button: "Bấm F: bỏ chọn"
       'p8b-room-lock': 'louvre=1&card=louvre-locked&roomAt=lock&lock=120', // at the lock button: the wrong-lock countdown in the middle of the screen
       // [C] HUD (RaceHud.demo stand-ins)
