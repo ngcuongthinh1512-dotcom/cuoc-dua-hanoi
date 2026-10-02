@@ -290,7 +290,7 @@ Object.assign(PRESETS, {
   // (?boxes=D1|A…), an r2: image offline (RaceHud resolveMedia → null: the card's placeholder, drawn by track C)
   'p8-box-yaw': camAt(-16.75, -10.9 + 3.5, 5.5, 0, -55) + '&npc=0&boxes=L2,-18,-10.9,opened;L1,-15.5,-10.9,opened,90', // facing north from above: left = no yaw, front north (lid up at the back = south, near us); right = yawDeg 90, front west (lid up at the east)
   'p8-box-branch': camAt(-28, -1, 3, 0, -14) + '&npc=0&boxes=D1|A,-38,-10.9,opened,180;D1|B,-18,-10.9,,180', // branch A opened (left), branch B shut 20 m east
-  'p8-media-offline': '/?player&npc=0&wait=1&card=media&full',
+  'p8-media-offline': '/?player&npc=0&wait=1&card=media-off&full', // "Hình chỉ tải được trong cuộc đua" (the demo has no demo-off.jpg)
 });
 
 // Phase 2B landmark views: target = area-weighted centroid of the landmark's outlines (chunk data) or its skyline
@@ -361,7 +361,7 @@ Object.assign(PRESETS, {
       'p8-card-detour-chosen': 'card=detour-chosen&full', // "Đang làm nhánh Tính", "Đổi lựa chọn kép"
       'p8-card-detour-locked': 'card=detour-locked&lock=540&full', // switch countdown, no box until it ends
       'p8-card-branch-task': 'card=branch-task&full', // branch box opened: its task, answer box, "Đổi lựa chọn kép"
-      'p8-card-proof': 'card=proof&full', // photo branch: submission code + Copy + contact + "Tôi đã gửi bài"
+      'p8-card-proof': 'card=proof&full', // photo branch: instruction + submission code + Copy + "Tôi đã gửi bài" (no Messenger button, SPEC §17.17)
       'p8-card-teaser': 'card=teaser&full', // "Nhận thử thách"
       'p8-card-media': 'card=media&full', // R2 image (stand-in data: URI) + https links
       'p8-book-media': 'book=media', // Sổ mật thư: images / links, submission code, no answer history

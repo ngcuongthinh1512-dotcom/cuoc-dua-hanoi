@@ -230,7 +230,7 @@ async function start() {
           answer: (step, text) => race?.answer(step, text),
           branch: (step, id) => race?.branch(step, id),
           accept: (step) => race?.accept(step),
-          resolveMedia: (name) => fetchMedia(session, name),
+          ...(session && { resolveMedia: (name: string) => fetchMedia(session, name) }), // none offline: "Hình chỉ tải được trong cuộc đua"
         },
         session?.team?.name ?? '',
       )
@@ -406,7 +406,7 @@ async function start() {
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
-  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes } }); // for scratch test scripts
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes, raceHud, menu } }); // for scratch test scripts, scripts/hud-check.ts
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing. SPEC §17.2: the menu opens
@@ -426,12 +426,15 @@ async function start() {
   };
   // Phase 8 B1 (critic): links, images, buttons and the answer box of a card / the Sổ take the mouse, so the pointer is free
   // while one is open (no menu: above), and locked again on close, right inside the key / click handler that closed it
-  // (Firefox grants the lock only there; Tab closes in the frame loop: locked in the keydown below).
+  // (Firefox grants the lock only there: Tab / Esc / Space close in RaceHud's keydown, a backdrop click below).
+  // Not while the map / menu stays open (a card that popped up over them, e.g. the Host's approval: review R-2).
+  const relock = () => void (!modal() && input.lock());
   if (raceHud) {
     raceHud.onOpenChange = (open) => {
       if (open) return void document.exitPointerLock();
       cardClosed = true;
-      input.lock();
+      relock();
+      help.hidden = input.locked || modal(); // a refused lock (Firefox: Esc is no user gesture) shows "Nhấp chuột để chơi" again (R-3); a granted one hides it
     };
     // the dimmed backdrop lets clicks through to the canvas, which locks the pointer (Input): close the card first
     renderer.domElement.addEventListener('click', () => raceHud.open && raceHud.toggleBook());
@@ -439,10 +442,11 @@ async function start() {
   // Firefox (and Safari) grant pointer lock only inside an input event handler, not in the frame loop that handles M /
   // Esc below: a key that will close the map or the menu locks right here (the loop closes it next frame; its own
   // lock() is then a no-op, or a rejected request that Input swallows). Chrome allows both.
+  // A card / the Sổ closes inside RaceHud's own key handler (Tab / Esc / Space) and locks there (onOpenChange); this key was
+  // its (cardClosed), and nothing locks while it is still open over the map / menu.
   addEventListener('keydown', (e) => {
-    if (e.repeat || input.locked || performance.now() - unlockedAt <= 300) return;
+    if (e.repeat || input.locked || cardClosed || raceHud?.open || performance.now() - unlockedAt <= 300) return;
     if ((fullMap?.isOpen && (keys.map.includes(e.code) || keys.menu.includes(e.code))) || (menu.isOpen && keys.menu.includes(e.code))) input.lock();
-    else if (raceHud?.open && keys.clueBook.includes(e.code) && !(e.target instanceof HTMLInputElement)) input.lock(); // Tab: the loop closes it (not from the answer box: core/Input.ts leaves text fields alone)
   });
   input.onImeSuspected = () => {
     const box = $('ime');
@@ -493,7 +497,7 @@ async function start() {
       // the menu, or opens the menu. A press right after an unlock is the Esc that released it (some browsers deliver
       // it): ignored.
       if (fullMap && input.wasPressed('map')) {
-        if (fullMap.isOpen) fullMap.close(), input.lock();
+        if (fullMap.isOpen) fullMap.close(), relock(); // a card on top keeps the pointer
         else if (!flying && !raceHud?.open) {
           // not from the free-fly camera (V, debug): the map is the body's (review m14); not under the Sổ mật thư / card
           menu.close();
@@ -501,7 +505,7 @@ async function start() {
           if (fullMap.isOpen) document.exitPointerLock();
         }
       }
-      if (raceHud && input.wasPressed('clueBook') && !menu.isOpen && !fullMap?.isOpen) raceHud.toggleBook(); // Tab: Sổ mật thư (SPEC §8.11)
+      if (raceHud && input.wasPressed('clueBook') && !menu.isOpen && !fullMap?.isOpen && !cardClosed) raceHud.toggleBook(); // Tab: Sổ mật thư (SPEC §8.11); the Tab that closed a card (RaceHud) opens nothing
       // Phase 8 (§17.14): Enter with nothing open → the current card again (answer history, input box)
       if (raceHud && input.wasPressed('clueCard') && !modal() && !flying && !cardClosed) raceHud.openCurrent();
       if (input.wasPressed('menu') && performance.now() - unlockedAt > 300 && !cardClosed) {

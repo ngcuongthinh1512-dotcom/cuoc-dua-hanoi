@@ -2,7 +2,6 @@
   "id": "near",
   "title": "Chặng rất gần để test (NỘI DUNG GIẢ)",
   "boxReveal": { "radius": 40, "hysteresis": 10 },
-  "hostApproval": { "contactUrl": "https://m.me/test-host-gia" },
   "start": { "name": "Đại lộ Champs-Élysées, đầu quảng trường Concorde", "lat": 48.8656, "lon": 2.32053, "yawDeg": 0, "spreadMeters": 3 },
   "steps": [
     {

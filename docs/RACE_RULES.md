@@ -40,7 +40,7 @@ Game chỉ dùng những phím có trên cả bàn phím Windows lẫn Mac. Game
 - `W` `A` `S` `D`: di chuyển
 - Giữ `Shift`: đi chậm, khi cần di chuyển thật chính xác trong thử thách
 - `Space`: nhảy; khi đang bơi sát tường kè sông Seine: leo lên bờ
-- `F`: tương tác (mở hộp mật thư, lấy xe, lên/xuống xe, nhặt đồ vật)
+- `F`: tương tác (mở hòm mật thư, lấy xe, lên/xuống xe, nhặt đồ vật)
 - `Tab`: mở Sổ mật thư
 - `Enter`: mở lại **thẻ mật thư hiện tại** (khi không có thẻ, Sổ, Menu hay bản đồ nào đang mở). Thẻ thử thách có ô gõ câu trả lời và lịch sử các câu bạn đã gửi (mục 6)
 - `M`: bản đồ lớn
@@ -92,8 +92,8 @@ Sau khi về đích (hoặc khi Host đã kết thúc chặng), bạn trở thà
 - **Mỗi người chơi giữ tối đa 1 xe.** Lấy xe khác thì chiếc cũ biến mất.
 
 ### Giữ xe của mình
-- Bạn **phải xuống xe** mới mở được hộp mật thư (kể cả hòm của nhánh Lựa chọn kép). Gõ câu trả lời của thử thách thì **không cần xuống xe** và không cần đứng ở điểm (mục 6).
-- Ở các lộ trình "tự chọn", bạn xuống xe mở hộp mật thư rồi lên xe đi tiếp, xe vẫn là của bạn.
+- Bạn **phải xuống xe** mới mở được hòm mật thư (kể cả hòm của nhánh Lựa chọn kép). Gõ câu trả lời của thử thách thì **không cần xuống xe** và không cần đứng ở điểm (mục 6).
+- Ở các lộ trình "tự chọn", bạn xuống xe mở hòm mật thư rồi lên xe đi tiếp, xe vẫn là của bạn.
 - Bỏ xe ngoài đường và **ở xa xe liên tục quá lâu** (ví dụ cách xe hơn 200 m suốt 1 phút) thì xe sẽ **biến mất**.
 - **Thoát game hay mất mạng không làm mất xe**: xe đứng yên tại chỗ và vẫn khóa theo đội bạn. Nếu đội vắng mặt quá lâu, Host có thể giải phóng xe.
 
@@ -118,14 +118,14 @@ Mỗi mật thư lộ trình ghi rõ luật phương tiện, và màn hình luô
 - Chặng đua là **một chuỗi bước theo đúng thứ tự**. Bạn chỉ nhận mật thư bước tiếp theo khi máy chủ xác nhận bạn đã xong bước hiện tại. **Không thể nhảy cóc.**
 - Tại mỗi điểm có một **hòm mật thư**: đế xám vuông, cột vàng có dải đỏ, hộp xám trên cùng với nắp phẳng, cao khoảng 1,6 m. Hòm chưa mở có một **cột sáng vàng mảnh** phía trên để nhìn thấy từ xa; hòm đã mở thì nắp lật lên.
 - Chỉ hòm của mật thư bạn **đang giữ** mới hiện, và chỉ khi bạn tới gần (khoảng 150 m). Hòm của các bước sau chưa hiện, nên không thể tìm trước. Hòm đã mở vẫn còn đó để bạn định hướng. Ở **Lựa chọn kép**, chỉ hòm của **nhánh bạn đã chọn** hiện (mục 5).
-- Bước vào vùng quanh hòm mật thư, **xuống xe**: màn hình hiện *"Bấm F để mở hộp mật thư"*. Bấm `F` để mở. Thẻ mật thư mới mở ra đầy đủ (bấm `Tab`, `Esc` hoặc `Space` để đóng) và tự vào Sổ mật thư; thẻ mở ra thì chuột được thả để bạn bấm liên kết, hình, nút (mục 2). Thẻ rút gọn của mật thư đang giữ luôn nằm ở góc trên bên trái; đóng thẻ rồi muốn xem lại thì bấm `Enter`.
+- Bước vào vùng quanh hòm mật thư, **xuống xe**: màn hình hiện *"Bấm F để mở hòm mật thư"*. Bấm `F` để mở. Thẻ mật thư mới mở ra đầy đủ (bấm `Tab`, `Esc` hoặc `Space` để đóng) và tự vào Sổ mật thư; thẻ mở ra thì chuột được thả để bạn bấm liên kết, hình, nút (mục 2). Thẻ rút gọn của mật thư đang giữ luôn nằm ở góc trên bên trái; đóng thẻ rồi muốn xem lại thì bấm `Enter`.
 - Thẻ rút gọn có thêm một **dòng trạng thái** khi cần: *Chờ Host duyệt · mm:ss*, *Phạt: còn mm:ss*, *Nhánh X · tới hòm nhánh*, *Đổi nhánh: còn mm:ss*.
 
 ### Xuất phát
 - Mỗi đội nhận **mật thư đầu tiên ở ngoài trò chơi**, mỗi đội vào một lúc khác nhau: không có tiếng súng xuất phát chung. **Đồng hồ của đội bạn chạy từ lúc đó** (Host ghi lại giờ này), kể cả khoảng thời gian trước khi bạn vào game.
 - Lần đầu vào game, bạn xuất hiện ở **điểm xuất phát của chặng** (chặng này: cầu Bir-Hakeim); các đội vào gần cùng lúc được đặt cách nhau vài mét. Bên phải màn hình hiện **"Xuất phát ở vị trí thứ n"** trong 15 giây rồi mờ dần: n là thứ tự đội bạn **vào game** (đội vào đầu tiên là 1), không phải thứ hạng, và không liên quan giờ xuất phát Host ghi. Thông báo chỉ hiện một lần; vào lại thì không hiện nữa.
-- Nếu mật thư đầu tiên dẫn bạn tới chính nơi xuất phát, bạn vào game là đã đứng cạnh hộp mật thư: mở luôn.
-- Host chưa mở cuộc đua: phía trên đồng hồ hiện nhãn **"Chưa bắt đầu"**; bạn vẫn đi lại được, nhưng bấm `F` ở hộp sẽ thấy *"Cuộc đua chưa bắt đầu, hãy chờ Host"*.
+- Nếu mật thư đầu tiên dẫn bạn tới chính nơi xuất phát, bạn vào game là đã đứng cạnh hòm mật thư: mở luôn.
+- Host chưa mở cuộc đua: phía trên đồng hồ hiện nhãn **"Chưa bắt đầu"**; bạn vẫn đi lại được, nhưng bấm `F` ở hòm sẽ thấy *"Cuộc đua chưa bắt đầu, hãy chờ Host"*.
 
 ## 5. Các loại thẻ mật thư
 
@@ -133,16 +133,16 @@ Mỗi loại thẻ có tiêu đề và màu riêng, nhìn là nhận ra ngay.
 
 ### Thông tin lộ trình
 - Cho biết nơi bạn cần tới tiếp theo: có thể là chỉ dẫn rõ ràng, cũng có thể là **một câu đố về địa điểm**.
-- Hoàn thành khi bạn tới đúng điểm và mở hộp mật thư ở đó. Riêng lộ trình dẫn tới Chặng dừng thì chỉ cần bước vào khu vực Chặng dừng.
+- Hoàn thành khi bạn tới đúng điểm và mở hòm mật thư ở đó. Riêng lộ trình dẫn tới Chặng dừng thì chỉ cần bước vào khu vực Chặng dừng.
 - Mật thư có thể kèm **hình** (bấm vào hình để xem lớn) và **liên kết** (bấm để mở tab mới, ví dụ video). Hình chỉ hiện cho đội đã mở mật thư đó.
 
 ### Lựa chọn kép
 - Thẻ giới thiệu **2 nhánh** (tên và mô tả ngắn) với **hai nút chọn nhánh** (hoặc phím `1` / `2`). Bạn bấm **1 trong 2** nút để chọn, bấm ở đâu cũng được.
 - Sau khi chọn, **chỉ hòm của nhánh bạn đã chọn mới hiện** (khi bạn tới gần, khoảng 150 m, như mọi hòm mật thư); hòm của nhánh kia không hiện. Mỗi nhánh có hòm và nơi làm riêng.
-- **Đề bài của nhánh nằm trong hòm của nhánh**: tới hòm, bấm `F` để mở thì mới thấy mô tả, hình và liên kết của nhiệm vụ. Làm nhiệm vụ (gõ câu trả lời, hoặc gửi ảnh chụp màn hình cho Host qua Messenger / Facebook) rồi chờ Host duyệt (mục 7); duyệt xong thì nhận mật thư tiếp theo.
+- **Đề bài của nhánh nằm trong hòm của nhánh**: tới hòm, bấm `F` để mở thì mới thấy mô tả, hình và liên kết của nhiệm vụ. Làm nhiệm vụ (gõ câu trả lời, hoặc gửi ảnh chụp màn hình cho Host qua Messenger mà bạn tự mở ở ngoài trò chơi) rồi chờ Host duyệt (mục 7); duyệt xong thì nhận mật thư tiếp theo.
 - Bấm nút **"Đổi lựa chọn kép"** (bỏ nhánh đang làm) từ bất kỳ đâu, sau khi đã chọn: một **hộp xác nhận** ghi rõ số phút phạt. Nếu đồng ý: hòm của nhánh đang chọn biến mất, bạn **mất toàn bộ tiến độ** của nhánh đó và **bị phạt 10 phút** (chặng có thể quy định số khác): giữa màn hình hiện **đồng hồ đếm ngược** *"Đổi lựa chọn kép: còn mm:ss"*; đếm ngược xong thì hòm của nhánh kia mới hiện (khi bạn tới gần) để bạn làm nhánh đó.
 - Đồng hồ đua vẫn chạy trong lúc đếm ngược, nên 10 phút là thời gian mất thật. **Mỗi lần đổi chịu một lần phạt** (đổi qua rồi đổi lại là 20 phút).
-- **Không đổi nhánh được khi đang chờ Host duyệt bài** (đây là điều kiện duy nhất). Đang bị phạt đếm ngược 3 phút của thử thách thì vẫn đổi được; đếm ngược 10 phút thay cho đếm ngược cũ.
+- **Không đổi nhánh được khi đang chờ Host duyệt bài, và trong lúc đang đếm ngược của lần đổi nhánh trước** (nút "Đổi lựa chọn kép" ẩn đi). Đang bị phạt đếm ngược 3 phút của thử thách thì vẫn đổi được; đếm ngược 10 phút thay cho đếm ngược cũ.
 - Xong nhánh đã chọn thì nhận mật thư tiếp theo.
 
 ### Thử thách
@@ -200,12 +200,12 @@ Game không tự chấm các nhiệm vụ của chặng: **Host xem bài của �
 6. Đồng hồ đua **vẫn chạy** trong lúc chờ duyệt và lúc đếm ngược, kể cả khi Host tạm dừng cuộc đua.
 
 ### Gửi ảnh cho Host qua Messenger (ví dụ nhánh của Lựa chọn kép)
-Có nhiệm vụ cần bằng chứng (ảnh chụp màn hình) gửi cho Host qua Facebook / Messenger:
+Có nhiệm vụ cần bằng chứng (ảnh chụp màn hình) gửi cho Host qua Messenger. **Game không có nút mở Messenger / Facebook**: bạn tự mở Messenger ở ngoài trò chơi (điện thoại hoặc cửa sổ khác).
 
 1. Mở hòm, đọc nhiệm vụ trên thẻ: mô tả, hình / liên kết minh họa và hướng dẫn gửi bài.
 2. Thẻ có một **mã bài nộp** riêng cho đội bạn và nhiệm vụ này, dạng `<tên đội>-<bước>[-<nhánh>]`, ví dụ `Đội Xanh-D1-A`. Bấm **Copy** rồi dán kèm tin nhắn để Host biết bài của đội nào, nhiệm vụ nào.
-3. Bấm nút gửi bài của thẻ: trang Facebook / Messenger của Host mở ra ở tab mới.
-4. Làm xong và gửi bài, quay lại game bấm **"Tôi đã gửi bài – chờ Host duyệt"**.
+3. Mở Messenger ở ngoài trò chơi, gửi ảnh kèm mã bài nộp cho Host.
+4. Gửi xong, quay lại game bấm **"Tôi đã gửi bài – chờ Host duyệt"**.
 5. Từ đây giống như trên: **"Đang chờ Host duyệt"** kèm đồng hồ đếm lên; Host bấm **Duyệt** (bạn nhận mật thư tiếp theo ngay) hoặc **Phạt** (đồng hồ đếm ngược, rồi gửi lại bài mới). Host cũng có thể duyệt ngay khi nhận được ảnh, kể cả trước khi bạn bấm "Tôi đã gửi bài".
 
 Trong lúc **chờ Host duyệt**, bạn chưa nhận được mật thư tiếp theo và **không đổi nhánh** Lựa chọn kép được.
@@ -224,7 +224,7 @@ Trong lúc **chờ Host duyệt**, bạn chưa nhận được mật thư tiếp
 - Theo mặc định, sổ **chỉ hiện những mật thư đã nhận**. Không có ô khóa hay thanh tiến độ, nên bạn **không biết chặng còn bao nhiêu bước**. Cứ đua hết sức!
 - Mỗi mục có trạng thái: đang làm hoặc đã xong (giờ hoàn thành và thời gian làm bước đó). Chờ Host duyệt / đếm ngược phạt hiện trên thẻ thử thách (bấm `Enter`) và giữa màn hình.
 - Mục Lựa chọn kép hiện **tên và mô tả ngắn của 2 nhánh**, nhánh bạn đã chọn (nhãn *"Đội đã chọn"*) và số lần bạn đã đổi nhánh. **Đề bài của nhánh chỉ có sau khi bạn mở hòm của nhánh đó**: đề bài của nhánh bạn chưa mở thì không hiện.
-- Mục nhiệm vụ gửi ảnh cho Host có hướng dẫn gửi bài và **mã bài nộp** (`<tên đội>-<bước>[-<nhánh>]`) kèm nút **Copy**. Nút mở Facebook của Host và nút "Tôi đã gửi bài" nằm trên thẻ thử thách (bấm `Enter`).
+- Mục nhiệm vụ gửi ảnh cho Host có hướng dẫn gửi bài và **mã bài nộp** (`<tên đội>-<bước>[-<nhánh>]`) kèm nút **Copy**. Nút "Tôi đã gửi bài – chờ Host duyệt" nằm trên thẻ thử thách (bấm `Enter`). Không có nút mở Messenger / Facebook: bạn tự mở Messenger ở ngoài trò chơi.
 - Sổ **không** có lịch sử các câu trả lời bạn đã gõ (kể cả mục được ghim). Muốn xem lại, đóng sổ rồi bấm `Enter` để mở thẻ thử thách hiện tại (mục 6).
 - Mật thư đang làm được ghim trên đầu; nút **"Về mật thư hiện tại"** đưa bạn quay lại ngay.
 - Sổ luôn **tải lại từ máy chủ** mỗi lần mở, nên đổi sang máy khác vẫn đủ mật thư.
@@ -277,7 +277,7 @@ Khi đội bạn có phút phạt, tổng số phút hiện ở **góc dưới b
 - **Thời gian chính thức** = giờ check-in trên thảm − giờ xuất phát của đội bạn − thời gian chờ Host duyệt (nếu chặng có bù giờ).
 - Thời gian đứng chờ hết phạt **đã nằm trong** thời gian chính thức. Đồng hồ đếm ngược sau khi bị Phạt bài hay khi đổi Lựa chọn kép cũng vậy (mục 7): không được trừ, và vẫn chạy cả khi Host tạm dừng cuộc đua.
 - Mỗi đội tính từ giờ xuất phát riêng của mình.
-- **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hộp mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục (phía trên đồng hồ hiện nhãn **"Tạm dừng"**; bấm `F` sẽ thấy *"Cuộc đua đang tạm dừng"*). **Khi Host kết thúc chặng**, bạn chuyển **ngay** sang chế độ khán giả (camera bay tự do, bảng thông tin trên màn hình tắt hẳn, không có lời nhắn riêng): đó là dấu hiệu chặng đã khép lại; từ lúc này không mở hộp, làm nhiệm vụ hay lấy xe được nữa. **Đồng hồ vẫn chạy và thời gian tạm dừng không được trừ** khỏi thời gian chính thức. Việc bạn **tới** một điểm trong lúc tạm dừng vẫn được ghi đúng giờ. Hệ quả: đội đang đi đường gần như không mất gì (vẫn đi tiếp được), còn đội đang đứng ở hộp mật thư hoặc trên thảm thì phải chờ hết thời gian tạm dừng. Khi Host cho tiếp tục, đội đang đứng trên thảm được check-in ngay, không cần di chuyển.
+- **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hòm mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục (phía trên đồng hồ hiện nhãn **"Tạm dừng"**; bấm `F` sẽ thấy *"Cuộc đua đang tạm dừng"*). **Khi Host kết thúc chặng**, bạn chuyển **ngay** sang chế độ khán giả (camera bay tự do, bảng thông tin trên màn hình tắt hẳn, không có lời nhắn riêng): đó là dấu hiệu chặng đã khép lại; từ lúc này không mở hòm, làm nhiệm vụ hay lấy xe được nữa. **Đồng hồ vẫn chạy và thời gian tạm dừng không được trừ** khỏi thời gian chính thức. Việc bạn **tới** một điểm trong lúc tạm dừng vẫn được ghi đúng giờ. Hệ quả: đội đang đi đường gần như không mất gì (vẫn đi tiếp được), còn đội đang đứng ở hòm mật thư hoặc trên thảm thì phải chờ hết thời gian tạm dừng. Khi Host cho tiếp tục, đội đang đứng trên thảm được check-in ngay, không cần di chuyển.
 - Thời gian chính thức càng ngắn, thứ hạng càng cao. Host bấm **"Công bố kết quả"** để gửi thứ hạng chính thức tới mọi người chơi.
 
 ## 12. Thoát ra & vào lại

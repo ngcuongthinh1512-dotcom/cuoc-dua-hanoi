@@ -241,8 +241,10 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
       p.branch = input.branch;
       return { p, effects: [{ kind: 'branch', step: i, branch: input.branch }] };
     }
-    // §17.16: only a pending answer blocks a switch (a "Phạt" countdown does not: the switch lock replaces it, critic M1)
+    // §17.16: a pending answer blocks a switch (a "Phạt" countdown does not: the switch lock replaces it, critic M1)
     if (p.pendingId !== null) return refuse('branchPending');
+    // a switch countdown (no branch box opened yet): the card has no "Đổi" button, nothing to say (review R-4: 3 rows each)
+    if (p.branchOpenedAt === null && (p.lockedUntil ?? 0) > now) return silent;
     const from = p.branch;
     const lockedUntil = now + leg.penalties.branchSwitchLockMinutes * 60_000;
     p = { ...p, branch: input.branch, branchOpenedAt: null, startedAt: null, arrivedAt: null, lockedUntil };
@@ -296,10 +298,9 @@ export function taskState(leg: Leg, i: number, row: StepProgressRow | undefined,
 const mediaView = (m: MediaItem): MediaView => ({ url: m.url, label: m.label, kind: m.url.startsWith(MEDIA.prefix) ? 'image' : 'link' });
 
 /** SPEC §10.1 task minus `answers` / `referenceAnswers` / `params`; its location only by name. */
-const taskView = (leg: Leg, t: Task): TaskView => ({
+const taskView = (t: Task): TaskView => ({
   title: t.title, description: t.description, media: t.media.map(mediaView), kind: t.kind, verification: t.verification,
   input: t.kind === 'free' ? 'proof' : 'text', proofInstruction: t.proofInstruction,
-  ...(t.kind === 'free' ? { contactUrl: leg.hostApproval.contactUrl, contactLabel: leg.hostApproval.contactLabel } : {}),
   timeLimitMinutes: t.timeLimitMinutes, ...(t.location ? { place: t.location.name } : {}),
 });
 
@@ -331,13 +332,13 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
       const opened = !!b && (row?.branch_opened_at != null || row?.completed_at != null);
       return {
         ...base, text: s.clue, media: s.media.map(mediaView),
-        branches: s.branches.map((x) => ({ id: x.id, name: x.name, summary: x.summary, ...(opened && x === b ? { task: taskView(leg, x.task) } : {}) })),
+        branches: s.branches.map((x) => ({ id: x.id, name: x.name, summary: x.summary, ...(opened && x === b ? { task: taskView(x.task) } : {}) })),
         branch, branchOpened: opened, switches: row?.branch_switches ?? 0, switchPenaltyMinutes: leg.penalties.branchSwitchLockMinutes,
         ...(b ? { retryPenaltyMinutes: retryLockMinutes(leg, b.task), answers: answerViews(row, branch) } : {}),
       };
     }
     case 'challenge':
-      return { ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null), ...(status === 'teaser' ? {} : { task: taskView(leg, s.task) }) };
+      return { ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null), ...(status === 'teaser' ? {} : { task: taskView(s.task) }) };
     case 'pit_stop':
       return { ...base, text: '' };
   }

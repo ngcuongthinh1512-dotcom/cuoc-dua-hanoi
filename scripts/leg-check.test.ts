@@ -6,6 +6,7 @@ import { latLonToWorld, worldToLatLon } from '@race/shared';
 import { checkFile, compass, loadMap, scanLeaks, secretStrings } from './leg-check.ts';
 import { chunkKey, type ChunkData } from '../client/src/geo/chunkData.ts';
 import { inRing } from '../client/src/geo/districts.ts';
+import { demoState } from '../client/src/host/hostView.ts';
 import { jsonProblem, parseLeg } from '../shared/src/leg/index.ts';
 
 const root = join(import.meta.dirname, '..');
@@ -360,17 +361,23 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     expect(lvl(runT('r2.json', k), 'warning')).toEqual(['Bước 4 (D1) › nhánh B › nhiệm vụ › mô tả: chứa đáp án "bay" của bước 4 (D1, nhánh A): đội đọc được trước khi giải']);
   });
 
-  it('proofInstruction, the step label and the Messenger button label are scanned (verify-foundation S2 / M1)', () => {
+  it('proofInstruction and the step label are scanned (verify-foundation S2 / M1)', () => {
     const j = miniJson();
     branch(j, 'B').task.proofInstruction = '(GIẢ) Gửi ảnh, đáp án là bảy.'; // A's answer in B's card
-    j.hostApproval.contactLabel = 'Gửi bảy cho Host'; // B is a photo task: this is its button
     step(j, 'T1').label = 'Thử thách bốn mươi hai';
     step(j, 'T1').task.referenceAnswers = ['bốn mươi hai'];
     expect(lvl(runT('m1.json', j), 'warning')).toEqual([
       'Bước 2 (T1) › tên bước: chứa đáp án tham khảo "bon muoi hai" của bước 2 (T1): đội đọc được trước khi giải',
       'Bước 4 (D1) › nhánh B › nhiệm vụ › hướng dẫn gửi bài: chứa đáp án "bay" của bước 4 (D1, nhánh A): đội đọc được trước khi giải',
-      'Host duyệt › chữ trên nút gửi bài: chứa đáp án "bay" của bước 4 (D1, nhánh A): đội đọc được trước khi giải',
     ]);
+  });
+
+  it('an old file with hostApproval.contactUrl "" / contactLabel passes without a word (SPEC §17.17: no Messenger button)', () => {
+    const j = miniJson();
+    j.hostApproval = { contactUrl: '', contactLabel: 'Gửi bảy cho Host' }; // B is a photo task; A's answer in the old label
+    const r = runT('c1.json', j);
+    expect(r.issues).toEqual([]);
+    expect(r.ok).toBe(true);
   });
 
   it('"[CHƯA NHẬP …]" is a blank, a repeated step label a warning, a strange kind a warning', () => {
@@ -449,5 +456,13 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     const r2 = checkFile(legs('test/mini.json'), { root, map, scanDirs: [both] });
     expect(r2.ok).toBe(false);
     expect(errors(r2)).toEqual([expect.stringContaining('chứa nguyên văn')]);
+  });
+  it('the Host page demo (demoState, shipped in client/dist) copies no text or answer of a bundled leg (R-6: leg:check mini = 0 warnings)', () => {
+    const demo = JSON.stringify(demoState());
+    for (const f of ['test/mini.json', 'test/near.json', 'paris-demo.json']) {
+      const parsed = parseLeg(JSON.parse(readFileSync(legs(f), 'utf8')));
+      if (!parsed.ok) throw new Error(`${f} invalid`);
+      for (const x of [...secretStrings(parsed.leg, 8)]) expect(demo, `${f}: ${x}`).not.toContain(JSON.stringify(x).slice(1, -1));
+    }
   });
 });

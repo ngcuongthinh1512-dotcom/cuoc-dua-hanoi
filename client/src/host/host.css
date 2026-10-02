@@ -66,3 +66,7 @@ td.locked { background: #3e2a6b; color: #d6c4ff; }
 table.matrix td.cell button { margin-top: 3px; padding: 1px 7px; font-size: 12px; }
 table.matrix td.cell div { white-space: nowrap; }
 th.wrap { white-space: normal; line-height: 1.2; min-width: 4.5em; }
+/* visual#10: no blank error line between the banner and the queue; the R2 image rows share their columns */
+#err:empty { display: none; }
+.media-grid { display: grid; grid-template-columns: repeat(4, max-content); gap: 6px 12px; align-items: center; }
+.media-grid .row { display: contents; }

@@ -12,7 +12,7 @@ Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự g
 5. Tải hình mật thư lên (chỉ khi chặng có `"r2:<tên>"`; `leg:check` in danh sách "Hình cần tải lên trang Host"): sau khi nạp chặng, mục **Hình mật thư (R2)** trên trang Host liệt kê từng tên → "Chọn file" (jpg / png / webp ≤ 5 MB) → ✓ "đã có"; nút **Xem** để kiểm. Hình lưu theo mã cuộc đua: diễn tập ở mã khác thì tải lại. Đội chỉ tải được hình của mật thư đã mở.
 
 ## Host duyệt bài trong lúc đua
-- Đội gõ câu trả lời trong game (hoặc bấm "Tôi đã gửi bài" sau khi gửi ảnh qua Messenger kèm **mã bài nộp** `<tên đội>-<bước>[-<nhánh>]`). Bài hiện ở mục **Chờ duyệt (n)** đầu trang Host (có âm báo; bấm **Bật thông báo** để nhận thông báo của trình duyệt), kèm câu trả lời, mã bài nộp, thời gian chờ và **Đáp án tham khảo** (chỉ Host thấy).
+- Đội gõ câu trả lời trong game (hoặc bấm "Tôi đã gửi bài" sau khi gửi ảnh qua Messenger kèm **mã bài nộp** `<tên đội>-<bước>[-<nhánh>]`; đội tự mở Messenger ở ngoài trò chơi, game không có nút mở Messenger / Facebook). Bài hiện ở mục **Chờ duyệt (n)** đầu trang Host (có âm báo; bấm **Bật thông báo** để nhận thông báo của trình duyệt), kèm câu trả lời, mã bài nộp, thời gian chờ và **Đáp án tham khảo** (chỉ Host thấy).
 - **Duyệt** → đội nhận mật thư kế ngay. **Phạt n phút** → đội thấy đồng hồ đếm ngược rồi mới trả lời lại được. Ô ghi chú chỉ để Host đọc (không gửi cho đội). Bấm nhầm Phạt: ô của đội trong ma trận có nút **Duyệt lại**. Bài ảnh Host đã nhận trước khi đội bấm nút: nút **Duyệt (đã nhận ảnh)** trong ô của đội.
 - Banner đỏ báo đội làm cùng một thử thách / nhánh quá 45 phút (`hostAlerts.stuckMinutes`), để Host gửi gợi ý qua Messenger. Thời gian chờ duyệt được bù vào giờ chính thức (cột "Bù giờ chờ duyệt").
 

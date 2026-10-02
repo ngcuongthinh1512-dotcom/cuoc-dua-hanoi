@@ -410,8 +410,10 @@ export class RaceRoom extends DurableObject<Env> {
       case 'race':
         if (a.role !== TEAM) return;
         // Phase 8 (D20): the ops that may write a row are budgeted like bike ops (not checkin / book: the mat check-in
-        // runs every 2 s, critic S4)
-        if ((m.op === 'answer' || m.op === 'accept' || m.op === 'branch' || m.op === 'open') && this.count(a.team, 'race', now) > NET.maxRaceOps) return this.close(ws, CLOSE.tooFast, 'too many race ops');
+        // runs every 2 s, critic S4; not open either: F pressed again and again at a box while the race is not open yet
+        // (lobby / paused) or out of reach writes nothing, and a box opens once — a branch box again only after a counted
+        // branch switch (review R-7))
+        if ((m.op === 'answer' || m.op === 'accept' || m.op === 'branch') && this.count(a.team, 'race', now) > NET.maxRaceOps) return this.close(ws, CLOSE.tooFast, 'too many race ops');
         // D4: judged at the trusted pose (the client sends its pose right before the op, on the same socket)
         return this.engine.onOp(a.team, m, this.live.get(a.team)?.valid ?? null, now);
       case 'host.race':

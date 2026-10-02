@@ -223,8 +223,7 @@
   font-weight: 700;
 }
 .rc-task-meta,
-.rc-meta,
-.rc-note {
+.rc-meta {
   margin-top: 4px;
   font-size: 12px;
   color: var(--hud-dim);
@@ -320,10 +319,6 @@
 .rc-full.quick {
   animation: none;
 }
-.rc-note {
-  font-size: 13px;
-  color: var(--hud-fg);
-}
 .rc-task.dim {
   opacity: 0.55;
 }
@@ -338,6 +333,9 @@
 }
 .rc-timer.wait { color: #ffd37a; border-left: 4px solid #ffb830; }
 .rc-timer.lock { color: #ffb3a8; border-left: 4px solid #f0643c; }
+.rc-timer.info { color: var(--hud-fg); border-left: 4px solid var(--c); }
+/* the mm:ss of a countdown / stopwatch (card line + centre chip): bigger than its sentence */
+.rc-num { font-size: 1.45em; font-variant-numeric: tabular-nums; line-height: 1; }
 
 /* Typed answer */
 .rc-answer {
@@ -403,11 +401,6 @@
 .rc-proof-btns .rc-task-btn {
   margin-top: 0;
 }
-a.rc-btn {
-  display: inline-block;
-  box-sizing: border-box;
-  text-decoration: none;
-}
 
 /* The team's own answers (card only, never the Sổ) */
 .rc-history {
@@ -466,6 +459,9 @@ a.rc-btn {
   object-fit: contain;
   cursor: zoom-in;
 }
+.rc-fig img[hidden] {
+  display: none; /* not loaded (placeholder shown): no broken-image icon + alt text */
+}
 .rc-fig figcaption {
   margin-top: 2px;
   font-size: 12px;
@@ -510,9 +506,6 @@ a.rc-btn {
   max-width: 94vw;
   max-height: 92vh;
   object-fit: contain;
-}
-.rc-detail .rc-note {
-  margin-top: 8px;
 }
 .rc-detail .rc-task.dim + .rc-task.dim,
 .rc-detail > .rc-switch {

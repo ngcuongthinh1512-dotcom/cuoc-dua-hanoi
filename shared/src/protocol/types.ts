@@ -103,13 +103,11 @@ export interface TaskView {
   media: MediaView[];
   kind: TaskKind;
   verification: Verification;
-  /** Phase 8: 'text' = an input box (answer typed in game); 'proof' = a photo sent on Messenger (kind free): the card shows
-   *  proofInstruction, the submission code, the contact button and "Tôi đã gửi bài – chờ Host duyệt" (answer ''). */
+  /** Phase 8: 'text' = an input box (answer typed in game); 'proof' = a photo the team sends on Messenger, opened outside the
+   *  game (kind free, SPEC §17.17: no contact button): the card shows proofInstruction, the submission code and
+   *  "Tôi đã gửi bài – chờ Host duyệt" (answer ''). */
   input: 'text' | 'proof';
   proofInstruction: string;
-  /** 'proof' only: leg hostApproval.contactUrl / contactLabel (the Messenger button). */
-  contactUrl?: string;
-  contactLabel?: string;
   timeLimitMinutes: number | null;
   /** Task somewhere else (leg task.location.name); absent = at the point just reached. */
   place?: string;
@@ -426,7 +424,8 @@ export interface HostState {
       id: string; type: StepType; label: string; name: string; x: number; z: number; r: number;
       /** Phase 8: a photo task (kind free): the matrix offers "Duyệt (đã nhận ảnh)" (host.review approve without id). */
       proof: boolean;
-      branches?: { id: string; name: string; x: number; z: number; r: number; proof: boolean }[];
+      /** `title` = the branch's own name (leg Branch.name, "Tính"): what the team calls it; `name` = its place. */
+      branches?: { id: string; title: string; name: string; x: number; z: number; r: number; proof: boolean }[];
     }[];
     vehicles: VehiclesConfig;
     bundled: string[];

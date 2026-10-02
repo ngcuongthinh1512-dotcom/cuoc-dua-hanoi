@@ -109,13 +109,20 @@ describe.concurrent('Phase 8 (workerd)', () => {
     expect(await card(a!, (c) => c.status === 'goToBranch')).toMatchObject({ branch: 'A', branches: [{ id: 'A' }, { id: 'B' }] });
     p = await walkTo(a!, p, off(P[4]!, -30));
     expect(await a!.until((m) => m.t === 'box', 3000)).toEqual({ t: 'box', op: 'reveal', box: expect.objectContaining({ step: 'D1', branch: 'A', opened: false, x: cm(P[4]!.x) }) });
-    // switch to B, then straight back to A (A → B → A, standing 30 m from A, never near B)
+    // switch to B, then back to A once its countdown ended (A → B → A, standing 30 m from A, never near B)
     const seen: unknown[] = [];
     const until = (match: (m: any) => boolean, ms?: number): Promise<any> => a!.until((m) => (seen.push(m), match(m)), ms);
     a!.send({ t: 'race', op: 'branch', step: 'D1', branch: 'B' });
     expect(await until((m) => m.t === 'box')).toEqual({ t: 'box', op: 'remove', step: 'D1', branch: 'A' });
     const l1 = (await until((m) => m.t === 'race')).view.card as ClueCard;
     expect(l1).toMatchObject({ status: 'switchLocked', lockKind: 'switch', switches: 1, branch: 'B', switchPenaltyMinutes: 0.1 });
+    // R-4: no switch during the switch countdown (the card has no "Đổi" button): silent, nothing written
+    a!.send({ t: 'race', op: 'branch', step: 'D1', branch: 'A' });
+    const quiet = await a!.drain(600);
+    seen.push(...quiet);
+    expect(quiet.filter((m) => m.t === 'race' || m.t === 'notice' || m.t === 'box')).toEqual([]);
+    expect(await rowOf(race, id, 'D1')).toMatchObject({ branch: 'B', branch_switches: 1 });
+    await waitLock(l1);
     a!.send({ t: 'race', op: 'branch', step: 'D1', branch: 'A' });
     const l2 = (await until((m) => m.t === 'race' && m.view.card.switches === 2)).view.card as ClueCard;
     expect(l2).toMatchObject({ status: 'switchLocked', branch: 'A' });
@@ -195,8 +202,23 @@ describe.concurrent('Phase 8 (workerd)', () => {
     expect((await http('test-gia.jpg', { method: 'HEAD', headers: auth(hostToken) })).status).toBe(200);
     expect((await http('nope.jpg', { method: 'HEAD', headers: auth(hostToken) })).status).toBe(404);
     const ok = await get(a!.token, 'test-gia.jpg'); // L1's clue: the team holds it from the start
-    expect([ok.status, ok.headers.get('Content-Type'), ok.headers.get('Cache-Control')]).toEqual([200, 'image/jpeg', `private, max-age=${MEDIA.cacheSeconds}`]);
+    expect([ok.status, ok.headers.get('Content-Type'), ok.headers.get('Cache-Control')]).toEqual([200, 'image/jpeg', 'private, no-cache']);
     expect(new Uint8Array(await ok.arrayBuffer())).toEqual(jpg);
+    // R-9: revalidated every time — unchanged → 304; the Host re-uploads the same name → the new bytes
+    const etag = ok.headers.get('ETag')!;
+    const cond = (t: string) => http('test-gia.jpg', { headers: { ...auth(t), 'If-None-Match': etag } });
+    const same = await cond(a!.token);
+    expect([same.status, same.headers.get('ETag'), (await same.arrayBuffer()).byteLength]).toEqual([304, etag, 0]);
+    const jpg2 = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 9, 9]);
+    await put(hostToken, 'test-gia.jpg', jpg2);
+    const fresh = await cond(a!.token);
+    expect(fresh.status).toBe(200);
+    expect(new Uint8Array(await fresh.arrayBuffer())).toEqual(jpg2);
+    expect((await cond(a!.token.slice(0, -2) + 'xx')).status).toBe(401); // the gate runs before the 304
+    // R-11: a broken %-escape in the path is a 400, not a 500
+    expect((await http('%E0.jpg', { headers: auth(a!.token) })).status).toBe(400);
+    expect((await fetch(new URL(`/api/race/%E0/media/test-gia.jpg`, base), { headers: auth(a!.token) })).status).toBe(400);
+    expect((await fetch(new URL(`/api/race/%E0/ws`, base))).status).toBe(400);
     expect((await get(a!.token, 'test-gia-2.jpg')).status).toBe(404); // T1's task: a later step
     expect((await get(hostToken, 'test-gia-2.jpg')).status).toBe(200);
     expect((await get('forged.token', 'test-gia.jpg')).status).toBe(401);
@@ -214,7 +236,7 @@ describe.concurrent('Phase 8 (workerd)', () => {
     t1.task.verification = 'auto'; // every wrong answer writes a row
     const { host, teams, socks: [a, b] } = await newRace(race, 2, { steps: leg.steps });
     await walkTo(a!, W(a!).start!, P[1]!);
-    a!.send({ t: 'race', op: 'open', step: 'L1' }); // race op 1
+    a!.send({ t: 'race', op: 'open', step: 'L1' }); // not a counted race op (review R-7)
     await step(a!, 'T1');
     for (let i = 0; i < 40; i++) {
       b!.send({ t: 'race', op: 'checkin' });
@@ -226,10 +248,44 @@ describe.concurrent('Phase 8 (workerd)', () => {
     }
     expect(await a!.until((m) => m.closed !== undefined, 3000)).toEqual({ closed: 4429 });
     const row = await rowOf(race, teams[0]!.id, 'T1');
-    expect(row.wrong_answers).toBe(29); // ops 2…30 written, the 31st closed the socket
+    expect(row.wrong_answers).toBe(30); // answers 1…30 written, the 31st closed the socket
     b!.send({ t: 'race', op: 'book' });
     expect(await b!.until((m) => m.t === 'book')).toMatchObject({ cards: [{ step: 'L1' }] });
     for (const s of [b!, host]) s.close();
+  }, 60_000);
+
+  it('R-7: F pressed 70 times a minute at a box (race not open yet, paused, out of reach) keeps the socket and writes no row', async () => {
+    const race = 'p8-open-spam';
+    const { host, teams } = await setupRace(server, race, 1);
+    host.send({ t: 'host.leg', json: JSON.stringify(nearLeg()) });
+    await host.until((m) => m.t === 'host.legResult');
+    const a = await joinTeam(server, race, teams[0]!.code);
+    const id = teams[0]!.id;
+    await walkTo(a, W(a).start!, W(a).start!); // a trusted pose 60 m from L1's box
+    const rows = async () => (await (await sqlOf(race)).exec('SELECT (SELECT COUNT(*) FROM events WHERE team = ?) AS e, (SELECT COUNT(*) FROM step_progress WHERE team = ?) AS p', id, id))[0];
+    const before = await rows();
+    const spam = async (n: number, code: string) => {
+      for (let i = 0; i < n; i++) {
+        a.send({ t: 'race', op: 'open', step: 'L1' });
+        await sleep(80);
+      }
+      const got = await a.drain(300);
+      expect(got.filter((m) => m.closed !== undefined)).toEqual([]);
+      expect(got.filter((m) => m.t === 'notice').map((m) => m.code)).toEqual(Array(n).fill(code));
+    };
+    await spam(25, 'raceNotOpen');
+    host.send({ t: 'host.race', op: 'start' });
+    await view(a, (v) => v.status === 'running');
+    await spam(25, 'boxFar');
+    host.send({ t: 'host.race', op: 'pause' });
+    await view(a, (v) => v.status === 'paused');
+    await spam(20, 'racePaused');
+    expect(await rows()).toEqual(before);
+    host.send({ t: 'host.race', op: 'resume' });
+    await walkTo(a, W(a).start!, P[1]!);
+    a.send({ t: 'race', op: 'open', step: 'L1' });
+    await step(a, 'T1'); // the socket still works
+    for (const s of [a, host]) s.close();
   }, 60_000);
 });
 

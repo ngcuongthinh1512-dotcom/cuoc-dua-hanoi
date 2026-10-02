@@ -1,5 +1,7 @@
 # Phase 8 – Thử thách & Lựa chọn kép: kế hoạch
 
+> **Cập nhật 2026-10-02 (SPEC §17.17):** bỏ nút / link liên hệ Host (nút "Mở Facebook / Messenger gửi bài", `TaskView.contactUrl` / `contactLabel`, luật CÒN TRỐNG link Facebook của Host). Đội tự mở Messenger ở ngoài trò chơi; `hostApproval.contactUrl` / `contactLabel` trong file chặng cũ bị bỏ qua. Các chỗ nhắc tới chúng bên dưới là kế hoạch cũ (báo cáo `docs/reports/phase8-fix-contact.md`).
+
 Nguồn: SPEC §3 (quota, R2), §8.4 (Lựa chọn kép), §8.8–8.11 (Thử thách, Host duyệt, vào lại, Sổ mật thư), §11 (chỉ để ghi hoãn), §13.4 (hàng chờ duyệt), §13.6 (ma trận), §17.10 (hòm 150 m), **§17.14 + §17.16 (quyết định chốt của người dùng, ghi đè mọi mục trên)**; `docs/reports/phase8-schema-gaps.md` (mục 1–14); TODO.md mục Phase 7/8; `docs/reports/HANDOFF.md`; `docs/plans/phase7.md` (mẫu; các D2–D25 của Phase 7 vẫn hiệu lực trừ chỗ ghi "thay"). Chặng thật và đáp án nằm NGOÀI repo (`~/Documents/chang-that/`): kế hoạch này không đọc, không chép, không nêu nội dung nào của nó; mọi ví dụ dùng chặng test (GIẢ).
 
 Quy tắc ponytail áp dụng: tái dùng cột `step_progress` đã có (Phase 7 D6), `normalizeAnswer`, `TrustedPoint`, `once()` của trang Host, `penaltyEl` của HUD; không thêm package; không thêm alarm; không thêm bảng mới.

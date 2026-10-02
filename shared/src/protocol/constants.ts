@@ -39,8 +39,8 @@ export const NET = {
    *  written (connect event + teams.state = 3 rows each) and logins past it write no `login` event. An honest client
    *  reconnects with a 1–15 s backoff, so it never gets near it. */
   maxConnects: 10,
-  /** Phase 8 (D20): same budget for the race ops that may write a row — answer / accept / branch / open (NOT checkin /
-   *  book: the mat check-in runs every 2 s) — past this per respawnWindowMs the socket is closed (CLOSE.tooFast). */
+  /** Phase 8 (D20): same budget for the race ops that may write a row — answer / accept / branch (NOT checkin /
+   *  book: the mat check-in runs every 2 s; NOT open: refused ones write nothing, review R-7) — past this per respawnWindowMs the socket is closed (CLOSE.tooFast). */
   maxRaceOps: 30,
   /** Phase 8: longest typed answer (the input's maxlength, the server's limit; '' = "đã gửi bài" of a photo task). */
   answerMax: 200,
@@ -90,8 +90,6 @@ export const MEDIA = {
   prefix: 'r2:',
   maxBytes: 5 * 1024 * 1024,
   types: ['image/jpeg', 'image/png', 'image/webp'],
-  /** Cache-Control: private, max-age of a served image. */
-  cacheSeconds: 86_400,
 } as const;
 
 /** WebSocket close codes the server uses (4000–4999 = application). */

@@ -170,7 +170,7 @@ export function statusButtons(state: HostState): StatusButton[] {
     label: 'Mở cuộc đua',
     confirm: blanks.length ? `Còn ${blanks.length} ô chưa xong:\n- ${blanks.join('\n- ')}\n\nVẫn mở cuộc đua?` : 'Mở cuộc đua cho tất cả các đội?',
   };
-  const end: StatusButton = { op: 'finish', label: 'Kết thúc', confirm: 'Kết thúc cuộc đua? Các đội sẽ không mở hộp hay làm nhiệm vụ được nữa.', danger: true };
+  const end: StatusButton = { op: 'finish', label: 'Kết thúc', confirm: 'Kết thúc cuộc đua? Các đội sẽ không mở hòm hay làm nhiệm vụ được nữa.', danger: true };
   switch (state.status) {
     case 'lobby': return [start];
     case 'running': return [{ op: 'pause', label: 'Tạm dừng', confirm: 'Tạm dừng? Đồng hồ các đội vẫn chạy, thời gian tạm dừng không được trừ.' }, end];
@@ -193,7 +193,7 @@ export function openBlanks(state: HostState): string[] {
 export function warnings(state: HostState): string[] {
   const w: string[] = [];
   const online = state.teams.filter((t) => t.online).length;
-  if (state.status === 'lobby' && online) w.push(`Cuộc đua chưa mở nhưng đã có ${online} đội trong game (các đội xem được mật thư 1 nhưng chưa mở được hộp).`);
+  if (state.status === 'lobby' && online) w.push(`Cuộc đua chưa mở nhưng đã có ${online} đội trong game (các đội xem được mật thư 1 nhưng chưa mở được hòm).`);
   if (state.status === 'lobby' && state.teams.some((t) => t.startAt !== null)) w.push('Đã nhập giờ xuất phát khi cuộc đua chưa mở: đồng hồ các đội đang chạy.');
   const noStart = state.teams.filter((t) => t.startAt === null && (t.online || t.joinedAt !== null)).map((t) => t.name);
   if (noStart.length) w.push(`Chưa nhập giờ xuất phát (đồng hồ hiện --:--): ${noStart.join(', ')}.`);
@@ -256,12 +256,12 @@ export function progressTable(state: HostState, now: number, mode: 'real' | 't')
         p?.arrivedAt != null && `Tới điểm: ${when(p.arrivedAt)}`,
         p?.startedAt != null && `Bắt đầu nhiệm vụ: ${when(p.startedAt)}`,
         doneAt != null && `Xong: ${when(doneAt)}`,
-        p?.branch && `Nhánh: ${p.branch}`,
+        p?.branch && `Nhánh: ${branchTag(state, s.id, p.branch)}`,
         ...(p?.answers ?? []).map((a) => `${a.branch ? `[${a.branch}] ` : ''}${a.text ? `«${a.text}»` : '(đã gửi bài)'} · ${when(a.at)} · ${ANSWER_LABEL[a.status]}${a.note ? ` · ghi chú: ${a.note}` : ''}`),
         p?.note && `Ghi chú Host: ${p.note}`,
         p?.approvalWaitSeconds && `Đã chờ duyệt: ${fmtMinSec(p.approvalWaitSeconds * 1000)}`,
       ].filter(Boolean).join('\n');
-      const branch = p?.branch ? ` (${p.branch}${p.branchSwitches ? ` ↺${p.branchSwitches}` : ''})` : '';
+      const branch = p?.branch ? ` · ${branchTag(state, s.id, p.branch)}${p.branchSwitches ? ` ↺${p.branchSwitches}` : ''}` : ''; // the team's name for it (visual#3)
       const tags = `${branch}${p?.rejections ? ` ✗${p.rejections}` : ''}`;
       if (doneAt !== null) return { state: 'done', text: `${when(doneAt)} · ${fmtMinSec(doneAt - (p?.openedAt ?? doneAt))}${tags}`, title, buttons: [] };
       if (i !== t.step || t.finishAt !== null) return { state: 'todo', text: '', title, buttons: [] };
@@ -280,7 +280,7 @@ export function progressTable(state: HostState, now: number, mode: 'real' | 't')
         // a mistaken "Phạt" is corrected by approving that answer (the server accepts the newest penalized one) - not the
         // countdown of a branch switch (branch box not open: the last answer belongs to the branch the team left)
         const retry = s.type !== 'detour' || p.branchOpenedAt != null;
-        const redo: CellButton[] = !proof && retry && last?.status === 'penalized' && last.branch === p.branch ? [{ op: 'approve', team: t.id, step: s.id, id: last.id, label: 'Duyệt lại', title: 'Sửa lại: duyệt câu vừa bị phạt' }] : [];
+        const redo: CellButton[] = !proof && retry && last?.status === 'penalized' && last.branch === p.branch ? [{ op: 'approve', team: t.id, step: s.id, id: last.id, label: 'Duyệt câu vừa phạt', title: 'Nhầm tay bấm Phạt? Duyệt lại câu vừa bị phạt: đội nhận mật thư kế, hết đếm ngược' }] : [];
         return { state: 'locked', text: `⏳ ${fmtMinSec(p.lockedUntil - now)}${tags}`, title, buttons: [...proofBtn, ...redo] };
       }
       return { state: 'active', text: `${p?.openedAt != null ? fmtMinSec(now - p.openedAt) : '…'}${tags}`, title, buttons: proofBtn };
@@ -318,6 +318,8 @@ export interface QueueRow {
   step: string;
   label: string;
   branch: string | null;
+  /** "Tính (A)": the branch as the team names it (visual#3), '' without a branch. */
+  branchName: string;
   id: number;
   /** submitCode: what the team pastes on Messenger with its photo. */
   code: string;
@@ -334,7 +336,7 @@ export function queueRows(state: HostState, now: number): QueueRow[] {
   return [...state.queue].sort((a, b) => a.at - b.at).map((q) => {
     const t = teams.get(q.team);
     const name = t?.name ?? q.team;
-    return { key: `${q.team}|${q.step}|${q.id}`, team: q.team, name, colour: t?.colour ?? '#8d99b0', step: q.step, label: q.label, branch: q.branch, id: q.id, code: submitCode(name, q.step, q.branch), text: q.text, waiting: fmtMinSec(now - q.at), reference: q.reference, note: q.note, lockMinutes: q.lockMinutes };
+    return { key: `${q.team}|${q.step}|${q.id}`, team: q.team, name, colour: t?.colour ?? '#8d99b0', step: q.step, label: q.label, branch: q.branch, branchName: q.branch ? branchTag(state, q.step, q.branch) : '', id: q.id, code: submitCode(name, q.step, q.branch), text: q.text, waiting: fmtMinSec(now - q.at), reference: q.reference, note: q.note, lockMinutes: q.lockMinutes };
   });
 }
 /** The queue only rebuilds (so a note box keeps its focus) when this changes: who, which step, which answer, when. */
@@ -344,6 +346,12 @@ export function freshQueue(seen: Set<string>, rows: QueueRow[], silent: boolean)
   const fresh = rows.filter((r) => !seen.has(r.key));
   for (const r of rows) seen.add(r.key);
   return silent ? [] : fresh;
+}
+
+/** A detour branch for the Host: "Tính (A)" (the team says "Tính"; the submit code has "A"), the id alone if unnamed. */
+export function branchTag(state: HostState, step: string, id: string): string {
+  const t = state.leg?.steps.find((s) => s.id === step)?.branches?.find((b) => b.id === id)?.title;
+  return t ? `${t} (${id})` : id;
 }
 
 export interface StuckAlert { key: string; team: string; name: string; step: string; label: string; branch: string | null; minutes: number; period: number; text: string }
@@ -365,7 +373,7 @@ export function stuckAlerts(state: HostState, now: number, minutes: number = sta
     const period = Math.floor((now - from) / (minutes * 60_000));
     if (period < 1) continue;
     const mins = Math.floor((now - from) / 60_000);
-    out.push({ key: `${t.id}|${s.id}`, team: t.id, name: t.name, step: s.id, label: s.label, branch: p.branch, minutes: mins, period, text: `${t.name} làm ${s.label}${p.branch ? ` (nhánh ${p.branch})` : ''} đã ${mins} phút (cứ ${fmtNum(minutes)} phút báo một lần).` });
+    out.push({ key: `${t.id}|${s.id}`, team: t.id, name: t.name, step: s.id, label: s.label, branch: p.branch, minutes: mins, period, text: `${t.name} làm ${s.label}${p.branch ? ` (nhánh ${branchTag(state, s.id, p.branch)})` : ''} đã ${mins} phút (cứ ${fmtNum(minutes)} phút báo một lần).` });
   }
   return out;
 }
@@ -424,7 +432,7 @@ export function demoState(now = 1_000_000): HostState {
     ({ slot, id: `t${slot}`, name, colour, online, code, player, lastSeen: seenAgo === null ? null : now - seenAgo, reconnects, pose: p, flagged, startAt: null, startOrder: null, step: 0, finishAt: null, penaltyMinutes: 0, joinedAt: null, ...race });
   const pt = (lat: number, lon: number, r: number, name: string) => ({ ...(({ x, z }) => ({ x, z }))(latLonToWorld(lat, lon)), r, name });
   const s = (id: string, type: 'route_info' | 'detour' | 'challenge' | 'pit_stop', label: string, p: ReturnType<typeof pt>, branches?: ReturnType<typeof pt>[]) =>
-    ({ id, type, label, name: p.name, x: p.x, z: p.z, r: p.r, proof: false, ...(branches && { branches: branches.map((b, i) => ({ id: 'AB'[i]!, ...b, proof: i === 1 })) }) });
+    ({ id, type, label, name: p.name, x: p.x, z: p.z, r: p.r, proof: false, ...(branches && { branches: branches.map((b, i) => ({ id: 'AB'[i]!, title: ['Tính', 'Ảnh'][i]!, ...b, proof: i === 1 })) }) });
   const t0 = now - 50 * min;
   const row = (team: string, step: string, o: number | null, a: number | null, c: number | null, branch: string | null = null, more: Partial<StepProgressView> = {}): StepProgressView => ({
     team, step, openedAt: o, arrivedAt: a, startedAt: c, completedAt: c, branch,
@@ -489,7 +497,7 @@ export function demoState(now = 1_000_000): HostState {
       { team: 't1', rank: 3, stepIndex: 3, finishAt: null, officialMs: null, gapMs: null },
     ],
     queue: [
-      { team: 't2', step: 'D1', label: 'Lựa chọn kép', branch: 'B', id: 1, text: '', at: now - 72_000, reference: ['(GIẢ) Ảnh thấy rõ chân tháp phía sau'], note: '', lockMinutes: 3 },
+      { team: 't2', step: 'D1', label: 'Lựa chọn kép', branch: 'B', id: 1, text: '', at: now - 72_000, reference: ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'], note: '', lockMinutes: 3 },
       { team: 't5', step: 'D1', label: 'Lựa chọn kép', branch: 'A', id: 1, text: 'bảy', at: now - 45_000, reference: ['7', 'bảy'], note: '', lockMinutes: 3 },
     ],
   };

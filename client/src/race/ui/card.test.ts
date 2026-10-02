@@ -6,7 +6,7 @@ import { raceClient as C } from '../../config.ts';
 import { answerLines, branchConfirmText, cardPanel, formatTimeOfDay, hudKey, liveStatus, lockLine, mediaViews, pendingLine, statusLine, summarize, timerLine } from './format.ts';
 
 const textTask: TaskView = { title: 'Phép tính', description: 'Tính đi', media: [], kind: 'answer', verification: 'host_approval', input: 'text', proofInstruction: '', timeLimitMinutes: null };
-const proofTask: TaskView = { ...textTask, title: 'Ảnh', description: 'Chụp ảnh', kind: 'free', input: 'proof', proofInstruction: 'Gửi ảnh', contactUrl: 'https://m.me/gia', contactLabel: 'Nhắn Host' };
+const proofTask: TaskView = { ...textTask, title: 'Ảnh', description: 'Chụp ảnh', kind: 'free', input: 'proof', proofInstruction: 'Gửi ảnh' };
 const branches = (a?: TaskView, b?: TaskView): BranchView[] => [
   { id: 'A', name: 'Lửa', summary: 'Tóm tắt lửa', ...(a ? { task: a } : {}) },
   { id: 'B', name: 'Nước', summary: 'Tóm tắt nước', ...(b ? { task: b } : {}) },
@@ -171,11 +171,11 @@ describe('card controls follow the card state (D5 / D6 / D15)', () => {
     expect(shape(locked)).toEqual({ accept: false, choose: [], input: false, proof: null, switchTo: ['B'] });
     expect(locked.line?.kind).toBe('lock');
   });
-  it('photo branch: contact + "Tôi đã gửi bài" only while active; the code stays while pending / locked; no input box', () => {
+  it('photo branch: "Tôi đã gửi bài" only while active, no Messenger link (SPEC §17.17); the code stays while pending / locked; no input box', () => {
     const open = { branch: 'B', branchOpened: true, branches: branches(undefined, proofTask) };
     const active = P(detour({ ...open, status: 'active' }));
     expect(active.answerBox).toBe(false);
-    expect(active.proof).toEqual({ instruction: 'Gửi ảnh', code: 'Đội Xanh-D1-B', contactUrl: 'https://m.me/gia', contactLabel: 'Nhắn Host', actions: true });
+    expect(active.proof).toEqual({ instruction: 'Gửi ảnh', code: 'Đội Xanh-D1-B', actions: true });
     expect(P(detour({ ...open, status: 'pending', answers: [ans(1, 'pending', 0, '')] })).proof).toMatchObject({ code: 'Đội Xanh-D1-B', actions: false });
     expect(P(detour({ ...open, status: 'locked', lockedUntil: 9e9, lockKind: 'retry' })).proof?.actions).toBe(false);
   });
@@ -183,11 +183,6 @@ describe('card controls follow the card state (D5 / D6 / D15)', () => {
     expect(submitCode('Đội Xanh', 'D1', 'A')).toBe('Đội Xanh-D1-A');
     expect(P(challenge({ task: proofTask, step: 'T2' })).proof?.code).toBe('Đội Xanh-T2');
     expect(P(detour({ branch: 'A', branchOpened: true, branches: branches(proofTask) })).proof?.code).toBe('Đội Xanh-D1-A');
-  });
-  it('a contact link that is not http(s) is not offered; the default label', () => {
-    const p = P(challenge({ task: { ...proofTask, contactUrl: 'javascript:alert(1)', contactLabel: undefined } })).proof!;
-    expect(p.contactUrl).toBeNull();
-    expect(p.contactLabel).toBe('Mở Facebook / Messenger gửi bài');
   });
   it('done, or the Host ended the race (live false): nothing to press; the history is still readable on the card', () => {
     const done = P(challenge({ status: 'done', answers: [ans(1, 'approved')] }));

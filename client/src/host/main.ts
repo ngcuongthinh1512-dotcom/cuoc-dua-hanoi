@@ -402,7 +402,7 @@ function soundNewQueue(s: State) {
   queueBaseline = false;
   if (!fresh.length || !hostPage.queueBeep) return;
   beep('queue');
-  for (const r of fresh) notify(`${r.name}: chờ duyệt`, `${r.label}${r.branch ? ` (nhánh ${r.branch})` : ''} · ${r.text ? `«${r.text}»` : 'đã gửi bài qua Messenger'}`, r.key);
+  for (const r of fresh) notify(`${r.name}: chờ duyệt`, `${r.label}${r.branchName ? ` (nhánh ${r.branchName})` : ''} · ${r.text ? `«${r.text}»` : 'đã gửi bài qua Messenger'}`, r.key);
 }
 
 function drawQueue(s: State, now: number) {
@@ -427,7 +427,7 @@ function drawQueue(s: State, now: number) {
       };
       return el('div', { className: 'review' },
         el('div', { className: 'row' },
-          el('span', { className: 'dot', style: `background:${r.colour}` }), el('b', {}, r.name), ` · ${r.label}${r.branch ? ` · nhánh ${r.branch}` : ''} · mã `,
+          el('span', { className: 'dot', style: `background:${r.colour}` }), el('b', {}, r.name), ` · ${r.label}${r.branchName ? ` · nhánh ${r.branchName}` : ''} · mã `,
           el('code', { className: 'code' }, r.code), el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(r.code) }, 'Sao chép'), ' · chờ ', wait),
         el('div', { className: 'answer' }, r.text ? `«${r.text}»` : 'Đội báo đã gửi bài qua Messenger (đối chiếu ảnh với mã trên).'),
         r.reference.length ? el('div', { className: 'ref' }, el('b', {}, 'Đáp án tham khảo: '), r.reference.join(' | ')) : '',
@@ -509,13 +509,13 @@ function drawMedia(s: State) {
   once('media', names.join('|'), () => {
     mediaEls.clear();
     mediaBox.replaceChildren(
-      el('p', { className: 'note' }, `Hình của chặng ("r2:<tên>") tải lên theo từng cuộc đua (mã ${race}): đổi mã cuộc đua thì tải lại. Tối đa ${MEDIA.maxBytes / 1048576} MB, jpg / png / webp; chỉ đội đã mở mật thư đó mới xem được.`),
-      ...(names.length ? names.map((n) => {
+      el('p', { className: 'note' }, `Hình của chặng ("r2:<tên>") tải lên theo từng cuộc đua (mã ${race}): đổi mã cuộc đua thì tải lại. Tối đa ${MEDIA.maxBytes / 1048576} MB, jpg / png / webp; chỉ đội đã mở mật thư đó mới xem được. Tải lại hình cùng tên (sửa hình sai): đội đã xem phải tải lại trang (F5) mới thấy hình mới.`),
+      ...(names.length ? [el('div', { className: 'media-grid' }, ...names.map((n) => {
         const status = el('span', {});
         mediaEls.set(n, status);
         const file = el('input', { type: 'file', accept: MEDIA.types.join(','), disabled: !hostToken, onchange: () => { const f = file.files?.[0]; file.value = ''; if (f) void uploadMedia(n, f); } });
         return el('div', { className: 'row' }, el('code', { className: 'code' }, n), status, file, el('button', { className: 'small', disabled: !hostToken, onclick: () => void viewMedia(n) }, 'Xem'));
-      }) : [el('p', { className: 'note' }, 'Chặng này không có hình tải lên (không có "r2:…").')]),
+      }))] : [el('p', { className: 'note' }, 'Chặng này không có hình tải lên (không có "r2:…").')]),
     );
     for (const n of names) paintMedia(n);
   });

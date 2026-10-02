@@ -37,15 +37,17 @@ export default {
     }
 
     // WebSocket (token from /api/login as ?token=): the object verifies it and accepts with the Hibernation API.
+    // Path segments are checked raw (never decoded): a valid race id / image name has no character encodeURIComponent
+    // changes, and a broken escape (%E0) is a 400, not a URIError 500 (review R-11).
     const ws = /^\/api\/race\/([^/]+)\/ws$/.exec(pathname);
     if (ws && request.method === 'GET') {
-      const race = decodeURIComponent(ws[1]!);
+      const race = ws[1]!;
       if (!RACE_ID.test(race)) return json({ ok: false, error: 'bad_race' }, 400);
       if (request.headers.get('Upgrade') !== 'websocket') return json({ ok: false, error: 'expected_websocket' }, 426);
       return env.RACE_ROOM.getByName(race).fetch(new Request(`${url.origin}/ws${url.search}`, request));
     }
     const media = /^\/api\/race\/([^/]+)\/media\/([^/]+)$/.exec(pathname);
-    if (media) return serveMedia(request, env, decodeURIComponent(media[1]!), decodeURIComponent(media[2]!));
+    if (media) return serveMedia(request, env, media[1]!, media[2]!);
     return json({ ok: false, error: 'not_found' }, 404);
   },
 } satisfies ExportedHandler<Env>;
@@ -53,7 +55,9 @@ export default {
 /** Phase 8 (docs/plans/phase8.md D12–D14): clue images on R2 (private bucket MEDIA, key `<race>/<name>`), the token in
  *  `Authorization: Bearer` (never in the URL). PUT / HEAD: Host token, R2 directly (no DO). GET: the Host always; a team
  *  only for an image of a clue it has opened (its DO answers 204 / 404, the Worker streams R2 itself) — "missing" and "not
- *  yet yours" are the same 404, so a later step's image name leaks nothing. */
+ *  yet yours" are the same 404, so a later step's image name leaks nothing. `private, no-cache` + ETag (review R-9): the
+ *  browser asks again each time (304 when unchanged, still one DO question), so an image the Host re-uploads under the
+ *  same name reaches the teams that already saw the old one. */
 async function serveMedia(request: Request, env: Env, race: string, name: string): Promise<Response> {
   if (!RACE_ID.test(race) || !MEDIA.name.test(name)) return json({ ok: false, error: 'bad_name' }, 400);
   const token = /^Bearer (.+)$/.exec(request.headers.get('Authorization') ?? '')?.[1];
@@ -63,11 +67,12 @@ async function serveMedia(request: Request, env: Env, race: string, name: string
   const host = claims.t === HOST;
   if (request.method === 'GET') {
     const allowed = host || (await env.RACE_ROOM.getByName(race).fetch(`https://do/media?name=${encodeURIComponent(name)}&team=${encodeURIComponent(claims.t)}`)).status === 204;
-    const obj = allowed ? await env.MEDIA.get(key) : null;
+    const obj = allowed ? await env.MEDIA.get(key, { onlyIf: request.headers }) : null;
     if (!obj) return json({ ok: false, error: 'not_found' }, 404);
-    const headers = new Headers({ 'Cache-Control': `private, max-age=${MEDIA.cacheSeconds}`, ETag: obj.httpEtag });
+    const headers = new Headers({ 'Cache-Control': 'private, no-cache', ETag: obj.httpEtag });
     obj.writeHttpMetadata(headers);
-    return new Response(obj.body, { headers });
+    // If-None-Match matched: R2 returns the object without its body
+    return 'body' in obj ? new Response((obj as R2ObjectBody).body, { headers }) : new Response(null, { status: 304, headers });
   }
   if (!host) return json({ ok: false, error: 'host_only' }, 403);
   if (request.method === 'HEAD') {

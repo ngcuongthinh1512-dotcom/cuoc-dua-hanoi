@@ -48,8 +48,6 @@
     "showLockedSlots": false
   },
   "hostApproval": {
-    "contactLabel": "Gửi bài qua Facebook cho Host",
-    "contactUrl": "",
     "approvalWaitCounts": false
   },
   "specials": {

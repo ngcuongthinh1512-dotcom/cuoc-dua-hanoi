@@ -1,9 +1,6 @@
 {
   "id": "mini",
   "title": "Chặng ngắn để test (NỘI DUNG GIẢ)",
-  "hostApproval": {
-    "contactUrl": "https://m.me/test-host-gia"
-  },
   "start": {
     "name": "Cầu Bir-Hakeim – lối đi bộ dưới cầu cạn metro, phía Passy",
     "lat": 48.85585,

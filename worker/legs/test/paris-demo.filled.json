@@ -48,8 +48,6 @@
     "showLockedSlots": false
   },
   "hostApproval": {
-    "contactLabel": "Gửi bài qua Facebook cho Host",
-    "contactUrl": "https://m.me/test-host-gia",
     "approvalWaitCounts": false
   },
   "specials": {

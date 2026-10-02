@@ -14,7 +14,8 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
     const r = parseLeg(leg);
     expect(r.ok).toBe(true);
     expect(new Set(r.issues.map((i) => i.level))).toEqual(new Set(['blank']));
-    expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 3 (D1)', 'Bước 5 (T1)', 'Bước 8 (T2)', 'Host duyệt']));
+    expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 3 (D1)', 'Bước 5 (T1)', 'Bước 8 (T2)']));
+    expect(r.issues.filter((i) => i.where.startsWith('Host duyệt'))).toEqual([]); // SPEC §17.17: no Host Facebook link to fill
     for (const id of ['paris-demo-filled', 'mini']) expect(parseLeg(bundledLeg(id)).issues).toEqual([]);
   });
 

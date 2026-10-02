@@ -133,10 +133,10 @@ describe('Host view', () => {
     expect(blue.cells.every((c) => c.state === 'done')).toBe(true);
     expect(blue.official).toBe('00:46:00');
     expect(blue.cells[0]!.text).toMatch(/^\d\d:\d\d:\d\d · 15:00$/); // when · how long the step took
-    expect(blue.cells[3]!.text).toContain('(A ↺1)'); // branch A after one switch
+    expect(blue.cells[3]!.text).toContain(' · Tính (A) ↺1'); // branch A after one switch
     const red = rows[2]!;
     expect(red.cells.map((c) => c.state)).toEqual(['done', 'done', 'done', 'active', 'todo', 'todo']);
-    expect(red.cells[3]!.text).toBe('08:00 (B)'); // 50 − 8 − 42 = 8 min since the clue of D1 reached it; took branch B
+    expect(red.cells[3]!.text).toBe('08:00 · Ảnh (B)'); // 50 − 8 − 42 = 8 min since the clue of D1 reached it; took branch B
     expect(red.penalty).toBe('+2 phút');
     expect(rows[3]!.cells.map((c) => c.state)).toEqual(['active', 'todo', 'todo', 'todo', 'todo', 'todo']); // holds clue 1 (D3), no times yet
     // T+: each team on its own clock (Đội Xanh: step 1 done at +15 min)
@@ -172,8 +172,9 @@ describe('review queue (D16 (1))', () => {
   it('lists every pending answer oldest first, with the submit code, the waiting time and the reference answers', () => {
     const rows = queueRows(s, NOW);
     expect(rows.map((r) => [r.name, r.step, r.branch, r.id, r.waiting])).toEqual([['Đội Vàng', 'D1', 'B', 1, '01:12'], ['Đội Cam', 'D1', 'A', 1, '00:45']]);
-    expect(rows[0]).toMatchObject({ code: 'Đội Vàng-D1-B', text: '', reference: ['(GIẢ) Ảnh thấy rõ chân tháp phía sau'], lockMinutes: 3, key: 't2|D1|1', label: 'Lựa chọn kép' });
-    expect(rows[1]).toMatchObject({ code: 'Đội Cam-D1-A', text: 'bảy', reference: ['7', 'bảy'] });
+    expect(rows[0]).toMatchObject({ code: 'Đội Vàng-D1-B', text: '', reference: ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'], lockMinutes: 3, key: 't2|D1|1', label: 'Lựa chọn kép' });
+    expect(rows[1]).toMatchObject({ code: 'Đội Cam-D1-A', text: 'bảy', reference: ['7', 'bảy'], branchName: 'Tính (A)' }); // the team's name for it, visual#3
+    expect(rows[0]!.branchName).toBe('Ảnh (B)');
     // the order is by `at`, whatever order the server sent
     expect(queueRows({ ...s, queue: [...s.queue].reverse() }, NOW).map((r) => r.name)).toEqual(['Đội Vàng', 'Đội Cam']);
     // a team the page does not know (should not happen) still shows by its id
@@ -220,12 +221,12 @@ describe('step_progress matrix, Phase 8 cells (D16 (3))', () => {
   it('an answer waiting for the Host: orange cell with the wait, Duyệt / Phạt in the cell (the penalty minutes in its title)', () => {
     const c = rowOf(s, 'Đội Vàng').cells[3]!;
     expect(c.state).toBe('pending');
-    expect(c.text).toBe('chờ duyệt 01:12 (B)');
+    expect(c.text).toBe('chờ duyệt 01:12 · Ảnh (B)');
     expect(c.buttons.map((b) => [b.op, b.id, b.label, b.team, b.step])).toEqual([['approve', 1, 'Duyệt', 't2', 'D1'], ['penalize', 1, 'Phạt', 't2', 'D1']]);
     expect(c.buttons[1]!.title).toContain('Phạt 3 phút');
     expect(c.title).toContain('(đã gửi bài) · '); // the title lists the answers
     expect(c.title).toContain('chờ duyệt');
-    expect(rowOf(s, 'Đội Cam').cells[3]!.text).toBe('chờ duyệt 00:45 (A ↺1)'); // one branch switch
+    expect(rowOf(s, 'Đội Cam').cells[3]!.text).toBe('chờ duyệt 00:45 · Tính (A) ↺1'); // one branch switch
   });
 
   it('a countdown: purple cell with ⏳ mm:ss, the number of penalties, the answers and Host notes in the title', () => {
@@ -237,19 +238,20 @@ describe('step_progress matrix, Phase 8 cells (D16 (3))', () => {
     expect(c.title).toContain('ghi chú: Gần đúng, đọc lại đề');
     expect(c.title).toContain('Đã chờ duyệt: 02:10');
     // a mistaken "Phạt" is undone by approving that answer (the server takes the newest penalized one)
-    expect(c.buttons.map((b) => [b.op, b.id, b.label])).toEqual([['approve', 2, 'Duyệt lại']]);
+    expect(c.buttons.map((b) => [b.op, b.id, b.label])).toEqual([['approve', 2, 'Duyệt câu vừa phạt']]); // not "Duyệt lại" (read as "review again", visual#3)
+    expect(c.buttons[0]!.title).toContain('Nhầm tay bấm Phạt');
     // the countdown is over: the team is just "active" again
     expect(rowOf(s, 'Đội Tím', NOW + 3 * MIN).cells[1]!.state).toBe('active');
   });
 
-  it('a branch-switch countdown is purple too, but offers no "Duyệt lại" (the last answer belongs to the branch the team left)', () => {
+  it('a branch-switch countdown is purple too, but offers no "Duyệt câu vừa phạt" (the last answer belongs to the branch the team left)', () => {
     const switched = withRow(s, 't5', 'D1', {
       pending: false, branch: 'B', branchOpenedAt: null, branchSwitches: 2, lockedUntil: NOW + 12_000,
       answers: [{ id: 1, text: 'bảy', at: NOW - 60_000, status: 'penalized', branch: 'A' }],
     });
     const c = rowOf(switched, 'Đội Cam').cells[3]!;
     expect(c.state).toBe('locked');
-    expect(c.text).toBe('⏳ 00:12 (B ↺2)');
+    expect(c.text).toBe('⏳ 00:12 · Ảnh (B) ↺2');
     expect(c.buttons).toEqual([]);
   });
 
@@ -262,7 +264,7 @@ describe('step_progress matrix, Phase 8 cells (D16 (3))', () => {
     expect(rowOf(withRow(s, 't1', 'D1', { branchOpenedAt: null }), 'Đội Đỏ').cells[3]!.buttons).toEqual([]);
     // branch A is a typed answer, not a photo
     expect(rowOf(withRow(s, 't1', 'D1', { branch: 'A' }), 'Đội Đỏ').cells[3]!.buttons).toEqual([]);
-    // a photo CHALLENGE: after "Nhận" (startedAt) yes, before no; also while the countdown runs (and then not "Duyệt lại")
+    // a photo CHALLENGE: after "Nhận" (startedAt) yes, before no; also while the countdown runs (and then not "Duyệt câu vừa phạt")
     const photo: HostState = { ...s, leg: { ...s.leg!, steps: s.leg!.steps.map((x) => (x.id === 'T1' ? { ...x, proof: true } : x)) } };
     expect(rowOf(photo, 'Đội Tím').cells[1]!.buttons.map((b) => b.label)).toEqual(['Duyệt (đã nhận ảnh)']);
     expect(rowOf(withRow(photo, 't4', 'T1', { startedAt: null, lockedUntil: null }), 'Đội Tím').cells[1]!.buttons).toEqual([]);
@@ -271,7 +273,7 @@ describe('step_progress matrix, Phase 8 cells (D16 (3))', () => {
   it('done cells: ✗n penalties and (A ↺n) switches; the "Bù giờ chờ duyệt" column adds up what the team waited', () => {
     const blue = rowOf(s, 'Đội Xanh');
     expect(blue.cells[1]!.text).toMatch(/ ✗1$/);
-    expect(blue.cells[3]!.text).toMatch(/\(A ↺1\)$/);
+    expect(blue.cells[3]!.text).toMatch(/ · Tính \(A\) ↺1$/);
     expect(blue.cells.every((c) => c.buttons.length === 0)).toBe(true);
     expect(blue.approvalWait).toBe('01:35');
     expect(rowOf(s, 'Đội Tím').approvalWait).toBe('02:10');
@@ -313,7 +315,7 @@ describe('stuck teams (D11)', () => {
 
   it('a detour counts from branch_opened_at (not from when the clue arrived)', () => {
     // Đội Đỏ: D1 clue at 8 min before NOW, branch B box opened 6 min before NOW. 40 min later: 46 from the box, 48 from the clue.
-    expect(stuckAlerts(s, at(40)).filter((a) => a.team === 't1').map((a) => [a.minutes, a.branch, a.text.includes('nhánh B')])).toEqual([[46, 'B', true]]);
+    expect(stuckAlerts(s, at(40)).filter((a) => a.team === 't1').map((a) => [a.minutes, a.branch, a.text.includes('nhánh Ảnh (B)')])).toEqual([[46, 'B', true]]);
     expect(stuckAlerts(s, at(38)).some((a) => a.team === 't1')).toBe(false); // 44 from the box: not yet (would be 46 from the clue)
   });
 

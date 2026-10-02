@@ -203,6 +203,8 @@ describe('RaceEngine', () => {
     expect(f.log.filter((l) => !l.startsWith('send'))).toEqual(['sql INSERT INTO step_progress', 'sql INSERT INTO step_progress', 'event review', 'event complete', 'saveTeam']);
     expect(to('t0').slice(-2)).toEqual([{ t: 'notice', code: 'approved' }, { t: 'race', view: expect.objectContaining({ card: expect.objectContaining({ step: 'L2', receivedAt: 50_000 }) }) }]);
     expect(f.teams.get('t0')!.step).toBe(2);
+    // review R-11: the Host who clicked "Duyệt" hears it overruled a "Phạt" (a second Host's screen a second old)
+    expect(host.slice(1)).toEqual([{ t: 'host.notice', level: 'warning', message: expect.stringContaining('vừa bị Phạt, nay đã được Duyệt') }]);
     f.log.length = 0;
     review('t0', 'T1', 'approve', 50_001, { id: 1 });
     expect(host.at(-1)).toMatchObject({ message: 'Bài này đã được xử lý.' });
@@ -315,14 +317,52 @@ describe('RaceEngine', () => {
     expect(e.hostView(10).progress.find((p) => p.step === 'D1')).toMatchObject({ arrivedAt: null, branchOpenedAt: null, startedAt: null, branchSwitches: 1, answers: [{ id: 1, branch: 'A', status: 'wrong' }] });
   });
 
+  it('"Tại điểm này" at a detour (C1, review R-8): only the chosen branch\'s place; after a switch the old place\'s list is cleared (verify-a 4.4)', () => {
+    const za = branchZone(mini, Z, 3, 'A')!;
+    const zb = branchZone(mini, Z, 3, 'B')!;
+    const pz = (p: { x: number; z: number }): PoseSample => ({ x: p.x, y: 0, z: p.z, yaw: 0, mode: 'walk', action: 'none' });
+    const branch = (b: string): RaceOp => ({ t: 'race', op: 'branch', step: 'D1', branch: b });
+    const MIN = 60_000;
+    {
+      const { e, op, to } = racing({ t0: 3, t1: 3 });
+      const zones = (team: string) => to(team).filter((m) => (m as { t: string }).t === 'zone');
+      op('t1', branch('B'), 5);
+      e.onPose('t1', pz(zb), 6);
+      op('t0', branch('A'), 7);
+      e.onPose('t0', pz(za), 8); // its own place: a list (nobody else there)
+      expect(zones('t0')).toEqual([{ t: 'zone', teams: [] }]);
+      e.onPose('t0', pz({ x: 1e5, z: 1e5 }), 9);
+      e.onPose('t0', pz(zb), 10); // B's place while on A: no list (never confirm a place that is not its own)
+      expect(zones('t0')).toHaveLength(1);
+      expect(zones('t1').at(-1)).toEqual({ t: 'zone', teams: [expect.objectContaining({ slot: 0, branch: 'A', since: 10 })] });
+      op('t0', branch('B'), 100); // switch, standing in B's place: still no list during the countdown
+      expect(zones('t0')).toHaveLength(1);
+      e.onPose('t0', pz(zb), 100 + 10 * MIN); // countdown over, at B: its place now (arrival where it already stood)
+      expect(zones('t0').at(-1)).toEqual({ t: 'zone', teams: [expect.objectContaining({ slot: 1, branch: 'B' })] });
+    }
+    {
+      const { e, op, to } = racing({ t0: 3, t1: 3 });
+      const zones = (team: string) => to(team).filter((m) => (m as { t: string }).t === 'zone');
+      for (const t of ['t0', 't1']) {
+        op(t, branch('A'), 5);
+        e.onPose(t, pz(za), 6);
+      }
+      expect(zones('t0').at(-1)).toEqual({ t: 'zone', teams: [expect.objectContaining({ slot: 1, branch: 'A' })] });
+      op('t0', branch('B'), 100); // still standing at A: A is no longer its place
+      expect(zones('t0').at(-1)).toEqual({ t: 'zone', teams: [] });
+      expect(zones('t1').at(-1)).toEqual({ t: 'zone', teams: [expect.objectContaining({ slot: 0, branch: 'B' })] });
+    }
+  });
+
   it('officialMs deducts the approval waits (SPEC §8.9) unless hostApproval.approvalWaitCounts', () => {
     for (const counts of [false, true]) {
       const leg = structuredClone(bundledLeg('mini')!) as Leg;
       leg.hostApproval.approvalWaitCounts = counts;
-      const { f, review, op, e } = racing({ t0: 1 }, leg);
+      const { f, review, op, e, host } = racing({ t0: 1 }, leg);
       op('t0', { t: 'race', op: 'accept', step: 'T1' }, 5);
       op('t0', { t: 'race', op: 'answer', step: 'T1', text: '42' }, 10_000);
       review('t0', 'T1', 'approve', 40_000);
+      expect(host).toEqual([]); // a plain approval: no notice to the Host (R-11 warns only over a "Phạt")
       f.teams.set('t0', { ...f.teams.get('t0')!, step: 4 }); // L3: the route into the Pit Stop zone
       e.onPose('t0', at(4), 100_001);
       const v = (f.sent.filter(([, m]) => (m as { t: string }).t === 'race').at(-1)![1] as { view: RaceView }).view;
@@ -343,6 +383,7 @@ describe('RaceEngine', () => {
     const h = e.hostView(12);
     expect(h.leg).toMatchObject({ media: ['test-gia.jpg', 'test-gia-2.jpg'], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45 });
     expect(h.leg!.steps.map((s) => [s.id, s.proof, s.branches?.map((b) => b.proof)])).toEqual([['L1', false, undefined], ['T1', false, undefined], ['L2', false, undefined], ['D1', false, [false, true]], ['L3', false, undefined], ['PS', false, undefined]]);
+    expect(h.leg!.steps[3]!.branches!.map((b) => b.title)).toEqual(['Tính', 'Ảnh']); // the branch's own name for the Host page (visual#3), not its place
   });
 
   it('D15: a start time after the team\'s check-in is refused; a change for a running team moves its clock, which then only runs forward', () => {

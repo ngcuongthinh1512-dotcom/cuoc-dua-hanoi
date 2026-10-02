@@ -1,4 +1,4 @@
-# Bàn giao phiên (cập nhật 2026-10-02, Phase 8 đã ghép, đang review) – đọc file này đầu tiên khi mở lại
+# Bàn giao phiên (cập nhật 2026-10-03, sau Phase 8) – đọc file này đầu tiên khi mở lại
 
 Mục đích: phiên mới không phải đọc lại hội thoại cũ. Đọc file này + `CLAUDE.md` + `TODO.md` là đủ; chỉ mở SPEC / kế hoạch phase khi cần.
 
@@ -12,7 +12,7 @@ Mục đích: phiên mới không phải đọc lại hội thoại cũ. Đọc 
 
 ## Việc tiếp theo
 1. **Người dùng nhập chặng thật** (lộ trình + thử thách) theo `docs/LEG_FORMAT.md` hoặc gửi cho tôi; LT2 đã nhận (xem memory `leg-content-draft`, điểm Palais de Tokyo dùng sân trước 48.86470, 2.29690). Đừng tự bịa nội dung chặng thật.
-2. Phase 8: review (spec/code ∥ visual ∥ e2e thật) rồi lượt sửa các mục "nên sửa" còn mở trong `docs/reports/phase8-verify-*.md` + `TODO.md` mục Phase 8; sau đó commit `feat(phase8)`. Phase 8 **đã đổi** schema chặng (trường tùy chọn mới: `referenceAnswers`, `penalties.retryLockMinutes` / `branchSwitchLockMinutes`, `hostAlerts`, `media` cho mọi mật thư, `destination.yawDeg`), SQLite `SCHEMA_VERSION = 3` (`step_progress` thêm 4 cột `answers`, `locked_until`, `branch_opened_at`, `host_note`) và giao thức `PROTOCOL_VERSION = 3` (op `task` bỏ; `accept` / `answer` / `branch` / `open{branch}`, `host.review`). Không Vượt rào; Phase 9 chỉ khi người dùng bảo.
+2. Phase 8 XONG (commit `feat(phase8)`; báo cáo `docs/reports/phase8-*.md`, cổng cuối `phase8-gate.md`). Việc kế: phòng Louvre / Thử thách 3 (SPEC §17.19, chờ người dùng xác nhận chi tiết), rồi Phase 10 (Phase 9 bỏ: SPEC §17.18), Phase 11 sim, Phase 12 deploy (cần tài khoản Cloudflare của người dùng).
 3. Workflow đã dùng cho Phase 6–7 (công cụ Workflow): kế hoạch + nền (Opus) → critic → track song song trong worktree → verifier đối kháng → merge → review (spec/code ∥ visual ∥ e2e thật) → skeptic → sửa → vòng 2 (kiểm lại bản sửa + critic độ đầy đủ + thử người tổ chức) → vòng 3 → dọn → cổng cuối.
 
 ## Quy tắc làm việc đã chốt (xem thêm memory `~/.claude/projects/-Users-nguyencuongthinh-Documents-cuoc-dua-paris/memory/`)

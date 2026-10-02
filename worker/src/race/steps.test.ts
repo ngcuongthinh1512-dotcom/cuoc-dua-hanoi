@@ -167,8 +167,10 @@ describe('advance: a detour (D6)', () => {
     const s2 = run({ ...opened, lockedUntil: 1000 + 3 * MIN }, branch('B'), 1000);
     expect(s2.p).toEqual(P(3, { branch: 'B', lockedUntil: 1000 + 10 * MIN, lastAnswerId: 2 }));
     expect(s2.effects[0]).toMatchObject({ kind: 'switch', from: 'A', to: 'B' });
-    // A → B → A: each switch one lock
-    expect(run(sw.p, branch('A'), 2000).effects).toEqual([{ kind: 'switch', step: 3, from: 'B', to: 'A', lockedUntil: 2000 + 10 * MIN }, { kind: 'hideBox', step: 3, branch: 'B' }]);
+    // A → B → A: no switch during the switch countdown (silent: no "Đổi" button then, review R-4), then one lock each
+    expect(run(sw.p, branch('A'), 2000)).toEqual({ p: sw.p, effects: [] });
+    const back = 1000 + 10 * MIN;
+    expect(run(sw.p, branch('A'), back).effects).toEqual([{ kind: 'switch', step: 3, from: 'B', to: 'A', lockedUntil: back + 10 * MIN }, { kind: 'hideBox', step: 3, branch: 'B' }]);
     const fast = { ...mini, penalties: { ...mini.penalties, branchSwitchLockMinutes: 0 } }; // 0 = no countdown
     expect(run(go, branch('B'), 1000, fast).p.lockedUntil).toBe(1000);
   });
@@ -323,7 +325,7 @@ describe('boxesOf / cardOf', () => {
       const mine = JSON.stringify([{ id: 1, b: 'A', text: 'đội gõ', at: 6, s: 'penalized', d: 7, n: 'GHI CHÚ HOST' }, { id: 2, b: 'A', text: 'đội gõ lại', at: 8, s: 'pending' }]);
       const rows = [{}, { branch: 'A' }, { branch: 'A', branch_opened_at: 6, task_started_at: 6, answers: mine, host_note: 'GHI CHÚ HOST', locked_until: 99 }, { branch: 'B', branch_opened_at: 6, completed_at: 8 }, { completed_at: 8, branch: 'A' }];
       for (const more of rows) leg.steps.forEach((_, i) => walk(cardOf(leg, i, { ...emptyProgress('t', leg.steps[i]!.id), clue_opened_at: 5, ...more }, 9)));
-      for (const k of ['referenceAnswers', 'params', 'lat', 'lon', 'destination', 'location', 'bikeParking', 'radius', 'note', 'n', 'b', 'host_note']) expect(keys.has(k)).toBe(false);
+      for (const k of ['referenceAnswers', 'params', 'lat', 'lon', 'destination', 'location', 'bikeParking', 'radius', 'note', 'n', 'b', 'host_note', 'contactUrl', 'contactLabel']) expect(keys.has(k)).toBe(false);
       for (const a of answers) expect(strings.filter((s) => (a.length < 3 ? s === a : s.toLowerCase().includes(a.toLowerCase())))).toEqual([]);
       for (const n of names) expect(strings.filter((s) => s.includes(n))).toEqual([]);
       expect(strings.filter((s) => s.includes('GHI CHÚ HOST'))).toEqual([]);
@@ -350,8 +352,17 @@ describe('boxesOf / cardOf', () => {
     expect(c).toMatchObject({ status: 'locked', lockKind: 'retry', retryPenaltyMinutes: 3, branchOpened: true, branches: [{ id: 'A', task: { title: '(GIẢ) Phép tính', input: 'text' } }, { id: 'B' }] });
     expect(c.branches![1]!.task).toBeUndefined();
     expect(c.answers.map((a) => a.text)).toEqual(recs.slice(-NET.answerHistory).map((r) => r.text));
-    expect(cardOf(mini, 3, row({ branch: 'B', branch_opened_at: 200 }), 1000).branches![1]!.task).toMatchObject({ input: 'proof', contactUrl: 'https://m.me/test-host-gia', place: 'Bãi cỏ Champ de Mars' });
+    expect(cardOf(mini, 3, row({ branch: 'B', branch_opened_at: 200 }), 1000).branches![1]!.task).toMatchObject({ input: 'proof', place: 'Bãi cỏ Champ de Mars' });
     expect(cardOf(mini, 3, row({ branch: 'A', branch_opened_at: 200, locked_until: 900 }), 1000)).toMatchObject({ status: 'active', lockedUntil: null, lockKind: null });
+  });
+
+  it('a photo task card has no contact field (SPEC §17.17: no Messenger button), even from an old leg file that still has one', () => {
+    const r = parseLeg({ ...structuredClone(miniRaw), hostApproval: { contactUrl: 'https://m.me/gia-cu', contactLabel: 'Nhắn Host cũ' } });
+    if (!r.ok) throw new Error(JSON.stringify(r.issues));
+    const task = cardOf(r.leg, 3, { ...emptyProgress('t', 'D1'), clue_opened_at: 100, branch: 'B', branch_opened_at: 200 }, 1000).branches![1]!.task!;
+    expect(task).toMatchObject({ input: 'proof', kind: 'free' });
+    expect(Object.keys(task).filter((k) => /contact/i.test(k))).toEqual([]);
+    expect(JSON.stringify(task)).not.toMatch(/m\.me|Nhắn Host cũ/);
   });
 
   it('card fields: route transport, challenge teaser + task place, detour branches, status from the row', () => {

@@ -6,7 +6,7 @@
 //  - Sổ mật thư (Tab, SPEC §8.11): reloaded from the server on every open (actions.book → showBook), current card pinned,
 //    read-only, never the answer history (SPEC §17.14);
 //  - "Xuất phát ở vị trí thứ n" at the right for raceHud.startOrderSeconds of sim time, then fades (SPEC §17.12);
-//  - "Bấm F để mở hộp mật thư" prompt, the centre countdown (Host "Phạt" / branch switch / Pit Stop wait), the host NPC's line
+//  - "Bấm F để mở hòm mật thư" prompt, the centre countdown (Host "Phạt" / branch switch / Pit Stop wait), the host NPC's line
 //    after the check-in, "Tại điểm này".
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
@@ -25,7 +25,8 @@ export interface RaceHudActions {
   branch(step: string, branch: string): void;
   /** "Nhận thử thách". */
   accept(step: string): void;
-  /** An "r2:<name>" image → a blob URL (fetched with the team token), null = not available (offline / not allowed). */
+  /** An "r2:<name>" image → a blob URL (fetched with the team token), null = not there (not uploaded / not allowed / network).
+   *  Absent = offline (no race): the placeholder says images load only in a race. */
   resolveMedia?(name: string): Promise<string | null>;
 }
 
@@ -34,7 +35,7 @@ export interface RaceHudFrame {
   simTime: number;
   /** ms, server clock estimate (NetClient.serverNow): the countdowns (checkinAt, card.lockedUntil) and the pending stopwatch. */
   serverNow: number;
-  /** The body stands inside the current, unopened box's zone, on foot: show "Bấm F để mở hộp mật thư". */
+  /** The body stands inside the current, unopened box's zone, on foot: show "Bấm F để mở hòm mật thư". */
   inZone: boolean;
 }
 
@@ -59,6 +60,12 @@ function el(tag: string, cls = '', text?: string, ...kids: (Node | null)[]): HTM
 }
 const html = (tag: string, cls: string, h: string) => Object.assign(el(tag, cls), { innerHTML: h });
 const setText = (e: HTMLElement, s: string) => void (e.textContent !== s && (e.textContent = s));
+/** A countdown / stopwatch line with its mm:ss in a bigger <b class="rc-num"> (visual#7); rebuilt only when the text changes. */
+const setTime = (e: HTMLElement, s: string) => {
+  if (e.dataset.t === s) return;
+  e.dataset.t = s;
+  e.replaceChildren(...s.split(/(\d+:\d{2}(?::\d{2})?)/).map((t, i) => (i % 2 ? el('b', 'rc-num', t) : t)));
+};
 
 const SEEN_KEY = 'race.lastCard';
 const store = {
@@ -103,10 +110,16 @@ export class RaceHud {
   private timerEl: HTMLElement | null = null;
   private draft = ''; // the unsent answer text; kept over redraws, closing and reopening the same step
   private draftStep = '';
-  private blurred = false; // Esc left the answer box: no auto-focus on the next redraw, the next Esc closes the card
+  // The answer box takes the focus on a (re)draw: the team opened the card (Enter) or went into the box. A card that popped up
+  // by itself never takes it (review R-10: a held W / the Space that closes cards would type into it); Esc leaves the box
+  // (false: the next Esc closes the card).
+  private focusBox = false;
   private resolver: (name: string) => Promise<string | null> = (n) => this.actions.resolveMedia?.(n) ?? Promise.resolve(null);
   private readonly urls = new Map<string, string>(); // r2 name → blob URL once fetched (a redraw must not flash the placeholder)
   private readonly fetching = new Map<string, Promise<string | null>>();
+  // r2 names that came back null: a redraw shows the placeholder without asking again (e2e#1: 1 Worker + 1 DO request per
+  // draw); forgotten when a card / the Sổ is opened (a new step, or Enter / Tab after the Host uploaded the missing image)
+  private readonly failed = new Set<string>();
 
   private readonly tl = el('div', 'rc-tl');
   private readonly compact = el('div', 'rc-card hud-box');
@@ -114,7 +127,7 @@ export class RaceHud {
   private readonly zonePanel = el('div', 'rc-zone hud-box');
   private readonly bannerEl = el('div', 'rc-banner hud-hand');
   private readonly penaltyEl = el('div', 'rc-penalty hud-box');
-  private readonly promptEl = el('div', 'rc-prompt hud-box', 'Bấm F để mở hộp mật thư');
+  private readonly promptEl = el('div', 'rc-prompt hud-box', 'Bấm F để mở hòm mật thư');
   private readonly npcEl = el('div', 'rc-npc hud-box');
   private readonly overlay = el('div', 'rc-overlay');
   private readonly zoomEl = html('div', 'rc-zoom', '<img alt="">');
@@ -128,27 +141,32 @@ export class RaceHud {
     this.tl.append(this.compact, this.zonePanel);
     document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay, this.zoomEl);
     this.zoomEl.addEventListener('click', () => this.zoom(null));
-    // Tab moves the browser focus: keep it on the page. The toggle itself is main.ts (input 'clueBook' → toggleBook), which
-    // never sees keys typed in a field: Tab in the answer box closes the card here.
+    // A clicked button / link gives the focus back (review R-1): Space / Enter then reach the card keys below (Space closes,
+    // never presses "Đổi lựa chọn kép" again after a declined confirm), and Tab is no key of the button's.
+    this.overlay.addEventListener('click', (e) => (e.target as HTMLElement).closest<HTMLElement>('button, a[href]')?.blur());
+    // Tab closes a card / the Sổ from anywhere (the answer box, a clicked button / link: core/Input.ts never sees those), right
+    // here inside the key handler: onOpenChange → pointer lock is granted there (Firefox). Opening is main.ts ('clueBook').
     addEventListener('keydown', (e) => {
       if (!this.open) return;
       const typing = this.answerInput != null && e.target === this.answerInput; // the answer box keeps Space / digits / arrows
-      if (e.code === 'Tab') return void (e.preventDefault(), typing && !e.repeat && this.close());
+      if (e.code === 'Tab') return void (e.preventDefault(), !e.repeat && this.close());
       if (!this.zoomEl.hidden) return void (!e.repeat && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') && this.zoom(null)); // the big picture takes these keys
-      if (e.target instanceof HTMLElement && e.target.matches('button, a[href]') && /^(Space|Enter|NumpadEnter)$/.test(e.code)) return; // a button / link the mouse just clicked presses itself (the pointer is free while a card is open)
+      if (e.target instanceof HTMLElement && e.target.matches('button, a[href]') && /^(Space|Enter|NumpadEnter)$/.test(e.code)) return; // a button / link still focused (mouse held down: a click blurs it) presses itself
       if (!typing && this.bookOpen && e.code in SCROLL) return this.scrollBook(SCROLL[e.code]!); // pointer lock sends wheel + mouse to the canvas: keys scroll the book
       if (e.repeat) return;
       const key = hudKey(e, typing, this.bookOpen);
       if (key === 'submit') this.submit();
-      else if (key === 'blur') (this.blurred = true), this.answerInput?.blur();
+      else if (key === 'blur') (this.focusBox = false), this.answerInput?.blur();
       else if (key === 'close') this.close();
       else if (key === 'primary') this.hot.primary ? this.hot.primary.click() : this.focusInput();
       else if (key) this.hot.choose[Number(key.slice(-1)) - 1]?.click();
     });
   }
 
-  /** welcome.view / `race` message; a card not seen before opens as the full card. */
+  /** welcome.view / `race` message; a card not seen before opens as the full card, and so does the detour card once F opened
+   *  the branch box (its task is on the card now: e2e#0, no other feedback for that F). */
   setView(view: RaceView | null): void {
+    const was = this.view?.card;
     this.view = view;
     const card = view?.card ?? null;
     this.renderCompact(card);
@@ -156,7 +174,8 @@ export class RaceHud {
     if (this.fullCard && !this.bookOpen && card.step === this.fullCard.step) return this.refreshFull(card); // same step: the card changed state, redraw in place
     if (card.status === 'done') return;
     const key = `${card.step}@${card.receivedAt}`;
-    if (key === this.seenKey || (this.seenKey == null && key === store.get())) return void (this.seenKey = key);
+    const boxOpened = was?.step === card.step && !was.branchOpened && !!card.branchOpened;
+    if (!boxOpened && (key === this.seenKey || (this.seenKey == null && key === store.get()))) return void (this.seenKey = key);
     this.seenKey = key;
     store.set(key);
     this.bookOpen = false;
@@ -180,13 +199,14 @@ export class RaceHud {
     if (this.open) return this.close();
     this.bookOpen = this.bookWaiting = true;
     this.fullCard = null;
+    this.failed.clear();
     this.renderBook(null);
     this.actions.book();
   }
 
-  /** Phase 8: keys.clueCard (Enter) with nothing open → the current card in full again (answer history, input). */
+  /** Phase 8: keys.clueCard (Enter) with nothing open → the current card in full again (answer history, input: focused). */
   openCurrent(): void {
-    if (!this.open && this.view?.card) this.openFull(this.view.card, false);
+    if (!this.open && this.view?.card) this.openFull(this.view.card, false, true);
   }
 
   /** The book or a full card is open: the body stops, keys go to the panel (main.ts modal()). */
@@ -217,9 +237,10 @@ export class RaceHud {
     this.sim = f.simTime;
     this.now = f.serverNow + this.clockOffset;
     this.bannerEl.classList.toggle('on', this.banner.text !== '' && this.banner.visible(f.simTime));
-    const pen = lockLine(this.view, this.now) ?? penaltyLine(this.view, this.now);
-    this.penaltyEl.hidden = pen == null;
-    if (pen) setText(this.penaltyEl, pen);
+    const lock = lockLine(this.view, this.now);
+    const pen = lock ?? penaltyLine(this.view, this.now);
+    this.penaltyEl.hidden = pen == null || (lock != null && this.timerEl != null); // the open card shows the same countdown (visual#7)
+    if (pen) setTime(this.penaltyEl, pen);
     this.promptEl.hidden = !f.inZone || this.open;
     this.npcEl.hidden = f.simTime - this.finishSince >= C.finishSeconds;
     const card = this.view?.card;
@@ -231,12 +252,12 @@ export class RaceHud {
     const full = this.fullCard;
     if (full && !this.bookOpen) {
       if (liveStatus(full, this.now) !== this.shown) this.renderFull(false); // a countdown ran out: the card flips (D9)
-      else if (this.timerEl) setText(this.timerEl, timerLine(full, this.now)?.text ?? '');
+      else if (this.timerEl) setTime(this.timerEl, timerLine(full, this.now)?.text ?? '');
     }
   }
 
   /** DEV, offline only (p7-* / p8-* presets): stand-in data from the URL (?card=route|detour|challenge|pit|teaser|answer|
-   *  answer-pending|answer-locked|detour-choose|detour-chosen|detour-locked|branch-task|proof|media, ?full, ?book[=media],
+   *  answer-pending|answer-locked|detour-choose|detour-chosen|detour-locked|branch-task|proof|media|media-off, ?full, ?book[=media],
    *  ?lock=<s left of a countdown>, ?startOrder=n, ?finish, ?zone, ?checkin=<s of penalty wait left>). The clock / penalty
    *  row: ui/HUD.ts (?raceTime, ?penalty). */
   demo(q: URLSearchParams): void {
@@ -306,9 +327,11 @@ export class RaceHud {
     this.compact.style.width = `${C.cardWidth}px`;
   }
 
-  private openFull(card: ClueCard, animate = true) {
+  /** `focus`: the team asked for it (Enter): the answer box takes the keys at once; a popup leaves them to the game. */
+  private openFull(card: ClueCard, animate = true, focus = false) {
     if (this.draftStep !== card.step) (this.draft = ''), (this.draftStep = card.step);
-    this.blurred = false;
+    this.focusBox = focus;
+    this.failed.clear();
     this.fullCard = card;
     this.renderFull(animate, false);
   }
@@ -333,11 +356,11 @@ export class RaceHud {
     this.overlay.hidden = false;
     box.scrollTop = top;
     this.sync();
-    if (!this.blurred) this.focusInput();
+    if (this.focusBox) this.focusInput();
   }
 
   private focusInput() {
-    this.blurred = false;
+    this.focusBox = true;
     this.answerInput?.focus({ preventScroll: true });
   }
 
@@ -390,9 +413,12 @@ export class RaceHud {
       if (dim) other.push(blk);
       else root.append(blk);
     }
-    if (p.note) root.append(el('div', 'rc-note', p.note));
-    if (p.line) root.append((this.timerEl = el('div', `rc-timer ${p.line.kind}`, p.line.text)));
-    if (p.accept) root.append((this.hot.primary = this.act('Nhận thử thách [Enter]', () => this.actions.accept(card.step))));
+    if (p.note) root.append(el('div', 'rc-timer info', p.note)); // the step's main instruction: framed like the countdown (visual#5)
+    if (p.line) {
+      root.append((this.timerEl = el('div', `rc-timer ${p.line.kind}`)));
+      setTime(this.timerEl, p.line.text);
+    }
+    if (p.accept) root.append((this.hot.primary = this.act('Nhận thử thách [Enter]', () => ((this.focusBox = true), this.actions.accept(card.step))))); // asked for the task: its answer box takes the keys
     if (p.answerBox) root.append(this.answerRow(card));
     if (p.proof) root.append(this.proofBox(card, p.proof));
     if (p.history.length) {
@@ -430,6 +456,7 @@ export class RaceHud {
     const input = Object.assign(document.createElement('input'), { type: 'text', className: 'rc-input', maxLength: NET.answerMax, placeholder: 'Nhập câu trả lời…', autocomplete: 'off', spellcheck: false, enterKeyHint: 'send', value: this.draft });
     input.setAttribute('aria-label', 'Câu trả lời');
     input.addEventListener('input', () => (this.draft = input.value));
+    input.addEventListener('focus', () => (this.focusBox = true)); // clicked into: a redraw keeps the box focused
     this.answerInput = input;
     return el('div', 'rc-answer', undefined, input, this.act('Gửi câu trả lời [Enter]', () => this.submit(card)));
   }
@@ -442,16 +469,16 @@ export class RaceHud {
     this.draft = this.answerInput!.value = '';
   }
 
-  /** Photo task (kind free): instruction, the submission code to paste next to the photo, contact link, "Tôi đã gửi bài". */
+  /** Photo task (kind free): instruction, the submission code to paste next to the photo, "Tôi đã gửi bài" (only when `actions`).
+   *  No Messenger button: teams open Messenger outside the game (SPEC §17.17). */
   private proofBox(card: ClueCard, p: NonNullable<ReturnType<typeof cardPanel>['proof']>): HTMLElement {
     const copy = el('button', 'rc-btn rc-copy', 'Copy');
     copy.addEventListener('click', () => {
       const done = () => (setText(copy, 'Đã chép'), void setTimeout(() => setText(copy, 'Copy'), 1500));
       navigator.clipboard?.writeText(p.code).then(done, () => {});
     });
-    const link = p.contactUrl ? Object.assign(el('a', 'rc-btn rc-contact', p.contactLabel), { href: p.contactUrl, target: '_blank', rel: 'noopener noreferrer' }) : null;
     const box = el('div', 'rc-proof', undefined, p.instruction ? el('div', 'rc-task-text', p.instruction) : null, el('div', 'rc-code-row', undefined, el('span', 'rc-code-label', 'Mã bài nộp (gửi kèm ảnh):'), el('code', 'rc-code', p.code), copy));
-    if (p.actions) box.append(el('div', 'rc-proof-btns', undefined, link, this.act('Tôi đã gửi bài – chờ Host duyệt', () => this.actions.answer(card.step, ''))));
+    if (p.actions) box.append(el('div', 'rc-proof-btns', undefined, this.act('Tôi đã gửi bài – chờ Host duyệt', () => this.actions.answer(card.step, ''))));
     return box;
   }
 
@@ -468,17 +495,17 @@ export class RaceHud {
       }
       const img = Object.assign(document.createElement('img'), { alt: m.label || 'Hình mật thư', hidden: true });
       const ph = el('div', 'rc-ph', 'Đang tải hình…');
+      box.append(el('figure', 'rc-fig', undefined, ph, img, m.label ? el('figcaption', '', m.label) : null)); // first: a cached image's show() removes ph at once
       const show = (url: string | null) => {
-        if (!url) return void (ph.textContent = 'Hình chỉ tải được trong cuộc đua');
+        if (!url) return void (ph.textContent = this.actions.resolveMedia ? 'Hình chưa có – báo Host' : 'Hình chỉ tải được trong cuộc đua'); // in a race: not uploaded (or no network)
         img.src = url;
         img.hidden = false;
         ph.remove();
       };
       const have = this.urls.get(m.name);
-      if (have) show(have);
+      if (have || this.failed.has(m.name)) show(have ?? null);
       else void this.image(m.name).then(show);
       img.addEventListener('click', () => this.zoom(img.src));
-      box.append(el('figure', 'rc-fig', undefined, ph, img, m.label ? el('figcaption', '', m.label) : null));
     }
     return box;
   }
@@ -488,7 +515,7 @@ export class RaceHud {
     if (!p) {
       p = this.resolver(name).catch(() => null);
       this.fetching.set(name, p);
-      void p.then((u) => (u ? this.urls.set(name, u) : this.fetching.delete(name))); // a failure may succeed next time
+      void p.then((u) => (u ? this.urls.set(name, u) : (this.fetching.delete(name), this.failed.add(name)))); // a failure may succeed after the next open
     }
     return p;
   }
@@ -510,7 +537,7 @@ const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" vi
 const DEMO_IMG = `data:image/svg+xml,${encodeURIComponent(SVG)}`;
 const task: TaskView = { title: 'Thử thách minh họa', description: 'Mô tả nhiệm vụ minh họa dành cho ảnh chụp giao diện.', media: [], kind: 'answer', verification: 'auto', input: 'text', proofInstruction: '', timeLimitMinutes: 20 };
 const textTask: TaskView = { ...task, description: 'Câu đố minh họa: hãy gõ câu trả lời của đội vào ô bên dưới rồi bấm gửi.', verification: 'host_approval' };
-const proofTask: TaskView = { ...task, title: 'Nhiệm vụ gửi ảnh', description: 'Chụp một bức ảnh cả đội cùng làm động tác minh họa.', kind: 'free', verification: 'host_approval', input: 'proof', proofInstruction: 'Gửi ảnh cho Host qua Messenger, nhớ ghi mã bài nộp bên dưới.', contactUrl: 'https://m.me/ten-trang-minh-hoa', contactLabel: 'Mở Facebook / Messenger gửi bài' };
+const proofTask: TaskView = { ...task, title: 'Nhiệm vụ gửi ảnh', description: 'Chụp một bức ảnh cả đội cùng làm động tác minh họa.', kind: 'free', verification: 'host_approval', input: 'proof', proofInstruction: 'Mở Messenger (ngoài trò chơi), gửi ảnh cho Host kèm mã bài nộp bên dưới.' };
 const MEDIA_SET = [
   { url: 'r2:demo-anh.jpg', label: 'Ảnh gợi ý', kind: 'image' as const },
   { url: 'https://example.org/trang-lien-quan', label: 'Trang liên quan', kind: 'link' as const },
@@ -525,7 +552,7 @@ const branches = (taskA?: TaskView, taskB?: TaskView) => [
 ];
 const detour = { ...NEW, step: 'D2', type: 'detour', label: 'Lựa chọn kép', text: 'Hai con đường, một phải chọn. Hãy chọn nhánh hợp với đội.', receivedAt: T0, completedAt: null, switchPenaltyMinutes: 10, retryPenaltyMinutes: 3 } satisfies Partial<ClueCard>;
 const DEMO_CARDS: Record<string, ClueCard> = {
-  route: { ...NEW, step: 'D1', type: 'route_info', label: 'Lộ trình 1', text: 'Nội dung mật thư minh họa: hãy đi tới nơi có thể nhìn thấy ngọn tháp cao nhất thành phố rồi tìm hộp mật thư ở chân nó.', transport: { allowed: 'any' }, status: 'active', receivedAt: T0, completedAt: null },
+  route: { ...NEW, step: 'D1', type: 'route_info', label: 'Lộ trình 1', text: 'Nội dung mật thư minh họa: hãy đi tới nơi có thể nhìn thấy ngọn tháp cao nhất thành phố rồi tìm hòm mật thư ở chân nó.', transport: { allowed: 'any' }, status: 'active', receivedAt: T0, completedAt: null },
   walk: { ...NEW, step: 'D1', type: 'route_info', label: 'Lộ trình 2', text: 'Mật thư minh họa, lộ trình bắt buộc đi bộ.', transport: { mandatory: 'walk' }, status: 'active', receivedAt: T0, completedAt: null },
   detour: { ...detour, status: 'choose', branch: null, branches: branches() }, // p7-card-detour (compact card)
   challenge: { ...NEW, step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý minh họa: hãy quan sát kỹ xung quanh.', status: 'active', receivedAt: T0, completedAt: null, task: { ...task, place: 'Sân minh họa' } },
@@ -540,6 +567,8 @@ const DEMO_CARDS: Record<string, ClueCard> = {
   'branch-task': { ...detour, status: 'active', branch: 'A', branchOpened: true, branches: branches({ ...textTask, title: 'Phép tính minh họa', description: 'Hãy tính tổng số tầng của công trình trước mặt rồi gõ kết quả.', place: 'Chân tháp minh họa' }), switches: 0, answers: [A(1, 'đáp án thử một', 'penalized', 130)] },
   proof: { ...detour, status: 'active', branch: 'B', branchOpened: true, branches: branches(undefined, proofTask), switches: 1 },
   media: { ...NEW, step: 'L1', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư minh họa kèm hình và liên kết: xem ảnh rồi đi tới nơi trong ảnh.', transport: { allowed: 'any' }, media: MEDIA_SET, status: 'active', receivedAt: T0, completedAt: null },
+  // p8-media-offline: the demo resolver has no demo-off.jpg (offline: "Hình chỉ tải được trong cuộc đua")
+  'media-off': { ...NEW, step: 'L1', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư minh họa kèm hình: ngoài cuộc đua hình không tải được.', transport: { allowed: 'any' }, media: [{ url: 'r2:demo-off.jpg', label: 'Ảnh gợi ý', kind: 'image' }], status: 'active', receivedAt: T0, completedAt: null },
 };
 const DEMO_BOOK: ClueCard[] = [
   { ...DEMO_CARDS.route!, label: 'Lộ trình 1', status: 'done', receivedAt: T0, completedAt: T0 + 1_240_000 },

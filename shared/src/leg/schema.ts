@@ -152,8 +152,10 @@ export const legSchema = z.strictObject({
   /** Phase 8 (SPEC §17.14): the Host page warns when a team has been on one challenge / branch this long (repeats every
    *  period until it is done); computed on the Host page, nothing in game. */
   hostAlerts: z.strictObject({ stuckMinutes: z.number().positive().default(45) }).prefault({}),
+  /** SPEC §17.17: no Messenger / Facebook button in game: an old file's contactUrl / contactLabel are accepted and dropped. */
   hostApproval: z
-    .strictObject({ contactLabel: text().default('Gửi bài qua Facebook cho Host'), contactUrl: z.string().max(500).default(''), approvalWaitCounts: z.boolean().default(false) })
+    .strictObject({ approvalWaitCounts: z.boolean().default(false), contactUrl: z.unknown().optional(), contactLabel: z.unknown().optional() })
+    .transform(({ approvalWaitCounts }) => ({ approvalWaitCounts }))
     .prefault({}),
   /** SPEC §9 (Phase 9 adds the per-element parameters). */
   specials: z.strictObject({ uTurn: on(false), yield: on(false), fastForward: on(false), speedBump: on(false), expressPass: on(true) }).prefault({}),

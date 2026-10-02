@@ -51,8 +51,13 @@ describe('notices', () => {
     expect(NOTICES.bikeLost).toBe('Chậm một bước! Xe đã có người lấy.'); // SPEC §6.3
     expect(NOTICES.walkOnly).toBe('Lộ trình này bắt buộc đi bộ'); // SPEC §6.5
     // the server's boxRiding also answers a task / check-in on a bike (D4); raceOver also a bike claim refused 'finished'
-    expect(NOTICES.boxRiding).toBe('Xuống xe trước đã: không mở hộp, làm nhiệm vụ hay check-in khi đang ngồi xe');
+    expect(NOTICES.boxRiding).toBe('Xuống xe trước đã: không mở hòm, làm nhiệm vụ hay check-in khi đang ngồi xe');
     expect(NOTICES.raceOver).toMatch(/^Cuộc đua của đội bạn đã kết thúc: không lấy xe/);
+  });
+
+  it('one word for the clue box: "hòm (mật thư)", never "hộp" (SPEC §17.15, review visual#6)', () => {
+    expect(Object.values(NOTICES).filter((t) => /hộp/i.test(t))).toEqual([]);
+    expect(NOTICES.boxFar).toBe('Hãy vào gần hòm mật thư hơn');
   });
 
   it('importing and calling toast / notice in Node (no DOM) is harmless', () => {

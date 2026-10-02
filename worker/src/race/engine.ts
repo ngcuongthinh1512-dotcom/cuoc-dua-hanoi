@@ -73,6 +73,7 @@ const MOVES: Record<'start' | 'pause' | 'resume' | 'finish', [RaceStatus[], Race
 };
 /** host.team start times later than the server's now by more than this are refused (D15: Host typo). */
 const FUTURE_SLACK_MS = 60_000;
+const OVERRULED = 'Lưu ý: bài này vừa bị Phạt, nay đã được Duyệt (khóa phạt đã gỡ, đội nhận mật thư kế). Nếu không định sửa quyết định Phạt, hãy trao đổi với Host còn lại.';
 const LEG_LOCKED = 'Đã có đội vào game trong cuộc đua này. Muốn đổi chặng, hãy tạo cuộc đua mới (race id mới): nạp chặng → tạo đội → phát mã → mở.';
 
 export class RaceEngine {
@@ -217,7 +218,8 @@ export class RaceEngine {
       const i = this.legV.steps.findIndex((s) => s.id === m.step);
       if (i < 0) return notice('error', 'Không có bước này trong chặng.');
       if (i > r.step) return notice('warning', 'Đội chưa tới bước này.');
-      const res = review(this.legV, i, this.teamRows(m.team).get(m.step) ?? emptyProgress(m.team, m.step), m, now);
+      const row = this.teamRows(m.team).get(m.step) ?? emptyProgress(m.team, m.step);
+      const res = review(this.legV, i, row, m, now);
       if ('refuse' in res) return notice('warning', res.refuse);
       const decision: RaceEffect = { kind: 'review', step: i, row: res.row, op: m.op, id: res.id };
       // approve: complete + settle through the machine at the team's trusted pose (S3: racked only if it stands there)
@@ -225,6 +227,8 @@ export class RaceEngine {
         ? advance(this.legV, this.zones, this.progress(m.team, r), { kind: 'approve', step: m.step, pose: stand(this.io.pose(m.team)) }, now, this.statusV === 'running')
         : { p: this.progress(m.team, r), effects: [] };
       this.apply(m.team, r, p, [decision, ...effects], now);
+      // N4 "Duyệt" over a "Phạt": the Host's own fix, or a second Host whose screen was a second old (review R-11)
+      if (m.op === 'approve' && parseAnswers(row).find((a) => a.id === res.id)?.s === 'penalized') notice('warning', OVERRULED);
       return;
     }
     // host.leg (D11): lobby only, and only before any team entered the game
@@ -334,7 +338,7 @@ export class RaceEngine {
         id: leg.id, title: leg.title, timezone: leg.timezone, start: { x: s0.x, z: s0.z },
         steps: leg.steps.map((s, i) => {
           const z = this.zones[i]!;
-          const branches = s.type === 'detour' ? s.branches.map((b) => ({ id: b.id, ...pick(branchZone(leg, this.zones, i, b.id)!), proof: b.task.kind === 'free' })) : undefined;
+          const branches = s.type === 'detour' ? s.branches.map((b) => ({ id: b.id, title: b.name, ...pick(branchZone(leg, this.zones, i, b.id)!), proof: b.task.kind === 'free' })) : undefined;
           return { id: s.id, type: s.type, label: s.label, ...pick(z), proof: s.type === 'challenge' && s.task.kind === 'free', ...(branches ? { branches } : {}) };
         }),
         vehicles: leg.vehicles, bundled: BUNDLED_LEGS, issues: this.issues,
@@ -500,7 +504,9 @@ export class RaceEngine {
     for (const m of out) this.io.send(team, m);
     if (dirty.size) {
       this.io.changed(now);
-      if (teamChanged) this.refreshZones(new Set([this.where.get(team)?.key ?? '']), now);
+      // its lists change with a new step, an arrival where it already stands (moveZone sees no move), or a branch switch
+      // (the old branch's place is no longer its own: its list there is cleared, review verify-a 4.4)
+      if (teamChanged || effects.some((e) => e.kind === 'arrive' || e.kind === 'switch')) this.refreshZones(new Set([this.where.get(team)?.key ?? '']), now);
     }
   }
 
@@ -560,9 +566,10 @@ export class RaceEngine {
         msg = `${w.key}|${list}`;
       } else {
         // ponytail: a team that leaves its place gets [] only when it stands in no place at all (stepping straight into a
-        // later step's place keeps the stale list rather than tell it that place is a race point)
+        // later step's place keeps the stale list rather than tell it that place is a race point), or when the place it
+        // still stands in stopped being its own (a branch switch: a place it knew anyway)
         const was = this.sentZone.get(t);
-        if (w || !was || was.endsWith('|[]')) continue;
+        if (!was || was.endsWith('|[]') || (w && !was.startsWith(`${w.key}|`))) continue;
         msg = '|[]';
       }
       if (this.sentZone.get(t) === msg) continue;

@@ -23,7 +23,6 @@ const mini = () => ({
     { id: 'L2', type: 'route_info', label: 'Lộ trình 2', clue: 'Về đích', transport: { mandatory: 'walk' }, destination: dest(48.8640, 2.3220) },
     { id: 'PS', type: 'pit_stop', label: 'Về đích', destination: dest(48.8640, 2.3220) },
   ],
-  hostApproval: { contactUrl: 'https://m.me/example' },
 });
 type Mini = ReturnType<typeof mini> & Record<string, unknown>;
 /** Phase 8 rule 6: branch A of the fixture has no place of its own (kept: the zone tests rely on it). */
@@ -110,7 +109,6 @@ describe('leg schema', () => {
   it('lists blanks the Host must still fill (a draft loads) and answers leaking into texts', () => {
     const j = mini() as Mini;
     Object.assign(j.steps[1]!, { task: { title: '', description: '', answers: [] } });
-    j.hostApproval = { contactUrl: '' };
     (j.steps[0] as { clue: string }).clue = 'Đi tới cột đèn XANH  LÁ';
     const r = parseLeg(j);
     expect(r.ok).toBe(true);
@@ -119,7 +117,6 @@ describe('leg schema', () => {
       'blank Bước 2 (T1) › nhiệm vụ › mô tả: mô tả nhiệm vụ còn trống',
       'blank Bước 2 (T1) › nhiệm vụ › đáp án: đáp án (cách xác nhận "auto") còn trống',
       `warning ${NO_PLACE_A}`,
-      'blank Host duyệt › link Facebook của Host: link Facebook của Host còn trống (có nhiệm vụ Host duyệt)',
       'warning Bước 1 (L1) › mật thư: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải',
     ]);
   });
@@ -238,14 +235,12 @@ describe('Phase 8 leg fields and rules (docs/plans/phase8.md D2)', () => {
     ]);
   });
 
-  it('host_approval + typed answer needs no proof instruction / Messenger link (gap 1); a photo task (free) does', () => {
+  it('host_approval + typed answer needs no proof instruction (gap 1); a photo task (free) does; no Host link at all (SPEC §17.17)', () => {
     const k = j();
-    k.hostApproval = { contactUrl: '' };
     k.steps[2].branches[1].task.proofInstruction = '';
     k.steps[1].task = { title: 'Đếm', description: 'Đếm cột đèn', verification: 'host_approval' }; // kind answer, no answers, no reference
     expect(lines(k)).toEqual([
       'blank Bước 3 (D1) › nhánh B › nhiệm vụ › hướng dẫn gửi bài: hướng dẫn gửi bài còn trống',
-      'blank Host duyệt › link Facebook của Host: link Facebook của Host còn trống (có nhiệm vụ Host duyệt)',
     ]);
     k.steps[2].branches[1].task.verification = 'auto';
     k.steps[2].branches[1].task.kind = 'answer';
@@ -278,21 +273,37 @@ describe('Phase 8 leg fields and rules (docs/plans/phase8.md D2)', () => {
     ]);
   });
 
-  it('the proof instruction, the step label and the Messenger button label are texts a team reads: an answer in them leaks', () => {
+  it('the proof instruction and the step label are texts a team reads: an answer in them leaks', () => {
     const k = j();
     k.steps[1].label = 'Thử thách BẢY'; // T1's own answer
     k.steps[3].label = 'Lộ trình bảy'; // a later step: read after T1 is solved, fine
     k.steps[2].branches[1].task.proofInstruction = 'Chụp ảnh cột đèn xanh lá'; // B's photo card, A's answer
-    Object.assign(k.hostApproval, { contactLabel: 'Gửi xanh lá qua Facebook' }); // B is a photo task: its button
     expect(lines(k)).toEqual([
       'warning Bước 2 (T1) › tên bước: chứa đáp án "bay" của bước 2 (T1): đội đọc được trước khi giải',
       'warning Bước 3 (D1) › nhánh B › nhiệm vụ › hướng dẫn gửi bài: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải',
-      'warning Host duyệt › chữ trên nút gửi bài: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải',
     ]);
-    const n = j(); // no photo task before the answer: the button is not on any card the team has read
-    n.steps[2].branches[1].task = { title: 'B', description: 'b', answers: ['đỏ'], location: dest(48.867, 2.318, 30) };
-    Object.assign(n.hostApproval, { contactLabel: 'Gửi xanh lá qua Facebook' });
-    expect(lines(n)).toEqual([]);
+  });
+
+  it('an old file\'s hostApproval.contactUrl / contactLabel (SPEC §17.17: no Messenger button) load without a word and are dropped', () => {
+    for (const old of [{ contactUrl: '' }, { contactUrl: 'https://m.me/gia', contactLabel: 'Gửi xanh lá qua Facebook', approvalWaitCounts: true }, { contactUrl: '[CHƯA NHẬP link]' }]) {
+      const r = parseLeg({ ...j(), hostApproval: old });
+      if (!r.ok) throw new Error(JSON.stringify(r.issues));
+      expect(lines({ ...j(), hostApproval: old })).toEqual([]); // no blank, no leak of the old button label, no placeholder
+      expect(r.leg.hostApproval).toEqual({ approvalWaitCounts: old.approvalWaitCounts ?? false });
+    }
+    expect(errors({ ...j(), hostApproval: { contactUrll: '' } })).toHaveLength(1); // still strict: a typo is an error
+  });
+
+  it('an answer in a media url (r2 image name / link) leaks too (R-5): compared with - _ . / : as spaces', () => {
+    const k = j();
+    k.steps[1].task.referenceAnswers = ['Palais de Tokyo'];
+    k.steps[0].media = [{ url: 'r2:palais-de-tokyo.jpg', label: 'Ảnh' }];
+    k.steps[2].branches[1].task.media = [{ url: 'https://example.invalid/palais_de_tokyo/view', label: 'Xem' }]; // after T1: fine
+    expect(lines(k)).toEqual(['warning Bước 1 (L1) › hình / liên kết › mục 1 › liên kết: chứa đáp án tham khảo "palais de tokyo" của bước 2 (T1): đội đọc được trước khi giải']);
+    const t = j();
+    t.steps[1].task.answers = ['Tháp Eiffel'];
+    t.steps[1].task.media = [{ url: 'r2:thap_eiffel.png', label: 'Ảnh' }]; // the task's own image, read before solving
+    expect(lines(t)).toEqual(['warning Bước 2 (T1) › nhiệm vụ › hình / liên kết › mục 1 › liên kết: chứa đáp án "thap eiffel" của bước 2 (T1): đội đọc được trước khi giải']);
   });
 
   it('"[CHƯA NHẬP …]" anywhere is a blank (gap 10, critic M4); duplicate labels, unplayed kinds, sub-minute penalties warn', () => {

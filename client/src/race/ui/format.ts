@@ -242,8 +242,9 @@ export interface CardPanel {
   choose: string[];
   /** The typed-answer box + "Gửi câu trả lời". */
   answerBox: boolean;
-  /** Photo task: instruction + submission code (+ contact button and "Tôi đã gửi bài" when `actions`). */
-  proof: { instruction: string; code: string; contactUrl: string | null; contactLabel: string; actions: boolean } | null;
+  /** Photo task: instruction + submission code (also pending / locked and in the Sổ) + "Tôi đã gửi bài" when `actions`. No
+   *  Messenger button: teams open Messenger outside the game (SPEC §17.17). */
+  proof: { instruction: string; code: string; actions: boolean } | null;
   /** "Đổi lựa chọn kép": the other branches (none while pending, in choose / switchLocked, or read-only). */
   switchTo: { id: string; name: string }[];
   history: AnswerLine[];
@@ -272,8 +273,6 @@ export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mo
     proof: proofTask && {
       instruction: proofTask.proofInstruction,
       code: submitCode(o.teamName, card.step, card.branch),
-      contactUrl: proofTask.contactUrl && HTTP.test(proofTask.contactUrl) ? proofTask.contactUrl : null,
-      contactLabel: proofTask.contactLabel || 'Mở Facebook / Messenger gửi bài',
       actions: act && status === 'active',
     },
     switchTo: act && chosen && (status === 'goToBranch' || status === 'active' || status === 'locked') ? (card.branches ?? []).filter((b) => b.id !== chosen.id).map((b) => ({ id: b.id, name: b.name })) : [],

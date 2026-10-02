@@ -36,7 +36,7 @@ const FIELD: Record<string, string> = {
   bikeParking: 'bãi xe', branches: 'nhánh', task: 'nhiệm vụ', description: 'mô tả', media: 'hình / liên kết', location: 'nơi làm nhiệm vụ',
   kind: 'kiểu nhiệm vụ', verification: 'cách xác nhận', answers: 'đáp án', proofInstruction: 'hướng dẫn gửi bài',
   timeLimitMinutes: 'giới hạn thời gian (phút)', params: 'tham số mini-game', teaser: 'câu gợi ý', summary: 'mô tả ngắn', yawDeg: 'hướng nhìn (độ)',
-  spreadMeters: 'khoảng rải đội (m)', contactUrl: 'link Facebook của Host', contactLabel: 'chữ trên nút gửi bài',
+  spreadMeters: 'khoảng rải đội (m)',
   // Phase 8 (docs/plans/phase8.md D2)
   referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
   hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
@@ -175,7 +175,6 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
 
   // blanks the Host must fill (SPEC §10, §13.1 readiness)
   const blank = (v: string | readonly string[], path: PropertyKey[], what: string) => (v.length ? 0 : add('blank', path, `${what} còn trống`));
-  let hostTasks = 0;
   const labels = new Map<string, number>();
   steps.forEach((s, i) => {
     if (!s.label) add('blank', ['steps', i, 'label'], 'tên bước còn trống');
@@ -191,9 +190,9 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
       blank(t.description, [...p, 'description'], 'mô tả nhiệm vụ');
       if (t.verification === 'auto' && t.kind !== 'free') blank(t.answers, [...p, 'answers'], 'đáp án (cách xác nhận "auto")');
       if (t.verification === 'auto' && t.kind === 'free') add('warning', [...p, 'kind'], 'nhiệm vụ "free" không tự chấm được: nên dùng cách xác nhận "host_approval"');
-      // Phase 8 (gap 1): an answer typed in game + Host approval needs no proof instruction / Messenger link; a photo
-      // task (free) does
-      if (t.verification === 'host_approval' && t.kind === 'free') (hostTasks++, blank(t.proofInstruction, [...p, 'proofInstruction'], 'hướng dẫn gửi bài'));
+      // Phase 8 (gap 1): an answer typed in game + Host approval needs no proof instruction; a photo task (free) does. No
+      // Host Facebook / Messenger link at all (SPEC §17.17: teams open Messenger outside the game)
+      if (t.verification === 'host_approval' && t.kind === 'free') blank(t.proofInstruction, [...p, 'proofInstruction'], 'hướng dẫn gửi bài');
       if (t.kind !== 'answer' && t.kind !== 'free') add('warning', [...p, 'kind'], `kiểu "${t.kind}" chưa có trong game (hoãn): máy chủ xử lý như "answer" (đội gõ đáp án)`);
     }
     // Phase 8 (§17.16): each branch has its own box at its task place; without one it stands where the previous box
@@ -204,7 +203,6 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
           add('warning', ['steps', i, 'branches', k, 'task', 'location'], 'nhánh không có nơi riêng: hòm nhánh đứng cùng chỗ hòm lộ trình trước (chồng lên nhau); nên cho nhánh một nơi riêng');
       });
   });
-  if (hostTasks && !leg.hostApproval.contactUrl) add('blank', ['hostApproval', 'contactUrl'], 'link Facebook của Host còn trống (có nhiệm vụ Host duyệt)');
   // Phase 8 (gap 10): "[CHƯA NHẬP …]" = still a placeholder, listed like an empty field (also blocks a careless "Mở cuộc đua")
   walkStrings(leg, [], (v, path) => held(v) && add('blank', path, `còn giữ chỗ "${v.trim().slice(0, 40)}": nhập nội dung thật`));
   for (const k of ['retryLockMinutes', 'branchSwitchLockMinutes'] as const)
@@ -223,22 +221,24 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   }
 
   // SPEC §3 / §8.3: an answer written into a text the team reads before solving it gives it away. Phase 8 (gap 9): only
-  // the texts it can read by then: every step up to this one (card label, clue, teaser, task text, proof instruction, the
-  // Messenger button label, link labels, the place name). Of a detour: BOTH branches' texts, the other branch's task
+  // the texts it can read by then: every step up to this one (card label, clue, teaser, task text, proof instruction,
+  // link labels + link / image addresses, the place name). Of a detour: BOTH branches' texts, the other branch's task
   // included: it sits in the other branch's box, but §17.16 lets a team open that box, read it and switch branch ("Đổi
   // lựa chọn kép") before answering (verify-foundation S2).
+  // R-5 (verify-d N1): a media url ("r2:<name>" or a link) reaches the team with the clue (the link on hover, the image path),
+  // so a name like "palais-de-tokyo.jpg" gives the place away: compared with its separators turned into spaces.
+  const urlText = (u: string) => u.replace(/[-_./:]+/g, ' ');
   const textsOf = (i: number): [string, PropertyKey[]][] => {
     const s = steps[i]!;
     const out: [string, PropertyKey[]][] = [[s.label, ['steps', i, 'label']]];
     const task = (t: Task, p: PropertyKey[]) => {
       out.push([t.title, [...p, 'title']], [t.description, [...p, 'description']], [t.location?.name ?? '', [...p, 'location', 'name']]); // the place name is on the card ("Địa điểm: …")
       out.push([t.proofInstruction, [...p, 'proofInstruction']]); // on a photo task's card
-      if (t.kind === 'free') out.push([leg.hostApproval.contactLabel, ['hostApproval', 'contactLabel']]); // that card's Messenger button
-      t.media.forEach((m, k) => out.push([m.label, [...p, 'media', k, 'label']]));
+      t.media.forEach((m, k) => out.push([m.label, [...p, 'media', k, 'label']], [urlText(m.url), [...p, 'media', k, 'url']]));
     };
     if (s.type === 'route_info' || s.type === 'detour') {
       out.push([s.clue, ['steps', i, 'clue']]);
-      s.media.forEach((m, k) => out.push([m.label, ['steps', i, 'media', k, 'label']]));
+      s.media.forEach((m, k) => out.push([m.label, ['steps', i, 'media', k, 'label']], [urlText(m.url), ['steps', i, 'media', k, 'url']]));
     }
     if (s.type === 'challenge') (out.push([s.teaser, ['steps', i, 'teaser']]), task(s.task, ['steps', i, 'task']));
     if (s.type === 'detour')
