@@ -2,6 +2,7 @@
 // "Không đi xe trên bậc thang", "Xe này đã có đội sử dụng". The same text within toasts.repeatGap s is dropped. The DOM
 // is created on first use (importing this module touches nothing: Player.ts imports it in Node tests).
 import { hud, toasts as T } from '../config.ts';
+import { fmtMin } from '../race/ui/format.ts';
 import './menu.css';
 import type { NoticeCode } from './types.ts';
 
@@ -97,6 +98,10 @@ export function toast(text: string): void {
   }
   draw();
 }
+
+/** `lockWrong` worded with the card's penalty minutes (card.retryPenaltyMinutes; a test leg may say 0,1). 0 / unknown → the fixed text. */
+export const lockWrongText = (minutes: number | undefined): string =>
+  minutes ? `Chưa đúng! Bị phạt ${fmtMin(minutes)} phút – lựa chọn vẫn giữ, bấm / bỏ được, chốt lại khi hết đếm ngược` : NOTICES.lockWrong;
 
 /** A fixed game message (its Vietnamese text lives here). */
 export function notice(code: NoticeCode): void {

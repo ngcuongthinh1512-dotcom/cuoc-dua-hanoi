@@ -386,9 +386,13 @@ Object.assign(PRESETS, {
       'p8b-credits': 'credits=louvre', // "Ghi nguồn" after the finish: credits.json + "Phòng Louvre" lines (stand-in items)
     }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
   ),
+  // [C] the same on a small window (visual review: the card and the feed against the minimap / clock)
+  'p8b-card-louvre-small': '/?player&npc=0&wait=1&card=louvre&full',
+  'p8b-feed-small': '/?player&npc=0&wait=1&feed=5',
   // [D] Host page: a louvre cell "chọn k/23 · ✗n · 💡40 / 💡70 (x/5)" + its title history (demoState)
   'p8b-host': '/host.html?demo=1',
 });
+Object.assign(VIEWPORT, { 'p8b-card-louvre-small': { width: 1024, height: 640 }, 'p8b-feed-small': { width: 1024, height: 640 } });
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { path: { type: 'string' }, name: { type: 'string' } } });

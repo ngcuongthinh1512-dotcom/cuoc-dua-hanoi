@@ -183,3 +183,24 @@
   color: var(--hud-dim, rgba(255, 255, 255, 0.72));
   font-size: 13px;
 }
+
+/* Phase 8B feed (ui/Feed.ts): bottom corner (position set from config feed.corner), newest line at the bottom, no mouse. */
+#feed {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  max-width: 380px;
+  pointer-events: none;
+  z-index: 1;
+}
+.feed-line {
+  padding: 4px 10px;
+  font-size: 14px;
+}
+.feed-time {
+  margin-right: 8px;
+  color: var(--hud-dim);
+  font-variant-numeric: tabular-nums;
+}

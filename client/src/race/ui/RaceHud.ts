@@ -10,8 +10,9 @@
 //    after the check-in, "Tại điểm này".
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
-import { NET, type ClueCard, type CreditItem, type FeedMessage, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
+import { NET, type ClueCard, type CreditItem, type FeedMessage, type LouvreView, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
 import { Feed } from '../../ui/Feed.ts';
+import { onCreditsRequest, openCredits, setCreditItems, setCreditsGate } from '../../ui/Credits.ts';
 import { raceHud as C } from '../../config.ts';
 import { bookEntries, type BookEntry, branchConfirmText, cardPanel, finishLine, hudKey, liveStatus, lockLine, type MediaItem, penaltyLine, type CardSummary, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, zoneLines } from './format.ts';
 import './race.css';
@@ -29,6 +30,8 @@ export interface RaceHudActions {
   /** An "r2:<name>" image → a blob URL (fetched with the team token), null = not there (not uploaded / not allowed / network).
    *  Absent = offline (no race): the placeholder says images load only in a race. */
   resolveMedia?(name: string): Promise<string | null>;
+  /** Phase 8B: "Ghi nguồn" opened after the finish: ask for the louvre credits (op `credits`; the answer is `credits()` below). */
+  credits?(): void;
 }
 
 export interface RaceHudFrame {
@@ -142,6 +145,7 @@ export class RaceHud {
     this.tl.append(this.compact, this.zonePanel);
     document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay, this.zoomEl);
     this.zoomEl.addEventListener('click', () => this.zoom(null));
+    onCreditsRequest(() => this.actions.credits?.());
     // A clicked button / link gives the focus back (review R-1): Space / Enter then reach the card keys below (Space closes,
     // never presses "Đổi lựa chọn kép" again after a declined confirm), and Tab is no key of the button's.
     this.overlay.addEventListener('click', (e) => (e.target as HTMLElement).closest<HTMLElement>('button, a[href]')?.blur());
@@ -169,6 +173,7 @@ export class RaceHud {
   setView(view: RaceView | null): void {
     const was = this.view?.card;
     this.view = view;
+    setCreditsGate(view != null && (view.finishAt != null || view.status === 'finished')); // §17.20: "Ghi nguồn" opens after the finish
     const card = view?.card ?? null;
     this.renderCompact(card);
     if (!card) return;
@@ -227,15 +232,23 @@ export class RaceHud {
     this.finishSince = this.sim;
   }
 
-  // Phase 8B (docs/plans/phase8b.md §G): the public feed + the "Ghi nguồn" answer. TODO(phase8b track C): draw them.
+  // Phase 8B (docs/plans/phase8b.md §G): the louvre room flag, the public feed, the "Ghi nguồn" answer.
+  private inRoom = false;
+  /** LouvreRoom.active (main.ts / track B): the louvre card says "Đang trong phòng" instead of "bấm F ở hòm để vào phòng". */
+  setRoom(inside: boolean): void {
+    if (inside === this.inRoom) return;
+    this.inRoom = inside;
+    if (this.fullCard && !this.bookOpen) this.renderFull(false);
+  }
   private readonly feedBox = new Feed();
   /** welcome.feed (the kept lines) and each `{t:'feed'}` (RaceClient). */
   feed(ms: readonly FeedMessage[], teams: readonly TeamInfo[]): void {
     this.feedBox.push(ms, teams);
   }
-  /** `{t:'credits'}` after the finish: the "Ghi nguồn" panel with credits.json + a "Phòng Louvre" section. TODO(phase8b
-   *  track C): ui/Credits.ts (creditLines). */
-  credits(_items: readonly CreditItem[]): void {}
+  /** `{t:'credits'}` after the finish: the "Ghi nguồn" panel gets a "Phòng Louvre" section (ui/Credits.ts). */
+  credits(items: readonly CreditItem[]): void {
+    setCreditItems(items);
+  }
 
   /** SPEC §7 "Tại điểm này" (`zone` message): the other teams here, named from welcome.teams. */
   zone(members: readonly ZoneMember[], teams: readonly TeamInfo[]): void {
@@ -285,10 +298,20 @@ export class RaceHud {
       this.setView({ status: 'running', startAt: 0, finishAt: null, penaltyMinutes: Number(q.get('penalty') ?? 0), card, checkinAt: Number.isFinite(wait) ? wait * 1000 + DEMO_NOW : null, officialMs: null });
       if (q.has('book')) (this.bookWaiting = this.bookOpen = true), this.showBook(q.get('book') === 'media' ? DEMO_BOOK_MEDIA : DEMO_BOOK);
     }
+    if (q.has('feed')) {
+      const teams = DEMO_TEAMS;
+      const n = Math.min(Number(q.get('feed')) || 3, DEMO_FEED.length);
+      this.feed(DEMO_FEED.slice(0, n), teams);
+    }
+    if (q.get('credits') === 'louvre') {
+      setCreditsGate(true);
+      setCreditItems(DEMO_CREDITS);
+      openCredits();
+    }
     if (q.has('startOrder')) this.startOrder(Number(q.get('startOrder')) || 1, 0);
     if (q.has('finish')) this.finished('Đội Xanh', 6135000);
     if (q.has('zone')) {
-      const teams = ['Xanh', 'Đỏ'].map((n, i) => ({ slot: i + 1, id: `t${i}`, name: `Đội ${n}`, colour: '#fff', online: true }));
+      const teams = DEMO_TEAMS;
       this.zone(
         [
           { slot: 1, label: 'Thử thách 2', type: 'challenge', branch: null, since: 1 },
@@ -400,7 +423,7 @@ export class RaceHud {
   private detail(card: ClueCard, entry: BookEntry | null): HTMLElement {
     const s: CardSummary = summarize(card);
     const st = TYPE_STYLE[card.type];
-    const p = cardPanel(card, { now: this.now, teamName: this.teamName || this.demoTeam, mode: entry ? 'book' : 'card', live: this.view?.status !== 'finished' }); // finished: the Host ended the race, read-only (SPEC §8.10)
+    const p = cardPanel(card, { now: this.now, teamName: this.teamName || this.demoTeam, mode: entry ? 'book' : 'card', live: this.view?.status !== 'finished', inRoom: this.inRoom }); // finished: the Host ended the race, read-only (SPEC §8.10)
     if (!entry) this.shown = p.status;
     const root = el('section', `rc-detail${entry?.pinned ? ' pinned' : ''}`);
     root.style.setProperty('--c', st.colour);
@@ -424,6 +447,7 @@ export class RaceHud {
       if (dim) other.push(blk);
       else root.append(blk);
     }
+    if (p.louvreInfo) root.append(el('div', `rc-louvre ${p.louvreInfo.state}`, undefined, el('div', 'rc-louvre-state', p.louvreInfo.text), ...p.louvreInfo.lines.map((l) => el('div', 'rc-louvre-line', l))));
     if (p.note) root.append(el('div', 'rc-timer info', p.note)); // the step's main instruction: framed like the countdown (visual#5)
     if (p.line) {
       root.append((this.timerEl = el('div', `rc-timer ${p.line.kind}`)));
@@ -581,6 +605,31 @@ const DEMO_CARDS: Record<string, ClueCard> = {
   // p8-media-offline: the demo resolver has no demo-off.jpg (offline: "Hình chỉ tải được trong cuộc đua")
   'media-off': { ...NEW, step: 'L1', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư minh họa kèm hình: ngoài cuộc đua hình không tải được.', transport: { allowed: 'any' }, media: [{ url: 'r2:demo-off.jpg', label: 'Ảnh gợi ý', kind: 'image' }], status: 'active', receivedAt: T0, completedAt: null },
 };
+// Phase 8B stand-ins (neutral art-NN ids; no real artwork names anywhere in the repo)
+const DEMO_TEAMS: TeamInfo[] = ['Xanh', 'Đỏ', 'Vàng'].map((n, i) => ({ slot: i + 1, id: `t${i}`, name: `Đội ${n}`, colour: '#fff', online: true }));
+const DEMO_FEED: FeedMessage[] = [
+  { t: 'feed', at: T0, slot: 1, ok: false, minutes: 3 },
+  { t: 'feed', at: T0 + 60_000, slot: 2, ok: false, minutes: 3, n: 2, of: 5 },
+  { t: 'feed', at: T0 + 120_000, slot: 3, ok: true, n: 5, of: 5 },
+];
+const DEMO_CREDITS: CreditItem[] = [
+  { file: 'art-03.webp', title: 'Tác phẩm minh họa 03', artist: 'Nghệ sĩ minh họa', photo: 'Ảnh: người chụp minh họa', license: 'CC BY-SA 4.0', source: 'https://example.org/art-03' },
+  { file: 'art-17.glb', title: 'Tác phẩm minh họa 17', artist: 'Nghệ sĩ minh họa', photo: 'Bản quét: người quét minh họa', license: 'CC BY-NC-SA 4.0', source: 'https://example.org/art-17' },
+  { file: 'art-21.webp', title: 'Tác phẩm minh họa 21', artist: 'Nghệ sĩ minh họa', photo: 'Ảnh: người chụp minh họa', license: 'Public domain', source: 'https://example.org/art-21' },
+];
+const DEMO_LOUVRE: LouvreView = {
+  artworks: Array.from({ length: 23 }, (_, i) => ({ id: `art-${String(i + 1).padStart(2, '0')}`, type: i < 15 ? ('painting' as const) : ('sculpture' as const), image: '' })),
+  room: { x: 0, z: 0, r: 25, yaw: 0 },
+  picks: ['art-03', 'art-08', 'art-12'],
+  attempts: 2,
+  hintAt: [DEMO_NOW - 600_000, DEMO_NOW - 60_000],
+  hintCount: 5,
+  hintCorrect: 2,
+  maxPicks: 5,
+};
+const louvreTask: TaskView = { ...task, title: 'Phòng tác phẩm', description: 'Chọn các tác phẩm theo gợi ý rồi bấm nút chốt trong phòng.', kind: 'louvre', verification: 'auto', input: 'room', place: 'Sân minh họa', louvre: DEMO_LOUVRE };
+DEMO_CARDS.louvre = { ...NEW, step: 'T3', type: 'challenge', label: 'Thử thách 3', text: 'Gợi ý minh họa: hãy vào phòng và chọn các tác phẩm.', status: 'active', retryPenaltyMinutes: 3, task: louvreTask, answers: [A(1, '4 tác phẩm', 'penalized', 420), A(2, '5 tác phẩm', 'penalized', 130)].map((a, i) => ({ ...a, correct: i === 0 ? 1 : 2 })), receivedAt: T0, completedAt: null };
+DEMO_CARDS['louvre-locked'] = { ...DEMO_CARDS.louvre, status: 'locked', lockedUntil: DEMO_NOW + 150_000, lockKind: 'retry', task: { ...louvreTask, louvre: { ...DEMO_LOUVRE, hintAt: [DEMO_NOW - 600_000, DEMO_NOW + 600_000], hintCorrect: null, attempts: 1 } }, answers: [{ ...A(1, '5 tác phẩm', 'penalized', 30) }] };
 const DEMO_BOOK: ClueCard[] = [
   { ...DEMO_CARDS.route!, label: 'Lộ trình 1', status: 'done', receivedAt: T0, completedAt: T0 + 1_240_000 },
   { ...DEMO_CARDS.challenge!, status: 'done', receivedAt: T0 + 1_240_000, completedAt: T0 + 2_100_000 },
