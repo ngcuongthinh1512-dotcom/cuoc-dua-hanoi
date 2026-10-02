@@ -132,7 +132,7 @@ Mỗi loại thẻ có tiêu đề và màu riêng, nhìn là nhận ra ngay.
 
 ### Lựa chọn kép
 - Thẻ giới thiệu **2 nhánh** (tên và mô tả ngắn). Bạn chọn **1 trong 2** để làm.
-- Bấm nút **"Đổi lựa chọn kép"** để đổi nhánh: **không bị phạt thời gian**; hòm mật thư của nhánh kia hiện ra và bạn phải **đi tới đúng nơi đó**; bạn sẽ **mất toàn bộ tiến độ** của nhánh cũ.
+- Bấm nút **"Đổi lựa chọn kép"** (bỏ nhánh đang làm): bạn **bị phạt 10 phút** (đồng hồ đếm ngược trên màn hình) và **mất toàn bộ tiến độ** của nhánh cũ; đếm ngược xong, hòm mật thư của nhánh kia mới hiện để bạn làm nhánh đó.
 - Không đổi nhánh được khi đang chờ Host duyệt bài.
 - Xong nhánh đã chọn thì nhận mật thư tiếp theo.
 
