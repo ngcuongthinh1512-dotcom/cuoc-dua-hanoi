@@ -1005,3 +1005,10 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 ### 17.15 Hình dạng hòm mật thư trong game (2026-10-02; thay "cờ vàng–đỏ + ánh sáng nhẹ" của §8.2)
 - Hòm mật thư dựng giống mô hình thật người dùng đưa (ảnh): **đế xám vuông, cột vàng vuông có dải đỏ dọc, hộp xám trên cùng với nắp phẳng nhô ra bốn phía**, cao ≈ 1,6 m; hòm đã mở: nắp lật lên, dải đỏ chuyển màu xám đỏ.
 - Chi tiết thêm của bản dựng (chờ người dùng xác nhận): dải đỏ ở cả 4 mặt cột (ảnh chỉ thấy mặt trước); **cột sáng vàng mảnh** phía trên hòm chưa mở để nhìn thấy ở 150 m (hòm chỉ cao ≈ 6 px ở khoảng đó), mờ dần trong 35 → 12 m; kích thước theo ảnh (cột 0,32 m, dải 0,17 m).
+
+### 17.16 Lựa chọn kép Lửa / Nước: nút chọn + hòm riêng từng nhánh (2026-10-02; áp dụng ở Phase 8)
+- Sau khi đội mở hòm của Lộ trình ngay trước Lựa chọn kép, thẻ Lựa chọn kép có **hai nút chọn nhánh** (Lửa, Nước). Đội bấm một nút để chọn.
+- **Chỉ hòm của nhánh đã chọn mới hiện** trong game; hòm nhánh kia không hiện. Hòm đặt tại nơi nhánh đó yêu cầu (tọa độ trong file chặng) và theo luật §17.10 (server chỉ gửi tọa độ khi đội vào 150 m).
+- **Mật thư của nhánh** (đề bài: liên kết, hình, yêu cầu chụp màn hình) nằm TRONG hòm của nhánh: chỉ hiện khi đội mở hòm đó. Đội gửi ảnh chụp màn hình cho Host qua Messenger / Facebook; Host duyệt trên màn hình Host (§8.9, §17.14); duyệt xong đội nhận mật thư kế tiếp.
+- Đổi nhánh theo §8.4 (mặc định, chờ người dùng xác nhận): được đổi, mất tiến độ nhánh cũ; hòm nhánh cũ biến mất, hòm nhánh mới hiện.
+- Mật thư có thể kèm hình (ví dụ "hình bên dưới" / "trong ảnh"): hình do người dùng cung cấp, lưu trên R2 (bucket riêng tư) và hiện trên thẻ + Sổ mật thư.
