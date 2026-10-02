@@ -6,13 +6,13 @@
 // (role, team, revealed box) from the socket attachment (docs/plans/phase6.md §3, §6 A).
 import { DurableObject } from 'cloudflare:workers';
 import { startSpot } from '@race/shared/leg';
-import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
+import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FeedMessage, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
 import { HOST, newClaims, signToken, verifyToken } from './auth.ts';
 import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, setMeta, type TeamRow } from './db.ts';
 import type { Env } from './index.ts';
 import { BikeService } from './race/BikeService.ts';
-import { NEW_TEAM_RACE, RaceEngine, type TeamRace } from './race/engine.ts';
+import { feedLine, NEW_TEAM_RACE, RaceEngine, type LockEvent, type TeamRace } from './race/engine.ts';
 import { needsTick, tickEntries, tickKey, type Peer } from './race/presence.ts';
 import type { PlayerSpot } from './race/VehicleSpawner.ts';
 
@@ -102,13 +102,15 @@ export class RaceRoom extends DurableObject<Env> {
   private readonly seen = new WeakMap<WebSocket, { start: number; n: number; last: number }>();
   /** Sockets already handled as gone (closed by us or by the client): never counted as online again. */
   private readonly gone = new WeakSet<WebSocket>();
+  /** Phase 8B: the newest NET.feedKept public feed lines, oldest first; null = not read from `events` since the wake. */
+  private feedV: FeedMessage[] | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     migrate(this.sql);
     const snap = this.sql.exec<{ t: number; data: string }>('SELECT t, data FROM snapshot WHERE id = 1').toArray()[0];
-    const data = (snap ? JSON.parse(snap.data) : {}) as { seq?: number; poses?: Record<string, unknown>; at?: Record<string, number>; counters?: Counters };
+    const data = (snap ? JSON.parse(snap.data) : {}) as { seq?: number; poses?: Record<string, unknown>; at?: Record<string, number>; counters?: Counters; picks?: Record<string, Record<string, string[]>> };
     this.counters = QuotaCounters.from(data.counters);
     this.snapSeq = data.seq ?? 0;
     for (const [team, arr] of Object.entries(data.poses ?? {})) {
@@ -144,7 +146,18 @@ export class RaceRoom extends DurableObject<Env> {
           this.send(ws, { t: 'box', op: 'remove', step, branch });
         }
       },
+      feed: (m) => {
+        const kept = this.feed();
+        kept.push(m);
+        kept.splice(0, kept.length - NET.feedKept);
+        this.broadcast(m);
+      },
+      touchSnapshot: (now) => {
+        this.snapshotAt ??= now + NET.snapshotMs;
+        this.soon(now);
+      },
     });
+    this.engine.restorePicks(data.picks, snap?.t ?? 0); // §D: live picks of the last snapshot, unless a lock is newer
     const engine = this.engine;
     this.bikes = new BikeService({
       sql: this.sql,
@@ -524,7 +537,7 @@ export class RaceRoom extends DurableObject<Env> {
     this.counters.rows += 1;
     const poses = Object.fromEntries([...this.live].map(([id, l]) => [id, encodePose(l.valid)]));
     const at = Object.fromEntries([...this.live].map(([id, l]) => [id, l.validAt]));
-    const data = JSON.stringify({ seq: ++this.snapSeq, poses, at, counters: this.counters });
+    const data = JSON.stringify({ seq: ++this.snapSeq, poses, at, counters: this.counters, picks: this.engine.livePicks() });
     this.sql.exec('INSERT INTO snapshot (id, t, data) VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET t = excluded.t, data = excluded.data', now, data);
   }
 
@@ -685,9 +698,20 @@ export class RaceRoom extends DurableObject<Env> {
       pose: team && l ? { ...l.valid, bikeId: myBikes.find((b) => b.owner === team.id)?.id ?? null } : null,
       bikes: myBikes,
       ...(race ?? { raceTime: null, boxes: [], view: null, startOrder: null, showStartOrder: false, start: null }),
-      // TODO(phase8b track A): the newest NET.feedKept lines (rebuilt from events type 'louvre.lock' on wake, docs/plans/phase8b.md §D)
-      feed: [],
+      feed: this.feed(),
     };
+  }
+
+  /** Phase 8B (§D): the kept feed lines, read once per wake from the newest `louvre.lock` events.
+   *  ponytail: scans `events` from the newest id down (no index on type, a few thousand rows once per wake); add an index
+   *  on (type) if a race ever logs far more. A right lock before the 70-minute mark has no line: read 2 × kept. */
+  private feed(): FeedMessage[] {
+    return (this.feedV ??= this.sql
+      .exec<{ t: number; data: string }>("SELECT t, data FROM events WHERE type = 'louvre.lock' ORDER BY id DESC LIMIT ?", NET.feedKept * 2)
+      .toArray()
+      .reverse()
+      .flatMap((e) => feedLine(e.t, JSON.parse(e.data) as LockEvent) ?? [])
+      .slice(-NET.feedKept));
   }
 
   private send(ws: WebSocket, m: ServerMessage) {
