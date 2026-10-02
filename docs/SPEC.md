@@ -1015,3 +1015,6 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 
 ### 17.17 Không có nút mở Messenger / Facebook trong game (2026-10-02; áp dụng ở Phase 8)
 - Game **không có nút mở Facebook / Messenger** (thay §8.11 "nút mở Facebook của Host"): đội tự mở Messenger ở ngoài trò chơi để gửi ảnh chụp màn hình cho Host. Thẻ bài ảnh chỉ có hướng dẫn gửi bài (chữ) và nút "Tôi đã gửi bài – chờ Host duyệt"; file chặng KHÔNG cần link Facebook / Messenger của Host (`hostApproval.contactUrl` / `contactLabel` bỏ).
+
+### 17.18 Chặng này bỏ các yếu tố đặc biệt (2026-10-03)
+- Chặng này KHÔNG dùng: Quay đầu (U-Turn), Nhường đường (Yield), Vé vượt (Express Pass), Vé ưu tiên (Priority Pass), Gờ giảm tốc (Speed Bump). Không làm trong Phase 9; các mục §9.x liên quan để TẠM hoãn (ghi TODO), có thể làm lại khi người dùng cần.
