@@ -3,7 +3,10 @@
 // 2 = Phase 7 race engine (race / book / zone messages, welcome.race / startOrder / start, BoxInfo.r).
 // 3 = Phase 8 tasks (docs/plans/phase8.md §5.1): race answer / accept / branch / open{branch}, host.review, ClueCard
 //     status / lockedUntil / answers / media, BoxInfo yaw / branch, box remove, HostState.queue.
-export const PROTOCOL_VERSION = 3;
+// 4 = Phase 8B Louvre room (docs/plans/phase8b.md §C): race pick / lock / view / credits, TaskView.louvre,
+//     AnswerView.correct, feed + welcome.feed, credits, notices lockWrong / pickLimit / creditsLocked,
+//     StepProgressView picks / hintCorrect, HostState.leg.steps[].louvre.
+export const PROTOCOL_VERSION = 4;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */
@@ -41,7 +44,9 @@ export const NET = {
   maxConnects: 10,
   /** Phase 8 (D20): same budget for the race ops that may write a row — answer / accept / branch (NOT checkin /
    *  book: the mat check-in runs every 2 s; NOT open: refused ones write nothing, review R-7) — past this per respawnWindowMs the socket is closed (CLOSE.tooFast). */
-  maxRaceOps: 30,
+  maxRaceOps: 30, // Phase 8B: `lock` counts too (each wrong one = 3 rows); `pick` / `view` / `credits` write nothing
+  /** Phase 8B: public feed lines kept (welcome.feed; rebuilt from `events` when the Durable Object wakes). */
+  feedKept: 20,
   /** Phase 8: longest typed answer (the input's maxlength, the server's limit; '' = "đã gửi bài" of a photo task). */
   answerMax: 200,
   /** Phase 8: a card carries at most this many of the team's own answers (newest; the HUD shows them all). */

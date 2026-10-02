@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { latLonToWorld, RACE_BBOX, worldToLatLon } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, WayFlag, pathPolyline, segPoint, shortestPath } from '@race/shared/graph';
 import { MEDIA } from '@race/shared/protocol';
-import { type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, mediaItems, parseLeg, placeOf, r2Names, startSpot } from '@race/shared/leg';
+import { type Artwork, type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, mediaItems, parseLeg, placeOf, r2Names, startSpot, words } from '@race/shared/leg';
 import { landmarks, roads, traffic } from '../client/src/config.ts';
 import { CHUNK_SIZE, type ChunkData, type WaterData } from '../client/src/geo/chunkData.ts';
 import { districtAt, inRing } from '../client/src/geo/districts.ts';
@@ -182,8 +182,42 @@ export function secretStrings(leg: Leg, min = 12): string[] {
     if (s.type === 'challenge') out.add(s.teaser);
     const tasks = s.type === 'detour' ? s.branches.map((b) => (out.add(b.summary), b.task)) : s.type === 'challenge' ? [s.task] : [];
     for (const t of tasks) [t.title, t.description, t.proofInstruction, ...t.answers, ...t.referenceAnswers].forEach((x) => out.add(x)); // Phase 8: reference answers are Host-only
+    for (const a of artworksOf(s)) [a.note, a.credit?.title ?? '', a.credit?.artist ?? ''].forEach((x) => out.add(x)); // Phase 8B rule 9: server-only
   }
   return [...out].map((x) => x.trim()).filter((x) => x.length >= min);
+}
+
+/** Phase 8B: the artworks of a step's louvre room ([] for any other step). */
+const artworksOf = (s: Leg['steps'][number]): Artwork[] => (s.type === 'challenge' && s.task.kind === 'louvre' ? (s.task.louvre?.artworks ?? []) : []);
+
+/** Phase 8B rule 9 (docs/plans/phase8b.md §B): no artwork title / artist / Host note in the static "Ghi nguồn" file (whole
+ *  text, ≥ 4 characters, plain + JSON-escaped) nor in the bytes of the room's pictures client/public/art/* (every word of ≥ 4
+ *  letters: EXIF / XMP / GLB node names): the room's secret is only the 5 ids. ERROR (the file reaches every team). */
+export function artLeaks(leg: Leg, root = ROOT): LegIssue[] {
+  const arts = leg.steps.flatMap(artworksOf);
+  const out: LegIssue[] = [];
+  const credits = join(root, 'client/public/credits.json');
+  if (existsSync(credits)) {
+    const text = readFileSync(credits, 'utf8').toLowerCase();
+    const hits = [...new Set(arts.flatMap((a) => [a.note, a.credit?.title ?? '', a.credit?.artist ?? '']).map((x) => x.trim()).filter((x) => x.length >= 4))]
+      .filter((x) => text.includes(x.toLowerCase()) || text.includes(JSON.stringify(x).slice(1, -1).toLowerCase()));
+    if (hits.length) out.push({ level: 'error', where: relative(root, credits), message: `chứa tên / ghi chú tác phẩm phòng Louvre ${hits.map((h) => `"${h.slice(0, 40)}"`).join(', ')}: file này tới máy mọi đội; chỉ một dòng chung, ghi nguồn chi tiết nằm trong chặng (gửi sau khi về đích)` });
+  }
+  const dir = join(root, 'client/public/art');
+  if (existsSync(dir)) {
+    const text = (a: Artwork) => `${a.note} ${a.credit?.title ?? ''} ${a.credit?.artist ?? ''}`;
+    // as written (UTF-8 metadata keeps the accents) and without diacritics (ASCII metadata)
+    const toks = [...new Set(arts.flatMap((a) => [...text(a).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4), ...words(text(a))]))];
+    const latin = (s: string) => Buffer.from(s, 'utf8').toString('latin1').toLowerCase();
+    for (const n of readdirSync(dir)) {
+      const f = join(dir, n);
+      if (!statSync(f).isFile()) continue;
+      const hay = readFileSync(f).toString('latin1').toLowerCase();
+      const hits = toks.filter((t) => hay.includes(latin(t)));
+      if (hits.length) out.push({ level: 'error', where: relative(root, f), message: `chứa chữ ${hits.map((h) => `"${h}"`).join(', ')} của tên / ghi chú tác phẩm (metadata, tên node GLB?): xử lý lại bằng npm run process-assets (xóa metadata, đổi tên node thành art-NN)` });
+    }
+  }
+  return out;
 }
 
 /** The answers among the secrets: short place names / street signs, so they may legitimately also be in the map data. */
@@ -421,12 +455,15 @@ export function checkFile(file: string, opts: { root?: string; scanDirs?: string
   const leg = r.ok ? r.leg : shape?.success ? shape.data : null;
   if (leg) {
     const map = opts.map ?? loadMap(root);
-    issues.push(...checkLeg(leg, map.geo)); // checkLeg without geo already ran inside parseLeg: duplicates dropped below
+    // checkLeg without geo already ran inside parseLeg: duplicates dropped below. Phase 8B: + the room's static files
+    const artSize = (name: string) => ((f) => (existsSync(f) ? statSync(f).size : null))(join(root, 'client/public/art', name));
+    issues.push(...checkLeg(leg, { ...map.geo, artSize }));
     const rep = mapReport(leg, map);
     issues.push(...rep.issues);
     const media = mediaReport(leg);
     issues.push(...media.issues);
     issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(leg), root, answerStrings(leg)));
+    issues.push(...artLeaks(leg, root));
     lines.push(...media.lines, ...rep.lines);
   }
   // SPEC §3: leg content never in client/ (shipped to every player); a real leg is best kept outside the project (no git)

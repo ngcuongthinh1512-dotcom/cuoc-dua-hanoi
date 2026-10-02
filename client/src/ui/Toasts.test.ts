@@ -42,7 +42,8 @@ describe('notices', () => {
   it('every code has its own Vietnamese text (SPEC §6.3 / §6.6 wording)', () => {
     const codes: NoticeCode[] = ['bikeStairs', 'bikeTooFast', 'bikeTooFar', 'bikeTaken', 'respawn', 'respawnStairs', 'bikeLost', 'bikeGone', 'bikeParked', 'walkOnly',
       'raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'clueNew', 'penaltyWait',
-      'answerSent', 'answerWrong', 'answerPending', 'answerLocked', 'approved', 'penalized', 'branchChosen', 'branchSwitched', 'branchPending', 'taskNotStarted']; // Phase 8
+      'answerSent', 'answerWrong', 'answerPending', 'answerLocked', 'approved', 'penalized', 'branchChosen', 'branchSwitched', 'branchPending', 'taskNotStarted', // Phase 8
+      'lockWrong', 'pickLimit', 'creditsLocked']; // Phase 8B
     expect(Object.keys(NOTICES).sort()).toEqual([...codes].sort());
     expect(new Set(Object.values(NOTICES)).size).toBe(codes.length);
     expect(NOTICES.bikeStairs).toBe('Không đi xe trên bậc thang');

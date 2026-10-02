@@ -436,7 +436,7 @@ export function demoState(now = 1_000_000): HostState {
   const t0 = now - 50 * min;
   const row = (team: string, step: string, o: number | null, a: number | null, c: number | null, branch: string | null = null, more: Partial<StepProgressView> = {}): StepProgressView => ({
     team, step, openedAt: o, arrivedAt: a, startedAt: c, completedAt: c, branch,
-    submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches: 0, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers: [], note: '',
+    submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches: 0, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers: [], note: '', picks: [], hintCorrect: null, // Phase 8B: TODO(phase8b track D) a louvre cell
     ...more,
   });
   const ans = (id: number, text: string, at: number, status: StepProgressView['answers'][number]['status'], branch: string | null = null, note?: string) => ({ id, text, at, status, branch, ...(note ? { note } : {}) });

@@ -6,7 +6,7 @@ import { BUNDLED_LEGS, bundledLeg } from './race/leg.ts';
 
 describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
   it('every bundled leg parses with no error', () => {
-    expect(BUNDLED_LEGS).toEqual(['paris-demo', 'paris-demo-filled', 'mini']);
+    expect(BUNDLED_LEGS).toEqual(['paris-demo', 'paris-demo-filled', 'mini', 'louvre']);
     for (const id of BUNDLED_LEGS) expect(bundledLeg(id)?.id).toBe(id);
   });
 

@@ -1,6 +1,6 @@
 // Phase 7 track C: pure helpers of the race HUD (no DOM, tested in Node). Everything here works only from what the server
 // sent (ClueCard / RaceView / ZoneMember): never answers, destination names or a later step.
-import { type AnswerStatus, type CardStatus, type ClueCard, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
+import { type AnswerStatus, type CardStatus, type ClueCard, type LouvreView, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
 import { raceClient, raceHud as C } from '../../config.ts';
 import { looksLikeIme } from '../../core/Input.ts';
 
@@ -248,6 +248,9 @@ export interface CardPanel {
   /** "Đổi lựa chọn kép": the other branches (none while pending, in choose / switchLocked, or read-only). */
   switchTo: { id: string; name: string }[];
   history: AnswerLine[];
+  /** Phase 8B: a louvre card (no input box: TaskView.input 'room'). TODO(phase8b track C): "Đang chọn k[/5] tác phẩm",
+   *  "Chốt sai: n lần", the hint lines (hintCount / live hintCorrect, "0/5 (chưa chọn tác phẩm nào)"), history "· đúng c/5". */
+  louvre: LouvreView | null;
 }
 
 export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mode: 'card' | 'book'; live?: boolean }): CardPanel {
@@ -277,6 +280,7 @@ export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mo
     },
     switchTo: act && chosen && (status === 'goToBranch' || status === 'active' || status === 'locked') ? (card.branches ?? []).filter((b) => b.id !== chosen.id).map((b) => ({ id: b.id, name: b.name })) : [],
     history: book ? [] : answerLines(card),
+    louvre: task?.louvre ?? null,
   };
 }
 

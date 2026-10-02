@@ -39,6 +39,10 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   branchSwitched: 'Đã đổi lựa chọn kép: hòm nhánh kia hiện khi hết đếm ngược',
   branchPending: 'Không đổi nhánh khi đang chờ Host duyệt',
   taskNotStarted: 'Bấm "Nhận thử thách" trước',
+  // Phase 8B: phòng Louvre (docs/plans/phase8b.md §G; track C may word lockWrong with the card's minutes via toast(text))
+  lockWrong: 'Chưa đúng! Bị phạt – lựa chọn vẫn giữ, bấm / bỏ được, chốt lại khi hết đếm ngược',
+  pickLimit: 'Chỉ được chọn tối đa 5 tác phẩm – bỏ một tác phẩm trước',
+  creditsLocked: 'Bảng Ghi nguồn mở sau khi về đích',
 };
 
 export interface Toast {

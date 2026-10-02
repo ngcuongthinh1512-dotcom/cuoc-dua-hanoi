@@ -3,7 +3,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { bike, remote } from '../config.ts';
 import type { PlayerState } from '../player/types.ts';
-import { fakeTick, leanFor, newRemotePose, parsePeers, Track, updateState } from './RemotePlayers.ts';
+import { fakeTick, inView, leanFor, newRemotePose, parsePeers, Track, updateState } from './RemotePlayers.ts';
 
 const P = (x: number, z = 0, yaw = 0, extra: Partial<PoseSample> = {}): PoseSample => ({ x, y: 0, z, yaw, mode: 'walk', action: 'none', ...extra });
 
@@ -124,5 +124,17 @@ describe('DEV ?peers stand-ins', () => {
     expect(e!.slot).toBe(4);
     expect(e!.pose.z).toBeCloseTo(-4); // yaw 0 = north = −Z, 4 m/s
     expect(e!.pose.y).toBe(2);
+  });
+});
+
+describe('Phase 8B: height cull (Louvre room 30 m under the box)', () => {
+  it('within renderRadius and remote.hideDy of the feet only; no feet height (spectator) = distance only', () => {
+    const v = { x: 0, z: 0 };
+    expect(inView({ x: 10, y: 0, z: 0 }, v, 300, 0)).toBe(true);
+    expect(inView({ x: 10, y: -25, z: 0 }, v, 300, 5)).toBe(false); // in the room, seen from the court
+    expect(inView({ x: 10, y: 5, z: 0 }, v, 300, -25)).toBe(false); // on the court, seen from the room
+    expect(inView({ x: 10, y: -24, z: 0 }, v, 300, -25)).toBe(true); // both in the room
+    expect(inView({ x: 10, y: -25, z: 0 }, v, 300)).toBe(true); // spectator
+    expect(inView({ x: 400, y: 0, z: 0 }, v, 300, 0)).toBe(false);
   });
 });

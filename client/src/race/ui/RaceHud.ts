@@ -10,7 +10,8 @@
 //    after the check-in, "Tại điểm này".
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
-import { NET, type ClueCard, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
+import { NET, type ClueCard, type CreditItem, type FeedMessage, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
+import { Feed } from '../../ui/Feed.ts';
 import { raceHud as C } from '../../config.ts';
 import { bookEntries, type BookEntry, branchConfirmText, cardPanel, finishLine, hudKey, liveStatus, lockLine, type MediaItem, penaltyLine, type CardSummary, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, zoneLines } from './format.ts';
 import './race.css';
@@ -225,6 +226,16 @@ export class RaceHud {
     setText(this.npcEl, finishLine(team, officialMs));
     this.finishSince = this.sim;
   }
+
+  // Phase 8B (docs/plans/phase8b.md §G): the public feed + the "Ghi nguồn" answer. TODO(phase8b track C): draw them.
+  private readonly feedBox = new Feed();
+  /** welcome.feed (the kept lines) and each `{t:'feed'}` (RaceClient). */
+  feed(ms: readonly FeedMessage[], teams: readonly TeamInfo[]): void {
+    this.feedBox.push(ms, teams);
+  }
+  /** `{t:'credits'}` after the finish: the "Ghi nguồn" panel with credits.json + a "Phòng Louvre" section. TODO(phase8b
+   *  track C): ui/Credits.ts (creditLines). */
+  credits(_items: readonly CreditItem[]): void {}
 
   /** SPEC §7 "Tại điểm này" (`zone` message): the other teams here, named from welcome.teams. */
   zone(members: readonly ZoneMember[], teams: readonly TeamInfo[]): void {

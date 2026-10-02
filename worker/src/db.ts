@@ -3,10 +3,12 @@
 // index (the Host filters by team). v2 (Phase 7): step_progress (one row per team × step, WITHOUT ROWID on its primary
 // key = 1 row written per upsert); the loaded leg lives in meta ('leg' JSON, 'legId'); the new team fields (startAt,
 // startOrder, finishAt, penalty…) live in teams.state JSON, so no ALTER. v3 (Phase 8, docs/plans/phase8.md D4): four
-// step_progress columns by ALTER (answers JSON, locked_until, branch_opened_at, host_note); no new table.
+// step_progress columns by ALTER (answers JSON, locked_until, branch_opened_at, host_note); no new table. v4 (Phase 8B,
+// docs/plans/phase8b.md §D): step_progress.picks by ALTER (the louvre picks of the last lock; live picks: engine memory +
+// the snapshot row).
 import type { AnswerStatus } from '@race/shared/protocol';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const DDL = [
   // key / value: race, status, schema, seed, candidates (JSON), spawning (JSON)…
@@ -76,6 +78,10 @@ export interface StepProgressRow extends Record<string, SqlStorageValue> {
   branch_opened_at: number | null;
   /** The Host's note on this step (never sent to the team). */
   host_note: string;
+  // v4 (Phase 8B)
+  /** JSON string[]: a louvre step's lit artwork ids, written ONLY with a lock (a pick lives in the engine's row cache + the
+   *  snapshot row; read with parsePicks). '[]' elsewhere. */
+  picks: string;
 }
 
 /** One answer in step_progress.answers (docs/plans/phase8.md D4): id = 1, 2… within the step; b = the detour branch it
@@ -89,6 +95,18 @@ export interface AnswerRec {
   s: AnswerStatus;
   d?: number;
   n?: string;
+  /** Phase 8B: a louvre lock, right ones among the picks (the card shows it only for locks past correctAtMinutes). */
+  c?: number;
+}
+
+/** step_progress.picks → artwork ids ([] for '' / a broken value). */
+export function parsePicks(row: Pick<StepProgressRow, 'picks'> | undefined): string[] {
+  try {
+    const v = JSON.parse(row?.picks || '[]') as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 /** step_progress.answers → records ([] for '' / a broken value: never throws in the DO). */
@@ -105,7 +123,7 @@ export const emptyProgress = (team: string, step: string): StepProgressRow => ({
   team, step, arrived_at: null, clue_opened_at: null, task_started_at: null, completed_at: null, branch: null, branch_switches: 0,
   wrong_answers: 0, penalty_minutes: 0, transport_used: null, bike_distance_m: 0, bike_lost_at_rack: 0, skipped_by: null,
   submitted_at: null, decided_at: null, decided_by: null, rejections: 0, approval_wait_seconds: 0,
-  answers: '[]', locked_until: null, branch_opened_at: null, host_note: '',
+  answers: '[]', locked_until: null, branch_opened_at: null, host_note: '', picks: '[]',
 });
 
 /** v3 columns (name, definition), added by ALTER in migrate. */
@@ -153,6 +171,7 @@ export function migrate(sql: SqlStorage): number {
   const v = Number(getMeta(sql, 'schema') ?? 0);
   // v1 → v2 only creates a table (in DDL); versioned ALTERs below.
   if (v < 3) for (const [name, def] of V3_COLUMNS) addColumn(sql, 'step_progress', name, def);
+  if (v < 4) addColumn(sql, 'step_progress', 'picks', "TEXT NOT NULL DEFAULT '[]'");
   if (v < SCHEMA_VERSION) setMeta(sql, 'schema', String(SCHEMA_VERSION));
   return SCHEMA_VERSION;
 }

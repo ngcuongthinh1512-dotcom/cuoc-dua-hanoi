@@ -413,7 +413,8 @@ export class RaceRoom extends DurableObject<Env> {
         // runs every 2 s, critic S4; not open either: F pressed again and again at a box while the race is not open yet
         // (lobby / paused) or out of reach writes nothing, and a box opens once — a branch box again only after a counted
         // branch switch (review R-7))
-        if ((m.op === 'answer' || m.op === 'accept' || m.op === 'branch') && this.count(a.team, 'race', now) > NET.maxRaceOps) return this.close(ws, CLOSE.tooFast, 'too many race ops');
+        // Phase 8B: `lock` too (a wrong one = 3 rows); not pick / view / credits (0 rows; maxMessagesPerSec still applies)
+        if ((m.op === 'answer' || m.op === 'accept' || m.op === 'branch' || m.op === 'lock') && this.count(a.team, 'race', now) > NET.maxRaceOps) return this.close(ws, CLOSE.tooFast, 'too many race ops');
         // D4: judged at the trusted pose (the client sends its pose right before the op, on the same socket)
         return this.engine.onOp(a.team, m, this.live.get(a.team)?.valid ?? null, now);
       case 'host.race':
@@ -684,6 +685,8 @@ export class RaceRoom extends DurableObject<Env> {
       pose: team && l ? { ...l.valid, bikeId: myBikes.find((b) => b.owner === team.id)?.id ?? null } : null,
       bikes: myBikes,
       ...(race ?? { raceTime: null, boxes: [], view: null, startOrder: null, showStartOrder: false, start: null }),
+      // TODO(phase8b track A): the newest NET.feedKept lines (rebuilt from events type 'louvre.lock' on wake, docs/plans/phase8b.md §D)
+      feed: [],
     };
   }
 

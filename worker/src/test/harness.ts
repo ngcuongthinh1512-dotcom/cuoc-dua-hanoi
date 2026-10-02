@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { latLonToWorld, worldToLatLon } from '@race/shared';
 import { encodePose, type MoveMode } from '@race/shared/protocol';
 import { createTestHarness } from 'wrangler';
+import louvre from '../../legs/test/louvre.json';
 import mini from '../../legs/test/mini.json';
 
 export const TEST_PASSWORD = 'test-secret';
@@ -115,6 +116,27 @@ export function nearLeg(gap = 60, footSpeed = 20) {
     ...leg, id: 'near', title: 'Chặng gần (NỘI DUNG GIẢ)', boxReveal: { radius: 40, hysteresis: 10 }, movement: { footSpeed, bikeSpeedMultiplier: 1.3 },
     // Phase 8: 6 s after a "Phạt", 12 s after a branch switch (a leg:check warning: test legs only)
     penalties: { retryLockMinutes: 0.1, branchSwitchLockMinutes: 0.2 },
+  };
+}
+
+/** Phase 8B test leg "near-louvre" (FAKE content): the `louvre` steps — L-LV route (its box = the room, yawDeg 90), T3
+ *  louvre (23 artworks, 5 fake answers: art-03 / 08 / 12 / 17 / 21), L3 route to the Pit Stop, PS — with L-LV `gap` m east
+ *  of the start and L3 / PS 2 × gap (radius 20), the box revealed within 40 m, a fast foot speed, hints at 3 s / 6 s after
+ *  the box opened (0.05 / 0.1 min) and a 6 s wrong-lock countdown. Load with host.leg {json}. Points: nearPoint(1) /
+ *  nearPoint(2) (same gap). */
+export function nearLouvreLeg(gap = 60, footSpeed = 20) {
+  const pt = (k: number) => {
+    const { lat, lon } = worldToLatLon(LEG_START.x + gap * k, LEG_START.z);
+    return { lat: Math.round(lat * 1e7) / 1e7, lon: Math.round(lon * 1e7) / 1e7 };
+  };
+  const leg = structuredClone(louvre) as typeof louvre & Record<string, unknown>;
+  const [lv, t3, l3, ps] = leg.steps as any[];
+  lv.destination = { ...lv.destination, ...pt(1), name: 'Hòm Louvre (GIẢ)' };
+  t3.task.louvre.hints = { countAtMinutes: 0.05, correctAtMinutes: 0.1 };
+  l3.destination = ps.destination = { ...l3.destination, ...pt(2), name: 'Thảm (GIẢ)' };
+  return {
+    ...leg, id: 'near-louvre', title: 'Chặng Louvre gần (NỘI DUNG GIẢ)', boxReveal: { radius: 40, hysteresis: 10 }, movement: { footSpeed, bikeSpeedMultiplier: 1.3 },
+    penalties: { retryLockMinutes: 0.1 },
   };
 }
 

@@ -1024,6 +1024,7 @@ export const remote = {
   clockSlewMs: 1, // ms the server-clock offset estimate sinks per tick (≈ 5 ms/s): drift and one lucky fast tick wear off
   renderRadius: 300, // m: until welcome.presence.renderRadius arrives (DEV ?peers stand-ins)
   bellRadius: 60, // m: another team's bell (R) is heard this close
+  hideDy: 10, // m: Phase 8B (docs/plans/phase8b.md §E): a remote player this far above / below the viewer's feet is hidden (a team in the Louvre room 30 m under the box: no ghost under the street, no tag through the ground)
   leanSmoothing: 0.15, // s: a remote rider's lean (derived from the turn rate, not on the wire) follows with this lag
 };
 // SPEC §17.10: the team's clue box, drawn only once the server sent its position (within boxReveal.radius). Shaped like the
@@ -1103,4 +1104,33 @@ export const raceHud = {
   taskLockSeconds: 2, // s the card's server buttons (Nhận thử thách, Chọn / Đổi nhánh, Gửi) stay disabled after a click (the answer comes back as a new `race` view)
   // Phase 8 (docs/plans/phase8.md D9 / D15). Typed-answer / history limits are NET.answerMax / NET.answerHistory (shared: the server cuts at the same numbers).
   mediaMaxHeight: 260, // px, tallest an image on a card / in the Sổ gets (click = full-screen)
+};
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// Phase 8B (docs/plans/phase8b.md §F, §G): phòng Louvre (Thử thách 3). Leg content (artworks, hints, answers) is on the
+// server; these are client layout / presentation tunables only. Each track edits ONLY its own block.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+
+// ── B · the room (race/LouvreRoom.ts, main.ts F priority, Player env) ──
+export const louvreRoom = {
+  below: 30, // m: floor = heightAt(box x, z) − this (under the Louvre courts: no road / NPC / bike there, the chunk stays loaded)
+  minFloorY: player.respawnBelow + 5, // m: floor never lower (respawn would fire); codec MIN_Y is −100
+  size: { width: 26, depth: 16, height: 5 }, // m, closed box; `width` along the door wall
+  door: { width: 2, height: 2.6 }, // middle of the front wall (facing room.yaw), standing at the box's x, z: going in / out only changes y
+  slots: { back: 9, side: 5, frontEachSide: 2, minSpacing: 2.6 }, // 9 + 5 + 5 + 2 + 2 = 23 places along the walls, leg order
+  painting: { width: 1.2, height: 0.9, centreY: 1.7, frame: 0.06 }, // m: frame on the wall, the picture inside
+  plinth: { size: 0.6, height: 1.0, fromWall: 0.5, photo: [0.8, 1.0], glbBox: [0.8, 1.2, 0.8] }, // a sculpture: photo standing on it, or its .glb fitted in glbBox
+  button: { radius: 0.125, postHeight: 0.9, fromWall: 0.8, reach: 2.2, aimDot: 0.2 }, // under each artwork; F picks the nearest within reach the camera faces (dot > aimDot)
+  lock: { plinthRadius: 0.3, buttonRadius: 0.2, reach: 2.5 }, // the lock button in the middle of the room (= the box's x, z ± the door offset)
+  doorReach: 2, // m: F at the door → back up to the court
+  ceilingLights: 6,
+  colours: { wall: '#efe6d2', floor: '#8a5a35', ceiling: '#9a9a9a', frame: '#b8902f', plinth: '#e8e2d6', off: '#c8281e', on: '#2fbf4a', lock: '#f2c230', light: '#fff6dc' },
+  dimSun: true, // N6: lower the sun / raise the ambient while inside (checked on the p8b-room preset)
+};
+
+// ── C · public feed (ui/Feed.ts): "Đội X trả lời sai và bị phạt 3 phút" (SPEC §17.19 (b): bottom corner, configurable) ──
+export const feed = {
+  corner: 'bottom-left' as 'bottom-left' | 'bottom-center' | 'bottom-right', // default: above the minimap, GTA chat style (waiting for the user's confirmation)
+  lines: 5, // newest lines shown
+  seconds: 90, // a line fades after this (s); a new line shows the box again
 };

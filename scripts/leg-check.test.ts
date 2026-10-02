@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import { checkFile, compass, loadMap, scanLeaks, secretStrings } from './leg-check.ts';
+import { artLeaks, checkFile, compass, loadMap, scanLeaks, secretStrings } from './leg-check.ts';
 import { chunkKey, type ChunkData } from '../client/src/geo/chunkData.ts';
 import { inRing } from '../client/src/geo/districts.ts';
 import { demoState } from '../client/src/host/hostView.ts';
@@ -466,3 +466,34 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     }
   });
 });
+
+describe('leg:check Phase 8B (louvre room: static pictures, rule 9)', () => {
+  const louvre = () => (parseLeg(JSON.parse(readFileSync(legs('test/louvre.json'), 'utf8'))) as { leg: Parameters<typeof artLeaks>[0] }).leg;
+
+  it('the bundled louvre test leg: valid, no error; the 6 pictures not shipped yet are blanks (CLI file check)', () => {
+    const r = run(legs('test/louvre.json'), [join(root, 'client/public')]);
+    expect(errors(r)).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.issues.filter((i) => i.message.startsWith('chưa có tệp client/public/art/art-02.webp'))).toHaveLength(1);
+  });
+
+  it('rule 9: an artwork title / note in the static credits.json or in a picture\'s bytes (metadata) is an error', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'legart-'));
+    mkdirSync(join(dir, 'client/public/art'), { recursive: true });
+    expect(artLeaks(louvre(), dir)).toEqual([]);
+    writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ title: 'Phòng Louvre', text: 'Ảnh: (GIẢ) Tranh 2 – (GIẢ) Họa sĩ 2' }]));
+    writeFileSync(join(dir, 'client/public/art/art-06.webp'), Buffer.concat([Buffer.from([0x52, 0x49, 0x46, 0x46, 0, 0]), Buffer.from('XMP dc:title=(GIẢ) Tác Phẩm 6', 'utf8')]));
+    writeFileSync(join(dir, 'client/public/art/art-09.webp'), Buffer.from([0x52, 0x49, 0x46, 0x46, 1, 2, 3]));
+    const out = artLeaks(louvre(), dir).map((i) => `${i.where}: ${i.message}`);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatch(/^client\/public\/credits.json: chứa tên \/ ghi chú tác phẩm phòng Louvre "\(GIẢ\) Tranh 2", "\(GIẢ\) Họa sĩ 2"/);
+    expect(out[1]).toMatch(/^client\/public\/art\/art-06.webp: chứa chữ "phẩm"/);
+  });
+
+  it('secretStrings carries the artworks\' notes / titles (the general static scan), never the neutral ids', () => {
+    const sec = secretStrings(louvre());
+    expect(sec).toEqual(expect.arrayContaining(['(GIẢ) Tác phẩm 1', '(GIẢ) Tranh 2', '(GIẢ) Họa sĩ 2']));
+    expect(sec.filter((x) => /^art-\d\d$/.test(x))).toEqual([]);
+  });
+});
+

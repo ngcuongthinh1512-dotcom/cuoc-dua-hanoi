@@ -7,10 +7,10 @@ import { branchZone, jsonProblem, parseLeg, r2Names, startSpot, stepZones, type 
 import { latLonToWorld } from '@race/shared';
 import type { BoxInfo, HostMessage, HostState, PoseSample, RaceOp, RaceStatus, RaceView, ReviewItem, ServerMessage, ServerNotice, StepProgressView, Welcome, ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
-import { emptyProgress, getMeta, parseAnswers, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
+import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { officialMs, ranking } from './ranking.ts';
-import { advance, boxesOf, cardOf, mediaAllowed, retryLockMinutes, review, rowFacts, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
+import { advance, boxesOf, cardOf, creditsOf, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
 
 /** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
  *  `auto` answers a minute for hours would grow one row and every host.state); raise it if a Host needs the whole log. */
@@ -161,6 +161,10 @@ export class RaceEngine {
     const r = this.io.team(team);
     if (!r) return;
     if (m.op === 'book') return this.io.send(team, { t: 'book', cards: this.cards(team, r, now) });
+    // Phase 8B (docs/plans/phase8b.md §C, critic S4): read-only, every status, 0 rows, not counted in maxRaceOps
+    if (m.op === 'view') return this.io.send(team, { t: 'race', view: this.view(team, now) });
+    if (m.op === 'credits')
+      return r.finishAt !== null || this.statusV === 'finished' ? this.io.send(team, { t: 'credits', items: creditsOf(this.legV) }) : this.io.send(team, { t: 'notice', code: 'creditsLocked' });
     if (this.statusV !== 'running') {
       // the client's periodic check-in on the mat (D19) gets no toast while the race is not running
       if (m.op !== 'checkin') this.io.send(team, { t: 'notice', code: STATUS_NOTICE[this.statusV] });
@@ -170,6 +174,9 @@ export class RaceEngine {
     if (m.op === 'accept') return this.step(team, { kind: 'accept', step: m.step }, now);
     if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text, pose: stand(at) }, now);
     if (m.op === 'branch') return this.step(team, { kind: 'branch', step: m.step, branch: m.branch }, now);
+    // Phase 8B: a pick from anywhere; a lock judged at the trusted pose inside the step's zone (TODO track A: advance + apply)
+    if (m.op === 'pick') return this.step(team, { kind: 'pick', step: m.step, art: m.art, on: m.on }, now);
+    if (m.op === 'lock') return this.step(team, { kind: 'lock', step: m.step, pose: stand(at) }, now);
     if (!at) return this.io.send(team, { t: 'notice', code: 'boxFar' });
     const riding = at.mode === 'bike';
     const input: RaceInput =
@@ -299,7 +306,7 @@ export class RaceEngine {
   }
 
   /** host.state parts: leg summary, step_progress, ranking, review queue. */
-  hostView(_now: number): Pick<HostState, 'leg' | 'progress' | 'ranking' | 'queue'> {
+  hostView(now: number): Pick<HostState, 'leg' | 'progress' | 'ranking' | 'queue'> {
     const leg = this.legV;
     const s0 = latLonToWorld(leg.start.lat, leg.start.lon);
     const progress: StepProgressView[] = [];
@@ -314,7 +321,9 @@ export class RaceEngine {
           team: id, step: row.step, arrivedAt: row.arrived_at, openedAt: row.clue_opened_at, startedAt: row.task_started_at, completedAt: row.completed_at, branch: row.branch,
           submittedAt: row.submitted_at, decidedAt: row.decided_at, rejections: row.rejections, wrongAnswers: row.wrong_answers, branchSwitches: row.branch_switches,
           branchOpenedAt: row.branch_opened_at, lockedUntil: row.locked_until, pending: answers.at(-1)?.s === 'pending', approvalWaitSeconds: row.approval_wait_seconds,
-          answers: answers.map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, branch: a.b, ...(a.n ? { note: a.n } : {}) })), note: row.host_note,
+          answers: answers.map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, branch: a.b, ...(a.n ? { note: a.n } : {}), ...(a.c !== undefined ? { correct: a.c } : {}) })), note: row.host_note,
+          // Phase 8B: the Host sees the picks + the live x/5 past the 70-minute mark (louvreView: the same numbers as the team's card)
+          picks: parsePicks(row), hintCorrect: louvreView(leg, i, row, this.zones[i]!, now)?.hintCorrect ?? null,
         });
       }
       return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, startAt: r.startAt, finishAt: r.finishAt, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null, approvalWaitMs: this.waitMs(id) }];
@@ -339,7 +348,11 @@ export class RaceEngine {
         steps: leg.steps.map((s, i) => {
           const z = this.zones[i]!;
           const branches = s.type === 'detour' ? s.branches.map((b) => ({ id: b.id, title: b.name, ...pick(branchZone(leg, this.zones, i, b.id)!), proof: b.task.kind === 'free' })) : undefined;
-          return { id: s.id, type: s.type, label: s.label, ...pick(z), proof: s.type === 'challenge' && s.task.kind === 'free', ...(branches ? { branches } : {}) };
+          const lv = s.type === 'challenge' && s.task.kind === 'louvre' ? s.task.louvre : undefined;
+          return {
+            id: s.id, type: s.type, label: s.label, ...pick(z), proof: s.type === 'challenge' && s.task.kind === 'free', ...(branches ? { branches } : {}),
+            ...(lv ? { louvre: { hints: [lv.hints.countAtMinutes, lv.hints.correctAtMinutes] as [number, number] } } : {}),
+          };
         }),
         vehicles: leg.vehicles, bundled: BUNDLED_LEGS, issues: this.issues,
         media: r2Names(leg), penalties: { retryLockMinutes: leg.penalties.retryLockMinutes, branchSwitchLockMinutes: leg.penalties.branchSwitchLockMinutes }, stuckMinutes: leg.hostAlerts.stuckMinutes,
@@ -400,7 +413,7 @@ export class RaceEngine {
     const pit = this.legV.steps[r.step]?.type === 'pit_stop';
     return {
       status: this.statusV, startAt: r.startAt, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
-      card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now) : null,
+      card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now, this.zones) : null,
       checkinAt: pit && r.finishAt === null && r.penaltyMinutes > 0 && p.arrivedAt !== null ? p.arrivedAt + r.penaltyMinutes * 60_000 : null,
       officialMs: this.official(team, r),
     };
@@ -408,7 +421,7 @@ export class RaceEngine {
 
   private cards(team: string, r: TeamRace, now: number) {
     const out = [];
-    for (let i = 0; i <= Math.min(r.step, this.legV.steps.length - 1); i++) out.push(cardOf(this.legV, i, this.row(team, i, r), now));
+    for (let i = 0; i <= Math.min(r.step, this.legV.steps.length - 1); i++) out.push(cardOf(this.legV, i, this.row(team, i, r), now, this.zones));
     return out;
   }
 

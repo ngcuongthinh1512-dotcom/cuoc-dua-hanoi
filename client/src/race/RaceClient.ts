@@ -45,6 +45,7 @@ export class RaceClient {
   welcome(w: Welcome, simTime: number) {
     this.teams = w.teams;
     this.setView(w.view);
+    this.deps.hud?.feed(w.feed ?? [], w.teams); // Phase 8B: the public feed so far (a Phase 8 welcome has none)
     if (w.showStartOrder && w.startOrder) this.deps.hud?.startOrder(w.startOrder, simTime);
     // SPEC §8.10: back after the check-in, or after the Host ended the race (read-only) → spectator at once
     if (w.view?.finishAt != null || w.view?.status === 'finished') this.deps.finished?.(false);
@@ -62,6 +63,10 @@ export class RaceClient {
     }
     if (m.t === 'book') return this.deps.hud?.showBook(m.cards), true;
     if (m.t === 'zone') return this.deps.hud?.zone(m.teams, this.teams), true;
+    // Phase 8B (docs/plans/phase8b.md §G, critic S3): the public feed line → RaceHud.feed (track C draws it); the "Ghi
+    // nguồn" answer after the finish → RaceHud.credits (track C, ui/Credits.ts)
+    if (m.t === 'feed') return this.deps.hud?.feed([m], this.teams), true;
+    if (m.t === 'credits') return this.deps.hud?.credits(m.items), true;
     return false;
   }
 
@@ -103,6 +108,25 @@ export class RaceClient {
   /** "Nhận thử thách" (a card with a teaser). */
   accept(step: string) {
     this.deps.send({ t: 'race', op: 'accept', step });
+  }
+
+  // Phase 8B (docs/plans/phase8b.md §C, §G): the Louvre room. TODO(phase8b track B): frame() sends refresh() once at each
+  // card.task.louvre.hintAt[i] + lockEndSlackMs (like lockDone) unless the card already has that hint.
+  /** A button under an artwork (on = light it); from anywhere: no pose first. */
+  pick(step: string, art: string, on: boolean) {
+    this.deps.send({ t: 'race', op: 'pick', step, art, on });
+  }
+  /** The lock button in the middle of the room: the pose first (the server checks it stands in the step's zone). */
+  lock(step: string) {
+    this.op({ t: 'race', op: 'lock', step });
+  }
+  /** The card again (`race view`, 0 rows): at a hint mark, the team standing still. */
+  refresh() {
+    this.deps.send({ t: 'race', op: 'view' });
+  }
+  /** "Ghi nguồn" in a race: items come back once the team finished / the race is over, else notice creditsLocked. */
+  credits() {
+    this.deps.send({ t: 'race', op: 'credits' });
   }
 
   private sendOp(m: RaceOp, now: number) {

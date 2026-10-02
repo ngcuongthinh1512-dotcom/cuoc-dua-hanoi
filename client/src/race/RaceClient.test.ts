@@ -1,7 +1,8 @@
-import type { BoxInfo, ClientMessage, RaceView, Welcome } from '@race/shared/protocol';
+import type { BoxInfo, ClientMessage, FeedMessage, RaceView, Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
 import { raceClient } from '../config.ts';
 import { boxInReach, matAt, RaceClient, raceClock } from './RaceClient.ts';
+import type { RaceHud } from './ui/RaceHud.ts';
 
 const view = (o: Partial<RaceView> = {}): RaceView => ({ status: 'running', startAt: null, finishAt: null, penaltyMinutes: 0, card: null, checkinAt: null, officialMs: null, ...o });
 const pit = (o: Partial<RaceView> = {}) =>
@@ -134,5 +135,32 @@ describe('Phase 8 ops (D7, D8, D9)', () => {
     c.accept('T2');
     expect(sent).toEqual([{ t: 'race', op: 'answer', step: 'T1', text: 'bảy' }, { t: 'race', op: 'answer', step: 'D1', text: '' }, { t: 'race', op: 'branch', step: 'D1', branch: 'A' }, { t: 'race', op: 'accept', step: 'T2' }]);
     expect(ops).toEqual([]);
+  });
+});
+
+describe('Phase 8B: Louvre room ops + feed / credits routing (docs/plans/phase8b.md §G)', () => {
+  it('pick / view / credits go out at once; lock goes through op (pose first)', () => {
+    const sent: ClientMessage[] = [];
+    const ops: ClientMessage[] = [];
+    const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), op: (m) => ops.push(m), serverNow: () => 0 });
+    c.pick('T3', 'art-07', true);
+    c.pick('T3', 'art-07', false);
+    c.refresh();
+    c.credits();
+    c.lock('T3');
+    expect(sent).toEqual([{ t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: true }, { t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: false }, { t: 'race', op: 'view' }, { t: 'race', op: 'credits' }]);
+    expect(ops).toEqual([{ t: 'race', op: 'lock', step: 'T3' }]);
+  });
+
+  it('welcome.feed, a feed line and the credits reach the HUD (team names from welcome.teams)', () => {
+    const got: unknown[] = [];
+    const hud = { setView() {}, feed: (ms: unknown, teams: unknown) => got.push(['feed', ms, teams]), credits: (items: unknown) => got.push(['credits', items]) } as unknown as RaceHud;
+    const c = new RaceClient({ hud, send: () => {}, serverNow: () => 0 });
+    const teams = [{ slot: 1, id: 't1', name: 'Đội Đỏ', colour: '#f00', online: true }];
+    const line: FeedMessage = { t: 'feed', at: 5, slot: 1, ok: false, minutes: 3 };
+    c.welcome({ teams, view: null, feed: [line], showStartOrder: false, startOrder: null } as unknown as Welcome, 0);
+    expect(c.message(line)).toBe(true);
+    expect(c.message({ t: 'credits', items: [] })).toBe(true);
+    expect(got).toEqual([['feed', [line], teams], ['feed', [line], teams], ['credits', []]]);
   });
 });

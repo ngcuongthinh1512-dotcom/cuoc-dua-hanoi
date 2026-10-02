@@ -142,7 +142,7 @@ describe('Host bot (D18, pure)', () => {
 
 describe('sim report numbers (D18)', () => {
   const row = (team: string, step: string, answers: StepProgressView['answers'], branchSwitches = 0): StepProgressView => ({
-    team, step, arrivedAt: null, openedAt: null, startedAt: null, completedAt: null, branch: null, submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers, note: '',
+    team, step, arrivedAt: null, openedAt: null, startedAt: null, completedAt: null, branch: null, submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers, note: '', picks: [], hintCorrect: null,
   });
   const a = (id: number, status: StepProgressView['answers'][number]['status']) => ({ id, text: 'x', at: 0, status, branch: null });
 

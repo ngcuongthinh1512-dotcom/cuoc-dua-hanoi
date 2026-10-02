@@ -139,7 +139,7 @@ describe('RaceRoom', () => {
     await server.getWorker().evictDurableObject('RaceRoom', { name: RACE, webSockets: 'close' });
     const sql = await server.getWorker().getDurableObjectStorage('RaceRoom', { name: RACE });
     expect(await sql.exec('SELECT COUNT(*) AS n FROM teams')).toEqual([{ n: 2 }]);
-    expect(await sql.exec("SELECT value FROM meta WHERE key = 'schema'")).toEqual([{ value: '3' }]); // Phase 8 schema v3
+    expect(await sql.exec("SELECT value FROM meta WHERE key = 'schema'")).toEqual([{ value: '4' }]); // Phase 8B schema v4
     const s = await openSocket(server, RACE, hostToken);
     expect((await s.next<Welcome>()).teams).toHaveLength(2);
     s.close();

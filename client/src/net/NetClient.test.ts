@@ -80,7 +80,7 @@ class FakeSocket implements Socket {
 const welcome = (v = PROTOCOL_VERSION): Welcome => ({
   t: 'welcome', v, race: 'paris', serverMs: Date.now(), status: 'lobby', role: 'team', teams: [],
   movement: { footSpeed: 4, bikeSpeedMultiplier: 1.3 }, presence: { renderRadius: 300, showOthersOnMinimap: false, interestRadius: 500 },
-  pose: null, raceTime: null, bikes: [], boxes: [], view: null, startOrder: 1, showStartOrder: false, start: null,
+  pose: null, raceTime: null, bikes: [], boxes: [], view: null, startOrder: 1, showStartOrder: false, start: null, feed: [],
 });
 
 describe('NetClient (fake socket, fake timers)', () => {

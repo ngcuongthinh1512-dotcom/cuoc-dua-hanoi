@@ -175,15 +175,16 @@ Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 
 | `media` | không | `[]` | Hình / liên kết của đề bài (mục 7.2); chỉ tới máy đội khi đề bài đã mở (sau "Nhận thử thách"; nhánh: sau khi mở hòm nhánh) |
 | `location` | không | `null` | `null` = làm tại điểm vừa tới; hoặc một khối điểm như ở đầu mục 7 (tên, tọa độ, vùng, bãi xe) = nơi thẻ ghi "Địa điểm: …" để đội tới làm (câu trả lời vẫn gõ được ở bất kỳ đâu). Của một **nhánh Lựa chọn kép** thì đó cũng là nơi đứng của hòm nhánh |
 | `kind` | không | `"answer"` | Kiểu nhiệm vụ, xem dưới |
-| `verification` | không | `"auto"` | `"host_approval"` = **Host duyệt tay** trên trang Host (cách của chặng thật): `kind: "answer"` → đội gõ đáp án trong game, Host thấy câu trả lời + đáp án tham khảo, bấm **Duyệt** (đội nhận mật thư kế ngay) hoặc **Phạt** (đội chờ `retryLockMinutes` phút rồi trả lời lại); `kind: "free"` → đội tự mở Messenger ở ngoài trò chơi, gửi ảnh kèm **mã bài nộp** `<tên đội>-<mã bước>[-<mã nhánh>]`, rồi bấm "Tôi đã gửi bài – chờ Host duyệt" trên thẻ, Host duyệt. `"auto"` (tùy chọn) = máy so với `answers`: đúng thì xong ngay, sai thì "Chưa đúng" (không khóa) |
+| `verification` | không | `"auto"` | `"host_approval"` = **Host duyệt tay** trên trang Host (cách của chặng thật): `kind: "answer"` → đội gõ đáp án trong game, Host thấy câu trả lời + đáp án tham khảo, bấm **Duyệt** (đội nhận mật thư kế ngay) hoặc **Phạt** (đội chờ `retryLockMinutes` phút rồi trả lời lại); `kind: "free"` → đội tự mở Messenger ở ngoài trò chơi, gửi ảnh kèm **mã bài nộp** `<tên đội>-<mã bước>[-<mã nhánh>]`, rồi bấm "Tôi đã gửi bài – chờ Host duyệt" trên thẻ, Host duyệt. `"auto"` (tùy chọn) = máy so với `answers`: đúng thì xong ngay, sai thì "Chưa đúng" (không khóa), **trừ `kind: "louvre"`**: máy chủ chấm lựa chọn trong phòng, sai thì khóa `retryLockMinutes` (mục 7.5) |
 | `answers` | khi `auto` (trống = CÒN TRỐNG) | `[]` | Các đáp án chấp nhận (không phân biệt hoa thường, dấu, khoảng trắng thừa: `"Bảy"`, `"BAY"`, `"bảy "` coi như nhau). `["7", "bảy"]`. Với `host_approval`: Host thấy chúng làm đáp án tham khảo nếu `referenceAnswers` trống. **Không bao giờ** gửi cho đội |
 | `referenceAnswers` | không | `[]` | **Đáp án tham khảo chỉ Host thấy** (hàng chờ duyệt trên trang Host), vd. `["Pont Alexandre III", "cầu Alexandre III"]`. **Không bao giờ** gửi cho đội; `leg:check` cảnh báo nếu nó lọt vào chữ đội đọc |
 | `retryLockMinutes` | không | `null` | Số phút đội phải chờ sau khi Host bấm **Phạt** nhiệm vụ này; `null` = theo `penalties.retryLockMinutes` (3); `0` = không khóa |
 | `proofInstruction` | khi `kind: "free"` + `host_approval` | `""` | Hướng dẫn đội gửi bài (vd. "Chụp màn hình và gửi Messenger cho Host kèm mã bài nộp"). Nhiệm vụ gõ đáp án trong game (`kind: "answer"`) không cần |
 | `timeLimitMinutes` | không | `null` | Giới hạn thời gian làm (phút), số dương; `null` = không giới hạn. Hiện tại chỉ hiện chữ "giới hạn N phút" trên thẻ, chưa tính giờ |
+| `louvre` | khi `kind: "louvre"` | (không có) | Phòng Louvre: 23 tác phẩm + mốc gợi ý (mục 7.5). Kiểu khác mà có khối này: CẢNH BÁO (bị bỏ qua) |
 | `params` | không | (không có) | Tham số mini-game cho các kiểu khác (vị trí vật, ảnh đích, hướng...). Lưu nguyên, **chưa kiểm** và **không bao giờ gửi** cho đội (các kiểu mini-game chưa có trong game) |
 
-**Kiểu nhiệm vụ (`kind`)**: `answer` (đội **gõ câu trả lời trong game**: ô gõ trên thẻ thử thách, gõ được ở bất kỳ đâu, mọi câu trả lời được lưu và hiện lại trên thẻ cho chính đội), `free` (đội **nộp ảnh** qua Messenger cho Host duyệt). Các kiểu mini-game `find_objects`, `delivery`, `observe_answer`, `cipher`, `photo_match`, `binocular_scan`, `timed_drive`, `memory_ui` **chưa có trong game** (hoãn): `leg:check` CẢNH BÁO và máy chủ xử lý như `answer`; hãy dùng liên kết ngoài (`media`) + `answer`. Tham số (nếu đã biết) để vào `params`: file vẫn hợp lệ, **không cần viết lại** sau này. `kind: "free"` với `verification: "auto"` bị cảnh báo (không có đáp án để chấm): dùng `host_approval`.
+**Kiểu nhiệm vụ (`kind`)**: `answer` (đội **gõ câu trả lời trong game**: ô gõ trên thẻ thử thách, gõ được ở bất kỳ đâu, mọi câu trả lời được lưu và hiện lại trên thẻ cho chính đội), `free` (đội **nộp ảnh** qua Messenger cho Host duyệt), `louvre` (**phòng Louvre**, Thử thách 3: đội chọn tác phẩm bằng nút trong phòng, máy chủ tự chấm; mục 7.5). Các kiểu mini-game `find_objects`, `delivery`, `observe_answer`, `cipher`, `photo_match`, `binocular_scan`, `timed_drive`, `memory_ui` **chưa có trong game** (hoãn): `leg:check` CẢNH BÁO và máy chủ xử lý như `answer`; hãy dùng liên kết ngoài (`media`) + `answer`. Tham số (nếu đã biết) để vào `params`: file vẫn hợp lệ, **không cần viết lại** sau này. `kind: "free"` với `verification: "auto"` bị cảnh báo (không có đáp án để chấm): dùng `host_approval`.
 
 ### 7.2 `media`: hình và liên kết
 
@@ -208,6 +209,54 @@ Chặng thật dùng `"verification": "host_approval"`: game không tự chấm,
 - Nhiệm vụ ảnh (`kind: "free"`): Host nhận ảnh qua Messenger rồi có thể bấm **"Duyệt (đã nhận ảnh)"** ở ô của bước / nhánh trong ma trận tiến độ, không cần chờ đội bấm "Tôi đã gửi bài".
 - **Cảnh báo kẹt:** đội làm cùng một thử thách / nhánh quá `hostAlerts.stuckMinutes` (mặc định 45) phút thì trang Host hiện dòng đỏ + âm báo "Đội X làm Thử thách Y đã n phút", lặp lại mỗi chu kỳ tới khi đội xong (đội đang chờ Host duyệt không bị coi là kẹt: bài đã nằm trong hàng chờ). Để Host gửi **gợi ý riêng cho đội qua Messenger**. Tính ngay trên trang Host nên trang phải đang mở; tải lại trang thì báo lại một lần. **Game không có gợi ý nào** và file chặng không chứa nội dung gợi ý.
 - **Hình mật thư (R2):** mục tải hình lên (mục 7.2).
+- Phòng Louvre (mục 7.5) không cần Host duyệt (máy chủ tự chấm) nhưng **cảnh báo kẹt vẫn áp dụng** như thử thách thường; trang Host hiện số tác phẩm đội đang chọn, số lần chốt sai và x/5 sau mốc gợi ý thứ hai. Ngoại lệ của câu "game không có gợi ý": phòng Louvre có hai gợi ý trong game theo giờ.
+
+### 7.5 Phòng Louvre (`kind: "louvre"`, Thử thách 3)
+
+Một căn phòng kín ngay **dưới hòm của Lộ trình vừa mở** (vào bằng phím F ở hòm, ra bằng F ở cửa), 23 tác phẩm (≈ 15 tranh treo tường + 8 tượng trên bệ) xếp quanh tường **theo thứ tự trong `artworks`**; dưới mỗi tác phẩm một nút (đỏ = chưa chọn, xanh = đã chọn; chỉ đội bấm thấy đèn của mình); nút chốt ở giữa phòng. Đúng = chọn **đúng 5 tác phẩm và không thừa** → mật thư kế ngay. Sai → phạt đếm ngược `retryLockMinutes` phút (lựa chọn giữ nguyên, vẫn bấm / bỏ được, chỉ không chốt được) và mọi đội thấy dòng "Đội X trả lời sai và bị phạt 3 phút" ở góc dưới màn hình. Gợi ý **tính từ lúc mở hòm Lộ trình trước** (không phải lúc vào phòng): phút `countAtMinutes` (40) "Đáp án bao gồm 5 tác phẩm" (riêng đội) và **từ đó tối đa 5 tác phẩm được chọn cùng lúc** (bỏ chọn luôn được); phút `correctAtMinutes` (70) "Đúng x/5", x cập nhật sống theo lựa chọn hiện tại; sau mốc này mỗi lần chốt của đội còn công khai thêm "đúng x/5". Tên tác phẩm **không** hiện trong game.
+
+| Trường | Bắt buộc? | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `task.kind` | có | | `"louvre"` |
+| `task.verification` | | `"auto"` | **Phải** là `"auto"` (khác: LỖI) |
+| `task.answers` | có | | **Đúng 5 mã** tác phẩm thật đang ở Louvre (mã trong `artworks`, không trùng). Chỉ máy chủ biết, **không bao giờ** gửi cho đội |
+| `task.location` | | `null` | **Không dùng** (có: LỖI): phòng nằm ngay dưới hòm vừa mở, nên bước ngay trước phải là một `route_info` có hòm |
+| `louvre.artworks` | có | | **Đúng 23** tác phẩm, thứ tự = thứ tự quanh tường; xáo trộn, đừng để 5 đáp án đứng liền nhau |
+| `artworks[].id` | có | | Mã ngắn trung tính, vd. `"art-07"` (chữ, số, `-` `_`, tối đa 16 ký tự, không trùng); đội thấy mã này |
+| `artworks[].type` | | `"painting"` | `"painting"` (khung trên tường) hoặc `"sculpture"` (bệ sát tường) |
+| `artworks[].image` | | `""` | Tệp tĩnh có sẵn trong game `client/public/art/<tên>`: `"art-NN.webp"` (ảnh) hoặc `"art-NN.glb"` (mô hình 3D, chỉ cho tượng). `""` = chưa có (trong phòng hiện ô đánh số, CÒN TRỐNG). **Không tải lên trang Host** (không dùng R2) |
+| `artworks[].note` | | `""` | Ghi chú **chỉ Host / người soạn** (nơi thật, tên...). Không bao giờ tới máy đội |
+| `artworks[].credit` | khi có `image` (thiếu: CẢNH BÁO) | | Ghi nguồn: `{ "title": tên tác phẩm, "artist": tác giả, "photo": tác giả ảnh / mô hình, "license": giấy phép, "source": "https://…" }`. Chỉ gửi cho đội **sau khi về đích** (bảng "Ghi nguồn") |
+| `credit.license` | có | | Một trong `PD`, `PD-Art`, `CC0`, `CC-BY`, `CC-BY-SA`, `CC-BY-NC`, `CC-BY-NC-SA`, `MIT`. **Cấm** ND (`CC-BY-ND`…), "chỉ dùng cá nhân", không rõ giấy phép (LỖI) |
+| `louvre.hints.countAtMinutes` | | `40` | Phút gợi ý "Đáp án bao gồm 5 tác phẩm" + từ đó tối đa 5 lựa chọn |
+| `louvre.hints.correctAtMinutes` | | `70` | Phút gợi ý "Đúng x/5" (phải lớn hơn `countAtMinutes`: LỖI nếu không) |
+| `task.retryLockMinutes` | | `null` | Phút phạt mỗi lần chốt sai; `null` = `penalties.retryLockMinutes` (3) |
+
+`leg:check` kiểm thêm: đủ 23 tác phẩm, mã không trùng, đúng 5 đáp án có thật; tên hình đúng dạng `art-NN.webp|glb` (`.glb` chỉ cho tượng), hai tác phẩm cùng tệp (CẢNH BÁO), tệp có trong `client/public/art/` chưa (chưa: CÒN TRỐNG) và dung lượng (ảnh ≤ 300 KB, mô hình ≤ 1 MB: CẢNH BÁO); tên / ghi chú của 5 tác phẩm đúng lọt vào chữ đội đọc trước đó (CẢNH BÁO); 5 đáp án đứng liền nhau (kể cả vòng từ cuối về đầu) hay là 5 mục đầu / cuối (CẢNH BÁO: thứ tự trong phòng gợi ý đáp án); `teaser` khác trống (CẢNH BÁO: mốc gợi ý tính từ lúc mở hòm, không phải lúc "Nhận thử thách"); `referenceAnswers` (bị bỏ qua); hai phòng cùng một hòm (CẢNH BÁO); và quét `client/public/credits.json` + từng byte của các tệp trong `client/public/art/` tìm tên / tác giả / ghi chú tác phẩm (LỖI: phải xử lý lại ảnh bằng `npm run process-assets` để xóa metadata).
+
+Ảnh thật: sau khi được duyệt (nguồn, giấy phép, dung lượng), `npm run process-assets` xử lý ảnh gốc thành `client/public/art/art-NN.webp` (xóa metadata, xáo thứ tự) và in ra `credits-snippet.json` (nằm ngoài git) để dán phần `image` + `credit` vào `artworks` của chặng thật. Ví dụ (NỘI DUNG GIẢ, rút gọn; file đầy đủ: `worker/legs/test/louvre.json`):
+
+```json
+{
+  "id": "T3", "type": "challenge", "label": "Thử thách 3",
+  "task": {
+    "title": "(GIẢ) Phòng Louvre",
+    "description": "(GIẢ) Bấm F ở hòm để xuống phòng. Chọn đúng 5 tác phẩm đang trưng bày ở đây rồi bấm nút chốt giữa phòng.",
+    "kind": "louvre", "verification": "auto",
+    "answers": ["art-17", "art-03", "art-21", "art-08", "art-12"],
+    "louvre": {
+      "hints": { "countAtMinutes": 40, "correctAtMinutes": 70 },
+      "artworks": [
+        { "id": "art-01", "type": "painting", "note": "(GIẢ) Tác phẩm 1" },
+        { "id": "art-02", "type": "painting", "image": "art-02.webp", "note": "(GIẢ) Tác phẩm 2",
+          "credit": { "title": "(GIẢ) Tranh 2", "artist": "(GIẢ) Họa sĩ 2", "photo": "(GIẢ) Người chụp 2", "license": "PD", "source": "https://example.invalid/gia/art-2" } },
+        { "id": "art-04", "type": "sculpture", "note": "(GIẢ) Tác phẩm 4" }
+      ]
+    }
+  }
+}
+```
+(`artworks` thật phải có đủ 23 mục.)
 
 ## 8. Cách lấy tọa độ và xem điểm đã đặt đúng chỗ chưa
 

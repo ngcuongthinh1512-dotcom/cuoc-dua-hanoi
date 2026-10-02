@@ -370,6 +370,25 @@ Object.assign(PRESETS, {
   ),
 });
 Object.assign(VIEWPORT, { 'p8-card-answer-small': { width: 1024, height: 640 } });
+// Phase 8B (docs/plans/phase8b.md §I): p8b-* presets, offline stand-ins only (`npm run screenshot -- p8b` runs the group). The
+// foundation fixed the NAMES; each track only changes the values on its own lines (the params below are placeholders until
+// the track reads them: unknown URL params are ignored, so each preset is the plain player view for now).
+Object.assign(PRESETS, {
+  ...Object.fromEntries(
+    Object.entries({
+      // [B] the room (?louvre=1: the room at the spawn point, 23 placeholders, stand-in card ?card=louvre)
+      'p8b-room': 'louvre=1&card=louvre', // from the door looking in: 23 numbered placeholders (15 frames + 8 plinths), lock button in the middle
+      'p8b-room-button': 'louvre=1&card=louvre&roomAt=button', // next to a green (picked) button: "Bấm F: bỏ chọn"
+      'p8b-room-lock': 'louvre=1&card=louvre-locked&roomAt=lock&lock=120', // at the lock button: the wrong-lock countdown in the middle of the screen
+      // [C] HUD (RaceHud.demo stand-ins)
+      'p8b-card-louvre': 'card=louvre&full', // louvre card: "Đang chọn k/5", "Chốt sai: n lần", hint lines, lock history "· đúng c/5", no input box
+      'p8b-feed': 'feed=3', // 3 feed lines bottom-left above the minimap (feed.corner)
+      'p8b-credits': 'credits=louvre', // "Ghi nguồn" after the finish: credits.json + "Phòng Louvre" lines (stand-in items)
+    }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
+  ),
+  // [D] Host page: a louvre cell "chọn k/23 · ✗n · 💡40 / 💡70 (x/5)" + its title history (demoState)
+  'p8b-host': '/host.html?demo=1',
+});
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { path: { type: 'string' }, name: { type: 'string' } } });
