@@ -996,3 +996,4 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - Thử thách 1 → Thử thách 2: **mật thư của Thử thách 2 xuất hiện ngay** khi Host duyệt xong Thử thách 1 (không cần đi tới đâu).
 - Thử thách 2: sau khi trả lời đúng địa điểm trong hình, đội **di chuyển tới chính địa điểm đã trả lời** để nhận mật thư tiếp theo (hộp mật thư kế tiếp đặt tại địa điểm đáp án; vị trí lấy từ file chặng).
 - Mật thư có thể kèm liên kết (ví dụ video, hình) hiện trên thẻ mật thư và trong Sổ mật thư.
+- Thử thách 1: **không có đáp án tự chấm trong game**; Host (người dùng) xem câu trả lời của đội ở tin nhắn Facebook và **duyệt trực tiếp trên màn hình Host/admin** (nút "Hoàn thành thử thách" / "Phạt 3 phút"). File chặng không cần lưu đáp án cho bước này (chốt 2026-10-02).
