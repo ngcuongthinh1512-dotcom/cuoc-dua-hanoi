@@ -209,7 +209,7 @@ Object.assign(PRESETS, {
   'p6-welcome-back': '/?login=back&npc=0', // "Chào mừng trở lại, Đội Xanh!" + summary + "Tiếp tục"
   'p6-peers': `/?player&npc=0&wait=2&peers=${PEERS}`, // in front of the spawn: walking across, riding (leaning), waving at us
   'p6-debug': `/?player&npc=0&wait=2&debug=1&peers=${PEERS}`, // F3 "Mạng:" line (offline: stand-in count)
-  'p6-boxes': '/?player&npc=0&boxes=L2,-18,-10.9;L1,-25.2,-7.7,opened', // SPEC §17.10: current box (flag, glow) + an opened one
+  'p6-boxes': '/?player&npc=0&boxes=L2,-18,-10.9;L1,-25.2,-7.7,opened', // SPEC §17.10: current box (closed) + an opened one (lid up, stripes dimmed)
   // [C] shared bikes: free (sparkle), another team's (lock), own; claim refused toast. ?bikes=<kind,…> turns the dev
   // bikes (bike.devSpawns) into server-like stand-ins in order (vehicle/Bikes.ts applyStandIns).
   'p6-bikes': '/?player&bikes=free,mine,other&camMode=far&orbit=-64&wait=1', // looking north: free (3 m E, sparkle), Đội Xanh's (blue lock, back right), own (red lock, bottom left)
@@ -229,6 +229,14 @@ const startAt = (n: number) => {
  *  walkway under the metro, Passy side). */
 const ISLAND_SPOT = 4;
 const PIT = (({ x, z }) => ({ x: +x.toFixed(1), z: +z.toFixed(1) }))(latLonToWorld(48.8596, 2.29243));
+/** Clue box on the Concorde (p6-boxes' current one), camera 3 m away 35° right of its front (+z), eye 1.9 m, looking down at it. */
+const boxView = (opened: string) => camAt(-18 + 3 * Math.sin(0.61), -10.9 + 3 * Math.cos(0.61), 1.9, 35, -19) + `&npc=0&boxes=L2,-18,-10.9${opened}`;
+/** The `street` view (Champs-Élysées centre line, facing the Arc) with a box 150 m ahead on that line. */
+const FAR = (() => {
+  const [a, b] = [latLonToWorld(48.8703, 2.306), latLonToWorld(48.8738, 2.295)];
+  const k = 150 / Math.hypot(b.x - a.x, b.z - a.z);
+  return `${PRESETS.street}&npc=0&boxes=L2,${[a.x + (b.x - a.x) * k, a.z + (b.z - a.z) * k].map((v) => v.toFixed(1)).join(',')}`;
+})();
 // Phase 7 (docs/plans/phase7.md §7): p7-* presets, offline stand-ins only (the screenshot server is Vite, no wrangler):
 // RaceHud.demo(query) (?card=, ?book, ?startOrder=, ?finish, ?zone) and Bir-Hakeim / Pit Stop views. Each track adds its
 // presets under its own line only.
@@ -241,6 +249,11 @@ Object.assign(PRESETS, {
   'p7-openbox': `/?player=${PIT.x},${PIT.z + 4},0&boxes=L6,${PIT.x + 0.9},${PIT.z + 2.6}&action=openBox&wait=0.9&orbit=140&npc=0`, // box ahead, opening it, "Bấm F" prompt
   'p7-mat': `/?player=${PIT.x - 4},${PIT.z + 9},-24&boxes=PS,${PIT.x},${PIT.z}&mat&wait=1.5&camMode=far&npc=0`, // mat + host NPC waving at the team
   'p7-celebrate': `/?player=${PIT.x},${PIT.z + 0.5},180&boxes=PS,${PIT.x},${PIT.z}&mat&action=celebrate&wait=1.2&orbit=160&npc=0`,
+  // the organiser's prop (config clueBox): 3/4 front view from 3 m, closed / opened (the lid hinges at the back, −z), and
+  // from 150 m (the reveal radius) up the Champs-Élysées
+  'p7-box-close': boxView(''),
+  'p7-box-opened': boxView(',opened'),
+  'p7-box-far': FAR,
   // [C] clue card (each step type), full card popup, Sổ mật thư, "Xuất phát ở vị trí thứ n", Pit Stop line, clock --:-- / penalty
   ...Object.fromEntries(
     Object.entries({

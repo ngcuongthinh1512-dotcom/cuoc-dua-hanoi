@@ -1,11 +1,12 @@
 // Phase 6 track B (SPEC §17.10, docs/plans/phase6.md §3.20): this team's clue boxes, drawn as ordinary 3D objects (houses
 // hide them, so does turning away) ONLY from what the server sent: welcome.boxes, then `box reveal` once the team is within
 // boxReveal.radius of the current one, `box hide` when it walks away again (opened boxes stay). The client never knows
-// a box before that. Phase 7 (track B): an opened box turns grey in place (F → `race open` → reveal opened: true); a
+// a box before that. Phase 7 (track B): an opened box opens its lid in place (F → `race open` → reveal opened: true); a
 // `kind: 'mat'` box is the Pit Stop mat (race/PitStop.ts); every change reports the zones (NPC exclusion, D20).
 import { matMesh } from '../race/PitStop.ts';
 import type { BoxInfo, ServerMessage } from '@race/shared/protocol';
-import { BoxGeometry, CylinderGeometry, DoubleSide, Group, Mesh, MeshStandardMaterial, PlaneGeometry, type Scene } from 'three';
+import { BoxGeometry, CylinderGeometry, Float32BufferAttribute, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, type Scene, type Vector3 } from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { clueBox as C } from '../config.ts';
 
 export type BoxMessage = Extract<ServerMessage, { t: 'box' }>;
@@ -26,46 +27,52 @@ export function parseBoxes(v: string | null, kind?: 'mat'): BoxInfo[] {
   });
 }
 
+// Geometries and materials shared by every box (4 draw calls and 3 materials each, + the light column); freed only by
+// ClueBoxes.dispose.
 let parts: ReturnType<typeof makeParts> | undefined;
 function makeParts() {
-  const mat = (colour: string, glow: number) => new MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: glow, roughness: 0.6, side: DoubleSide });
-  const { size: s, flag: F } = C;
+  const { base: B, post: P, head: H, lid: L, beam: M, colours: c } = C;
+  const box = (w: number, h: number, d: number, y: number) => new BoxGeometry(w, h, d).translate(0, y + h / 2, 0);
+  const lit = (color: string) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: C.glow, roughness: 0.5 });
+  const across = P.size + 2 * P.proud;
+  const top = B.height + P.height + H.height + L.height;
+  const beam = new CylinderGeometry(M.width / 2, M.width / 2, M.height, 8, 1, true).translate(0, top + M.height / 2, 0);
+  const ys = beam.getAttribute('position');
+  beam.setAttribute('color', new Float32BufferAttribute(Array.from({ length: ys.count }, (_, i) => [1, 1, 1, 1 - (ys.getY(i) - top) / M.height]).flat(), 4)); // alpha 1 → 0 upward
   return {
-    box: new BoxGeometry(s, s, s).translate(0, s / 2, 0),
-    band: new BoxGeometry(s * 1.02, s * 0.22, s * 1.02).translate(0, s / 2, 0),
-    pole: new CylinderGeometry(0.025, 0.025, F.height, 6).translate(0, F.height / 2, 0),
-    cloth: new PlaneGeometry(F.width, F.depth / 2).translate(F.width / 2 + 0.025, 0, 0),
-    open: { box: mat(C.colours.opened, 0), band: mat(C.colours.opened, 0) },
-    shut: { box: mat(C.colours.box, C.glow), band: mat(C.colours.band, C.glow) },
-    poleMat: new MeshStandardMaterial({ color: '#9aa0a6', metalness: 0.6, roughness: 0.4 }),
+    beam,
+    beamMat: new MeshBasicMaterial({ color: c.post, vertexColors: true, transparent: true, depthWrite: false, opacity: 0 }), // normal blending: stays yellow on a bright sky
+    body: mergeGeometries([box(B.size, B.height, B.size, 0), box(H.size, H.height, H.size, B.height + P.height)])!,
+    post: box(P.size, P.height, P.size, B.height),
+    stripes: mergeGeometries([box(P.stripe, P.height, across, B.height), box(across, P.height, P.stripe, B.height)])!, // a "+" through the post: one stripe per face
+    lid: box(L.size, L.height, L.size, 0).translate(0, 0, L.size / 2), // hinge (its back edge) at the origin
+    grey: new MeshStandardMaterial({ color: c.grey, roughness: 0.7 }),
+    yellow: lit(c.post),
+    red: lit(c.stripe),
+    redOpened: new MeshStandardMaterial({ color: c.opened, roughness: 0.8 }),
   };
 }
 
-/** One box: cube with a red band, a pole beside it with a yellow-over-red flag (route-marker colours). */
+/** The organiser's prop (config clueBox): base + head box, lid, yellow post, red stripes; + the light column (closed only). */
 function boxMesh(opened: boolean) {
   const P = (parts ??= makeParts());
   const g = new Group();
   g.name = 'box';
-  const mesh = (geo: BoxGeometry | CylinderGeometry | PlaneGeometry, part: 'box' | 'band' | null, x = 0, y = 0) => {
-    const o = new Mesh(geo, P.poleMat);
-    o.position.set(x, y, 0);
-    o.castShadow = o.receiveShadow = true;
-    o.userData.part = part;
-    return g.add(o), o;
-  };
-  const pole = C.size * 0.75;
-  mesh(P.box, 'box');
-  mesh(P.band, 'band');
-  mesh(P.pole, null, pole);
-  mesh(P.cloth, 'box', pole, C.flag.height - C.flag.depth / 4);
-  mesh(P.cloth, 'band', pole, C.flag.height - (3 * C.flag.depth) / 4);
+  for (const [name, geo, mat] of [['body', P.body, P.grey], ['lid', P.lid, P.grey], ['post', P.post, P.yellow], ['stripes', P.stripes, P.red], ['beam', P.beam, P.beamMat]] as const) {
+    const o = new Mesh(geo, mat);
+    o.name = name;
+    o.castShadow = o.receiveShadow = name !== 'beam';
+    g.add(o);
+  }
+  g.getObjectByName('lid')!.position.set(0, C.base.height + C.post.height + C.head.height, -C.lid.size / 2);
   return paint(g, opened);
 }
 
-/** Shut (glowing yellow / red) or opened (faded) materials, in place. */
+/** Shut or opened (lid swung up about its back edge, stripes dimmed, no light column), in place. */
 function paint(g: Group, opened: boolean) {
-  const m = opened ? parts!.open : parts!.shut;
-  for (const o of g.children) if (o instanceof Mesh && o.userData.part) o.material = m[o.userData.part as 'box' | 'band'];
+  g.getObjectByName('lid')!.rotation.x = opened ? (-C.lid.openDeg * Math.PI) / 180 : 0;
+  (g.getObjectByName('stripes') as Mesh).material = opened ? parts!.redOpened : parts!.red;
+  g.getObjectByName('beam')!.visible = !opened;
   return g;
 }
 
@@ -103,14 +110,31 @@ export class ClueBoxes {
     this.sync();
   }
 
+  /** Drops every box and frees the shared box parts (the next box builds them again). */
+  dispose() {
+    this.reset([]);
+    for (const p of Object.values(parts ?? {})) p.dispose();
+    parts = undefined;
+  }
+
   /** Every frame: a box moves onto the collider under it, and up again when a higher one appears (a bridge deck's chunk
    *  collider loads after the terrain heightfield the first ray hit: the box sat on the Seine bed). Never down: a far
-   *  chunk's colliders unload while its flag is still in view. */
-  update() {
+   *  chunk's colliders unload while its box is still in view. `eye` (the camera): the light column's width and fade. */
+  update(eye?: Vector3) {
+    let near = Infinity;
     for (const d of this.drawn.values()) {
       const y = this.groundAt(d.info.x, d.info.z);
       if (y !== null && (!d.placed || y > d.root.position.y)) (d.root.position.y = y), (d.placed = true);
+      const beam = d.root.getObjectByName('beam');
+      if (!eye || !beam?.visible) continue;
+      const dist = Math.hypot(d.info.x - eye.x, d.info.z - eye.z);
+      beam.scale.x = beam.scale.z = Math.max(1, (dist * C.beam.spread) / C.beam.width);
+      near = Math.min(near, dist);
     }
+    // ponytail: one shared fade (the nearest closed box); the server only ever sends one unopened box at a time
+    if (!eye || !parts) return;
+    parts.beamMat.opacity = C.beam.opacity * MathUtils.smoothstep(near, C.beam.fade[0], C.beam.fade[1]);
+    parts.beamMat.visible = parts.beamMat.opacity > 0; // no draw call up close
   }
 
   private sync() {

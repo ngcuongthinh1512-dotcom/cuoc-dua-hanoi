@@ -1025,12 +1025,20 @@ export const remote = {
   bellRadius: 60, // m: another team's bell (R) is heard this close
   leanSmoothing: 0.15, // s: a remote rider's lean (derived from the turn rate, not on the wire) follows with this lag
 };
-// SPEC §17.10: the team's clue box, drawn only once the server sent its position (within boxReveal.radius); flag + glow.
+// SPEC §17.10: the team's clue box, drawn only once the server sent its position (within boxReveal.radius). Shaped like the
+// organiser's real prop (reference photo, docs/reports/phase7-clue-box-model.md): grey base plate, yellow post with a red
+// stripe down every face, grey box on top under a flat lid overhanging it on all sides. Sizes in m (total ≈ 1.6 m).
 export const clueBox = {
-  size: 0.6, // m, cube on the ground
-  colours: { box: '#f2c230', band: '#d6342b', opened: '#7d7466' }, // yellow / red route-marker look; opened = faded
-  flag: { height: 2.6, width: 0.9, depth: 0.55 }, // m: pole and cloth (yellow over red), visible over parked cars
-  glow: 0.45, // emissive strength of an unopened box (no real light: one more light recompiles every shader)
+  base: { size: 0.65, height: 0.06 },
+  post: { size: 0.32, height: 1.0, stripe: 0.17, proud: 0.006 }, // stripe: width on each face, `proud` m out of the face (no z-fight)
+  head: { size: 0.52, height: 0.5 },
+  lid: { size: 0.58, height: 0.05, openDeg: 100 }, // opened box: the lid swung up this far about its back (−z) edge
+  colours: { grey: '#737b8c', post: '#f2d30a', stripe: '#c8281e', opened: '#94706b' }, // grey: the photo's #565d6b rendered near black in shade; opened = stripes dimmed to grey-red
+  glow: 0.3, // emissive strength of the yellow / red (readable in shade and haze; no real light: one more light recompiles every shader)
+  // Over a CLOSED box only: a thin translucent yellow light column fading upward (the 1.6 m prop is ≈ 6 px tall at 150 m, the
+  // reveal radius). At least `spread` m wide per m of distance (≈ 4 px at 150 m, fov 70, 720p); faded out between fade[1]
+  // and fade[0] m so the prop stands alone up close. Still a 3D object: houses hide it.
+  beam: { height: 10, width: 0.08, spread: 0.008, opacity: 0.85, fade: [12, 35] },
 };
 
 // ── C · shared bikes (worker/src/race/VehicleSpawner.ts, vehicle/Bikes.ts server mode, host/spawnCandidates.ts) ──

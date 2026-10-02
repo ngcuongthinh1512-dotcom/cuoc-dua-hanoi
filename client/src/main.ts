@@ -489,7 +489,7 @@ async function start() {
         nextFakeTick += 1000 / NET.tickHz;
       }
       remote?.update(dt, net ? net.serverNow() : player ? player.simTime * 1000 : 0, camera.position);
-      boxes.update();
+      boxes.update(camera.position);
       if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
       // No HUD while loading or flying (V): hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
       document.body.classList.toggle('hud-off', !worldReady || flying);
