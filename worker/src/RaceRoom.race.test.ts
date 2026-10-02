@@ -281,11 +281,11 @@ describe('race engine restart', () => {
   it('rebuilds the step and the Sổ mật thư from SQLite after an eviction mid-leg', async () => {
     await server.getWorker().evictDurableObject('RaceRoom', { name: flow.race, webSockets: 'close' });
     const b = await joinTeam(server, flow.race, flow.code);
-    expect(W(b).view).toMatchObject({ status: 'running', card: { step: 'T1', status: 'active' }, startAt: expect.any(Number) });
+    expect(W(b).view).toMatchObject({ status: 'running', card: { step: 'T1', status: 'teaser' } /* Phase 8 D22: T1 has a teaser */, startAt: expect.any(Number) });
     expect(W(b).boxes.map((x) => [x.step, x.opened])).toEqual([['L1', true]]);
     b.send({ t: 'race', op: 'book' });
     const book = (await b.until((m) => m.t === 'book')) as { cards: { step: string; status: string }[] };
-    expect(book.cards.map((c) => [c.step, c.status])).toEqual([['L1', 'done'], ['T1', 'active']]);
+    expect(book.cards.map((c) => [c.step, c.status])).toEqual([['L1', 'done'], ['T1', 'teaser']]);
     b.close();
   }, 60_000);
 });

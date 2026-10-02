@@ -5,8 +5,8 @@ import { fmtDuration, fmtMinSec } from '../../host/hostView.ts';
 import { raceClock } from '../RaceClient.ts';
 import { bookEntries, finishLine, formatDuration, formatHms, penaltyLine, StartOrderBanner, summarize, transportLabel, zoneLines } from './format.ts';
 
-const task: TaskView = { title: 'Nhiệm vụ', description: 'Mô tả', media: [], kind: 'answer', verification: 'auto', proofInstruction: '', timeLimitMinutes: 20 };
-const card = (o: Partial<ClueCard>): ClueCard => ({ step: 's', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư', status: 'done', receivedAt: 1000, completedAt: null, ...o });
+const task: TaskView = { title: 'Nhiệm vụ', description: 'Mô tả', media: [], kind: 'answer', verification: 'auto', input: 'text', proofInstruction: '', timeLimitMinutes: 20 };
+const card = (o: Partial<ClueCard>): ClueCard => ({ step: 's', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư', media: [], status: 'done', lockedUntil: null, lockKind: null, answers: [], receivedAt: 1000, completedAt: null, ...o });
 
 describe('card summary', () => {
   it('route: clue + vehicle rule', () => {

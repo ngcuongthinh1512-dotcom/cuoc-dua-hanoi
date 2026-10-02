@@ -69,17 +69,47 @@ export interface BoxInfo {
   r: number;
   /** Phase 7: 'mat' = the Pit Stop mat + host NPC instead of a clue box (also shown for the route leading to it). */
   kind?: 'mat';
+  /** Phase 8 (D7): heading of the box's front, rad (leg destination.yawDeg: 0 = north, + = left / west). */
+  yaw?: number;
+  /** Phase 8 (D6): a detour branch's box (only the chosen branch's is ever sent); the client keys boxes by step|branch. */
+  branch?: string;
 }
 
-// ── Phase 7: race engine (SPEC §8, docs/plans/phase7.md §5.1). Never carries answers, destination names or a later step. ──
-/** A task as the team sees it (SPEC §10.1 task fields minus `answers`; location → only its name). */
+// ── Phase 7: race engine (SPEC §8, docs/plans/phase7.md §5.1); Phase 8 tasks (docs/plans/phase8.md §5.1). Never carries
+// answers, reference answers, Host notes, another team's answers, destination names, a later step, an unopened branch's
+// task or an unopened step's media. ──
+/** A link or an image of a clue / task (leg `media`, D12). image = "r2:<name>" (the client fetches it with its token from
+ *  /api/race/<race>/media/<name>); link = "https://…" (opened in a new tab, never embedded). */
+export interface MediaView {
+  url: string;
+  /** '' = none (the client shows the link's host name). */
+  label: string;
+  kind: 'image' | 'link';
+}
+export type AnswerStatus = 'pending' | 'approved' | 'penalized' | 'wrong' | 'correct';
+/** One answer of THIS team (its card history, SPEC §17.14; never in the Sổ mật thư). '' = "đã gửi bài" of a photo task. */
+export interface AnswerView {
+  /** 1, 2… within the step (host.review names it). */
+  id: number;
+  text: string;
+  /** server ms sent. */
+  at: number;
+  status: AnswerStatus;
+}
+/** A task as the team sees it (SPEC §10.1 task fields minus `answers` / `referenceAnswers` / `params`; location → only its name). */
 export interface TaskView {
   title: string;
   description: string;
-  media: string[];
+  media: MediaView[];
   kind: TaskKind;
   verification: Verification;
+  /** Phase 8: 'text' = an input box (answer typed in game); 'proof' = a photo sent on Messenger (kind free): the card shows
+   *  proofInstruction, the submission code, the contact button and "Tôi đã gửi bài – chờ Host duyệt" (answer ''). */
+  input: 'text' | 'proof';
   proofInstruction: string;
+  /** 'proof' only: leg hostApproval.contactUrl / contactLabel (the Messenger button). */
+  contactUrl?: string;
+  contactLabel?: string;
   timeLimitMinutes: number | null;
   /** Task somewhere else (leg task.location.name); absent = at the point just reached. */
   place?: string;
@@ -88,10 +118,17 @@ export interface BranchView {
   id: string;
   name: string;
   summary: string;
-  task: TaskView;
+  /** Phase 8 (§17.16): ONLY for the chosen branch once its box is opened (the task is inside the box). */
+  task?: TaskView;
 }
-/** Phase 8 adds 'pending' (waiting for the Host) / 'rejected'. */
-export type CardStatus = 'active' | 'done';
+/** Phase 8 (D5 / D6) card states, derived from step_progress + now on the server (no timer):
+ *  - challenge / opened branch: teaser (hint + "Nhận thử thách") → active (input) → pending (waiting for the Host) →
+ *    locked (the Host's "Phạt": countdown to lockedUntil) → active … → done;
+ *  - detour before its branch box is opened: choose (2 buttons) → goToBranch (walk to the branch box; "Đổi lựa chọn kép")
+ *    ⇄ switchLocked (after a switch: countdown, no box);
+ *  - route_info / pit_stop: active → done.
+ *  Priority: done > pending > locked > active > teaser. */
+export type CardStatus = 'teaser' | 'choose' | 'switchLocked' | 'goToBranch' | 'active' | 'pending' | 'locked' | 'done';
 /** One received clue (SPEC §8.3, §8.11): the current card, and every entry of the Sổ mật thư. */
 export interface ClueCard {
   step: string;
@@ -102,13 +139,30 @@ export interface ClueCard {
   text: string;
   /** route_info only (SPEC §6.5, HUD icon). */
   transport?: Transport;
-  /** challenge (Phase 8: absent until "Nhận thử thách" when there is a teaser). */
+  /** Phase 8: route_info / detour clue media ([] = none). */
+  media: MediaView[];
+  /** challenge, once started (absent while status = 'teaser'). */
   task?: TaskView;
-  /** detour: both branches (SPEC §8.4). */
+  /** detour: both branches' name + summary (SPEC §8.4); the chosen one's task once its box is opened. */
   branches?: BranchView[];
   /** detour: the branch the team took, null = none yet. */
   branch?: string | null;
+  /** detour: the chosen branch's box has been opened (its task is on the card). */
+  branchOpened?: boolean;
+  /** detour: how many times the team switched branch (each switch = a branchSwitchLockMinutes countdown). */
+  switches?: number;
+  /** detour: minutes of one switch (the confirm text of "Đổi lựa chọn kép"). */
+  switchPenaltyMinutes?: number;
+  /** challenge / branch: minutes of the Host's "Phạt" (task.retryLockMinutes ?? penalties.retryLockMinutes; may be 0.1 in
+   *  a test leg: never hard-code "3"). */
+  retryPenaltyMinutes?: number;
   status: CardStatus;
+  /** server ms the countdown ends (status locked / switchLocked), else null. The client flips the card itself at that time
+   *  (+ raceClient slack) and re-sends one pose so the server checks the branch box (D9). */
+  lockedUntil: number | null;
+  lockKind: 'retry' | 'switch' | null;
+  /** This team's answers to this step (detour: the current branch only), oldest first, at most NET.answerHistory. */
+  answers: AnswerView[];
   /** server ms the team got this clue / finished this step. */
   receivedAt: number;
   completedAt: number | null;
@@ -139,17 +193,61 @@ export interface ZoneMember {
   /** server ms it entered the zone. */
   since: number;
 }
-/** Host table rows (SPEC §8.1 step_progress, the Phase 7 subset; Phase 8 / 10 add the rest). */
+/** Host table rows (SPEC §8.1 step_progress; Host only). */
 export interface StepProgressView {
   team: string;
   step: string;
   arrivedAt: number | null;
   /** The clue of this step reached the team (= the previous step's completion; step 1: its start time / first login). */
   openedAt: number | null;
+  /** Task started ("Nhận thử thách", or the clue when there is no teaser); detour: see branchOpenedAt. */
   startedAt: number | null;
   completedAt: number | null;
   branch: string | null;
+  // Phase 8 (docs/plans/phase8.md §5.1)
+  /** server ms of the last answer sent for the Host / of the last decision. */
+  submittedAt: number | null;
+  decidedAt: number | null;
+  /** "Phạt" count, wrong `auto` answers, branch switches. */
+  rejections: number;
+  wrongAnswers: number;
+  branchSwitches: number;
+  /** detour: server ms the chosen branch's box was opened (its task started), null = not yet. */
+  branchOpenedAt: number | null;
+  /** server ms a retry / switch countdown ends (may be past: compare with serverMs). */
+  lockedUntil: number | null;
+  /** The last answer waits for the Host. */
+  pending: boolean;
+  /** SPEC §8.9: s waited for Host decisions (deducted from the official time unless hostApproval.approvalWaitCounts). */
+  approvalWaitSeconds: number;
+  /** Every answer of this step, all branches, with the Host's note per decision. */
+  answers: (AnswerView & { branch: string | null; note?: string })[];
+  /** The Host's note on this step ("Lưu ghi chú"); never sent to the team. */
+  note: string;
 }
+/** Phase 8 (D10 / D16): one answer waiting for the Host (HostState.queue, oldest first). */
+export interface ReviewItem {
+  team: string;
+  step: string;
+  /** The step's label ("Thử thách 2"). */
+  label: string;
+  branch: string | null;
+  /** AnswerView.id: host.review names it. */
+  id: number;
+  /** '' = "đã gửi bài qua Messenger" (photo task: compare with submitCode). */
+  text: string;
+  at: number;
+  /** task.referenceAnswers, else task.answers (Host only). */
+  reference: string[];
+  /** The step's Host note so far. */
+  note: string;
+  /** Minutes the "Phạt" button locks (task.retryLockMinutes ?? penalties.retryLockMinutes). */
+  lockMinutes: number;
+}
+
+/** Phase 8 (SPEC §8.9 (2), docs/plans/phase8.md §12 q16): the code a team pastes with its photo on Messenger and the Host
+ *  sees in the review queue: "<team name>-<step>[-<branch>]" (one pending answer per team at a time: no random part). */
+export const submitCode = (teamName: string, step: string, branch?: string | null) => `${teamName}-${step}${branch ? `-${branch}` : ''}`;
 /** SPEC §13.6 / §13.8 ranking: finished teams by official time, then the others by step reached. */
 export interface RankRow {
   team: string;
@@ -181,13 +279,34 @@ export type ClientMessage =
   | RaceOp
   | HostMessage;
 
-/** Phase 7 race ops (SPEC §8): F on the current box (open), a task done (stub passes; Phase 8 checks `answer`), standing on
- *  the Pit Stop mat once the penalty wait is over (checkin), Tab (book: the Sổ mật thư is reloaded on every open, §8.11). */
+/** Race ops (SPEC §8): F on the current box (open; Phase 8: also the chosen branch's box, `branch`), standing on the Pit
+ *  Stop mat once the penalty wait is over (checkin), Tab (book: the Sổ mật thư is reloaded on every open, §8.11).
+ *  Phase 8 (docs/plans/phase8.md D5 / D6 / D8), from ANYWHERE (no zone, no foot rule, no trusted pose needed):
+ *  accept = "Nhận thử thách" (a card with a teaser); answer = a typed answer (≤ NET.answerMax; '' = "Tôi đã gửi bài" of a
+ *  photo task); branch = choose a detour branch, or switch to the other one (the client confirmed the penalty). */
 export type RaceOp =
-  | { t: 'race'; op: 'open'; step: string }
+  | { t: 'race'; op: 'open'; step: string; branch?: string }
+  | { t: 'race'; op: 'accept'; step: string }
+  | { t: 'race'; op: 'answer'; step: string; text: string }
+  | { t: 'race'; op: 'branch'; step: string; branch: string }
+  /** @deprecated Phase 7 stub (the task passes inside its zone). Kept only until Phase 8 track A plays answer / branch /
+   *  open{branch}; track A removes it with its Phase 7 tests (docs/reports/phase8-foundation.md). */
   | { t: 'race'; op: 'task'; step: string; branch?: string; answer?: string }
   | { t: 'race'; op: 'checkin' }
   | { t: 'race'; op: 'book' };
+
+/** Phase 8 (D5 / D10): the Host decides on a team's answer. approve / penalize name the answer (`id`); approve without
+ *  `id` = a photo task approved before the team pressed "Tôi đã gửi bài" (the Host already has the photo); note = save the
+ *  step's Host note only. Idempotent: a second decision on the same answer is refused with a host.notice. */
+export interface HostReview {
+  t: 'host.review';
+  team: string;
+  step: string;
+  op: 'approve' | 'penalize' | 'note';
+  id?: number;
+  /** ≤ NET.noteMax; stored with the decision (never sent to the team). */
+  note?: string;
+}
 
 /** Host screen only (Phase 6: minimal Host page; Phase 10: the rest). */
 export type HostMessage =
@@ -205,13 +324,17 @@ export type HostMessage =
    *  later than the server's now + 60 s; a warning when later than the team's first entry (it got the clue before). */
   | { t: 'host.team'; op: 'startAt'; team: string; at: number | null | 'now' }
   /** Phase 7: load a bundled leg (`id`) or a leg file the Host picked (`json` text), lobby only; answer: host.legResult. */
-  | { t: 'host.leg'; id?: string; json?: string };
+  | { t: 'host.leg'; id?: string; json?: string }
+  | HostReview;
 
 // ── server → client ──
 export type ServerNotice =
   | 'bikeLost' | 'bikeGone' | 'bikeParked' | 'walkOnly'
   // Phase 7 (race ops refused / done; texts in client/src/ui/Toasts.ts)
-  | 'raceNotOpen' | 'racePaused' | 'raceOver' | 'boxFar' | 'boxRiding' | 'boxOpened' | 'taskFar' | 'clueNew' | 'penaltyWait';
+  | 'raceNotOpen' | 'racePaused' | 'raceOver' | 'boxFar' | 'boxRiding' | 'boxOpened' | 'taskFar' | 'clueNew' | 'penaltyWait'
+  // Phase 8 (docs/plans/phase8.md D15)
+  | 'answerSent' | 'answerWrong' | 'answerPending' | 'answerLocked' | 'approved' | 'penalized'
+  | 'branchChosen' | 'branchSwitched' | 'branchPending' | 'taskNotStarted';
 export type KickReason = 'badToken' | 'otherDevice' | 'raceClosed' | 'protocol';
 
 export interface Welcome {
@@ -259,6 +382,8 @@ export type ServerMessage =
    *  away again beyond radius + hysteresis. Opened boxes are never hidden. */
   | { t: 'box'; op: 'reveal'; box: BoxInfo }
   | { t: 'box'; op: 'hide'; step: string }
+  /** Phase 8 (D7): the team switched branch: drop that branch's box even if opened (`hide` never drops an opened box). */
+  | { t: 'box'; op: 'remove'; step: string; branch: string }
   /** Phase 7: the team's race state changed (step, start time, status, finish…). */
   | { t: 'race'; view: RaceView }
   /** Phase 7: answer to `race book`: every received card in order (SPEC §8.11; never a later step). */
@@ -300,14 +425,27 @@ export interface HostState {
     timezone: string;
     start: { x: number; z: number };
     /** stepZones(leg) per step (+ branchZone of each detour branch). */
-    steps: { id: string; type: StepType; label: string; name: string; x: number; z: number; r: number; branches?: { id: string; name: string; x: number; z: number; r: number }[] }[];
+    steps: {
+      id: string; type: StepType; label: string; name: string; x: number; z: number; r: number;
+      /** Phase 8: a photo task (kind free): the matrix offers "Duyệt (đã nhận ảnh)" (host.review approve without id). */
+      proof: boolean;
+      branches?: { id: string; name: string; x: number; z: number; r: number; proof: boolean }[];
+    }[];
     vehicles: VehiclesConfig;
     bundled: string[];
     issues: LegIssueView[];
+    /** Phase 8 (D14): the R2 image names the leg refers to ("r2:<name>"): the Host uploads them per race. */
+    media: string[];
+    /** Phase 8: minutes of a "Phạt" (leg default; ReviewItem.lockMinutes has the task's) and of a branch switch. */
+    penalties: { retryLockMinutes: number; branchSwitchLockMinutes: number };
+    /** Phase 8 (D11): hostAlerts.stuckMinutes: the Host page warns when a team is on one challenge / branch this long. */
+    stuckMinutes: number;
   } | null;
   /** Phase 7: step_progress rows (SPEC §8.1) and the ranking (§13.6 / §13.8). */
   progress: StepProgressView[];
   ranking: RankRow[];
+  /** Phase 8 (D10): every answer waiting for the Host, oldest first. */
+  queue: ReviewItem[];
 }
 
 /** Estimated Cloudflare usage (SPEC §3: the Host debug view shows these). */

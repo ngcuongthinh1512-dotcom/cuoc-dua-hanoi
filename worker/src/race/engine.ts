@@ -3,14 +3,14 @@
 // step_progress (cache + writes) and the team race fields in teams.state; it applies steps.ts effects — SQLite first,
 // in one transaction, the cache patched only once it committed, THEN the answers (SPEC §3) — and builds the welcome /
 // host.state parts.
-import { branchZone, jsonProblem, parseLeg, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
+import { branchZone, jsonProblem, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
 import { latLonToWorld } from '@race/shared';
 import type { BoxInfo, HostMessage, HostState, PoseSample, RaceOp, RaceStatus, RaceView, ServerMessage, StepProgressView, Welcome, ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
-import { emptyProgress, getMeta, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
+import { emptyProgress, getMeta, parseAnswers, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { officialMs, ranking } from './ranking.ts';
-import { advance, boxesOf, cardOf, type Progress, type RaceEffect, type RaceInput } from './steps.ts';
+import { advance, boxesOf, cardOf, review, type Progress, type RaceEffect, type RaceInput } from './steps.ts';
 import { verifyTask } from './tasks.ts';
 
 /** Race fields of teams.state (JSON; RaceRoom keeps reconnects / lastSeen / flagged next to them). */
@@ -55,7 +55,7 @@ export interface RaceIO {
   legLoaded(now: number): void;
 }
 
-export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.team' | 'host.leg' }>;
+export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.team' | 'host.leg' | 'host.review' }>;
 
 const STATUS_NOTICE = { lobby: 'raceNotOpen', paused: 'racePaused', finished: 'raceOver' } as const;
 /** host.race op → [from statuses, to]. */
@@ -73,7 +73,8 @@ export class RaceEngine {
   private legV!: Leg;
   private issues: LegIssue[] = [];
   private zones: Zone[] = [];
-  private boxes: (Omit<BoxInfo, 'opened'> | null)[] = [];
+  /** boxesOf: per step, its box(es) (a detour: one per branch), null = none. */
+  private boxes: (Omit<BoxInfo, 'opened'>[] | null)[] = [];
   /** Every place of the leg (step zones + detour branch places), for D21 membership. */
   private places: Zone[] = [];
   private statusV: RaceStatus;
@@ -125,8 +126,9 @@ export class RaceEngine {
     const view = this.view(team, now);
     const boxes: BoxInfo[] = [];
     for (let i = 0; i < r.step; i++) {
-      const b = this.boxes[i];
-      if (b && !b.kind && !boxes.some((o) => o.step === b.step)) boxes.push({ ...b, opened: true });
+      // TODO(phase8 track A, D6): a done detour's chosen branch box, opened
+      const b = this.boxes[i]?.[0];
+      if (b && !b.kind && !b.branch && !boxes.some((o) => o.step === b.step)) boxes.push({ ...b, opened: true });
     }
     const cur = this.currentBox(team);
     if (cur && pose && Math.hypot(pose.x - cur.x, pose.z - cur.z) <= this.legV.boxReveal.radius) boxes.push({ ...cur, opened: false });
@@ -155,10 +157,14 @@ export class RaceEngine {
       if (m.op !== 'checkin') this.io.send(team, { t: 'notice', code: STATUS_NOTICE[this.statusV] });
       return;
     }
+    // Phase 8 (D8, critic N2): answer / accept / branch from anywhere, no trusted pose needed (a team typing right after a reload)
+    if (m.op === 'accept') return this.step(team, { kind: 'accept', step: m.step }, now);
+    if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text }, now);
+    if (m.op === 'branch') return this.step(team, { kind: 'branch', step: m.step, branch: m.branch }, now);
     if (!at) return this.io.send(team, { t: 'notice', code: m.op === 'task' ? 'taskFar' : 'boxFar' });
     const riding = at.mode === 'bike';
     const input: RaceInput =
-      m.op === 'open' ? { kind: 'open', step: m.step, x: at.x, z: at.z, riding }
+      m.op === 'open' ? { kind: 'open', step: m.step, ...(m.branch !== undefined ? { branch: m.branch } : {}), x: at.x, z: at.z, riding }
       : m.op === 'task' ? { kind: 'task', step: m.step, ...(m.branch !== undefined ? { branch: m.branch } : {}), ...(m.answer !== undefined ? { answer: m.answer } : {}), x: at.x, z: at.z, riding }
       : { kind: 'checkin', x: at.x, z: at.z, riding };
     this.step(team, input, now);
@@ -196,6 +202,17 @@ export class RaceEngine {
       this.io.send(m.team, { t: 'race', view: this.view(m.team, now) });
       return this.io.changed(now);
     }
+    if (m.t === 'host.review') {
+      // Phase 8 (D5, D10, D24): any status but finished; idempotent (a second decision is refused, nothing written)
+      if (this.statusV === 'finished') return notice('error', 'Cuộc đua đã kết thúc.');
+      if (!this.io.team(m.team)) return notice('error', 'Không có đội này.');
+      const i = this.legV.steps.findIndex((s) => s.id === m.step);
+      const res = review(this.legV, i, this.teamRows(m.team).get(m.step), m, now);
+      if ('refuse' in res) return notice('warning', res.refuse);
+      // TODO(phase8 track A, D5 / D10): write res.row + event 'review' in one transaction, then `race` + notice approved /
+      // penalized to the team; approve → this.step(m.team, { kind: 'approve', step: m.step, pose }) (complete + settle, S3)
+      return;
+    }
     // host.leg (D11): lobby only, and only before any team entered the game
     const fail = (message: string, issues = [{ level: 'error' as const, where: 'cả file', message }]) => reply({ t: 'host.legResult', ok: false, issues });
     if (this.statusV !== 'lobby' || this.io.teamIds().some((id) => this.io.team(id)?.startOrder != null)) return fail(LEG_LOCKED);
@@ -223,10 +240,11 @@ export class RaceEngine {
     this.io.changed(now);
   }
 
-  /** SPEC §17.10: the box of the team's current step (checkBoxes), null = none. */
+  /** SPEC §17.10: the box of the team's current step (checkBoxes), null = none. TODO(phase8 track A, D6): a detour → the
+   *  chosen branch's box when not locked (+ `opened`); none yet. */
   currentBox(team: string): Omit<BoxInfo, 'opened'> | null {
     const r = this.io.team(team);
-    return (r && this.boxes[r.step]) ?? null;
+    return (r && this.boxes[r.step]?.find((b) => b.branch === undefined)) ?? null;
   }
 
   /** Why the team may not take a bike now (BikeService.onTeam), false = it may: checked in or the race is over (a
@@ -246,8 +264,8 @@ export class RaceEngine {
     if (w) this.refreshZones(new Set([w.key]), now);
   }
 
-  /** host.state parts: leg summary, step_progress, ranking. */
-  hostView(_now: number): Pick<HostState, 'leg' | 'progress' | 'ranking'> {
+  /** host.state parts: leg summary, step_progress, ranking, review queue. */
+  hostView(_now: number): Pick<HostState, 'leg' | 'progress' | 'ranking' | 'queue'> {
     const leg = this.legV;
     const s0 = latLonToWorld(leg.start.lat, leg.start.lon);
     const progress: StepProgressView[] = [];
@@ -256,7 +274,14 @@ export class RaceEngine {
       if (!r) return [];
       for (let i = 0; i <= Math.min(r.step, leg.steps.length - 1); i++) {
         const row = this.row(id, i, r);
-        if (row) progress.push({ team: id, step: row.step, arrivedAt: row.arrived_at, openedAt: row.clue_opened_at, startedAt: row.task_started_at, completedAt: row.completed_at, branch: row.branch });
+        if (!row) continue;
+        const answers = parseAnswers(row);
+        progress.push({
+          team: id, step: row.step, arrivedAt: row.arrived_at, openedAt: row.clue_opened_at, startedAt: row.task_started_at, completedAt: row.completed_at, branch: row.branch,
+          submittedAt: row.submitted_at, decidedAt: row.decided_at, rejections: row.rejections, wrongAnswers: row.wrong_answers, branchSwitches: row.branch_switches,
+          branchOpenedAt: row.branch_opened_at, lockedUntil: row.locked_until, pending: answers.at(-1)?.s === 'pending', approvalWaitSeconds: row.approval_wait_seconds,
+          answers: answers.map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, branch: a.b, ...(a.n ? { note: a.n } : {}) })), note: row.host_note,
+        });
       }
       const wait = [...this.teamRows(id).values()].reduce((n, x) => n + x.approval_wait_seconds * 1000, 0);
       return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, startAt: r.startAt, finishAt: r.finishAt, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null, approvalWaitMs: wait }];
@@ -266,13 +291,17 @@ export class RaceEngine {
         id: leg.id, title: leg.title, timezone: leg.timezone, start: { x: s0.x, z: s0.z },
         steps: leg.steps.map((s, i) => {
           const z = this.zones[i]!;
-          const branches = s.type === 'detour' ? s.branches.map((b) => ({ id: b.id, ...pick(branchZone(leg, this.zones, i, b.id)!) })) : undefined;
-          return { id: s.id, type: s.type, label: s.label, ...pick(z), ...(branches ? { branches } : {}) };
+          const branches = s.type === 'detour' ? s.branches.map((b) => ({ id: b.id, ...pick(branchZone(leg, this.zones, i, b.id)!), proof: b.task.kind === 'free' })) : undefined;
+          return { id: s.id, type: s.type, label: s.label, ...pick(z), proof: s.type === 'challenge' && s.task.kind === 'free', ...(branches ? { branches } : {}) };
         }),
         vehicles: leg.vehicles, bundled: BUNDLED_LEGS, issues: this.issues,
+        media: r2Names(leg), penalties: { retryLockMinutes: leg.penalties.retryLockMinutes, branchSwitchLockMinutes: leg.penalties.branchSwitchLockMinutes }, stuckMinutes: leg.hostAlerts.stuckMinutes,
       },
       progress,
       ranking: ranking(ranks, leg.hostApproval.approvalWaitCounts),
+      // TODO(phase8 track A, D10): every pending answer of every team, oldest first (ReviewItem: reference =
+      // task.referenceAnswers || task.answers, lockMinutes = retryLockMinutes(leg, task))
+      queue: [],
     };
   }
 
@@ -309,7 +338,11 @@ export class RaceEngine {
 
   private progress(team: string, r: TeamRace): Progress {
     const row = this.teamRows(team).get(this.legV.steps[r.step]?.id ?? '');
-    return { step: r.step, arrivedAt: row?.arrived_at ?? null, startedAt: row?.task_started_at ?? null, branch: row?.branch ?? null, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes };
+    const last = parseAnswers(row).at(-1);
+    return {
+      step: r.step, arrivedAt: row?.arrived_at ?? null, startedAt: row?.task_started_at ?? null, branch: row?.branch ?? null, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
+      branchOpenedAt: row?.branch_opened_at ?? null, lockedUntil: row?.locked_until ?? null, pendingId: last?.s === 'pending' ? last.id : null,
+    };
   }
 
   private view(team: string, now: number): RaceView {
@@ -358,14 +391,16 @@ export class RaceEngine {
         edit(e.step).arrived_at = now;
         events.push(['arrive', { step: steps[e.step]!.id }]);
       } else if (e.kind === 'start') Object.assign(edit(e.step), { task_started_at: now, branch: e.branch });
+      // TODO(phase8 track A, D4–D6): accept / answer / branch / switch / openBranch / hideBox (rows + events here, the
+      // hideBox through RaceIO.hideBox before the `race` message)
       else if (e.kind === 'complete') {
         edit(e.step).completed_at = now;
         if (steps[e.step + 1]) edit(e.step + 1).clue_opened_at = now;
         events.push(['complete', { step: steps[e.step]!.id }]);
-        const box = this.boxes[e.step];
-        if (box && !box.kind) out.push({ t: 'box', op: 'reveal', box: { ...box, opened: true } }); // D5: opened at once
+        const box = this.boxes[e.step]?.[0];
+        if (box && !box.kind && !box.branch) out.push({ t: 'box', op: 'reveal', box: { ...box, opened: true } }); // D5: opened at once
         if (steps[e.step + 1]) out.push({ t: 'notice', code: 'clueNew' });
-      } else {
+      } else if (e.kind === 'finish') {
         edit(p.step).completed_at = now;
         events.push(['finish', { officialMs: officialMs({ ...r, finishAt: now, approvalWaitMs: 0 }, true) }]);
       }
@@ -414,8 +449,9 @@ export class RaceEngine {
     for (let i = 0; i <= Math.min(r.step, leg.steps.length - 1); i++) {
       if (i === r.step && this.progress(team, r).arrivedAt === null) break;
       const s = leg.steps[i]!;
-      if (s.type === 'detour') s.branches.forEach((b) => out.add(branchZone(leg, this.zones, i, b.id)!.rack));
-      else out.add(this.zones[i]!.rack);
+      // a detour: only the place of the branch the team chose (Phase 8 critic C1), none before a choice
+      const z = s.type === 'detour' ? branchZone(leg, this.zones, i, this.teamRows(team).get(s.id)?.branch ?? '') : this.zones[i]!;
+      if (z) out.add(z.rack);
     }
     return out;
   }

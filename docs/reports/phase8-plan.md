@@ -1,0 +1,34 @@
+# Phase 8 – tóm tắt kế hoạch (2026-10-02)
+
+Kế hoạch đầy đủ: `docs/plans/phase8.md` (mẫu `phase7.md`: §1 phạm vi, §3 quyết định D1–D25, §4 nền, §5 interface, §6 track, §9 ngân sách, §12 câu hỏi mở). Nguồn luật: SPEC §17.14, §17.16, §8.9, §13.4, `docs/reports/phase8-schema-gaps.md` 1–14. Không đọc / không chép chặng thật (`~/Documents/chang-that/`).
+
+## Làm gì
+- **Thử thách gõ đáp án trong game** (ở bất kỳ đâu sau khi bắt đầu): mọi câu trả lời lưu trong `step_progress.answers` (JSON, 1 dòng ghi / câu); thẻ hiện lịch sử của chính đội; Host **Duyệt / Phạt** + ghi chú + đáp án tham khảo (`referenceAnswers`, chỉ Host); Phạt = khóa `penalties.retryLockMinutes` (3) với đồng hồ đếm ngược trên màn hình đội (cùng ô với phạt Chặng dừng); Thử thách 2 ngay khi duyệt (sẵn có).
+- **Lựa chọn kép**: 2 nút chọn; `boxesOf` sinh **một hòm mỗi nhánh** (`BoxInfo.branch`, `yaw`); chỉ hòm nhánh đã chọn là `currentBox` (luật 150 m) và **chỉ vùng nhánh đã chọn là "điểm của đội"** (`placesOf` theo nhánh: không `arrived_at` / xe vào bãi / "Tại điểm này" ở nơi nhánh không chọn); đề bài nhánh chỉ vào thẻ sau `open{branch}`; hòm đã mở không bao giờ bị gỡ vì khoảng cách; "Đổi lựa chọn kép" (confirm ghi rõ phạt) → `RaceIO.hideBox` (xóa attachment) + `box remove{step, branch}` (op riêng, gỡ cả hộp đã mở), khóa `branchSwitchLockMinutes` (10), mỗi lần đổi một lần phạt, chỉ `pending` chặn đổi (đang khóa 3 phút vẫn đổi được).
+- **Chuột**: thẻ đầy đủ / Sổ mở → nhả pointer lock (link / hình / nút bấm được, Menu không tự bật), đóng → khóa lại; `Enter` mở lại thẻ hiện tại; lịch sử câu trả lời chỉ trên thẻ, **không** ở mục nào của Sổ (§17.14).
+- **Mã bài nộp** nhánh ảnh: `<tên đội>-<bước>[-<nhánh>]` + Copy trên thẻ, Sổ, hàng chờ Host (không số ngẫu nhiên).
+- **Host duyệt**: đi qua `advance` (`approve` + vị trí của đội) → dùng chung `complete()` + `settle()`; xe vào bãi **chỉ khi** đội đứng trong vùng lúc được duyệt (đạp xe ở xa → xe vẫn của đội).
+- **Đếm ngược không cần alarm**: trạng thái tính từ `locked_until` + `now`; client tới 0 tự đổi thẻ và **gửi lại một vị trí** để `checkBoxes` chạy (vòng tick ngủ khi đội đứng im).
+- **Cảnh báo kẹt 45 phút tính trên trang Host** từ `progress` (0 dòng, 0 alarm; âm báo + Notification mỗi chu kỳ).
+- **Media**: `media` chuỗi hoặc `{url, label}`; `r2:<name>` = hình trên R2 (khóa `<race>/<name>`); Host tải lên `PUT /api/race/<r>/media/<name>` (Worker, Host token, ≤ 5 MB jpg/png/webp); đội tải `GET` kèm `Authorization` → Worker → DO `mediaAllowed(team, name)` (chỉ bước / nhánh đã mở) → 404 nếu không; thẻ + Sổ vẽ hình / link.
+- **Schema (tương thích ngược, mọi trường mới có mặc định)**: `referenceAnswers`, `task.retryLockMinutes`, `penalties.retryLockMinutes / branchSwitchLockMinutes`, `hostAlerts.stuckMinutes`, `destination.yawDeg`, `media` cho route / detour; luật: `host_approval` + `answer` không đòi `proofInstruction`; quét lộ đáp án theo thứ tự bước; `[CHƯA NHẬP` = CÒN TRỐNG; nhãn trùng / nhánh không nơi riêng / `kind` chưa làm / phạt < 1 phút = cảnh báo.
+- **Giao thức v3**: op `answer` / `accept` / `branch` / `open{branch}` (bỏ `task`), `host.review {approve|penalize|note, id}`, `ClueCard.status` 8 trạng thái + `lockedUntil` / `lockKind` / `answers` / `branchOpened` / `switches`, `HostState.queue`, `StepProgressView` đầy đủ. Không bao giờ gửi đội: đáp án / đáp án tham khảo / ghi chú Host / câu đội khác / đề bài nhánh chưa mở / tọa độ hòm nhánh chưa chọn / media chưa mở.
+- **SQLite v3**: 4 cột ALTER (`answers`, `locked_until`, `branch_opened_at`, `host_note`; `CREATE` giữ cột v2, ALTER kiểm PRAGMA), không bảng mới; dựng lại sau evict từ `step_progress`. Ước tính +≈ 45 dòng / đội (một lần Duyệt = 7 dòng) → 7 đội ≈ 6 345 dòng, 20 đội ≈ 10 010 (< 20 000); request 20 đội xấu nhất ≈ 36 570 (< 40 000, biên 8,6 %). `maxRaceOps` 30 / phút chỉ đếm `answer` / `accept` / `branch` / `open` (không `checkin`).
+- **Phản hồi critic** (phase8.md §13): 2 chặn + 11 nên sửa đều đúng, **không bác bỏ mục nào**; sửa vào D4–D8, D13–D16, D20, §5, §6, §8, §9, §12; mục nhỏ cũng áp dụng (rẻ).
+- **Không làm** (TODO): mini-game §11, khóa 3 lần sai của `auto`, watermark theo đội, Hoàn tác 10 s, luật phương tiện (Phase 9), soạn chặng (Phase 10).
+
+## Track (nền trước, rồi song song; ghép A → B → C → E → D)
+| Track | Model | File sở hữu | Nghiệm thu |
+|---|---|---|---|
+| Nền (người tích hợp) | Fable/Opus | `shared/src/leg/*`, `shared/src/protocol/*`, `worker/src/db.ts`, chữ ký `steps/engine/RaceClient/RaceHud`, `Toasts.ts`, chặng test, config | `build && test` qua; thẻ detour không chứa `description` nhánh |
+| A Máy chủ | Opus | `worker/src/race/*`, `RaceRoom.ts`, `index.ts`, harness, test | harness: pending → penalize → locked (SQLite trước tin) → approve → mật thư kế; đổi nhánh: hide A, không lộ B tới hết khóa, reveal B sau resend; evict giữa pending / locked; media 404 / 200 / 401 / 403 / 413; ≤ 160 dòng / đội |
+| B Client | Opus | `RaceClient.ts`, `ClueBoxes.ts`, `session.ts`, `main.ts`, `sfx.ts` | hòm theo step\|branch, hide gỡ hộp mở, `boxRotation`, resend vị trí 1 lần khi hết khóa, `fetchMedia` header; kiểm tay 2 trình duyệt + Host |
+| C HUD thẻ | Sonnet | `race/ui/*`, `race.css` | ô gõ + lịch sử + đếm lên / đếm ngược + 2 nút nhánh + Đổi (confirm) + media; 10 preset `p8-card-*` |
+| D leg:check + docs | Sonnet | `scripts/leg-check.ts`, `LEG_FORMAT.md`, `RACE_RULES.md`, chặng test | test luật mới; `mini` 0 lỗi; `paris-demo` chỉ ô trống |
+| E Host + sim | Sonnet | `host/*`, `scripts/sim.ts` | hàng chờ + Duyệt / Phạt / ghi chú, cảnh báo kẹt, ma trận ô cam / khóa / nhánh, tải hình; sim 3 bot về đích với 1 phạt + 1 đổi nhánh, ≤ 160 dòng / đội; `p8-host` |
+
+## Mặc định chờ anh xác nhận (phase8.md §12)
+1. `auto`: vẫn so đáp án 1 dòng (không stub "luôn pass"), không khóa 3 lần sai. 2. Ghi chú Host không gửi cho đội. 3. Mỗi lần đổi nhánh một lần phạt 10 phút. 4. Phạt nhánh ảnh cũng khóa 3 phút (`task.retryLockMinutes: 0` để tắt). 5. Đếm ngược chạy khi Host tạm dừng. 6. Bù giờ chờ duyệt theo SPEC (`approvalWaitCounts: false`). 7. Làm nút "Nhận thử thách" khi có `teaser`. 8. Lịch sử chỉ trên thẻ (đúng §17.14, không ở Sổ); mở lại thẻ bằng Enter. 9. Không ép đánh số nhãn (chỉ cảnh báo trùng). 10. Gõ đáp án ở bất kỳ đâu, kể cả trên xe. 11. Hình theo cuộc đua (tải lại khi diễn tập race khác). 12. Cảnh báo kẹt tính trên trang Host. 13. Nút "Tôi đã gửi bài" không có ô ghi chú. 14. Host duyệt được nhánh ảnh khi đội chưa bấm nút. 15. Đổi nhánh khi đang bị khóa 3 phút: cho, khóa 10 phút thay. 16. Mã bài nộp không số ngẫu nhiên. 17. Host duyệt lúc đội ở xa / đạp xe → xe không vào bãi.
+
+## Tài liệu phải cập nhật khi ghép
+`docs/RACE_RULES.md` (§5–§8, §12), `docs/LEG_FORMAT.md` (trường mới, tải hình, sim Host bot), `TODO.md` (xóa dòng Phase 7/8 đã làm; thêm hoãn §11 của plan), `docs/reports/HANDOFF.md`, `CLAUDE.md` (route media, `host.review`, preset `p8-*`, `?boxes` yaw), README (Host duyệt + tải hình). `docs/SPEC.md` không sửa (điều phối viên ghi §17).

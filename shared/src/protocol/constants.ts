@@ -1,7 +1,9 @@
 // Phase 6 (docs/plans/phase6.md §3): rates and limits BOTH sides must agree on. Client-only tunables stay in
 // client/src/config.ts, race rules in the leg file (movement, presence, vehicles); these are the wire contract.
 // 2 = Phase 7 race engine (race / book / zone messages, welcome.race / startOrder / start, BoxInfo.r).
-export const PROTOCOL_VERSION = 2;
+// 3 = Phase 8 tasks (docs/plans/phase8.md §5.1): race answer / accept / branch / open{branch}, host.review, ClueCard
+//     status / lockedUntil / answers / media, BoxInfo yaw / branch, box remove, HostState.queue.
+export const PROTOCOL_VERSION = 3;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */
@@ -37,6 +39,15 @@ export const NET = {
    *  written (connect event + teams.state = 3 rows each) and logins past it write no `login` event. An honest client
    *  reconnects with a 1–15 s backoff, so it never gets near it. */
   maxConnects: 10,
+  /** Phase 8 (D20): same budget for the race ops that may write a row — answer / accept / branch / open (NOT checkin /
+   *  book: the mat check-in runs every 2 s) — past this per respawnWindowMs the socket is closed (CLOSE.tooFast). */
+  maxRaceOps: 30,
+  /** Phase 8: longest typed answer (the input's maxlength, the server's limit; '' = "đã gửi bài" of a photo task). */
+  answerMax: 200,
+  /** Phase 8: a card carries at most this many of the team's own answers (newest; the HUD shows them all). */
+  answerHistory: 20,
+  /** Phase 8: longest Host note on a review. */
+  noteMax: 500,
   /** SPEC §17.10: the server compares each online team's last pose with its current clue box this often (one sqrt per
    *  team, no SQLite); radius + hysteresis come from the leg file (boxReveal). */
   boxCheckMs: 2_000,
@@ -69,6 +80,18 @@ export const NET = {
   /** Team codes: 6 chars, no 0 / O / 1 / I (SPEC §7). */
   codeLength: 6,
   codeAlphabet: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+} as const;
+
+/** Phase 8 (D12): clue images on R2 (private bucket MEDIA). A leg says "r2:<name>"; the object key is `<race>/<name>`
+ *  (uploaded per race from the Host page); the Worker serves it only to a team that has opened that clue (D13). */
+export const MEDIA = {
+  name: /^[A-Za-z0-9._-]{1,64}\.(jpe?g|png|webp)$/i,
+  /** Leg reference prefix: "r2:<name>". Anything else must be an http(s) link (opened in a new tab, never embedded). */
+  prefix: 'r2:',
+  maxBytes: 5 * 1024 * 1024,
+  types: ['image/jpeg', 'image/png', 'image/webp'],
+  /** Cache-Control: private, max-age of a served image. */
+  cacheSeconds: 86_400,
 } as const;
 
 /** WebSocket close codes the server uses (4000–4999 = application). */

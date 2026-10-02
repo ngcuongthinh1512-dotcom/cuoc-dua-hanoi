@@ -38,11 +38,11 @@ export function summarize(card: ClueCard): CardSummary {
     blocks.push({ branch: null, title: t.title, text: t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes), chosen: false });
   }
   for (const b of card.branches ?? []) {
-    const t = b.task;
-    blocks.push({ branch: b.id, title: b.name, text: b.summary || t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes), chosen: b.id === card.branch });
+    const t = b.task; // Phase 8: only the chosen branch's, once its box is opened
+    blocks.push({ branch: b.id, title: b.name, text: b.summary || (t?.description ?? ''), place: t?.place ?? null, limit: limitText(t?.timeLimitMinutes ?? null), chosen: b.id === card.branch });
   }
   const clue = card.text || (card.type === 'pit_stop' ? 'Hãy về Chặng dừng và đứng trên thảm để về đích.' : '');
-  return { type: card.type, label: card.label, clue, transport: transportLabel(card.transport), blocks, active: card.status === 'active' };
+  return { type: card.type, label: card.label, clue, transport: transportLabel(card.transport), blocks, active: card.status !== 'done' }; // Phase 8: every state but done is "Đang làm" (track C draws them)
 }
 
 /** Duration rounded to the second like the Host page (hostView fmtDuration / fmtMinSec): 125000 → "02:05", past an hour "1:02:05". */
@@ -79,12 +79,12 @@ export interface BookEntry {
 /** SPEC §8.11: the current card (the active one, else the newest) pinned first, then the others in the order received.
  *  Never shows a step number, a locked slot or the total. */
 export function bookEntries(cards: readonly ClueCard[]): BookEntry[] {
-  const idx = cards.map((c) => c.status).lastIndexOf('active');
+  const idx = cards.map((c) => c.status !== 'done').lastIndexOf(true);
   const cur = idx >= 0 ? idx : cards.length - 1;
   const entry = (c: ClueCard, pinned: boolean): BookEntry => ({
     card: c,
     pinned,
-    status: c.status === 'active' ? 'Đang làm' : 'Đã xong',
+    status: c.status !== 'done' ? 'Đang làm' : 'Đã xong',
     received: formatTimeOfDay(c.receivedAt),
     completed: c.completedAt == null ? null : formatTimeOfDay(c.completedAt),
     duration: c.completedAt == null ? null : formatDuration(c.completedAt - c.receivedAt),

@@ -15,6 +15,8 @@ export interface Zone {
   rack: string;
   /** Where that rack stands (the point's bikeParking), null = none in the file (the bike stays where it stands). */
   parking: { x: number; z: number } | null;
+  /** Phase 8 (D7): heading of the box's front, rad (destination.yawDeg; 0 = north, + = left / west, like PlayerState.yaw). */
+  yaw: number;
 }
 
 const rackId = (x: number, z: number) => `rack:${Math.round(x)}_${Math.round(z)}`;
@@ -26,7 +28,7 @@ const xz = (p: { lat: number; lon: number }) => {
 
 const zone = (d: Destination): Zone => {
   const p = latLonToWorld(d.lat, d.lon);
-  return { x: p.x, z: p.z, r: d.radius, name: d.name, rack: rackId(p.x, p.z), parking: d.bikeParking ? xz(d.bikeParking) : null };
+  return { x: p.x, z: p.z, r: d.radius, name: d.name, rack: rackId(p.x, p.z), parking: d.bikeParking ? xz(d.bikeParking) : null, yaw: (d.yawDeg * Math.PI) / 180 };
 };
 
 /** Index-aligned with leg.steps:
@@ -38,7 +40,7 @@ const zone = (d: Destination): Zone => {
 export function stepZones(leg: Leg): Zone[] {
   const out: Zone[] = [];
   const s0 = latLonToWorld(leg.start.lat, leg.start.lon);
-  let prev: Zone = { x: s0.x, z: s0.z, r: LEG_LIMITS.radiusMax, name: leg.start.name, rack: rackId(s0.x, s0.z), parking: null };
+  let prev: Zone = { x: s0.x, z: s0.z, r: LEG_LIMITS.radiusMax, name: leg.start.name, rack: rackId(s0.x, s0.z), parking: null, yaw: 0 };
   leg.steps.forEach((s, i) => {
     const next = leg.steps[i + 1];
     const z =

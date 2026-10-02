@@ -44,6 +44,9 @@ export default {
       if (request.headers.get('Upgrade') !== 'websocket') return json({ ok: false, error: 'expected_websocket' }, 426);
       return env.RACE_ROOM.getByName(race).fetch(new Request(`${url.origin}/ws${url.search}`, request));
     }
+    // Phase 8 (docs/plans/phase8.md D13 / D14): clue images on R2. PUT / HEAD = Host token, R2 directly; GET = team or Host
+    // token in `Authorization: Bearer`, a team only for an image it has opened (the DO says 204 / 404). TODO(phase8 track A).
+    if (/^\/api\/race\/[^/]+\/media\/[^/]+$/.test(pathname)) return json({ ok: false, error: 'not_implemented' }, 501);
     return json({ ok: false, error: 'not_found' }, 404);
   },
 } satisfies ExportedHandler<Env>;

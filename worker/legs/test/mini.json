@@ -25,8 +25,16 @@
         "bikeParking": {
           "lat": 48.8625,
           "lon": 2.2878
-        }
-      }
+        },
+        "yawDeg": 150
+      },
+      "media": [
+        {
+          "url": "https://example.invalid/gia/video-l1",
+          "label": "(GIẢ) Video gợi ý"
+        },
+        "r2:test-gia.jpg"
+      ]
     },
     {
       "id": "T1",
@@ -36,7 +44,8 @@
         "title": "(GIẢ) Câu hỏi ở vườn Trocadéro",
         "description": "(GIẢ) 6 × 7 = ?",
         "media": [
-          "https://example.invalid/gia/vuon-trocadero.jpg"
+          "https://example.invalid/gia/vuon-trocadero.jpg",
+          "r2:test-gia-2.jpg"
         ],
         "location": {
           "name": "Vườn Trocadéro (phía dưới)",
@@ -48,8 +57,12 @@
             "lon": 2.2899
           }
         },
+        "verification": "host_approval",
         "answers": [
           "42"
+        ],
+        "referenceAnswers": [
+          "42 (bốn mươi hai) – GIẢ"
         ],
         "timeLimitMinutes": 10
       },
@@ -86,7 +99,18 @@
             "answers": [
               "7",
               "bảy"
-            ]
+            ],
+            "location": {
+              "name": "Phía bắc chân tháp, lối ra sông",
+              "lat": 48.85878,
+              "lon": 2.29469,
+              "radius": 15,
+              "yawDeg": 135,
+              "bikeParking": {
+                "lat": 48.85899,
+                "lon": 2.29478
+              }
+            }
           }
         },
         {
@@ -108,7 +132,10 @@
                 "lat": 48.8558,
                 "lon": 2.2972
               }
-            }
+            },
+            "referenceAnswers": [
+              "(GIẢ) Ảnh thấy rõ chân tháp phía sau"
+            ]
           }
         }
       ]

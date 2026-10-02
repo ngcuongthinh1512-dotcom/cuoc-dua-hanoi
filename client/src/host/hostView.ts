@@ -1,7 +1,7 @@
 // Minimal Host page, pure part (docs/plans/phase6.md §3.19): host.state → table rows / counter lines. No DOM, so it is
 // testable in Node. Phase 10 replaces the page with SPEC §13; keep the page thin.
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import type { HostState, LegIssueView, QuotaCounters, RaceStatus } from '@race/shared/protocol';
+import type { HostState, LegIssueView, QuotaCounters, RaceStatus, StepProgressView } from '@race/shared/protocol';
 
 /** Durable Object requests as Cloudflare bills them (same formula as worker/src/counters.ts, docs/plans/phase6.md §3.7). */
 export const billableRequests = (c: QuotaCounters) => c.http + c.alarms + Math.ceil(c.wsIn / 20);
@@ -291,9 +291,13 @@ export function demoState(now = 1_000_000): HostState {
     ({ slot, id: `t${slot}`, name, colour, online, code, player, lastSeen: seenAgo === null ? null : now - seenAgo, reconnects, pose: p, flagged, startAt: null, startOrder: null, step: 0, finishAt: null, penaltyMinutes: 0, joinedAt: null, ...race });
   const pt = (lat: number, lon: number, r: number, name: string) => ({ ...(({ x, z }) => ({ x, z }))(latLonToWorld(lat, lon)), r, name });
   const s = (id: string, type: 'route_info' | 'detour' | 'challenge' | 'pit_stop', label: string, p: ReturnType<typeof pt>, branches?: ReturnType<typeof pt>[]) =>
-    ({ id, type, label, name: p.name, x: p.x, z: p.z, r: p.r, ...(branches && { branches: branches.map((b, i) => ({ id: 'AB'[i]!, ...b })) }) });
+    ({ id, type, label, name: p.name, x: p.x, z: p.z, r: p.r, proof: false, ...(branches && { branches: branches.map((b, i) => ({ id: 'AB'[i]!, ...b, proof: i === 1 })) }) });
   const t0 = now - 50 * min;
-  const row = (team: string, step: string, o: number | null, a: number | null, c: number | null, branch: string | null = null) => ({ team, step, openedAt: o, arrivedAt: a, startedAt: c, completedAt: c, branch });
+  const row = (team: string, step: string, o: number | null, a: number | null, c: number | null, branch: string | null = null): StepProgressView => ({
+    team, step, openedAt: o, arrivedAt: a, startedAt: c, completedAt: c, branch,
+    // Phase 8 fields (track E fills the stand-ins it draws)
+    submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches: 0, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers: [], note: '',
+  });
   return {
     t: 'host.state',
     serverMs: now,
@@ -320,6 +324,7 @@ export function demoState(now = 1_000_000): HostState {
       vehicles: { corridorMeters: 150, minDistanceFromCheckpoint: 100, initialPerSegment: [0, 1], spawnIntervalMinutes: 3, spawnChance: 0.3, maxAvailablePerSegment: 1, decoyRatio: 0.4, noSpawnNearPlayerMeters: 120, abandonMeters: 200, abandonSeconds: 60, bikeParking: { offsetMeters: 20, maxBikes: 6 } },
       bundled: ['paris-demo', 'mini'],
       issues: [{ level: 'blank', where: 'Lộ trình 1', message: 'chưa có mật thư (ô trống)' }],
+      media: ['test-gia.jpg', 'test-gia-2.jpg'], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45,
     },
     progress: [
       row('t0', 'L1', t0, t0 + 14 * min, t0 + 15 * min), row('t0', 'T1', t0 + 15 * min, t0 + 19 * min, t0 + 23 * min), row('t0', 'L2', t0 + 23 * min, t0 + 31 * min, t0 + 32 * min),
@@ -334,5 +339,6 @@ export function demoState(now = 1_000_000): HostState {
       { team: 't2', rank: 2, stepIndex: 3, finishAt: null, officialMs: null, gapMs: null },
       { team: 't1', rank: 3, stepIndex: 3, finishAt: null, officialMs: null, gapMs: null },
     ],
+    queue: [],
   };
 }

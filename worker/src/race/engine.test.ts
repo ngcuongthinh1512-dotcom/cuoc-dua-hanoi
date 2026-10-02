@@ -137,6 +137,27 @@ describe('RaceEngine', () => {
     expect(f.teams.get('t0')!.step).toBe(2);
   });
 
+  it('Phase 8 foundation: answer / accept / branch reach the engine without a pose (D8, N2) and write nothing yet; host.review is refused; host.state has the new leg fields', () => {
+    const f = fake();
+    f.teams.set('t0', { ...NEW_TEAM_RACE });
+    const e = new RaceEngine(f.io);
+    e.onHost({ t: 'host.leg', id: 'mini' }, () => {}, 0);
+    f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, step: 1 });
+    e.onHost({ t: 'host.race', op: 'start' }, () => {}, 1);
+    f.log.length = 0;
+    for (const m of [{ t: 'race', op: 'answer', step: 'T1', text: '42' }, { t: 'race', op: 'accept', step: 'T1' }, { t: 'race', op: 'branch', step: 'D1', branch: 'A' }] as const) e.onOp('t0', m, null, 10);
+    expect(f.log).toEqual([]); // no boxFar for a missing pose; TODO(phase8 track A): the transitions
+    const r: ServerMessage[] = [];
+    e.onHost({ t: 'host.review', team: 't0', step: 'T1', op: 'approve', id: 1 }, (m) => r.push(m), 11);
+    expect(r).toEqual([{ t: 'host.notice', level: 'warning', message: expect.any(String) }]);
+    expect(f.log).toEqual([]);
+    const h = e.hostView(12);
+    expect(h.queue).toEqual([]);
+    expect(h.leg).toMatchObject({ media: ['test-gia.jpg', 'test-gia-2.jpg'], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45 });
+    expect(h.leg!.steps.map((s) => [s.id, s.proof, s.branches?.map((b) => b.proof)])).toEqual([['L1', false, undefined], ['T1', false, undefined], ['L2', false, undefined], ['D1', false, [false, true]], ['L3', false, undefined], ['PS', false, undefined]]);
+    expect(h.progress.find((p) => p.step === 'L1')).toMatchObject({ pending: false, answers: [], note: '', lockedUntil: null, branchOpenedAt: null });
+  });
+
   it('D15: a start time after the team\'s check-in is refused; a change for a running team moves its clock, which then only runs forward', () => {
     const f = fake();
     f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, startAt: 100_000, finishAt: 900_000 }).set('t1', { ...NEW_TEAM_RACE, startOrder: 2, joinedAt: 1 });

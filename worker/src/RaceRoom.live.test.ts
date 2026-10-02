@@ -35,7 +35,7 @@ const ticks = (msgs: unknown[]) => msgs.filter(Array.isArray).map((m) => decodeT
 const slotsOf = (msgs: unknown[]) => ticks(msgs).at(-1)?.entries.map((e) => e.slot).sort();
 const hostStates = (msgs: { t?: string }[]) => msgs.filter((m) => m.t === 'host.state') as HostState[];
 const boxMsgs = (msgs: { t?: string }[]) => msgs.filter((m) => m.t === 'box');
-const reveal = { t: 'box', op: 'reveal', box: { step: 'L1', x: L1.x, z: L1.z, opened: false, r: 15 } satisfies BoxInfo };
+const reveal = { t: 'box', op: 'reveal', box: { step: 'L1', x: L1.x, z: L1.z, opened: false, r: 15, yaw: 0 } satisfies BoxInfo };
 const hide = { t: 'box', op: 'hide', step: 'L1' };
 const sqlOf = (race: string) => server.getWorker().getDurableObjectStorage('RaceRoom', { name: race });
 const snapSeq = async (race: string) => {

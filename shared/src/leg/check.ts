@@ -4,7 +4,8 @@
 // the previous point) is injected by the CLI through `LegGeo`; the Durable Object never has those files.
 import { RACE_BBOX } from '../constants.ts';
 import { latLonToWorld } from '../projection.ts';
-import { LEG_LIMITS, type Leg, legSchema, STEP_TYPES } from './schema.ts';
+import { MEDIA } from '../protocol/constants.ts';
+import { LEG_LIMITS, type Leg, legSchema, type MediaItem, STEP_TYPES, type Task } from './schema.ts';
 import { stepZones } from './zones.ts';
 
 export interface LegIssue {
@@ -32,10 +33,14 @@ const FIELD: Record<string, string> = {
   boxReveal: 'hiện hộp mật thư', penalties: 'phạt', movement: 'tốc độ', vehicles: 'xe đạp', clueBook: 'Sổ mật thư', hostApproval: 'Host duyệt',
   specials: 'yếu tố đặc biệt', start: 'điểm xuất phát', steps: 'các bước', type: 'loại bước', label: 'tên bước', clue: 'mật thư',
   transport: 'phương tiện', destination: 'điểm đến', name: 'tên', lat: 'vĩ độ (lat)', lon: 'kinh độ (lon)', radius: 'bán kính',
-  bikeParking: 'bãi xe', branches: 'nhánh', task: 'nhiệm vụ', description: 'mô tả', media: 'ảnh/video', location: 'nơi làm nhiệm vụ',
+  bikeParking: 'bãi xe', branches: 'nhánh', task: 'nhiệm vụ', description: 'mô tả', media: 'hình / liên kết', location: 'nơi làm nhiệm vụ',
   kind: 'kiểu nhiệm vụ', verification: 'cách xác nhận', answers: 'đáp án', proofInstruction: 'hướng dẫn gửi bài',
   timeLimitMinutes: 'giới hạn thời gian (phút)', params: 'tham số mini-game', teaser: 'câu gợi ý', summary: 'mô tả ngắn', yawDeg: 'hướng nhìn (độ)',
   spreadMeters: 'khoảng rải đội (m)', contactUrl: 'link Facebook của Host', contactLabel: 'chữ trên nút gửi bài',
+  // Phase 8 (docs/plans/phase8.md D2)
+  referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
+  hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
+  walkOnlyViolationMinutes: 'phút phạt đi xe ở lộ trình đi bộ', quitTaskMinutes: 'phút phạt bỏ thử thách',
 };
 const TYPE: Record<string, string> = { number: 'một số', string: 'chữ (trong dấu ngoặc kép)', boolean: 'true hoặc false', array: 'danh sách [...]', object: 'một khối {...}' };
 
@@ -52,6 +57,7 @@ export function placeOf(root: unknown, path: readonly PropertyKey[]): string {
       out.push(k === 'steps' ? `Bước ${next + 1}${typeof id === 'string' ? ` (${id})` : ''}` : `nhánh ${typeof id === 'string' ? id : next + 1}`);
       i++;
     } else if (typeof k === 'number') out.push(`mục ${k + 1}`);
+    else if (k === 'label' && path[i - 2] === 'media') out.push('nhãn liên kết'); // not the step's 'tên bước'
     else out.push(FIELD[String(k)] ?? String(k));
   }
   return out.join(' › ') || 'cả file';
@@ -84,6 +90,7 @@ function zodMessage(i: ZodIssue, root: unknown): string {
       if (i.discriminator === 'type')
         return `loại bước "${n(at(root, i.path))}" không có; chỉ dùng: ${STEP_TYPES.join(', ')} (trò chơi này không có Vượt rào / roadblock)`;
       if (i.path.at(-1) === 'transport') return 'phải là {"allowed": "any"} (tự chọn) hoặc {"mandatory": "walk"} (bắt buộc đi bộ)';
+      if (i.path.at(-2) === 'media') return 'phải là một chuỗi ("https://…" hoặc "r2:<tên hình>") hoặc {"url": "…", "label": "…"}';
       return 'không đúng dạng nào được phép';
     case 'not_multiple_of':
       return `phải là bội số của ${n(i.divisor)}`;
@@ -169,8 +176,12 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   // blanks the Host must fill (SPEC §10, §13.1 readiness)
   const blank = (v: string | readonly string[], path: PropertyKey[], what: string) => (v.length ? 0 : add('blank', path, `${what} còn trống`));
   let hostTasks = 0;
+  const labels = new Map<string, number>();
   steps.forEach((s, i) => {
     if (!s.label) add('blank', ['steps', i, 'label'], 'tên bước còn trống');
+    // Phase 8 (gap 12): duplicate labels only warn (no numbering rule imposed, docs/plans/phase8.md §12 q9)
+    else if (labels.has(s.label) && !held(s.label)) add('warning', ['steps', i, 'label'], `tên bước "${s.label}" trùng với bước ${labels.get(s.label)! + 1}: đội và Host khó phân biệt`);
+    else labels.set(s.label, i);
     if (s.type === 'route_info') blank(s.clue, ['steps', i, 'clue'], 'mật thư');
     if (s.type === 'detour') blank(s.clue, ['steps', i, 'clue'], 'lời dẫn Lựa chọn kép');
     const tasks = s.type === 'detour' ? s.branches.map((b, k) => [b.task, ['steps', i, 'branches', k, 'task']] as const) : s.type === 'challenge' ? [[s.task, ['steps', i, 'task']] as const] : [];
@@ -180,23 +191,67 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
       blank(t.description, [...p, 'description'], 'mô tả nhiệm vụ');
       if (t.verification === 'auto' && t.kind !== 'free') blank(t.answers, [...p, 'answers'], 'đáp án (cách xác nhận "auto")');
       if (t.verification === 'auto' && t.kind === 'free') add('warning', [...p, 'kind'], 'nhiệm vụ "free" không tự chấm được: nên dùng cách xác nhận "host_approval"');
-      if (t.verification === 'host_approval') (hostTasks++, blank(t.proofInstruction, [...p, 'proofInstruction'], 'hướng dẫn gửi bài'));
+      // Phase 8 (gap 1): an answer typed in game + Host approval needs no proof instruction / Messenger link; a photo
+      // task (free) does
+      if (t.verification === 'host_approval' && t.kind === 'free') (hostTasks++, blank(t.proofInstruction, [...p, 'proofInstruction'], 'hướng dẫn gửi bài'));
+      if (t.kind !== 'answer' && t.kind !== 'free') add('warning', [...p, 'kind'], `kiểu "${t.kind}" chưa có trong game (hoãn): máy chủ xử lý như "answer" (đội gõ đáp án)`);
     }
+    // Phase 8 (§17.16): each branch has its own box at its task place; without one it stands where the previous box
+    // stood (on top of it). A branch still blank is listed above: its place comes with its content.
+    if (s.type === 'detour')
+      s.branches.forEach((b, k) => {
+        if (!b.task.location && (b.task.title || b.task.description))
+          add('warning', ['steps', i, 'branches', k, 'task', 'location'], 'nhánh không có nơi riêng: hòm nhánh đứng cùng chỗ hòm lộ trình trước (chồng lên nhau); nên cho nhánh một nơi riêng');
+      });
   });
   if (hostTasks && !leg.hostApproval.contactUrl) add('blank', ['hostApproval', 'contactUrl'], 'link Facebook của Host còn trống (có nhiệm vụ Host duyệt)');
+  // Phase 8 (gap 10): "[CHƯA NHẬP …]" = still a placeholder, listed like an empty field (also blocks a careless "Mở cuộc đua")
+  walkStrings(leg, [], (v, path) => held(v) && add('blank', path, `còn giữ chỗ "${v.trim().slice(0, 40)}": nhập nội dung thật`));
+  for (const k of ['retryLockMinutes', 'branchSwitchLockMinutes'] as const)
+    if (leg.penalties[k] < 1) add('warning', ['penalties', k], `phạt dưới 1 phút (${leg.penalties[k]}): chỉ dùng cho chặng test`);
 
-  // SPEC §3 / §8.3: an answer written into a text the team reads before solving it gives it away
-  const texts: [string, PropertyKey[]][] = [];
+  // Phase 8 (D2 rule 5): media = an r2 image name the Host uploads, or an http(s) link
+  const r2 = new Map<string, string>();
+  for (const { item, path } of mediaItems(leg)) {
+    const where = [...path, 'url'];
+    if (item.url.startsWith(MEDIA.prefix)) {
+      const name = item.url.slice(MEDIA.prefix.length);
+      if (!MEDIA.name.test(name)) add('error', where, `tên hình "${name}" không hợp lệ: chỉ chữ không dấu, số, dấu . _ -, tối đa 64 ký tự, đuôi .jpg / .jpeg / .png / .webp`);
+      else if (r2.has(name)) add('warning', where, `hình "${name}" đã dùng ở ${r2.get(name)}: kiểm tra có nhầm hình không`);
+      else r2.set(name, placeOf(leg, path));
+    } else if (!isWebLink(item.url)) add('error', where, `"${item.url}" không phải liên kết hợp lệ: phải bắt đầu bằng https:// (hoặc "r2:<tên hình>" cho hình tải lên trang Host)`);
+  }
+
+  // SPEC §3 / §8.3: an answer written into a text the team reads before solving it gives it away. Phase 8 (gap 9): only
+  // the texts it can read by then — every step up to this one; of this detour both branch names / summaries but only its
+  // own branch's task (the other branch's is in that branch's box).
+  const textsOf = (i: number, own?: number): [string, PropertyKey[]][] => {
+    const s = steps[i]!;
+    const out: [string, PropertyKey[]][] = [];
+    const task = (t: Task, p: PropertyKey[]) => {
+      out.push([t.title, [...p, 'title']], [t.description, [...p, 'description']], [t.location?.name ?? '', [...p, 'location', 'name']]); // the place name is on the card ("Địa điểm: …")
+      t.media.forEach((m, k) => out.push([m.label, [...p, 'media', k, 'label']]));
+    };
+    if (s.type === 'route_info' || s.type === 'detour') {
+      out.push([s.clue, ['steps', i, 'clue']]);
+      s.media.forEach((m, k) => out.push([m.label, ['steps', i, 'media', k, 'label']]));
+    }
+    if (s.type === 'challenge') (out.push([s.teaser, ['steps', i, 'teaser']]), task(s.task, ['steps', i, 'task']));
+    if (s.type === 'detour')
+      s.branches.forEach((b, k) => {
+        out.push([b.name, ['steps', i, 'branches', k, 'name']], [b.summary, ['steps', i, 'branches', k, 'summary']]);
+        if (own === undefined || own === k) task(b.task, ['steps', i, 'branches', k, 'task']);
+      });
+    return out;
+  };
   steps.forEach((s, i) => {
-    if (s.type === 'route_info' || s.type === 'detour') texts.push([s.clue, ['steps', i, 'clue']]);
-    // a task place's name is on the card too ("Địa điểm: …")
-    if (s.type === 'challenge') texts.push([s.teaser, ['steps', i, 'teaser']], [s.task.title, ['steps', i, 'task', 'title']], [s.task.description, ['steps', i, 'task', 'description']], [s.task.location?.name ?? '', ['steps', i, 'task', 'location', 'name']]);
-    if (s.type === 'detour') s.branches.forEach((b, k) => texts.push([b.summary, ['steps', i, 'branches', k, 'summary']], [b.task.title, ['steps', i, 'branches', k, 'task', 'title']], [b.task.description, ['steps', i, 'branches', k, 'task', 'description']], [b.task.location?.name ?? '', ['steps', i, 'branches', k, 'task', 'location', 'name']]));
-  });
-  steps.forEach((s, i) => {
-    const tasks = s.type === 'detour' ? s.branches.map((b) => b.task) : s.type === 'challenge' ? [s.task] : [];
-    for (const a of tasks.flatMap((t) => t.answers).map(normalizeAnswer).filter((a) => a.length >= 3))
-      for (const [t, p] of texts) if (normalizeAnswer(t).includes(a)) add('warning', p, `chứa đáp án "${a}" của bước ${i + 1} (${s.id}): đội đọc được trước khi giải`);
+    const tasks = s.type === 'detour' ? s.branches.map((b, k) => [b.task, k] as const) : s.type === 'challenge' ? [[s.task, undefined] as const] : [];
+    for (const [t, own] of tasks) {
+      const texts = [...steps.slice(0, i).flatMap((_, j) => textsOf(j)), ...textsOf(i, own)];
+      for (const [list, what] of [[t.answers, 'đáp án'], [t.referenceAnswers, 'đáp án tham khảo']] as const)
+        for (const a of list.filter((x) => !held(x)).map(normalizeAnswer).filter((a) => a.length >= 3))
+          for (const [x, p] of texts) if (normalizeAnswer(x).includes(a)) add('warning', p, `chứa ${what} "${a}" của bước ${i + 1} (${s.id}): đội đọc được trước khi giải`);
+    }
   });
 
   // map data (CLI only): every point a team must reach (step zones, each detour branch's own place) is outside buildings
@@ -245,6 +300,36 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   }
   return out;
 }
+
+/** "[CHƯA NHẬP …]": a placeholder left in a draft (gap 10), whatever the case / Unicode form. */
+const held = (v: string) => v.normalize('NFC').trim().toUpperCase().startsWith('[CHƯA NHẬP');
+
+/** An http(s) link with a dotted host and no spaces (shared has no URL global: ES lib only). */
+const isWebLink = (u: string) => /^https?:\/\/[^\s/?#.]+(\.[^\s/?#.]+)+([/?#]\S*)?$/i.test(u);
+
+/** Every string of the parsed leg with its path. */
+function walkStrings(v: unknown, path: PropertyKey[], fn: (s: string, path: PropertyKey[]) => void) {
+  if (typeof v === 'string') fn(v, path);
+  else if (Array.isArray(v)) v.forEach((x, k) => walkStrings(x, [...path, k], fn));
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walkStrings(x, [...path, k], fn);
+}
+
+/** Every media item of a leg (route / detour clues, challenge and branch tasks) with its path. */
+export function mediaItems(leg: Leg): { item: MediaItem; path: PropertyKey[] }[] {
+  const out: { item: MediaItem; path: PropertyKey[] }[] = [];
+  const add = (list: readonly MediaItem[], p: PropertyKey[]) => list.forEach((item, k) => out.push({ item, path: [...p, 'media', k] }));
+  leg.steps.forEach((s, i) => {
+    if (s.type === 'route_info' || s.type === 'detour') add(s.media, ['steps', i]);
+    if (s.type === 'challenge') add(s.task.media, ['steps', i, 'task']);
+    if (s.type === 'detour') s.branches.forEach((b, k) => add(b.task.media, ['steps', i, 'branches', k, 'task']));
+  });
+  return out;
+}
+
+/** The R2 image names a leg refers to ("r2:<name>", valid names only, once each): the Host page's upload list (D14). */
+export const r2Names = (leg: Leg): string[] => [
+  ...new Set(mediaItems(leg).map((m) => m.item.url).filter((u) => u.startsWith(MEDIA.prefix)).map((u) => u.slice(MEDIA.prefix.length)).filter((n) => MEDIA.name.test(n))),
+];
 
 /** Every point inside RACE_BBOX (SPEC §4.1). */
 function outsideMap(out: LegIssue[], leg: Leg) {

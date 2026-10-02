@@ -402,6 +402,7 @@ export class RaceRoom extends DurableObject<Env> {
       case 'host.race':
       case 'host.team':
       case 'host.leg':
+      case 'host.review': // isClientMessage: Host sockets only
         this.engine.onHost(m, (r) => this.send(ws, r), now);
         return this.soon(now);
     }

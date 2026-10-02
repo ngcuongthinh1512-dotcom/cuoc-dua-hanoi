@@ -28,6 +28,17 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   taskFar: 'Hãy tới đúng nơi làm nhiệm vụ',
   clueNew: 'Mật thư mới đã vào Sổ mật thư', // SPEC §8.9
   penaltyWait: 'Hãy chờ cạnh thảm cho hết phút phạt', // SPEC §8.6
+  // Phase 8: tasks typed in game, Host review, Lựa chọn kép (docs/plans/phase8.md D15)
+  answerSent: 'Đã gửi câu trả lời, chờ Host duyệt',
+  answerWrong: 'Chưa đúng, hãy thử lại!',
+  answerPending: 'Câu trả lời trước đang chờ Host duyệt',
+  answerLocked: 'Đang bị phạt, chờ hết đếm ngược rồi trả lời lại',
+  approved: 'Host đã duyệt! Mật thư mới đã vào Sổ mật thư.', // one toast, no clueNew with it (critic M8)
+  penalized: 'Host chưa duyệt: chờ hết đếm ngược rồi trả lời lại',
+  branchChosen: 'Đã chọn nhánh. Hòm của nhánh hiện khi tới gần',
+  branchSwitched: 'Đã đổi lựa chọn kép: hòm nhánh kia hiện khi hết đếm ngược',
+  branchPending: 'Không đổi nhánh khi đang chờ Host duyệt',
+  taskNotStarted: 'Bấm "Nhận thử thách" trước',
 };
 
 export interface Toast {

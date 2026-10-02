@@ -2,8 +2,11 @@
 // day on the Free plan, an index row counts too): hot data is batched into single JSON rows, only `events` carries an
 // index (the Host filters by team). v2 (Phase 7): step_progress (one row per team × step, WITHOUT ROWID on its primary
 // key = 1 row written per upsert); the loaded leg lives in meta ('leg' JSON, 'legId'); the new team fields (startAt,
-// startOrder, finishAt, penalty…) live in teams.state JSON, so no ALTER.
-export const SCHEMA_VERSION = 2;
+// startOrder, finishAt, penalty…) live in teams.state JSON, so no ALTER. v3 (Phase 8, docs/plans/phase8.md D4): four
+// step_progress columns by ALTER (answers JSON, locked_until, branch_opened_at, host_note); no new table.
+import type { AnswerStatus } from '@race/shared/protocol';
+
+export const SCHEMA_VERSION = 3;
 
 const DDL = [
   // key / value: race, status, schema, seed, candidates (JSON), spawning (JSON)…
@@ -19,7 +22,9 @@ const DDL = [
   'CREATE INDEX IF NOT EXISTS events_team ON events (team, t)',
   // shared bikes (SPEC §6.2–6.4): one JSON row each (ServerBike in race/VehicleSpawner.ts)
   'CREATE TABLE IF NOT EXISTS bikes (id TEXT PRIMARY KEY, data TEXT NOT NULL)',
-  // v2 – SPEC §8.1 step_progress: every column of the spec now (Phase 8–10 fill the rest), timestamps = server ms UTC
+  // v2 – SPEC §8.1 step_progress: every column of the spec now (Phase 8–10 fill the rest), timestamps = server ms UTC.
+  // Keep this the v2 column list: v3 columns come by ALTER (V3_COLUMNS) for new and v2 databases alike (critic S5: a
+  // column here AND in an ALTER = "duplicate column" thrown in the DO constructor, every request dead).
   'CREATE TABLE IF NOT EXISTS step_progress (team TEXT NOT NULL, step TEXT NOT NULL, ' +
     'arrived_at INTEGER, clue_opened_at INTEGER, task_started_at INTEGER, completed_at INTEGER, branch TEXT, ' +
     'branch_switches INTEGER NOT NULL DEFAULT 0, wrong_answers INTEGER NOT NULL DEFAULT 0, penalty_minutes REAL NOT NULL DEFAULT 0, ' +
@@ -62,13 +67,60 @@ export interface StepProgressRow extends Record<string, SqlStorageValue> {
   decided_by: string | null;
   rejections: number;
   approval_wait_seconds: number;
+  // v3 (Phase 8)
+  /** JSON AnswerRec[] (every answer of this step, all branches; read with parseAnswers). One answer = this row's upsert. */
+  answers: string;
+  /** server ms a retry ("Phạt") / branch-switch countdown ends; null = none. Compared with now on read (no timer). */
+  locked_until: number | null;
+  /** detour: server ms the chosen branch's box was opened (its task started); null = not yet / switched away. */
+  branch_opened_at: number | null;
+  /** The Host's note on this step (never sent to the team). */
+  host_note: string;
+}
+
+/** One answer in step_progress.answers (docs/plans/phase8.md D4): id = 1, 2… within the step; b = the detour branch it
+ *  was for (kept after a switch: the Host sees it, the team's card lists only its current branch's); d / n = the Host's
+ *  decision time / note. */
+export interface AnswerRec {
+  id: number;
+  b: string | null;
+  text: string;
+  at: number;
+  s: AnswerStatus;
+  d?: number;
+  n?: string;
+}
+
+/** step_progress.answers → records ([] for '' / a broken value: never throws in the DO). */
+export function parseAnswers(row: Pick<StepProgressRow, 'answers'> | undefined): AnswerRec[] {
+  try {
+    const v = JSON.parse(row?.answers || '[]') as unknown;
+    return Array.isArray(v) ? (v as AnswerRec[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export const emptyProgress = (team: string, step: string): StepProgressRow => ({
   team, step, arrived_at: null, clue_opened_at: null, task_started_at: null, completed_at: null, branch: null, branch_switches: 0,
   wrong_answers: 0, penalty_minutes: 0, transport_used: null, bike_distance_m: 0, bike_lost_at_rack: 0, skipped_by: null,
   submitted_at: null, decided_at: null, decided_by: null, rejections: 0, approval_wait_seconds: 0,
+  answers: '[]', locked_until: null, branch_opened_at: null, host_note: '',
 });
+
+/** v3 columns (name, definition), added by ALTER in migrate. */
+const V3_COLUMNS = [
+  ['answers', "TEXT NOT NULL DEFAULT '[]'"],
+  ['locked_until', 'INTEGER'],
+  ['branch_opened_at', 'INTEGER'],
+  ['host_note', "TEXT NOT NULL DEFAULT ''"],
+] as const;
+
+/** ALTER TABLE … ADD COLUMN unless the column is there (idempotent: a migrate cut half-way runs again safely). */
+function addColumn(sql: SqlStorage, table: string, name: string, def: string) {
+  if (sql.exec<{ name: string }>(`PRAGMA table_info(${table})`).toArray().some((c) => c.name === name)) return;
+  sql.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`);
+}
 
 /** Every step_progress row (read once by the engine, then kept in memory and patched on write). */
 export const readProgress = (sql: SqlStorage) => sql.exec<StepProgressRow>('SELECT * FROM step_progress').toArray();
@@ -99,7 +151,8 @@ export interface EventRow extends Record<string, SqlStorageValue> {
 export function migrate(sql: SqlStorage): number {
   for (const stmt of DDL) sql.exec(stmt);
   const v = Number(getMeta(sql, 'schema') ?? 0);
-  // v1 → v2 only creates a table (in DDL); versioned ALTERs go here when a later version changes existing tables.
+  // v1 → v2 only creates a table (in DDL); versioned ALTERs below.
+  if (v < 3) for (const [name, def] of V3_COLUMNS) addColumn(sql, 'step_progress', name, def);
   if (v < SCHEMA_VERSION) setMeta(sql, 'schema', String(SCHEMA_VERSION));
   return SCHEMA_VERSION;
 }

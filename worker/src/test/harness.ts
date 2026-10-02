@@ -107,12 +107,20 @@ export function nearLeg(gap = 60, footSpeed = 20) {
   l1.destination = dest(1, 'Điểm 1 (GIẢ)');
   t1.task.location = dest(2, 'Nơi thử thách (GIẢ)');
   l2.destination = { ...dest(3, 'Điểm 3 (GIẢ)'), bikeParking: undefined };
+  // ponytail: branch A stays at point 3 (L2's point), the Phase 7 layout the `race task` tests walk; Phase 8 track A moves
+  // it to a place of its own (docs/plans/phase8.md §4: 3 = L2, 4 = A, 5 = B, 6 = Pit Stop) with its new harness tests
+  d1.branches[0].task.location = dest(3, 'Nơi nhánh A (GIẢ)');
   d1.branches[1].task.location = dest(4, 'Nơi nhánh B (GIẢ)');
   l3.destination = ps.destination = dest(5, 'Thảm (GIẢ)');
-  return { ...leg, id: 'near', title: 'Chặng gần (NỘI DUNG GIẢ)', boxReveal: { radius: 40, hysteresis: 10 }, movement: { footSpeed, bikeSpeedMultiplier: 1.3 } };
+  return {
+    ...leg, id: 'near', title: 'Chặng gần (NỘI DUNG GIẢ)', boxReveal: { radius: 40, hysteresis: 10 }, movement: { footSpeed, bikeSpeedMultiplier: 1.3 },
+    // Phase 8: 6 s after a "Phạt", 12 s after a branch switch (a leg:check warning: test legs only)
+    penalties: { retryLockMinutes: 0.1, branchSwitchLockMinutes: 0.2 },
+  };
 }
 
-/** World position of point k of nearLeg (0 = start, 1 = L1, 2 = T1, 3 = L2 / D1 branch A, 4 = branch B, 5 = Pit Stop). */
+/** World position of point k of nearLeg (0 = start, 1 = L1, 2 = T1, 3 = L2 / D1 branch A, 4 = branch B, 5 = Pit Stop). The
+ *  `mini` it copies has T1 = host_approval (typed answer), D1 A = auto, D1 B = a photo task (free). */
 export const nearPoint = (k: number, gap = 60) => {
   const { lat, lon } = worldToLatLon(LEG_START.x + gap * k, LEG_START.z);
   return latLonToWorld(Math.round(lat * 1e7) / 1e7, Math.round(lon * 1e7) / 1e7);

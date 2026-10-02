@@ -70,6 +70,7 @@ const keyTable = {
   jump: ['Space'],
   interact: ['KeyF'],
   clueBook: ['Tab'],
+  clueCard: ['Enter', 'NumpadEnter'], // Phase 8: reopen the current card (answer history, input) when no card / book / menu / map is open
   map: ['KeyM'],
   camera: ['KeyC'],
   binoculars: ['KeyB'],

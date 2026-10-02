@@ -84,9 +84,24 @@ export class RaceClient {
     return { inZone: !riding && !!boxInReach(boxes, x, z) };
   }
 
-  /** The full card's task button (Phase 7 stub; RaceHud locks it taskLockSeconds): the pose first, like every op (D4). */
+  /** The full card's task button (Phase 7 stub; RaceHud locks it taskLockSeconds): the pose first, like every op (D4).
+   *  Phase 8 track B removes it with the `race task` op (answer / branch / accept below replace it). */
   task(step: string, branch?: string) {
     this.op({ t: 'race', op: 'task', step, ...(branch ? { branch } : {}) });
+  }
+
+  // Phase 8 (docs/plans/phase8.md D8): from anywhere, so no pose first (only open / checkin are judged at the pose).
+  /** A typed answer ('' = "Tôi đã gửi bài – chờ Host duyệt" of a photo task). */
+  answer(step: string, text: string) {
+    this.deps.send({ t: 'race', op: 'answer', step, text });
+  }
+  /** Choose a detour branch, or switch (the HUD already confirmed the penalty). */
+  branch(step: string, branch: string) {
+    this.deps.send({ t: 'race', op: 'branch', step, branch });
+  }
+  /** "Nhận thử thách" (a card with a teaser). */
+  accept(step: string) {
+    this.deps.send({ t: 'race', op: 'accept', step });
   }
 
   private sendOp(m: RaceOp, now: number) {

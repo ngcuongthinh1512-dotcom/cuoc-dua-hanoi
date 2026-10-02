@@ -58,11 +58,12 @@ Quy tắc viết JSON: chữ nằm trong dấu ngoặc kép `"..."`; số không
 | `mapLabels` | không | `"streets-only"` | `"streets-only"` bản đồ chỉ ghi tên đường; `"all"` ghi cả tên địa danh (chưa có tác dụng: bản đồ hiện luôn chỉ ghi tên đường) |
 | `presence` | không | `{renderRadius 300, showOthersOnMinimap false}` | `renderRadius`: thấy đội khác trong bao nhiêu mét; `showOthersOnMinimap`: hiện đội khác trên bản đồ nhỏ không (chưa có tác dụng: bản đồ nhỏ hiện luôn không có đội khác) |
 | `boxReveal` | không | `{radius 150, hysteresis 20}` | Hộp mật thư kế tiếp chỉ hiện (và máy chủ chỉ gửi tọa độ) khi đội cách hộp ≤ `radius` m; xa quá `radius + hysteresis` thì ẩn lại |
-| `penalties` | không | `{walkOnlyViolationMinutes 15, quitTaskMinutes 30}` | Số phút phạt (chưa có tác dụng) |
+| `penalties` | không | `{walkOnlyViolationMinutes 15, quitTaskMinutes 30, retryLockMinutes 3, branchSwitchLockMinutes 10}` | Số phút phạt. `retryLockMinutes`: Host bấm **Phạt** một câu trả lời → đội thấy **đồng hồ đếm ngược** bấy nhiêu phút rồi mới được trả lời lại (mỗi nhiệm vụ ghi đè được bằng `task.retryLockMinutes`). `branchSwitchLockMinutes`: đội bấm **"Đổi lựa chọn kép"** → đếm ngược bấy nhiêu phút, hết giờ hòm của nhánh kia mới hiện (mỗi lần đổi phạt một lần). Dưới 1 phút: CẢNH BÁO (chỉ dùng cho chặng test). `walkOnlyViolationMinutes`, `quitTaskMinutes`: chưa có tác dụng (Phase 9) |
 | `movement` | không | `{footSpeed 4, bikeSpeedMultiplier 1.3}` | Tốc độ đi bộ tối đa (m/s) và hệ số xe đạp so với đi bộ (dùng để phát hiện gian lận tốc độ) |
 | `vehicles` | không | xem dưới | Xe đạp dùng chung trên đường |
+| `hostAlerts` | không | `{stuckMinutes 45}` | Trang Host **cảnh báo** (âm báo + dòng đỏ) khi một đội làm cùng một thử thách / nhánh quá `stuckMinutes` phút, lặp lại mỗi `stuckMinutes` phút tới khi xong. Không có gì hiện trong game: gợi ý cho đội thì Host gửi riêng qua Messenger |
 | `clueBook` | không | `{showLockedSlots false}` | `true` = Sổ mật thư hiện cả ô khóa của bước chưa tới (không khuyến khích: lộ số bước; chưa có tác dụng) |
-| `hostApproval` | không | `{contactLabel "Gửi bài qua Facebook cho Host", contactUrl "", approvalWaitCounts false}` | Cho nhiệm vụ Host duyệt: chữ trên nút, **link nhận bài** (bắt buộc điền nếu có nhiệm vụ `host_approval`, vd. `"https://m.me/ten-trang"`; nút gửi bài cho đội làm ở phase sau), `approvalWaitCounts` = trừ thời gian chờ duyệt khỏi thời gian chính thức |
+| `hostApproval` | không | `{contactLabel "Gửi bài qua Facebook cho Host", contactUrl "", approvalWaitCounts false}` | Cho nhiệm vụ Host duyệt: chữ trên nút, **link nhận bài** (bắt buộc điền nếu có nhiệm vụ **nộp ảnh** `kind: "free"` + `host_approval`, vd. `"https://m.me/ten-trang"`: nút "Mở Facebook / Messenger gửi bài" trên thẻ; nhiệm vụ **gõ đáp án trong game** không cần), `approvalWaitCounts`: `false` (mặc định) = thời gian chờ Host duyệt **được trừ** khỏi thời gian chính thức; `true` = không trừ |
 | `specials` | không | `expressPass` bật, còn lại tắt | Yếu tố đặc biệt (phase 9, chưa có tác dụng): `uTurn`, `yield`, `fastForward`, `speedBump`, `expressPass`, mỗi cái `{ "enabled": true/false }` |
 
 `vehicles` (mặc định = chặng demo, hiếm khi cần sửa): `corridorMeters 150` (xe chỉ đặt cách đường đi dự kiến ≤ ngần này), `minDistanceFromCheckpoint 100` (xe không đặt gần điểm nhận mật thư), `initialPerSegment [0, 1]`, `spawnIntervalMinutes 3`, `spawnChance 0.3`, `maxAvailablePerSegment 1`, `decoyRatio 0.4`, `noSpawnNearPlayerMeters 120`, `abandonMeters 200`, `abandonSeconds 60` (xe bị bỏ lại > 200 m trong 60 s thì thu hồi), `bikeParking { offsetMeters 20, maxBikes 6 }` (bãi xe cạnh điểm: mục 7).
@@ -95,27 +96,31 @@ Mỗi bước có `id` (tên ngắn, chữ + số, gạch ngang / dưới, ≤ 1
 | `clue` | có (có thể `""` khi soạn nháp: báo "CÒN TRỐNG") | | Mật thư đội đọc. Không viết đáp án của nhiệm vụ vào đây |
 | `transport` | không | `{"allowed": "any"}` | `{"allowed": "any"}` tự chọn đi bộ / xe; `{"mandatory": "walk"}` **bắt buộc đi bộ** trên lộ trình này (không nhận được xe) |
 | `destination` | có | | Điểm đến, mục 7 |
+| `media` | không | `[]` | Hình / liên kết kèm mật thư (mục 7.2) |
 
 ### 5.2 `challenge`: Thử thách
 
-Đội làm một nhiệm vụ. Làm **ngay tại điểm vừa tới**, hoặc tại một nơi khác nếu `task.location` có giá trị.
+Đội làm một nhiệm vụ. Hộp mật thư kế tiếp đứng **ngay tại điểm vừa tới**, hoặc tại một nơi khác nếu `task.location` có giá trị. Câu trả lời thì đội **gõ được ở bất kỳ đâu** sau khi thử thách bắt đầu (ô gõ trên thẻ thử thách); Host duyệt / phạt trên trang Host khi `verification` là `host_approval` (mục 7.1).
 
 | Trường | Bắt buộc? | Mặc định | Ý nghĩa |
 |---|---|---|---|
-| `teaser` | không | `""` | Câu gợi ý ngắn đội đọc **trước khi nhận** thử thách (phase 8 dùng cho nút "Nhận thử thách") |
+| `teaser` | không | `""` | Câu gợi ý ngắn đội đọc **trước khi nhận** thử thách: thẻ chỉ hiện câu này + nút **"Nhận thử thách"**; đề bài (và hình của nhiệm vụ) chỉ hiện sau khi đội bấm. `""` = đề bài hiện ngay |
 | `task` | không (trống = CÒN TRỐNG) | nhiệm vụ trống | Nhiệm vụ, mục 7.1 |
 
 ### 5.3 `detour`: Lựa chọn kép
 
-Đội chọn **một trong hai nhánh** (`branches`, đúng 2 phần tử), mỗi nhánh có nhiệm vụ riêng. Nhánh nào có `task.location` riêng thì đội phải tới đó làm.
+Đội chọn **một trong hai nhánh** (`branches`, đúng 2 phần tử) bằng **hai nút trên thẻ** (bấm ở đâu cũng được). Mỗi nhánh có **hòm riêng** đứng tại `task.location` của nhánh; chỉ hòm của nhánh đã chọn hiện (theo luật 150 m như hộp mật thư). **Đề bài của nhánh nằm trong hòm**: đội chỉ đọc được `task` (tiêu đề, mô tả, hình) sau khi tới mở hòm; trước đó chỉ thấy `name` + `summary` của hai nhánh. Nút **"Đổi lựa chọn kép"** (bấm ở đâu cũng được, trừ lúc đang chờ Host duyệt): hòm nhánh đang chọn biến mất, tiến độ nhánh cũ mất, đội chờ `penalties.branchSwitchLockMinutes` phút (đếm ngược trên màn hình) rồi hòm nhánh kia mới hiện.
+
+**Nên cho mỗi nhánh một `task.location` riêng**: nhánh không có nơi riêng thì hòm nhánh đứng đúng chỗ hộp mật thư trước (chồng lên nhau), `leg:check` CẢNH BÁO (nhánh còn trống nội dung thì chưa báo). Chỉ nơi của nhánh **đã chọn** mới là "điểm của đội" (tới vùng mới tính "đã tới", xe vào bãi, "Tại điểm này"); đi ngang nơi của nhánh kia không có tác dụng gì.
 
 | Trường | Bắt buộc? | Mặc định | Ý nghĩa |
 |---|---|---|---|
 | `clue` | không | `""` | Lời dẫn chung cho lựa chọn |
+| `media` | không | `[]` | Hình / liên kết kèm lời dẫn (mục 7.2); hình riêng của từng nhánh đặt trong `branches[].task.media` |
 | `branches[].id` | có | | Mã nhánh, thường `"A"`, `"B"` (hai nhánh khác nhau) |
 | `branches[].name` | không | `""` | Tên nhánh đội thấy khi chọn |
-| `branches[].summary` | không | `""` | Mô tả ngắn (không lộ đáp án) |
-| `branches[].task` | không | nhiệm vụ trống | Nhiệm vụ, mục 7.1 |
+| `branches[].summary` | không | `""` | Mô tả ngắn đội thấy **trước khi chọn** (không lộ đáp án) |
+| `branches[].task` | không | nhiệm vụ trống | Nhiệm vụ, mục 7.1; nằm trong hòm nhánh |
 
 ### 5.4 `pit_stop`: Chặng dừng (về đích)
 
@@ -141,6 +146,7 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
 | `lat`, `lon` | có | Tọa độ tâm (dùng dấu chấm). **Hộp mật thư (vật thể trong game) đứng đúng tại đây**; thảm Chặng dừng cũng vậy |
 | `radius` | có | **Bán kính vùng, 15–40 m.** Đứng trong vòng tròn này = "đã tới điểm" (mở được hộp) |
 | `bikeParking` | không | `{ "lat": ..., "lon": ... }`: bãi xe đạp **cạnh điểm** (mục dưới) |
+| `yawDeg` | không (mặc định `0`) | Hướng **mặt trước** của hộp / hòm mật thư (phía đội đứng đọc), cùng quy ước với `start.yawDeg` (mục 4): `0` = bắc, `90` = tây, `180` = nam, `-90` = đông (`yawDeg` = − hướng la bàn). Áp dụng cho cả hòm nhánh (`task.location` của nhánh) |
 
 **Đặt tâm ở đâu:** vỉa hè, quảng trường, bờ sông, giữa cầu (lối đi bộ); **không bao giờ trong nhà** (LỖI; `leg:check` gợi ý sẵn "điểm ngoài nhà gần nhất"), **không giữa lòng đường xe chạy** (cảnh báo: hộp sẽ đứng giữa dòng xe NPC), không giữa sông / bể nước, không trên nóc cầu cạn metro. Phải có đường đi bộ gần để đội đi tới (không thì LỖI "không đi bộ tới được").
 
@@ -164,16 +170,31 @@ Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 
 |---|---|---|---|
 | `title` | không (trống = CÒN TRỐNG) | `""` | Tiêu đề nhiệm vụ |
 | `description` | không (trống = CÒN TRỐNG) | `""` | Đề bài đội đọc. **Không chứa đáp án** |
-| `media` | không | `[]` | Danh sách **link công khai** ảnh / video minh họa: `["https://..."]`. Phase này chỉ link công khai có sẵn; lưu file trên R2 làm ở Phase 10 |
+| `media` | không | `[]` | Hình / liên kết của đề bài (mục 7.2); chỉ tới máy đội khi đề bài đã mở (sau "Nhận thử thách"; nhánh: sau khi mở hòm nhánh) |
 | `location` | không | `null` | `null` = làm tại điểm vừa tới; hoặc một khối điểm như ở đầu mục 7 (tên, tọa độ, vùng, bãi xe) = đội phải tới đó làm |
 | `kind` | không | `"answer"` | Kiểu nhiệm vụ, xem dưới |
-| `verification` | không | `"auto"` | `"auto"` = máy so đáp án; `"host_approval"` = Host duyệt bài đội gửi |
-| `answers` | khi `auto` (trống = CÒN TRỐNG) | `[]` | Các đáp án chấp nhận (không phân biệt hoa thường, dấu, khoảng trắng thừa: `"Bảy"`, `"BAY"`, `"bảy "` coi như nhau). `["7", "bảy"]` |
-| `proofInstruction` | khi `host_approval` | `""` | Hướng dẫn đội gửi bài (vd. "Chụp ảnh và gửi Facebook cho Host") |
+| `verification` | không | `"auto"` | `"host_approval"` = **Host duyệt tay** trên trang Host (cách của chặng thật): `kind: "answer"` → đội gõ đáp án trong game, Host thấy câu trả lời + đáp án tham khảo, bấm **Duyệt** (đội nhận mật thư kế ngay) hoặc **Phạt** (đội chờ `retryLockMinutes` phút rồi trả lời lại); `kind: "free"` → đội gửi ảnh qua Messenger kèm **mã bài nộp** `<tên đội>-<mã bước>[-<mã nhánh>]`, bấm "Tôi đã gửi bài", Host duyệt. `"auto"` (tùy chọn) = máy so với `answers`: đúng thì xong ngay, sai thì "Chưa đúng" (không khóa) |
+| `answers` | khi `auto` (trống = CÒN TRỐNG) | `[]` | Các đáp án chấp nhận (không phân biệt hoa thường, dấu, khoảng trắng thừa: `"Bảy"`, `"BAY"`, `"bảy "` coi như nhau). `["7", "bảy"]`. Với `host_approval`: Host thấy chúng làm đáp án tham khảo nếu `referenceAnswers` trống. **Không bao giờ** gửi cho đội |
+| `referenceAnswers` | không | `[]` | **Đáp án tham khảo chỉ Host thấy** (hàng chờ duyệt trên trang Host), vd. `["Pont Alexandre III", "cầu Alexandre III"]`. **Không bao giờ** gửi cho đội; `leg:check` cảnh báo nếu nó lọt vào chữ đội đọc |
+| `retryLockMinutes` | không | `null` | Số phút đội phải chờ sau khi Host bấm **Phạt** nhiệm vụ này; `null` = theo `penalties.retryLockMinutes` (3); `0` = không khóa |
+| `proofInstruction` | khi `kind: "free"` + `host_approval` | `""` | Hướng dẫn đội gửi bài (vd. "Chụp màn hình và gửi Messenger cho Host kèm mã bài nộp"). Nhiệm vụ gõ đáp án trong game (`kind: "answer"`) không cần |
 | `timeLimitMinutes` | không | `null` | Giới hạn thời gian làm (phút), số dương; `null` = không giới hạn. Hiện tại chỉ hiện chữ "giới hạn N phút" trên thẻ, chưa tính giờ |
 | `params` | không | (không có) | Tham số mini-game cho các kiểu khác (vị trí vật, ảnh đích, hướng...). Lưu nguyên, **chưa kiểm** và **không gửi** cho đội ở Phase 7 |
 
-**Kiểu nhiệm vụ (`kind`)**: `answer` (trả lời bằng chữ), `free` (nộp ảnh / bài cho Host duyệt), `find_objects`, `delivery`, `observe_answer`, `cipher`, `photo_match`, `binocular_scan`, `timed_drive`, `memory_ui`. Ở **Phase 7 chỉ `answer` và `free` đầy đủ**; trong lúc chơi thử, mọi nhiệm vụ đều có nút "Hoàn thành (tạm)". Với kiểu khác, hãy mô tả cách chơi trong `description`, đặt tham số (nếu đã biết) vào `params`: file vẫn hợp lệ và Phase 8 sẽ dùng tiếp, **không cần viết lại**. `kind: "free"` với `verification: "auto"` bị cảnh báo (không có đáp án để chấm): dùng `host_approval`.
+**Kiểu nhiệm vụ (`kind`)**: `answer` (đội **gõ câu trả lời trong game**: ô gõ trên thẻ thử thách, gõ được ở bất kỳ đâu, mọi câu trả lời được lưu và hiện lại trên thẻ cho chính đội), `free` (đội **nộp ảnh** qua Messenger cho Host duyệt). Các kiểu mini-game `find_objects`, `delivery`, `observe_answer`, `cipher`, `photo_match`, `binocular_scan`, `timed_drive`, `memory_ui` **chưa có trong game** (hoãn): `leg:check` CẢNH BÁO và máy chủ xử lý như `answer`; hãy dùng liên kết ngoài (`media`) + `answer`. Tham số (nếu đã biết) để vào `params`: file vẫn hợp lệ, **không cần viết lại** sau này. `kind: "free"` với `verification: "auto"` bị cảnh báo (không có đáp án để chấm): dùng `host_approval`.
+
+### 7.2 `media`: hình và liên kết
+
+`media` là danh sách, mỗi mục là **một chuỗi** hoặc `{ "url": "...", "label": "..." }` (`label` = chữ hiện trên link, trống thì hiện tên trang web). Có ở `route_info`, `detour` và mọi `task`.
+
+- **Liên kết** `"https://…"` (video YouTube, trang web, mini-game ngoài…): đội bấm được trên thẻ và trong Sổ mật thư, mở **tab mới** (không nhúng vào game). Chuỗi không bắt đầu bằng `http://` / `https://` (và không phải `r2:`): LỖI.
+- **Hình** `"r2:<tên hình>"`, vd. `"r2:lua-hinh-1.jpg"`: hình hiện ngay trên thẻ (bấm để xem lớn). Tên chỉ gồm chữ **không dấu**, số, `.` `_` `-`, tối đa 64 ký tự, đuôi `.jpg` / `.jpeg` / `.png` / `.webp` (sai: LỖI). Một tên dùng hai lần trong chặng: CẢNH BÁO (nhầm hình?).
+- **Tải hình lên:** sau khi nạp chặng, trang Host có mục **"Hình mật thư (R2)"** liệt kê mọi tên `r2:` của chặng: chọn file cho từng tên (jpg / png / webp, **tối đa 5 MB**: nén trước nếu lớn hơn). Hình được lưu **theo mã cuộc đua**: diễn tập ở một mã cuộc đua khác thì tải lên lại. `leg:check` in danh sách hình cần tải.
+- Hình nằm trong kho riêng tư: máy chủ chỉ trả hình cho **đội đã mở** mật thư / nhiệm vụ chứa nó (đội khác hay đội chưa tới bước đó không tải được, kể cả khi biết tên).
+
+### 7.3 Ô giữ chỗ `[CHƯA NHẬP …]`
+
+Khi soạn nháp, viết `"[CHƯA NHẬP tên điểm]"`, `"[CHƯA NHẬP đáp án]"`… cho chỗ chưa có nội dung: mọi chữ bắt đầu bằng `[CHƯA NHẬP` (hoa thường như nhau) được `leg:check` và trang Host liệt kê là **CÒN TRỐNG** ("còn giữ chỗ"), nên không bị mở cuộc đua nhầm. Nhãn bước (`label`) trùng nhau: CẢNH BÁO (đội và Host khó phân biệt; không bắt buộc đánh số theo quy tắc nào).
 
 ## 8. Cách lấy tọa độ và xem điểm đã đặt đúng chỗ chưa
 
@@ -210,13 +231,13 @@ Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 
   - trong `client/`: **LỖI** (mọi thứ ở đó được gửi tới máy người chơi, đội đọc được đáp án);
   - chỗ khác trong thư mục dự án: CẢNH BÁO (dễ bị đưa lên git cùng mã nguồn);
   - trong `worker/legs/`: không báo (thư mục của các chặng demo / test có sẵn, nằm trong git). Đừng để chặng thật ở đây: file mới bỏ vào đây **không** tự thành "chặng có sẵn" trên trang Host, và sẽ bị đưa lên git cùng mã nguồn.
-- `leg:check` cũng quét `client/public`, `client/dist` và báo LỖI nếu có mật thư / mô tả (từ 12 ký tự) lọt vào, hoặc từ 2 chuỗi bí mật nằm chung một file (bản chép của chặng). Một đáp án đơn lẻ trùng tên đường / địa danh có sẵn trong bản đồ chỉ bị CẢNH BÁO (bình thường, bỏ qua).
-- Đáp án **không được xuất hiện** trong chữ đội đọc trước khi giải (mật thư, tiêu đề, mô tả, gợi ý, và tên `task.location` vì đội thấy nó): `leg:check` cảnh báo nếu thấy (đáp án từ 3 ký tự) trong mật thư, tiêu đề, mô tả, gợi ý.
+- `leg:check` cũng quét `client/public`, `client/dist` và báo LỖI nếu có mật thư / mô tả / đáp án / đáp án tham khảo (từ 12 ký tự) lọt vào, hoặc từ 2 chuỗi bí mật nằm chung một file (bản chép của chặng). Một đáp án đơn lẻ trùng tên đường / địa danh có sẵn trong bản đồ chỉ bị CẢNH BÁO (bình thường, bỏ qua).
+- Đáp án và **đáp án tham khảo** (`referenceAnswers`, chỉ Host thấy) **không được xuất hiện** trong chữ đội đọc **trước khi giải** (mật thư, tiêu đề, mô tả, gợi ý, nhãn hình / liên kết, và tên `task.location` vì đội thấy nó): `leg:check` cảnh báo nếu thấy (từ 3 ký tự) trong chữ của **bước đó và các bước trước** (chữ của bước sau, đọc sau khi đã giải, được phép nhắc lại đáp án). Với Lựa chọn kép: tên + mô tả ngắn của cả hai nhánh tính là đọc được; đề bài nhánh kia (nằm trong hòm nhánh kia) thì không.
 - **Đáp án phải dựa trên thứ có trong game** (chữ trên biển tên đường, hình dáng công trình, số trên tượng...). Game dựng từ dữ liệu OpenStreetMap: không có biển hiệu cửa hàng, thực đơn, chữ trong nhà, hoặc vật mà bản đồ không có. Hãy **vào game đứng ở đó** (link `Trong game:` của mục 8) kiểm tra đáp án có thấy được không trước khi chốt.
 
 ## 10. Ví dụ đầy đủ
 
-Chặng `mini` (`worker/legs/test/mini.json`, **nội dung GIẢ**) dùng đủ mọi dạng: lộ trình thường, lộ trình bắt buộc đi bộ, thử thách làm ở nơi khác (có bãi xe), lựa chọn kép trong đó nhánh B có nơi riêng, bãi xe ở điểm L1, `teaser`, `media`, `timeLimitMinutes`, Host duyệt, Chặng dừng. Mọi trường không viết thì lấy giá trị mặc định ở mục 3.1, nên file ngắn.
+Chặng `mini` (`worker/legs/test/mini.json`, **nội dung GIẢ**) dùng đủ mọi dạng: lộ trình thường (có hình `r2:` + liên kết, hướng hộp `yawDeg`), lộ trình bắt buộc đi bộ, thử thách làm ở nơi khác (có bãi xe, `teaser`, gõ đáp án + Host duyệt, đáp án tham khảo), lựa chọn kép với mỗi nhánh một nơi riêng (A tự chấm, B nộp ảnh cho Host duyệt), `timeLimitMinutes`, Chặng dừng. Mọi trường không viết thì lấy giá trị mặc định ở mục 3.1, nên file ngắn.
 
 Kết quả `leg:check` thật của các chặng có sẵn (chạy lại được bằng `npm run leg:check -- worker/legs/test/mini.json` v.v.):
 
@@ -255,8 +276,16 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
         "bikeParking": {
           "lat": 48.8625,
           "lon": 2.2878
-        }
-      }
+        },
+        "yawDeg": 150
+      },
+      "media": [
+        {
+          "url": "https://example.invalid/gia/video-l1",
+          "label": "(GIẢ) Video gợi ý"
+        },
+        "r2:test-gia.jpg"
+      ]
     },
     {
       "id": "T1",
@@ -266,7 +295,8 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
         "title": "(GIẢ) Câu hỏi ở vườn Trocadéro",
         "description": "(GIẢ) 6 × 7 = ?",
         "media": [
-          "https://example.invalid/gia/vuon-trocadero.jpg"
+          "https://example.invalid/gia/vuon-trocadero.jpg",
+          "r2:test-gia-2.jpg"
         ],
         "location": {
           "name": "Vườn Trocadéro (phía dưới)",
@@ -278,8 +308,12 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
             "lon": 2.2899
           }
         },
+        "verification": "host_approval",
         "answers": [
           "42"
+        ],
+        "referenceAnswers": [
+          "42 (bốn mươi hai) – GIẢ"
         ],
         "timeLimitMinutes": 10
       },
@@ -316,7 +350,18 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
             "answers": [
               "7",
               "bảy"
-            ]
+            ],
+            "location": {
+              "name": "Phía bắc chân tháp, lối ra sông",
+              "lat": 48.85878,
+              "lon": 2.29469,
+              "radius": 15,
+              "yawDeg": 135,
+              "bikeParking": {
+                "lat": 48.85899,
+                "lon": 2.29478
+              }
+            }
           }
         },
         {
@@ -338,7 +383,10 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
                 "lat": 48.8558,
                 "lon": 2.2972
               }
-            }
+            },
+            "referenceAnswers": [
+              "(GIẢ) Ảnh thấy rõ chân tháp phía sau"
+            ]
           }
         }
       ]
@@ -401,6 +449,14 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `cách thảm Chặng dừng N m ...` | CẢNH BÁO | Điểm đến của lộ trình cuối nên trùng điểm Chặng dừng |
 | `chứa đáp án "..." của bước N` | CẢNH BÁO | Đáp án bị lộ trong chữ đội đọc trước (kể cả tên nơi làm nhiệm vụ, `› nơi làm nhiệm vụ › tên`); sửa chữ |
 | `nhiệm vụ "free" không tự chấm được` | CẢNH BÁO | Đổi sang `"verification": "host_approval"` |
+| `chứa đáp án tham khảo "..." của bước N` | CẢNH BÁO | Đáp án tham khảo (chỉ Host) lộ trong chữ đội đọc trước: sửa chữ |
+| `tên hình "..." không hợp lệ: ...` | LỖI | Đổi tên hình (và tên file khi tải lên): chữ không dấu, số, `.` `_` `-`, đuôi `.jpg` / `.png` / `.webp` (mục 7.2) |
+| `"..." không phải liên kết hợp lệ: phải bắt đầu bằng https://` | LỖI | Viết đủ `https://…`, hoặc `r2:<tên hình>` cho hình tải lên trang Host |
+| `hình "..." đã dùng ở ...` | CẢNH BÁO | Một hình dùng hai lần: kiểm tra có nhầm tên không |
+| `nhánh không có nơi riêng: hòm nhánh đứng cùng chỗ hòm lộ trình trước` | CẢNH BÁO | Cho nhánh một `task.location` riêng (mục 5.3) |
+| `kiểu "..." chưa có trong game (hoãn)` | CẢNH BÁO | Kiểu mini-game chưa làm: máy chủ chấm như `answer`; dùng `answer` + liên kết ngoài |
+| `tên bước "..." trùng với bước N` | CẢNH BÁO | Đặt nhãn khác nhau cho các bước |
+| `phạt dưới 1 phút (...): chỉ dùng cho chặng test` | CẢNH BÁO | Chặng thật: để mặc định (3 và 10 phút) hoặc ≥ 1 |
 | `nằm giữa sông, đội không đứng được` | CẢNH BÁO | Dời vào bờ hoặc lên mặt cầu |
 | `nằm giữa mặt nước (hồ / bể nước / đài phun nước)` | CẢNH BÁO | Điểm rơi vào bể / hồ (vd. bể đài phun nước trong sân): dời ra chỗ đất cạnh đó |
 | `nằm trên đoạn cầu bắc qua đất (bờ / đảo), không phải qua mặt nước` | CẢNH BÁO | Cầu vẫn có thể bắc qua sông, nhưng đúng chỗ này dưới cầu là đất. Kiểm tra đúng mặt cầu đi bộ, không phải nóc cầu cạn metro / đường sắt. Giữa cầu Bir-Hakeim trên đảo Île aux Cygnes (xuất phát, hoặc bước 1 trùng xuất phát) thì cảnh báo này là bình thường; chỉ hiện một lần cho một tọa độ |
@@ -408,6 +464,7 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `chứa chữ ... trùng một đáp án của chặng` | CẢNH BÁO | Đáp án trùng tên đường / địa danh có trong dữ liệu bản đồ: bình thường. Chỉ xóa nếu file đó là bản chép chặng do bạn bỏ vào `client/` |
 | `file chặng nằm trong thư mục dự án` | CẢNH BÁO | Chuyển file chặng thật ra ngoài thư mục dự án (mục 9) |
 | `... còn trống` (mật thư, tiêu đề, đáp án, link Facebook...) | CÒN TRỐNG | Ô bạn chưa điền; cho phép khi soạn nháp, phải điền trước khi mở cuộc đua |
+| `còn giữ chỗ "[CHƯA NHẬP …]": nhập nội dung thật` | CÒN TRỐNG | Thay chữ giữ chỗ bằng nội dung thật (mục 7.3) |
 | `KHÔNG hợp lệ: N lỗi` (dòng cuối) | | Còn lỗi: máy chủ không nạp file này |
 
 ## 12. Lỗi JSON hay gặp của người không lập trình

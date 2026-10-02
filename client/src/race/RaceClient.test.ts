@@ -5,7 +5,7 @@ import { boxInReach, matAt, RaceClient, raceClock } from './RaceClient.ts';
 
 const view = (o: Partial<RaceView> = {}): RaceView => ({ status: 'running', startAt: null, finishAt: null, penaltyMinutes: 0, card: null, checkinAt: null, officialMs: null, ...o });
 const pit = (o: Partial<RaceView> = {}) =>
-  view({ card: { step: 'PS', type: 'pit_stop', label: 'Chặng dừng', text: '', status: 'active', receivedAt: 0, completedAt: null }, ...o });
+  view({ card: { step: 'PS', type: 'pit_stop', label: 'Chặng dừng', text: '', media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: 0, completedAt: null }, ...o });
 const box: BoxInfo = { step: 'L1', x: 0, z: 0, opened: false, r: 20 };
 const mat: BoxInfo = { step: 'PS', x: 100, z: 0, opened: false, r: 15, kind: 'mat' };
 
@@ -99,5 +99,16 @@ describe('task button (D4)', () => {
     c.task('D2', 'B');
     expect(ops).toEqual([{ t: 'race', op: 'task', step: 'T1' }, { t: 'race', op: 'task', step: 'D2', branch: 'B' }]);
     expect(sent).toEqual([]);
+  });
+
+  it('Phase 8 answer / branch / accept go out at once from anywhere: no pose first (D8)', () => {
+    const [ops, sent]: ClientMessage[][] = [[], []];
+    const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), op: (m) => ops.push(m), serverNow: () => 0 });
+    c.answer('T1', 'bảy');
+    c.answer('D1', '');
+    c.branch('D1', 'A');
+    c.accept('T2');
+    expect(sent).toEqual([{ t: 'race', op: 'answer', step: 'T1', text: 'bảy' }, { t: 'race', op: 'answer', step: 'D1', text: '' }, { t: 'race', op: 'branch', step: 'D1', branch: 'A' }, { t: 'race', op: 'accept', step: 'T2' }]);
+    expect(ops).toEqual([]);
   });
 });

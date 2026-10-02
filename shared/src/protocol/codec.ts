@@ -1,5 +1,6 @@
 // Compact number-array codec + trust-boundary validation (docs/plans/phase6.md §3.4). Decoders return null for anything
 // malformed instead of throwing: the server closes such sockets, the client ignores such frames.
+import { NET } from './constants.ts';
 import { MOVE_MODES, PLAYER_ACTIONS, type PoseArray, type PoseSample, TAG, type TickArray, type TickEntry } from './types.ts';
 
 const CM = 100; // positions in cm (SPEC §3)
@@ -72,6 +73,8 @@ export function parseFrame(raw: string | ArrayBuffer, maxBytes: number): unknown
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const str = (v: unknown, max = 64): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
+/** Like str, but '' allowed (an answer / note may be empty). */
+const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
 /** A JSON position (m) inside the pose bounds, so it always encodes to a pose / tick the other side can decode. */
 const point = (m: Record<string, unknown>) =>
   num(m.x) && num(m.y) && num(m.z) && num(m.yaw) && Math.abs(m.x) <= MAX_XZ / CM && Math.abs(m.z) <= MAX_XZ / CM && m.y >= MIN_Y / CM && m.y <= MAX_Y / CM;
@@ -99,13 +102,28 @@ export function isClientMessage(m: unknown, role: 'team' | 'host'): boolean {
       return role === 'host' && (o.op === 'add' || o.op === 'remove' || o.op === 'release');
     case 'host.spawning':
       return role === 'host' && typeof o.paused === 'boolean';
-    // Phase 7 (docs/plans/phase7.md §5.1): step ids are ≤ 16 chars (LEG_LIMITS.stepId), answers ≤ 200
+    // Phase 7 / 8 (docs/plans/phase8.md §5.1, D19): step / branch ids are ≤ 16 chars (LEG_LIMITS.stepId), answers ≤ NET.answerMax
     case 'race':
       if (role !== 'team') return false;
       if (o.op === 'checkin' || o.op === 'book') return true;
       if (!str(o.step, 16)) return false;
-      if (o.op === 'open') return true;
-      return o.op === 'task' && (o.branch === undefined || str(o.branch, 16)) && (o.answer === undefined || (typeof o.answer === 'string' && o.answer.length <= 200));
+      switch (o.op) {
+        case 'open':
+          return o.branch === undefined || str(o.branch, 16);
+        case 'accept':
+          return true;
+        case 'answer':
+          return text(o.text, NET.answerMax);
+        case 'branch':
+          return str(o.branch, 16);
+        case 'task': // Phase 7 stub, until track A removes it
+          return (o.branch === undefined || str(o.branch, 16)) && (o.answer === undefined || text(o.answer, NET.answerMax));
+        default:
+          return false;
+      }
+    case 'host.review':
+      return role === 'host' && str(o.team) && str(o.step, 16) && (o.op === 'approve' || o.op === 'penalize' || o.op === 'note') &&
+        (o.id === undefined || isInt(o.id, 1, 10_000)) && (o.note === undefined || text(o.note, NET.noteMax));
     case 'host.race':
       return role === 'host' && (o.op === 'start' || o.op === 'pause' || o.op === 'resume' || o.op === 'finish');
     case 'host.team':

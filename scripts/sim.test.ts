@@ -79,7 +79,7 @@ function fakeEngine(legJson: string) {
   const log: ServerMessage[] = [];
   const ops: string[] = [];
   let step = 0, finished = false, at = { x: 0, z: 0 };
-  const view = (): RaceView => ({ status: 'running', startAt: 1, finishAt: finished ? 2 : null, penaltyMinutes: 0, card: { step: leg.steps[step]!.id, type: leg.steps[step]!.type, label: '', text: '', status: 'active', receivedAt: 0, completedAt: null }, checkinAt: null, officialMs: null });
+  const view = (): RaceView => ({ status: 'running', startAt: 1, finishAt: finished ? 2 : null, penaltyMinutes: 0, card: { step: leg.steps[step]!.id, type: leg.steps[step]!.type, label: '', text: '', media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: 0, completedAt: null }, checkinAt: null, officialMs: null });
   const inZone = (z: { x: number; z: number; r: number }) => Math.hypot(at.x - z.x, at.z - z.z) <= z.r;
   const push = () => log.push({ t: 'race', view: view() });
   const advance = () => {
@@ -130,7 +130,8 @@ describe('sim bot against a stand-in engine (no workerd)', () => {
     const zones = stepZones(eng.leg);
     const legState = {
       id: 'mini', title: '', timezone: 'Asia/Ho_Chi_Minh', start: { x: zones[0]!.x, z: zones[0]!.z }, bundled: [], issues: [], vehicles: eng.leg.vehicles,
-      steps: eng.leg.steps.map((s, i) => ({ id: s.id, type: s.type, label: s.label, name: '', x: zones[i]!.x, z: zones[i]!.z, r: zones[i]!.r })),
+      steps: eng.leg.steps.map((s, i) => ({ id: s.id, type: s.type, label: s.label, name: '', x: zones[i]!.x, z: zones[i]!.z, r: zones[i]!.r, proof: false })),
+      media: [], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45,
     } as NonNullable<HostState['leg']>;
     const welcome = { movement: { footSpeed: 400, bikeSpeedMultiplier: 1.3 }, start: { x: legState.start.x, z: legState.start.z, yaw: 0 }, pose: null, view: { card: { step: 'L1' }, finishAt: null } } as unknown as Welcome;
     const refused: string[] = [];

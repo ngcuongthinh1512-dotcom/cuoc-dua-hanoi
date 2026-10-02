@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodePose, decodeTick, encodePose, encodeTick, isClientMessage, parseFrame, POSE_LEN, samePose } from './codec.ts';
 import { NET } from './constants.ts';
-import { MOVE_MODES, PLAYER_ACTIONS, type PoseSample, TAG } from './types.ts';
+import { MOVE_MODES, PLAYER_ACTIONS, type PoseSample, submitCode, TAG } from './types.ts';
 
 const pose: PoseSample = { x: 123.456, y: 1.234, z: -910.117, yaw: 2.5, mode: 'bike', action: 'none' };
 
@@ -131,5 +131,53 @@ describe('frames and JSON messages', () => {
     expect(isClientMessage({ t: 'host.leg', json: '{}' }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.leg', id: 'a', json: '{}' }, 'host')).toBe(false); // one or the other
     expect(isClientMessage({ t: 'host.leg', id: 'paris-demo' }, 'team')).toBe(false);
+  });
+
+  it('Phase 8: answer / accept / branch / open{branch} from a team, host.review from the Host, through a JSON frame', () => {
+    const longest = 'Đ'.repeat(NET.answerMax); // Vietnamese, the full input length: one player frame still
+    const team = [
+      { t: 'race', op: 'answer', step: 'T1', text: 'Tháp Eiffel' },
+      { t: 'race', op: 'answer', step: 'D1', text: '' }, // "Tôi đã gửi bài" of a photo task
+      { t: 'race', op: 'answer', step: 'T2', text: longest },
+      { t: 'race', op: 'accept', step: 'T1' },
+      { t: 'race', op: 'branch', step: 'D1', branch: 'A' },
+      { t: 'race', op: 'open', step: 'D1', branch: 'B' },
+    ];
+    const host = [
+      { t: 'host.review', team: 't0', step: 'T1', op: 'approve', id: 2, note: 'đúng ý' },
+      { t: 'host.review', team: 't0', step: 'D1', op: 'approve' }, // photo approved before the team pressed its button
+      { t: 'host.review', team: 't0', step: 'T1', op: 'penalize', id: 1 },
+      { t: 'host.review', team: 't0', step: 'T1', op: 'note', note: '' },
+    ];
+    for (const [list, role, max] of [[team, 'team', NET.maxPlayerBytes], [host, 'host', NET.maxHostBytes]] as const)
+      for (const m of list) {
+        const back = parseFrame(JSON.stringify(m), max);
+        expect(back).toEqual(m);
+        expect(isClientMessage(back, role)).toBe(true);
+        expect(isClientMessage(back, role === 'team' ? 'host' : 'team')).toBe(false); // each side only its own
+      }
+  });
+
+  it('Phase 8: refuses malformed answers, branches and reviews', () => {
+    const bad: [unknown, 'team' | 'host'][] = [
+      [{ t: 'race', op: 'answer', step: 'T1' }, 'team'], // no text
+      [{ t: 'race', op: 'answer', step: 'T1', text: 'a'.repeat(NET.answerMax + 1) }, 'team'],
+      [{ t: 'race', op: 'answer', step: 'T1', text: 42 }, 'team'],
+      [{ t: 'race', op: 'branch', step: 'D1' }, 'team'], // which branch?
+      [{ t: 'race', op: 'branch', step: 'D1', branch: '' }, 'team'],
+      [{ t: 'race', op: 'open', step: 'D1', branch: 'x'.repeat(17) }, 'team'],
+      [{ t: 'race', op: 'accept' }, 'team'],
+      [{ t: 'host.review', team: 't0', step: 'T1', op: 'reject', id: 1 }, 'host'],
+      [{ t: 'host.review', team: 't0', step: 'T1', op: 'approve', id: 0 }, 'host'],
+      [{ t: 'host.review', team: 't0', step: 'T1', op: 'approve', id: 1.5 }, 'host'],
+      [{ t: 'host.review', team: '', step: 'T1', op: 'approve', id: 1 }, 'host'],
+      [{ t: 'host.review', team: 't0', step: 'T1', op: 'note', note: 'x'.repeat(NET.noteMax + 1) }, 'host'],
+    ];
+    for (const [m, role] of bad) expect(isClientMessage(m, role), JSON.stringify(m).slice(0, 80)).toBe(false);
+  });
+
+  it('Phase 8: submission code "<team>-<step>[-<branch>]" (card, Sổ, Host queue: one function)', () => {
+    expect(submitCode('Đội Xanh', 'D1', 'A')).toBe('Đội Xanh-D1-A');
+    expect(submitCode('Đội Xanh', 'T2', null)).toBe('Đội Xanh-T2');
   });
 });

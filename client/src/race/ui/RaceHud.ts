@@ -12,10 +12,19 @@ import { bookEntries, type BookEntry, finishLine, penaltyLine, type CardSummary,
 import './race.css';
 
 export interface RaceHudActions {
-  /** Phase 7 stub task: the team says it did the task (`race task`; detour: the branch). */
+  /** Phase 7 stub task: the team says it did the task (`race task`; detour: the branch). Phase 8 tracks B / C remove it. */
   task(step: string, branch?: string): void;
   /** The Sổ mật thư opened: ask the server for the cards (`race book`). */
   book(): void;
+  // Phase 8 (docs/plans/phase8.md §5.3; RaceClient sends them)
+  /** A typed answer ('' = "Tôi đã gửi bài – chờ Host duyệt" of a photo task). */
+  answer(step: string, text: string): void;
+  /** Choose / switch a detour branch (after the confirm that names the penalty). */
+  branch(step: string, branch: string): void;
+  /** "Nhận thử thách". */
+  accept(step: string): void;
+  /** An "r2:<name>" image → a blob URL (fetched with the team token), null = not available (offline / not allowed). */
+  resolveMedia?(name: string): Promise<string | null>;
 }
 
 export interface RaceHudFrame {
@@ -96,7 +105,11 @@ export class RaceHud {
   private readonly npcEl = el('div', 'rc-npc hud-box');
   private readonly overlay = el('div', 'rc-overlay');
 
-  constructor(readonly actions: RaceHudActions) {
+  /** Phase 8 (critic B1): called whenever `open` flips (track C calls it; track B sets it: release / re-take the pointer lock). */
+  onOpenChange?: (open: boolean) => void;
+
+  /** `teamName`: the submission code "<team>-<step>[-<branch>]" (submitCode) on photo task cards. */
+  constructor(readonly actions: RaceHudActions, readonly teamName = '') {
     this.compact.hidden = this.zonePanel.hidden = this.penaltyEl.hidden = this.promptEl.hidden = this.npcEl.hidden = this.overlay.hidden = true;
     this.tl.append(this.compact, this.zonePanel);
     document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay);
@@ -117,7 +130,7 @@ export class RaceHud {
     this.view = view;
     const card = view?.card ?? null;
     this.renderCompact(card);
-    if (!card || card.status !== 'active') return;
+    if (!card || card.status === 'done') return;
     const key = `${card.step}@${card.receivedAt}`;
     if (key === this.seenKey || (this.seenKey == null && key === store.get())) return void (this.seenKey = key);
     this.seenKey = key;
@@ -145,6 +158,11 @@ export class RaceHud {
     this.fullCard = null;
     this.renderBook(null);
     this.actions.book();
+  }
+
+  /** Phase 8: keys.clueCard (Enter) with nothing open → the current card in full again (answer history, input). */
+  openCurrent(): void {
+    if (!this.open && this.view?.card) this.openFull(this.view.card);
   }
 
   /** The book or a full card is open: the body stops, keys go to the panel (main.ts modal()). */
@@ -304,19 +322,21 @@ export class RaceHud {
 
 // ── DEV stand-ins (p7-* presets): invented UI text, not leg content ──
 const T0 = Date.UTC(2026, 9, 1, 9, 0, 0);
-const task: TaskView = { title: 'Thử thách minh họa', description: 'Mô tả nhiệm vụ minh họa dành cho ảnh chụp giao diện.', media: [], kind: 'answer', verification: 'auto', proofInstruction: '', timeLimitMinutes: 20 };
+const task: TaskView = { title: 'Thử thách minh họa', description: 'Mô tả nhiệm vụ minh họa dành cho ảnh chụp giao diện.', media: [], kind: 'answer', verification: 'auto', input: 'text', proofInstruction: '', timeLimitMinutes: 20 };
+/** Phase 8 card fields every stand-in shares (no media, no countdown, no answers yet). */
+const NEW = { media: [], lockedUntil: null, lockKind: null, answers: [] } satisfies Partial<ClueCard>;
 const DEMO_CARDS: Record<string, ClueCard> = {
-  route: { step: 'D1', type: 'route_info', label: 'Lộ trình 1', text: 'Nội dung mật thư minh họa: hãy đi tới nơi có thể nhìn thấy ngọn tháp cao nhất thành phố rồi tìm hộp mật thư ở chân nó.', transport: { allowed: 'any' }, status: 'active', receivedAt: T0, completedAt: null },
-  walk: { step: 'D1', type: 'route_info', label: 'Lộ trình 2', text: 'Mật thư minh họa, lộ trình bắt buộc đi bộ.', transport: { mandatory: 'walk' }, status: 'active', receivedAt: T0, completedAt: null },
+  route: { ...NEW, step: 'D1', type: 'route_info', label: 'Lộ trình 1', text: 'Nội dung mật thư minh họa: hãy đi tới nơi có thể nhìn thấy ngọn tháp cao nhất thành phố rồi tìm hộp mật thư ở chân nó.', transport: { allowed: 'any' }, status: 'active', receivedAt: T0, completedAt: null },
+  walk: { ...NEW, step: 'D1', type: 'route_info', label: 'Lộ trình 2', text: 'Mật thư minh họa, lộ trình bắt buộc đi bộ.', transport: { mandatory: 'walk' }, status: 'active', receivedAt: T0, completedAt: null },
   detour: {
-    step: 'D2', type: 'detour', label: 'Lựa chọn kép', text: 'Hai con đường, một phải chọn. Hãy chọn nhánh hợp với đội.', status: 'active', receivedAt: T0, completedAt: null, branch: null,
+    ...NEW, step: 'D2', type: 'detour', label: 'Lựa chọn kép', text: 'Hai con đường, một phải chọn. Hãy chọn nhánh hợp với đội.', status: 'active', receivedAt: T0, completedAt: null, branch: null,
     branches: [
       { id: 'A', name: 'Nhánh A', summary: 'Một nhiệm vụ nhanh gọn ngay tại điểm này.', task },
       { id: 'B', name: 'Nhánh B', summary: 'Nhiệm vụ dài hơn ở một nơi khác.', task: { ...task, place: 'Quảng trường minh họa' } },
     ],
   },
-  challenge: { step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý minh họa: hãy quan sát kỹ xung quanh.', status: 'active', receivedAt: T0, completedAt: null, task: { ...task, place: 'Sân minh họa' } },
-  pit: { step: 'P', type: 'pit_stop', label: 'Chặng dừng', text: '', status: 'active', receivedAt: T0, completedAt: null },
+  challenge: { ...NEW, step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý minh họa: hãy quan sát kỹ xung quanh.', status: 'active', receivedAt: T0, completedAt: null, task: { ...task, place: 'Sân minh họa' } },
+  pit: { ...NEW, step: 'P', type: 'pit_stop', label: 'Chặng dừng', text: '', status: 'active', receivedAt: T0, completedAt: null },
 };
 const DEMO_BOOK: ClueCard[] = [
   { ...DEMO_CARDS.route!, label: 'Lộ trình 1', status: 'done', receivedAt: T0, completedAt: T0 + 1_240_000 },

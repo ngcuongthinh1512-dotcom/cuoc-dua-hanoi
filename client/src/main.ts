@@ -223,7 +223,17 @@ async function start() {
   // the team's race state from the server (track B).
   // task goes through `race` (the pose first, D4; the book needs none); offline there is no race: Tab shows an empty book.
   const raceHud = player
-    ? new RaceHud({ task: (step, branch) => race?.task(step, branch), book: () => void (net ? net.send({ t: 'race', op: 'book' }) : raceHud?.showBook([])) })
+    ? new RaceHud(
+        {
+          task: (step, branch) => race?.task(step, branch),
+          book: () => void (net ? net.send({ t: 'race', op: 'book' }) : raceHud?.showBook([])),
+          // Phase 8 (track B wires the rest: pointer lock on onOpenChange, Enter → openCurrent, resolveMedia)
+          answer: (step, text) => race?.answer(step, text),
+          branch: (step, id) => race?.branch(step, id),
+          accept: (step) => race?.accept(step),
+        },
+        session?.team?.name ?? '',
+      )
     : undefined;
   if (import.meta.env.DEV && !session) raceHud?.demo(query);
   const race =

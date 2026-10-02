@@ -22,7 +22,8 @@ export const LEG_LIMITS = {
 /** SPEC §2 / §17.12: the step types of this game (no `roadblock`). */
 export const STEP_TYPES = ['route_info', 'detour', 'challenge', 'pit_stop'] as const;
 export type StepType = (typeof STEP_TYPES)[number];
-/** SPEC §11 mini-game kinds (Phase 8 implements them; Phase 7 passes every task through the stub). */
+/** SPEC §11 mini-game kinds. Phase 8 plays `answer` (typed in game) and `free` (a photo sent on Messenger); the others
+ *  are a `leg:check` warning and run as `answer` (the mini-game library is deferred, docs/plans/phase8.md §11). */
 export const TASK_KINDS = ['find_objects', 'delivery', 'observe_answer', 'cipher', 'photo_match', 'binocular_scan', 'timed_drive', 'memory_ui', 'answer', 'free'] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
 export const VERIFICATIONS = ['auto', 'host_approval'] as const;
@@ -32,6 +33,13 @@ const text = () => z.string().max(LEG_LIMITS.textMax);
 const latLon = { lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) };
 const radius = z.number().min(LEG_LIMITS.radiusMin).max(LEG_LIMITS.radiusMax);
 const stepId = z.string().regex(LEG_LIMITS.stepId);
+/** Phase 8 (D2): a link or an image, written as a string or {url, label}; always {url, label} once parsed. url =
+ *  "https://…" (a link, opened in a new tab) or "r2:<name>" (an image the Host uploads to R2, protocol MEDIA). The url /
+ *  name rules are checkLeg's (Vietnamese messages naming the item). */
+const mediaItem = z
+  .union([z.string().max(500), z.strictObject({ url: z.string().max(500), label: text().default('') })])
+  .transform((m) => (typeof m === 'string' ? { url: m, label: '' } : m));
+const media = () => z.array(mediaItem).default([]);
 
 /** A point with a geofence (SPEC §8.2): the clue box / mat stands at lat, lon; `radius` m around it is "at the point". */
 export const destinationSchema = z.strictObject({
@@ -40,6 +48,9 @@ export const destinationSchema = z.strictObject({
   radius,
   /** SPEC §6.4: the bike rack next to the point (optional; `npm run leg:check` suggests one). */
   bikeParking: z.strictObject(latLon).optional(),
+  /** Phase 8 (gap 11): where the FRONT of the clue box faces (the side a team reads it from), like start.yawDeg: 0 = north,
+   *  + = turned left / west. Also the box of a detour branch (its task.location). */
+  yawDeg: z.number().default(0),
 });
 
 /** SPEC §6.5. */
@@ -49,12 +60,18 @@ export const transportSchema = z.union([z.strictObject({ allowed: z.literal('any
 export const taskSchema = z.strictObject({
   title: text().default(''),
   description: text().default(''),
-  media: z.array(z.string().max(500)).default([]),
+  media: media(),
   /** null = right at the point just reached; else somewhere else (its own geofence). */
   location: destinationSchema.nullable().default(null),
   kind: z.enum(TASK_KINDS).default('answer'),
   verification: z.enum(VERIFICATIONS).default('auto'),
   answers: z.array(z.string().max(200)).default([]),
+  /** Phase 8 (gap 2): shown to the Host next to a team's answer (host_approval); NEVER sent to a team. Empty = the Host
+   *  sees `answers`. */
+  referenceAnswers: z.array(z.string().max(200)).default([]),
+  /** Phase 8 (gap 3): minutes a team waits after the Host's "Phạt" before answering again; null = penalties.retryLockMinutes,
+   *  0 = no wait. */
+  retryLockMinutes: z.number().min(0).nullable().default(null),
   proofInstruction: text().default(''),
   timeLimitMinutes: z.number().positive().nullable().default(null),
   /** Mini-game parameters of kinds other than answer / free (object positions, target photo + heading, gates…: SPEC
@@ -70,6 +87,8 @@ const routeInfo = z.strictObject({
   clue: text(),
   transport: transportSchema.default({ allowed: 'any' }),
   destination: destinationSchema,
+  /** Phase 8 (gap 5 / 14): links and images of the clue. */
+  media: media(),
 });
 const branchSchema = z.strictObject({ id: stepId, name: text().default(''), summary: text().default(''), task: taskSchema.prefault({}) });
 const detour = z.strictObject({
@@ -77,6 +96,7 @@ const detour = z.strictObject({
   type: z.literal('detour'),
   label: text(),
   clue: text().default(''),
+  media: media(),
   branches: z.array(branchSchema).length(2),
 });
 const challenge = z.strictObject({
@@ -102,7 +122,16 @@ export const legSchema = z.strictObject({
   presence: z.strictObject({ renderRadius: z.number().positive().default(300), showOthersOnMinimap: z.boolean().default(false) }).prefault({}),
   /** SPEC §17.10: the current box's position is sent within `radius` m, taken away beyond radius + hysteresis. */
   boxReveal: z.strictObject({ radius: z.number().positive().default(150), hysteresis: z.number().min(0).default(20) }).prefault({}),
-  penalties: z.strictObject({ walkOnlyViolationMinutes: z.number().min(0).default(15), quitTaskMinutes: z.number().min(0).default(30) }).prefault({}),
+  penalties: z
+    .strictObject({
+      walkOnlyViolationMinutes: z.number().min(0).default(15),
+      quitTaskMinutes: z.number().min(0).default(30),
+      /** Phase 8 (SPEC §17.14): the Host's "Phạt" = a countdown before the team may answer again (task.retryLockMinutes overrides). */
+      retryLockMinutes: z.number().min(0).default(3),
+      /** Phase 8 (SPEC §17.16): "Đổi lựa chọn kép" = a countdown before the other branch's box shows (each switch). */
+      branchSwitchLockMinutes: z.number().min(0).default(10),
+    })
+    .prefault({}),
   movement: z.strictObject({ footSpeed: z.number().positive().default(4), bikeSpeedMultiplier: z.number().positive().default(1.3) }).prefault({}),
   vehicles: z
     .strictObject({
@@ -120,6 +149,9 @@ export const legSchema = z.strictObject({
     })
     .prefault({}),
   clueBook: z.strictObject({ showLockedSlots: z.boolean().default(false) }).prefault({}),
+  /** Phase 8 (SPEC §17.14): the Host page warns when a team has been on one challenge / branch this long (repeats every
+   *  period until it is done); computed on the Host page, nothing in game. */
+  hostAlerts: z.strictObject({ stuckMinutes: z.number().positive().default(45) }).prefault({}),
   hostApproval: z
     .strictObject({ contactLabel: text().default('Gửi bài qua Facebook cho Host'), contactUrl: z.string().max(500).default(''), approvalWaitCounts: z.boolean().default(false) })
     .prefault({}),
@@ -144,4 +176,6 @@ export type Destination = z.output<typeof destinationSchema>;
 export type Task = z.output<typeof taskSchema>;
 export type Branch = DetourStep['branches'][number];
 export type Transport = z.output<typeof transportSchema>;
+/** A parsed media item: {url: "https://…" | "r2:<name>", label}. */
+export type MediaItem = Task['media'][number];
 export type VehiclesConfig = Leg['vehicles'];

@@ -116,7 +116,17 @@
             "title": "(GIẢ) Đếm cột đèn",
             "description": "(GIẢ) Có bao nhiêu cột đèn trên sân trước Palais de Chaillot? Nhập một số.",
             "media": [],
-            "location": null,
+            "location": {
+              "name": "Đầu bậc thang xuống vườn Trocadéro",
+              "lat": 48.86176,
+              "lon": 2.28809,
+              "radius": 15,
+              "yawDeg": 315,
+              "bikeParking": {
+                "lat": 48.86157,
+                "lon": 2.28792
+              }
+            },
             "kind": "answer",
             "verification": "auto",
             "answers": [
@@ -135,7 +145,16 @@
             "title": "(GIẢ) Ảnh với tháp Eiffel",
             "description": "(GIẢ) Chụp màn hình nhân vật của đội với tháp Eiffel phía sau.",
             "media": [],
-            "location": null,
+            "location": {
+              "name": "Góc sân phía quảng trường Trocadéro",
+              "lat": 48.86237,
+              "lon": 2.28902,
+              "radius": 15,
+              "bikeParking": {
+                "lat": 48.86249,
+                "lon": 2.28932
+              }
+            },
             "kind": "free",
             "verification": "host_approval",
             "answers": [],
@@ -223,6 +242,9 @@
         "kind": "free",
         "verification": "host_approval",
         "answers": [],
+        "referenceAnswers": [
+          "(GIẢ) Ảnh có mặt đồng hồ lớn, thấy rõ kim"
+        ],
         "proofInstruction": "(GIẢ) Gửi ảnh chụp màn hình kèm mã bài nộp qua Facebook.",
         "timeLimitMinutes": null
       }

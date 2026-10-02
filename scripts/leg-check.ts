@@ -180,7 +180,7 @@ export function secretStrings(leg: Leg, min = 12): string[] {
     if (s.type === 'route_info' || s.type === 'detour') out.add(s.clue);
     if (s.type === 'challenge') out.add(s.teaser);
     const tasks = s.type === 'detour' ? s.branches.map((b) => (out.add(b.summary), b.task)) : s.type === 'challenge' ? [s.task] : [];
-    for (const t of tasks) [t.title, t.description, t.proofInstruction, ...t.answers].forEach((x) => out.add(x));
+    for (const t of tasks) [t.title, t.description, t.proofInstruction, ...t.answers, ...t.referenceAnswers].forEach((x) => out.add(x)); // Phase 8: reference answers are Host-only
   }
   return [...out].map((x) => x.trim()).filter((x) => x.length >= min);
 }
@@ -188,7 +188,7 @@ export function secretStrings(leg: Leg, min = 12): string[] {
 /** The answers among the secrets: short place names / street signs, so they may legitimately also be in the map data. */
 export function answerStrings(leg: Leg, min = 12): Set<string> {
   const out = new Set<string>();
-  for (const s of leg.steps) for (const t of s.type === 'detour' ? s.branches.map((b) => b.task) : s.type === 'challenge' ? [s.task] : []) t.answers.forEach((x) => x.trim().length >= min && out.add(x.trim()));
+  for (const s of leg.steps) for (const t of s.type === 'detour' ? s.branches.map((b) => b.task) : s.type === 'challenge' ? [s.task] : []) [...t.answers, ...t.referenceAnswers].forEach((x) => x.trim().length >= min && out.add(x.trim()));
   return out;
 }
 
