@@ -1060,6 +1060,12 @@ export const hostPage = {
   noticeMs: 15_000, // how long a host.notice (a refused / warned Host op) stays on the page
   maxLegBytes: 256 * 1024, // leg file the Host may send (host.leg json; the server refuses more)
   addBikeOffset: 3, // m east of the team: "Thêm xe" in the team table puts a shared bike this close to the team's last pose
+  // Phase 8 (docs/plans/phase8.md D11 / D14 / D16, track E)
+  queueBeep: true, // a new answer in the review queue → a beep (+ a browser Notification once "Bật thông báo" was pressed)
+  alertRepeat: true, // the stuck warning sounds again every hostAlerts.stuckMinutes (false: only the first time per team / step)
+  mediaHeadRetryMs: 15_000, // HEAD again, this often, only the R2 images still missing (never the whole list)
+  reviewLockMs: 1500, // after Duyệt / Phạt the item's buttons stay off this long (a double click is idempotent on the server anyway)
+  beepVolume: 0.2, // 0…1, WebAudio gain of the queue / stuck beeps
 };
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════

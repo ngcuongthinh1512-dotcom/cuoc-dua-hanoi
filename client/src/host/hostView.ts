@@ -1,7 +1,7 @@
 // Minimal Host page, pure part (docs/plans/phase6.md §3.19): host.state → table rows / counter lines. No DOM, so it is
 // testable in Node. Phase 10 replaces the page with SPEC §13; keep the page thin.
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import type { HostState, LegIssueView, QuotaCounters, RaceStatus, StepProgressView } from '@race/shared/protocol';
+import { MEDIA, NET, submitCode, type AnswerStatus, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type StepProgressView } from '@race/shared/protocol';
 
 /** Durable Object requests as Cloudflare bills them (same formula as worker/src/counters.ts, docs/plans/phase6.md §3.7). */
 export const billableRequests = (c: QuotaCounters) => c.http + c.alarms + Math.ceil(c.wsIn / 20);
@@ -223,11 +223,20 @@ export function startRows(state: HostState): StartRow[] {
   }));
 }
 
-export interface Cell { state: 'todo' | 'active' | 'done'; text: string; title: string }
-export interface ProgressRow { team: string; name: string; colour: string; rank: string; cells: Cell[]; penalty: string; finish: string; official: string; gap: string }
+/** A button inside a matrix cell: host.review on `team` / `step` (`id` absent = approve a photo task before "Tôi đã gửi bài"). */
+export interface CellButton { op: 'approve' | 'penalize'; team: string; step: string; id?: number; label: string; title: string }
+export interface Cell { state: 'todo' | 'active' | 'done' | 'pending' | 'locked'; text: string; title: string; buttons: CellButton[] }
+export interface ProgressRow { team: string; name: string; colour: string; rank: string; cells: Cell[]; penalty: string; finish: string; official: string; gap: string; approvalWait: string }
+
+const ANSWER_LABEL: Record<AnswerStatus, string> = { pending: 'chờ duyệt', approved: 'đã duyệt', penalized: 'bị phạt', wrong: 'chưa đúng', correct: 'đúng' };
+/** 0.1 → "0,1" (Vietnamese decimal comma; Number.toLocaleString depends on the Node / browser ICU). */
+const fmtNum = (n: number) => String(n).replace('.', ',');
 
 /** SPEC §13.6 minimal matrix: rows = teams (ranked first), columns = steps. grey = not yet, yellow = at the step (elapsed there),
- *  green = done ("HH:mm:ss · mm:ss": when · how long the step took). `mode` 't' shows T+ on each team's own clock. */
+ *  green = done ("HH:mm:ss · mm:ss": when · how long the step took). `mode` 't' shows T+ on each team's own clock.
+ *  Phase 8 (D16): orange = an answer waits for the Host ("chờ duyệt mm:ss", Duyệt / Phạt in the cell), purple = a countdown
+ *  ("⏳ mm:ss": the Host's penalty or a branch switch), "(A ↺1)" = branch A after one switch, "✗2" = two penalties; a photo
+ *  task the team has started offers "Duyệt (đã nhận ảnh)"; the title lists every answer with the Host's notes. */
 export function progressTable(state: HostState, now: number, mode: 'real' | 't'): { head: { label: string; title: string }[]; rows: ProgressRow[] } {
   const leg = state.leg;
   const tz = leg?.timezone ?? 'Asia/Ho_Chi_Minh';
@@ -248,13 +257,36 @@ export function progressTable(state: HostState, now: number, mode: 'real' | 't')
         p?.startedAt != null && `Bắt đầu nhiệm vụ: ${when(p.startedAt)}`,
         doneAt != null && `Xong: ${when(doneAt)}`,
         p?.branch && `Nhánh: ${p.branch}`,
+        ...(p?.answers ?? []).map((a) => `${a.branch ? `[${a.branch}] ` : ''}${a.text ? `«${a.text}»` : '(đã gửi bài)'} · ${when(a.at)} · ${ANSWER_LABEL[a.status]}${a.note ? ` · ghi chú: ${a.note}` : ''}`),
+        p?.note && `Ghi chú Host: ${p.note}`,
+        p?.approvalWaitSeconds && `Đã chờ duyệt: ${fmtMinSec(p.approvalWaitSeconds * 1000)}`,
       ].filter(Boolean).join('\n');
-      const branch = p?.branch ? ` (${p.branch})` : '';
-      if (doneAt !== null) return { state: 'done', text: `${when(doneAt)} · ${fmtMinSec(doneAt - (p?.openedAt ?? doneAt))}${branch}`, title };
-      if (i === t.step && t.finishAt === null) return { state: 'active', text: `${p?.openedAt != null ? fmtMinSec(now - p.openedAt) : '…'}${branch}`, title };
-      return { state: 'todo', text: '', title };
+      const branch = p?.branch ? ` (${p.branch}${p.branchSwitches ? ` ↺${p.branchSwitches}` : ''})` : '';
+      const tags = `${branch}${p?.rejections ? ` ✗${p.rejections}` : ''}`;
+      if (doneAt !== null) return { state: 'done', text: `${when(doneAt)} · ${fmtMinSec(doneAt - (p?.openedAt ?? doneAt))}${tags}`, title, buttons: [] };
+      if (i !== t.step || t.finishAt !== null) return { state: 'todo', text: '', title, buttons: [] };
+      // the team is at this step. A photo task it has started (a detour: its branch box opened) may be approved at once.
+      const proof = s.type === 'detour' ? p?.branchOpenedAt != null && !!s.branches?.find((b) => b.id === p.branch)?.proof : !!s.proof && p?.startedAt != null;
+      const proofBtn: CellButton[] = proof ? [{ op: 'approve', team: t.id, step: s.id, label: 'Duyệt (đã nhận ảnh)', title: 'Host đã nhận ảnh qua Messenger: duyệt mà đội chưa bấm "Tôi đã gửi bài"' }] : [];
+      const last = p?.answers.at(-1);
+      if (p?.pending && last) {
+        const lock = state.queue.find((q) => q.team === t.id && q.step === s.id && q.id === last.id)?.lockMinutes ?? leg?.penalties.retryLockMinutes;
+        return { state: 'pending', text: `chờ duyệt ${fmtMinSec(now - last.at)}${tags}`, title, buttons: [
+          { op: 'approve', team: t.id, step: s.id, id: last.id, label: 'Duyệt', title: 'Duyệt câu trả lời này: đội nhận mật thư kế' },
+          { op: 'penalize', team: t.id, step: s.id, id: last.id, label: 'Phạt', title: `Phạt${lock !== undefined ? ` ${fmtNum(lock)} phút` : ''}: đội chờ hết đếm ngược rồi trả lời lại` },
+        ] };
+      }
+      if (p?.lockedUntil != null && p.lockedUntil > now) {
+        // a mistaken "Phạt" is corrected by approving that answer (the server accepts the newest penalized one) - not the
+        // countdown of a branch switch (branch box not open: the last answer belongs to the branch the team left)
+        const retry = s.type !== 'detour' || p.branchOpenedAt != null;
+        const redo: CellButton[] = !proof && retry && last?.status === 'penalized' && last.branch === p.branch ? [{ op: 'approve', team: t.id, step: s.id, id: last.id, label: 'Duyệt lại', title: 'Sửa lại: duyệt câu vừa bị phạt' }] : [];
+        return { state: 'locked', text: `⏳ ${fmtMinSec(p.lockedUntil - now)}${tags}`, title, buttons: [...proofBtn, ...redo] };
+      }
+      return { state: 'active', text: `${p?.openedAt != null ? fmtMinSec(now - p.openedAt) : '…'}${tags}`, title, buttons: proofBtn };
     });
     const r = rankOf.get(t.id);
+    const wait = state.progress.reduce((n, x) => n + (x.team === t.id ? x.approvalWaitSeconds : 0), 0);
     return {
       team: t.id, name: t.name, colour: t.colour,
       rank: r ? String(r.rank) : '—',
@@ -263,10 +295,111 @@ export function progressTable(state: HostState, now: number, mode: 'real' | 't')
       finish: when(t.finishAt),
       official: r?.officialMs != null ? fmtDuration(r.officialMs) : '—',
       gap: r?.gapMs ? `+${fmtMinSec(r.gapMs)}` : '—',
+      approvalWait: wait ? fmtMinSec(wait * 1000) : '—',
     };
   });
   return { head, rows };
 }
+
+// ── Phase 8 (docs/plans/phase8.md D10, D11, D14, D16, track E): review queue, stuck alerts, R2 images ──
+
+/** host.review of a cell / queue button. `note` '' = none (op 'note' sends '' to clear the Host note); never longer than NET.noteMax. */
+export function reviewMessage(team: string, step: string, op: HostReview['op'], id: number | undefined, note: string): HostReview {
+  const n = note.trim().slice(0, NET.noteMax);
+  return { t: 'host.review', team, step, op, ...(id !== undefined ? { id } : {}), ...(op === 'note' || n ? { note: n } : {}) };
+}
+
+export interface QueueRow {
+  /** team|step|id: new-item detection and the draft note. */
+  key: string;
+  team: string;
+  name: string;
+  colour: string;
+  step: string;
+  label: string;
+  branch: string | null;
+  id: number;
+  /** submitCode: what the team pastes on Messenger with its photo. */
+  code: string;
+  /** '' = "đã gửi bài qua Messenger". */
+  text: string;
+  waiting: string;
+  reference: string[];
+  note: string;
+  lockMinutes: number;
+}
+/** The review queue ("Chờ duyệt"), oldest answer first. `now` = the server's clock estimated at drawing. */
+export function queueRows(state: HostState, now: number): QueueRow[] {
+  const teams = new Map(state.teams.map((t) => [t.id, t]));
+  return [...state.queue].sort((a, b) => a.at - b.at).map((q) => {
+    const t = teams.get(q.team);
+    const name = t?.name ?? q.team;
+    return { key: `${q.team}|${q.step}|${q.id}`, team: q.team, name, colour: t?.colour ?? '#8d99b0', step: q.step, label: q.label, branch: q.branch, id: q.id, code: submitCode(name, q.step, q.branch), text: q.text, waiting: fmtMinSec(now - q.at), reference: q.reference, note: q.note, lockMinutes: q.lockMinutes };
+  });
+}
+/** The queue only rebuilds (so a note box keeps its focus) when this changes: who, which step, which answer, when. */
+export const queueSig = (state: HostState): string => JSON.stringify(state.queue.map((q) => [q.id, q.team, q.step, q.at]));
+/** Items of `rows` not seen before (`seen` is updated). `silent` = the first state of a page load: nothing is new then. */
+export function freshQueue(seen: Set<string>, rows: QueueRow[], silent: boolean): QueueRow[] {
+  const fresh = rows.filter((r) => !seen.has(r.key));
+  for (const r of rows) seen.add(r.key);
+  return silent ? [] : fresh;
+}
+
+export interface StuckAlert { key: string; team: string; name: string; step: string; label: string; branch: string | null; minutes: number; period: number; text: string }
+/** D11 (instead of a server alarm): a team on one challenge / branch for `minutes` or more, repeating every period until it is
+ *  done. Counted from task_started_at, a detour from branch_opened_at; from the clue's openedAt while neither exists (teaser not
+ *  accepted, wandering at "choose" / "goToBranch"). Not stuck: waiting for the Host (the queue shows it), done, finished,
+ *  race not on. */
+export function stuckAlerts(state: HostState, now: number, minutes: number = state.leg?.stuckMinutes ?? 45): StuckAlert[] {
+  const leg = state.leg;
+  if (!leg || !(minutes > 0) || (state.status !== 'running' && state.status !== 'paused')) return [];
+  const out: StuckAlert[] = [];
+  for (const t of state.teams) {
+    const s = leg.steps[t.step];
+    if (!s || t.finishAt !== null || (s.type !== 'challenge' && s.type !== 'detour')) continue;
+    const p = state.progress.find((x) => x.team === t.id && x.step === s.id);
+    if (!p || p.completedAt != null || p.pending) continue;
+    const from = (s.type === 'detour' ? p.branchOpenedAt : p.startedAt) ?? p.openedAt;
+    if (from == null) continue;
+    const period = Math.floor((now - from) / (minutes * 60_000));
+    if (period < 1) continue;
+    const mins = Math.floor((now - from) / 60_000);
+    out.push({ key: `${t.id}|${s.id}`, team: t.id, name: t.name, step: s.id, label: s.label, branch: p.branch, minutes: mins, period, text: `${t.name} làm ${s.label}${p.branch ? ` (nhánh ${p.branch})` : ''} đã ${mins} phút (cứ ${fmtNum(minutes)} phút báo một lần).` });
+  }
+  return out;
+}
+/** The alerts to sound now: a team / step whose period went up since `alerted` (updated). repeat = false: the first period only. */
+export function freshAlerts(alerted: Map<string, number>, alerts: StuckAlert[], repeat: boolean): StuckAlert[] {
+  const fresh = alerts.filter((a) => a.period > (alerted.get(a.key) ?? 0) && (repeat || a.period === 1));
+  for (const a of alerts) alerted.set(a.key, Math.max(a.period, alerted.get(a.key) ?? 0));
+  return fresh;
+}
+
+/** The R2 image names the loaded leg refers to ("Hình mật thư"). */
+export const mediaNames = (state: HostState): string[] => [...new Set(state.leg?.media ?? [])];
+/** `/api/race/<race>/media/<name>`: HEAD (exists?), PUT (upload), GET (view), all with `Authorization: Bearer <Host token>`. */
+export const mediaPath = (apiBase: string, race: string, name: string) => `${apiBase}/race/${encodeURIComponent(race)}/media/${encodeURIComponent(name)}`;
+/** What the Worker would refuse before it reads the body (415 / 413): checked on the page for a Vietnamese reason. */
+export function checkMediaFile(f: { type: string; size: number }): string | null {
+  if (!(MEDIA.types as readonly string[]).includes(f.type)) return 'Chỉ nhận hình jpg, png hoặc webp.';
+  if (f.size > MEDIA.maxBytes) return `Hình ${(f.size / 1048576).toFixed(1)} MB, tối đa ${MEDIA.maxBytes / 1048576} MB (nén bớt rồi tải lại).`;
+  return null;
+}
+/** Worker answer to a media PUT / HEAD → Vietnamese. */
+export function mediaErrorText(status: number): string {
+  switch (status) {
+    case 400: return 'Tên hình sai (chỉ chữ, số, dấu chấm, gạch; đuôi jpg / png / webp).';
+    case 401: return 'Phiên Host hết hạn, đăng nhập lại.';
+    case 403: return 'Chỉ Host mới tải hình lên được.';
+    case 411: return 'Trình duyệt không gửi độ dài tệp (411).';
+    case 413: return `Hình quá ${MEDIA.maxBytes / 1048576} MB.`;
+    case 415: return 'Chỉ nhận hình jpg, png hoặc webp.';
+    default: return `Máy chủ trả lỗi ${status}.`;
+  }
+}
+/** Under the leg title (D16 (5)): "Phạt 3 / 10 phút (trả lời lại / đổi nhánh) · cảnh báo kẹt sau 45 phút." */
+export const legPenaltyLine = (leg: Leg): string => `Phạt ${fmtNum(leg.penalties.retryLockMinutes)} / ${fmtNum(leg.penalties.branchSwitchLockMinutes)} phút (trả lời lại / đổi nhánh) · cảnh báo kẹt sau ${fmtNum(leg.stuckMinutes)} phút.`;
 
 export interface XZ { x: number; z: number }
 /** SPEC §6.2 / D11: corridor points = start → every step's zone in order (both places of a detour); checkpoints = every zone
@@ -282,7 +415,7 @@ export function corridorPoints(leg: Leg): { points: XZ[]; checkpoints: XZ[] } {
   return { points, checkpoints };
 }
 
-/** `/host.html?demo=1`: fake state for screenshots, no server (a running race with 4 teams, 6 steps, progress + ranking). */
+/** `/host.html?demo=1`: fake state for screenshots, no server (a running race with 6 teams, 6 steps, progress + ranking, a review queue, a stuck team). */
 export function demoState(now = 1_000_000): HostState {
   const pose = (x: number, z: number) => ({ x, y: 0, z, yaw: 0, mode: 'walk' as const, action: 'none' as const });
   const min = 60_000;
@@ -293,11 +426,12 @@ export function demoState(now = 1_000_000): HostState {
   const s = (id: string, type: 'route_info' | 'detour' | 'challenge' | 'pit_stop', label: string, p: ReturnType<typeof pt>, branches?: ReturnType<typeof pt>[]) =>
     ({ id, type, label, name: p.name, x: p.x, z: p.z, r: p.r, proof: false, ...(branches && { branches: branches.map((b, i) => ({ id: 'AB'[i]!, ...b, proof: i === 1 })) }) });
   const t0 = now - 50 * min;
-  const row = (team: string, step: string, o: number | null, a: number | null, c: number | null, branch: string | null = null): StepProgressView => ({
+  const row = (team: string, step: string, o: number | null, a: number | null, c: number | null, branch: string | null = null, more: Partial<StepProgressView> = {}): StepProgressView => ({
     team, step, openedAt: o, arrivedAt: a, startedAt: c, completedAt: c, branch,
-    // Phase 8 fields (track E fills the stand-ins it draws)
     submittedAt: null, decidedAt: null, rejections: 0, wrongAnswers: 0, branchSwitches: 0, branchOpenedAt: null, lockedUntil: null, pending: false, approvalWaitSeconds: 0, answers: [], note: '',
+    ...more,
   });
+  const ans = (id: number, text: string, at: number, status: StepProgressView['answers'][number]['status'], branch: string | null = null, note?: string) => ({ id, text, at, status, branch, ...(note ? { note } : {}) });
   return {
     t: 'host.state',
     serverMs: now,
@@ -307,6 +441,10 @@ export function demoState(now = 1_000_000): HostState {
       team(1, 'Đội Đỏ', '#d8342c', 'W9HT4B', 'Bình', true, 0, 0, pose(-80, 40), { startAt: t0 + 8 * min, startOrder: 2, joinedAt: t0 + 9 * min, step: 3, penaltyMinutes: 2 }, true),
       team(2, 'Đội Vàng', '#e0b020', 'R2NZ8P', 'Chi', false, 95_000, 3, pose(400, -520), { startAt: t0 + 4 * min, startOrder: 3, joinedAt: t0 + 6 * min, step: 3 }),
       team(3, 'Đội Lục', '#2c9a4a', 'D5FY6E', '', false, null, 0, null),
+      // Đội Tím: on Thử thách 1 for 46 min (the stuck warning), penalized twice, waiting out the countdown
+      team(4, 'Đội Tím', '#8a3fc4', 'M4PC7S', 'Dũng', false, 20 * min, 1, pose(60, -150), { startAt: now - 60 * min, startOrder: 4, joinedAt: now - 58 * min, step: 1 }),
+      // Đội Cam: switched branch once, now waits for the Host on Lựa chọn kép (nhánh A, a typed answer)
+      team(5, 'Đội Cam', '#e07a20', 'H8LV2T', 'Em', false, 30_000, 0, pose(-200, -260), { startAt: t0 + 10 * min, startOrder: 5, joinedAt: t0 + 11 * min, step: 3 }),
     ],
     counters: { wsIn: 18_420, wsOut: 41_200, http: 12, alarms: 3, rows: 1_262 },
     bikes: [],
@@ -327,18 +465,32 @@ export function demoState(now = 1_000_000): HostState {
       media: ['test-gia.jpg', 'test-gia-2.jpg'], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45,
     },
     progress: [
-      row('t0', 'L1', t0, t0 + 14 * min, t0 + 15 * min), row('t0', 'T1', t0 + 15 * min, t0 + 19 * min, t0 + 23 * min), row('t0', 'L2', t0 + 23 * min, t0 + 31 * min, t0 + 32 * min),
-      row('t0', 'D1', t0 + 32 * min, t0 + 33 * min, t0 + 40 * min, 'A'), row('t0', 'L3', t0 + 40 * min, t0 + 44 * min, t0 + 45 * min), row('t0', 'PS', t0 + 45 * min, t0 + 46 * min, t0 + 46 * min),
+      row('t0', 'L1', t0, t0 + 14 * min, t0 + 15 * min),
+      row('t0', 'T1', t0 + 15 * min, t0 + 19 * min, t0 + 23 * min, null, {
+        rejections: 1, approvalWaitSeconds: 95, answers: [ans(1, '41', t0 + 20 * min, 'penalized', null, 'Chưa đúng, thử lại'), ans(2, '42', t0 + 22 * min, 'approved')],
+      }),
+      row('t0', 'L2', t0 + 23 * min, t0 + 31 * min, t0 + 32 * min),
+      row('t0', 'D1', t0 + 32 * min, t0 + 33 * min, t0 + 40 * min, 'A', { branchSwitches: 1, branchOpenedAt: t0 + 36 * min }),
+      row('t0', 'L3', t0 + 40 * min, t0 + 44 * min, t0 + 45 * min), row('t0', 'PS', t0 + 45 * min, t0 + 46 * min, t0 + 46 * min),
       row('t1', 'L1', t0 + 8 * min, t0 + 22 * min, t0 + 24 * min), row('t1', 'T1', t0 + 24 * min, t0 + 29 * min, t0 + 35 * min), row('t1', 'L2', t0 + 35 * min, t0 + 41 * min, t0 + 42 * min),
-      { ...row('t1', 'D1', t0 + 42 * min, t0 + 43 * min, null), completedAt: null },
+      // Đội Đỏ: took the photo branch B and opened its box: the Host may approve it before the team presses "Tôi đã gửi bài"
+      { ...row('t1', 'D1', t0 + 42 * min, t0 + 43 * min, null, 'B', { branchOpenedAt: t0 + 44 * min }), completedAt: null },
       row('t2', 'L1', t0 + 4 * min, t0 + 19 * min, t0 + 21 * min), row('t2', 'T1', t0 + 21 * min, t0 + 25 * min, t0 + 31 * min), row('t2', 'L2', t0 + 31 * min, t0 + 38 * min, t0 + 40 * min),
-      { ...row('t2', 'D1', t0 + 40 * min, null, null), completedAt: null },
+      // Đội Vàng: photo branch B sent ("đã gửi bài"), waiting for the Host
+      { ...row('t2', 'D1', t0 + 40 * min, t0 + 41 * min, null, 'B', { branchOpenedAt: t0 + 42 * min, pending: true, submittedAt: now - 72_000, answers: [ans(1, '', now - 72_000, 'pending', 'B')] }), completedAt: null },
+      row('t4', 'L1', now - 60 * min, now - 48 * min, now - 47 * min),
+      { ...row('t4', 'T1', now - 47 * min, now - 46 * min - 30_000, now - 46 * min, null, { rejections: 2, lockedUntil: now + 110_000, approvalWaitSeconds: 130, answers: [ans(1, '41', now - 12 * min, 'penalized'), ans(2, '43', now - 5 * min, 'penalized', null, 'Gần đúng, đọc lại đề')] }), completedAt: null },
+      row('t5', 'L1', t0 + 10 * min, t0 + 22 * min, t0 + 24 * min), row('t5', 'T1', t0 + 24 * min, t0 + 28 * min, t0 + 33 * min), row('t5', 'L2', t0 + 33 * min, t0 + 37 * min, t0 + 38 * min),
+      { ...row('t5', 'D1', t0 + 38 * min, t0 + 45 * min, null, 'A', { branchSwitches: 1, branchOpenedAt: t0 + 46 * min, pending: true, submittedAt: now - 45_000, answers: [ans(1, 'bảy', now - 45_000, 'pending', 'A')] }), completedAt: null },
     ],
     ranking: [
       { team: 't0', rank: 1, stepIndex: 5, finishAt: now - 4 * min, officialMs: 46 * min, gapMs: 0 },
       { team: 't2', rank: 2, stepIndex: 3, finishAt: null, officialMs: null, gapMs: null },
       { team: 't1', rank: 3, stepIndex: 3, finishAt: null, officialMs: null, gapMs: null },
     ],
-    queue: [],
+    queue: [
+      { team: 't2', step: 'D1', label: 'Lựa chọn kép', branch: 'B', id: 1, text: '', at: now - 72_000, reference: ['(GIẢ) Ảnh thấy rõ chân tháp phía sau'], note: '', lockMinutes: 3 },
+      { team: 't5', step: 'D1', label: 'Lựa chọn kép', branch: 'A', id: 1, text: 'bảy', at: now - 45_000, reference: ['7', 'bảy'], note: '', lockMinutes: 3 },
+    ],
   };
 }

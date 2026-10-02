@@ -277,6 +277,12 @@ Object.assign(PRESETS, {
   // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
   'p7-host': '/host.html?demo=1',
 });
+// Phase 8 (docs/plans/phase8.md §7): p8-* presets, offline stand-ins only (the screenshot server is Vite, no wrangler). Each
+// track adds its presets under its own line only; `npm run screenshot -- p8` runs the group.
+Object.assign(PRESETS, {
+  // [E] Host page: review queue (2 answers with reference answers), a stuck team, orange / purple / ↺ cells, R2 images (1 ✓ 1 ✗)
+  'p8-host': '/host.html?demo=1',
+});
 
 // Phase 8 (docs/plans/phase8.md §7): p8-* presets, offline stand-ins only. Each track adds its presets under its own line.
 Object.assign(PRESETS, {
@@ -379,7 +385,7 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8)-/.test(k))); // landmark / player / online views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8)-/.test(k))); // landmark / player / online / Phase 8 views by name
 
 const outDir = join(root, 'screenshots');
 const errors: string[] = [];
