@@ -144,6 +144,8 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
 
 **Đặt tâm ở đâu:** vỉa hè, quảng trường, bờ sông, giữa cầu (lối đi bộ); **không bao giờ trong nhà** (LỖI; `leg:check` gợi ý sẵn "điểm ngoài nhà gần nhất"), **không giữa lòng đường xe chạy** (cảnh báo: hộp sẽ đứng giữa dòng xe NPC), không giữa sông / bể nước, không trên nóc cầu cạn metro. Phải có đường đi bộ gần để đội đi tới (không thì LỖI "không đi bộ tới được").
 
+Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 4 chân) và **dưới vòm Khải Hoàn Môn** (hai lối đi xuyên qua vòm; đặt vào trụ đá thì vẫn LỖI "nằm trong một tòa nhà"). Riêng Khải Hoàn Môn đứng trên đảo giữa vòng xuyến Étoile, không nối với đường đi bộ của bản đồ (ngoài đời đi qua đường hầm, game không có hầm): điểm dưới vòm luôn có cảnh báo "đường đi bộ gần nhất cách tâm 60–70 m, xa hơn bán kính" (bình thường); đội phải tự đi bộ băng qua vòng xuyến (xe NPC dừng khi người chơi đứng trước mũi xe).
+
 **Chọn bán kính:**
 - Vùng là **vòng tròn phẳng** quanh tâm, **không tính cao thấp**: điểm giữa cầu có lối đi bên dưới (vd. cầu Bir-Hakeim với lối Allée des Cygnes bên dưới) thì đội đứng dưới gầm cũng tính là tới; điểm trên bậc thang / sân thượng thì đứng tầng dưới cũng tính. Muốn tránh: đặt tâm xa chỗ chồng tầng hơn bán kính.
 - Bán kính phải **≥ khoảng cách từ tâm tới lối đi bộ** mà đội sẽ đi tới (không thì `leg:check` cảnh báo "đường đi bộ gần nhất cách tâm N m, xa hơn bán kính": đội phải ra khỏi vùng mới tới được đường).

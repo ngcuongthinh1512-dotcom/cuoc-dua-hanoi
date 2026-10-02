@@ -246,6 +246,16 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(errors(runT('in3.json', t))).toEqual([expect.stringMatching(/tòa nhà \(Palais de Tokyo; điểm ngoài nhà gần nhất: /)]);
   });
 
+  it('under the Arc de Triomphe (both passages open in the game) is not inside a building; in a pier it is', () => {
+    const j = miniJson();
+    Object.assign(j.steps[2].destination, { lat: 48.873817, lon: 2.294916 }); // main passage, west mouth
+    expect(errors(runT('arc1.json', j))).toEqual([]);
+    Object.assign(j.steps[2].destination, { lat: 48.873876, lon: 2.295109 }); // transverse passage
+    expect(errors(runT('arc3.json', j))).toEqual([]);
+    Object.assign(j.steps[2].destination, { lat: 48.87387, lon: 2.295225 }); // a pier
+    expect(errors(runT('arc2.json', j))).toEqual([expect.stringMatching(/^Bước 3 \(L2\) › điểm đến: tâm vùng nằm trong một tòa nhà \(Khải Hoàn Môn; điểm ngoài nhà gần nhất: /)]);
+  });
+
   it('a bike rack of a task place / detour branch off the map is an error (review 2 F5: 111 km off passed)', () => {
     const j = miniJson();
     j.steps[1].task.location.bikeParking.lat = 47.8601;

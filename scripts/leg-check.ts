@@ -10,12 +10,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { latLonToWorld, RACE_BBOX, worldToLatLon } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, WayFlag, pathPolyline, segPoint, shortestPath } from '@race/shared/graph';
 import { type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, parseLeg, placeOf, startSpot } from '@race/shared/leg';
-import { roads, traffic } from '../client/src/config.ts';
+import { landmarks, roads, traffic } from '../client/src/config.ts';
 import { CHUNK_SIZE, type ChunkData, type WaterData } from '../client/src/geo/chunkData.ts';
 import { districtAt, inRing } from '../client/src/geo/districts.ts';
 import { flatHeightGrid, heightAt, parseHeightGrid } from '../client/src/geo/heightGrid.ts';
 import { LANDMARKS } from '../client/src/geo/landmarks.ts';
 import { StreetLocator } from '../client/src/geo/locate.ts';
+import { footprintFrame } from '../client/src/world/landmarks/kit.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 /** "Xem" screenshot: the game's spectator camera this far (m) from the point, from the south, looking down this much (°):
@@ -27,13 +28,21 @@ const DEV_URL = 'http://localhost:5173';
  *  centre, the player stood inside the clue box). */
 const APPROACH = 12;
 
-/** A building the game turns into a solid block (BuildingBuilder: canopies `building=roof` and parts raised off the
- *  ground leave the ground free; bridges / fountains / artworks are walkable; the Eiffel Tower is open underneath). */
+/** A building the game turns into a solid block at (x, z) (BuildingBuilder: canopies `building=roof` and parts raised off
+ *  the ground leave the ground free; bridges / fountains / artworks are walkable; the Eiffel Tower is open underneath;
+ *  the Arc de Triomphe only in its piers: both passages are open, world/landmarks/g1.ts arc()). */
 // ponytail: same conditions as BuildingBuilder written down here (the builder runs in the browser, not importable
 // without three); change both when the builder's rules change.
 const OPEN_KINDS = new Set(['roof', 'bridge', 'fountain', 'artwork']);
-const solid = (b: ChunkData['buildings'][number]) => !OPEN_KINDS.has(b.kind) && !(b.minHeight && b.minHeight > 2.5) && b.landmark !== 'eiffel';
+const underArc = (b: ChunkData['buildings'][number], x: number, z: number) => {
+  const f = footprintFrame(b.outer); // the model's frame (g1.ts modelPose; its u flip does not change |u|, |w|)
+  const [dx, dz] = [x - f.cx, z - f.cz];
+  return Math.abs(dx * f.ux + dz * f.uz) < ARC.mainArch[1] || Math.abs(dz * f.ux - dx * f.uz) < ARC.sideArch[1];
+};
+const solid = (x: number, z: number) => (b: ChunkData['buildings'][number]) =>
+  !OPEN_KINDS.has(b.kind) && !(b.minHeight && b.minHeight > 2.5) && b.landmark !== 'eiffel' && !(b.landmark === 'arc' && underArc(b, x, z));
 const LANDMARK_NAME = new Map(LANDMARKS.map((l) => [l.id, l.name]));
+const ARC = landmarks.g1.arc;
 const fmt = (n: number) => n.toFixed(5);
 const inBox = (p: { lat: number; lon: number }) => p.lat > RACE_BBOX.south && p.lat < RACE_BBOX.north && p.lon > RACE_BBOX.west && p.lon < RACE_BBOX.east;
 
@@ -125,7 +134,7 @@ export function loadMap(root = ROOT): MapData {
       const n = Math.ceil((2 * Math.PI * r) / 3);
       for (let k = 0; k < n; k++) {
         const [px, pz] = [x + r * Math.cos((2 * Math.PI * k) / n), z + r * Math.sin((2 * Math.PI * k) / n)];
-        if (footprints(px, pz).some(solid) || (waterAt(px, pz) && !onBridge(px, pz)) || carriageway(px, pz)) continue;
+        if (footprints(px, pz).some(solid(px, pz)) || (waterAt(px, pz) && !onBridge(px, pz)) || carriageway(px, pz)) continue;
         const snap = mainSnap(px, pz, 8);
         if (snap < (best?.snap ?? Infinity)) best = { x: px, z: pz, snap };
       }
@@ -137,7 +146,7 @@ export function loadMap(root = ROOT): MapData {
     // Not the OSM `building` value ("yes" means nothing to an organiser): the landmark's name if any + the nearest outdoor
     // spot; checkLeg prints it as "… nằm trong một tòa nhà (<this>)".
     building(x, z) {
-      const b = footprints(x, z).find(solid);
+      const b = footprints(x, z).find(solid(x, z));
       if (!b) return null;
       const alt = nearestOutdoor(x, z);
       const g = alt && worldToLatLon(alt.x, alt.z);
