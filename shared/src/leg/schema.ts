@@ -15,6 +15,8 @@ export const LEG_LIMITS = {
   legId: /^[a-z0-9][a-z0-9-]{0,31}$/,
   /** Longest text (clue, description…) in characters. */
   textMax: 4000,
+  /** A bike rack farther than this (m) from its point is a warning in `leg:check` (a coordinate typo inside the map). */
+  rackFar: 300,
 } as const;
 
 /** SPEC §2 / §17.12: the step types of this game (no `roadblock`). */

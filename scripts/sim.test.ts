@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
@@ -159,7 +160,18 @@ describe('sim --leg (Phase 7)', () => {
     expect(legArg('paris-demo-filled')).toMatchObject({ id: 'paris-demo-filled', file: expect.stringMatching(/worker\/legs\/test\/paris-demo\.filled\.json$/) });
     expect(legArg('paris-demo').file).toMatch(/worker\/legs\/paris-demo\.json$/);
     expect(() => legArg('khong-co')).toThrow('khong-co');
+    expect(() => legArg('/khong/co/chang.json')).toThrow('Không tìm thấy file chặng "/khong/co/chang.json"');
   });
+
+  it('CLI: an unknown --leg id or a missing file prints a Vietnamese line + the usage, exit 2, no stack trace (verify3 m7)', () => {
+    const root = join(import.meta.dirname, '..');
+    for (const leg of ['khong-co', '/khong/co/chang.json']) {
+      const r = spawnSync(join(root, 'node_modules/.bin/tsx'), [join(root, 'scripts/sim.ts'), '--leg', leg], { encoding: 'utf8' });
+      expect(r.status).toBe(2);
+      expect(r.stderr).toMatch(/^Không tìm thấy (chặng|file chặng) "[^\n]+\n\nCách dùng: npm run sim/);
+      expect(r.stderr).not.toMatch(/\n\s+at |ENOENT/);
+    }
+  }, 20_000);
 
   it('the compacted leg stays a valid leg with the same steps', () => {
     const r = parseLeg(JSON.parse(compactMini()));

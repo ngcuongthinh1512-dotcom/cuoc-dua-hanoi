@@ -1,4 +1,4 @@
-import { RACE_BBOX } from '@race/shared';
+import { latLonToWorld, RACE_BBOX } from '@race/shared';
 import { parseLeg } from '@race/shared/leg';
 import { describe, expect, it } from 'vitest';
 import leg from '../legs/paris-demo.json';
@@ -18,8 +18,14 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
     for (const id of ['paris-demo-filled', 'mini']) expect(parseLeg(bundledLeg(id)).issues).toEqual([]);
   });
 
-  it('starts at the Pont de Bir-Hakeim (SPEC §17.12), not at the obelisk', () => {
-    expect(leg.start).toMatchObject({ lat: 48.85569, lon: 2.28758 });
+  it('starts at the Pont de Bir-Hakeim (SPEC §17.12), not at the obelisk: every bundled leg, within 25 m of its OSM centre', () => {
+    // the walkway under the metro viaduct, Passy side (phase7-fix3-host-tools.md: the OSM centre is the mouth of the island vault)
+    const bh = latLonToWorld(48.85569, 2.28758);
+    for (const id of BUNDLED_LEGS) {
+      const s = bundledLeg(id)!.start;
+      const p = latLonToWorld(s.lat, s.lon);
+      expect(Math.hypot(p.x - bh.x, p.z - bh.z)).toBeLessThan(25);
+    }
   });
 });
 

@@ -80,8 +80,27 @@ describe('leg schema', () => {
     expect(errors(j)).toEqual(['điểm xuất phát: (48.8049, 2.1204) nằm ngoài bản đồ đua (vĩ độ 48.845–48.878, kinh độ 2.285–2.36)']);
   });
 
+  it('keeps the bike racks of task places / detour branches on the map too: the SERVER refuses a rack typo (verify3 m3)', () => {
+    const j = JSON.parse(JSON.stringify(mini()));
+    j.steps[1].task.location = { ...dest(48.8662, 2.3195), bikeParking: { lat: 47.8662, lon: 2.3195 } };
+    j.steps[2].branches[1].task.location.bikeParking = { lat: 48.867, lon: 3.318 };
+    const box = '(vĩ độ 48.845–48.878, kinh độ 2.285–2.36)';
+    expect(errors(j)).toEqual([
+      `Bước 2 (T1) › nhiệm vụ › nơi làm nhiệm vụ › bãi xe: (47.8662, 2.3195) nằm ngoài bản đồ đua ${box}`,
+      `Bước 3 (D1) › nhánh B › nhiệm vụ › nơi làm nhiệm vụ › bãi xe: (48.867, 3.318) nằm ngoài bản đồ đua ${box}`,
+    ]);
+  });
+
+  it('an answer in a task place name leaks too (teams read it on the card: "Địa điểm: …")', () => {
+    const j = JSON.parse(JSON.stringify(mini()));
+    j.steps[2].branches[1].task.location.name = 'Cột đèn số Bảy';
+    expect(parseLeg(j).issues.map((i) => `${i.level} ${i.where}: ${i.message}`)).toEqual([
+      'warning Bước 3 (D1) › nhánh B › nhiệm vụ › nơi làm nhiệm vụ › tên: chứa đáp án "bay" của bước 2 (T1): đội đọc được trước khi giải',
+    ]);
+  });
+
   it('refuses a time zone the Host page cannot format (review fix: Intl throws, the Host screen stopped drawing)', () => {
-    for (const tz of ['Paris', 'UTC+7', 'Europe/Paris ']) expect(errors({ ...mini(), timezone: tz })).toEqual([`múi giờ: "${tz}" không phải múi giờ hợp lệ; dùng tên IANA, ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"`]);
+    for (const tz of ['Paris', 'UTC+7', 'Europe/Paris ']) expect(errors({ ...mini(), timezone: tz })).toEqual([`múi giờ: "${tz}" không phải múi giờ hợp lệ; dùng tên múi giờ chuẩn dạng Châu_lục/Thành_phố (tên IANA), ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"`]);
     expect(errors({ ...mini(), timezone: 'Europe/Paris' })).toEqual([]);
   });
 

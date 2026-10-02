@@ -159,8 +159,8 @@ export function answersOf(json: string): Map<string, string> {
  *  page lists); `--leg path/to/leg.json` → the file's text (host.leg {json}). */
 export function legArg(arg: string): { id?: string; json?: string; file: string } {
   if (arg.endsWith('.json')) {
-    const json = readFileSync(arg, 'utf8');
-    return { json, file: arg };
+    if (!existsSync(arg)) throw new Error(`Không tìm thấy file chặng "${arg}" (kiểm tra đường dẫn; ví dụ --leg ~/Documents/chang-that/paris-1.json)`);
+    return { json: readFileSync(arg, 'utf8'), file: arg };
   }
   const name = arg.replace(/-filled$/, '.filled');
   const file = [`../worker/legs/test/${name}.json`, `../worker/legs/${name}.json`].map((f) => join(import.meta.dirname, f)).find(existsSync);
@@ -510,7 +510,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exit(0);
   }
   const str = (k: string) => (typeof v[k] === 'string' ? v[k] : undefined);
-  const leg = str('leg') ? legArg(str('leg')!) : undefined;
+  let leg: ReturnType<typeof legArg> | undefined;
+  try {
+    leg = str('leg') ? legArg(str('leg')!) : undefined;
+  } catch (e) {
+    console.error(`${e instanceof Error ? e.message : String(e)}\n\n${USAGE}`); // Vietnamese, no stack trace (verify3 m7)
+    process.exit(2);
+  }
   const report = await runSim({
     url: str('url'),
     bots: Number(str('bots')),

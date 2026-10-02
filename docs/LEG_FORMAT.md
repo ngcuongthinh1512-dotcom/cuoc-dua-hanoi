@@ -73,14 +73,14 @@ Mọi đội **vào game ở đây** (thế giới không có xuất phát cố 
 
 | Trường | Bắt buộc? | Mặc định | Ý nghĩa |
 |---|---|---|---|
-| `name` | có | | Tên chỗ (chỉ Host thấy). `"Cầu Bir-Hakeim – giữa cầu"` |
-| `lat`, `lon` | có | | Vĩ độ, kinh độ, dùng **dấu chấm**: `48.85569`, `2.28758` |
+| `name` | có | | Tên chỗ (chỉ Host thấy). `"Cầu Bir-Hakeim – lối đi bộ dưới cầu cạn metro, phía Passy"` |
+| `lat`, `lon` | có | | Vĩ độ, kinh độ, dùng **dấu chấm**: `48.85585`, `2.28744` |
 | `yawDeg` | không | `0` | Hướng nhìn lúc vào, xem dưới |
 | `spreadMeters` | không | `5` | Rải các đội trong bán kính này (0–20 m) |
 
 **`yawDeg` chạy ngược chiều la bàn.** La bàn / Google Maps đo theo chiều kim đồng hồ (0 = bắc, 90 = đông, 180 = nam, 270 = tây); `yawDeg` thì quay sang trái (0 = bắc, 90 = tây, 180 = nam, −90 = đông). Đổi: **`yawDeg` = − (hướng la bàn)**. Ví dụ muốn đội nhìn hướng la bàn 34° (đông bắc) thì ghi `-34`; nhìn đông (90°) ghi `-90`; nhìn tây bắc (327°) ghi `-327` hoặc `33` (như nhau). `leg:check` in lại "Hướng nhìn lúc vào: la bàn N° (tên hướng)" để bạn soát.
 
-**Chọn chỗ xuất phát:** ngoài nhà, có lối đi bộ, **không giữa lòng đường xe chạy** (`leg:check` kiểm cả ba), và **thoáng**: camera đi sau lưng đội vài mét, nên tránh sát tường, gầm vòm, cầu thang hẹp (cách ít nhất ≈ 8 m tính từ mép vùng rải). Các chặng mẫu đang xuất phát đúng tâm cầu Bir-Hakeim (`48.85569, 2.28758`), ngay miệng khối vòm đá trên đảo Île aux Cygnes: camera có thể lọt vào vòm. Với chặng thật xuất phát ở cầu Bir-Hakeim, nên dùng lối đi bộ dưới cầu cạn metro, phía bờ Passy: **`48.85585, 2.28744`** (cách vòm hơn 15 m, đã chụp kiểm tra trong game; `leg:check` không cảnh báo).
+**Chọn chỗ xuất phát:** ngoài nhà, có lối đi bộ, **không giữa lòng đường xe chạy** (`leg:check` kiểm cả ba), và **thoáng**: camera đi sau lưng đội vài mét, nên tránh sát tường, gầm vòm, cầu thang hẹp (cách ít nhất ≈ 8 m tính từ mép vùng rải). Đừng dùng đúng tâm cầu Bir-Hakeim trên bản đồ (`48.85569, 2.28758`): đó là miệng khối vòm đá trên đảo Île aux Cygnes, camera có thể lọt vào vòm. Các chặng mẫu xuất phát ở lối đi bộ dưới cầu cạn metro, phía bờ Passy: **`48.85585, 2.28744`** (cách vòm hơn 15 m, đã chụp kiểm tra trong game; `leg:check` không cảnh báo). Chặng thật xuất phát ở cầu Bir-Hakeim nên dùng đúng điểm này.
 
 ## 5. Các loại bước (`steps`)
 
@@ -154,7 +154,7 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
 - Bãi theo **điểm** (tâm vùng), không theo bước: nhiều bước cùng một điểm dùng chung một bãi.
 - Nhiệm vụ ở **nơi khác** (`task.location`): xe chỉ để lại khi đội **tới vùng** nhiệm vụ đó (đội đạp xe tới đó làm), tại bãi của `task.location`.
 - Không viết `bikeParking`: xe bị bỏ lại đúng chỗ đội đứng (không lỗi).
-- Nên đặt bãi **cạnh nhưng ngoài vùng** (khoảng `radius + 20` m); trong vùng thì `leg:check` cảnh báo; trong nhà hoặc ngoài bản đồ đua thì LỖI. `leg:check` in tọa độ bãi bạn đã đặt (kèm khoảng cách tới tâm) và gợi ý sẵn tọa độ bãi xe có thật trong dữ liệu bản đồ cho điểm chưa có bãi.
+- Nên đặt bãi **cạnh nhưng ngoài vùng** (khoảng `radius + 20` m); trong vùng, hoặc cách tâm hơn 300 m (thường là gõ nhầm số), thì `leg:check` cảnh báo; trong nhà hoặc ngoài bản đồ đua thì LỖI (ngoài bản đồ: máy chủ cũng không nạp chặng). `leg:check` in tọa độ bãi bạn đã đặt (kèm khoảng cách tới tâm) và gợi ý sẵn tọa độ bãi xe có thật trong dữ liệu bản đồ cho điểm chưa có bãi.
 
 ### 7.1 `task`: nhiệm vụ
 
@@ -189,7 +189,7 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
     Bản đồ: https://www.openstreetmap.org/?mlat=48.86050&mlon=2.29030#map=19/48.86050/2.29030
     Vệ tinh: https://www.google.com/maps?q=48.86050,2.29030&t=k&z=19
     Xem: npm run screenshot -- --path "/?cam=-2263.6,55.3,586.3,0,-60&boxes=T1,-2263.6,553.8&mat&npc=0" --name leg-T1
-    Trong game: http://localhost:5173/?start=-2263.6,553.8,0&boxes=T1,-2263.6,553.8
+    Trong game: http://localhost:5173/?start=-2273.3,546.9,-125&boxes=T1,-2263.6,553.8
 ```
 
 - **Tên đường + quận** cho biết ngay nếu gõ nhầm số (nhầm 2 chữ số vẫn nằm trong bản đồ nhưng sai tên đường / quận).
@@ -197,7 +197,7 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
 - **Link `Bản đồ:`** mở OpenStreetMap (bản đồ vẽ) có ghim đúng điểm.
 - **Link `Vệ tinh:`** mở Google Maps **ảnh vệ tinh** có ghim đúng điểm: thấy ngay điểm nằm trên mái nhà, trong sân, trên vỉa hè hay giữa đường.
 - **Dòng `Xem:`** là lệnh sẵn: copy, dán vào Terminal, chạy (≈ 1 phút) → ảnh `screenshots/leg-<mã bước>.png` chụp **thế giới 3D của game** xiên từ trên cao, nhìn về hướng bắc, khung ≈ 160 × 105 m, **điểm nằm giữa ảnh**, đánh dấu bằng một tấm thảm đỏ viền vàng (3 × 7 m) đặt đúng tâm. Ảnh **chưa vẽ vòng bán kính**; điểm dưới mái / dưới cầu cạn thì thảm bị che (vẫn ở giữa ảnh).
-- **Link `Trong game:`** để **đứng thử tại điểm**: mở một Terminal khác, chạy `npm run dev` (giữ chạy), rồi mở link trong Chrome. Bạn xuất hiện ngay tại tâm (điểm xuất phát: đúng chỗ và hướng nhìn đội đầu tiên vào game), có hộp mật thư cắm cờ (Chặng dừng: thảm đỏ). Đây là thế giới thử, không cần cuộc đua, không cần mật khẩu: đi lại bằng `W` `A` `S` `D` để xem đáp án có nhìn thấy được không. Tắt bằng `Ctrl`+`C` trong Terminal đang chạy `npm run dev`.
+- **Link `Trong game:`** để **đứng thử tại điểm**: mở một Terminal khác, chạy `npm run dev` (giữ chạy), rồi mở link trong Chrome. Bạn xuất hiện cách tâm 12 m trên đường đi bộ từ điểm trước, nhìn thẳng về hộp mật thư cắm cờ ở tâm (Chặng dừng: thảm đỏ; điểm trùng điểm trước: 12 m về phía nam, nhìn về bắc). Điểm xuất phát: đúng chỗ và hướng nhìn của đội đầu tiên vào game. Đây là thế giới thử, không cần cuộc đua, không cần mật khẩu: đi lại bằng `W` `A` `S` `D` để xem đáp án có nhìn thấy được không. Tắt bằng `Ctrl`+`C` trong Terminal đang chạy `npm run dev`.
 - "đi bộ ≈ N m": quãng đường đi bộ thật theo đồ thị đường. Quá dài so với dự kiến = điểm sai chỗ. "KHÔNG đi bộ tới được" = LỖI.
 
 ## 9. Đáp án nằm đâu, và không bao giờ tới máy người chơi
@@ -220,9 +220,9 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
 
 | Chặng | Dòng cuối | Các cảnh báo (bình thường, đã biết) |
 |---|---|---|
-| `worker/legs/test/mini.json` | `Hợp lệ: 1 cảnh báo, 0 ô còn trống.` | `điểm xuất phát: nằm trên đoạn cầu bắc qua đất (bờ / đảo)…` (tâm cầu Bir-Hakeim nằm trên đảo Île aux Cygnes: bình thường) |
-| `worker/legs/paris-demo.json` | `Hợp lệ: 2 cảnh báo, 18 ô còn trống.` | cảnh báo xuất phát như `mini`; `Bước 9 (L6) › điểm đến: đường đi bộ gần nhất cách tâm 39 m, xa hơn bán kính 20 m` (điểm trước kim tự tháp Louvre đã thống nhất ở bản đặc tả; sân Cour Napoléon lát đá đi được, dữ liệu đường đi bộ chỉ có ở mép sân). 18 ô còn trống là các ô Lựa chọn kép / thử thách / link Facebook chờ bạn điền |
-| `worker/legs/test/paris-demo.filled.json` (`paris-demo-filled`, demo đã điền nội dung GIẢ) | `Hợp lệ: 2 cảnh báo, 0 ô còn trống.` | hai cảnh báo như `paris-demo` |
+| `worker/legs/test/mini.json` | `Hợp lệ: 0 cảnh báo, 0 ô còn trống.` | không có |
+| `worker/legs/paris-demo.json` | `Hợp lệ: 1 cảnh báo, 18 ô còn trống.` | `Bước 9 (L6) › điểm đến: đường đi bộ gần nhất cách tâm 39 m, xa hơn bán kính 20 m` (điểm trước kim tự tháp Louvre đã thống nhất ở bản đặc tả; sân Cour Napoléon lát đá đi được, dữ liệu đường đi bộ chỉ có ở mép sân). 18 ô còn trống là các ô Lựa chọn kép / thử thách / link Facebook chờ bạn điền |
+| `worker/legs/test/paris-demo.filled.json` (`paris-demo-filled`, demo đã điền nội dung GIẢ) | `Hợp lệ: 1 cảnh báo, 0 ô còn trống.` | cảnh báo L6 như `paris-demo` |
 | `worker/legs/test/near.json` (các điểm cách nhau vài chục mét quanh Concorde, `boxReveal` nhỏ, để chạy thử nhanh) | `Hợp lệ: 2 cảnh báo, 0 ô còn trống.` | `điểm xuất phát: nằm giữa lòng đường xe chạy (Avenue des Champs-Élysées)…`, `Bước 3 (L2) › điểm đến: tâm nằm giữa lòng đường xe chạy (Place de la Concorde)…` (chặng thử, cố ý đặt giữa quảng trường) |
 
 ```json
@@ -233,9 +233,9 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
     "contactUrl": "https://m.me/test-host-gia"
   },
   "start": {
-    "name": "Cầu Bir-Hakeim – giữa cầu",
-    "lat": 48.85569,
-    "lon": 2.28758,
+    "name": "Cầu Bir-Hakeim – lối đi bộ dưới cầu cạn metro, phía Passy",
+    "lat": 48.85585,
+    "lon": 2.28744,
     "yawDeg": 33,
     "spreadMeters": 5
   },
@@ -386,7 +386,7 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `bước đầu tiên phải là lộ trình (route_info)` | LỖI | Đưa một `route_info` lên đầu |
 | `phải có đúng một Chặng dừng (pit_stop) và nó là bước cuối cùng` | LỖI | Thêm / bớt `pit_stop`, chuyển xuống cuối |
 | `bước ngay trước Chặng dừng phải là lộ trình` | LỖI | Chèn một `route_info` dẫn tới thảm ngay trước `pit_stop` |
-| `múi giờ: "..." không phải múi giờ hợp lệ; dùng tên IANA ...` | LỖI | Viết đúng dạng `Châu_lục/Thành_phố`: `"Asia/Ho_Chi_Minh"`, `"Europe/Paris"` (không phải `"Paris"`, `"UTC+7"`, `"GMT+7"`); máy chủ không nạp chặng có múi giờ sai |
+| `múi giờ: "..." không phải múi giờ hợp lệ; dùng tên múi giờ chuẩn dạng Châu_lục/Thành_phố (tên IANA) ...` | LỖI | Viết đúng dạng `Châu_lục/Thành_phố`: `"Asia/Ho_Chi_Minh"`, `"Europe/Paris"` (không phải `"Paris"`, `"UTC+7"`, `"GMT+7"`); máy chủ không nạp chặng có múi giờ sai |
 | `... nằm ngoài bản đồ đua (vĩ độ ..., kinh độ ...)` | LỖI | Tọa độ sai (thường nhầm lat/lon hoặc gõ thiếu / thừa số): kiểm tra lại, lat ≈ 48.8, lon ≈ 2.3. Áp dụng cho cả bãi xe (`› bãi xe`) |
 | `tâm vùng nằm trong một tòa nhà (<tên địa danh>; điểm ngoài nhà gần nhất: lat, lon, cách N m, cạnh <đường>)` / `nằm trong một tòa nhà (...)` | LỖI | Dời điểm ra vỉa hè / quảng trường. Tọa độ gợi ý là chỗ đứng được gần nhất (ngoài nhà, không giữa đường, sát lối đi bộ): xem nó bằng link `Vệ tinh:` / lệnh `Xem:` rồi dùng nếu hợp |
 | `không đi bộ tới được từ ... theo đồ thị đường` | LỖI | Điểm ở cù lao, sân trong, nóc cầu... không có đường đi bộ nối; dời về chỗ có đường |
@@ -394,9 +394,10 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `chứa nguyên văn "..." của chặng` (tên file `client/...`) | LỖI | Chặng / mật thư đang nằm trong `client/`; xóa khỏi đó |
 | `file chặng nằm trong thư mục client/` | LỖI | Chuyển file chặng ra ngoài thư mục dự án (mục 9) |
 | `bãi xe cách tâm N m, nằm trong vùng` | CẢNH BÁO | Dời bãi xe ra ngoài vùng (≈ bán kính + 20 m) |
+| `bãi xe cách tâm N m, xa hơn 300 m (gõ nhầm tọa độ?)` | CẢNH BÁO | Bãi xe vẫn trong bản đồ nhưng quá xa điểm: thường là gõ nhầm một chữ số. Sửa lại cho bãi ở ngay ngoài vùng |
 | `đường đi bộ gần nhất cách tâm N m, xa hơn bán kính` | CẢNH BÁO | Đường đi bộ ở xa tâm: đội phải ra khỏi vùng để tới đường; dời tâm gần đường hơn hoặc tăng bán kính (mục 7) |
 | `cách thảm Chặng dừng N m ...` | CẢNH BÁO | Điểm đến của lộ trình cuối nên trùng điểm Chặng dừng |
-| `chứa đáp án "..." của bước N` | CẢNH BÁO | Đáp án bị lộ trong chữ đội đọc trước; sửa chữ |
+| `chứa đáp án "..." của bước N` | CẢNH BÁO | Đáp án bị lộ trong chữ đội đọc trước (kể cả tên nơi làm nhiệm vụ, `› nơi làm nhiệm vụ › tên`); sửa chữ |
 | `nhiệm vụ "free" không tự chấm được` | CẢNH BÁO | Đổi sang `"verification": "host_approval"` |
 | `nằm giữa sông, đội không đứng được` | CẢNH BÁO | Dời vào bờ hoặc lên mặt cầu |
 | `nằm giữa mặt nước (hồ / bể nước / đài phun nước)` | CẢNH BÁO | Điểm rơi vào bể / hồ (vd. bể đài phun nước trong sân): dời ra chỗ đất cạnh đó |

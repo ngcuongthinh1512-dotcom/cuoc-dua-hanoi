@@ -45,11 +45,8 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(r.ok).toBe(true);
     expect(r.issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(r.issues.some((i) => i.level === 'blank')).toBe(true);
-    // L6 (the SPEC §17.4 point) and, until the bundled starts move off the island vault (worker/src/legs.test.ts pins it), the
-    // Bir-Hakeim start over the island: docs/LEG_FORMAT.md §10 lists both
-    const w = r.issues.filter((i) => i.level === 'warning');
-    expect(w.map((i) => i.where)).toContain('Bước 9 (L6) › điểm đến');
-    expect(w.every((i) => i.where === 'Bước 9 (L6) › điểm đến' || (i.where === 'điểm xuất phát' && i.message.includes('đoạn cầu bắc qua đất')))).toBe(true);
+    // only L6 (the SPEC §17.4 point): the start moved off the island vault (walkway under the metro, Passy side), docs/LEG_FORMAT.md §10
+    expect(r.issues.filter((i) => i.level === 'warning').map((i) => i.where)).toEqual(['Bước 9 (L6) › điểm đến']);
   });
 
   it.each(['test/mini.json', 'test/paris-demo.filled.json', 'test/near.json'])('%s: 0 errors on the real map data', (f) => {
@@ -58,8 +55,8 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(r.ok).toBe(true);
   });
 
-  it('mini: no blank; the only warning is the Bir-Hakeim start over the island (docs/LEG_FORMAT.md §10 says so)', () => {
-    expect(run(legs('test/mini.json')).issues).toEqual([expect.objectContaining({ level: 'warning', where: 'điểm xuất phát', message: expect.stringContaining('đoạn cầu bắc qua đất') })]);
+  it('mini: no blank, no warning (docs/LEG_FORMAT.md §10 says so)', () => {
+    expect(run(legs('test/mini.json')).issues).toEqual([]);
   });
 
   it('summary lists every point with street, district, OSM link and screenshot command', () => {
@@ -71,7 +68,13 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const p = latLonToWorld(48.86215, 2.28843);
     const xz = `${+p.x.toFixed(1)},${+p.z.toFixed(1)}`;
     expect(report).toMatch(new RegExp(`Xem: npm run screenshot -- --path "/\\?cam=${p.x.toFixed(1)},[\\d.]+,${(p.z + 32.5).toFixed(1)},0,-60&boxes=L1,${xz}&mat&npc=0" --name leg-L1\n`));
-    expect(report).toContain(`Trong game: http://localhost:5173/?start=${xz},0&boxes=L1,${xz}\n`); // in game: the clue box
+    // in game: the clue box, the player 12 m back on the walking route from the start, facing it (verify3 m6: not inside the box)
+    const g = new RegExp(`Trong game: http://localhost:5173/\\?start=([-\\d.]+),([-\\d.]+),(-?\\d+)&boxes=L1,${xz}\n`).exec(report)!;
+    const [sx, sz, yaw] = [Number(g[1]), Number(g[2]), (Number(g[3]) * Math.PI) / 180];
+    const d = Math.hypot(p.x - sx, p.z - sz);
+    expect(d).toBeGreaterThan(8);
+    expect(d).toBeLessThanOrEqual(12.1);
+    expect((-Math.sin(yaw) * (p.x - sx) - Math.cos(yaw) * (p.z - sz)) / d).toBeGreaterThan(0.99); // forward (yaw 0 = north = −z) → the box
     expect(report).toMatch(/Trong game: [^\n]+&boxes=PS,[-\d.,]+&mat\n/); // the Pit Stop: its mat
     expect(report).toMatch(/Xem: [^\n]+&boxes=start,[-\d.,]+&mat&npc=0" --name leg-start\n/);
     expect(report).toContain('Hướng nhìn lúc vào: la bàn 327° (tây bắc) — "yawDeg": 33');
@@ -257,6 +260,16 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const k = miniJson();
     k.steps[0].destination.bikeParking.lat = 47.8;
     expect(errors(runT('rack2.json', k))).toHaveLength(1);
+  });
+
+  it('a bike rack inside the map but far from its point (a typo) is a warning with the distance', () => {
+    const j = miniJson();
+    Object.assign(j.steps[1].task.location.bikeParking, { lat: 48.8606, lon: 2.29954 }); // ≈ 680 m east of T1, on Rue de l'Université
+    const r = runT('rack-far.json', j);
+    expect(r.ok).toBe(true);
+    expect(r.issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`)).toEqual([
+      expect.stringMatching(/^Bước 2 \(T1\) › nhiệm vụ › nơi làm nhiệm vụ › bãi xe: bãi xe cách tâm 6\d\d m, xa hơn 300 m \(gõ nhầm tọa độ\?\)/),
+    ]);
   });
 
   it('yawDeg → compass bearing (yawDeg turns left: compass 34° NE is yawDeg -34)', () => {

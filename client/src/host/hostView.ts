@@ -308,7 +308,7 @@ export function demoState(now = 1_000_000): HostState {
     bikes: [],
     spawning: { paused: false, candidates: 120, nextAt: null },
     leg: {
-      id: 'mini', title: 'Chặng ngắn để test (NỘI DUNG GIẢ)', timezone: 'Asia/Ho_Chi_Minh', start: (({ x, z }) => ({ x, z }))(latLonToWorld(48.85569, 2.28758)),
+      id: 'mini', title: 'Chặng ngắn để test (NỘI DUNG GIẢ)', timezone: 'Asia/Ho_Chi_Minh', start: (({ x, z }) => ({ x, z }))(latLonToWorld(48.85585, 2.28744)),
       steps: [
         s('L1', 'route_info', 'Lộ trình 1', pt(48.86215, 2.28843, 35, 'Sân trước Palais de Chaillot')),
         s('T1', 'challenge', 'Thử thách 1', pt(48.8605, 2.2903, 30, 'Vườn Trocadéro')),

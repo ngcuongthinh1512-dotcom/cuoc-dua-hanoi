@@ -18,7 +18,8 @@ export interface LegIssue {
 
 /** Map facts for the CLI (scripts/leg-check.ts builds them from client/public/data/chunks + shared/data/roadgraph.json). */
 export interface LegGeo {
-  /** Kind of the building footprint containing (x, z) (bridges excluded: their decks are walkable), null = none. */
+  /** Readable description of the solid building containing (x, z) (the CLI: the landmark's name if any + the nearest outdoor
+   *  spot), printed as "nằm trong một tòa nhà (<this>)"; null = none (bridges, canopies and other walkable footprints too). */
   building(x: number, z: number): string | null;
   /** Walking route a → b on the road graph (m) + how far each end is from the graph (m); null = no route. */
   walk(a: { x: number; z: number }, b: { x: number; z: number }): { meters: number; snapA: number; snapB: number } | null;
@@ -138,7 +139,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   try {
     new Intl.DateTimeFormat('en', { timeZone: leg.timezone });
   } catch {
-    add('error', ['timezone'], `"${leg.timezone}" không phải múi giờ hợp lệ; dùng tên IANA, ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"`);
+    add('error', ['timezone'], `"${leg.timezone}" không phải múi giờ hợp lệ; dùng tên múi giờ chuẩn dạng Châu_lục/Thành_phố (tên IANA), ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"`);
   }
 
   // ids, order, Pit Stop
@@ -188,8 +189,9 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   const texts: [string, PropertyKey[]][] = [];
   steps.forEach((s, i) => {
     if (s.type === 'route_info' || s.type === 'detour') texts.push([s.clue, ['steps', i, 'clue']]);
-    if (s.type === 'challenge') texts.push([s.teaser, ['steps', i, 'teaser']], [s.task.title, ['steps', i, 'task', 'title']], [s.task.description, ['steps', i, 'task', 'description']]);
-    if (s.type === 'detour') s.branches.forEach((b, k) => texts.push([b.summary, ['steps', i, 'branches', k, 'summary']], [b.task.title, ['steps', i, 'branches', k, 'task', 'title']], [b.task.description, ['steps', i, 'branches', k, 'task', 'description']]));
+    // a task place's name is on the card too ("Địa điểm: …")
+    if (s.type === 'challenge') texts.push([s.teaser, ['steps', i, 'teaser']], [s.task.title, ['steps', i, 'task', 'title']], [s.task.description, ['steps', i, 'task', 'description']], [s.task.location?.name ?? '', ['steps', i, 'task', 'location', 'name']]);
+    if (s.type === 'detour') s.branches.forEach((b, k) => texts.push([b.summary, ['steps', i, 'branches', k, 'summary']], [b.task.title, ['steps', i, 'branches', k, 'task', 'title']], [b.task.description, ['steps', i, 'branches', k, 'task', 'description']], [b.task.location?.name ?? '', ['steps', i, 'branches', k, 'task', 'location', 'name']]));
   });
   steps.forEach((s, i) => {
     const tasks = s.type === 'detour' ? s.branches.map((b) => b.task) : s.type === 'challenge' ? [s.task] : [];
@@ -198,8 +200,8 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   });
 
   // map data (CLI only): every point a team must reach (step zones, each detour branch's own place) is outside buildings
-  // and walkable from every point of the step before (both branch places → the next step); bike racks outside buildings
-  // and outside their zone (SPEC §6.4: next to the point, not in it).
+  // and walkable from every point of the step before (both branch places → the next step); bike racks outside buildings,
+  // outside their zone (SPEC §6.4: next to the point, not in it) and not a typo far off it.
   if (geo) {
     const zones = stepZones(leg);
     type Pt = { x: number; z: number; r: number; id: string; path: PropertyKey[] };
@@ -214,6 +216,8 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
       if (b) add('error', [...path, 'bikeParking'], `bãi xe nằm trong một tòa nhà (${b}); dời ra vỉa hè`);
       const dist = Math.hypot(p.x - c.x, p.z - c.z);
       if (dist <= d.radius) add('warning', [...path, 'bikeParking'], `bãi xe cách tâm ${Math.round(dist)} m, nằm trong vùng (bán kính ${d.radius} m); nên đặt ngoài vùng ≈ ${leg.vehicles.bikeParking.offsetMeters} m`);
+      else if (dist > LEG_LIMITS.rackFar && inBox(d.bikeParking)) // off the map: outsideMap's error already
+        add('warning', [...path, 'bikeParking'], `bãi xe cách tâm ${Math.round(dist)} m, xa hơn ${LEG_LIMITS.rackFar} m (gõ nhầm tọa độ?); nên đặt ngay ngoài vùng ≈ ${leg.vehicles.bikeParking.offsetMeters} m`);
     };
     steps.forEach((s, i) => {
       const own: Pt[] =
@@ -247,8 +251,9 @@ function outsideMap(out: LegIssue[], leg: Leg) {
   const pts: [{ lat: number; lon: number } | null | undefined, PropertyKey[]][] = [[leg.start, ['start']]];
   leg.steps.forEach((s, i) => {
     if (s.type === 'route_info' || s.type === 'pit_stop') pts.push([s.destination, ['steps', i, 'destination']], [s.destination.bikeParking, ['steps', i, 'destination', 'bikeParking']]);
-    if (s.type === 'challenge') pts.push([s.task.location, ['steps', i, 'task', 'location']]);
-    if (s.type === 'detour') s.branches.forEach((b, k) => pts.push([b.task.location, ['steps', i, 'branches', k, 'task', 'location']]));
+    // a task place's rack too (review 2 F5: a typo 111 km off loaded on the server, BikeService.park moved the bike there)
+    if (s.type === 'challenge') pts.push([s.task.location, ['steps', i, 'task', 'location']], [s.task.location?.bikeParking, ['steps', i, 'task', 'location', 'bikeParking']]);
+    if (s.type === 'detour') s.branches.forEach((b, k) => pts.push([b.task.location, ['steps', i, 'branches', k, 'task', 'location']], [b.task.location?.bikeParking, ['steps', i, 'branches', k, 'task', 'location', 'bikeParking']]));
   });
   for (const [p, path] of pts)
     if (p && !inBox(p)) out.push({ level: 'error', where: placeOf(leg, path), message: `(${p.lat}, ${p.lon}) nằm ngoài bản đồ đua (vĩ độ ${RACE_BBOX.south}–${RACE_BBOX.north}, kinh độ ${RACE_BBOX.west}–${RACE_BBOX.east})` });

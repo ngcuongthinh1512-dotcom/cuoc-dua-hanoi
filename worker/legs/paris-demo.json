@@ -65,9 +65,9 @@
     }
   },
   "start": {
-    "name": "Cầu Bir-Hakeim – giữa cầu, lối đi bộ dưới cầu cạn metro",
-    "lat": 48.85569,
-    "lon": 2.28758,
+    "name": "Cầu Bir-Hakeim – lối đi bộ dưới cầu cạn metro, phía Passy",
+    "lat": 48.85585,
+    "lon": 2.28744,
     "yawDeg": 33,
     "spreadMeters": 5
   },

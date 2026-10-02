@@ -58,7 +58,7 @@ export function groundAt(world: RAPIER.World, x: number, z: number, from: number
 /** BikeState.rider of a bike another team rides: its model is hidden (net/RemotePlayers draws it under the rider). */
 export const REMOTE_RIDER = 'remote';
 /** Why the server refused F (SPEC §6.3 "Chậm một bước! Xe đã có người lấy.", §6.5) → a toast (ui/Toasts.ts notice). */
-export type ClaimNotice = 'bikeLost' | 'bikeTooFar' | 'walkOnly';
+export type ClaimNotice = 'bikeLost' | 'bikeTooFar' | 'walkOnly' | 'raceOver';
 type BikeAnswer = Extract<ServerMessage, { t: 'bike' }>;
 
 export class Bikes {
@@ -209,7 +209,7 @@ export class Bikes {
     }
     this.serverRiding.delete(m.id);
     if (b && this.c?.riding === b) this.getOff(this.c, b);
-    this.notify(m.reason === 'far' ? 'bikeTooFar' : m.reason === 'walkOnly' ? 'walkOnly' : 'bikeLost');
+    this.notify(m.reason === 'finished' ? 'raceOver' : m.reason === 'far' ? 'bikeTooFar' : m.reason === 'walkOnly' ? 'walkOnly' : 'bikeLost');
   }
 
   /** Online, once a frame: tells the server when the own bike's rider state differs from what it knows (a dismount, a

@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { latLonToWorld, RACE_BBOX, worldToLatLon } from '@race/shared';
-import { RoadGraph, type RoadGraphFile, WayFlag, segPoint, shortestPath } from '@race/shared/graph';
+import { RoadGraph, type RoadGraphFile, WayFlag, pathPolyline, segPoint, shortestPath } from '@race/shared/graph';
 import { type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, parseLeg, placeOf, startSpot } from '@race/shared/leg';
 import { roads, traffic } from '../client/src/config.ts';
 import { CHUNK_SIZE, type ChunkData, type WaterData } from '../client/src/geo/chunkData.ts';
@@ -23,6 +23,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const VIEW = { distance: 65, pitchDeg: 60 };
 /** "Trong game" link: the client dev server (`npm run dev`, Vite's default port). */
 const DEV_URL = 'http://localhost:5173';
+/** "Trong game" spawn this far (m) before the point, on the walking route from the step before (verify3 m6: spawned on the
+ *  centre, the player stood inside the clue box). */
+const APPROACH = 12;
 
 /** A building the game turns into a solid block (BuildingBuilder: canopies `building=roof` and parts raised off the
  *  ground leave the ground free; bridges / fountains / artworks are walkable; the Eiffel Tower is open underneath). */
@@ -229,6 +232,23 @@ function points(leg: Leg): Pt[] {
   return out;
 }
 
+/** "Trong game" spawn: APPROACH m back from p along the walking route from `from`, facing p (yawDeg: 0 = north, + = left);
+ *  no route (or `from` at p) → APPROACH m south of p, facing north. */
+function approach(map: MapData, from: Pt | undefined, p: Pt) {
+  const g = map.graph;
+  const [a, b] = from ? [g.nearestNode(from.x, from.z, 'walk', 300), g.nearestNode(p.x, p.z, 'walk', 300)] : [-1, -1];
+  const path = a >= 0 && b >= 0 && a !== b ? shortestPath(g, a, b, 'walk') : null;
+  const line = path ? pathPolyline(g, path) : [];
+  let [x, z, left] = [p.x, p.z, APPROACH];
+  for (let i = line.length - 2; i >= 0 && left > 0; i -= 2) {
+    const d = Math.hypot(line[i]! - x, line[i + 1]! - z);
+    const t = Math.min(1, left / d);
+    [x, z, left] = [x + (line[i]! - x) * t, z + (line[i + 1]! - z) * t, left - d * t];
+  }
+  if (Math.hypot(x - p.x, z - p.z) < 1) [x, z] = [p.x, p.z + APPROACH];
+  return { x, z, yawDeg: Math.round((Math.atan2(x - p.x, z - p.z) * 180) / Math.PI) };
+}
+
 /** Compass bearing (°, clockwise from north) of a leg yawDeg (0 = north, + = turned left / west) and its Vietnamese name. */
 export function compass(yawDeg: number): { deg: number; name: string } {
   const deg = Math.round((((-yawDeg % 360) + 360) % 360));
@@ -251,7 +271,7 @@ function mapReport(leg: Leg, map: MapData) {
     '',
     'Các điểm trên bản đồ. "Bản đồ" / "Vệ tinh": mở trong trình duyệt, có ghim đúng điểm. "Xem": dán vào Terminal → ảnh screenshots/leg-<mã>.png',
     'chụp xiên từ trên cao, khung ≈ 160 × 105 m, điểm ở GIỮA ảnh, đánh dấu bằng tấm thảm đỏ viền vàng (3 × 7 m, như thảm Chặng dừng) đặt đúng tâm; ảnh chưa vẽ vòng bán kính.',
-    `"Trong game": mở khi máy đang chạy npm run dev → đứng đúng tại điểm (thế giới thử, không cần cuộc đua).`,
+    `"Trong game": mở khi máy đang chạy npm run dev → đứng cách điểm ${APPROACH} m trên đường đi bộ từ điểm trước, nhìn về phía điểm (thế giới thử, không cần cuộc đua).`,
   );
   let cur: Pt[] = [];
   const pts = points(leg);
@@ -278,7 +298,7 @@ function mapReport(leg: Leg, map: MapData) {
     }
     if (step && p.step === 1 && Math.hypot(p.x - s0.x, p.z - s0.z) <= p.r)
       lines.push('    Điểm xuất phát nằm trong vùng này: đội vào game là đã tới, mở được hộp ngay (đúng kiểu mật thư 1 phát ngoài game dẫn tới chính nơi xuất phát).');
-    if (p.rack) {
+    if (p.rack) { // a rack far off its point: shared/src/leg/check.ts warns (LEG_LIMITS.rackFar)
       const w = latLonToWorld(p.rack.lat, p.rack.lon);
       lines.push(`    Bãi xe: ${fmt(p.rack.lat)}, ${fmt(p.rack.lon)} (${inBox(p.rack) ? `cách tâm ${Math.round(Math.hypot(w.x - p.x, w.z - p.z))} m` : 'NGOÀI bản đồ đua'})`);
     }
@@ -291,12 +311,10 @@ function mapReport(leg: Leg, map: MapData) {
     lines.push(`    Xem: npm run screenshot -- --path "/?cam=${cam}&boxes=${name},${xz(p.x, p.z)}&mat&npc=0" --name leg-${name}`);
     // in game: what the team will find there (the clue box; the mat at the Pit Stop)
     const marker = step ? `&boxes=${name},${xz(p.x, p.z)}${step.type === 'pit_stop' ? '&mat' : ''}` : '';
-    const spawn = step ? p : startSpot(leg, 1);
-    lines.push(`    Trong game: ${DEV_URL}/?start=${xz(spawn.x, spawn.z)},${step ? 0 : leg.start.yawDeg}${marker}`);
+    const spawn = step ? approach(map, prev.find((q) => Math.hypot(q.x - p.x, q.z - p.z) >= 1), p) : { ...startSpot(leg, 1), yawDeg: leg.start.yawDeg };
+    lines.push(`    Trong game: ${DEV_URL}/?start=${xz(spawn.x, spawn.z)},${spawn.yawDeg}${marker}`);
     const where = p.path;
     const key = `${Math.round(p.x)}_${Math.round(p.z)}`;
-    if (p.rack && !inBox(p.rack)) // shared/src/leg/check.ts outsideMap covers destination racks only (same message: deduped)
-      add('error', [...where, 'bikeParking'], `(${p.rack.lat}, ${p.rack.lon}) nằm ngoài bản đồ đua (vĩ độ ${RACE_BBOX.south}–${RACE_BBOX.north}, kinh độ ${RACE_BBOX.west}–${RACE_BBOX.east})`);
     if (!warned.has(key)) {
       warned.add(key);
       const bridge = map.onBridge(p.x, p.z);

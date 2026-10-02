@@ -165,6 +165,16 @@ describe('Bikes online: shared bikes from the server (Phase 6 track C, SPEC §6.
     expect(bikes.list.find((b) => b.id === 'b1')!.owner).toBe('t0');
   });
 
+  it('each refusal reason → its own toast: finished → raceOver (verify3 m4: was "Chậm một bước!"), far, walkOnly, else bikeLost', () => {
+    const { c, bikes, notes } = online();
+    bikes.applyServer([info('b1', 1)], [], true);
+    for (const reason of ['finished', 'far', 'walkOnly', 'taken', 'gone'] as const) {
+      bikes.interact(c);
+      bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: false, reason });
+    }
+    expect([c.riding, notes]).toEqual([null, ['raceOver', 'bikeTooFar', 'walkOnly', 'bikeLost', 'bikeLost']]);
+  });
+
   it('own bike: get off / crash → dismount with where it stands; a lost claim answer frees F after claimTimeoutMs', () => {
     const { c, bikes, sent, frame } = online();
     bikes.applyServer([info('b1', 1)], [], true);
