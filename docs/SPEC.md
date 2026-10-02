@@ -1020,8 +1020,8 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - Chặng này KHÔNG dùng: Quay đầu (U-Turn), Nhường đường (Yield), Vé vượt (Express Pass), Vé ưu tiên (Priority Pass), Gờ giảm tốc (Speed Bump). Không làm trong Phase 9; các mục §9.x liên quan để TẠM hoãn (ghi TODO), có thể làm lại khi người dùng cần.
 - (2026-10-03, bổ sung) Chặng này cũng KHÔNG có lộ trình bắt buộc đi bộ (`transport.mandatory = "walk"`) và không có phạt đi bộ sai luật (`walkOnlyViolationMinutes`); mọi lộ trình đi bộ hoặc xe đạp tự do. Phase 9 vì vậy không còn việc bắt buộc: phạt bỏ cuộc thử thách (`quitTaskMinutes`) cũng không dùng (Lựa chọn kép đã có phạt đổi nhánh riêng, §17.16). Chuyển thẳng sang Phase 10.
 
-### 17.19 Thử thách 3 tại Louvre: phòng 20 tác phẩm, chọn 5 món thật (2026-10-03; người dùng nêu, một số điểm chờ xác nhận)
-- Một **căn phòng mô phỏng một phòng trong Louvre** chứa **20 tranh / tượng nổi tiếng**, bày xung quanh phòng (sửa 2026-10-03, trước ghi 30); chỉ **5** món là **độc bản duy nhất đang trưng bày ở Louvre**, 15 món còn lại nổi tiếng nhưng ở nơi khác.
+### 17.19 Thử thách 3 tại Louvre: phòng 23 tác phẩm, chọn 5 món thật (2026-10-03; người dùng nêu, một số điểm chờ xác nhận)
+- Một **căn phòng mô phỏng một phòng trong Louvre** chứa **23 tranh / tượng nổi tiếng**, bày xung quanh phòng (sửa 2026-10-03: 30 → 20 → 23); chỉ **5** món là **độc bản duy nhất đang trưng bày ở Louvre**, 18 món còn lại nổi tiếng nhưng ở nơi khác.
 - **Cách chơi:** dưới mỗi tác phẩm có **một nút chọn**; chọn thì **đèn sáng**. Chọn xong, đội bấm **một nút chốt ở giữa phòng**. Sai → **phạt 3 phút đếm ngược** (sửa 2026-10-03, trước ghi 2 phút) rồi mới được trả lời lại.
 - **Gợi ý theo giờ:** sau **40 phút** đội được gợi ý về số tác phẩm đúng. **30 phút sau đó** (70 phút) nếu chưa xong: thông báo đã đúng bao nhiêu / 5 và thông báo này **công khai cho các đội khác**.
 - **Mỗi đội / người chơi có bộ nút hiển thị khác nhau** (chống chép đáp án giữa các đội).
