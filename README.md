@@ -9,9 +9,15 @@ Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự g
 2. Kiểm tra: `npm run leg:check -- <đường-dẫn-file.json>` → sửa tới khi dòng cuối là "Hợp lệ"; bảng cuối có link bản đồ / ảnh vệ tinh / ảnh 3D / link đứng thử trong game cho từng điểm.
 3. Chơi thử tự động: `npm run sim -- --leg <đường-dẫn-file.json> --bots 2 --speedup 2` (`--help` để xem tùy chọn).
 4. Nạp vào cuộc đua: `npm run dev:worker`, mở http://localhost:8787/host.html, nhập mã cuộc đua + mật khẩu Host (`HOST_PASSWORD` trong `worker/.dev.vars`), phần "Chặng" → **Nạp chặng từ file**. Đội vào bằng link `/?race=<mã>` mà trang Host in ra.
+5. Tải hình mật thư lên (chỉ khi chặng có `"r2:<tên>"`; `leg:check` in danh sách "Hình cần tải lên trang Host"): sau khi nạp chặng, mục **Hình mật thư (R2)** trên trang Host liệt kê từng tên → "Chọn file" (jpg / png / webp ≤ 5 MB) → ✓ "đã có"; nút **Xem** để kiểm. Hình lưu theo mã cuộc đua: diễn tập ở mã khác thì tải lại. Đội chỉ tải được hình của mật thư đã mở.
+
+## Host duyệt bài trong lúc đua
+- Đội gõ câu trả lời trong game (hoặc bấm "Tôi đã gửi bài" sau khi gửi ảnh qua Messenger kèm **mã bài nộp** `<tên đội>-<bước>[-<nhánh>]`). Bài hiện ở mục **Chờ duyệt (n)** đầu trang Host (có âm báo; bấm **Bật thông báo** để nhận thông báo của trình duyệt), kèm câu trả lời, mã bài nộp, thời gian chờ và **Đáp án tham khảo** (chỉ Host thấy).
+- **Duyệt** → đội nhận mật thư kế ngay. **Phạt n phút** → đội thấy đồng hồ đếm ngược rồi mới trả lời lại được. Ô ghi chú chỉ để Host đọc (không gửi cho đội). Bấm nhầm Phạt: ô của đội trong ma trận có nút **Duyệt lại**. Bài ảnh Host đã nhận trước khi đội bấm nút: nút **Duyệt (đã nhận ảnh)** trong ô của đội.
+- Banner đỏ báo đội làm cùng một thử thách / nhánh quá 45 phút (`hostAlerts.stuckMinutes`), để Host gửi gợi ý qua Messenger. Thời gian chờ duyệt được bù vào giờ chính thức (cột "Bù giờ chờ duyệt").
 
 ## Yêu cầu
-- Node.js ≥ 22.12 (khuyên dùng 24), npm ≥ 10.
+- Node.js ≥ 22.13 (khuyên dùng 24), npm ≥ 10.
 - Google Chrome (dùng cho `npm run screenshot`).
 - Chơi trên máy tính Windows hoặc macOS (Chrome, Edge, Firefox, Safari).
 
@@ -28,7 +34,7 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 | `npm run dev:worker` | Build client rồi chạy `wrangler dev` tại http://localhost:8787 (trang web + API + Durable Object + SQLite + R2 giả lập). |
 | `npm run build` | Kiểm tra kiểu toàn bộ, build client, kiểm tra bundle Worker (`wrangler deploy --dry-run`). |
 | `npm test` | Chạy toàn bộ unit test (Vitest). |
-| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`; gọi theo tên: `lm-<địa danh>`, `leg-L1`…`leg-L6`, nhóm nhân vật `p3` hoặc từng cái như `p3-swim`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
+| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`; gọi theo tên: `lm-<địa danh>`, `leg-L1`…`leg-L6`, nhóm nhân vật `p3` hoặc từng cái như `p3-swim`; nhóm cuộc đua thử `p6` / `p7` / `p8`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
 | `npm run fetch-map` | Tải dữ liệu OSM thô (Overpass) vào `.cache/osm/` và độ cao (AWS Terrain Tiles) → `client/public/data/elevation.*`. Chỉ cần chạy một lần. |
 | `npm run process-assets` | Xử lý asset gốc đã duyệt trong `.cache/assets/` → `client/public/models/*.glb` (kể cả nhân vật `player.glb` + `player-anims.glb`) và `client/public/credits.json`. |
 | `npm run build-graph` | Dựng đồ thị đường từ `.cache/osm/` → `shared/data/roadgraph.json` (đường, vỉa hè, vạch qua đường, bậc thang, một chiều, bãi xe đạp). |
@@ -40,7 +46,7 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 
 Thử nhanh khi `npm run dev:worker` đang chạy: `curl localhost:8787/api/health`, `curl localhost:8787/api/room/ping`.
 
-Tham số URL của game (tiện khi thử): mặc định vào chế độ nhân vật ở Place de la Concorde. `?cam=x,y,z,yaw,pitch` = chế độ khán giả (chỉ bay camera tự do, mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``), `?player=x,z,yaw` đặt chỗ xuất hiện của nhân vật (thêm `camMode=near|far|first`, `orbit=<độ>`, `action=wave|openBox|celebrate|crash`, `autoMove=walk|slow`, `jump`, `wait=<giây>` – xem `docs/plans/phase3.md` §7; Phase 4: `bike` = bắt đầu trên xe, `autoTurn=left|right`, `graph=1` = hiện đồ thị đường; Phase 7: `start=x,z,yaw` = xuất hiện như đội vào game ở đó, `boxes=<mã>,x,z` = đặt hộp mật thư thử, thêm `mat` = thảm Chặng dừng; `leg:check` in sẵn các link này cho từng điểm của chặng). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`) `/character.html` xem nhân vật với các tư thế, `/bike.html` xem xe đạp.
+Tham số URL của game (tiện khi thử): mặc định vào chế độ nhân vật ở Place de la Concorde. `?cam=x,y,z,yaw,pitch` = chế độ khán giả (chỉ bay camera tự do, mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``), `?player=x,z,yaw` đặt chỗ xuất hiện của nhân vật (thêm `camMode=near|far|first`, `orbit=<độ>`, `action=wave|openBox|celebrate|crash`, `autoMove=walk|slow`, `jump`, `wait=<giây>` – xem `docs/plans/phase3.md` §7; Phase 4: `bike` = bắt đầu trên xe, `autoTurn=left|right`, `graph=1` = hiện đồ thị đường; Phase 7: `start=x,z,yaw` = xuất hiện như đội vào game ở đó, `boxes=<mã>,x,z` = đặt hộp mật thư thử, thêm `mat` = thảm Chặng dừng; Phase 8: `boxes=<mã>[|<nhánh>],x,z,opened,<hướng độ>` (hướng 0 = mặt trước hòm quay về bắc), `card=answer|detour-choose|…&full` = thẻ thử thách giả; `leg:check` in sẵn các link này cho từng điểm của chặng). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`) `/character.html` xem nhân vật với các tư thế, `/bike.html` xem xe đạp.
 
 ## Điều khiển
 | Thao tác | Bàn phím / chuột | Tay cầm |
@@ -59,7 +65,7 @@ Tham số URL của game (tiện khi thử): mặc định vào chế độ nhâ
 | Hiện đồ thị đường (khi bảng debug đang mở) | `N` | – |
 | Nhả chuột (menu ở Phase 5) | `Esc` | – |
 
-Camera bay tự do: `W` `A` `S` `D` bay, `Space` hoặc `E` lên, `Q` xuống, giữ `Shift` bay nhanh, lăn chuột đổi tốc độ (tay cầm: `RT`/`RB` lên, `LT`/`LB` xuống, bấm stick trái bay nhanh). `F` cũng mở hộp mật thư, `Tab` mở Sổ mật thư, `M` bản đồ lớn, `Esc` menu. Đã gán nhưng chưa có tác dụng: `B` ống nhòm.
+Camera bay tự do: `W` `A` `S` `D` bay, `Space` hoặc `E` lên, `Q` xuống, giữ `Shift` bay nhanh, lăn chuột đổi tốc độ (tay cầm: `RT`/`RB` lên, `LT`/`LB` xuống, bấm stick trái bay nhanh). `F` cũng mở hộp mật thư, `Enter` mở lại thẻ mật thư hiện tại (để trả lời, xem lịch sử câu trả lời), `Tab` mở Sổ mật thư (khi thẻ / Sổ mở thì chuột được nhả để bấm link, hình, nút, ô gõ), `M` bản đồ lớn, `Esc` menu. Đã gán nhưng chưa có tác dụng: `B` ống nhòm.
 
 Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh khi còn cách ≤ 30 m. Xe nhanh gấp 1,3 lần đi bộ, đạt tốc độ tối đa trong khoảng 1 giây, chậm lại khi cua gắt hoặc va chạm; trên đá lát khó cua, khó phanh hơn. Đâm mạnh vào tường khi đang nhanh thì ngã, 2 giây sau đứng dậy, xe vẫn là của đội. Không đi xe lên bậc thang (xe dừng lại).
 
@@ -76,7 +82,7 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 5 | HUD cơ bản | Xong |
 | 6 | Server & presence (Durable Object, WebSocket, vào lại) | Xong |
 | 7 | Race engine lõi: chặng từ file (`leg:check`), mật thư, hộp, Chặng dừng, giờ xuất phát lệch, trang Host tối giản | Xong |
-| 8 | Thử thách, Host duyệt | Chưa làm |
+| 8 | Thử thách gõ đáp án + Host duyệt / phạt, Lựa chọn kép theo hòm nhánh, hình mật thư R2 | Đang review |
 | 9 | Yếu tố đặc biệt, phạt giờ | Chưa làm |
 | 10 | Màn hình Host đầy đủ | Chưa làm |
 | 11 | Chặng demo Paris & test toàn trình | Chưa làm |

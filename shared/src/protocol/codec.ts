@@ -116,8 +116,6 @@ export function isClientMessage(m: unknown, role: 'team' | 'host'): boolean {
           return text(o.text, NET.answerMax);
         case 'branch':
           return str(o.branch, 16);
-        case 'task': // Phase 7 stub, until track A removes it
-          return (o.branch === undefined || str(o.branch, 16)) && (o.answer === undefined || text(o.answer, NET.answerMax));
         default:
           return false;
       }

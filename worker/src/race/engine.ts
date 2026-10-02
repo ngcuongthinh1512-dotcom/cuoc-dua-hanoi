@@ -169,8 +169,6 @@ export class RaceEngine {
     if (m.op === 'accept') return this.step(team, { kind: 'accept', step: m.step }, now);
     if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text, pose: stand(at) }, now);
     if (m.op === 'branch') return this.step(team, { kind: 'branch', step: m.step, branch: m.branch }, now);
-    // ponytail: the Phase 7 `task` op is ignored until the integrator drops it from the protocol (Phase 8 adjustment)
-    if (m.op === 'task') return;
     if (!at) return this.io.send(team, { t: 'notice', code: 'boxFar' });
     const riding = at.mode === 'bike';
     const input: RaceInput =

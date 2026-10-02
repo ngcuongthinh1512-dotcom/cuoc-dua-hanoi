@@ -1,4 +1,4 @@
-# Bàn giao phiên (cập nhật 2026-10-01, sau Phase 6) – đọc file này đầu tiên khi mở lại
+# Bàn giao phiên (cập nhật 2026-10-02, Phase 8 đã ghép, đang review) – đọc file này đầu tiên khi mở lại
 
 Mục đích: phiên mới không phải đọc lại hội thoại cũ. Đọc file này + `CLAUDE.md` + `TODO.md` là đủ; chỉ mở SPEC / kế hoạch phase khi cần.
 
@@ -7,12 +7,12 @@ Mục đích: phiên mới không phải đọc lại hội thoại cũ. Đọc 
 |---|---|
 | 0–2B, 3, 4, 4B, 5, 6 | Xong (xem `git log`) |
 | 7 Race engine lõi | **Xong** (commit `feat(phase7)` trên main): schema chặng + `leg:check` + `docs/LEG_FORMAT.md`, máy trạng thái từng đội, hộp mật thư, Sổ mật thư, Chặng dừng, xếp hạng, đồng hồ đội, anti-teleport, trang Host, bot `sim --leg`; 3 vòng review + e2e client/server thật |
-| 8 Thử thách (mini-game, kiểm đáp án, Host duyệt) | **Chưa làm — DỪNG chờ người dùng bảo** |
+| 8 Thử thách & Lựa chọn kép | **Đã ghép, đang review** (merge năm track trên main + commit `fix(phase8): ghép …`; chưa có commit `feat(phase8)` cuối): gõ đáp án trong game, Host duyệt / phạt (đếm ngược), Lựa chọn kép theo hòm nhánh + đổi nhánh 10 phút, hình mật thư R2, cảnh báo kẹt 45 phút trên trang Host, `leg:check` luật mới, `sim` có Host bot. Kế hoạch `docs/plans/phase8.md`, ghép `docs/reports/phase8-integration.md`, kiểm track `docs/reports/phase8-verify-*.md` |
 | 9–12 | Chưa làm |
 
 ## Việc tiếp theo
 1. **Người dùng nhập chặng thật** (lộ trình + thử thách) theo `docs/LEG_FORMAT.md` hoặc gửi cho tôi; LT2 đã nhận (xem memory `leg-content-draft`, điểm Palais de Tokyo dùng sân trước 48.86470, 2.29690). Đừng tự bịa nội dung chặng thật.
-2. Phase 8 chỉ khi người dùng nói tiếp tục: đọc `TODO.md` mục Phase 7 + 8, SPEC §8.4–8.9, §11 (thư viện thử thách), §17.9–17.13. Điều kiện đã chốt: không Vượt rào; nhiệm vụ Phase 7 đang là "Hoàn thành (tạm)"; Phase 8 chỉ thay `verifyTask` và thêm op, không đổi schema chặng hay `step_progress`.
+2. Phase 8: review (spec/code ∥ visual ∥ e2e thật) rồi lượt sửa các mục "nên sửa" còn mở trong `docs/reports/phase8-verify-*.md` + `TODO.md` mục Phase 8; sau đó commit `feat(phase8)`. Phase 8 **đã đổi** schema chặng (trường tùy chọn mới: `referenceAnswers`, `penalties.retryLockMinutes` / `branchSwitchLockMinutes`, `hostAlerts`, `media` cho mọi mật thư, `destination.yawDeg`), SQLite `SCHEMA_VERSION = 3` (`step_progress` thêm 4 cột `answers`, `locked_until`, `branch_opened_at`, `host_note`) và giao thức `PROTOCOL_VERSION = 3` (op `task` bỏ; `accept` / `answer` / `branch` / `open{branch}`, `host.review`). Không Vượt rào; Phase 9 chỉ khi người dùng bảo.
 3. Workflow đã dùng cho Phase 6–7 (công cụ Workflow): kế hoạch + nền (Opus) → critic → track song song trong worktree → verifier đối kháng → merge → review (spec/code ∥ visual ∥ e2e thật) → skeptic → sửa → vòng 2 (kiểm lại bản sửa + critic độ đầy đủ + thử người tổ chức) → vòng 3 → dọn → cổng cuối.
 
 ## Quy tắc làm việc đã chốt (xem thêm memory `~/.claude/projects/-Users-nguyencuongthinh-Documents-cuoc-dua-paris/memory/`)

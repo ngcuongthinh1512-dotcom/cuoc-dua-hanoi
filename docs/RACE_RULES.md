@@ -222,9 +222,9 @@ Trong lúc **chờ Host duyệt**, bạn chưa nhận được mật thư tiếp
 - Sổ mở ra thì chuột được thả để bạn bấm liên kết, hình và nút; đóng sổ thì chuột khóa lại (mục 2).
 - Sổ liệt kê **theo thứ tự mọi mật thư đội bạn đã nhận** trong chặng: nội dung đầy đủ, hình và liên kết minh họa (bấm hình để xem lớn, bấm liên kết để mở tab mới), luật phương tiện.
 - Theo mặc định, sổ **chỉ hiện những mật thư đã nhận**. Không có ô khóa hay thanh tiến độ, nên bạn **không biết chặng còn bao nhiêu bước**. Cứ đua hết sức!
-- Mỗi mục có trạng thái: đang làm, chờ Host duyệt, bị phạt (còn đếm ngược), hoặc đã xong (giờ hoàn thành và thời gian làm bước đó).
+- Mỗi mục có trạng thái: đang làm hoặc đã xong (giờ hoàn thành và thời gian làm bước đó). Chờ Host duyệt / đếm ngược phạt hiện trên thẻ thử thách (bấm `Enter`) và giữa màn hình.
 - Mục Lựa chọn kép hiện **tên và mô tả ngắn của 2 nhánh**, nhánh bạn đã chọn (nhãn *"Đội đã chọn"*) và số lần bạn đã đổi nhánh. **Đề bài của nhánh chỉ có sau khi bạn mở hòm của nhánh đó**: đề bài của nhánh bạn chưa mở thì không hiện.
-- Mục nhiệm vụ gửi ảnh cho Host có hướng dẫn gửi bài, **mã bài nộp** (`<tên đội>-<bước>[-<nhánh>]`) kèm nút **Copy**, và nút mở Facebook của Host.
+- Mục nhiệm vụ gửi ảnh cho Host có hướng dẫn gửi bài và **mã bài nộp** (`<tên đội>-<bước>[-<nhánh>]`) kèm nút **Copy**. Nút mở Facebook của Host và nút "Tôi đã gửi bài" nằm trên thẻ thử thách (bấm `Enter`).
 - Sổ **không** có lịch sử các câu trả lời bạn đã gõ (kể cả mục được ghim). Muốn xem lại, đóng sổ rồi bấm `Enter` để mở thẻ thử thách hiện tại (mục 6).
 - Mật thư đang làm được ghim trên đầu; nút **"Về mật thư hiện tại"** đưa bạn quay lại ngay.
 - Sổ luôn **tải lại từ máy chủ** mỗi lần mở, nên đổi sang máy khác vẫn đủ mật thư.

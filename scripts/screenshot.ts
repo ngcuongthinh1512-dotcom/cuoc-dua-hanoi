@@ -231,7 +231,7 @@ const ISLAND_SPOT = 4;
 const PIT = (({ x, z }) => ({ x: +x.toFixed(1), z: +z.toFixed(1) }))(latLonToWorld(48.8596, 2.29243));
 /** Clue box on the Concorde (p6-boxes' current one), camera 3 m away 35° right of its front (+z: yawDeg 180, Phase 8 D7),
  *  eye 1.9 m, looking down at it. */
-const boxView = (opened: string) => camAt(-18 + 3 * Math.sin(0.61), -10.9 + 3 * Math.cos(0.61), 1.9, 35, -19) + `&npc=0&boxes=L2,-18,-10.9,${opened},180`;
+const boxView = (opened: boolean) => camAt(-18 + 3 * Math.sin(0.61), -10.9 + 3 * Math.cos(0.61), 1.9, 35, -19) + `&npc=0&boxes=L2,-18,-10.9,${opened ? 'opened' : ''},180`;
 /** The `street` view (Champs-Élysées centre line, facing the Arc) with a box 150 m ahead on that line. */
 const FAR = (() => {
   const [a, b] = [latLonToWorld(48.8703, 2.306), latLonToWorld(48.8738, 2.295)];
@@ -252,8 +252,8 @@ Object.assign(PRESETS, {
   'p7-celebrate': `/?player=${PIT.x},${PIT.z + 0.5},180&boxes=PS,${PIT.x},${PIT.z}&mat&action=celebrate&wait=1.2&orbit=160&npc=0`,
   // the organiser's prop (config clueBox): 3/4 front view from 3 m, closed / opened (the lid hinges at the back, −z), and
   // from 150 m (the reveal radius) up the Champs-Élysées
-  'p7-box-close': boxView(''),
-  'p7-box-opened': boxView(',opened'),
+  'p7-box-close': boxView(false),
+  'p7-box-opened': boxView(true),
   'p7-box-far': FAR,
   // [C] clue card (each step type), full card popup, Sổ mật thư, "Xuất phát ở vị trí thứ n", Pit Stop line, clock --:-- / penalty
   ...Object.fromEntries(

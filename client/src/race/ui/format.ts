@@ -1,7 +1,7 @@
 // Phase 7 track C: pure helpers of the race HUD (no DOM, tested in Node). Everything here works only from what the server
 // sent (ClueCard / RaceView / ZoneMember): never answers, destination names or a later step.
 import { type AnswerStatus, type CardStatus, type ClueCard, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
-import { raceHud as C } from '../../config.ts';
+import { raceClient, raceHud as C } from '../../config.ts';
 import { looksLikeIme } from '../../core/Input.ts';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -136,9 +136,9 @@ export function zoneLines(members: readonly ZoneMember[], teams: readonly TeamIn
 export const fmtMin = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
 
 /** The state the screen shows at `now` (ms, server clock estimate): a countdown that ran out flips the card by itself,
- *  lockFlipSlackMs late (D9: a client clock a second early would send `answer` into answerLocked). */
+ *  raceClient.lockEndSlackMs late, the same moment the pose is re-sent (D9: a client clock a second early would send `answer` into answerLocked). */
 export function liveStatus(card: ClueCard, now: number): CardStatus {
-  if (card.lockedUntil == null || now < card.lockedUntil + C.lockFlipSlackMs) return card.status;
+  if (card.lockedUntil == null || now < card.lockedUntil + raceClient.lockEndSlackMs) return card.status;
   return card.status === 'locked' ? 'active' : card.status === 'switchLocked' ? 'goToBranch' : card.status;
 }
 

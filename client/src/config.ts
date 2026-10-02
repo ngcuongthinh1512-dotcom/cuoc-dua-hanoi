@@ -1081,8 +1081,9 @@ export const raceClient = {
   hintAbove: 1.5, // m: a re-entry spawn ray starts this far above welcome.pose.y (the deck / promenade it stood on, D17)
   opMinGapMs: 800, // F / check-in: at most one `race` op this often (each is preceded by a pose: the server's 15 msg/s limit)
   spectateAfterS: 4.5, // s after the check-in (celebrate ≈ 4 s) the finished team becomes a spectator (free-fly, D19)
-  // Phase 8 (D9): this long after a card countdown ends (server clock estimate) the pose is re-sent once, so the server's
-  // tick loop wakes and reveals the branch box to a team standing still (its clock may run 1–2 s early: critic N8)
+  // Phase 8 (D9): this long after a card countdown ends (server clock estimate) the card flips to active / goToBranch
+  // (race/ui/format.ts liveStatus) and the pose is re-sent once, so the server's tick loop wakes and reveals the branch box
+  // to a team standing still (a client clock 1–2 s early would send `answer` into answerLocked: critic N8)
   lockEndSlackMs: 1000,
   // Pit Stop (SPEC §8.6): a red mat with yellow stripes at the zone centre (the check-in zone is the whole radius) + the host NPC
   mat: { length: 7, width: 3.2, colour: '#b3201c', stripe: '#f2c230', stripeWidth: 0.25, lift: 0.04 },
@@ -1101,6 +1102,5 @@ export const raceHud = {
   finishSeconds: 14, // s (sim clock) the host NPC's finish line stays on screen
   taskLockSeconds: 2, // s the card's server buttons (Nhận thử thách, Chọn / Đổi nhánh, Gửi) stay disabled after a click (the answer comes back as a new `race` view)
   // Phase 8 (docs/plans/phase8.md D9 / D15). Typed-answer / history limits are NET.answerMax / NET.answerHistory (shared: the server cuts at the same numbers).
-  lockFlipSlackMs: 1000, // ms after card.lockedUntil (server clock estimate) before the card flips to active / goToBranch: a client clock 1–2 s early would send `answer` into answerLocked (D9)
   mediaMaxHeight: 260, // px, tallest an image on a card / in the Sổ gets (click = full-screen)
 };

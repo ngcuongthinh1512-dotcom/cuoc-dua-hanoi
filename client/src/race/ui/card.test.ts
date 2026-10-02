@@ -2,7 +2,7 @@
 // draws `cardPanel`, so "which button exists in which state" is decided and tested here.
 import { describe, expect, it } from 'vitest';
 import { NET, submitCode, type AnswerStatus, type AnswerView, type BranchView, type ClueCard, type RaceView, type TaskView } from '@race/shared/protocol';
-import { raceHud as C } from '../../config.ts';
+import { raceClient as C } from '../../config.ts';
 import { answerLines, branchConfirmText, cardPanel, formatTimeOfDay, hudKey, liveStatus, lockLine, mediaViews, pendingLine, statusLine, summarize, timerLine } from './format.ts';
 
 const textTask: TaskView = { title: 'Phép tính', description: 'Tính đi', media: [], kind: 'answer', verification: 'host_approval', input: 'text', proofInstruction: '', timeLimitMinutes: null };
@@ -31,8 +31,8 @@ describe('countdown (D9): lockLine / liveStatus / statusLine', () => {
     expect(lockLine(view(switched), 0)).toBe('Đổi lựa chọn kép: còn 09:12 · hòm nhánh Nước hiện khi hết giờ');
   });
   it('gone after lockedUntil + the flip slack; none for a card without a countdown, a finished race, no view', () => {
-    expect(lockLine(view(locked), 160_000 + C.lockFlipSlackMs - 1)).toBe('Phạt: còn 00:00 trước khi trả lời lại');
-    expect(lockLine(view(locked), 160_000 + C.lockFlipSlackMs)).toBeNull();
+    expect(lockLine(view(locked), 160_000 + C.lockEndSlackMs - 1)).toBe('Phạt: còn 00:00 trước khi trả lời lại');
+    expect(lockLine(view(locked), 160_000 + C.lockEndSlackMs)).toBeNull();
     expect(lockLine(view(challenge()), 0)).toBeNull();
     expect(lockLine(view(locked, { status: 'finished' }), 0)).toBeNull();
     expect(lockLine(view(locked, { finishAt: 5 }), 0)).toBeNull();
@@ -40,9 +40,9 @@ describe('countdown (D9): lockLine / liveStatus / statusLine', () => {
     expect(lockLine({ ...view(locked), card: null }, 0)).toBeNull();
   });
   it('the card flips by itself once the countdown + slack ran out: locked → active, switchLocked → goToBranch', () => {
-    expect(liveStatus(locked, 160_000 + C.lockFlipSlackMs - 1)).toBe('locked');
-    expect(liveStatus(locked, 160_000 + C.lockFlipSlackMs)).toBe('active');
-    expect(liveStatus(switched, 552_000 + C.lockFlipSlackMs)).toBe('goToBranch');
+    expect(liveStatus(locked, 160_000 + C.lockEndSlackMs - 1)).toBe('locked');
+    expect(liveStatus(locked, 160_000 + C.lockEndSlackMs)).toBe('active');
+    expect(liveStatus(switched, 552_000 + C.lockEndSlackMs)).toBe('goToBranch');
     expect(liveStatus(challenge({ status: 'pending' }), 9e9)).toBe('pending');
   });
   it('top-left state line: Chờ Host duyệt / Phạt / Đổi nhánh / Nhánh X · tới hòm nhánh / nothing', () => {
@@ -51,7 +51,7 @@ describe('countdown (D9): lockLine / liveStatus / statusLine', () => {
     expect(statusLine(locked, 0)).toEqual({ kind: 'lock', text: 'Phạt: còn 02:40' });
     expect(statusLine(switched, 0)).toEqual({ kind: 'lock', text: 'Đổi nhánh: còn 09:12' });
     expect(statusLine(detour({ status: 'goToBranch', branch: 'A' }), 0)).toEqual({ kind: 'info', text: 'Nhánh Lửa · tới hòm nhánh' });
-    expect(statusLine(switched, 552_000 + C.lockFlipSlackMs)).toEqual({ kind: 'info', text: 'Nhánh Nước · tới hòm nhánh' });
+    expect(statusLine(switched, 552_000 + C.lockEndSlackMs)).toEqual({ kind: 'info', text: 'Nhánh Nước · tới hòm nhánh' });
     expect(statusLine(challenge(), 0)).toBeNull();
     expect(statusLine(card({ type: 'route_info' }), 0)).toBeNull();
   });
@@ -148,7 +148,7 @@ describe('card controls follow the card state (D5 / D6 / D15)', () => {
     const locked = P(challenge({ status: 'locked', lockedUntil: 160_000, lockKind: 'retry' }));
     expect(shape(locked).input).toBe(false);
     expect(locked.line?.kind).toBe('lock');
-    expect(shape(P(challenge({ status: 'locked', lockedUntil: 160_000, lockKind: 'retry' }), 160_000 + C.lockFlipSlackMs)).input).toBe(true); // countdown over: typing again
+    expect(shape(P(challenge({ status: 'locked', lockedUntil: 160_000, lockKind: 'retry' }), 160_000 + C.lockEndSlackMs)).input).toBe(true); // countdown over: typing again
   });
   it('detour choose: two choose buttons, NO "Đổi" button', () => {
     expect(shape(P(detour({ status: 'choose' })))).toEqual({ accept: false, choose: ['A', 'B'], input: false, proof: null, switchTo: [] });

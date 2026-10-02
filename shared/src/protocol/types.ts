@@ -289,9 +289,6 @@ export type RaceOp =
   | { t: 'race'; op: 'accept'; step: string }
   | { t: 'race'; op: 'answer'; step: string; text: string }
   | { t: 'race'; op: 'branch'; step: string; branch: string }
-  /** @deprecated Phase 7 stub (the task passes inside its zone). Kept only until Phase 8 track A plays answer / branch /
-   *  open{branch}; track A removes it with its Phase 7 tests (docs/reports/phase8-foundation.md). */
-  | { t: 'race'; op: 'task'; step: string; branch?: string; answer?: string }
   | { t: 'race'; op: 'checkin' }
   | { t: 'race'; op: 'book' };
 

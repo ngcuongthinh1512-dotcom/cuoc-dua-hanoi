@@ -112,11 +112,11 @@ describe('frames and JSON messages', () => {
   });
 
   it('Phase 7: race ops from a team, race / team / leg ops from the Host only', () => {
-    for (const m of [{ t: 'race', op: 'open', step: 'L1' }, { t: 'race', op: 'task', step: 'D1', branch: 'A' }, { t: 'race', op: 'task', step: 'T1', answer: 'bảy' }, { t: 'race', op: 'checkin' }, { t: 'race', op: 'book' }])
+    for (const m of [{ t: 'race', op: 'open', step: 'L1' }, { t: 'race', op: 'open', step: 'D1', branch: 'A' }, { t: 'race', op: 'answer', step: 'T1', text: 'bảy' }, { t: 'race', op: 'checkin' }, { t: 'race', op: 'book' }])
       expect(isClientMessage(m, 'team')).toBe(true);
     expect(isClientMessage({ t: 'race', op: 'open' }, 'team')).toBe(false); // which box?
     expect(isClientMessage({ t: 'race', op: 'open', step: 'x'.repeat(17) }, 'team')).toBe(false);
-    expect(isClientMessage({ t: 'race', op: 'task', step: 'T1', answer: 'a'.repeat(201) }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'race', op: 'task', step: 'T1', answer: 'bảy' }, 'team')).toBe(false); // Phase 7 op, gone in v3
     expect(isClientMessage({ t: 'race', op: 'skip', step: 'L1' }, 'team')).toBe(false);
     expect(isClientMessage({ t: 'host.race', op: 'pause' }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.race', op: 'pause' }, 'team')).toBe(false);
