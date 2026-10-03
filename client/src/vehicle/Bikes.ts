@@ -122,6 +122,13 @@ export class Bikes {
     b.ownerColour = this.colour;
   }
 
+  /** What F would do now, no side effect (the HUD prompt): 'on' = a bike in reach to take (interact's conditions; a decoy the
+   *  server will refuse still counts: the client cannot tell), 'off' = riding slow enough to get off, else null. */
+  prompt(c: CharacterController): 'on' | 'off' | null {
+    if (c.riding) return Math.abs(c.riding.speed) <= B.dismountMaxSpeed ? 'off' : null;
+    return canMount(c.state) && bikeInReach(this.list, c.state.position, this.team) ? 'on' : null;
+  }
+
   /** F: get off (at ≤ bike.dismountMaxSpeed) or take + mount the bike in reach. What happened, why nothing did
    *  (BikeRefusal → toast, Phase 5), or null (nothing to do, silent). */
   interact(c: CharacterController): 'mount' | 'dismount' | BikeRefusal | null {

@@ -655,7 +655,8 @@ async function start() {
         const riding = !!player.controller.riding;
         // (race.frame runs in the Louvre room too: the hint marks' `view`; no box prompt from under the ground)
         const inZone = !player.active ? false : (race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone : !riding && !!boxInReach(boxes.boxes, x, z)) && !room?.active;
-        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone, prompt });
+        const bike = player.active && !flying && !room?.active && !modal() && !race?.view?.result ? player.bikes.prompt(player.controller) : null;
+        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone, prompt, bike });
         gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
         hud.update(frame, dt);
         minimap.update(frame, gps ?? NO_GPS, dt);

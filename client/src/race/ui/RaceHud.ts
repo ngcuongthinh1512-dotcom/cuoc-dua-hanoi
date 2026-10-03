@@ -47,9 +47,12 @@ export interface RaceHudFrame {
   inZone: boolean;
   /** Phase 8B: the Louvre room's prompt (LouvreRoom.roomPrompt / "Bấm F để vào phòng Louvre"), shown instead of the box one. */
   prompt?: string | null;
+  /** Lowest priority (after the room / box prompts): 'on' = a bike F can take is in reach, 'off' = riding, slow enough to get off. */
+  bike?: 'on' | 'off' | null;
 }
 
 const BOX_PROMPT = 'Bấm F để mở hòm mật thư';
+const BIKE_PROMPT = { on: 'Bấm F để lên xe', off: 'Bấm F để xuống xe' } as const;
 
 const ICONS = {
   route: '<path d="M4 19c7 0 4-13 11-13h3M15 3l4 3-4 3"/>',
@@ -315,7 +318,7 @@ export class RaceHud {
     const pen = lock ?? penaltyLine(this.view, this.now);
     this.penaltyEl.hidden = pen == null || (lock != null && this.timerEl != null); // the open card shows the same countdown (visual#7)
     if (pen) setTime(this.penaltyEl, pen);
-    const prompt = f.prompt || (f.inZone ? BOX_PROMPT : '');
+    const prompt = f.prompt || (f.inZone ? BOX_PROMPT : f.bike ? BIKE_PROMPT[f.bike] : '');
     this.promptEl.hidden = !prompt || this.open;
     if (prompt) setText(this.promptEl, prompt);
     this.npcEl.hidden = f.simTime - this.finishSince >= C.finishSeconds;

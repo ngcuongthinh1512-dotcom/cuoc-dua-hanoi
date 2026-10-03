@@ -70,6 +70,25 @@ describe('Bikes: take / mount / get off (SPEC §6.3)', () => {
   });
 });
 
+describe('Bikes.prompt: "Bấm F để lên xe" / "xuống xe", no side effect', () => {
+  it('free bike near → on; other team / too far / riding → not on', () => {
+    const { c, bikes } = setup();
+    const b = bikes.add(bikeRules.interactRadius - 0.3, 0, 0, 0);
+    expect(bikes.prompt(c)).toBe('on');
+    expect([b.owner, b.rider, c.riding]).toEqual([null, null, null]); // nothing taken
+    b.owner = 'Đội B';
+    expect(bikes.prompt(c)).toBeNull();
+    b.owner = null;
+    b.position.x = bikeRules.interactRadius + 0.3;
+    expect(bikes.prompt(c)).toBeNull();
+    b.position.x = bikeRules.interactRadius - 0.3;
+    expect(bikes.interact(c)).toBe('mount');
+    expect(bikes.prompt(c)).toBe('off'); // stopped on the bike
+    b.speed = B.dismountMaxSpeed + 1;
+    expect(bikes.prompt(c)).toBeNull();
+  });
+});
+
 describe('Bikes.interact: why F did nothing (Phase 5 track C, SPEC §6.3)', () => {
   it('riding above bike.dismountMaxSpeed (4 m/s; also in reverse) → bikeTooFast', () => {
     const { c, bikes } = setup();
