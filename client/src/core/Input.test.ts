@@ -43,7 +43,7 @@ describe('Input gamepad buttons (config padButtons)', () => {
     buttons.forEach((b) => (b.pressed = true));
     input.poll();
     expect(input.isDown('moveForward')).toBe(false);
-    expect(input.isDown('walkSlow')).toBe(true);
+    expect(input.isDown('sprint')).toBe(true);
   });
 });
 

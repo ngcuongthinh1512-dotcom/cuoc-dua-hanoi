@@ -38,7 +38,7 @@ docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese), plans/phase2.md (pa
 
 ## Input (SPEC §17: PC Windows + macOS only)
 - No Ctrl / Alt / Option / Cmd / Win as gameplay keys; no F-key as the only binding; never F5 / F11 / F12.
-- Bindings by `KeyboardEvent.code` in `client/src/config.ts` (Phase 1), several keys per action. Key table: SPEC §17.2. Bike (Phase 4): F take/mount/dismount, W pedal, S brake/reverse, A/D steer, R bell, C camera. Debug-only (F3 open): V free-fly, N road graph overlay. Louvre room (Phase 8B): F at the box enters (≤ `louvreRoom.enterReach` m), inside F = the faced button (pick / unpick), the lock button, or the door (out).
+- Bindings by `KeyboardEvent.code` in `client/src/config.ts` (Phase 1), several keys per action. Key table: SPEC §17.2. Shift (pad LB) held = sprint × `SPRINT_MULTIPLIER` (shared/src/constants.ts, 2) on foot, swimming and on a bike (SPEC §17.29; the server's speed flag + trusted point use the same constant). Bike (Phase 4): F take/mount/dismount, W pedal, S brake/reverse, A/D steer, R bell, C camera. Debug-only (F3 open): V free-fly, N road graph overlay. Louvre room (Phase 8B): F at the box enters (≤ `louvreRoom.enterReach` m), inside F = the faced button (pick / unpick), the lock button, or the door (out).
 
 ## Commands
 - `npm run dev` – client Vite dev server.

@@ -1,5 +1,5 @@
 // Track B (docs/plans/phase3.md): Rapier KinematicCharacterController on a capsule (step 0.4 m, slope 45°, ground snap),
-// walk / slow walk / jump / fall, swimming in the Seine + climbing out onto a quay, safe spawn and respawn.
+// walk / sprint (Shift, ×movement.sprintMultiplier) / jump / fall, swimming in the Seine + climbing out onto a quay, safe spawn and respawn.
 // Phase 4 track B: riding (ride(bike)) moves the same capsule with the bike's velocity (vehicle/BikeController.ts), a
 // front-wheel probe keeps the nose out of walls and off stairs, a strong impact is a crash (SPEC §6.3).
 import RAPIER from '@dimforge/rapier3d-compat';
@@ -17,7 +17,7 @@ import type { Gesture, MoveIntent, PlayerEnv, PlayerState } from './types.ts';
 
 const axis = (input: Input, pos: Action, neg: Action) => Number(input.isDown(pos)) - Number(input.isDown(neg));
 
-export const newIntent = (): MoveIntent => ({ forward: 0, right: 0, cameraYaw: 0, slow: false, jump: false });
+export const newIntent = (): MoveIntent => ({ forward: 0, right: 0, cameraYaw: 0, sprint: false, jump: false });
 
 /** Phase 5, menu / full map open (Player, every physics step): no input; a ridden bike brakes (S) to a stop, never on into
  *  reverse (review M3). */
@@ -32,7 +32,7 @@ export function readMoveIntent(input: Input, cameraYaw: number, out: MoveIntent)
   out.forward = f * k;
   out.right = r * k;
   out.cameraYaw = cameraYaw;
-  out.slow = input.isDown('walkSlow');
+  out.sprint = input.isDown('sprint');
   out.jump ||= input.wasPressed('jump');
   return out;
 }
@@ -320,7 +320,7 @@ export class CharacterController {
     const river = this.overRiver(p.x, p.z);
     const swimming = river && level - p.y > S.enterDepth;
     const [dx, dz] = locked ? [0, 0] : moveDirection(intent);
-    const top = movement.footSpeed * (intent.slow ? movement.slowWalkFactor : 1) * (swimming ? S.speedFactor : 1);
+    const top = movement.footSpeed * (intent.sprint ? movement.sprintMultiplier : 1) * (swimming ? S.speedFactor : 1); // SPEC §17.29: Shift ×2, swimming too
     // Step toward the target velocity: |v| stays ≤ max(|v|, |target|), so never above the top speed on flat ground.
     const [ax, az] = [dx * top - this.vx, dz * top - this.vz];
     const k = Math.min(1, (P.accel * dt * (swimming || s.grounded ? 1 : P.airControl)) / (Math.hypot(ax, az) || 1));
@@ -361,7 +361,7 @@ export class CharacterController {
       this.vy = Math.min(this.vy, m.y / dt); // a ceiling stops the jump; an autostep lift never launches us
     }
     s.inWater = river && p.y < level;
-    s.moveMode = swimming ? 'swim' : this.jumped || this.airTime > P.fallDelay ? 'air' : intent.slow ? 'slow' : 'walk';
+    s.moveMode = swimming ? 'swim' : this.jumped || this.airTime > P.fallDelay ? 'air' : 'walk';
 
     if (p.y < P.respawnBelow || p.y < this.env.heightAt(p.x, p.z) - P.fellThrough) return this.respawn();
     if (s.grounded && !s.inWater) this.rememberSafe(p);
@@ -374,7 +374,7 @@ export class CharacterController {
   private rideStep(dt: number, intent: MoveIntent, b: BikeState, sx: number, sz: number) {
     const s = this.state;
     const p = s.position;
-    stepBike(b, { throttle: Math.max(0, intent.forward), brake: intent.forward < -0.1, turn: -intent.right }, this.surfaceAt(p.x, p.z), dt);
+    stepBike(b, { throttle: Math.max(0, intent.forward), brake: intent.forward < -0.1, turn: -intent.right, sprint: intent.sprint }, this.surfaceAt(p.x, p.z), dt);
     const [fx, fz] = [-Math.sin(b.yaw), -Math.cos(b.yaw)];
     let d = b.speed * dt;
     const hit = d > 0 ? this.wheelProbe(fx, fz, d, B.wheelBase) : d < 0 ? this.wheelProbe(-fx, -fz, -d, B.rearReach) : undefined;

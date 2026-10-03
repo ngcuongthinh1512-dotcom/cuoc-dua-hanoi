@@ -91,8 +91,8 @@ let assets: NpcAssets;
 beforeAll(async () => void (assets = await loadNpcAssets()));
 
 const anchorAt = (x: number, z: number, o: Partial<NpcAnchor> = {}): NpcAnchor => ({ x, z, viewYaw: 0, body: true, vx: 0, vz: 0, nose: null, waving: false, ...o });
-const ahead = (): MoveIntent => ({ forward: 1, right: 0, cameraYaw: 0, slow: false, jump: false });
-const idle = (): MoveIntent => ({ forward: 0, right: 0, cameraYaw: 0, slow: false, jump: false });
+const ahead = (): MoveIntent => ({ forward: 1, right: 0, cameraYaw: 0, sprint: false, jump: false });
+const idle = (): MoveIntent => ({ forward: 0, right: 0, cameraYaw: 0, sprint: false, jump: false });
 
 function scene(test: { kind: CarKind; x: number; z: number; yawDeg: number }[]) {
   const world = new RAPIER.World(physics.gravity);

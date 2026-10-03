@@ -3,8 +3,8 @@ import { parseOverrides } from './Player.ts';
 
 describe('parseOverrides (URL test hooks)', () => {
   it('reads spawn, camera mode, orbit, action, autoMove, jump', () => {
-    const o = parseOverrides(new URLSearchParams('player=10,-20,90&camMode=far&orbit=180&action=wave&autoMove=slow&jump'));
-    expect(o).toEqual({ spawn: { x: 10, z: -20, yawDeg: 90 }, camMode: 'far', orbitDeg: 180, action: 'wave', autoMove: 'slow', holdJump: true });
+    const o = parseOverrides(new URLSearchParams('player=10,-20,90&camMode=far&orbit=180&action=wave&autoMove=sprint&jump'));
+    expect(o).toEqual({ spawn: { x: 10, z: -20, yawDeg: 90 }, camMode: 'far', orbitDeg: 180, action: 'wave', autoMove: 'sprint', holdJump: true });
   });
   it('ignores invalid values (bare ?player = default spawn)', () => {
     const o = parseOverrides(new URLSearchParams('player&camMode=top&action=fly&orbit=x&autoMove=run'));
@@ -28,9 +28,9 @@ describe('parseOverrides (URL test hooks)', () => {
     expect(parseOverrides(new URLSearchParams('npcDensity=0')).npcDensity).toBe(0);
   });
   it('Phase 6: online (in a race) drops every test hook, keeps the npc* fields', () => {
-    const q = new URLSearchParams('player=10,-20,90&camMode=far&orbit=180&action=wave&autoMove=slow&jump&bike&autoTurn=left&npc=0&npcSeed=3');
+    const q = new URLSearchParams('player=10,-20,90&camMode=far&orbit=180&action=wave&autoMove=sprint&jump&bike&autoTurn=left&npc=0&npcSeed=3');
     expect(parseOverrides(q, true)).toEqual({ online: true, npc: false, npcSeed: 3 });
-    expect(parseOverrides(q)).toMatchObject({ spawn: { x: 10, z: -20, yawDeg: 90 }, action: 'wave', autoMove: 'slow', holdJump: true, bike: true, autoTurn: 'left' });
+    expect(parseOverrides(q)).toMatchObject({ spawn: { x: 10, z: -20, yawDeg: 90 }, action: 'wave', autoMove: 'sprint', holdJump: true, bike: true, autoTurn: 'left' });
     expect(parseOverrides(q).online).toBeUndefined(); // offline: unchanged
   });
 });

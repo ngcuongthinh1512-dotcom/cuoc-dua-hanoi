@@ -1,5 +1,5 @@
 // Every client tunable lives here (CLAUDE.md). Map constants come from @race/shared, never copied.
-import { latLonToWorld } from '@race/shared';
+import { latLonToWorld, SPRINT_MULTIPLIER } from '@race/shared';
 
 export { RACE_BBOX } from '@race/shared';
 
@@ -68,7 +68,7 @@ const keyTable = {
   moveBack: ['KeyS'],
   moveLeft: ['KeyA'],
   moveRight: ['KeyD'],
-  walkSlow: ['ShiftLeft', 'ShiftRight'],
+  sprint: ['ShiftLeft', 'ShiftRight'], // SPEC §17.29: hold = ×movement.sprintMultiplier, on foot and on a bike
   jump: ['Space'],
   interact: ['KeyF'],
   clueBook: ['Tab'],
@@ -92,12 +92,12 @@ export const keys: Readonly<Record<Action, readonly string[]>> = keyTable;
 
 // Gamepad buttons per action, W3C "standard" mapping: 0 A/✕, 1 B/○, 2 X/□, 3 Y/△, 4 LB/L1, 5 RB/R1, 6 LT/L2, 7 RT/R2,
 // 8 View/Share, 9 Menu/Options, 10 L3, 11 R3, 12–15 D-pad ↑ ↓ ← →. Sticks: left = move, right = look (core/Input.ts).
-// The free-fly camera also rises with RT/RB and sinks with LT/LB (Input.pad.rise), so LB = slow walk only on foot.
+// The free-fly camera also rises with RT/RB and sinks with LT/LB (Input.pad.rise), so LB = sprint only on foot / bike.
 export const padButtons: Readonly<Partial<Record<Action, readonly number[]>>> = {
   jump: [0],
   interact: [2],
   clueBook: [3],
-  walkSlow: [4],
+  sprint: [4],
   camera: [8],
   menu: [9],
   flyFast: [10],
@@ -553,8 +553,8 @@ export const preview = {
 // ── Foundation · movement + test session (player/Player.ts, main.ts) ──
 // SPEC §6.1: the leg file's `movement` block overrides footSpeed / bikeSpeedMultiplier (server-sent, Phase 6).
 export const movement = {
-  footSpeed: 4, // m/s: standard on-foot speed (the "jog" clip) = the maximum on foot, no sprint
-  slowWalkFactor: 0.35, // × footSpeed while walkSlow (Shift / LB) is held → 1.4 m/s (the "walk" clip)
+  footSpeed: 4, // m/s: standard on-foot speed (the "jog" clip)
+  sprintMultiplier: SPRINT_MULTIPLIER, // SPEC §17.29: × the top speed (foot, swim, bike) while sprint (Shift / LB) is held; the server's limits use the same constant
   bikeSpeedMultiplier: 1.3, // Phase 4: bike speed = footSpeed × this
 };
 
@@ -597,7 +597,7 @@ export const character = {
   // an upright swimmer (swim.floatDepth keeps the head of Swim_Idle_Loop out), which would sink the whole crawl.
   clipLift: { Swim_Fwd_Loop: 0.3 } as Readonly<Record<string, number>>,
   moveThreshold: 0.25, // m/s horizontal: below = idle / swimIdle / land
-  // m/s: on foot (not slow walk) Jog_Fwd_Loop from jogFrom[1], back to Walk_Loop below jogFrom[0]; in between both
+  // m/s: on foot Jog_Fwd_Loop from jogFrom[1], back to Walk_Loop below jogFrom[0]; in between both
   // clips slide a little (Walk_Loop tops out at 1.09 × 1.6 = 1.74 m/s, Jog_Fwd_Loop starts at 6.1 × 0.4 = 2.44 m/s)
   jogFrom: [1.8, 2.1] as const,
   jump: { startAt: 0.07, startSeconds: 0.45 }, // s into Jump_Start (push-off, after its crouch); s before Jump_Loop

@@ -46,8 +46,8 @@ describe('pickState', () => {
   it.each<[string, PlayerState, AnimState]>([
     ['still', state(), 'idle'],
     ['standard speed', state({ speed: 4 }), 'jog'],
-    ['slow walk', state({ mode: 'slow', speed: 1.4 }), 'walk'],
-    ['slow, still', state({ mode: 'slow' }), 'idle'],
+    ['slow stride (wall slide)', state({ speed: 1.4 }), 'walk'],
+    ['sprint (SPEC §17.29)', state({ speed: 8 }), 'jog'],
     ['swimming', state({ mode: 'swim', speed: 1.8 }), 'swimFwd'],
     ['floating', state({ mode: 'swim' }), 'swimIdle'],
     ['falling (no jump)', state({ mode: 'air' }), 'air'],
@@ -78,7 +78,6 @@ describe('pickState', () => {
     expect(pickState(mid, 'walk', 1, false)).toBe('walk');
     expect(pickState(mid, 'jog', 1, false)).toBe('jog');
     expect(pickState(state({ speed: C.jogFrom[0] - 0.01 }), 'jog', 1, false)).toBe('walk');
-    expect(pickState(state({ mode: 'slow', speed: 4 }), 'jog', 1, false)).toBe('walk');
   });
 });
 

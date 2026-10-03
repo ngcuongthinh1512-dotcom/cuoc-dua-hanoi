@@ -7,7 +7,7 @@ import type { FinishKind, FinishTexts } from './finish.ts';
 export type { StepType, TaskKind, Transport, Verification, VehiclesConfig };
 
 /** Locomotion modes (client/src/player/types.ts MoveMode derives from this); the wire sends the index. */
-export const MOVE_MODES = ['walk', 'slow', 'swim', 'air', 'bike'] as const;
+export const MOVE_MODES = ['walk', 'swim', 'air', 'bike'] as const; // SPEC §17.29: no 'slow' any more (Shift = sprint)
 export type MoveMode = (typeof MOVE_MODES)[number];
 /** One-shot gestures (PlayerAction); the wire sends the index, remote players restart the gesture on change. */
 export const PLAYER_ACTIONS = ['none', 'wave', 'openBox', 'celebrate', 'crash', 'climbOut'] as const;

@@ -37,7 +37,7 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60).rotateX(-Math.PI /
 ground.receiveShadow = true;
 scene.add(ground);
 
-const walk = movement.footSpeed * movement.slowWalkFactor;
+const walk = 1.4; // m/s: a slow stride (the "walk" clip, below character.jogFrom)
 function state(pose: string, t: number): PlayerState {
   const gesture = pose in playerSetup.actions;
   const speed = pose === 'jog' ? movement.footSpeed : pose === 'walk' ? walk : 0;
@@ -47,7 +47,7 @@ function state(pose: string, t: number): PlayerState {
     yaw: 0,
     grounded: pose !== 'air',
     inWater: false,
-    moveMode: pose === 'walk' ? 'slow' : pose === 'air' ? 'air' : 'walk',
+    moveMode: pose === 'air' ? 'air' : 'walk',
     jumps: 0,
     action: gesture ? (pose as Gesture) : 'none',
     actionTime: gesture ? t : 0,

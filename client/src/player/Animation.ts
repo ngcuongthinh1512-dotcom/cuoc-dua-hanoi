@@ -9,8 +9,8 @@ import type { Gesture, PlayerState } from './types.ts';
 
 export type AnimState =
   | 'idle'
-  | 'walk' // moveMode 'slow'
-  | 'jog' // moveMode 'walk' (standard speed)
+  | 'walk' // moveMode 'walk' below C.jogFrom (sliding along a wall, part-tilted stick)
+  | 'jog' // moveMode 'walk' (standard speed, sprint)
   | 'jumpStart'
   | 'air' // jump loop and fall
   | 'land'
@@ -59,7 +59,7 @@ export function pickState(p: Readonly<PlayerState>, prev: AnimState, prevTime: n
   const landing = prev === 'air' || prev === 'jumpStart' || (prev === 'land' && prevTime < C.land.seconds);
   if (!moving) return landing ? 'land' : 'idle';
   // By speed too: a part-tilted stick or sliding along a wall must not skate a running stride (C.jogFrom).
-  return p.moveMode !== 'slow' && hSpeed(p) >= C.jogFrom[prev === 'jog' ? 0 : 1] ? 'jog' : 'walk';
+  return hSpeed(p) >= C.jogFrom[prev === 'jog' ? 0 : 1] ? 'jog' : 'walk';
 }
 
 /** Locomotion playback speed: proportional to the ground speed, 1 at the clip's own speed, clamped. */

@@ -15,7 +15,7 @@ function setup() {
   const c = new CharacterController(world, { heightAt: () => 0, waterLevel: null, water: undefined });
   c.spawn(0, 0, 0);
   for (let i = 0; i < 30; i++) {
-    c.fixedUpdate(physics.fixedDt, { forward: 0, right: 0, cameraYaw: 0, slow: false, jump: false });
+    c.fixedUpdate(physics.fixedDt, { forward: 0, right: 0, cameraYaw: 0, sprint: false, jump: false });
     world.step();
   }
   const bikes = new Bikes(null, null, 'xanh', '#2c6bd8');

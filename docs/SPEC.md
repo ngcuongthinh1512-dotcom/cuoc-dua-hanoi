@@ -1083,3 +1083,8 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - **Cập nhật 17.27 (2026-10-03):** `docs/RACE_RULES.md` không nhắc gì tới Thử thách 3 / phòng Louvre (mục riêng, số tác phẩm, đáp án, gợi ý, ghi nguồn riêng cho phòng đều bỏ). Người chơi vào chơi mới biết; thẻ thử thách trong game tự nói cách làm.
 
 - **Cập nhật 17.28 (2026-10-03):** `docs/RACE_RULES.md` rút gọn từ 323 còn 124 dòng, chỉ giữ phần người chơi cần: bỏ yếu tố đặc biệt đã hoãn (Quay đầu, Nhường đường, Vé, Gờ giảm tốc), kiểu mini-game chưa có, luật đi bộ bắt buộc / bỏ cuộc, chi tiết công cụ Host (Hoàn tác, cờ đỏ, Cho qua, xuất CSV), chú giải kỹ thuật.
+
+### 17.29 Giữ Shift = chạy nhanh ×2, bỏ đi chậm (2026-10-03; thay "không có chạy nước rút" và "Shift = đi chậm")
+- Giữ `Shift` (trái / phải, theo `KeyboardEvent.code`; tay cầm `LB`) = **×2 tốc độ hiện tại**, áp dụng cho CẢ đi bộ (và bơi) LẪN xe đạp; thả = tốc độ thường. Hệ số `SPRINT_MULTIPLIER = 2` ở một chỗ (`shared/src/constants.ts`; client `movement.sprintMultiplier` đọc từ đó). Xe: chỉ trần tốc độ nhân 2, độ bám / cua gắt / ngã xe giữ nguyên theo tốc độ thật.
+- BỎ HẲN chức năng đi chậm cũ của Shift / LB (khóa `walkSlow`, `slowWalkFactor`, chế độ `slow` trên đường truyền).
+- Máy chủ (cờ tốc độ chỉ gắn cờ, §13.9) nới ngưỡng theo cùng hệ số: đi bộ ≤ footSpeed × 2 × 1,25, xe ≤ footSpeed × 1,3 × 2 × 1,25 (mặc định 10 / 13 m/s); điểm tin cậy chống dịch chuyển cũng đi tối đa ở tốc độ xe × 2 × 1,25. Vẫn bắt dịch chuyển tức thời và tốc độ vượt xa mức ×2.

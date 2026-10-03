@@ -52,13 +52,13 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 
 Thử nhanh khi `npm run dev:worker` đang chạy: `curl localhost:8787/api/health`, `curl localhost:8787/api/room/ping`.
 
-Tham số URL của game (tiện khi thử): mặc định vào chế độ nhân vật ở Place de la Concorde. `?cam=x,y,z,yaw,pitch` = chế độ khán giả (chỉ bay camera tự do, mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``), `?player=x,z,yaw` đặt chỗ xuất hiện của nhân vật (thêm `camMode=near|far|first`, `orbit=<độ>`, `action=wave|openBox|celebrate|crash`, `autoMove=walk|slow`, `jump`, `wait=<giây>` – xem `docs/plans/phase3.md` §7; Phase 4: `bike` = bắt đầu trên xe, `autoTurn=left|right`, `graph=1` = hiện đồ thị đường; Phase 7: `start=x,z,yaw` = xuất hiện như đội vào game ở đó, `boxes=<mã>,x,z` = đặt hộp mật thư thử, thêm `mat` = thảm Chặng dừng; Phase 8: `boxes=<mã>[|<nhánh>],x,z,opened,<hướng độ>` (hướng 0 = mặt trước hòm quay về bắc), `card=answer|detour-choose|…&full` = thẻ thử thách giả; `leg:check` in sẵn các link này cho từng điểm của chặng). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`) `/character.html` xem nhân vật với các tư thế, `/bike.html` xem xe đạp.
+Tham số URL của game (tiện khi thử): mặc định vào chế độ nhân vật ở Place de la Concorde. `?cam=x,y,z,yaw,pitch` = chế độ khán giả (chỉ bay camera tự do, mét, độ; yaw 0 = nhìn về hướng Bắc), `?debug=1` bật sẵn bảng debug (`F3` hoặc `` ` ``), `?player=x,z,yaw` đặt chỗ xuất hiện của nhân vật (thêm `camMode=near|far|first`, `orbit=<độ>`, `action=wave|openBox|celebrate|crash`, `autoMove=walk|sprint`, `jump`, `wait=<giây>` – xem `docs/plans/phase3.md` §7; Phase 4: `bike` = bắt đầu trên xe, `autoTurn=left|right`, `graph=1` = hiện đồ thị đường; Phase 7: `start=x,z,yaw` = xuất hiện như đội vào game ở đó, `boxes=<mã>,x,z` = đặt hộp mật thư thử, thêm `mat` = thảm Chặng dừng; Phase 8: `boxes=<mã>[|<nhánh>],x,z,opened,<hướng độ>` (hướng 0 = mặt trước hòm quay về bắc), `card=answer|detour-choose|…&full` = thẻ thử thách giả; `leg:check` in sẵn các link này cho từng điểm của chặng). Khi chạy `npm run dev`, trang `/preview.html` dựng thử vài ô bản đồ (vd. `/preview.html?at=48.8738,2.2950&r=300&only=roads`) `/character.html` xem nhân vật với các tư thế, `/bike.html` xem xe đạp.
 
 ## Điều khiển
 | Thao tác | Bàn phím / chuột | Tay cầm |
 |---|---|---|
 | Đi (tốc độ chuẩn, theo hướng camera) | `W` `A` `S` `D` | stick trái |
-| Đi chậm (giữ) | `Shift` | `LB` |
+| Chạy nhanh gấp 2 (giữ; cả đi bộ, bơi và xe đạp) | `Shift` | `LB` |
 | Nhảy; khi đang bơi sát tường kè: leo lên bờ | `Space` | `A` |
 | Nhìn quanh | chuột (nhấp vào game để khóa con trỏ) | stick phải |
 | Đổi camera: gần → xa → góc nhìn thứ nhất | `C` | `View` |
@@ -73,7 +73,7 @@ Tham số URL của game (tiện khi thử): mặc định vào chế độ nhâ
 
 Camera bay tự do: `W` `A` `S` `D` bay, `Space` hoặc `E` lên, `Q` xuống, giữ `Shift` bay nhanh, lăn chuột đổi tốc độ (tay cầm: `RT`/`RB` lên, `LT`/`LB` xuống, bấm stick trái bay nhanh). `F` cũng mở hộp mật thư, `Enter` mở lại thẻ mật thư hiện tại (để trả lời, xem lịch sử câu trả lời), `Tab` mở Sổ mật thư (khi thẻ / Sổ mở thì chuột được nhả để bấm link, hình, nút, ô gõ), `M` bản đồ lớn, `Esc` menu. Đã gán nhưng chưa có tác dụng: `B` ống nhòm.
 
-Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh khi còn cách ≤ 30 m. Xe nhanh gấp 1,3 lần đi bộ, đạt tốc độ tối đa trong khoảng 1 giây, chậm lại khi cua gắt hoặc va chạm; trên đá lát khó cua, khó phanh hơn. Đâm mạnh vào tường khi đang nhanh thì ngã, 2 giây sau đứng dậy, xe vẫn là của đội. Không đi xe lên bậc thang (xe dừng lại).
+Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh khi còn cách ≤ 30 m. Xe nhanh gấp 1,3 lần đi bộ (giữ `Shift`: cả hai nhanh gấp 2), đạt tốc độ tối đa trong khoảng 1 giây, chậm lại khi cua gắt hoặc va chạm; trên đá lát khó cua, khó phanh hơn. Đâm mạnh vào tường khi đang nhanh thì ngã, 2 giây sau đứng dậy, xe vẫn là của đội. Không đi xe lên bậc thang (xe dừng lại).
 
 ## Tiến độ
 | Phase | Nội dung | Trạng thái |

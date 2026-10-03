@@ -4,7 +4,7 @@ import type { MoveMode, PlayerAction } from '@race/shared/protocol';
 import type { Vector3 } from 'three';
 import type { WaterData } from '../geo/chunkData.ts';
 
-/** walk = standard on-foot speed (movement.footSpeed, "jog" clip), slow = walkSlow held ("walk" clip),
+/** walk = on foot (movement.footSpeed, × sprintMultiplier while Shift is held; "jog" clip, "walk" clip when slow),
  *  swim = in the Seine, air = jumping or falling, bike = riding (Phase 4, "cycle" clip + leg IK; vehicle/types.ts).
  *  Phase 6: the lists live in @race/shared/protocol (MOVE_MODES / PLAYER_ACTIONS: the wire sends their indices). */
 export type { MoveMode, PlayerAction };
@@ -39,7 +39,8 @@ export interface MoveIntent {
   right: number;
   /** rad, same convention as PlayerState.yaw. */
   cameraYaw: number;
-  slow: boolean;
+  /** Shift / LB held: top speed × movement.sprintMultiplier (SPEC §17.29). */
+  sprint: boolean;
   /** Latched until a physics step consumes it: frames with no physics step must not lose the press. */
   jump: boolean;
 }

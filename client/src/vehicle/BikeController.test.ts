@@ -5,7 +5,7 @@ import { newBike } from './Bikes.ts';
 import type { BikeState, RoadSurface } from './types.ts';
 
 const DT = physics.fixedDt;
-const go = (throttle = 1, turn = 0, brake = false): BikeInput => ({ throttle, turn, brake });
+const go = (throttle = 1, turn = 0, brake = false, sprint = false): BikeInput => ({ throttle, turn, brake, sprint });
 function run(b: BikeState, input: BikeInput, seconds: number, surface: RoadSurface = 'asphalt') {
   for (let i = 0; i < Math.round(seconds / DT); i++) stepBike(b, input, surface, DT);
   return b;
@@ -31,6 +31,12 @@ describe('stepBike (pure bicycle dynamics, SPEC §6.1 / §6.6)', () => {
     }
     expect(Math.abs(b.speed / movement.footSpeed - 1.3)).toBeLessThan(0.013);
     expect(max).toBeLessThanOrEqual(bikeTopSpeed() + 1e-9);
+  });
+  it('SPEC §17.29: sprint = top × sprintMultiplier, released → bleeds back to top; a sharp turn still slows', () => {
+    const b = run(newBike('t', 0, 0, 0, 0), go(1, 0, false, true), 4);
+    expect(b.speed).toBeCloseTo(bikeTopSpeed() * movement.sprintMultiplier, 5);
+    expect(run(b, go(1, 1, false, true), 3).speed).toBeLessThan(bikeTopSpeed() * movement.sprintMultiplier * 0.95);
+    expect(run(b, go(), 4).speed).toBeCloseTo(bikeTopSpeed(), 5);
   });
   it('0 → 90 % of top in 0.9–1.1 s (accelTime ~1 s)', () => {
     expect(timeTo(0.9)).toBeGreaterThanOrEqual(0.9 - DT);

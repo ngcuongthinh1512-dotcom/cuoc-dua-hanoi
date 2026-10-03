@@ -1,6 +1,10 @@
 /** Gốc tọa độ thế giới (0,0,0): cột obelisk quảng trường Concorde (SPEC §4.1). */
 export const ORIGIN = { lat: 48.86548, lon: 2.32115 } as const;
 
+/** SPEC §17.29: holding Shift (pad LB) runs at this × the current top speed, on foot AND on a bike. The client's
+ *  movement.sprintMultiplier reads it; the server multiplies its speed-flag / trusted-point limits by it. */
+export const SPRINT_MULTIPLIER = 2;
+
 /** Vùng bản đồ đua (SPEC §4.1). */
 export const RACE_BBOX = { south: 48.845, west: 2.285, north: 48.878, east: 2.36 } as const;
 

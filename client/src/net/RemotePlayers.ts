@@ -294,7 +294,7 @@ export const fakeTeams = (peers: readonly FakePeer[]): TeamInfo[] =>
 export function fakeTick(peers: readonly FakePeer[], ms: number, groundAt: (x: number, z: number) => number): TickEntry[] {
   const t = ms / 1000;
   return peers.map((p) => {
-    const speed = p.action !== 'none' ? 0 : { bike: 0.6 * bikeTopSpeed(), walk: movement.footSpeed, slow: movement.footSpeed * movement.slowWalkFactor, swim: 0, air: 0 }[p.mode];
+    const speed = p.action !== 'none' ? 0 : { bike: 0.6 * bikeTopSpeed(), walk: movement.footSpeed, swim: 0, air: 0 }[p.mode];
     const w = p.mode === 'bike' ? FAKE.turn : 0;
     const yaw = p.yaw + w * t;
     const [x, z] = w

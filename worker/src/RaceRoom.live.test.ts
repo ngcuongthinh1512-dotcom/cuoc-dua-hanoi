@@ -3,6 +3,7 @@
 // and hibernation. Phase 7: teams move into zones only by walking (TrustedPoint, D4), so the box checks run on the
 // fake `nearLeg` (points 60 m apart, box within 40 m). Each race = its own Durable Object, so the first block runs concurrently; evictions stall the
 // harness (they wait for the tick loop to go idle), so they run afterwards, one by one, on the races left behind.
+import { SPRINT_MULTIPLIER } from '@race/shared';
 import { decodeTick, encodePose, NET, type BoxInfo, type HostState, type MoveMode, type QuotaCounters, type Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { joinTeam, LEG_START, login, nearLeg, nearPoint, openSocket, raceHarness, setupRace, sleep, walkTo } from './test/harness.ts';
@@ -124,7 +125,7 @@ describe.concurrent('RaceRoom live', () => {
     Object.assign(cadence, { hostToken, codes: teams.map((t) => t.code), slot: teams[0]!.slot, ax, wsIn: c1.wsIn });
   }, 30_000);
 
-  it('flags 20 m/s over the 3 s window for the Host; a 300 m respawn and bike speed are fine', async () => {
+  it('flags 20 m/s over the 3 s window for the Host; a 300 m respawn and sprinting bike speed are fine', async () => {
     const race = 'live-speed';
     const { host, teams } = await setupRace(server, race, 3);
     const [a, b, c] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
@@ -136,7 +137,7 @@ describe.concurrent('RaceRoom live', () => {
         await sleep(200);
         await walk(b!, x + 300, 0, 0.6, 8);
       })(),
-      walk(c!, 0, 0, 1.1, 15, 'bike'), // 5.5 m/s ≤ 4 × 1.3 × 1.25
+      walk(c!, 0, 0, 1.1 * SPRINT_MULTIPLIER, 15, 'bike'), // 11 m/s ≤ 4 × 1.3 × 2 × 1.25 (sprinting rider, SPEC §17.29)
     ]);
     const st = (await host.until((m) => m.t === 'host.state' && m.teams[0].flagged)) as unknown as HostState;
     expect(st.teams.map((t) => t.flagged)).toEqual([true, false, false]);
@@ -247,7 +248,7 @@ describe.concurrent('RaceRoom live', () => {
     expect(await host.until((m) => m.t === 'host.legResult')).toMatchObject({ ok: true });
     const s = await joinTeam(server, race, teams[0]!.code); // connect 1, login 1
     const p0 = (s.welcome as unknown as Welcome).start!;
-    const rate = 4 * 1.3 * NET.speedTolerance;
+    const rate = 4 * 1.3 * SPRINT_MULTIPLIER * NET.speedTolerance; // SPEC §17.29
     let x = p0.x;
     s.send(abs(p0));
     await sleep(50);

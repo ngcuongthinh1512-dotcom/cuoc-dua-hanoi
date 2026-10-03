@@ -15,7 +15,7 @@ import type { BikeRefusal, BikeState, RiderTargets } from './types.ts';
 
 /** On foot, on the ground, no gesture running (SPEC §6.3: "đang đi bộ"). */
 export const canMount = (s: Readonly<PlayerState>) =>
-  (s.moveMode === 'walk' || s.moveMode === 'slow') && s.grounded && !s.inWater && s.action === 'none';
+  s.moveMode === 'walk' && s.grounded && !s.inWater && s.action === 'none';
 
 export const newBike = (id: string, x: number, y: number, z: number, yaw: number): BikeState => ({
   id, position: new Vector3(x, y, z), yaw, speed: 0, steer: 0, lean: 0, wheelAngle: 0, crankAngle: 0, owner: null, ownerColour: null, rider: null,

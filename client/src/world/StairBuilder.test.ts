@@ -75,10 +75,10 @@ function world(build: (w: RAPIER.World) => void) {
 const box = (w: RAPIER.World, x: number, y: number, z: number, hx: number, hy: number, hz: number) =>
   w.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z));
 const trimesh = (w: RAPIER.World, m: TriMesh) => w.createCollider(RAPIER.ColliderDesc.trimesh(m.vertices, m.indices));
-const go = (cameraYaw: number): MoveIntent => ({ forward: 1, right: 0, cameraYaw, slow: false, jump: false });
+const go = (cameraYaw: number): MoveIntent => ({ forward: 1, right: 0, cameraYaw, sprint: false, jump: false });
 function run(w: RAPIER.World, c: CharacterController, seconds: number, intent?: MoveIntent) {
   for (let i = 0; i < Math.round(seconds / DT); i++) {
-    c.fixedUpdate(DT, intent ?? { forward: 0, right: 0, cameraYaw: 0, slow: false, jump: false });
+    c.fixedUpdate(DT, intent ?? { forward: 0, right: 0, cameraYaw: 0, sprint: false, jump: false });
     w.step();
   }
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SPRINT_MULTIPLIER } from '@race/shared';
 import { bikeTopSpeed, keys, movement, npc } from './config.ts';
 
 // SPEC §17.1: keys both Windows and macOS have, none the browser/OS takes over.
@@ -17,6 +18,11 @@ describe('bike speed (SPEC §6.1)', () => {
   it('is footSpeed × 1.3', () => {
     expect(movement.bikeSpeedMultiplier).toBe(1.3);
     expect(bikeTopSpeed() / movement.footSpeed).toBeCloseTo(1.3, 6);
+  });
+  it('SPEC §17.29: sprint = ×2, the shared constant the server reads too; Shift only (no Ctrl / Alt)', () => {
+    expect(movement.sprintMultiplier).toBe(2);
+    expect(movement.sprintMultiplier).toBe(SPRINT_MULTIPLIER);
+    expect(keys.sprint).toEqual(['ShiftLeft', 'ShiftRight']);
   });
 });
 

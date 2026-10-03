@@ -84,7 +84,7 @@ const cuboid = (w: RAPIER.World, x: number, y: number, z: number, hx: number, hy
   w.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z));
 /** Ground top at y = 0 over |x|, |z| ≤ 100. */
 const ground = (w: RAPIER.World) => cuboid(w, 0, -0.5, 0, 100, 0.5, 100);
-const walk = (forward = 1, slow = false, cameraYaw = 0): MoveIntent => ({ forward, right: 0, cameraYaw, slow, jump: false });
+const walk = (forward = 1, sprint = false, cameraYaw = 0): MoveIntent => ({ forward, right: 0, cameraYaw, sprint, jump: false });
 /** Steps like main.ts (fixedUpdate, then world.step()); `each` sees the state after every step. */
 function run(world: RAPIER.World, c: CharacterController, seconds: number, intent: MoveIntent = newIntent(), each?: (s: PlayerState) => void) {
   for (let i = 0; i < Math.round(seconds / DT); i++) {
@@ -107,7 +107,7 @@ function speedOf(world: RAPIER.World, c: CharacterController, intent: MoveIntent
 }
 
 describe('CharacterController on a real Rapier world', () => {
-  it('walks at footSpeed on flat ground, never faster; slow walk = × slowWalkFactor; feet on the ground', () => {
+  it('walks at footSpeed on flat ground, never faster; sprint (Shift) = × sprintMultiplier (SPEC §17.29); feet on the ground', () => {
     const { world, c } = setup(ground);
     spawned(world, c, 0, 0);
     expect(c.state.position.y).toBeCloseTo(0, 2);
@@ -116,9 +116,11 @@ describe('CharacterController on a real Rapier world', () => {
     expect(max).toBeLessThanOrEqual(movement.footSpeed * 1.001);
     expect(speedOf(world, c, walk()) / movement.footSpeed).toBeCloseTo(1, 1);
     expect(Math.abs(speedOf(world, c, walk()) - movement.footSpeed)).toBeLessThan(0.02 * movement.footSpeed);
-    const slow = speedOf(world, c, walk(1, true));
-    expect(Math.abs(slow - movement.footSpeed * movement.slowWalkFactor)).toBeLessThan(0.02 * movement.footSpeed * movement.slowWalkFactor);
-    expect(c.state.moveMode).toBe('slow');
+    const sprint = speedOf(world, c, walk(1, true));
+    expect(Math.abs(sprint - movement.footSpeed * movement.sprintMultiplier)).toBeLessThan(0.02 * movement.footSpeed * movement.sprintMultiplier);
+    expect(c.state.moveMode).toBe('walk');
+    run(world, c, 1, walk()); // released: back to footSpeed
+    expect(speedOf(world, c, walk()) / movement.footSpeed).toBeCloseTo(1, 1);
     expect(c.state.grounded).toBe(true);
     expect(c.state.position.y).toBeCloseTo(0, 2);
     expect(c.state.yaw).toBeCloseTo(0); // body faces the move direction (north)

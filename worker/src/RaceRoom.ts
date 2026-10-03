@@ -5,6 +5,7 @@
 // Rebuild rule: memory is a cache — teams / poses / counters come back from SQLite in the constructor, per-socket facts
 // (role, team, revealed box) from the socket attachment (docs/plans/phase6.md §3, §6 A).
 import { DurableObject } from 'cloudflare:workers';
+import { SPRINT_MULTIPLIER } from '@race/shared';
 import { startSpot } from '@race/shared/leg';
 import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FeedMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
 import { HOST, newClaims, signToken, verifyToken } from './auth.ts';
@@ -329,7 +330,8 @@ export class RaceRoom extends DurableObject<Env> {
     let unseen: number | null = null;
     if (l.win) {
       l.win.push(now, pose.x, pose.z);
-      over = overSpeed(l.win, footSpeed * (now - l.bikeAt <= NET.speedWindowMs ? bikeSpeedMultiplier : 1));
+      // SPEC §17.29: Shift sprints at × SPRINT_MULTIPLIER on foot and on a bike, so the limit is the mode's top × that
+      over = overSpeed(l.win, footSpeed * SPRINT_MULTIPLIER * (now - l.bikeAt <= NET.speedWindowMs ? bikeSpeedMultiplier : 1));
       if (over && !l.over) {
         if (this.count(t.id, 'speed', now) <= NET.maxRespawns) this.event(now, t.id, 'speed', { v: Math.round(l.win.speed * 10) / 10, x: Math.round(pose.x), z: Math.round(pose.z) });
         this.flag(t, 'speed', now);
@@ -351,10 +353,10 @@ export class RaceRoom extends DurableObject<Env> {
     this.engine.onPose(t.id, l.valid, now);
   }
 
-  /** m/s the trusted point may move: bike speed × tolerance for every mode (walking too fast is the `speed` flag's job). */
+  /** m/s the trusted point may move: sprinting bike speed × tolerance for every mode (walking too fast is the `speed` flag's job). */
   private trustRate() {
     const { footSpeed, bikeSpeedMultiplier } = this.engine.rules().movement;
-    return footSpeed * bikeSpeedMultiplier * NET.speedTolerance;
+    return footSpeed * bikeSpeedMultiplier * SPRINT_MULTIPLIER * NET.speedTolerance;
   }
 
   /** The trusted point towards `pose` (+ `grant` m, at least `earned` m: TrustedPoint.follow): `valid` = the pose at the

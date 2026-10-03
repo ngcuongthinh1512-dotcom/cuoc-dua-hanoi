@@ -31,7 +31,7 @@ export interface PlayerOverrides {
   orbitDeg?: number;
   action?: Gesture;
   /** Holds forward (screenshots of the locomotion). */
-  autoMove?: 'walk' | 'slow';
+  autoMove?: 'walk' | 'sprint';
   /** Holds Space (screenshot of the quay climb-out: swim at the wall with Space held). */
   holdJump?: boolean;
   /** Phase 4: start mounted on the first dev bike (placed at the spawn). */
@@ -57,7 +57,7 @@ const groups = (v: string | null, n: number) =>
   (v ?? '').split(';').map((g) => g.split(',').map(Number)).filter((g) => g.length === n && g.every(Number.isFinite));
 const finite = (v: string | null) => (v !== null && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
 
-/** ?player[=x,z,yawDeg]&camMode=near|far|first&orbit=deg&action=<gesture>&autoMove=walk|slow&jump&bike&autoTurn=left|right;
+/** ?player[=x,z,yawDeg]&camMode=near|far|first&orbit=deg&action=<gesture>&autoMove=walk|sprint&jump&bike&autoTurn=left|right;
  *  Phase 4B: npc=0, npcSeed=n, npcDensity=d, npcZone=x,z,r[;…], npcTest=car:<kind>@x,z,yawDeg[;…]. Invalid fields ignored.
  *  Phase 6: `online` (in a race) keeps only the npc* fields: a team cannot teleport, auto-walk or pose by URL. */
 export function parseOverrides(q: URLSearchParams, online = false): PlayerOverrides {
@@ -85,7 +85,7 @@ export function parseOverrides(q: URLSearchParams, online = false): PlayerOverri
     ...(q.has('orbit') && Number.isFinite(orbit) ? { orbitDeg: orbit } : {}),
     camMode: oneOf(q.get('camMode'), thirdPersonCamera.modes),
     action: oneOf(q.get('action'), GESTURES),
-    autoMove: oneOf(q.get('autoMove'), ['walk', 'slow'] as const),
+    autoMove: oneOf(q.get('autoMove'), ['walk', 'sprint'] as const),
     ...(q.has('jump') ? { holdJump: true } : {}),
     ...(q.has('bike') ? { bike: true } : {}),
     ...(oneOf(q.get('autoTurn'), ['left', 'right'] as const) ? { autoTurn: q.get('autoTurn') as 'left' | 'right' } : {}),
@@ -254,7 +254,7 @@ export class Player {
       this.camera.look(input, dt);
       if (input.wasPressed('camera')) this.camera.cycleMode();
       readMoveIntent(input, this.camera.yaw, this.intent);
-      if (this.o.autoMove) [this.intent.forward, this.intent.right, this.intent.slow] = [1, 0, this.o.autoMove === 'slow'];
+      if (this.o.autoMove) [this.intent.forward, this.intent.right, this.intent.sprint] = [1, 0, this.o.autoMove === 'sprint'];
       if (this.o.autoTurn) this.intent.right = this.o.autoTurn === 'left' ? -1 : 1;
       if (this.o.holdJump) this.intent.jump = true;
       const handled = input.wasPressed('interact') && !this.controller.riding ? this.onInteract?.() : false;
