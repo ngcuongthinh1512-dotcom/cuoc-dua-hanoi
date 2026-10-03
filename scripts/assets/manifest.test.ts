@@ -37,7 +37,7 @@ describe('readManifest8c + assetPath', () => {
   it('reads the manifest and the Sketchfab extras', () => {
     const list = readManifest8c(dir);
     expect(list.map((x) => x.file)).toEqual(['x.txt', 'sketchfab/morris.glb']);
-    expect(list[1]).toMatchObject({ author: 'BigMax', title: 'French Colonne Morris', pageUrl: 'https://sketchfab.com/3d-models/m' });
+    expect(list[1]).toMatchObject({ author: 'BigMax (https://sketchfab.com/bigmax)', title: 'French Colonne Morris', pageUrl: 'https://sketchfab.com/3d-models/m' });
     expect(assetPath(dir, list, 'x.txt')).toBe(join(dir, 'x.txt'));
     expect(() => assetPath(dir, list, 'y.txt')).toThrow(/not in the manifest/);
     expect(() => assetPath(dir, [{ ...list[0]!, file: 'ambientcg/Grass004_2K-JPG.zip' }], 'ambientcg/Grass004_2K-JPG.zip')).toThrow(/not used/);
@@ -85,6 +85,11 @@ describe('credits8c', () => {
   it('the real downloads (when present) all have a label and an allowed licence', () => {
     const dir = join(import.meta.dirname, '../../.cache/assets/8c');
     if (!existsSync(join(dir, 'manifest.json'))) return;
-    expect(credits8c(readManifest8c(dir)).length).toBeGreaterThan(10);
+    const c = credits8c(readManifest8c(dir));
+    expect(c.length).toBeGreaterThan(10);
+    // fix A: full CC BY attribution (display name + profile URL), never an UNUSED file
+    expect(c.find((x) => x.title.startsWith('Ngọn lửa'))?.author).toBe('emm (https://sketchfab.com/edemaistre)');
+    for (const x of c.filter((q) => /^CC BY/.test(q.licence))) expect(x.author).toMatch(/\(https:\/\/sketchfab\.com\/[^)]+\)$/);
+    expect(c.map((x) => x.text).join('\n')).not.toMatch(/Wallace|pigeon|Bồ câu|garbage|Rocketbox|sandstone|qwantani/i);
   });
 });

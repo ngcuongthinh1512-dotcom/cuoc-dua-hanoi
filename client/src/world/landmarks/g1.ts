@@ -72,6 +72,7 @@ function arc(rec: BuildingRec, minGround: number, height: (x: number, z: number)
 export const details: Partial<Record<LandmarkId, DetailFn>> = {
   eiffel: (rec, _parts, ctx) => ({ ...empty(), colliders: [collider(eiffelLegs(rec, ctx.minGround))] }),
   arc: (rec, _parts, ctx) => arc(rec, ctx.minGround, ctx.height),
-  // Phase 8C: the Flamme scan (models.ts) is drawn on the main thread; the worker keeps g2's pedestal collider only
+  // Phase 8C: the Flamme scan (models.ts) is drawn on the main thread; the worker keeps g2's colliders only (round steps
+  // + pedestal, the same config.landmarks.g2.flamme tiers as the steps in the scan's GLB)
   ...(G8.flamme.enabled ? { flamme: (rec: BuildingRec, _parts: unknown, ctx: { minGround: number }) => ({ ...empty(), colliders: flamme(rec, ctx).colliders }) } : {}),
 };

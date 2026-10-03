@@ -32,7 +32,7 @@ export function readManifest8c(dir: string): Asset8c[] {
   for (const f of existsSync(sk) ? readdirSync(sk).filter((f) => f.endsWith('.glb')).sort() : []) {
     const x = glbJson(readFileSync(join(sk, f))).asset?.extras;
     if (!x?.license || !x.source) throw new Error(`8c: sketchfab/${f} has no licence / source in asset.extras`);
-    list.push({ file: `sketchfab/${f}`, title: x.title ?? stem(f), pageUrl: x.source, licence: x.license, author: (x.author ?? '').replace(/\s*\(https?:[^)]*\)$/, '') });
+    list.push({ file: `sketchfab/${f}`, title: x.title ?? stem(f), pageUrl: x.source, licence: x.license, author: x.author ?? '' }); // as Sketchfab writes it: display name + profile URL (CC BY attribution)
   }
   const bad = list.filter((a) => !licenceOk(a.licence));
   if (bad.length) throw new Error(`8c: licence outside SPEC §17.20: ${bad.map((a) => `${a.file} (${a.licence || 'không rõ'})`).join(', ')}`);
