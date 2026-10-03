@@ -938,6 +938,13 @@ export const graphics8c = {
     storageKey: 'cuoc-dua-paris.quality',
     weakGpu: /swiftshader|llvmpipe|softpipe|basic render|intel(?!.*\barc\b)|mali|adreno|powervr/i,
     lowTexture: 1024, // px: the *_1k.webp variant of a texture (scripts/assets/pipeline.ts) on low quality
+    anisotropy: 8, // PBR texture sets (world/textures.ts), clamped to the GPU's maximum
+    // low quality = close to Phase 7 cost (fix B, review F1): PBR sets diffuse only (no normal / ARM map) with this
+    // roughness, trees without a normal map, the river with one normal layer
+    lowRoughness: 0.9,
+    // Runtime downgrade (world/graphics.ts FpsWatch): on high quality, a mean FPS below `fps` over `seconds` (after
+    // `graceSeconds` of play) turns post-processing + the image-based light off for the session (the stored choice stays)
+    autoDowngrade: { fps: 24, seconds: 8, graceSeconds: 5 },
   },
   // [T1] sky + light (world/Sky.ts), river (world/Water.ts), post-processing (world/post.ts, hooked in main.ts)
   sky: {
@@ -946,9 +953,12 @@ export const graphics8c = {
     lowEnvironment: false, // scene.environment on low quality too (SwiftShader bench: −35 % FPS); off = Phase 7 hemi light
     mode: 'hdri' as 'hdri' | 'shader', // 'shader' = three's Sky.js (no file); off = the Phase 7 canvas sky (render.sky)
     sunPosition: { x: -313, y: 320, z: 216 }, // m from the target: south-west, 40° high (STYLE_GUIDE 35–45°); render.sun when off
-    sunIntensity: 2.4,
+    sunIntensity: 3.2,
     hemiIntensity: 0.35, // the environment light does most of the fill now (render.hemiLight.intensity when off)
-    environmentIntensity: 0.5, // scene.environmentIntensity: image-based light on every standard material
+    environmentIntensity: 0.25, // scene.environmentIntensity: image-based light on every standard material
+    // without the image-based light (low quality, or the runtime downgrade): sun + hemisphere only, tuned so the street
+    // has the same mean brightness as high quality and before 8C (docs/reports/phase8c-fix-b.md)
+    low: { sunIntensity: 2.8, hemiIntensity: 2.6 },
     backgroundIntensity: 1,
     horizonBandDeg: 6, // fog colour = mean HDRI radiance from the horizon up to this elevation
     // mode 'shader': Sky.js uniforms, and the fog colour (linear radiance near its horizon, by eye)
@@ -981,7 +991,13 @@ export const graphics8c = {
   // low quality: no full crown). props: per kind [LOD0, LOD1] distances, nothing drawn beyond LOD1; × lowScale on low.
   // flamme: the scan (models/lm-flamme.glb) on the OSM outline, `sink` m below its lowest ground; the scan's paving disc is
   // fitted to the outline radius by scripts/assets/flamme.ts.
-  trees: { enabled: true, lowOff: false, lod: [60, 240], lowLod: [0, 150] },
+  // lowLod[0] > 0: the full crown right around the camera on low quality too (under a tree LOD1's big flat cards show)
+  trees: {
+    enabled: true, lowOff: false, lod: [60, 240], lowLod: [18, 150],
+    // trunk / limb vertex colours (world/Vegetation.ts barkColour): the bark map (mean colour mapMean, near black-brown)
+    // tinted to olive-grey `dark` with flaked grey-cream `light` patches (up to `patch` of the way)
+    bark: { mapMean: '#454730', dark: '#7a7a72', light: '#d4d2c4', patch: 0.9 },
+  },
   props: {
     enabled: true, lowOff: false, lowScale: 0.6,
     lod: { lamp: [45, 300], morris: [60, 350], shelter: [60, 350], bench: [35, 160], bouquiniste: [70, 400], cafe: [30, 140] },

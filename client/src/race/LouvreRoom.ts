@@ -353,6 +353,11 @@ export class LouvreRoom {
     private readonly groundAt: (x: number, z: number) => number,
   ) {}
 
+  /** The room's meshes (null before build): kept visible while the city is hidden (main.ts, world/hideWorld.ts). */
+  get root(): Group | null {
+    return this.group;
+  }
+
   /** World y of the floor (0 before build). */
   get floorY() {
     return this.frame?.floorY ?? 0;

@@ -349,7 +349,7 @@ const withOffset = (m: MeshStandardMaterial, f: number) =>
 function asphaltMaterial() {
   if (!graphics8c.asphalt.enabled) return new MeshStandardMaterial({ map: canvasTexture(C.colours.asphalt, C.textureTile.asphalt, 0.35), roughness: 0.95 });
   const m = new MeshStandardMaterial(pbrMaps('asphalt_02'));
-  for (const t of [m.map!, m.normalMap!, m.aoMap!]) t.repeat.set(1 / graphics8c.asphalt.tile, 1 / graphics8c.asphalt.tile);
+  for (const t of [m.map, m.normalMap, m.aoMap]) t?.repeat.set(1 / graphics8c.asphalt.tile, 1 / graphics8c.asphalt.tile);
   return m;
 }
 

@@ -525,7 +525,7 @@ function railingCanvas(iron: string) {
 function roofMaterial(zinc: string, limestone: string) {
   if (!graphics8c.roofs.enabled) return new THREE.MeshStandardMaterial({ map: texture(roofCanvas(zinc, limestone), true), vertexColors: true, roughness: 0.6 });
   const m = new THREE.MeshStandardMaterial({ ...pbrMaps('roof_slates_03'), vertexColors: true });
-  for (const t of [m.map!, m.normalMap!, m.aoMap!]) t.repeat.set(1 / graphics8c.roofs.tile, 1 / graphics8c.roofs.tile);
+  for (const t of [m.map, m.normalMap, m.aoMap]) t?.repeat.set(1 / graphics8c.roofs.tile, 1 / graphics8c.roofs.tile);
   return m;
 }
 

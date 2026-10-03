@@ -12,7 +12,7 @@ import { Sky as SkyMesh } from 'three/examples/jsm/objects/Sky.js';
 import { graphics8c, render as R } from '../config.ts';
 import { hash01 } from './geom.ts';
 import { graphics } from './graphics.ts';
-import { sceneEnvironmentOn } from './Water.ts';
+import { sceneEnvironmentOn, skyEnvironment } from './Water.ts';
 
 const G = graphics8c.sky;
 
@@ -104,15 +104,19 @@ export function acesFilmic([r, g, b]: RGB, exposure: number): RGB {
 const fogColour = (horizon: RGB, toneMappedLater: boolean): RGB => (toneMappedLater ? horizon : acesFilmic(horizon, R.exposure));
 
 export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, groundAt: (x: number, z: number) => number) {
-  scene.background = skyTexture();
+  const canvasSky = skyTexture(); // until the HDRI (or Sky.js) replaces it, then disposed (review 1 #6: ~2 MB VRAM)
+  scene.background = canvasSky;
   const fog = new THREE.Fog(R.sky.horizon, R.fog.near, R.fog.far);
   scene.fog = fog;
 
   const on = graphics().on('sky');
   const { hemiLight: h } = R;
-  const envOn = sceneEnvironmentOn(); // low quality: HDRI background + fog only, Phase 7 light levels
-  const s = on ? { ...R.sun, intensity: envOn ? G.sunIntensity : R.sun.intensity, position: G.sunPosition } : R.sun;
-  scene.add(new THREE.HemisphereLight(h.sky, h.ground, envOn ? G.hemiIntensity : h.intensity));
+  let envOn = sceneEnvironmentOn(); // low quality: HDRI background + fog only, graphics8c.sky.low light levels
+  /** Sun / hemisphere intensities with and without the image-based light (graphics8c.sky off: Phase 7). */
+  const levels = (env: boolean) => (env ? { sun: G.sunIntensity, hemi: G.hemiIntensity } : on ? { sun: G.low.sunIntensity, hemi: G.low.hemiIntensity } : { sun: R.sun.intensity, hemi: h.intensity });
+  const s = on ? { ...R.sun, intensity: levels(envOn).sun, position: G.sunPosition } : R.sun;
+  const hemi = new THREE.HemisphereLight(h.sky, h.ground, levels(envOn).hemi);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(s.color, s.intensity);
   sun.castShadow = true;
   sun.shadow.mapSize.setScalar(R.shadowMapSize);
@@ -126,9 +130,11 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
   scene.add(sun, sun.target);
 
   let skyMesh: SkyMesh | undefined;
+  let toneMappedLater = false;
+  let horizon: RGB | undefined; // the HDRI's, once loaded
   const sunDir = new THREE.Vector3(s.position.x, s.position.y, s.position.z).normalize();
   if (on) {
-    const toneMappedLater = graphics().on('post');
+    toneMappedLater = graphics().on('post');
     scene.environmentIntensity = G.environmentIntensity * (G.mode === 'shader' ? G.shaderEnvironmentScale : 1);
     if (G.mode === 'hdri') {
       const url = `textures/sky_${graphics().quality === 'low' ? '1k' : '2k'}.hdr`;
@@ -142,11 +148,12 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
           // Rotate the image so its sun lies at our sun's azimuth (shadows and the bright sky agree).
           const yaw = stats.sunAzimuth - Math.atan2(sunDir.z, sunDir.x);
           scene.background = tex;
+          canvasSky.dispose();
           scene.backgroundIntensity = G.backgroundIntensity;
           scene.backgroundRotation.set(0, yaw, 0);
           if (envOn) scene.environment = tex; // the renderer turns an equirect environment into a PMREM once
           scene.environmentRotation.set(0, yaw, 0);
-          const horizon = stats.horizon.map((v) => v * G.backgroundIntensity) as RGB;
+          horizon = stats.horizon.map((v) => v * G.backgroundIntensity) as RGB;
           fog.color.setRGB(...fogColour(horizon, toneMappedLater), THREE.LinearSRGBColorSpace);
         },
         undefined,
@@ -160,6 +167,7 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
       sky.frustumCulled = false;
       sky.renderOrder = -1;
       scene.background = null;
+      canvasSky.dispose();
       scene.add(sky);
       fog.color.setRGB(...fogColour(G.shaderHorizon as unknown as RGB, toneMappedLater), THREE.LinearSRGBColorSpace);
       // Bake the environment once, on the first frame (onBeforeRender hands over the renderer; a nested render is fine,
@@ -185,6 +193,24 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
   const snapped = new THREE.Vector3();
   const texel = (2 * e) / R.shadowMapSize;
   return {
+    /** Runtime downgrade (main.ts FpsWatch, high quality): no image-based light (graphics8c.sky.low light levels, like low
+     *  quality), the fog colour for the plain renderer (post-processing off too). `materials` that relied on
+     *  scene.environment for their reflection (metals, the river: metalness ≥ 0.5 or roughness < 0.1, no envMap) get the
+     *  small sky gradient instead, as on low quality. */
+    lowLight(materials: Iterable<THREE.Material>) {
+      if (!envOn && !toneMappedLater) return;
+      envOn = toneMappedLater = false;
+      scene.environment = null;
+      skyMesh && (skyMesh.onBeforeRender = () => {}); // Sky.js: no late environment bake
+      Object.assign(sun, { intensity: levels(false).sun });
+      hemi.intensity = levels(false).hemi;
+      const fogRgb = horizon ?? (G.mode === 'shader' && on ? (G.shaderHorizon as unknown as RGB) : undefined);
+      if (fogRgb) fog.color.setRGB(...fogColour(fogRgb, false), THREE.LinearSRGBColorSpace);
+      const env = skyEnvironment();
+      for (const m of materials) {
+        if (m instanceof THREE.MeshStandardMaterial && !m.envMap && (m.metalness >= 0.5 || m.roughness < 0.1)) (m.envMap = env), (m.needsUpdate = true);
+      }
+    },
     /** Per frame, after the camera moved. */
     update() {
       const p = camera.position;

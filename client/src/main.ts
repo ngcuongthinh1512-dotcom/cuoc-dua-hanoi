@@ -53,6 +53,8 @@ import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
 import { carveRiver, createTerrainCollider, createTerrainMaterials, flattenPads, riverLevel } from './world/Terrain.ts';
 import { createWater } from './world/Water.ts';
 import { createPost } from './world/post.ts';
+import { FpsWatch, graphics } from './world/graphics.ts';
+import { hideWorld, showWorld } from './world/hideWorld.ts';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -117,7 +119,7 @@ async function start() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(R.fov, 1, R.near, R.far);
-  const post = createPost(renderer, scene, camera); // Phase 8C T1: null = plain renderer.render
+  let post = createPost(renderer, scene, camera); // Phase 8C T1: null = plain renderer.render
   const resize = () => {
     renderer.setPixelRatio(Math.min(devicePixelRatio, R.maxPixelRatio));
     renderer.setSize(innerWidth, innerHeight);
@@ -546,6 +548,11 @@ async function start() {
   const edge = $('edge');
   const loading = $('loading');
 
+  // Runtime downgrade (graphics8c.quality.autoDowngrade): high quality chosen by the user / GPU, not by ?quality= (tests)
+  let fpsWatch = graphics().quality === 'high' && !graphics().forced ? new FpsWatch() : undefined;
+  let lastFrame = performance.now();
+  const hiddenForRoom = new Set<THREE.Object3D>();
+  const keepInRoom = (o: THREE.Object3D) => (o as THREE.Light).isLight === true || o === room?.root || o === player?.model.root || !!remote?.owns(o);
   const waitArg = Number(query.get('wait') ?? NaN);
   const wait = Number.isFinite(waitArg) ? waitArg : playerSetup.readyWait; // s simulated before __READY__ (player mode)
   const euler = new THREE.Euler();
@@ -608,7 +615,6 @@ async function start() {
       if (player) player.camera.override = room?.active ? roomCfg.camera : null; // fix F2 (5): over the shoulder, higher, in the room
       player?.update(dt, flying ? null : input, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
       if (room?.active && !flying) camera.position.y = Math.min(camera.position.y, room.floorY + roomCfg.size.height - 0.3); // no ceiling collider (C2): the camera stays under it
-      // ponytail: the streets above are still drawn in the room (≈ 270 calls hidden by the ceiling), hide the chunks while room.active if FPS needs it
       if (player?.active) bikeLink?.frame(dt, player.controller);
       if (net && player?.active && !flying) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); none while spectating
       if (peers.length && player?.active && player.simTime * 1000 >= nextFakeTick) {
@@ -668,8 +674,26 @@ async function start() {
       edge.hidden = edgeDistance(p.x, p.z) >= bounds.warnDistance;
     },
     render: () => {
-      if (post) post.render();
-      else renderer.render(scene, camera);
+      // Fix B (review 3 F3): in the Louvre room only the room, the players and the lights are drawn, without post-processing
+      if (room?.active) hideWorld(scene.children, keepInRoom, hiddenForRoom);
+      else if (hiddenForRoom.size) showWorld(hiddenForRoom);
+      if (post && !room?.active) post.render();
+      else {
+        if (!renderer.info.autoReset) renderer.info.reset(); // post.ts counts its passes by hand
+        renderer.render(scene, camera);
+      }
+      const now = performance.now();
+      if (fpsWatch && worldReady && !room?.active && fpsWatch.frame((now - lastFrame) / 1000)) {
+        // a weak GPU behind a "high" choice: no post-processing / image-based light for this session (the choice stays stored)
+        post?.dispose();
+        post = null;
+        const mats = new Set<THREE.Material>();
+        scene.traverse((o) => void (o instanceof THREE.Mesh && [o.material].flat().forEach((m: THREE.Material) => mats.add(m))));
+        sky.lowLight(mats);
+        toast('Đã tự giảm chất lượng đồ họa để chạy mượt');
+        fpsWatch = undefined;
+      }
+      lastFrame = now;
       const cs = chunks.stats;
       const colliders = world.colliders.len();
       const ps = player?.controller.state;

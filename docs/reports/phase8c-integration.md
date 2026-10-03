@@ -27,7 +27,8 @@ Sau mỗi merge: `tsc` + vitest của client (740 → 745 → 747) và scripts.
 - `sim --leg louvre --bots 3 --speedup 2`: 3 / 3 đội về đích, ≈ 35 642 request / 20 đội × 2 giờ (< 40 000), 7,7 dòng ghi / bot / phút.
 - `hud-check`: mọi mục ok, 0 lỗi console. `ride-check`: OK (đi bộ 4,0 / xe 5,2 m/s, tỉ lệ 1,30, nghiêng 15,6°, ngã / đứng dậy / lên lại đúng; heap 143 → 155 MB). `RIDE_ONLY=3`: không chạy (điều phối viên yêu cầu xong sớm).
 
-### Số liệu `__STATS__` (SwiftShader headless; preset thường = chất lượng Thấp vì SwiftShader khớp `weakGpu`; `p8c-bench` / `-sky` / `-post` = Cao)
+### Số liệu `__STATS__` (SwiftShader headless)
+**Lưu ý:** SwiftShader khớp `graphics8c.quality.weakGpu` (= GPU yếu) nên MỌI preset thường (`street`, `champs`, `etoile`, `seine`, `eiffel`, `topdown`, `p8c-trees`, `p8c-roof`, `p8c-flamme`, `lm-*`) chạy ở chất lượng **Thấp**, không phải chất lượng máy người chơi có GPU rời; chỉ `p8c-bench`, `p8c-sky`, `p8c-post` (có `&quality=high`) là **Cao**.
 | Preset | Lệnh vẽ trước → sau | Tam giác (M) trước → sau |
 |---|---|---|
 | `street` | 328 → 319 | 0,91 → 0,69 |
@@ -46,7 +47,7 @@ Sau mỗi merge: `tsc` + vitest của client (740 → 745 → 747) và scripts.
 | `lm-flamme` | 337 → 312 | 1,05 → 0,76 |
 | `lm-notre-dame` | – → 400 | – → 0,80 |
 
-Ngân sách ≤ 450 lệnh vẽ / ≤ 1,5 M tam giác: mọi cảnh mặt đất đạt. Cảnh trên cao `champs` / `etoile` / `topdown` vượt 450 (vốn đã vượt trước 8C; đều GIẢM). FPS SwiftShader (chỉ so tương đối, máy tải): bench Cao 1,7 → 1,1, Thấp 1,5 → 2,3.
+Ngân sách ≤ 450 lệnh vẽ / ≤ 1,5 M tam giác: mọi cảnh mặt đất đạt. Cảnh trên cao `champs` / `etoile` / `topdown` vượt 450 (vốn đã vượt trước 8C; đều GIẢM). FPS SwiftShader (chỉ so tương đối): ~~bench Cao 1,7 → 1,1, Thấp 1,5 → 2,3~~ – **sai**: mốc "trước" đo lúc máy tải nặng ở thời điểm khác, không so được. Đo xen kẽ cùng điều kiện (reviewer 3, `phase8c-review-run.md` (3)): trước 8C ≈ 3,5, Cao ≈ 1,0 (≈ 29 %), Thấp ≈ 2,2 (≈ 64 %). Sau nhóm sửa B: xem `phase8c-fix-b.md`.
 
 ### Ảnh
 Đã chụp: mặc định (topdown … p4b-*, p8b-*), `p8c` (14 preset), `p8b`, `p8`, `p7`, `p6-boxes`, `p5-hud`, `lm-flamme`, `lm-notre-dame`: 0 lỗi console, trừ một lỗi Vite `504 (Outdated Optimize Dep)` trong lượt mặc định đầu tiên (Vite tối ưu lại dependency mới `three/examples/jsm/postprocessing` giữa chừng; nhóm `p8b` chạy lại sạch). Đã xem: street / etoile / seine / topdown / eiffel so với `before-8c`, `p8c-flamme`, `p8c-props`, `p8c-post`, `p6-boxes`, `p8b-room`: cây platane, bầu trời mây, nước Seine, ngói, nhựa đường, đồ phố hiện đúng, không vỡ hình.

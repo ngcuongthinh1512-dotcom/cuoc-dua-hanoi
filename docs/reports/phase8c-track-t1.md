@@ -8,7 +8,7 @@ Ngày 2026-10-03. Nhánh `phase8c-T1` (từ `phase8c-T0` c9088b3), worktree riê
 - **Nước sông Seine** (`client/src/world/Water.ts`): `waternormals.jpg` hai lớp (34 m và 13 m mỗi lần lặp, trôi lệch hướng, cộng trong shader qua `onBeforeCompile`) → không thấy lặp ô; phản chiếu bầu trời HDRI (Fresnel của PBR, roughness 0,04) + ánh nắng lấp lánh; màu xanh xám đậm. Lưới, mực nước, kè, carve sông và collider không đổi.
 - **Hậu kỳ** (`client/src/world/post.ts`): `EffectComposer`: RenderPass (HalfFloat, tuyến tính) → UnrealBloom rất nhẹ (ngưỡng 3: chỉ mặt trời lấp lánh trên nước, vàng mái vòm, neon) → OutputPass (ACES + sRGB) → SMAA. `renderer.info` đếm mọi pass (autoReset tắt, reset mỗi khung) → `__STATS__` / F3 gồm cả hậu kỳ.
 - **Kim loại landmark** (`landmarks/index.ts`, chỉ `envMap`): dùng `scene.environment` (HDRI) khi có; vàng Invalides có highlight thật từ HDRI (ảnh zoom: mái vòm sáng / tối theo mây, đỉnh có quầng bloom).
-- **Chất lượng** (`client/src/ui/settings.ts`): Esc → Cài đặt → "Chất lượng đồ họa" (Cao / Thấp), ghi `localStorage[graphics8c.quality.storageKey]`, gợi ý "áp dụng sau khi tải lại trang". `Menu.ts` không phải tệp 8C nên hàng này được gắn từ `settings.ts` (`mountQualitySetting`, MutationObserver chờ menu dựng lần đầu; gọi trong `createPost`).
+- **Chất lượng** (`client/src/ui/settings.ts`): Esc → Cài đặt → "Chất lượng đồ họa" (Cao / Thấp), ghi `localStorage[graphics8c.quality.storageKey]`, gợi ý "áp dụng sau khi tải lại trang". (Lúc track: gắn từ `settings.ts` bằng `mountQualitySetting` + MutationObserver. **Lỗi thời** – khi ghép đã thay bằng `qualityRow()` gọi trong `Menu.build`, xem `phase8c-integration.md` §2.)
 - **Hạ cấp** (GPU yếu / `?quality=low`): hậu kỳ tắt (`post.lowOff`, về `renderer.render` + MSAA canvas); HDRI 1K chỉ làm nền + sương mù, KHÔNG ánh sáng môi trường (`sky.lowEnvironment: false`: trên SwiftShader IBL tốn −35 % FPS), đèn bán cầu / mặt trời giữ mức Phase 7, kim loại và sông phản chiếu bầu trời nhỏ `skyEnvironment()` như cũ; nước vẫn hai lớp. Tắt hẳn từng mục: `graphics8c.<mục>.enabled = false` = y hệt Phase 7.
 - **Preset** (`scripts/screenshot.ts`): `p8c-sky`, `p8c-seine`, `p8c-gold`, `p8c-post`, `p8c-bench` thêm `&quality=high` (SwiftShader khớp `weakGpu` nên mặc định là `low`); `p8c-sky-low`, `p8c-bench-low` giữ `quality=low`.
 - **Cấu hình**: `graphics8c.{sky,water,post}` (mọi tunable); `render.sky.horizon` `#c9d9e6` → `#bfc2cc` (= màu chân trời hiển thị của HDRI, để quầng mờ skyline Sacré-Cœur / La Défense của `g5.ts` – vốn đọc hằng này – khớp sương mù mới).
@@ -48,7 +48,7 @@ Dung lượng tải thêm: cao 5,20 + 0,24 MB, thấp 1,37 + 0,24 MB (≤ 25 MB 
 - `npm run build && npm test` từ gốc worktree: xem §6.
 
 ## 5. Lệch / việc khi ghép
-- Hàng "Chất lượng" gắn vào menu bằng `MutationObserver` từ `settings.ts` vì `ui/Menu.ts` thuộc 8B / cấm sửa; khi ghép có thể thay bằng 1 dòng `qualityRow()` trong `Menu.build` (cần export).
+- ~~Hàng "Chất lượng" gắn vào menu bằng `MutationObserver`~~ – đã xử lý khi ghép: `qualityRow()` trong `Menu.build`, không còn MutationObserver (ghi chú lỗi thời, giữ để tra lịch sử).
 - Quầng mờ skyline (`landmarks/g5.ts`) đọc `render.sky.horizon` cố định; đã đổi giá trị cho khớp HDRI. Với hậu kỳ bật, quầng trộn trước tone mapping nên hơi nhạt hơn sương (khó thấy). Gọn hơn: `g5` đọc `scene.fog.color` (ngoài phạm vi T1).
 - `render.sky.horizon` đổi cũng làm bầu trời canvas (khi `graphics8c.sky` tắt) hơi xám hơn Phase 7.
 - Hậu kỳ +17 lệnh vẽ (kế hoạch "+≤ 5"); SMAA thay MSAA khi hậu kỳ bật (MSAA trên render target ở pixel ratio 2 tốn ~250 MB).
