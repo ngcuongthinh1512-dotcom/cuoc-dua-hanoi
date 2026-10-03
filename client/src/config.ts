@@ -77,7 +77,7 @@ const keyTable = {
   camera: ['KeyC'],
   binoculars: ['KeyB'],
   menu: ['Escape'],
-  debug: ['F3', 'Backquote'],
+  debug: ['F3'],
   wave: ['KeyG'], // vẫy tay chào
   bell: ['KeyR'], // bấm chuông/còi xe đạp
   flyUp: ['Space', 'KeyE'],
