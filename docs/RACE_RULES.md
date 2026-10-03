@@ -153,27 +153,22 @@ Mỗi loại thẻ có tiêu đề và màu riêng, nhìn là nhận ra ngay.
 - Đội **gõ câu trả lời ngay trong game**, ở ô nhập trên thẻ thử thách, và **gõ được ở bất kỳ đâu** sau khi đã nhận thử thách (mục 6). Game không tự chấm các thử thách gõ chữ: **Host xem câu trả lời rồi bấm Duyệt hoặc Phạt** (mục 7). Ngoại lệ là **Thử thách 3 (phòng Louvre)**: máy chủ tự chấm, xem mục "Thử thách 3" ngay bên dưới.
 - Thẻ liệt kê **lịch sử các câu trả lời của chính đội bạn** ở thử thách đó (nội dung, giờ gửi, trạng thái). Lịch sử chỉ có trên thẻ thử thách, **không** nằm trong Sổ mật thư; đóng thẻ rồi muốn xem lại thì bấm `Enter`.
 - Thử thách này được Host duyệt thì **mật thư của thử thách kế tiếp hiện ngay**, bạn không phải đi tới đâu (ví dụ Thử thách 2 hiện ngay khi Thử thách 1 được duyệt).
-- **Trừ Thử thách 3 (phòng Louvre, có gợi ý phút 40 và phút 70 ngay trong game), các thử thách không có gợi ý trong game.** Nếu đội làm một thử thách quá lâu (mặc định 45 phút, chặng có thể quy định khác), trang Host báo cho Host; Host có thể gửi gợi ý **riêng cho đội bạn qua Messenger**.
+- **Trừ Thử thách 3 (phòng Louvre, có gợi ý ngay trong game), các thử thách không có gợi ý trong game.** Nếu đội làm một thử thách quá lâu (mặc định 45 phút, chặng có thể quy định khác), trang Host báo cho Host; Host có thể gửi gợi ý **riêng cho đội bạn qua Messenger**.
 - Bỏ qua thử thách bằng cách **bỏ cuộc** (bị phạt giờ) hoặc dùng **Vé ưu tiên**: chưa có trong bản game này.
 
 Nhiệm vụ ghi *"Địa điểm: …"* trên thẻ là nơi bạn được hướng dẫn tới làm nhiệm vụ (tới đó thì Host thấy đội đã tới, và xe vào bãi của nơi đó, mục 3); nhiệm vụ không ghi địa điểm thì làm ngay tại điểm vừa tới. Dù vậy câu trả lời vẫn gõ được ở bất kỳ đâu. Kết quả do Host duyệt (mục 7); chặng có thể bật **tự chấm** cho một số thử thách, khi đó game báo đúng hay sai ngay.
 
 ### Thử thách 3: phòng Louvre
-Thử thách đặc biệt, **không gõ chữ**: bạn vào một căn phòng mô phỏng một phòng trong Louvre và chọn đúng các tác phẩm.
+Thử thách đặc biệt, **không gõ chữ**: bạn vào một căn phòng mô phỏng một phòng trong Louvre và tự tìm ra điều mật thư yêu cầu. Cách giải thế nào thì đội tự khám phá; luật chỉ nói cách thao tác.
 
 - **Vào phòng bằng `F`**: sau khi mở hòm Lộ trình ngay trước đó, bấm `F` khi đứng gần hòm để xuống phòng; muốn ra thì đứng gần cửa phòng và bấm `F`. Vào / ra không làm bạn bị coi là dịch chuyển bất thường và không cần "Về chỗ an toàn". Thấy nhân vật của các đội khác đang ở trong phòng, nhưng các đội ở ngoài phố không thấy bạn khi bạn ở dưới phòng.
-- **23 tác phẩm** (tranh treo tường và tượng trên bệ) bày quanh phòng; **chỉ 5** là độc bản duy nhất đang trưng bày ở Louvre, 18 tác phẩm còn lại nổi tiếng nhưng ở nơi khác. **Tên tác phẩm không hiện** ở đâu cả.
-- Dưới mỗi tác phẩm có **một nút**: **đỏ** là chưa chọn, **xanh lá** là đã chọn; đứng gần nút và bấm `F` để chọn, bấm lại để bỏ chọn. **Đèn / nút chỉ hiện cho chính đội bạn** (đội khác ở cùng phòng không thấy lựa chọn của bạn). Các đội thấy cùng một bộ nút, nên đừng chép đáp án của đội khác: mỗi đội tự suy ra.
-- **Nút chốt ở giữa phòng**: bấm `F` ở đó để chốt các tác phẩm đang chọn (không có hộp xác nhận; chốt khi chưa chọn tác phẩm nào thì game báo *"Chưa chọn tác phẩm nào"*). Máy chủ tự chấm: **đúng là chọn đúng 5 tác phẩm thật và không thừa** (chọn 6, kể cả đủ 5 món đúng, vẫn là sai). Đúng thì bước xong và mật thư kế tiếp hiện ngay.
+- Trong phòng có các tác phẩm, dưới mỗi tác phẩm có **một nút**: **đỏ** là chưa chọn, **xanh lá** là đã chọn; đứng gần nút và bấm `F` để chọn, bấm lại để bỏ chọn. **Đèn / nút chỉ hiện cho chính đội bạn.** Tên tác phẩm không hiện trong game.
+- **Nút chốt ở giữa phòng**: bấm `F` ở đó để chốt các tác phẩm đang chọn (không có hộp xác nhận). Máy chủ tự chấm; đúng thì bước xong và mật thư kế tiếp hiện ngay.
 - **Sai bị phạt 3 phút** (chặng có thể quy định số khác): giữa màn hình hiện đồng hồ đếm ngược, đếm ngược vẫn chạy kể cả khi Host tạm dừng. Trong lúc bị phạt, **lựa chọn của bạn được giữ nguyên và bạn vẫn bấm / bỏ chọn được**, chỉ chưa chốt được cho tới khi hết đếm ngược. Số lần chốt không giới hạn.
-- **Gợi ý theo giờ**, tính **từ lúc đội mở hòm Lộ trình ngay trước thử thách** (không phải lúc bạn bước vào phòng), mặc định:
-  - **Phút 40:** thẻ hiện *"Đáp án bao gồm 5 tác phẩm"*.
-  - **Phút 70:** thẻ hiện *"Đúng x/5"*, với x là số tác phẩm đúng **trong lựa chọn hiện tại của bạn** và **cập nhật ngay** mỗi khi bạn bấm / bỏ chọn (không cần chốt).
-- **Từ phút 40, mỗi đội chỉ được chọn tối đa 5 tác phẩm cùng lúc**: bấm chọn khi đã đủ 5 thì bị từ chối (*"Chỉ được chọn tối đa 5 tác phẩm"*); bỏ chọn thì luôn được. Trước phút 40 chọn bao nhiêu cũng được; nếu đội đang bật hơn 5 đèn khi qua phút 40 thì phải tự bỏ bớt (chốt hơn 5 tác phẩm luôn là sai). Hệ quả: sau phút 70, đội có thể dò đáp án bằng cách đổi từng tác phẩm và xem x tăng hay giảm; việc đổi lựa chọn không bị phạt, chỉ chốt sai mới bị phạt.
-- **Tin công khai cho mọi đội**, hiện thành một đoạn chat nhỏ ở **góc dưới bên trái** màn hình (ngay bên phải bản đồ nhỏ): *"Đội X trả lời sai và bị phạt 3 phút"*. Tin công khai **không bao giờ** nói đội đúng mấy tác phẩm, và đội chốt đúng thì không có tin: để đội đến sau không biết trước số đáp án đúng.
-- **Ra khỏi phòng bất kỳ lúc nào** (`F` ở cửa), lựa chọn vẫn được giữ; tải lại trang khi đang ở trong phòng thì vào lại đúng trong phòng (mục 12). Khi đã chốt đúng, bạn vẫn đứng trong phòng và tự ra bằng `F` ở cửa (bảng ở cửa ghi *"Đã xong – bấm F để ra"*).
+- Thử thách này có thể hiện **gợi ý theo thời gian** ngay trên thẻ; đội đọc thẻ để biết.
+- **Tin công khai cho mọi đội**, hiện thành một đoạn chat nhỏ ở **góc dưới bên trái** màn hình: *"Đội X trả lời sai và bị phạt 3 phút"*. Tin này không nói gì khác về lựa chọn của đội.
+- **Ra khỏi phòng bất kỳ lúc nào** (`F` ở cửa), lựa chọn vẫn được giữ; tải lại trang khi đang ở trong phòng thì vào lại đúng trong phòng (mục 12). Khi đã chốt đúng, bạn vẫn đứng trong phòng và tự ra bằng `F` ở cửa.
 - **Ghi nguồn:** ảnh và mô hình các tác phẩm có bản quyền riêng; **bảng "Ghi nguồn" (trong menu `Esc`) chỉ mở sau khi đội bạn về đích** hoặc cuộc đua kết thúc, trước đó bấm vào chỉ thấy *"Mở sau khi về đích"*. Tên tác phẩm, tác giả, giấy phép và nguồn ảnh chỉ hiện ở bảng đó.
-- Host có thể thấy đội đang chọn bao nhiêu tác phẩm, số lần chốt sai và gợi ý đã tới; nếu đội bị kẹt trong phòng (lỗi, mất kết nối) Host có nút cho đội qua bước. Cảnh báo "làm một thử thách quá lâu" (mặc định 45 phút) của Host vẫn chạy ở thử thách này, song song với các gợi ý trong game.
 
 ### Các kiểu nhiệm vụ bạn có thể gặp
 
@@ -318,7 +313,7 @@ Lỡ tải lại trang (`F5` trên Windows, `Cmd`+`R` trên Mac), tắt tab, m�
 
 ### Nhiệm vụ đang làm dở
 - Tìm và nhặt đồ vật: giữ nguyên những vật đã nhặt.
-- Phòng Louvre (Thử thách 3): giữ nguyên **các tác phẩm đang chọn** (tối đa mất vài giây bấm cuối nếu máy chủ vừa khởi động lại; bấm lại là được), số lần chốt sai và **đồng hồ đếm ngược phạt**; gợi ý phút 40 / 70 tính lại đúng theo giờ. Tải lại trang khi đang ở trong phòng thì bạn xuất hiện lại **đúng trong phòng**; nếu bạn đã chốt đúng mà chưa ra khỏi phòng rồi mới tải lại, bạn đứng trên **sân Louvre** (coi như đã ra).
+- Phòng Louvre (Thử thách 3): giữ nguyên **các tác phẩm đang chọn** (tối đa mất vài giây bấm cuối nếu máy chủ vừa khởi động lại; bấm lại là được), số lần chốt sai và **đồng hồ đếm ngược phạt**; gợi ý trong game tính lại đúng theo giờ. Tải lại trang khi đang ở trong phòng thì bạn xuất hiện lại **đúng trong phòng**; nếu bạn đã chốt đúng mà chưa ra khỏi phòng rồi mới tải lại, bạn đứng trên **sân Louvre** (coi như đã ra).
 - Thử thách gõ câu trả lời: giữ nguyên **lịch sử các câu bạn đã gửi** (bấm `Enter` để xem trên thẻ), câu đang chờ Host duyệt và **đồng hồ đếm ngược phạt**. Đếm ngược chạy cả lúc bạn offline: còn bao nhiêu thì vào lại thấy đúng bấy nhiêu, hết thì gõ lại được.
 - Lựa chọn kép: giữ nguyên nhánh đã chọn, hòm nhánh đã mở, số lần đã đổi nhánh và **đồng hồ đếm ngược đổi nhánh**. Hòm nhánh hiện lại khi bạn tới gần (hòm của nhánh vừa đổi hiện khi hết đếm ngược).
 - Nhiệm vụ bấm giờ (chở hàng, đạp xe qua cổng, mini-game trên màn hình): lượt đang chạy bị hủy, vào lại làm lại từ đầu lượt đó.

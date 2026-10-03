@@ -1076,3 +1076,6 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 ### 17.26 Tin công khai của phòng Louvre (2026-10-03)
 - Tin công khai chỉ báo đội trả lời sai và bị phạt 3 phút. **Bỏ** phần công khai "đúng x/5" (kể cả sau phút 70) và tin khi đội chốt đúng, vì có thể lộ số đáp án đúng cho đội đến sau. "Đúng x/5" sống vẫn hiện riêng cho đội đó từ phút 70.
 - Lựa chọn kép: không phạt 3 phút, Host chỉ cần nút Duyệt (chặng đặt `retryLockMinutes: 0` cho hai nhánh).
+
+### 17.27 Luật đua không lộ chi tiết Thử thách 3 (2026-10-03)
+- `docs/RACE_RULES.md` (mở trong game) chỉ nói cách thao tác phòng Louvre (vào / ra, nút đỏ xanh, nút chốt, phạt 3 phút, tin công khai). Không nêu số tác phẩm, số đáp án, mốc gợi ý phút 40 / 70, giới hạn 5, hay cách dò đáp án.
