@@ -92,8 +92,8 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 8B | Phòng Louvre (Thử thách 3): 23 tác phẩm, chọn đúng 5, phạt 3 phút khi chốt sai, gợi ý phút 40 / 70, tin công khai, "Ghi nguồn" sau khi về đích | Xong |
 | 8C | Đồ họa: bầu trời HDRI, nước Seine, hậu kỳ, cây platane, đồ đường phố Paris, Ngọn lửa Tự do, ngói mái + nhựa đường; Esc → Cài đặt → "Chất lượng đồ họa" (Cao / Thấp, áp dụng sau khi tải lại; máy yếu tự chọn Thấp, Cao tự hạ cấp khi FPS thấp) | Xong |
 | 8D | Đợt việc nhỏ: không sao chép chữ mật thư, thứ hạng = thứ tự về đích, thông báo về đích / BỊ LOẠI (chữ trong file chặng `pit_stop.announce`), bỏ đồng hồ đội + giờ xuất phát | Xong |
-| 9 | Yếu tố đặc biệt, phạt giờ | Chưa làm |
-| 10 | Màn hình Host đầy đủ | Chưa làm |
+| 9 | Yếu tố đặc biệt, phạt giờ | Bỏ (SPEC §17.18) |
+| 10 | Công cụ Host (thu hẹp, SPEC §17.24–17.25): Hoàn tác 10 giây, xóa cờ đỏ, "vừa rời đi", Cho qua mọi thử thách, xuất dữ liệu thô thời gian (CSV + JSON), ghim bảng | Xong |
 | 11 | Chặng demo Paris & test toàn trình | Chưa làm |
 | 12 | Tối ưu & deploy | Chưa làm |
 
