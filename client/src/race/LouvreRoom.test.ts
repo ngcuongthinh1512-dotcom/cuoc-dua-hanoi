@@ -10,13 +10,13 @@ const slots = wallSlots(lv.artworks);
 const { width: W, depth: D } = C.size;
 
 describe('wallSlots (docs/plans/phase8b.md §F)', () => {
-  it('23 places in leg order, inside the room, ≥ minSpacing apart, none at the door', () => {
+  it('23 places in leg order, inside the room, ≥ minSpacing apart, none at the entry gap', () => {
     expect(slots.map((s) => s.id)).toEqual(lv.artworks.map((a) => a.id));
     expect(slots.filter((s) => s.type === 'sculpture')).toHaveLength(8);
     for (const [i, a] of slots.entries()) {
       expect(Math.abs(a.x)).toBeLessThanOrEqual(W / 2 + 1e-9);
       expect(Math.abs(a.z)).toBeLessThanOrEqual(D / 2 + 1e-9);
-      if (a.z === -D / 2) expect(Math.abs(a.x)).toBeGreaterThan(C.door.width / 2 + 1); // door wall: clear of the door
+      if (a.z === -D / 2) expect(Math.abs(a.x)).toBeGreaterThan(C.door.width / 2 + 1); // front wall: clear of the entry gap
       for (const b of slots.slice(i + 1)) {
         expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThanOrEqual(C.slots.minSpacing);
         expect(Math.hypot(a.button.x - b.button.x, a.button.z - b.button.z)).toBeGreaterThan(1); // buttons apart
@@ -36,9 +36,9 @@ describe('wallSlots (docs/plans/phase8b.md §F)', () => {
   });
 });
 
-describe('room frame: door straight under the box, in / out keep x, z (critic S5)', () => {
+describe('room frame: the entry point straight under the box, in / out keep x, z (critic S5)', () => {
   const f = roomFrame(lv.room, 13.7);
-  it('the door is at the box, the room behind it, the floor below.m under the ground (≥ minFloorY)', () => {
+  it('the entry point is at the box, the room behind it, the floor below.m under the ground (≥ minFloorY)', () => {
     const door = toWorld(f, 0, -D / 2);
     expect(door.x).toBeCloseTo(lv.room.x);
     expect(door.z).toBeCloseTo(lv.room.z);
@@ -67,7 +67,7 @@ describe('room frame: door straight under the box, in / out keep x, z (critic S5
   });
 });
 
-describe('F in the room: targetAt (button → lock → door)', () => {
+describe('F in the room: targetAt (button → lock; SPEC §17.33: no door)', () => {
   const s = slots[10]!;
   it('the nearest button within reach the view faces; facing away: not that one', () => {
     const [x, z] = [s.button.x + s.nx * 1, s.button.z + s.nz * 1];
@@ -75,9 +75,9 @@ describe('F in the room: targetAt (button → lock → door)', () => {
     expect(targetAt(slots, x, z, s.nx, s.nz)).toBeNull();
     expect(targetAt(slots, s.button.x + s.nx * 3, s.button.z + s.nz * 3, -s.nx, -s.nz)).toBeNull(); // out of reach
   });
-  it('the lock button in the middle, the door at the door wall', () => {
+  it('the lock button in the middle; nothing at the front wall (no door)', () => {
     expect(targetAt(slots, 1, 0, 0, 1)).toEqual({ kind: 'lock' });
-    expect(targetAt(slots, 0, -D / 2 + C.inset, 0, -1)).toEqual({ kind: 'door' });
+    expect(targetAt(slots, 0, -D / 2 + C.inset, 0, -1)).toBeNull();
     expect(targetAt(slots, 0, -3, 0, 1)).toBeNull();
   });
 });
@@ -90,7 +90,7 @@ describe('lights from this team only (SPEC §17.19)', () => {
     expect(on[10]).toBe(true);
     expect(buttonStates(slots, [])).toEqual(slots.map(() => false));
   });
-  it('prompts: choose / unpick / full at 5 / lock / door', () => {
+  it('prompts: choose / unpick / full at 5 / lock (no door line)', () => {
     const o = { done: false, locked: false };
     expect(roomPrompt({ kind: 'button', id: 'art-01' }, lv, o)).toBe('Bấm F: chọn tác phẩm này');
     expect(roomPrompt({ kind: 'button', id: 'art-04' }, lv, o)).toBe('Bấm F: bỏ chọn');
@@ -99,7 +99,6 @@ describe('lights from this team only (SPEC §17.19)', () => {
     expect(roomPrompt({ kind: 'lock' }, lv, o)).toBe('Bấm F để chốt (đang chọn 2)');
     expect(roomPrompt({ kind: 'lock' }, { ...lv, picks: [] }, o)).toBe('Chưa chọn tác phẩm nào');
     expect(roomPrompt({ kind: 'button', id: 'art-01' }, lv, { done: true, locked: false })).toBeNull();
-    expect(roomPrompt({ kind: 'door' }, lv, { done: true, locked: false })).toBe('Đã xong – bấm F để ra');
   });
 });
 

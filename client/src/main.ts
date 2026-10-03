@@ -306,13 +306,17 @@ async function start() {
     player!.moveTo(e.x, e.z, e.yaw);
     if (openCard) raceHud?.openCurrent();
   };
-  let roomDoneAt: number | null = null; // SPEC §17.33: ms (performance clock) the step finished while inside → automatic exit
+  // SPEC §17.33: no door. The step finishing while inside (a right lock, a Host "Cho qua") starts the automatic exit
+  // autoExitSeconds later; a lock the team sent itself gets "CHÍNH XÁC" first. The race over for the team → out at once.
+  let roomDoneAt: number | null = null; // ms (performance clock) the step finished while inside
+  let lockSent = false; // our lock went out and has no verdict yet (lockWrong clears it)
   const leaveRoom = () => {
     roomDoneAt = null;
     const e = room!.leave();
     if (e) player!.moveTo(e.x, e.z, e.yaw);
+    raceHud?.openCurrent(); // the next card (held while inside) / the finish card
   };
-  /** F (docs/plans/phase8b.md §F): outside, at the box of a louvre card → in (gesture); inside: button / lock / door, no
+  /** F (docs/plans/phase8b.md §F): outside, at the box of a louvre card → in (gesture); inside: button / lock, no
    *  gesture ('quiet': the other teams in the room must not see what was pressed); false = not the room's F. */
   const roomInteract = (): boolean | 'quiet' => {
     if (!room) return false;
@@ -322,13 +326,7 @@ async function start() {
       return enterRoom(rc.step, rc.lv), true;
     }
     const t = roomTarget();
-    if (t?.kind === 'door') {
-      const done = rc?.step !== room.step;
-      leaveRoom(); // cancels the automatic exit (SPEC §17.33); the held next card opens on the court
-      if (done) raceHud?.openCurrent();
-      return 'quiet';
-    }
-    if (!t || !rc || rc.step !== room.step) return 'quiet'; // the step is over: only the door
+    if (!t || !rc || rc.step !== room.step) return 'quiet'; // the step is over: the automatic exit is running
     const now = performance.now();
     if (t.kind === 'button') {
       const on = !rc.lv.picks.includes(t.id);
@@ -338,7 +336,7 @@ async function start() {
       else race?.pick(rc.step, t.id, on, now);
     } else if (!rc.lv.picks.length) toast('Chưa chọn tác phẩm nào'); // N4: an empty lock is stopped here
     else if (rc.status === 'locked') notice('answerLocked');
-    else race?.lock(rc.step, now);
+    else if (race?.lock(rc.step, now)) lockSent = true;
     return 'quiet';
   };
   if (player) {
@@ -388,7 +386,7 @@ async function start() {
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') {
           // Phase 8B: the wrong lock's minutes from the card (0.1 in a test leg: never "3")
-          if (m.code === 'lockWrong') toast(lockWrongText(race?.view?.card?.retryPenaltyMinutes));
+          if (m.code === 'lockWrong') (lockSent = false), toast(lockWrongText(race?.view?.card?.retryPenaltyMinutes));
           else if (m.code === 'penalized') toast(penalizedText(m.score, m.of)); // SPEC §17.31
           else notice(m.code);
           if (m.code === 'approved' || m.code === 'penalized') reviewSound(m.code === 'approved'); // SPEC §8.9 (6)
@@ -647,12 +645,15 @@ async function start() {
       if (room && player?.active && !flying && !player.controller.riding) {
         const done = rc?.step !== room.step;
         if (room.active) {
-          room.setPicks(done ? null : rc!.lv.picks, done);
-          // SPEC §17.33: the step finished while inside (a right lock; also a Host "Cho qua") → "CHÍNH XÁC", then the
-          // automatic exit autoExitSeconds later, the next card opening on the court; F at the door earlier cancels it
-          if (done && roomDoneAt == null) (roomDoneAt = performance.now()), raceHud?.announce(ROOM_TEXT.correct);
-          const left = autoExitLeft(roomDoneAt, performance.now());
-          if (left === 0) leaveRoom(), raceHud?.openCurrent();
+          room.setPicks(done ? null : rc!.lv.picks);
+          if (done && roomDoneAt == null) {
+            roomDoneAt = performance.now();
+            if (lockSent) raceHud?.announce(ROOM_TEXT.correct); // our lock was right (a Host "Cho qua" says nothing)
+            lockSent = false;
+          }
+          const over = !!race?.view?.result || race?.view?.status === 'finished'; // finished / BỊ LOẠI / the Host ended the race
+          const left = over ? 0 : autoExitLeft(roomDoneAt, performance.now());
+          if (left === 0) leaveRoom();
           else if (!modal()) prompt = left != null ? ROOM_TEXT.autoExit(left) : roomPrompt(roomTarget(), rc?.lv ?? null, { done, locked: rc?.status === 'locked' });
         } else if (rc) {
           near = nearBox(rc);

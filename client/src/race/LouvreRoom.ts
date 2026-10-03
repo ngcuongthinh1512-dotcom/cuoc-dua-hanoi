@@ -1,5 +1,5 @@
 // Phase 8B (docs/plans/phase8b.md §F): the Louvre room ("Thử thách 3") — a closed box `louvreRoom.below` m under the box
-// just opened (card.task.louvre.room), its door straight under the box (going in / out only changes y: no teleport, no
+// just opened (card.task.louvre.room), its entry point straight under the box (going in / out only changes y: no teleport, no
 // `respawn`), 23 artworks along the walls in leg order, a red / green button under each (this team's picks only), the lock
 // button in the middle. Built synchronously at F (or before spawnAt on an F5 inside: the floor collider must be in Rapier
 // first), unloaded only by leave().
@@ -54,8 +54,9 @@ export interface RoomSlot {
   button: { x: number; z: number };
 }
 
-/** What F does in the room (main.ts onInteract priority after the closed box: enter → button → lock → door → bikes). */
-export type RoomTarget = { kind: 'button'; id: string } | { kind: 'lock' } | { kind: 'door' };
+/** What F does in the room (main.ts onInteract priority after the closed box: enter → button → lock → bikes). SPEC §17.33:
+ *  no door / manual exit: the team leaves by itself once the step is done (autoExitLeft). */
+export type RoomTarget = { kind: 'button'; id: string } | { kind: 'lock' };
 
 /** Pure: the 23 places along the walls in leg order, round the room: door wall right part (from the door outward), right
  *  wall (front → back), back wall, left wall (back → front), door wall left part (outward → door). Evenly spread on each
@@ -117,7 +118,7 @@ export const toWorld = (f: RoomFrame, x: number, z: number) => {
 };
 
 /** Pure (room-local): what F does from feet (x, z) looking along (dx, dz): the nearest button within reach that the view
- *  faces, else the lock button within reach, else the door within reach. */
+ *  faces, else the lock button within reach. */
 export function targetAt(slots: readonly RoomSlot[], x: number, z: number, dx: number, dz: number): RoomTarget | null {
   const len = Math.hypot(dx, dz) || 1;
   let best: RoomSlot | null = null;
@@ -130,7 +131,6 @@ export function targetAt(slots: readonly RoomSlot[], x: number, z: number, dx: n
   }
   if (best) return { kind: 'button', id: best.id };
   if (Math.hypot(x, z) <= C.lock.reach) return { kind: 'lock' };
-  if (Math.hypot(x, z + C.size.depth / 2) <= C.doorReach) return { kind: 'door' };
   return null;
 }
 
@@ -152,7 +152,6 @@ export function autoExitLeft(doneAt: number | null, now: number): number | null 
 /** Pure: the prompt over the HUD in / at the room (null = none). */
 export function roomPrompt(t: RoomTarget | null, lv: LouvreView | null, o: { done: boolean; locked: boolean }): string | null {
   if (!t) return null;
-  if (t.kind === 'door') return o.done ? 'Đã xong – bấm F để ra' : 'Bấm F để ra (lựa chọn vẫn giữ)';
   if (o.done || !lv) return null;
   if (t.kind === 'lock') {
     if (o.locked) return 'Đang bị phạt – chờ hết đếm ngược để chốt (vẫn chọn / bỏ được)';
@@ -269,7 +268,7 @@ function bakeLight(g: BufferGeometry) {
   }
 }
 
-function signTexture(text: string, bg = C.colours.exitSign): CanvasTexture {
+function signTexture(text: string, bg: string): CanvasTexture {
   const cv = Object.assign(document.createElement('canvas'), { width: 512, height: 96 });
   const g = cv.getContext('2d')!;
   g.fillStyle = bg;
@@ -348,14 +347,13 @@ export function addColliders(world: RAPIER.World, f: RoomFrame, slots: readonly 
 export class LouvreRoom {
   /** The local player is inside (Player's own env: heightAt = floorY, waterLevel null — critic C2; never the shared env). */
   active = false;
-  /** The step id the room was built for (card.step !== step → done: buttons off, door sign "Đã xong – bấm F để ra"). */
+  /** The step id the room was built for (card.step !== step → done: buttons off, the automatic exit runs: main.ts). */
   step: string | null = null;
   frame: RoomFrame | null = null;
   slots: RoomSlot[] = [];
   private group: Group | null = null;
   private colliders: RAPIER.Collider[] = [];
   private buttons: { off: InstancedMesh; on: InstancedMesh } | null = null;
-  private sign: { mesh: Mesh; done: boolean } | null = null;
   private lit = '';
 
   constructor(
@@ -407,8 +405,6 @@ export class LouvreRoom {
       box(W, 0.25, 0.12, 0, H - 0.25, D / 2 - 0.06, c.frame),
       box(0.12, 0.25, D, -W / 2 + 0.06, H - 0.25, 0, c.frame),
       box(0.12, 0.25, D, W / 2 - 0.06, H - 0.25, 0, c.frame),
-      box(C.door.width, C.door.height, 0.08, 0, 0, -D / 2 + 0.04, c.door),
-      box(0.06, C.door.height, 0.1, 0, 0, -D / 2 + 0.05, '#2c1c10'), // the gap between the two leaves
       cyl(C.lock.plinthRadius, C.plinth.height, 0, 0, 0, c.plinth, 24),
       cyl(C.lock.buttonRadius, 0.12, 0, C.plinth.height, 0, c.lock, 24),
       ...[-0.9, 0.9].map((x) => box(0.02, H - C.lockSign.y - C.lockSign.size[1], 0.02, x * (C.lockSign.size[0] / 2), C.lockSign.y + C.lockSign.size[1], 0, c.post)), // the lock sign's wires
@@ -475,16 +471,13 @@ export class LouvreRoom {
     const mk = (colour: string) => new InstancedMesh(btn, new MeshBasicMaterial({ color: colour }), Math.max(1, this.slots.length));
     this.buttons = { off: mk(c.off), on: mk(c.on) };
     this.lit = '\u0000'; // forces the first setPicks
-    const sign = new Mesh(new PlaneGeometry(...C.exitSign), new MeshBasicMaterial({ map: signTexture('Lối ra – bấm F') }));
-    sign.position.set(0, C.door.height + 0.1 + C.exitSign[1] / 2, -D / 2 + 0.03);
-    this.sign = { mesh: sign, done: false };
     // "Chốt đáp án" hanging over the lock button, readable from both halves of the room (two faces, one texture)
     const [lw, lh] = C.lockSign.size;
     const lockGeo = mergeGeometries([new PlaneGeometry(lw, lh), new PlaneGeometry(lw, lh).rotateY(Math.PI)])!.translate(0, C.lockSign.y + lh / 2, 0);
     const lockSign = new Mesh(lockGeo, new MeshBasicMaterial({ map: signTexture('Chốt đáp án', c.lockSign) }));
-    g.add(staticMesh, floor, frames, this.buttons.off, this.buttons.on, sign, lockSign, ...pictures);
+    g.add(staticMesh, floor, frames, this.buttons.off, this.buttons.on, lockSign, ...pictures);
     this.scene.add(g);
-    this.setPicks(view.picks, false);
+    this.setPicks(view.picks);
   }
 
   /** A sculpture's scan (.glb), fitted in plinth.glbBox on its plinth, unlit (MeshBasicMaterial: no sun underground); the
@@ -514,16 +507,8 @@ export class LouvreRoom {
     photo.visible = false;
   }
 
-  /** Every frame: the team's lit buttons (card.task.louvre.picks; null = keep them: the card moved on), `done` (the step
-   *  is over: exit sign). */
-  setPicks(picks: readonly string[] | null, done: boolean): void {
-    if (this.sign && this.sign.done !== done) {
-      this.sign.done = done;
-      const mat = this.sign.mesh.material as MeshBasicMaterial;
-      mat.map?.dispose();
-      mat.map = signTexture(done ? 'Đã xong – bấm F để ra' : 'Lối ra – bấm F');
-      mat.needsUpdate = true;
-    }
+  /** Every frame: the team's lit buttons (card.task.louvre.picks; null = keep them: the card moved on). */
+  setPicks(picks: readonly string[] | null): void {
     if (!this.buttons || !picks || picks.join(',') === this.lit) return;
     const key = picks.join(',');
     this.lit = key;
@@ -549,7 +534,7 @@ export class LouvreRoom {
     return this.frame.enter;
   }
 
-  /** F at the door: back on the court in front of the box (same x, z ± inset); clears active, unloads. */
+  /** The automatic exit (SPEC §17.33, main.ts): back on the court in front of the box (same x, z ± inset); clears active, unloads. */
   leave(): RoomFrame['exit'] | null {
     const f = this.frame;
     this.active = false;
@@ -608,7 +593,7 @@ export class LouvreRoom {
         mat.dispose();
       });
     }
-    this.group = this.buttons = this.sign = this.frame = null;
+    this.group = this.buttons = this.frame = null;
     this.step = null;
     this.slots = [];
   }
