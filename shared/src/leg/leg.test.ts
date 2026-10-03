@@ -284,14 +284,37 @@ describe('Phase 8 leg fields and rules (docs/plans/phase8.md D2)', () => {
     ]);
   });
 
-  it('an old file\'s hostApproval.contactUrl / contactLabel (SPEC §17.17: no Messenger button) load without a word and are dropped', () => {
+  it('an old file\'s hostApproval.contactUrl / contactLabel / approvalWaitCounts (SPEC §17.17, §17.23) load without a word and are dropped', () => {
     for (const old of [{ contactUrl: '' }, { contactUrl: 'https://m.me/gia', contactLabel: 'Gửi xanh lá qua Facebook', approvalWaitCounts: true }, { contactUrl: '[CHƯA NHẬP link]' }]) {
       const r = parseLeg({ ...j(), hostApproval: old });
       if (!r.ok) throw new Error(JSON.stringify(r.issues));
       expect(lines({ ...j(), hostApproval: old })).toEqual([]); // no blank, no leak of the old button label, no placeholder
-      expect(r.leg.hostApproval).toEqual({ approvalWaitCounts: old.approvalWaitCounts ?? false });
+      expect(r.leg.hostApproval).toEqual({});
     }
     expect(errors({ ...j(), hostApproval: { contactUrll: '' } })).toHaveLength(1); // still strict: a typo is an error
+  });
+
+  it('SPEC §17.22 / §17.23: pit_stop.announce (npc / toast / card + first / out) is optional; placeholders and characters are checked', () => {
+    const withAnn = (announce: unknown) => {
+      const k = j();
+      (k.steps[k.steps.length - 1] as Record<string, unknown>).announce = announce;
+      return k;
+    };
+    expect(lines(withAnn(undefined))).toEqual([]);
+    const ok = parseLeg(withAnn({ npc: '{tên đội} về đích thứ {n} tại X!', toast: 'Về đích thứ {n}/{tổng}', first: { card: 'Về nhất!' }, out: { npc: '{tên đội} BỊ LOẠI ({n}/{tổng})' } }));
+    expect(ok.ok && ok.issues.filter((i) => !i.message.startsWith('nhánh không có nơi riêng'))).toEqual([]);
+    expect(ok.ok && ok.leg.steps.at(-1)).toMatchObject({ announce: { npc: '{tên đội} về đích thứ {n} tại X!', first: { card: 'Về nhất!' } } });
+    // decomposed Vietnamese (a Mac file) is the same placeholder
+    expect(lines(withAnn({ card: '{tên đội}'.normalize('NFD') }))).toEqual([]);
+    expect(lines(withAnn({ npc: 'Đội {team} thứ {n}', out: { card: 'hạng {rank}' } }))).toEqual([
+      'error Bước 5 (PS) › thông báo về đích › lời NPC dẫn chương trình: chỗ giữ "{team}" không có; chỉ dùng {n}, {tổng}, {tên đội}',
+      'error Bước 5 (PS) › thông báo về đích › bản bị loại › thẻ về đích: chỗ giữ "{rank}" không có; chỉ dùng {n}, {tổng}, {tên đội}',
+    ]);
+    expect(lines(withAnn({ toast: 'thứ {n' }))).toEqual(['error Bước 5 (PS) › thông báo về đích › thông báo nhanh: dấu { } lẻ: chỗ giữ phải viết đủ, ví dụ {n}; chỉ dùng {n}, {tổng}, {tên đội}']);
+    expect(lines(withAnn({ card: 'Về​đích' }))).toEqual(['error Bước 5 (PS) › thông báo về đích › thẻ về đích: có ký tự điều khiển / vô hình (thường do copy từ nơi khác): gõ lại đoạn này']);
+    expect(lines(withAnn({ npc: 'Về đích 🎉 nhé' }))).toEqual(['warning Bước 5 (PS) › thông báo về đích › lời NPC dẫn chương trình: có ký tự ngoài bảng chữ Việt / Latin (🎉): máy người chơi có thể hiện ô vuông']);
+    expect(errors(withAnn({ npcc: 'x' }))).toHaveLength(1); // strict: a typo is an error
+    expect(lines(withAnn({ out: { card: '[CHƯA NHẬP chữ bị loại]' } }))[0]).toMatch(/^blank .*bản bị loại › thẻ về đích: còn giữ chỗ/);
   });
 
   it('an answer in a media url (r2 image name / link) leaks too (R-5): compared with - _ . / : as spaces', () => {

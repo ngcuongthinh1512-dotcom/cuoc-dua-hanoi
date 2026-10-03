@@ -275,7 +275,6 @@ async function start() {
           },
           pose: () => net?.flushPose(poseOf()), // D9: a countdown ended (the branch box may be due)
           serverNow: () => (net ? net.serverNow() : Date.now()),
-          team: session.team?.name,
           finished: (fresh) => {
             if (spectating || spectateAt < Infinity) return;
             if (fresh) player.controller.startAction('celebrate'), pitHost?.cheer();
@@ -644,7 +643,7 @@ async function start() {
           x, z, heading: Math.atan2(-view.x, -view.z), bodyYaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z),
           riding: !!player.controller.riding, swimming: s.moveMode === 'swim', time: Math.max(0, player.simTime),
           street: room?.active ? 'Phòng Louvre' : streets?.at(x, z), district: room?.active ? 0 : districtAt(water?.districts, x, z), // fix F2 (7): not the court's street underground
-          raceTime: race ? race.raceTime() : undefined, penaltyMinutes: race?.view?.penaltyMinutes, raceStatus: race?.view?.status,
+          penaltyMinutes: race?.view?.penaltyMinutes,
         } satisfies HudFrame);
         const riding = !!player.controller.riding;
         // (race.frame runs in the Louvre room too: the hint marks' `view`; no box prompt from under the ground)

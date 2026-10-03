@@ -227,6 +227,56 @@ await ev(`hud.toggleBook(); hud.toggleBook(); hud.showBook([{ ...c.main, answers
 await page.waitForSelector('.rc-book');
 ok(await ev<boolean>(`document.querySelector('.rc-book') != null && !document.querySelector('.rc-book').textContent.includes('BÍ-MẬT') && document.querySelector('.rc-book .rc-input') == null`), 'no history / input in the Sổ');
 
+console.log('SPEC §17.21: clue text cannot be selected / copied (cards, Sổ); the submission code and the answer box can');
+await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: `http://localhost:${process.env.HUD_CHECK_PORT ?? 5199}` });
+const SECRET = 'Mật thư bí mật 7319';
+const selected = () => ev<string>(`getSelection().toString()`);
+/** A copy / contextmenu / dragstart event on `sel` (first match), true = cancelled. */
+const cancelled = (sel: string, type: string) => ev<boolean>(`(() => { const e = new Event('${type}', { bubbles: true, cancelable: true }); document.querySelector('${sel}').dispatchEvent(e); return e.defaultPrevented; })()`);
+await setup(`main: { ...det, text: '${SECRET}', status: 'active', branch: 'B', branchOpened: true, branches: br(undefined, proof) }`);
+ok(await ev<boolean>(`getComputedStyle(document.querySelector('.rc-full .rc-text')).userSelect === 'none' && getComputedStyle(document.querySelector('.rc-card')).userSelect === 'none'`), 'user-select: none on the full card and the compact card');
+await page.click('.rc-full .rc-text', { clickCount: 3 });
+ok(!(await selected()).includes('7319'), 'triple-click on the clue selects nothing of it');
+await page.keyboard.press('ControlOrMeta+A');
+ok(!(await selected()).includes('7319'), 'Ctrl+A (select all) does not take the clue text');
+await page.evaluate(() => navigator.clipboard.writeText('trống'));
+await page.keyboard.press('ControlOrMeta+C');
+ok(!(await page.evaluate(() => navigator.clipboard.readText())).includes('7319'), 'Ctrl+C after select-all: the clue is not in the clipboard');
+for (const t of ['copy', 'cut', 'contextmenu', 'dragstart', 'selectstart']) ok(await cancelled('.rc-full .rc-text', t), `${t} on the clue text is cancelled`);
+ok(!(await cancelled('.rc-full .rc-code', 'copy')) && !(await cancelled('.rc-full .rc-code', 'selectstart')), 'copy / selection on the submission code is allowed');
+await page.click('.rc-copy');
+await page.waitForFunction(`document.querySelector('.rc-copy').textContent === 'Đã chép'`);
+ok((await page.evaluate(() => navigator.clipboard.readText())) === 'Đội Xanh-D1-B', 'the "Copy" button still copies the submission code');
+await setup(`main: { ...base, text: '${SECRET}', task }`);
+await page.keyboard.press('Enter');
+await page.keyboard.type('dap an 12');
+ok(!(await cancelled('.rc-input', 'selectstart')) && !(await cancelled('.rc-input', 'copy')), 'the answer box can still be selected / copied from');
+await page.keyboard.press('ControlOrMeta+A');
+await page.keyboard.press('Backspace');
+ok((await inputValue()) === '', 'select-all + Backspace inside the answer box still edits it');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Tab');
+ok(!(await overlayShown()), 'Esc / Tab still work over a no-copy card');
+await ev(`hud.toggleBook(); hud.showBook([{ ...c.main, status: 'done' }])`);
+await page.waitForSelector('.rc-book');
+ok((await ev<string>(`getComputedStyle(document.querySelector('.rc-book .rc-text')).userSelect`)) === 'none' && (await cancelled('.rc-book .rc-text', 'copy')), 'Sổ mật thư: not selectable, copy cancelled');
+await page.keyboard.press('Tab');
+
+console.log('SPEC §17.22 / §17.23: the finish announcement (server texts) — NPC line, toast, finish card; BỊ LOẠI; once per result');
+await setup(`main: { ...base, type: 'pit_stop', label: 'Về đích', text: '', task: undefined, status: 'done' }`);
+await ev(`hud.result({ rank: 2, total: 5, kind: 'finish', npc: 'NPC: Đội Xanh thứ 2', toast: 'Về đích thứ 2/5', card: 'Thẻ: thứ 2 trên 5' }, true); hud.update({ simTime: 0.1, serverNow: now, inZone: false })`);
+ok((await overlayShown()) && (await ev<string>(`document.querySelector('.rc-result').textContent`)).includes('Về đích thứ 2Thẻ: thứ 2 trên 5'), 'finish card: title "Về đích thứ 2" + the server text');
+ok((await ev<string>(`document.querySelector('.rc-npc').textContent`)) === 'NPC: Đội Xanh thứ 2' && !(await ev<boolean>(`document.querySelector('.rc-npc').hidden`)), 'host NPC line = the server text');
+ok(await ev<boolean>(`[...document.querySelectorAll('*')].some((e) => e.children.length === 0 && e.textContent === 'Về đích thứ 2/5')`), 'toast = the server text');
+ok(!(await ev<string>(`document.body.textContent`)).match(/Thời gian:|THỜI GIAN/), 'no team time anywhere (SPEC §17.23)');
+await page.keyboard.press('Tab');
+ok(!(await overlayShown()), 'Tab closes the finish card');
+await ev(`hud.result({ rank: 2, total: 5, kind: 'finish', npc: 'a', toast: 'b', card: 'c' }, false)`);
+ok(!(await overlayShown()), 'the same result again from a welcome (reload): not shown twice');
+await ev(`hud.result({ rank: 5, total: 5, kind: 'out', npc: '', toast: '', card: '' }, false)`);
+ok((await overlayShown()) && (await ev<string>(`document.querySelector('.rc-result.out').textContent`)).includes('BỊ LOẠIRất tiếc, Đội Xanh đã BỊ LOẠI khỏi cuộc đua. Thứ hạng cuối: 5/5.'), 'out (e.g. Host "Kết thúc" while offline): "BỊ LOẠI" card, generic text when the server sent none');
+await page.keyboard.press('Escape');
+
 // main.ts on the real (offline DEV) game page: requestPointerLock is counted and never granted (like Firefox refusing a lock
 // asked from Esc), the card is the demo popup (?card=answer&full) over the map (?map) / the menu (?menu).
 console.log('game page: a card closed over the map / menu keeps the pointer free (R-2); a refused lock shows the help again (R-3)');

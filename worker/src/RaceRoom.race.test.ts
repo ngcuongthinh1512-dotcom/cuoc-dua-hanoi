@@ -89,10 +89,10 @@ async function runLeg(s: Sock, from: { x: number; z: number }, host: Host, team:
 }
 
 /** Left behind by the flow test for the restart test. */
-const flow = { race: 'race-flow', code: '' };
+const flow = { race: 'race-flow', code: '', codeA: '' };
 
 describe.concurrent('race engine (workerd)', () => {
-  it('start order, lobby / pause gates, boxes per step, SQLite before the answer, start time, check-in, ranking, Host leg rules', async () => {
+  it('start order, lobby / pause gates, boxes per step, SQLite before the answer, check-in + finish rank, ranking, Host leg rules', async () => {
     const race = flow.race;
     const { host, teams } = await setupRace(server, race, 2);
     host.send({ t: 'host.leg', json: '{"id": "x", "title": "y",' });
@@ -109,12 +109,14 @@ describe.concurrent('race engine (workerd)', () => {
     const [a, b0] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
     expect([W(a!).startOrder, W(b0!).startOrder].sort()).toEqual([1, 2]);
     for (const s of [a!, b0!]) {
-      expect(W(s)).toMatchObject({ showStartOrder: true, pose: null, raceTime: null, view: { status: 'lobby', startAt: null, card: { step: 'L1', status: 'active' } } });
+      expect(W(s)).toMatchObject({ showStartOrder: true, pose: null, view: { status: 'lobby', result: null, card: { step: 'L1', status: 'active' } } });
+      expect(W(s)).not.toHaveProperty('raceTime'); // SPEC §17.23: no team clock
       expect(Math.hypot(W(s).start!.x - LEG_START.x, W(s).start!.z - LEG_START.z)).toBeLessThanOrEqual(5);
     }
     const b = await joinTeam(server, race, teams[1]!.code);
     expect(W(b)).toMatchObject({ showStartOrder: false, startOrder: W(b0!).startOrder });
     flow.code = teams[1]!.code;
+    flow.codeA = teams[0]!.code;
     await host.until((m) => m.t === 'host.state' && m.teams.every((t: { startOrder: number | null }) => t.startOrder !== null));
     host.send({ t: 'host.leg', json: JSON.stringify(nearLeg()) }); // a team entered: refused (D11)
     expect(await hostSays(host, 'host.legResult')).toMatchObject({ ok: false, issues: [{ message: expect.stringContaining('race id mới') }] });
@@ -165,16 +167,6 @@ describe.concurrent('race engine (workerd)', () => {
     host.send({ t: 'host.race', op: 'resume' });
     await view(a!, (v) => v.status === 'running');
 
-    // start times (D15): in the future → refused; 'now' → the server's clock; a past one runs the clock
-    host.send({ t: 'host.team', op: 'startAt', team: teams[0]!.id, at: Date.now() + 5 * 60_000 });
-    expect(await hostSays(host, 'host.notice')).toMatchObject({ level: 'error', message: expect.stringContaining('tương lai') });
-    const t0 = Date.now();
-    host.send({ t: 'host.team', op: 'startAt', team: teams[1]!.id, at: 'now' });
-    expect((await view(b, (v) => v.startAt !== null)).view.startAt).toBeGreaterThanOrEqual(t0);
-    const startA = Date.now() - 60_000;
-    host.send({ t: 'host.team', op: 'startAt', team: teams[0]!.id, at: startA });
-    await view(a!, (v) => v.startAt === startA);
-
     // the rest of the leg; the route into the Pit Stop zone checks in at once (no penalty)
     pa = await walkTo(a!, pa, P[3]!);
     a!.send({ t: 'race', op: 'open', step: 'L2' });
@@ -182,25 +174,25 @@ describe.concurrent('race engine (workerd)', () => {
     pa = await doD1(a!, host, teams[0]!.id, pa);
     pa = await walkTo(a!, pa, P[6]!);
     const fin = (await view(a!, (v) => v.finishAt !== null)).view;
-    const waits = ((await sqlOf(race).then((q) => q.exec('SELECT approval_wait_seconds AS w FROM step_progress WHERE team = ?', teams[0]!.id))) as { w: number }[]).reduce((n, r) => n + r.w, 0);
-    expect(waits).toBeGreaterThan(0);
-    expect(fin.officialMs).toBe(fin.finishAt! - startA - Math.round(waits * 1000)); // D23: the Host's approval time is not the team's
+    // SPEC §17.22: "Về đích thứ 1" at once, the leg's winner texts (fake mini texts), stored in teams.state before the answer
+    expect(fin.result).toMatchObject({ rank: 1, total: 2, kind: 'first', npc: expect.stringContaining('Đội 0 về nhất') });
+    expect(JSON.parse(((await sqlOf(race).then((q) => q.exec('SELECT state FROM teams WHERE id = ?', teams[0]!.id))) as { state: string }[])[0]!.state)).toMatchObject({ rank: 1, out: false });
     expect(fin.card).toMatchObject({ step: 'PS', status: 'done' });
     const st = (await host.until((m) => m.t === 'host.state' && m.ranking[0]?.finishAt)) as unknown as HostState;
-    expect(st.ranking.map((r) => [r.team, r.rank, r.officialMs])).toEqual([[teams[0]!.id, 1, fin.officialMs], [teams[1]!.id, 2, null]]);
+    expect(st.ranking.map((r) => [r.team, r.rank, r.out])).toEqual([[teams[0]!.id, 1, false], [teams[1]!.id, 2, false]]);
     expect(st.progress.filter((r) => r.team === teams[0]!.id).map((r) => r.step)).toEqual(['L1', 'T1', 'L2', 'D1', 'L3', 'PS']);
-    expect(st.progress.find((r) => r.team === teams[0]!.id && r.step === 'L1')!.openedAt).toBe(startA); // D3, on read
+    expect(st.progress.find((r) => r.team === teams[0]!.id && r.step === 'L1')!.openedAt).toBe(st.teams.find((t) => t.id === teams[0]!.id)!.joinedAt); // D3, on read: its first entry
     // checked in = a spectator (SPEC §8.6): a bike right here cannot be taken
     host.send({ t: 'host.bike', op: 'add', x: pa.x + 1, z: pa.z });
     const near = (await host.until((m) => m.t === 'bikes' && m.list[0]?.x === pa.x + 1)) as { list: { id: string }[] };
     a!.send({ t: 'bike', op: 'claim', id: near.list[0]!.id });
     expect(await a!.until((m) => m.t === 'bike')).toMatchObject({ ok: false, reason: 'finished' });
-    // a later welcome: the clock stopped at the check-in
+    // a later welcome: the same result (teams.state)
     const a2 = await joinTeam(server, race, teams[0]!.code);
-    expect(W(a2).raceTime).toBeCloseTo(fin.officialMs! / 1000, 0);
+    expect(W(a2).view!.result).toEqual(fin.result);
     expect(W(a2).boxes.map((x) => [x.step, x.branch ?? '', x.opened])).toEqual([['L1', '', true], ['L2', '', true], ['D1', 'A', true], ['PS', '', false]]);
-    const again = (await login(server, race, { code: teams[0]!.code })).body as unknown as { summary: { raceTime: number; step: string } };
-    expect(again.summary).toMatchObject({ raceTime: expect.closeTo(fin.officialMs! / 1000, 0), step: 'Về đích' }); // "Chào mừng trở lại"
+    const again = (await login(server, race, { code: teams[0]!.code })).body as unknown as { summary: { step: string } };
+    expect(again.summary).toEqual({ reconnects: expect.any(Number), lastSeen: expect.any(Number), step: 'Về đích' }); // "Chào mừng trở lại"
 
     // B goes on to T1 for the restart test; the Host may not load a leg after the start
     await runTo(b, W(b0!).start!);
@@ -323,11 +315,15 @@ describe('race engine restart', () => {
   it('rebuilds the step and the Sổ mật thư from SQLite after an eviction mid-leg', async () => {
     await server.getWorker().evictDurableObject('RaceRoom', { name: flow.race, webSockets: 'close' });
     const b = await joinTeam(server, flow.race, flow.code);
-    expect(W(b).view).toMatchObject({ status: 'running', card: { step: 'T1', status: 'teaser' } /* Phase 8 D22: T1 has a teaser */, startAt: expect.any(Number) });
+    expect(W(b).view).toMatchObject({ status: 'running', card: { step: 'T1', status: 'teaser' } /* Phase 8 D22: T1 has a teaser */, result: null });
     expect(W(b).boxes.map((x) => [x.step, x.opened])).toEqual([['L1', true]]);
     b.send({ t: 'race', op: 'book' });
     const book = (await b.until((m) => m.t === 'book')) as { cards: { step: string; status: string }[] };
     expect(book.cards.map((c) => [c.step, c.status])).toEqual([['L1', 'done'], ['T1', 'teaser']]);
+    // SPEC §17.22: A's finish rank survives the eviction (teams.state)
+    const a = await joinTeam(server, flow.race, flow.codeA);
+    expect(W(a).view!.result).toMatchObject({ rank: 1, total: 2, kind: 'first' });
+    a.close();
     b.close();
   }, 60_000);
 });

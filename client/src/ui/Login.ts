@@ -59,14 +59,11 @@ export const NET_DOWN: Readonly<Record<NetDown, string>> = {
 };
 export const netDownText = (reason: NetDown) => NET_DOWN[reason];
 
-/** "Chào mừng trở lại" lines: race clock (from the Host-entered start time, SPEC §17.12), the current step (Phase 7),
- *  last seen. ponytail: "Bạn có 1 mật thư mới" needs the server to know which cards were read (Phase 8+). */
+/** "Chào mừng trở lại" lines: the current step (Phase 7; SPEC §17.23: no race clock), last seen. ponytail: "Bạn có 1 mật thư mới" needs the server to know which cards were read (Phase 8+). */
 export function summaryLines(s: Summary): string[] {
   const clock = (ms: number) => new Date(ms).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-  const h = (sec: number) => `${Math.floor(sec / 3600)}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(Math.floor(sec) % 60).padStart(2, '0')}`;
   const step = typeof s.step === 'number' ? `Bước ${s.step + 1}` : s.step;
   return [
-    s.raceTime === null ? 'Đồng hồ đua chưa chạy (Host chưa nhập giờ xuất phát)' : `Thời gian đua: ${h(s.raceTime)}`,
     ...(step ? [`Đang làm: ${step}`] : []),
     ...(s.lastSeen === null ? [] : [`Lần cuối trong game: ${clock(s.lastSeen)}`]),
   ];
@@ -183,6 +180,6 @@ export function login(race: string): Promise<Session> {
 /** DEV ?login / ?login=back (p6-login, p6-welcome-back): the screens with stand-in data over the offline world, not
  *  blocking it; a submit / "Tiếp tục" just closes them. */
 export function previewLogin(back: boolean) {
-  if (back) void welcomeBack('Đội Xanh', { reconnects: 2, lastSeen: Date.now() - 7 * 60_000, raceTime: null }).then(close);
+  if (back) void welcomeBack('Đội Xanh', { reconnects: 2, lastSeen: Date.now() - 7 * 60_000, step: 'Thử thách 2' }).then(close);
   else form('paris', readStoredCode(), async () => close());
 }

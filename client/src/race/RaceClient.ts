@@ -1,6 +1,6 @@
 // Phase 7 track B (docs/plans/phase7.md §5.3, §6 B): the team's race state on the client, ONLY from the server
-// (welcome.view, `race`, `book`, `zone`): drives the race HUD (track C's RaceHud), the clock, F on the current box (D23),
-// the periodic Pit Stop check-in (D19), the finish (celebrate, host NPC line, then spectator: main.ts).
+// (welcome.view, `race`, `book`, `zone`): drives the race HUD (track C's RaceHud), F on the current box (D23), the periodic
+// Pit Stop check-in (D19), the finish (SPEC §17.22 / §17.23 announcement, celebrate, then spectator: main.ts).
 import type { BoxInfo, ClientMessage, RaceOp, RaceView, ServerMessage, TeamInfo, TickArray, Welcome } from '@race/shared/protocol';
 import { louvreRoom, raceClient as C } from '../config.ts';
 import type { RaceHud } from './ui/RaceHud.ts';
@@ -14,16 +14,9 @@ export interface RaceDeps {
   pose?(): void;
   /** ms, server clock estimate (NetClient.serverNow). */
   serverNow(): number;
-  /** The team's name (the host NPC's line). */
-  team?: string;
   /** The check-in landed (`fresh`: just now → celebrate first) or the team was already finished at (re-)entry. */
   finished?(fresh: boolean): void;
 }
-
-/** Race clock (s) of a view at server time `now`: since the team's start time, stopped at the check-in (SPEC §17.12).
- *  Stopped, it is rounded to whole seconds like the finish line's officialMs and the Host table (HUD floors the rest). */
-export const raceClock = (v: RaceView | null, now: number): number | null =>
-  v?.startAt == null ? null : v.finishAt == null ? Math.max(0, (now - v.startAt) / 1000) : Math.max(0, Math.round((v.finishAt - v.startAt) / 1000));
 
 /** The current, unopened clue box whose zone holds (x, z): F opens it (D23). Mats are not opened. */
 export const boxInReach = (boxes: readonly BoxInfo[], x: number, z: number): BoxInfo | undefined =>
@@ -49,6 +42,7 @@ export class RaceClient {
     this.setView(w.view);
     this.deps.hud?.feed(w.feed ?? [], w.teams, true); // Phase 8B: the public feed so far, replacing ours (a reconnect must not repeat it)
     if (w.showStartOrder && w.startOrder) this.deps.hud?.startOrder(w.startOrder, simTime);
+    if (w.view?.result) this.deps.hud?.result(w.view.result, false); // e.g. out at the Host's "Kết thúc" while offline
     // SPEC §8.10: back after the check-in, or after the Host ended the race (read-only) → spectator at once
     if (w.view?.finishAt != null || w.view?.status === 'finished') this.deps.finished?.(false);
   }
@@ -59,7 +53,8 @@ export class RaceClient {
       const was = this.view;
       const fresh = was?.finishAt == null && m.view.finishAt != null;
       this.setView(m.view);
-      if (fresh) this.deps.hud?.finished(this.deps.team ?? '', m.view.officialMs), this.deps.finished?.(true);
+      if (m.view.result && !was?.result) this.deps.hud?.result(m.view.result, true); // "Về đích thứ n" / "BỊ LOẠI" at once
+      if (fresh) this.deps.finished?.(true);
       else if (was?.status !== 'finished' && m.view.status === 'finished' && m.view.finishAt == null) this.deps.finished?.(false); // Host "Kết thúc": read-only
       return true;
     }
@@ -70,11 +65,6 @@ export class RaceClient {
     if (m.t === 'feed') return this.deps.hud?.feed([m], this.teams), true;
     if (m.t === 'credits') return this.deps.hud?.credits(m.items), true;
     return false;
-  }
-
-  /** s on the team's race clock now; null = the Host has not entered its start time yet. */
-  raceTime(): number | null {
-    return raceClock(this.view, this.deps.serverNow());
   }
 
   /** F on foot (Player.onInteract): the current box in reach → `race open` (+ its detour branch) (true: the openBox gesture plays). */

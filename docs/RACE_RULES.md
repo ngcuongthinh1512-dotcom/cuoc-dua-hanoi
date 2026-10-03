@@ -119,13 +119,14 @@ Mỗi mật thư lộ trình ghi rõ luật phương tiện, và màn hình luô
 - Tại mỗi điểm có một **hòm mật thư**: đế xám vuông, cột vàng có dải đỏ, hộp xám trên cùng với nắp phẳng, cao khoảng 1,6 m. Hòm chưa mở có một **cột sáng vàng mảnh** phía trên để nhìn thấy từ xa; hòm đã mở thì nắp lật lên.
 - Chỉ hòm của mật thư bạn **đang giữ** mới hiện, và chỉ khi bạn tới gần (khoảng 150 m). Hòm của các bước sau chưa hiện, nên không thể tìm trước. Hòm đã mở vẫn còn đó để bạn định hướng. Ở **Lựa chọn kép**, chỉ hòm của **nhánh bạn đã chọn** hiện (mục 5).
 - Bước vào vùng quanh hòm mật thư, **xuống xe**: màn hình hiện *"Bấm F để mở hòm mật thư"*. Bấm `F` để mở. Thẻ mật thư mới mở ra đầy đủ (bấm `Tab`, `Esc` hoặc `Space` để đóng) và tự vào Sổ mật thư; thẻ mở ra thì chuột được thả để bạn bấm liên kết, hình, nút (mục 2). Thẻ rút gọn của mật thư đang giữ luôn nằm ở góc trên bên trái; đóng thẻ rồi muốn xem lại thì bấm `Enter`.
+- Chữ trên thẻ mật thư (mọi loại thẻ) và trong Sổ mật thư **không bôi đen / sao chép được** (kể cả chuột phải, kéo thả, `Ctrl`+`C`). Ngoại lệ: **mã bài nộp** của nhiệm vụ gửi ảnh vẫn chép được bằng nút **Copy** (mục 7), và ô gõ đáp án vẫn gõ / sửa bình thường.
 - Thẻ rút gọn có thêm một **dòng trạng thái** khi cần: *Chờ Host duyệt · mm:ss*, *Phạt: còn mm:ss*, *Nhánh X · tới hòm nhánh*, *Đổi nhánh: còn mm:ss*.
 
 ### Xuất phát
-- Mỗi đội nhận **mật thư đầu tiên ở ngoài trò chơi**, mỗi đội vào một lúc khác nhau: không có tiếng súng xuất phát chung. **Đồng hồ của đội bạn chạy từ lúc đó** (Host ghi lại giờ này), kể cả khoảng thời gian trước khi bạn vào game.
-- Lần đầu vào game, bạn xuất hiện ở **điểm xuất phát của chặng** (chặng này: cầu Bir-Hakeim); các đội vào gần cùng lúc được đặt cách nhau vài mét. Bên phải màn hình hiện **"Xuất phát ở vị trí thứ n"** trong 15 giây rồi mờ dần: n là thứ tự đội bạn **vào game** (đội vào đầu tiên là 1), không phải thứ hạng, và không liên quan giờ xuất phát Host ghi. Thông báo chỉ hiện một lần; vào lại thì không hiện nữa.
+- Mỗi đội nhận **mật thư đầu tiên ở ngoài trò chơi**, mỗi đội vào một lúc khác nhau: không có tiếng súng xuất phát chung. Game **không có đồng hồ riêng của từng đội**: thứ hạng chỉ tính theo **thứ tự chạm thảm về đích** (mục 11).
+- Lần đầu vào game, bạn xuất hiện ở **điểm xuất phát của chặng** (chặng này: cầu Bir-Hakeim); các đội vào gần cùng lúc được đặt cách nhau vài mét. Bên phải màn hình hiện **"Xuất phát ở vị trí thứ n"** trong 15 giây rồi mờ dần: n là thứ tự đội bạn **vào game** (đội vào đầu tiên là 1), không phải thứ hạng. Thông báo chỉ hiện một lần; vào lại thì không hiện nữa.
 - Nếu mật thư đầu tiên dẫn bạn tới chính nơi xuất phát, bạn vào game là đã đứng cạnh hòm mật thư: mở luôn.
-- Host chưa mở cuộc đua: phía trên đồng hồ hiện nhãn **"Chưa bắt đầu"**; bạn vẫn đi lại được, nhưng bấm `F` ở hòm sẽ thấy *"Cuộc đua chưa bắt đầu, hãy chờ Host"*.
+- Host chưa mở cuộc đua: bạn vẫn đi lại được, nhưng bấm `F` ở hòm sẽ thấy *"Cuộc đua chưa bắt đầu, hãy chờ Host"*.
 
 ## 5. Các loại thẻ mật thư
 
@@ -141,7 +142,7 @@ Mỗi loại thẻ có tiêu đề và màu riêng, nhìn là nhận ra ngay.
 - Sau khi chọn, **chỉ hòm của nhánh bạn đã chọn mới hiện** (khi bạn tới gần, khoảng 150 m, như mọi hòm mật thư); hòm của nhánh kia không hiện. Mỗi nhánh có hòm và nơi làm riêng.
 - **Đề bài của nhánh nằm trong hòm của nhánh**: tới hòm, bấm `F` để mở thì mới thấy mô tả, hình và liên kết của nhiệm vụ. Làm nhiệm vụ (gõ câu trả lời, hoặc gửi ảnh chụp màn hình cho Host qua Messenger mà bạn tự mở ở ngoài trò chơi) rồi chờ Host duyệt (mục 7); duyệt xong thì nhận mật thư tiếp theo.
 - Bấm nút **"Đổi lựa chọn kép"** (bỏ nhánh đang làm) từ bất kỳ đâu, sau khi đã chọn: một **hộp xác nhận** ghi rõ số phút phạt. Nếu đồng ý: hòm của nhánh đang chọn biến mất, bạn **mất toàn bộ tiến độ** của nhánh đó và **bị phạt 10 phút** (chặng có thể quy định số khác): giữa màn hình hiện **đồng hồ đếm ngược** *"Đổi lựa chọn kép: còn mm:ss"*; đếm ngược xong thì hòm của nhánh kia mới hiện (khi bạn tới gần) để bạn làm nhánh đó.
-- Đồng hồ đua vẫn chạy trong lúc đếm ngược, nên 10 phút là thời gian mất thật. **Mỗi lần đổi chịu một lần phạt** (đổi qua rồi đổi lại là 20 phút).
+- Thời gian vẫn trôi trong lúc đếm ngược (các đội khác vẫn đua), nên 10 phút là thời gian mất thật. **Mỗi lần đổi chịu một lần phạt** (đổi qua rồi đổi lại là 20 phút).
 - **Không đổi nhánh được khi đang chờ Host duyệt bài, và trong lúc đang đếm ngược của lần đổi nhánh trước** (nút "Đổi lựa chọn kép" ẩn đi). Đang bị phạt đếm ngược 3 phút của thử thách thì vẫn đổi được; đếm ngược 10 phút thay cho đếm ngược cũ.
 - Xong nhánh đã chọn thì nhận mật thư tiếp theo.
 
@@ -163,7 +164,7 @@ Thử thách đặc biệt, **không gõ chữ**: bạn vào một căn phòng m
 - **23 tác phẩm** (tranh treo tường và tượng trên bệ) bày quanh phòng; **chỉ 5** là độc bản duy nhất đang trưng bày ở Louvre, 18 tác phẩm còn lại nổi tiếng nhưng ở nơi khác. **Tên tác phẩm không hiện** ở đâu cả.
 - Dưới mỗi tác phẩm có **một nút**: **đỏ** là chưa chọn, **xanh lá** là đã chọn; đứng gần nút và bấm `F` để chọn, bấm lại để bỏ chọn. **Đèn / nút chỉ hiện cho chính đội bạn** (đội khác ở cùng phòng không thấy lựa chọn của bạn). Các đội thấy cùng một bộ nút, nên đừng chép đáp án của đội khác: mỗi đội tự suy ra.
 - **Nút chốt ở giữa phòng**: bấm `F` ở đó để chốt các tác phẩm đang chọn (không có hộp xác nhận; chốt khi chưa chọn tác phẩm nào thì game báo *"Chưa chọn tác phẩm nào"*). Máy chủ tự chấm: **đúng là chọn đúng 5 tác phẩm thật và không thừa** (chọn 6, kể cả đủ 5 món đúng, vẫn là sai). Đúng thì bước xong và mật thư kế tiếp hiện ngay.
-- **Sai bị phạt 3 phút** (chặng có thể quy định số khác): giữa màn hình hiện đồng hồ đếm ngược, đồng hồ đua vẫn chạy kể cả khi Host tạm dừng. Trong lúc bị phạt, **lựa chọn của bạn được giữ nguyên và bạn vẫn bấm / bỏ chọn được**, chỉ chưa chốt được cho tới khi hết đếm ngược. Số lần chốt không giới hạn.
+- **Sai bị phạt 3 phút** (chặng có thể quy định số khác): giữa màn hình hiện đồng hồ đếm ngược, đếm ngược vẫn chạy kể cả khi Host tạm dừng. Trong lúc bị phạt, **lựa chọn của bạn được giữ nguyên và bạn vẫn bấm / bỏ chọn được**, chỉ chưa chốt được cho tới khi hết đếm ngược. Số lần chốt không giới hạn.
 - **Gợi ý theo giờ**, tính **từ lúc đội mở hòm Lộ trình ngay trước thử thách** (không phải lúc bạn bước vào phòng), mặc định:
   - **Phút 40:** thẻ hiện *"Đáp án bao gồm 5 tác phẩm"*.
   - **Phút 70:** thẻ hiện *"Đúng x/5"*, với x là số tác phẩm đúng **trong lựa chọn hiện tại của bạn** và **cập nhật ngay** mỗi khi bạn bấm / bỏ chọn (không cần chốt).
@@ -190,9 +191,9 @@ Thử thách đặc biệt, **không gõ chữ**: bạn vào một căn phòng m
 Xe dùng trong nhiệm vụ chở hàng hay đạp xe qua cổng là **xe riêng của thử thách**: chỉ xuất hiện cho đội đang làm, biến mất khi xong, không liên quan tới xe đạp ngoài đường.
 
 ### Chặng dừng
-- Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**. Đi bộ (không ngồi trên xe) bước vào khu vực thảm để check-in, không cần bấm phím: người dẫn chương trình đón đội bạn và báo thời gian của đội. Vì mỗi đội xuất phát vào một lúc khác nhau, **thứ hạng chính thức do Host công bố** (mục 11).
+- Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**. Đi bộ (không ngồi trên xe) bước vào khu vực thảm để check-in, không cần bấm phím: **ngay lúc đó** bạn được báo **"Về đích thứ n"** (lời người dẫn chương trình, thông báo nhanh và thẻ về đích giữa màn hình; đội về nhất có lời riêng). n là thứ tự **chạm thảm thật**: đội chạm trước hạng trước, hạng **cố định**, không phụ thuộc lúc đội nhận mật thư đầu tiên (mục 11). Không có thông báo thời gian.
+- **Đội về cuối cùng bị loại**: khi mọi đội khác đã về đích, đội chạm thảm sau cùng nhận thông báo **"BỊ LOẠI"** kèm thứ hạng cuối (ví dụ 6/6). Nếu Host bấm **"Kết thúc"** khi đội bạn chưa về đích, đội bạn cũng nhận thông báo **"BỊ LOẠI"** với thứ hạng sau mọi đội đã về đích.
 - Nếu đội bạn có **phút phạt**, bạn phải **đứng chờ cạnh thảm cho hết thời gian phạt** rồi mới được check-in: giữa màn hình hiện *"Phạt chờ: còn mm:ss trước khi về đích"*; hết giờ thì đứng trong khu vực thảm là tự check-in. Trong lúc đó, đội tới sau có thể check-in trước bạn!
-- Chặng có thể là **chặng loại** (đội về cuối bị loại) hoặc **chặng không loại** (đội cuối được cứu, nhưng phải nhận **Gờ giảm tốc** ở chặng sau).
 - Sau khi check-in, bạn trở thành **khán giả**: bay camera tự do để theo dõi các đội còn lại.
 
 ## 6. Nhập đáp án
@@ -214,7 +215,7 @@ Các nhiệm vụ gõ chữ hoặc gửi ảnh của chặng không được gam
 3. Host bấm **Duyệt**: có âm báo cùng thông báo *"Host đã duyệt! Mật thư mới đã vào Sổ mật thư."* và bạn nhận **ngay** mật thư tiếp theo, không phải đi tới đâu. Ví dụ Thử thách 2 hiện ngay khi Thử thách 1 được duyệt.
 4. Host bấm **Phạt**: có âm báo cùng thông báo *"Host chưa duyệt: chờ hết đếm ngược rồi trả lời lại"*, và giữa màn hình hiện **đồng hồ đếm ngược** *"Phạt: còn mm:ss trước khi trả lời lại"* (mặc định **3 phút**; chặng hoặc từng thử thách có thể quy định số khác). Hết đếm ngược thì gõ lại được; **không giới hạn số lần**. Thẻ ghi rõ lần gửi nào *"Bị phạt n phút"*. Bấm `Enter` để xem lại lần trước bạn đã gõ gì rồi sửa.
 5. **Ghi chú của Host không gửi cho đội**: bạn chỉ thấy đếm ngược, không thấy lý do.
-6. Đồng hồ đua **vẫn chạy** trong lúc chờ duyệt và lúc đếm ngược, kể cả khi Host tạm dừng cuộc đua.
+6. Thời gian **vẫn trôi** trong lúc chờ duyệt và lúc đếm ngược (đếm ngược chạy cả khi Host tạm dừng cuộc đua); không có bù giờ (mục 11).
 
 ### Gửi ảnh cho Host qua Messenger (ví dụ nhánh của Lựa chọn kép)
 Có nhiệm vụ cần bằng chứng (ảnh chụp màn hình) gửi cho Host qua Messenger. **Game không có nút mở Messenger / Facebook**: bạn tự mở Messenger ở ngoài trò chơi (điện thoại hoặc cửa sổ khác).
@@ -227,10 +228,8 @@ Có nhiệm vụ cần bằng chứng (ảnh chụp màn hình) gửi cho Host q
 
 Trong lúc **chờ Host duyệt**, bạn chưa nhận được mật thư tiếp theo và **không đổi nhánh** Lựa chọn kép được.
 
-### Bù giờ chờ duyệt
-- Nếu chặng có bù giờ (mặc định có), mọi khoảng thời gian từ lúc bạn gửi bài tới lúc Host quyết định (Duyệt hay Phạt) được **trừ khỏi thời gian chính thức**. Đội bạn không bị thiệt nếu Host duyệt chậm.
-- **Đồng hồ đếm ngược sau khi bị Phạt và đếm ngược khi đổi Lựa chọn kép không được trừ**: đó là hình phạt, là thời gian mất thật. Chúng cũng không cộng vào dòng **PHẠT +n phút** (mục 10).
-- Vì vậy (và vì mỗi đội xuất phát một lúc khác nhau), thứ tự các đội bước lên thảm **có thể khác thứ hạng chính thức**. Thứ hạng chính thức do Host công bố.
+### Thời gian chờ duyệt
+- Không có "bù giờ": thứ hạng là thứ tự chạm thảm (mục 11), nên thời gian chờ Host duyệt, đếm ngược sau khi bị Phạt và đếm ngược khi đổi Lựa chọn kép đều là thời gian đã trôi thật. Chúng **không cộng thêm** vào đâu (không vào dòng **PHẠT +n phút**, mục 10).
 
 ## 8. Sổ mật thư
 
@@ -284,18 +283,17 @@ Bạn bị cộng phút phạt khi:
 
 Số phút phạt do từng chặng quy định, ví dụ 15 phút cho vi phạm đi bộ, 30 phút cho bỏ cuộc.
 
-**Không phải phút phạt:** nút **Phạt** của Host khi duyệt bài (mục 7) và nút **"Đổi lựa chọn kép"** (mục 5) chỉ tạo **đồng hồ đếm ngược** trên màn hình (mặc định 3 phút và 10 phút). Đó là thời gian mất thật vì phải chờ: không cộng vào dòng PHẠT +n phút, không phải chờ thêm ở thảm, và cũng không được trừ khỏi thời gian chính thức.
+**Không phải phút phạt:** nút **Phạt** của Host khi duyệt bài (mục 7) và nút **"Đổi lựa chọn kép"** (mục 5) chỉ tạo **đồng hồ đếm ngược** trên màn hình (mặc định 3 phút và 10 phút). Đó là thời gian mất thật vì phải chờ: không cộng vào dòng PHẠT +n phút và không phải chờ thêm ở thảm.
 
-Khi đội bạn có phút phạt, tổng số phút hiện ở **góc dưới bên phải, ngay dưới đồng hồ đua** (dòng **PHẠT +n phút**; không có phạt thì dòng này ẩn). Phạt được "trả" tại **Chặng dừng**: bạn đứng chờ cạnh thảm cho hết số phút phạt rồi mới được check-in (mục 5).
+Khi đội bạn có phút phạt, tổng số phút hiện ở **góc dưới bên phải** (dòng **PHẠT +n phút**; không có phạt thì dòng này ẩn). Phạt được "trả" tại **Chặng dừng**: bạn đứng chờ cạnh thảm cho hết số phút phạt rồi mới được check-in (mục 5).
 
-## 11. Thời gian chính thức & xếp hạng
+## 11. Xếp hạng
 
-- **Đồng hồ đua** (góc dưới bên phải, dòng **THỜI GIAN**) chạy từ lúc đội bạn **nhận mật thư đầu tiên ở ngoài trò chơi** (giờ xuất phát của đội, Host ghi lại), kể cả khoảng thời gian trước khi bạn vào game. Khi Host chưa ghi giờ này, đồng hồ hiện `--:--`. Đồng hồ dừng lại lúc bạn check-in.
-- **Thời gian chính thức** = giờ check-in trên thảm − giờ xuất phát của đội bạn − thời gian chờ Host duyệt (nếu chặng có bù giờ).
-- Thời gian đứng chờ hết phạt **đã nằm trong** thời gian chính thức. Đồng hồ đếm ngược sau khi bị Phạt bài hay khi đổi Lựa chọn kép cũng vậy (mục 7): không được trừ, và vẫn chạy cả khi Host tạm dừng cuộc đua.
-- Mỗi đội tính từ giờ xuất phát riêng của mình.
-- **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hòm mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục (phía trên đồng hồ hiện nhãn **"Tạm dừng"**; bấm `F` sẽ thấy *"Cuộc đua đang tạm dừng"*). **Khi Host kết thúc chặng**, bạn chuyển **ngay** sang chế độ khán giả (camera bay tự do, bảng thông tin trên màn hình tắt hẳn, không có lời nhắn riêng): đó là dấu hiệu chặng đã khép lại; từ lúc này không mở hòm, làm nhiệm vụ hay lấy xe được nữa. **Đồng hồ vẫn chạy và thời gian tạm dừng không được trừ** khỏi thời gian chính thức. Việc bạn **tới** một điểm trong lúc tạm dừng vẫn được ghi đúng giờ. Hệ quả: đội đang đi đường gần như không mất gì (vẫn đi tiếp được), còn đội đang đứng ở hòm mật thư hoặc trên thảm thì phải chờ hết thời gian tạm dừng. Khi Host cho tiếp tục, đội đang đứng trên thảm được check-in ngay, không cần di chuyển.
-- Thời gian chính thức càng ngắn, thứ hạng càng cao. Host bấm **"Công bố kết quả"** để gửi thứ hạng chính thức tới mọi người chơi.
+- **Không có đồng hồ đua của từng đội** và không có "thời gian chính thức": góc dưới bên phải chỉ còn tên phố / quận, tốc độ khi đạp xe và dòng PHẠT (nếu có).
+- **Thứ hạng = thứ tự chạm thảm về đích thực**: đội chạm thảm trước hạng trước. Thứ hạng được báo **ngay** khi bạn check-in ("Về đích thứ n") và **không đổi** sau đó. Không cộng phạt vào thứ hạng: thời gian đứng chờ hết phạt, đếm ngược sau khi bị Phạt bài hay khi đổi Lựa chọn kép đã trôi thật nên đã nằm trong thời điểm bạn chạm thảm.
+- **Đội về cuối cùng bị loại** (mọi đội khác đã về đích): thông báo về đích của đội đó là **"BỊ LOẠI"** kèm thứ hạng cuối. Khi Host bấm **"Kết thúc"**, mọi đội **chưa về đích** cũng nhận **"BỊ LOẠI"**; thứ hạng của các đội này xếp sau mọi đội đã về, đội đi được xa hơn (bước xa nhất) xếp trước, cùng bước thì đội xong bước trước đó sớm hơn xếp trước.
+- **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hòm mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục (bấm `F` sẽ thấy *"Cuộc đua đang tạm dừng"*). Thời gian vẫn trôi. Việc bạn **tới** một điểm trong lúc tạm dừng vẫn được ghi đúng giờ. Khi Host cho tiếp tục, đội đang đứng trên thảm được check-in ngay, không cần di chuyển (nhiều đội cùng chờ trên thảm thì được check-in cùng lúc tiếp tục, thứ hạng theo thứ tự máy chủ xử lý).
+- **Khi Host kết thúc chặng**, bạn chuyển **ngay** sang chế độ khán giả (camera bay tự do, bảng thông tin trên màn hình tắt hẳn); đội chưa về đích nhận thông báo **"BỊ LOẠI"** (vào lại game sau đó vẫn thấy thông báo này một lần). Từ lúc này không mở hòm, làm nhiệm vụ hay lấy xe được nữa.
 
 ## 12. Thoát ra & vào lại
 
@@ -303,12 +301,12 @@ Lỡ tải lại trang (`F5` trên Windows, `Cmd`+`R` trên Mac), tắt tab, m�
 
 ### Cách vào lại
 - Mở lại trang game và nhập mã đội. Trình duyệt có thể đã điền sẵn mã, bạn chỉ cần bấm **"Vào lại"**.
-- Màn hình **"Chào mừng trở lại"** gọi tên đội bạn, tóm tắt bước hiện tại và thời gian đua đã chạy.
+- Màn hình **"Chào mừng trở lại"** gọi tên đội bạn và tóm tắt bước hiện tại.
 - Bấm **"Tiếp tục"**: nhân vật xuất hiện **đúng chỗ đứng lần cuối, đúng hướng nhìn**, đang ngồi trên xe hay không cũng như cũ. Sổ mật thư và xe đạp vẫn nguyên vẹn.
 - Nếu chỗ đứng cũ không hợp lệ (kẹt trong tường, dưới nước), bạn được đặt lên vỉa hè gần nhất.
 
 ### Cần biết
-- **Đồng hồ đua vẫn chạy trong lúc bạn offline**, và thời gian này không được bù.
+- **Thời gian vẫn trôi trong lúc bạn offline** (các đội khác vẫn đua), và không được bù.
 - Trong lúc offline, nhân vật của bạn bị ẩn khỏi thế giới của các đội khác.
 - Xe đạp đang giữ vẫn là của bạn. Nhưng nếu lúc thoát xe đang nằm ở bãi (vì bạn đang làm nhiệm vụ) thì xe không còn là của riêng bạn nữa.
 - Đăng nhập trên máy mới thì máy cũ bị ngắt và hiện *"Đội của bạn vừa đăng nhập trên thiết bị khác"*.

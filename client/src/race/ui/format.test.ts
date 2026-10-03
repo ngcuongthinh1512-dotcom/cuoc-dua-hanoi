@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ClueCard, RaceView, TaskView } from '@race/shared/protocol';
+import type { ClueCard, FinishResult, RaceView, TaskView } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
-import { fmtDuration, fmtMinSec } from '../../host/hostView.ts';
-import { raceClock } from '../RaceClient.ts';
-import { bookEntries, finishLine, formatDuration, formatHms, penaltyLine, StartOrderBanner, summarize, transportLabel, zoneLines } from './format.ts';
+import { fmtMinSec } from '../../host/hostView.ts';
+import { bookEntries, COPY_OK, copyBlocked, formatDuration, penaltyLine, resultView, StartOrderBanner, summarize, transportLabel, zoneLines } from './format.ts';
 
 const task: TaskView = { title: 'Nhiệm vụ', description: 'Mô tả', media: [], kind: 'answer', verification: 'auto', input: 'text', proofInstruction: '', timeLimitMinutes: 20 };
 const card = (o: Partial<ClueCard>): ClueCard => ({ step: 's', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư', media: [], status: 'done', lockedUntil: null, lockKind: null, answers: [], receivedAt: 1000, completedAt: null, ...o });
@@ -70,18 +69,18 @@ describe('start-order banner', () => {
 });
 
 describe('Pit Stop lines', () => {
-  const view = (o: Partial<RaceView>): RaceView => ({ status: 'running', startAt: 0, finishAt: null, penaltyMinutes: 0, card: null, checkinAt: null, officialMs: null, ...o });
-  it('host NPC line with / without the official time', () => {
-    expect(finishLine('Đội Xanh', 6_135_000)).toBe('Đội Xanh, các bạn đã về đích! Thời gian: 01:42:15. Thứ hạng chính thức sẽ được Host công bố.');
-    expect(finishLine('Đội Xanh', null)).toBe('Đội Xanh, các bạn đã về đích! Thứ hạng chính thức sẽ được Host công bố.');
-    expect(formatHms(59_000)).toBe('00:00:59');
+  const view = (o: Partial<RaceView>): RaceView => ({ status: 'running', finishAt: null, penaltyMinutes: 0, card: null, checkinAt: null, result: null, ...o });
+  it('SPEC §17.22 / §17.23: the finish announcement is the server\'s text (rank only, no time); an empty text → the generic line, never a place', () => {
+    const r: FinishResult = { rank: 3, total: 7, kind: 'finish', npc: 'Đội Xanh về đích thứ 3 tại X!', toast: 'Về đích thứ 3/7', card: 'Thẻ' };
+    expect(resultView(r, 'Đội Xanh')).toEqual({ npc: 'Đội Xanh về đích thứ 3 tại X!', toast: 'Về đích thứ 3/7', card: 'Thẻ', title: 'Về đích thứ 3' });
+    expect(resultView({ ...r, npc: '' }, 'Đội Xanh').npc).toBe('Đội Xanh, chúc mừng các bạn đã về đích thứ 3!');
+    const out = resultView({ ...r, rank: 7, kind: 'out', card: '' }, 'Đội Đỏ');
+    expect(out).toMatchObject({ title: 'BỊ LOẠI', npc: 'Đội Xanh về đích thứ 3 tại X!', card: 'Rất tiếc, Đội Đỏ đã BỊ LOẠI khỏi cuộc đua. Thứ hạng cuối: 7/7.' });
+    expect(resultView({ ...r, rank: 1, kind: 'first', toast: '' }, 'Đội Xanh')).toMatchObject({ title: 'Về đích thứ 1', toast: 'Về đích thứ 1 – về nhất!' });
+    for (const k of ['npc', 'toast', 'card'] as const) expect(resultView({ ...r, npc: '', toast: '', card: '' }, 'A')[k]).not.toMatch(/\d:\d\d|Thời gian/);
   });
-  it('the team reads the Host table time: NPC line, Host fmtDuration and the stopped HUD clock agree (e2e: 00:20:45 vs 00:20:46)', () => {
-    for (const ms of [1_245_909, 1_245_400, 483_873, 59_500, 6_135_000, 3_599_999]) {
-      expect(formatHms(ms)).toBe(fmtDuration(ms));
-      if (ms >= 60_000 && ms < 3_599_500) expect(formatDuration(ms)).toBe(fmtMinSec(ms)); // book "Thời gian làm" vs the Host step matrix (mm:ss)
-      expect(raceClock(view({ startAt: 7, finishAt: 7 + ms }), 0)).toBe(Math.round(ms / 1000));
-    }
+  it('book "Thời gian làm" reads like the Host step matrix (mm:ss)', () => {
+    for (const ms of [1_245_909, 1_245_400, 483_873, 59_500, 3_599_000]) if (ms >= 60_000) expect(formatDuration(ms)).toBe(fmtMinSec(ms));
   });
   it('penalty countdown until checkinAt, then nothing', () => {
     expect(penaltyLine(view({ checkinAt: 134_000 }), 0)).toBe('Phạt chờ: còn 02:14 trước khi về đích');
@@ -92,6 +91,24 @@ describe('Pit Stop lines', () => {
     expect(penaltyLine(view({ checkinAt: 9e9, finishAt: 5 }), 0)).toBeNull();
     expect(penaltyLine(null, 0)).toBeNull();
     expect(formatDuration(3_725_000)).toBe('1:02:05');
+  });
+});
+
+describe('SPEC §17.21: no copying clue text', () => {
+  // a stand-in for Element.closest over a parent chain (Node tests: no DOM)
+  const node = (cls: string, parent: object | null = null) => ({ cls, parentElement: parent, closest(sel: string): unknown { return sel.split(', ').some((s) => s === `.${this.cls}` || s === this.cls) ? this : (this.parentElement as { closest?: (s: string) => unknown } | null)?.closest?.(sel) ?? null; } });
+  it('blocked in the card text, the Sổ and a Text node there; allowed in the submission code and the answer box', () => {
+    const card = node('rc-full');
+    const text = node('rc-text', card);
+    const code = node('rc-code', card);
+    expect(copyBlocked(text)).toBe(true);
+    expect(copyBlocked(card)).toBe(true);
+    expect(copyBlocked({ parentElement: text })).toBe(true); // a Text node inside the clue
+    expect(copyBlocked(code)).toBe(false);
+    expect(copyBlocked({ parentElement: code })).toBe(false); // selecting the code's text
+    expect(copyBlocked(node('input', card))).toBe(false);
+    expect(copyBlocked(null)).toBe(true);
+    expect(COPY_OK).toContain('.rc-code');
   });
 });
 

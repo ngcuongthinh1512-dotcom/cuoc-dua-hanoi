@@ -130,8 +130,6 @@ export function isClientMessage(m: unknown, role: 'team' | 'host'): boolean {
         (o.id === undefined || isInt(o.id, 1, 10_000)) && (o.note === undefined || text(o.note, NET.noteMax));
     case 'host.race':
       return role === 'host' && (o.op === 'start' || o.op === 'pause' || o.op === 'resume' || o.op === 'finish');
-    case 'host.team':
-      return role === 'host' && o.op === 'startAt' && str(o.team) && (o.at === null || o.at === 'now' || (num(o.at) && o.at > 0));
     case 'host.leg':
       return role === 'host' && (o.id === undefined) !== (o.json === undefined) && (o.id === undefined || str(o.id, 32)) && (o.json === undefined || typeof o.json === 'string');
     default:

@@ -15,7 +15,6 @@ export interface Session {
   summary?: {
     reconnects: number;
     lastSeen: number | null;
-    raceTime: number | null;
     /** Phase 7 (RaceEngine.summary): the current step's label ("Lộ trình 3"; a number = its index), absent before Phase 7. */
     step?: string | number | null;
   };

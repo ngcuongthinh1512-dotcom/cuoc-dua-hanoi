@@ -255,7 +255,7 @@ Object.assign(PRESETS, {
   'p7-box-close': boxView(false),
   'p7-box-opened': boxView(true),
   'p7-box-far': FAR,
-  // [C] clue card (each step type), full card popup, Sổ mật thư, "Xuất phát ở vị trí thứ n", Pit Stop line, clock --:-- / penalty
+  // [C] clue card (each step type), full card popup, Sổ mật thư, "Xuất phát ở vị trí thứ n", Pit Stop penalty (SPEC §17.23: no clock)
   ...Object.fromEntries(
     Object.entries({
       'p7-card': 'card=route', // top-left mission card, route clue (yellow, bike icon)
@@ -264,17 +264,18 @@ Object.assign(PRESETS, {
       'p7-card-full': 'card=challenge&full', // the full card popup (envelope animation finished)
       'p7-book': 'book', // Sổ mật thư: current card pinned, then the earlier ones
       'p7-start-order': 'startOrder=3', // "Xuất phát ở vị trí thứ 3" (right)
-      'p7-finish': 'card=pit&finish&raceTime=6135', // host NPC line after the check-in
-      'p7-pit': 'card=pit&checkin=134&penalty=3&raceTime=3725', // Pit Stop penalty countdown + clock + PHẠT row
-      'p7-clock': 'raceTime=--&raceStatus=lobby', // clock "--:--" (no start time entered yet) + "Chưa bắt đầu" badge above it
+      'p7-finish': 'card=pit&finish=2', // SPEC §17.22: "Về đích thứ 2" (finish card + host NPC line + toast, generic texts)
+      'p7-finish-first': 'card=pit&finish=first', // the winner's announcement
+      'p7-finish-out': 'card=pit&finish=out', // SPEC §17.23: "BỊ LOẠI" with the final rank
+      'p7-pit': 'card=pit&checkin=134&penalty=3', // Pit Stop penalty countdown + PHẠT row (no team clock)
       'p7-zone': 'card=route&zone', // "Tại điểm này"
     }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
   ),
-  // the book / full card over the minimap, street label and clock on a small window (VIEWPORT below; visual review)
+  // the book / full card over the minimap, street label and speed / penalty rows on a small window (VIEWPORT below; visual review)
   'p7-book-small': '/?player&npc=0&wait=1&book',
   'p7-card-full-small': '/?player&npc=0&wait=1&card=challenge&full',
   // [D] leg format + validator: no screenshots
-  // [E] Host page: start time inputs, step_progress matrix, ranking (demo data)
+  // [E] Host page: entry order, step_progress matrix, ranking in finish order (demo data)
   'p7-host': '/host.html?demo=1',
 });
 // Phase 8 (docs/plans/phase8.md §7): p8-* presets, offline stand-ins only (the screenshot server is Vite, no wrangler). Each

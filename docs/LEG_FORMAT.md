@@ -26,7 +26,7 @@ Mỗi cuộc đua có một **mã cuộc đua** (race id, ví dụ `thu`, `paris
 1. Chọn **mã cuộc đua mới** (vd. `thu` để diễn tập, `paris-1` cho buổi thật).
 2. Vào Host của mã đó, **nạp chặng** (bước 4 ở trên).
 3. **Tạo đội**, phát mã đăng nhập cho từng đội. Đội vào game bằng link `…/?race=<mã cuộc đua>` (trang Host in sẵn link này) rồi nhập mã đội.
-4. Khi sẵn sàng, bấm **Mở cuộc đua**; nhập **giờ xuất phát** của từng đội (giờ gõ vào được hiểu theo `timezone` của chặng, mục 3.1).
+4. Khi sẵn sàng, bấm **Mở cuộc đua**. Không cần nhập giờ xuất phát: không có đồng hồ riêng của từng đội, thứ hạng là **thứ tự về đích thực** (SPEC §17.22, §17.23).
 
 **Vì sao không đổi chặng sau khi đã có đội vào game?** Khi đội đã vào, máy chủ đã ghi vị trí xuất phát, thứ tự "Xuất phát ở vị trí thứ n", tiến trình theo mã bước của chặng cũ. Đổi chặng giữa chừng để lại dữ liệu mồ côi và đội đứng sai chỗ. Máy chủ vì thế **từ chối nạp chặng khác** khi đã có đội vào game hoặc cuộc đua đã mở. Muốn đổi: **tạo cuộc đua mới (mã mới)** và làm lại từ bước 1. Diễn tập hãy dùng một mã riêng, đừng dùng mã đội của buổi thật.
 
@@ -51,7 +51,7 @@ Quy tắc viết JSON: chữ nằm trong dấu ngoặc kép `"..."`; số không
 |---|---|---|---|
 | `id` | có | | Mã chặng: chữ thường a–z, số, gạch ngang, ≤ 32 ký tự, không bắt đầu bằng gạch ngang. `"paris-1"` |
 | `title` | có | | Tên chặng (hiện cho Host). `"Chặng Paris 2026"` |
-| `timezone` | không | `"Asia/Ho_Chi_Minh"` | Múi giờ để **hiểu giờ xuất phát Host gõ vào** (Host ở đâu cũng được). Viết đúng tên chuẩn dạng `Châu_lục/Thành_phố` (gọi là tên IANA): `"Asia/Ho_Chi_Minh"`, `"Europe/Paris"`. Sai tên (vd. `"Paris"`, `"UTC+7"`, `"GMT+7"`): **LỖI**, máy chủ không nạp chặng (giờ xuất phát sẽ bị hiểu sai) |
+| `timezone` | không | `"Asia/Ho_Chi_Minh"` | Múi giờ trang Host **hiện giờ** (giờ vào game, giờ xong từng bước, giờ về đích; Host ở đâu cũng được). Viết đúng tên chuẩn dạng `Châu_lục/Thành_phố` (gọi là tên IANA): `"Asia/Ho_Chi_Minh"`, `"Europe/Paris"`. Sai tên (vd. `"Paris"`, `"UTC+7"`, `"GMT+7"`): **LỖI**, máy chủ không nạp chặng |
 | `start` | có | | Nơi xuất phát, mục 4 |
 | `steps` | có | | Các bước, mục 5 (1–60 bước) |
 | `eliminationLeg` | không | `false` | `true` = chặng có loại đội cuối (chưa có tác dụng) |
@@ -63,7 +63,7 @@ Quy tắc viết JSON: chữ nằm trong dấu ngoặc kép `"..."`; số không
 | `vehicles` | không | xem dưới | Xe đạp dùng chung trên đường |
 | `hostAlerts` | không | `{stuckMinutes 45}` | Trang Host **cảnh báo** (âm báo + dòng đỏ) khi một đội làm cùng một thử thách / nhánh quá `stuckMinutes` phút, lặp lại mỗi `stuckMinutes` phút tới khi xong. Không có gì hiện trong game: gợi ý cho đội thì Host gửi riêng qua Messenger |
 | `clueBook` | không | `{showLockedSlots false}` | `true` = Sổ mật thư hiện cả ô khóa của bước chưa tới (không khuyến khích: lộ số bước; chưa có tác dụng) |
-| `hostApproval` | không | `{approvalWaitCounts false}` | Cho nhiệm vụ Host duyệt: `approvalWaitCounts`: `false` (mặc định) = thời gian chờ Host duyệt **được trừ** khỏi thời gian chính thức (đồng hồ đếm ngược sau khi bị Phạt hay đổi nhánh thì **không** được trừ); `true` = không trừ. **Không cần link Facebook / Messenger của Host**: game không có nút mở Messenger, đội tự mở Messenger ở ngoài trò chơi để gửi ảnh. File cũ còn `contactUrl` / `contactLabel` vẫn nạp được, hai trường này **bị bỏ qua** (không lỗi, không báo trống) |
+| `hostApproval` | không | `{}` | Không còn trường nào dùng. **Không cần link Facebook / Messenger của Host**: game không có nút mở Messenger, đội tự mở Messenger ở ngoài trò chơi để gửi ảnh. File cũ còn `contactUrl` / `contactLabel` / `approvalWaitCounts` vẫn nạp được, các trường này **bị bỏ qua** (không lỗi, không báo trống): không còn "thời gian chính thức" nên không còn trừ thời gian chờ duyệt (SPEC §17.23) |
 | `specials` | không | `expressPass` bật, còn lại tắt | Yếu tố đặc biệt (phase 9, chưa có tác dụng): `uTurn`, `yield`, `fastForward`, `speedBump`, `expressPass`, mỗi cái `{ "enabled": true/false }` |
 
 `vehicles` (mặc định = chặng demo, hiếm khi cần sửa): `corridorMeters 150` (xe chỉ đặt cách đường đi dự kiến ≤ ngần này), `minDistanceFromCheckpoint 100` (xe không đặt gần điểm nhận mật thư), `initialPerSegment [0, 1]`, `spawnIntervalMinutes 3`, `spawnChance 0.3`, `maxAvailablePerSegment 1`, `decoyRatio 0.4`, `noSpawnNearPlayerMeters 120`, `abandonMeters 200`, `abandonSeconds 60` (xe bị bỏ lại > 200 m trong 60 s thì thu hồi), `bikeParking { offsetMeters 20, maxBikes 6 }` (bãi xe cạnh điểm: mục 7).
@@ -126,7 +126,35 @@ Mỗi bước có `id` (tên ngắn, chữ + số, gạch ngang / dưới, ≤ 1
 
 ### 5.4 `pit_stop`: Chặng dừng (về đích)
 
-Có **đúng một** và **phải là bước cuối cùng**. Đội tới thảm đỏ thì về đích. Chỉ có `destination` (mục 7).
+Có **đúng một** và **phải là bước cuối cùng**. Đội tới thảm đỏ thì về đích. Có `destination` (mục 7) và khối tùy chọn `announce` dưới đây.
+
+**Thông báo về đích (`announce`, tùy chọn; SPEC §17.22, §17.23).** Ngay khi đội chạm thảm, máy chủ gửi cho **riêng đội đó** thứ hạng **"Về đích thứ n"** (thứ tự chạm thảm thật, cố định) ở ba chỗ: lời **NPC dẫn chương trình** trên thảm, **thông báo nhanh** (toast) và **thẻ về đích** giữa màn hình. Đội **về nhất** có bản riêng. Đội **về cuối cùng** (mọi đội khác đã về đích) và mọi đội **chưa về khi Host bấm "Kết thúc"** nhận bản **"BỊ LOẠI"** kèm thứ hạng cuối. Chữ thật thường nhắc tên nơi về đích nên nằm trong file chặng (chỉ máy chủ có), không nằm trong game.
+
+| Trường | Ý nghĩa |
+|---|---|
+| `announce.npc` | Lời NPC dẫn chương trình (đội về đích thứ 2 trở đi, trừ đội bị loại) |
+| `announce.toast` | Thông báo nhanh (một dòng ngắn) |
+| `announce.card` | Chữ trên thẻ về đích (tiêu đề thẻ do game ghi: "Về đích thứ n" / "BỊ LOẠI") |
+| `announce.first` | `{ "npc", "toast", "card" }` cho **đội về nhất**; trường nào thiếu thì dùng trường cùng tên ở trên |
+| `announce.out` | `{ "npc", "toast", "card" }` cho **đội bị loại**; trường nào thiếu thì dùng chữ chung của game (không dùng chữ về đích thường) |
+
+Chỗ giữ được thay khi gửi: `{n}` = thứ hạng, `{tổng}` = số đội của cuộc đua, `{tên đội}`. Mọi trường đều có thể bỏ: thiếu thì game dùng chữ chung **không nhắc địa điểm**, ví dụ *"{tên đội}, chúc mừng các bạn đã về đích thứ {n}!"*, *"Về đích thứ {n}/{tổng}"*, *"Rất tiếc, {tên đội} đã BỊ LOẠI khỏi cuộc đua. Thứ hạng cuối: {n}/{tổng}."*. Không có thông báo thời gian (không còn đồng hồ đội).
+
+```json
+{
+  "id": "PS", "type": "pit_stop", "label": "Về đích",
+  "destination": { "name": "…", "lat": 48.8596, "lon": 2.29243, "radius": 25 },
+  "announce": {
+    "npc": "{tên đội} về đích thứ {n} tại <nơi về đích>!",
+    "toast": "Về đích thứ {n}/{tổng}",
+    "card": "Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội.",
+    "first": { "npc": "{tên đội} về nhất!" },
+    "out": { "card": "{tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}." }
+  }
+}
+```
+
+`leg:check` kiểm: chỗ giữ lạ (vd. `{team}`) hoặc dấu `{ }` lẻ là **LỖI**; ký tự điều khiển / vô hình (thường do copy) là **LỖI**; ký tự ngoài bảng chữ Việt / Latin (vd. biểu tượng cảm xúc) là **CẢNH BÁO** (máy người chơi có thể hiện ô vuông). Chữ `announce` cũng được tìm trong tài sản tĩnh của game như mật thư (không được lộ trước khi về đích).
 
 ## 6. Luật thứ tự
 
@@ -136,7 +164,7 @@ Có **đúng một** và **phải là bước cuối cùng**. Đội tới thả
 - **Một** `pit_stop`, ở cuối; bước **ngay trước** nó phải là `route_info` (lộ trình dẫn tới thảm). Lộ trình cuối này hoàn thành ngay khi đội vào vùng Chặng dừng, nên điểm đến của nó nên **trùng** điểm Chặng dừng (lệch > 5 m thì cảnh báo).
 - Các bước khác (`challenge`, `detour`, `route_info`) xen kẽ tùy ý. `id` không trùng.
 - Mật thư bước N+1 chỉ tới đội khi bước N đã xong: **lộ trình** xong khi đội mở hộp ở điểm đến (xuống xe, đứng trong vùng, bấm `F`); **thử thách** và **nhánh Lựa chọn kép** xong khi Host duyệt (hoặc máy chấm đúng, với `auto`), đội ở đâu cũng được; đội nhận mật thư kế ngay lúc đó. Tọa độ hộp chỉ tới máy đội khi họ cách hộp ≤ `boxReveal.radius` (150 m).
-- Giờ nghỉ khi Host tạm dừng cuộc đua **không** bị trừ khỏi đồng hồ đội.
+- Không có đồng hồ đội: thứ hạng là thứ tự chạm thảm thật (thời gian Host tạm dừng cuộc đua cũng đã trôi như mọi khoảng chờ khác).
 
 ## 7. Điểm đến, vùng và bãi xe (`destination`, `task.location`)
 
@@ -526,6 +554,9 @@ Mỗi dòng của `leg:check` có dạng `MỨC  Ở-ĐÂU: nội dung`. "Ở đ
 | `bãi xe cách tâm N m, xa hơn 300 m (gõ nhầm tọa độ?)` | CẢNH BÁO | Bãi xe vẫn trong bản đồ nhưng quá xa điểm: thường là gõ nhầm một chữ số. Sửa lại cho bãi ở ngay ngoài vùng |
 | `đường đi bộ gần nhất cách tâm N m, xa hơn bán kính` | CẢNH BÁO | Đường đi bộ ở xa tâm: đội phải ra khỏi vùng để tới đường; dời tâm gần đường hơn hoặc tăng bán kính (mục 7) |
 | `cách thảm Chặng dừng N m ...` | CẢNH BÁO | Điểm đến của lộ trình cuối nên trùng điểm Chặng dừng |
+| `› thông báo về đích › ...: chỗ giữ "{...}" không có` / `dấu { } lẻ` | LỖI | Chỉ dùng `{n}`, `{tổng}`, `{tên đội}`, viết đủ hai dấu ngoặc (mục 5.4) |
+| `› thông báo về đích › ...: có ký tự điều khiển / vô hình` | LỖI | Gõ lại đoạn chữ đó (ký tự lạ thường đi theo khi copy từ nơi khác) |
+| `› thông báo về đích › ...: có ký tự ngoài bảng chữ Việt / Latin` | CẢNH BÁO | Bỏ biểu tượng cảm xúc / ký tự lạ, chỉ dùng chữ, số, dấu câu |
 | `chứa đáp án "..." của bước N (D1, nhánh A)` | CẢNH BÁO | Đáp án bị lộ trong chữ đội đọc trước: mật thư, tên bước, mô tả, hướng dẫn gửi bài, chữ trên nút gửi bài, nhãn hình, **tên hình `r2:…` / địa chỉ link** (`› hình / liên kết › mục N › liên kết`), tên nơi làm nhiệm vụ (`› nơi làm nhiệm vụ › tên`); với Lựa chọn kép: cả chữ của **nhánh kia** (đội có thể mở hòm nhánh kia rồi đổi nhánh); sửa chữ |
 | `nhiệm vụ "free" không tự chấm được` | CẢNH BÁO | Đổi sang `"verification": "host_approval"` |
 | `chứa đáp án tham khảo "..." của bước N` | CẢNH BÁO | Đáp án tham khảo (chỉ Host) lộ trong chữ đội đọc trước: sửa chữ |
@@ -563,7 +594,7 @@ Mẹo khác: thiếu dấu phẩy **giữa** hai mục cũng báo lỗi ở dòn
 
 ## 13. Chơi thử tự động (`npm run sim`)
 
-Sau khi `leg:check` ra "Hợp lệ", cho **bot** chơi hết chặng để chắc mọi bước đi được, mọi hộp mở được, đội về đích và có xếp hạng. Không cần chạy máy chủ hay trang Host: lệnh tự dựng một máy chủ tạm trong máy (y như máy chủ thật), nạp chặng, tạo đội bot, nhập giờ xuất phát "bây giờ", mở cuộc đua, rồi mỗi bot đi bộ theo đường đi bộ tới từng điểm, mở hộp, làm nhiệm vụ (bấm "Nhận thử thách" nếu có câu gợi ý; **gõ** đáp án đầu tiên trong `answers`, không có thì trong `referenceAnswers`, không có nữa thì "(bot) trả lời"; nhiệm vụ ảnh thì gửi bài rỗng) và check-in ở thảm. Một **Host ảo** duyệt bài của các bot.
+Sau khi `leg:check` ra "Hợp lệ", cho **bot** chơi hết chặng để chắc mọi bước đi được, mọi hộp mở được, đội về đích và có xếp hạng. Không cần chạy máy chủ hay trang Host: lệnh tự dựng một máy chủ tạm trong máy (y như máy chủ thật), nạp chặng, tạo đội bot, mở cuộc đua, rồi mỗi bot đi bộ theo đường đi bộ tới từng điểm, mở hộp, làm nhiệm vụ (bấm "Nhận thử thách" nếu có câu gợi ý; **gõ** đáp án đầu tiên trong `answers`, không có thì trong `referenceAnswers`, không có nữa thì "(bot) trả lời"; nhiệm vụ ảnh thì gửi bài rỗng) và check-in ở thảm. Một **Host ảo** duyệt bài của các bot.
 
 ```
 npm run sim -- --leg ~/Documents/chang-that/paris-1.json --bots 2 --speedup 2
@@ -572,7 +603,7 @@ npm run sim -- --leg ~/Documents/chang-that/paris-1.json --bots 2 --speedup 2
 - `--leg`: đường dẫn file chặng, hoặc mã chặng có sẵn (`mini`, `paris-demo-filled`).
 - `--bots`: số đội bot (2 là đủ). `--speedup 2`: nhanh gấp đôi (tối đa 2). Chặng 4 bước ≈ 2,3 km mất ≈ 7 phút ở `--speedup 2` (đo thật); lệnh tự dừng sau `--minutes` phút mô phỏng (mặc định 30) nếu bot chưa xong.
 - `npm run sim -- --help` in mọi tùy chọn.
-- Đọc kết quả: dòng `Chặng <mã> (N bước): 2 / 2 đội về đích · xếp hạng 2 dòng` là đạt. `← LỖI` ở cuối dòng hoặc mã thoát khác 0 = có đội không về đích / quá ngân sách ghi dữ liệu. "Thao tác bị từ chối (thử lại)" là các lần bot bấm F / gửi bài khi máy chủ chưa nhận vị trí mới nhất (thử lại là qua): chỉ đáng lo khi kèm "kẹt ở bước …". "Đội bị đánh dấu vượt tốc" khi tua nhanh là bình thường.
+- Đọc kết quả: dòng `Chặng <mã> (N bước): 2 / 2 đội về đích (bị loại: 1) · xếp hạng 2 dòng` là đạt (bot về cuối cùng luôn bị loại, đúng luật). `← LỖI` ở cuối dòng hoặc mã thoát khác 0 = có đội không về đích / quá ngân sách ghi dữ liệu. "Thao tác bị từ chối (thử lại)" là các lần bot bấm F / gửi bài khi máy chủ chưa nhận vị trí mới nhất (thử lại là qua): chỉ đáng lo khi kèm "kẹt ở bước …". "Đội bị đánh dấu vượt tốc" khi tua nhanh là bình thường.
 - **Host ảo:** mọi bài chờ duyệt (câu gõ lẫn bài ảnh) được duyệt tự động; riêng câu đầu tiên của bot thứ hai ở thử thách đầu tiên bị **Phạt** một lần (bot chờ hết đếm ngược rồi gửi lại). Với Lựa chọn kép, bot thứ i chọn nhánh số i chia 2 lấy dư (bot đầu nhánh đầu, bot hai nhánh sau, …); bot thứ ba (chỉ có 2 bot thì bot thứ hai) còn **đổi nhánh một lần** ngay sau khi chọn (chờ hết đếm ngược, đi tới hòm nhánh kia, mở và làm). Vì vậy một lần chạy `--bots 2` thử đủ: gõ đáp án, Host duyệt, Host phạt, hai nhánh, đổi nhánh. Chặng thật thì **Host thật duyệt**, không có bot.
 - **Thời gian chờ:** để không phải chờ 3 và 10 phút thật, `sim` nạp chặng với hai đồng hồ đếm ngược của `penalties` rút xuống còn 6 và 12 giây (chỉ trong lần chạy thử; file của bạn không bị sửa; thử thách có `retryLockMinutes` riêng vẫn giữ số của nó). Chặng test đã có (`mini`, `paris-demo-filled`) vẫn khai báo phạt 3 và 10 phút như mặc định.
 - Báo cáo thêm số câu trả lời, số lần Duyệt / Phạt và số lần đổi nhánh.

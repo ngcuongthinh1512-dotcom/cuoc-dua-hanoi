@@ -15,7 +15,7 @@ const ans = (id: number, status: AnswerStatus, at = id * 1000, text = `câu ${id
 const card = (o: Partial<ClueCard>): ClueCard => ({ step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý', media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: 0, completedAt: null, ...o });
 const challenge = (o: Partial<ClueCard> = {}) => card({ task: textTask, retryPenaltyMinutes: 3, ...o });
 const detour = (o: Partial<ClueCard> = {}) => card({ step: 'D1', type: 'detour', label: 'Lựa chọn kép', branches: branches(), branch: null, switchPenaltyMinutes: 10, retryPenaltyMinutes: 3, ...o });
-const view = (c: ClueCard, o: Partial<RaceView> = {}): RaceView => ({ status: 'running', startAt: 0, finishAt: null, penaltyMinutes: 0, card: c, checkinAt: null, officialMs: null, ...o });
+const view = (c: ClueCard, o: Partial<RaceView> = {}): RaceView => ({ status: 'running', finishAt: null, penaltyMinutes: 0, card: c, checkinAt: null, result: null, ...o });
 const P = (c: ClueCard, now = 0, o: Partial<Parameters<typeof cardPanel>[1]> = {}) => cardPanel(c, { now, teamName: 'Đội Xanh', mode: 'card', ...o });
 const key = (o: Partial<KeyboardEvent>) => ({ code: '', key: '', keyCode: 0, isComposing: false, ...o }) as KeyboardEvent;
 

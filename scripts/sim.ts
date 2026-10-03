@@ -60,7 +60,7 @@ export interface SimReport {
   /** Phase 7 `--leg` run: teams that checked in, ranking rows, the steps played; SQLite rows per team written while the race ran
    *  WITHOUT the shared snapshot / replay rows (`sharedRows`, they do not grow with the team count), vs `rowBudget`. Rows are only
    *  measured in the in-process harness (null with --url). null = random walk. */
-  leg: { id: string; steps: number; finished: number; ranked: number; rowsPerTeam: number | null; sharedRows: number | null; rowBudget: number; refused: string[]; stats: LegStats; /** Phase 8B: public feed messages the bot that saw the fewest received (louvre locks of every team). */ feed?: number } | null;
+  leg: { id: string; steps: number; finished: number; ranked: number; /** SPEC §17.23: teams out (the last to finish). */ out: number; rowsPerTeam: number | null; sharedRows: number | null; rowBudget: number; refused: string[]; stats: LegStats; /** Phase 8B: public feed messages the bot that saw the fewest received (louvre locks of every team). */ feed?: number } | null;
   flagged: number;
   speedup: number;
 }
@@ -447,8 +447,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
     hs.send({ t: 'host.createTeams', teams: Array.from({ length: opts.bots }, (_, i) => ({ name: `Bot ${i + 1}`, colour: '#2c6bd8', player: `bot${i + 1}` })) });
     const created = await hs.until((m): m is HostState => isState(m) && m.teams.length >= existing + opts.bots);
     const codes = created.teams.slice(existing, existing + opts.bots).map((t) => t.code);
-    // SPEC §17.12: the first clue is handed over outside the game, the team clock starts at the Host's start time
-    if (opts.leg) for (const t of created.teams.slice(existing, existing + opts.bots)) hs.send({ t: 'host.team', op: 'startAt', team: t.id, at: 'now' });
+    // SPEC §17.23: no per-team start time to enter any more (ranking = real finish order)
 
     // ── Bots: login, socket, welcome ──
     const graph = RoadGraph.decode(JSON.parse(readFileSync(FILE, 'utf8')) as RoadGraphFile);
@@ -621,7 +620,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       claim,
       rejoin,
       leg: opts.leg ? {
-        id: legId, steps: legSteps, finished: final.teams.filter((t) => t.finishAt !== null).length, ranked: final.ranking.length,
+        id: legId, steps: legSteps, finished: final.teams.filter((t) => t.finishAt !== null).length, ranked: final.ranking.length, out: final.ranking.filter((r) => r.out).length,
         rowsPerTeam: atStart && (c.rows - atStart.rows - shared!) / opts.bots, sharedRows: shared, rowBudget: legRowBudget(legSteps), refused, stats: legStats(final.progress, new Set(final.leg?.steps.filter((x) => x.louvre).map((x) => x.id))), feed: sockets.length > 1 ? Math.min(...sockets.slice(1).map((k) => k.log.filter((m) => m.t === 'feed').length)) : 0,
       } : null,
       flagged: final.teams.filter((t) => t.flagged).length,
@@ -644,7 +643,7 @@ function print(r: SimReport) {
     const rows = r.leg.rowsPerTeam === null
       ? 'dòng ghi / đội: chỉ đo được khi chạy không có --url'
       : `dòng ghi / đội ${n(r.leg.rowsPerTeam, 1)} (ngân sách ≤ ${r.leg.rowBudget}; không tính ${n(r.leg.sharedRows ?? 0)} dòng vị trí + replay chung cho mọi đội)`;
-    console.log(`  Chặng ${r.leg.id} (${r.leg.steps} bước): ${r.leg.finished} / ${r.bots} đội về đích · xếp hạng ${r.leg.ranked} dòng · ${rows}${legFailed(r) ? ' ← LỖI' : ''}`);
+    console.log(`  Chặng ${r.leg.id} (${r.leg.steps} bước): ${r.leg.finished} / ${r.bots} đội về đích (bị loại: ${r.leg.out}) · xếp hạng ${r.leg.ranked} dòng · ${rows}${legFailed(r) ? ' ← LỖI' : ''}`);
     const s = r.leg.stats;
     console.log(`  Thử thách: ${s.answers} câu trả lời · Host duyệt ${s.approved}, phạt ${s.penalized}${s.wrong ? `, sai (tự chấm) ${s.wrong}` : ''} · đổi nhánh ${s.switches} lần (phạt rút còn ${SIM_PENALTIES.retryLockMinutes * 60} s / ${SIM_PENALTIES.branchSwitchLockMinutes * 60} s)`);
     if (r.leg.stats.louvre) console.log(`  Phòng Louvre: chốt sai ${r.leg.stats.wrong}, chốt đúng ${r.leg.stats.correct} · tin feed công khai mỗi bot nhận ≥ ${r.leg.feed ?? 0}`);

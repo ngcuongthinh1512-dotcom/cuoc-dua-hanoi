@@ -121,12 +121,9 @@ describe('frames and JSON messages', () => {
     expect(isClientMessage({ t: 'host.race', op: 'pause' }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.race', op: 'pause' }, 'team')).toBe(false);
     expect(isClientMessage({ t: 'host.race', op: 'restart' }, 'host')).toBe(false);
-    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 1_790_000_000_000 }, 'host')).toBe(true);
-    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: null }, 'host')).toBe(true);
-    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 'now' }, 'host')).toBe(true); // server stamps
-    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 'soon' }, 'host')).toBe(false);
+    // SPEC §17.23: no per-team start time any more (v5)
+    for (const at of [1_790_000_000_000, null, 'now']) expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at }, 'host')).toBe(false);
     expect(isClientMessage({ t: 'race', op: 'book' }, 'host')).toBe(false); // the Host socket has no team
-    expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at: 1 }, 'team')).toBe(false);
     expect(isClientMessage({ t: 'host.leg', id: 'paris-demo' }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.leg', json: '{}' }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.leg', id: 'a', json: '{}' }, 'host')).toBe(false); // one or the other
@@ -177,7 +174,7 @@ describe('frames and JSON messages', () => {
   });
 
   it('Phase 8B (v4): pick / lock / view / credits from a team only, through a JSON frame; view / credits carry no step', () => {
-    expect(PROTOCOL_VERSION).toBe(4);
+    expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(4); // 5: SPEC §17.22 / §17.23 (no team clock, RaceView.result)
     const ok: RaceOp[] = [
       { t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: true },
       { t: 'race', op: 'pick', step: 'T3', art: 'x'.repeat(16), on: false },

@@ -54,6 +54,7 @@ function fake() {
     },
     teamIds: () => [...teams.keys()],
     slot: (id: string) => [...teams.keys()].indexOf(id),
+    name: (id: string) => `Đội ${id}`,
     online: () => [...teams.keys()],
     pose: (id: string) => poses.get(id) ?? null,
     park: () => log.push('park'),
@@ -146,7 +147,7 @@ describe('RaceEngine', () => {
     const r: ServerMessage[] = [];
     e.onHost(typeof leg === 'string' ? { t: 'host.leg', id: leg } : { t: 'host.leg', json: JSON.stringify(leg) }, (m) => r.push(m), 0);
     expect(r).toMatchObject([{ ok: true }]);
-    for (const [id, step] of Object.entries(steps)) f.teams.set(id, { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, startAt: 1, step });
+    for (const [id, step] of Object.entries(steps)) f.teams.set(id, { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, step });
     e.onHost({ t: 'host.race', op: 'start' }, () => {}, 1);
     f.log.length = 0;
     f.sent.length = 0;
@@ -359,21 +360,58 @@ describe('RaceEngine', () => {
     }
   });
 
-  it('officialMs deducts the approval waits (SPEC §8.9) unless hostApproval.approvalWaitCounts', () => {
-    for (const counts of [false, true]) {
-      const leg = structuredClone(bundledLeg('mini')!) as Leg;
-      leg.hostApproval.approvalWaitCounts = counts;
-      const { f, review, op, e, host } = racing({ t0: 1 }, leg);
-      op('t0', { t: 'race', op: 'accept', step: 'T1' }, 5);
-      op('t0', { t: 'race', op: 'answer', step: 'T1', text: '42' }, 10_000);
-      review('t0', 'T1', 'approve', 40_000);
-      expect(host).toEqual([]); // a plain approval: no notice to the Host (R-11 warns only over a "Phạt")
-      f.teams.set('t0', { ...f.teams.get('t0')!, step: 4 }); // L3: the route into the Pit Stop zone
-      e.onPose('t0', at(4), 100_001);
-      const v = (f.sent.filter(([, m]) => (m as { t: string }).t === 'race').at(-1)![1] as { view: RaceView }).view;
-      expect(v.officialMs).toBe(100_000 - (counts ? 0 : 30_000));
-      expect(e.hostView(100_002).ranking[0]!.officialMs).toBe(v.officialMs);
-    }
+  it('SPEC §17.22: the finish fixes "Về đích thứ n" by real finish order, written before the team hears it; the leg\'s texts, the winner\'s own', () => {
+    const { f, e, to } = racing({ t0: 4, t1: 4, t2: 1 });
+    const finish = (team: string, now: number) => {
+      f.log.length = 0;
+      e.onPose(team, at(4), now);
+      writesFirst(f);
+      return (to(team).filter((m) => (m as { t: string }).t === 'race').at(-1) as { view: RaceView }).view;
+    };
+    const a = finish('t1', 100); // t1 entered after t0's order but touches the mat first
+    expect(a.result).toEqual({ rank: 1, total: 3, kind: 'first', npc: '(GIẢ) Đội t1 về nhất tại cầu Iéna!', toast: '(GIẢ) Về đích thứ 1/3', card: '(GIẢ) Đội t1 về nhất trên 3 đội.' });
+    expect(f.teams.get('t1')).toMatchObject({ rank: 1, out: false, finishAt: 100 });
+    expect(f.events.at(-1)).toEqual(['finish', { rank: 1, out: false, total: 3 }]);
+    const b = finish('t0', 200);
+    expect(b.result).toMatchObject({ rank: 2, kind: 'finish', npc: '(GIẢ) Đội t0 về đích thứ 2 tại cầu Iéna!', card: '(GIẢ) Chúc mừng Đội t0: về đích thứ 2 trên 3 đội tại cầu Iéna.' });
+    expect(Object.keys(b)).not.toContain('officialMs');
+    e.onPose('t1', at(4), 300); // checked in already: nothing changes
+    expect(f.teams.get('t1')!.rank).toBe(1);
+    expect(e.hostView(400).ranking.map((r) => [r.team, r.rank, r.out])).toEqual([['t1', 1, false], ['t0', 2, false], ['t2', 3, false]]);
+  });
+
+  it('SPEC §17.23: the last team to finish (every other one already did) gets "BỊ LOẠI" with its final rank; a leg without texts uses the defaults', () => {
+    const leg = structuredClone(bundledLeg('mini')!) as Leg;
+    delete (leg.steps.at(-1) as { announce?: unknown }).announce;
+    const { f, e, to } = racing({ t0: 4, t1: 4 }, leg);
+    e.onPose('t0', at(4), 100);
+    e.onPose('t1', at(4), 200);
+    const v = (to('t1').filter((m) => (m as { t: string }).t === 'race').at(-1) as { view: RaceView }).view;
+    expect(v.result).toEqual({ rank: 2, total: 2, kind: 'out', npc: 'Đội t1, rất tiếc, các bạn đã bị loại.', toast: 'BỊ LOẠI – hạng 2/2', card: 'Rất tiếc, Đội t1 đã BỊ LOẠI khỏi cuộc đua. Thứ hạng cuối: 2/2.' });
+    expect(f.teams.get('t1')).toMatchObject({ rank: 2, out: true });
+    expect(e.hostView(300).ranking.map((r) => [r.team, r.out])).toEqual([['t0', false], ['t1', true]]);
+    // a race of one team: nobody else to beat, so it is not "the last" (never out by itself)
+    const solo = racing({ t0: 4 });
+    solo.e.onPose('t0', at(4), 100);
+    expect(solo.f.teams.get('t0')).toMatchObject({ rank: 1, out: false });
+  });
+
+  it('SPEC §17.23 (Chốt): "Kết thúc" with teams still racing: each is out, ranked after the finished ones (furthest step first), written with the status, then told', () => {
+    const { f, e, to } = racing({ t0: 4, t1: 1, t2: 3 });
+    e.onPose('t0', at(4), 100);
+    f.log.length = f.txs.length = 0;
+    e.onHost({ t: 'host.race', op: 'finish' }, () => {}, 500);
+    writesFirst(f);
+    expect(f.txs).toHaveLength(1); // status + the out marks: one transaction
+    expect(f.teams.get('t2')).toMatchObject({ rank: 2, out: true, finishAt: null });
+    expect(f.teams.get('t1')).toMatchObject({ rank: 3, out: true });
+    expect(f.teams.get('t0')).toMatchObject({ rank: 1, out: false });
+    const last = (team: string) => (to(team).filter((m) => (m as { t: string }).t === 'race').at(-1) as { view: RaceView }).view;
+    expect(last('t1')).toMatchObject({ status: 'finished', result: { rank: 3, total: 3, kind: 'out', card: '(GIẢ) Đội t1 BỊ LOẠI, hạng cuối 3/3.' } });
+    expect(last('t0').result).toMatchObject({ rank: 1, kind: 'first' });
+    expect(e.hostView(600).ranking.map((r) => [r.team, r.rank, r.out])).toEqual([['t0', 1, false], ['t2', 2, true], ['t1', 3, true]]);
+    // rebuilt after an eviction: the marks live in teams.state (a new engine over the same rows says the same)
+    expect(new RaceEngine(f.io).welcome('t1', null, false, 700).view!.result).toMatchObject({ rank: 3, kind: 'out' });
   });
 
   it('media (D13): what the team has opened only; host.state carries the leg fields', () => {
@@ -389,33 +427,6 @@ describe('RaceEngine', () => {
     expect(h.leg).toMatchObject({ media: ['test-gia.jpg', 'test-gia-2.jpg'], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45 });
     expect(h.leg!.steps.map((s) => [s.id, s.proof, s.branches?.map((b) => b.proof)])).toEqual([['L1', false, undefined], ['T1', false, undefined], ['L2', false, undefined], ['D1', false, [false, true]], ['L3', false, undefined], ['PS', false, undefined]]);
     expect(h.leg!.steps[3]!.branches!.map((b) => b.title)).toEqual(['Tính', 'Ảnh']); // the branch's own name for the Host page (visual#3), not its place
-  });
-
-  it('D15: a start time after the team\'s check-in is refused; a change for a running team moves its clock, which then only runs forward', () => {
-    const f = fake();
-    f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, startAt: 100_000, finishAt: 900_000 }).set('t1', { ...NEW_TEAM_RACE, startOrder: 2, joinedAt: 1 });
-    const e = new RaceEngine(f.io);
-    e.onHost({ t: 'host.race', op: 'start' }, () => {}, 0);
-    const r: ServerMessage[] = [];
-    const startAt = (team: string, at: number | 'now', now: number) => e.onHost({ t: 'host.team', op: 'startAt', team, at }, (m) => r.push(m), now);
-    f.log.length = 0;
-    startAt('t0', 900_001, 1_000_000);
-    expect(r).toEqual([{ t: 'host.notice', level: 'error', message: expect.stringContaining('về đích') }]);
-    expect(f.log).toEqual([]); // nothing written, nothing sent to the team
-    expect(f.teams.get('t0')!.startAt).toBe(100_000);
-    startAt('t0', 900_000, 1_000_000); // = the check-in: allowed
-    expect(f.sent.at(-1)).toEqual(['t0', { t: 'race', view: expect.objectContaining({ startAt: 900_000, officialMs: 0 }) }]);
-    // a running team: each change moves its clock; from there it only runs forward and never below 0 (≤ 60 s ahead is
-    // accepted for a clock skew)
-    const clock = (now: number) => e.summary('t1', now).raceTime;
-    startAt('t1', 400_000, 1_000_000);
-    expect([1_000_000, 1_005_000].map(clock)).toEqual([600, 605]);
-    startAt('t1', 'now', 1_010_000);
-    expect([1_010_000, 1_011_000].map(clock)).toEqual([0, 1]);
-    startAt('t1', 1_050_000, 1_020_000);
-    expect([1_020_000, 1_040_000, 1_050_000, 1_055_000].map(clock)).toEqual([0, 0, 0, 5]);
-    const views = f.sent.filter(([t, m]) => t === 't1' && (m as { t: string }).t === 'race').map(([, m]) => (m as { view: { startAt: number | null } }).view.startAt);
-    expect(views.slice(-3)).toEqual([400_000, 1_010_000, 1_050_000]);
   });
 
   it('every status change reaches each online team as a race view, and its welcome carries it (lobby / paused / finished on screen)', () => {

@@ -1,6 +1,6 @@
 import { isClientMessage, MEDIA, NET, type HostState } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, billableRequests, checkMediaFile, corridorPoints, counterLines, demoState, fmtDuration, fmtMinSec, freshAlerts, freshQueue, inputToMs, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, msToInput, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startPreview, startRows, statusButtons, stuckAlerts, teamRows, warnings, withLouvreDemo, louvreLines } from './hostView.ts';
+import { ago, billableRequests, checkMediaFile, corridorPoints, counterLines, demoState, fmtMinSec, freshAlerts, freshQueue, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, statusButtons, stuckAlerts, teamRows, warnings, withLouvreDemo, louvreLines } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -56,38 +56,6 @@ describe('Host view', () => {
     expect(ago(0, 7_200_000)).toBe('2 giờ trước');
   });
 
-  it('start time input is read in the leg time zone, not the Host machine zone', () => {
-    // 14:05:30 in Ho Chi Minh (UTC+7) = 07:05:30 UTC, whatever zone this process runs in
-    expect(inputToMs('2026-10-03T14:05:30', 'Asia/Ho_Chi_Minh')).toBe(Date.UTC(2026, 9, 3, 7, 5, 30));
-    expect(inputToMs('2026-10-03T14:05', 'Asia/Ho_Chi_Minh')).toBe(Date.UTC(2026, 9, 3, 7, 5, 0));
-    // a Host machine in Paris typing a Vietnamese leg time gets the same instant; the Paris leg reads it 5 h earlier in October
-    expect(inputToMs('2026-10-03T14:05:30', 'Europe/Paris')).toBe(Date.UTC(2026, 9, 3, 12, 5, 30)); // CEST = UTC+2
-    expect(inputToMs('2026-01-15T14:00:00', 'Europe/Paris')).toBe(Date.UTC(2026, 0, 15, 13, 0, 0)); // CET = UTC+1
-    expect(inputToMs('hôm nay', 'Europe/Paris')).toBeNull();
-  });
-
-  it('msToInput is the inverse of inputToMs, also around a DST change', () => {
-    for (const [v, tz] of [['2026-10-03T14:05:30', 'Asia/Ho_Chi_Minh'], ['2026-03-29T03:30:00', 'Europe/Paris'], ['2026-10-25T01:30:00', 'Europe/Paris'], ['2026-12-31T23:59:59', 'America/New_York']] as const) {
-      expect(msToInput(inputToMs(v, tz)!, tz)).toBe(v);
-    }
-  });
-
-  it('preview: past time shows T+, > 60 s in the future is what the server refuses', () => {
-    const now = 10_000_000;
-    expect(startPreview(now - 3_725_000, now)).toEqual({ text: 'Đồng hồ đội sẽ hiện T+01:02:05.', level: 'ok' });
-    expect(startPreview(now + 30_000, now).level).toBe('ok');
-    expect(startPreview(now + 61_000, now).level).toBe('bad');
-    expect(startPreview(null, now).level).toBe('bad');
-    expect(fmtDuration(-61_000)).toBe('-00:01:01');
-  });
-
-  it('preview of a finished team: its final time (finishAt − start), not now − start; a start after the finish is refused', () => {
-    const now = 10_000_000;
-    const finishAt = now - 4 * 60_000;
-    expect(startPreview(now - 50 * 60_000, now, finishAt)).toEqual({ text: 'Đội đã về đích: thời gian sẽ là T+00:46:00.', level: 'ok' });
-    expect(startPreview(finishAt + 1000, now, finishAt).level).toBe('bad');
-  });
-
   it('mm:ss rounds once: 59.6 s is 01:00, 119.5 s is 02:00', () => {
     expect(fmtMinSec(59_600)).toBe('01:00');
     expect(fmtMinSec(119_500)).toBe('02:00');
@@ -101,37 +69,39 @@ describe('Host view', () => {
     expect(labels('running')).toEqual(['pause', 'finish']);
     expect(labels('paused')).toEqual(['resume', 'finish']);
     expect(labels('finished')).toEqual([]);
-    // "Mở cuộc đua" lists what is still empty
-    expect(statusButtons({ ...s, status: 'lobby' })[0]!.confirm).toContain('Chưa nhập giờ xuất phát: Đội Lục');
+    // "Mở cuộc đua" lists what is still empty; SPEC §17.23: never a start time (no team clock)
+    expect(statusButtons({ ...s, status: 'lobby' })[0]!.confirm).toContain('chưa có mật thư');
+    expect(statusButtons({ ...s, status: 'lobby' })[0]!.confirm).not.toContain('giờ xuất phát');
+    // SPEC §17.23 (Chốt): "Kết thúc" names the teams still racing, which will read "BỊ LOẠI"
+    const end = statusButtons(s).find((b) => b.op === 'finish')!.confirm!;
+    expect(end).toContain('5 đội chưa về đích sẽ nhận thông báo BỊ LOẠI: Đội Đỏ, Đội Vàng, Đội Lục, Đội Tím, Đội Cam.');
+    expect(statusButtons(s).find((b) => b.op === 'pause')!.confirm).not.toMatch(/[Đđ]ồng hồ/);
   });
 
-  it('red banner: lobby with teams online / start times, teams in game without a start time', () => {
+  it('red banner: lobby with teams online; SPEC §17.23: nothing about start times any more', () => {
     const s = demoState();
-    expect(warnings({ ...s, status: 'lobby' }).join('\n')).toMatch(/chưa mở nhưng đã có 2 đội trong game[^]*Đã nhập giờ xuất phát khi cuộc đua chưa mở/);
-    expect(warnings(s)).toEqual([]); // running, only Đội Lục (never entered) has no start time
-    const t = s.teams.map((x) => (x.slot === 0 ? { ...x, startAt: null } : x));
-    expect(warnings({ ...s, teams: t })[0]).toContain('Đội Xanh');
+    expect(warnings({ ...s, status: 'lobby' })).toEqual(['Cuộc đua chưa mở nhưng đã có 2 đội trong game (các đội xem được mật thư 1 nhưng chưa mở được hòm).']);
+    expect(warnings(s)).toEqual([]);
     expect(openBlanks({ ...s, leg: null })).toContain('Chưa nạp chặng.');
+    expect(openBlanks(s).join('\n')).not.toContain('giờ xuất phát');
   });
 
-  it('start rows show times in the leg zone', () => {
+  it('"Thứ tự vào game" rows: entry order + first entry in the leg zone; no start-time input (SPEC §17.23)', () => {
     const s = demoState(Date.UTC(2026, 9, 3, 8, 0, 0));
     const r = startRows(s)[0]!;
-    expect(r.input).toBe(msToInput(s.teams[0]!.startAt!, 'Asia/Ho_Chi_Minh'));
-    expect(r.input).toMatch(/^2026-10-03T14:\d\d:00$/); // 08:00 UTC − 50 min = 07:10 UTC = 14:10 ICT
-    expect(r.startOrder).toBe('1');
-    expect(startRows(s)[3]).toMatchObject({ input: '', joined: '—', startOrder: '—' });
+    expect(r).toEqual({ id: 't0', name: 'Đội Xanh', colour: '#2c6bd8', startOrder: '1', joined: '14:12:00', stepLabel: 'Đã về đích', penalty: '—' }); // 08:00 UTC − 48 min = 07:12 UTC = 14:12 ICT
+    expect(startRows(s)[3]).toMatchObject({ joined: '—', startOrder: '—' });
   });
 
-  it('step_progress matrix: done / active / todo cells, ranked rows, T+ mode', () => {
+  it('step_progress matrix: done / active / todo cells, rows in finish order, BỊ LOẠI marked; no official time / T+ (SPEC §17.23)', () => {
     const now = 3_000_000_000;
     const s = demoState(now);
-    const { head, rows } = progressTable(s, now, 'real');
+    const { head, rows } = progressTable(s, now);
     expect(head.map((h) => h.label)).toEqual(['Lộ trình 1', 'Thử thách 1', 'Lộ trình 2', 'Lựa chọn kép', 'Lộ trình 3', 'Về đích']);
     expect(rows.map((r) => [r.name, r.rank])).toEqual([['Đội Xanh', '1'], ['Đội Vàng', '2'], ['Đội Đỏ', '3'], ['Đội Lục', '—'], ['Đội Tím', '—'], ['Đội Cam', '—']]);
     const blue = rows[0]!;
     expect(blue.cells.every((c) => c.state === 'done')).toBe(true);
-    expect(blue.official).toBe('00:46:00');
+    expect(Object.keys(blue).sort()).toEqual(['cells', 'colour', 'finish', 'name', 'out', 'penalty', 'rank', 'team']);
     expect(blue.cells[0]!.text).toMatch(/^\d\d:\d\d:\d\d · 15:00$/); // when · how long the step took
     expect(blue.cells[3]!.text).toContain(' · Tính (A) ↺1'); // branch A after one switch
     const red = rows[2]!;
@@ -139,9 +109,9 @@ describe('Host view', () => {
     expect(red.cells[3]!.text).toBe('08:00 · Ảnh (B)'); // 50 − 8 − 42 = 8 min since the clue of D1 reached it; took branch B
     expect(red.penalty).toBe('+2 phút');
     expect(rows[3]!.cells.map((c) => c.state)).toEqual(['active', 'todo', 'todo', 'todo', 'todo', 'todo']); // holds clue 1 (D3), no times yet
-    // T+: each team on its own clock (Đội Xanh: step 1 done at +15 min)
-    expect(progressTable(s, now, 't').rows[0]!.cells[0]!.text).toMatch(/^T\+00:15:00 · 15:00$/);
     expect(rows[0]!.cells[0]!.title).toContain('Tới điểm');
+    const out = progressTable({ ...s, ranking: s.ranking.map((r) => (r.team === 't1' ? { ...r, out: true } : r)) }, now).rows[2]!;
+    expect([out.name, out.rank, out.out]).toEqual(['Đội Đỏ', '3 · BỊ LOẠI', true]);
   });
 
   it('corridor points: start → every zone in order incl. both detour places; checkpoints = all zones, deduplicated', () => {
@@ -164,7 +134,7 @@ type Row = HostState['progress'][number];
 /** demoState with one progress row of a team replaced. */
 const withRow = (s: HostState, team: string, step: string, more: Partial<Row>): HostState => ({ ...s, progress: s.progress.map((p) => (p.team === team && p.step === step ? { ...p, ...more } : p)) });
 const withTeam = (s: HostState, id: string, more: Partial<HostState['teams'][number]>): HostState => ({ ...s, teams: s.teams.map((t) => (t.id === id ? { ...t, ...more } : t)) });
-const rowOf = (s: HostState, name: string, now = NOW) => progressTable(s, now, 'real').rows.find((r) => r.name === name)!;
+const rowOf = (s: HostState, name: string, now = NOW) => progressTable(s, now).rows.find((r) => r.name === name)!;
 
 describe('review queue (D16 (1))', () => {
   const s = demoState(NOW);
@@ -270,14 +240,12 @@ describe('step_progress matrix, Phase 8 cells (D16 (3))', () => {
     expect(rowOf(withRow(photo, 't4', 'T1', { startedAt: null, lockedUntil: null }), 'Đội Tím').cells[1]!.buttons).toEqual([]);
   });
 
-  it('done cells: ✗n penalties and (A ↺n) switches; the "Bù giờ chờ duyệt" column adds up what the team waited', () => {
+  it('done cells: ✗n penalties and (A ↺n) switches; the approval wait stays in the cell title (no official-time column)', () => {
     const blue = rowOf(s, 'Đội Xanh');
     expect(blue.cells[1]!.text).toMatch(/ ✗1$/);
     expect(blue.cells[3]!.text).toMatch(/ · Tính \(A\) ↺1$/);
     expect(blue.cells.every((c) => c.buttons.length === 0)).toBe(true);
-    expect(blue.approvalWait).toBe('01:35');
-    expect(rowOf(s, 'Đội Tím').approvalWait).toBe('02:10');
-    expect(rowOf(s, 'Đội Đỏ').approvalWait).toBe('—');
+    expect(blue.cells[1]!.title).toContain('Đã chờ duyệt: 01:35');
     expect(blue.cells[1]!.title).toContain('«41»');
     expect(blue.cells[1]!.title).toContain('đã duyệt');
   });
@@ -378,7 +346,7 @@ describe('R2 images and the leg line (D14, D16 (4) (5))', () => {
     expect(s.queue).toHaveLength(2);
     expect(s.queue.every((q) => q.reference.length > 0)).toBe(true);
     expect(stuckAlerts(s, NOW)).toHaveLength(1);
-    const states = progressTable(s, NOW, 'real').rows.flatMap((r) => r.cells.map((c) => c.state));
+    const states = progressTable(s, NOW).rows.flatMap((r) => r.cells.map((c) => c.state));
     expect(states).toContain('pending');
     expect(states).toContain('locked');
   });

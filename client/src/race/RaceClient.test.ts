@@ -1,31 +1,22 @@
-import type { BoxInfo, ClientMessage, FeedMessage, LouvreView, RaceView, Welcome } from '@race/shared/protocol';
+import type { BoxInfo, ClientMessage, FeedMessage, FinishResult, LouvreView, RaceView, Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
 import { louvreRoom, raceClient } from '../config.ts';
-import { boxInReach, matAt, RaceClient, raceClock } from './RaceClient.ts';
+import { boxInReach, matAt, RaceClient } from './RaceClient.ts';
 import type { RaceHud } from './ui/RaceHud.ts';
 
-const view = (o: Partial<RaceView> = {}): RaceView => ({ status: 'running', startAt: null, finishAt: null, penaltyMinutes: 0, card: null, checkinAt: null, officialMs: null, ...o });
+const view = (o: Partial<RaceView> = {}): RaceView => ({ status: 'running', finishAt: null, penaltyMinutes: 0, card: null, checkinAt: null, result: null, ...o });
 const pit = (o: Partial<RaceView> = {}) =>
   view({ card: { step: 'PS', type: 'pit_stop', label: 'Chặng dừng', text: '', media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: 0, completedAt: null }, ...o });
+const WIN: FinishResult = { rank: 1, total: 2, kind: 'first', npc: 'n', toast: 't', card: 'c' };
 const box: BoxInfo = { step: 'L1', x: 0, z: 0, opened: false, r: 20 };
 const mat: BoxInfo = { step: 'PS', x: 100, z: 0, opened: false, r: 15, kind: 'mat' };
 
 function client(now = 0) {
   const sent: ClientMessage[] = [];
   const finished: boolean[] = [];
-  const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), serverNow: () => now, team: 'Đội Xanh', finished: (f) => finished.push(f) });
+  const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), serverNow: () => now, finished: (f) => finished.push(f) });
   return { c, sent, finished };
 }
-
-describe('race clock (SPEC §17.12)', () => {
-  it('no start time → null; running → since the start; finished → stopped at the check-in', () => {
-    expect(raceClock(null, 5000)).toBeNull();
-    expect(raceClock(view(), 5000)).toBeNull();
-    expect(raceClock(view({ startAt: 1000 }), 61_000)).toBe(60);
-    expect(raceClock(view({ startAt: 1000, finishAt: 31_000 }), 99_000)).toBe(30);
-    expect(raceClock(view({ startAt: 10_000 }), 5000)).toBe(0); // clock skew: never negative
-  });
-});
 
 describe('F and the Pit Stop (D23, D19)', () => {
   it('F: the current unopened box in its zone (→ race open), else the bikes; opened boxes and mats are not opened', () => {
@@ -71,11 +62,25 @@ describe('F and the Pit Stop (D23, D19)', () => {
   it('finish: fresh check-in → celebrate first; a welcome already finished → spectator at once', () => {
     const { c, finished } = client();
     c.welcome({ teams: [], view: pit(), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
-    c.message({ t: 'race', view: pit({ finishAt: 5, officialMs: 5 }) });
-    c.message({ t: 'race', view: pit({ finishAt: 5, officialMs: 5 }) }); // same state again: no second celebration
+    c.message({ t: 'race', view: pit({ finishAt: 5, result: WIN }) });
+    c.message({ t: 'race', view: pit({ finishAt: 5, result: WIN }) }); // same state again: no second celebration
     const back = client();
     back.c.welcome({ teams: [], view: pit({ finishAt: 5 }), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
     expect([finished, back.finished]).toEqual([[true], [false]]);
+  });
+
+  it('SPEC §17.22 / §17.23: the result goes to the HUD once when it appears (fresh), and from a welcome as a replay', () => {
+    const results: [unknown, boolean][] = [];
+    const hud = { result: (r: unknown, fresh: boolean) => results.push([r, fresh]), setView: () => {}, feed: () => {} } as unknown as RaceHud;
+    const c = new RaceClient({ hud, send: () => {}, serverNow: () => 0 });
+    c.welcome({ teams: [], view: pit(), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
+    expect(results).toEqual([]);
+    c.message({ t: 'race', view: pit({ finishAt: 5, result: WIN }) });
+    c.message({ t: 'race', view: pit({ finishAt: 5, result: WIN }) });
+    expect(results).toEqual([[WIN, true]]);
+    const out = { ...WIN, rank: 2, kind: 'out' as const };
+    c.welcome({ teams: [], view: view({ status: 'finished', result: out }), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
+    expect(results.at(-1)).toEqual([out, false]); // out at the Host's "Kết thúc" while offline: RaceHud shows it unless already seen
   });
 
   it('Host "Kết thúc" (status finished) → read-only spectator for a team not checked in, live or at re-entry (SPEC §8.10)', () => {

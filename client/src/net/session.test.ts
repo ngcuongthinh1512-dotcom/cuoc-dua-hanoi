@@ -81,10 +81,9 @@ describe('login screen (pure parts)', () => {
     expect(errorText('bad_code')).toBe('Mã đội không đúng');
     expect(errorText('locked', 59_001)).toBe('Nhập sai quá nhiều lần. Thử lại sau 60 giây');
     expect(errorText(undefined)).toMatch(/Không kết nối được máy chủ/);
-    expect(summaryLines({ reconnects: 1, lastSeen: null, raceTime: null })).toEqual(['Đồng hồ đua chưa chạy (Host chưa nhập giờ xuất phát)']);
-    expect(summaryLines({ reconnects: 1, lastSeen: null, raceTime: 3725 })).toEqual(['Thời gian đua: 1:02:05']);
-    // Phase 7: the current step (a label from the server, or an index)
-    expect(summaryLines({ reconnects: 1, lastSeen: null, raceTime: 3725, step: 'Thử thách 2' })).toEqual(['Thời gian đua: 1:02:05', 'Đang làm: Thử thách 2']);
-    expect(summaryLines({ reconnects: 1, lastSeen: null, raceTime: 3725, step: 0 })[1]).toBe('Đang làm: Bước 1');
+    // SPEC §17.23: no race clock line; Phase 7: the current step (a label from the server, or an index)
+    expect(summaryLines({ reconnects: 1, lastSeen: null })).toEqual([]);
+    expect(summaryLines({ reconnects: 1, lastSeen: null, step: 'Thử thách 2' })).toEqual(['Đang làm: Thử thách 2']);
+    expect(summaryLines({ reconnects: 1, lastSeen: null, step: 0 })[0]).toBe('Đang làm: Bước 1');
   });
 });
