@@ -524,3 +524,43 @@
 .rc-louvre.done { border-left-color: #7be08f; }
 .rc-louvre-state { font-weight: 700; margin-bottom: 4px; }
 .rc-louvre-line { font-size: 15px; font-variant-numeric: tabular-nums; }
+
+/* SPEC §17.21: clue text is not selectable (cards, Sổ mật thư); the submission code and the answer box still are. RaceHud
+   also cancels copy / cut / drag / right-click inside them (format.ts copyBlocked). */
+.rc-nocopy {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.rc-nocopy .rc-code {
+  -webkit-user-select: all;
+  user-select: all;
+}
+.rc-nocopy input,
+.rc-nocopy textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* SPEC §17.22 / §17.23: the finish card ("Về đích thứ n" / the winner / "BỊ LOẠI") and the host NPC line when out. */
+.rc-result {
+  border-top: 5px solid #3fae5a;
+  text-align: center;
+}
+.rc-result.first {
+  border-top-color: #e8b923;
+}
+.rc-result.out,
+.rc-npc.out {
+  border-color: #d8342c;
+}
+.rc-result-title {
+  margin: 4px 0 8px;
+  font-size: 26px;
+  letter-spacing: 0.02em;
+}
+.rc-result.out .rc-result-title {
+  color: #ff6b5e;
+}
+.rc-result .rc-actions {
+  justify-content: center;
+}

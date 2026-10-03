@@ -28,7 +28,8 @@
       "id": "PS",
       "type": "pit_stop",
       "label": "Về đích",
-      "destination": { "name": "Quảng trường Concorde – điểm 2", "lat": 48.86587, "lon": 2.32094, "radius": 20 }
+      "destination": { "name": "Quảng trường Concorde – điểm 2", "lat": 48.86587, "lon": 2.32094, "radius": 20 },
+      "announce": { "npc": "(GIẢ) {tên đội} về đích thứ {n}!", "out": { "card": "(GIẢ) {tên đội} BỊ LOẠI ({n}/{tổng})." } }
     }
   ]
 }

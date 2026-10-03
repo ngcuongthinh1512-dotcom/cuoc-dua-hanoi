@@ -205,7 +205,7 @@ function fakeRace(legJson: string, o: { teamId: string; lockMs: number }) {
       ...(st.type === 'challenge' && s !== 'teaser' ? { task: tv(st.task) } : {}),
       ...(st.type === 'detour' ? { branch: row.branch, branches: st.branches.map((b) => ({ id: b.id, name: b.name, summary: '', ...(row.opened && b.id === row.branch ? { task: tv(b.task) } : {}) })) } : {}),
     } as unknown as ClueCard;
-    return { status: 'running', startAt: 1, finishAt: finished ? 2 : null, penaltyMinutes: 0, card: c, checkinAt: null, officialMs: null };
+    return { status: 'running', finishAt: finished ? 2 : null, penaltyMinutes: 0, card: c, checkinAt: null, result: null };
   };
   const push = () => botLog.push({ t: 'race', view: view() });
   const pushHost = () => {
@@ -371,7 +371,7 @@ describe('sim --leg (Phase 7 / 8)', () => {
   // Phase 8 integration (docs/plans/phase8.md §6 Track E, critic N9c): the bots against track A's real engine.
   it('3 bots finish the whole leg: all checked in, ranking has 3 rows, ≥ 1 penalty and ≥ 1 branch switch in the report, ≤ 160 SQLite rows per team', { timeout: 300_000 }, async () => {
     const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-leg', password: 'test-secret', log: () => {}, leg: { json: compactMini() } });
-    expect(r.leg).toMatchObject({ id: 'mini', steps: 6, finished: 3, ranked: 3, rowBudget: 160 });
+    expect(r.leg).toMatchObject({ id: 'mini', steps: 6, finished: 3, ranked: 3, out: 1, rowBudget: 160 }); // SPEC §17.23: the last of the 3 bots is out
     expect(r.leg!.stats.penalized).toBeGreaterThanOrEqual(1);
     expect(r.leg!.stats.switches).toBeGreaterThanOrEqual(1);
     expect(r.leg!.stats.answers).toBeGreaterThanOrEqual(7); // 3 × T1 + 1 retry + 3 × D1
@@ -386,7 +386,7 @@ describe('sim --leg (Phase 7 / 8)', () => {
   it('a long leg is not reported as LỖI for the shared rows: the budget counts per-team race rows (organiser review)', () => {
     // the organiser's 4-step leg, 2 bots, 826 s at speedup 2: 324 rows = 2 × 40 race rows + 244 snapshot / replay rows (413 s real,
     // one every 2 s + one every 10 s); the old check divided all 324 by 2 → "162 > 110 ← LỖI"
-    const leg = { id: 'x', steps: 4, finished: 2, ranked: 2, rowsPerTeam: 40, sharedRows: 244, rowBudget: legRowBudget(4), refused: [], stats: legStats([]) };
+    const leg = { id: 'x', steps: 4, finished: 2, ranked: 2, out: 1, rowsPerTeam: 40, sharedRows: 244, rowBudget: legRowBudget(4), refused: [], stats: legStats([]) };
     const r = { bots: 2, counters: { wsIn: 0, wsOut: 0, http: 0, alarms: 0, rows: 324 }, leg } as unknown as Parameters<typeof legFailed>[0];
     expect(legFailed(r)).toBe(false);
     expect(legFailed({ ...r, leg: { ...leg, rowsPerTeam: 161 } })).toBe(true);
@@ -459,7 +459,7 @@ describe('sim --leg louvre', () => {
   };
   it('3 bots finish: ≥ 3 wrong locks, every bot sees ≥ 3 public feed messages, ≤ 16 × steps rows per team', { timeout: 300_000 }, async () => {
     const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-louvre', password: 'test-secret', log: () => {}, leg: { json: nearLouvre() } });
-    expect(r.leg).toMatchObject({ id: 'louvre', finished: 3, ranked: 3 });
+    expect(r.leg).toMatchObject({ id: 'louvre', finished: 3, ranked: 3, out: 1 });
     expect(r.leg!.stats.wrong).toBeGreaterThanOrEqual(3);
     expect(r.leg!.feed).toBeGreaterThanOrEqual(3);
     expect(r.leg!.rowsPerTeam!).toBeLessThanOrEqual(r.leg!.rowBudget);

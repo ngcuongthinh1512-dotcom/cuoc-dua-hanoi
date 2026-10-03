@@ -20,12 +20,11 @@ export interface TeamRow {
   /** World metres, for "Thêm xe" (null = no pose yet). */
   pos: { x: number; z: number } | null;
   flagged: boolean;
-  /** Phase 7: team id (host.team), start-order, current step label, penalty, start time + first entry (server ms). */
+  /** Phase 7: team id, start-order, current step label, penalty, first entry (server ms; SPEC §17.23: no start time). */
   id: string;
   startOrder: number | null;
   stepLabel: string;
   penaltyMinutes: number;
-  startAt: number | null;
   joinedAt: number | null;
 }
 
@@ -58,7 +57,6 @@ export function teamRows(state: HostState, now: number = state.serverMs): TeamRo
       startOrder: t.startOrder,
       stepLabel: t.finishAt !== null ? 'Đã về đích' : (state.leg?.steps[t.step]?.label ?? '—'),
       penaltyMinutes: t.penaltyMinutes,
-      startAt: t.startAt,
       joinedAt: t.joinedAt,
     };
   });
@@ -99,7 +97,7 @@ export function parseTeamLines(text: string, colours: readonly string[], first =
   return { teams, error: null };
 }
 
-// ── Phase 7 (docs/plans/phase7.md D9, D11, D15, track E): race status, start times in the leg's time zone, step_progress matrix ──
+// ── Phase 7 (docs/plans/phase7.md D9, D11, track E): race status, times in the leg's time zone, step_progress matrix ──
 
 const pad = (n: number, w = 2) => String(Math.abs(Math.trunc(n))).padStart(w, '0');
 
@@ -110,33 +108,6 @@ function fieldsIn(ms: number, tz: string) {
   return { y: n('year'), mo: n('month'), d: n('day'), h: n('hour') % 24, mi: n('minute'), s: n('second') };
 }
 
-/** `<input type="datetime-local" step="1">` value ("2026-10-03T14:05:30") of server ms `ms`, read in zone `tz`. */
-export function msToInput(ms: number, tz: string): string {
-  const f = fieldsIn(ms, tz);
-  return `${pad(f.y, 4)}-${pad(f.mo)}-${pad(f.d)}T${pad(f.h)}:${pad(f.mi)}:${pad(f.s)}`;
-}
-
-/** The wall-clock text of a datetime-local input read IN zone `tz` (not the Host machine's zone) → server ms; null = not a time. */
-export function inputToMs(value: string, tz: string): number | null {
-  const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d))?$/.exec(value.trim());
-  if (!m) return null;
-  const [y, mo, d, h, mi, s] = m.slice(1).map((v) => Number(v ?? 0)) as [number, number, number, number, number, number];
-  const guess = Date.UTC(y, mo - 1, d, h, mi, s);
-  const offset = (at: number) => {
-    const f = fieldsIn(at, tz);
-    return Date.UTC(f.y, f.mo - 1, f.d, f.h, f.mi, f.s) - Math.floor(at / 1000) * 1000;
-  };
-  let ms = guess - offset(guess);
-  const again = offset(ms);
-  if (again !== guess - ms) ms = guess - again; // the other side of a DST change
-  return ms;
-}
-
-/** "hh:mm:ss" of a duration (negative: "-hh:mm:ss"). */
-export function fmtDuration(ms: number): string {
-  const s = Math.round(Math.abs(ms) / 1000);
-  return `${ms < 0 ? '-' : ''}${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
-}
 /** "mm:ss" (minutes may exceed 59); rounded once to whole seconds, so 59.6 s is "01:00", not "00:00". */
 export function fmtMinSec(ms: number): string {
   const s = Math.round(Math.abs(ms) / 1000);
@@ -146,18 +117,6 @@ export function fmtMinSec(ms: number): string {
 export function fmtTimeOfDay(ms: number, tz: string): string {
   const f = fieldsIn(ms, tz);
   return `${pad(f.h)}:${pad(f.mi)}:${pad(f.s)}`;
-}
-
-/** What the Host reads under the start-time input: the team clock that value would give right now, or (finished team,
- *  `finishAt` set) its final time = finishAt − start (D15: the server refuses a start in the future or after the finish). */
-export function startPreview(inputMs: number | null, nowMs: number, finishAt: number | null = null): { text: string; level: 'ok' | 'warn' | 'bad' } {
-  if (inputMs === null) return { text: 'Chưa hiểu giờ này.', level: 'bad' };
-  if (inputMs - nowMs > 60_000) return { text: `Giờ này còn ${fmtDuration(inputMs - nowMs)} nữa mới tới: máy chủ sẽ từ chối (tối đa 60 giây sau bây giờ).`, level: 'bad' };
-  if (finishAt !== null && inputMs > finishAt) return { text: 'Giờ này sau giờ về đích của đội: máy chủ sẽ từ chối.', level: 'bad' };
-  const d = (finishAt ?? nowMs) - inputMs;
-  if (d < 0) return { text: 'Đồng hồ đội bắt đầu từ bây giờ.', level: 'ok' };
-  const level = d > 6 * 3600_000 ? 'warn' : 'ok';
-  return finishAt !== null ? { text: `Đội đã về đích: thời gian sẽ là T+${fmtDuration(d)}.`, level } : { text: `Đồng hồ đội sẽ hiện T+${fmtDuration(d)}.`, level };
 }
 
 export interface StatusButton { op: 'start' | 'pause' | 'resume' | 'finish'; label: string; confirm: string | null; danger?: boolean }
@@ -171,33 +130,32 @@ export function statusButtons(state: HostState): StatusButton[] {
     label: 'Mở cuộc đua',
     confirm: blanks.length ? `Còn ${blanks.length} ô chưa xong:\n- ${blanks.join('\n- ')}\n\nVẫn mở cuộc đua?` : 'Mở cuộc đua cho tất cả các đội?',
   };
-  const end: StatusButton = { op: 'finish', label: 'Kết thúc', confirm: 'Kết thúc cuộc đua? Các đội sẽ không mở hòm hay làm nhiệm vụ được nữa.', danger: true };
+  const racing = state.teams.filter((t) => t.finishAt === null).map((t) => t.name);
+  const end: StatusButton = {
+    op: 'finish', label: 'Kết thúc', danger: true,
+    confirm: `Kết thúc cuộc đua? Các đội sẽ không mở hòm hay làm nhiệm vụ được nữa.${racing.length ? `\n\n${racing.length} đội chưa về đích sẽ nhận thông báo BỊ LOẠI: ${racing.join(', ')}.` : ''}`,
+  };
   switch (state.status) {
     case 'lobby': return [start];
-    case 'running': return [{ op: 'pause', label: 'Tạm dừng', confirm: 'Tạm dừng? Đồng hồ các đội vẫn chạy, thời gian tạm dừng không được trừ.' }, end];
+    case 'running': return [{ op: 'pause', label: 'Tạm dừng', confirm: 'Tạm dừng? Các đội không mở hòm / làm nhiệm vụ được cho tới khi tiếp tục; thứ hạng vẫn theo thứ tự về đích.' }, end];
     case 'paused': return [{ op: 'resume', label: 'Tiếp tục', confirm: null }, end];
     default: return [];
   }
 }
 
-/** §13.1 "ô còn trống" shown before "Mở cuộc đua": blanks of the leg + teams without a start time. */
+/** §13.1 "ô còn trống" shown before "Mở cuộc đua": blanks of the leg, no leg, no team (SPEC §17.23: no start times). */
 export function openBlanks(state: HostState): string[] {
   const out = (state.leg?.issues ?? []).filter((i) => i.level === 'blank').map((i) => `${i.where}: ${i.message}`);
   if (!state.leg) out.push('Chưa nạp chặng.');
-  const noStart = state.teams.filter((t) => t.startAt === null).map((t) => t.name);
-  if (noStart.length) out.push(`Chưa nhập giờ xuất phát: ${noStart.join(', ')}`);
   if (!state.teams.length) out.push('Chưa có đội nào.');
   return out;
 }
 
-/** Red banner lines (D9, D15, §13.1). */
+/** Red banner lines (D9, §13.1). */
 export function warnings(state: HostState): string[] {
   const w: string[] = [];
   const online = state.teams.filter((t) => t.online).length;
   if (state.status === 'lobby' && online) w.push(`Cuộc đua chưa mở nhưng đã có ${online} đội trong game (các đội xem được mật thư 1 nhưng chưa mở được hòm).`);
-  if (state.status === 'lobby' && state.teams.some((t) => t.startAt !== null)) w.push('Đã nhập giờ xuất phát khi cuộc đua chưa mở: đồng hồ các đội đang chạy.');
-  const noStart = state.teams.filter((t) => t.startAt === null && (t.online || t.joinedAt !== null)).map((t) => t.name);
-  if (noStart.length) w.push(`Chưa nhập giờ xuất phát (đồng hồ hiện --:--): ${noStart.join(', ')}.`);
   const errors = (state.leg?.issues ?? []).filter((i) => i.level === 'error');
   if (errors.length) w.push(`Chặng đang nạp có ${errors.length} lỗi: ${errors[0]!.where}: ${errors[0]!.message}`);
   return w;
@@ -209,16 +167,14 @@ export function legIssueLines(issues: LegIssueView[]): { level: LegIssueView['le
   return [...issues].sort((a, b) => rank[a.level] - rank[b.level]).map((i) => ({ level: i.level, text: `${i.where}: ${i.message}` }));
 }
 
-export interface StartRow { id: string; name: string; colour: string; startOrder: string; joined: string; startAt: number | null; input: string; stepLabel: string; penalty: string }
-/** One row of the "Giờ xuất phát" table; times read in the leg's zone (D15). */
+export interface StartRow { id: string; name: string; colour: string; startOrder: string; joined: string; stepLabel: string; penalty: string }
+/** One row of the "Thứ tự vào game" table (SPEC §17.12 order; §17.23: no start-time input); times in the leg's zone. */
 export function startRows(state: HostState): StartRow[] {
   const tz = state.leg?.timezone ?? 'Asia/Ho_Chi_Minh';
   return teamRows(state).map((r) => ({
     id: r.id, name: r.name, colour: r.colour,
     startOrder: r.startOrder === null ? '—' : String(r.startOrder),
     joined: r.joinedAt === null ? '—' : fmtTimeOfDay(r.joinedAt, tz),
-    startAt: r.startAt,
-    input: r.startAt === null ? '' : msToInput(r.startAt, tz),
     stepLabel: r.stepLabel,
     penalty: r.penaltyMinutes ? `+${r.penaltyMinutes} phút` : '—',
   }));
@@ -227,18 +183,20 @@ export function startRows(state: HostState): StartRow[] {
 /** A button inside a matrix cell: host.review on `team` / `step` (`id` absent = approve a photo task before "Tôi đã gửi bài"). */
 export interface CellButton { op: 'approve' | 'penalize'; team: string; step: string; id?: number; label: string; title: string; /** window.confirm text before sending (Phase 8B: the louvre exit). */ confirm?: string }
 export interface Cell { state: 'todo' | 'active' | 'done' | 'pending' | 'locked'; text: string; title: string; buttons: CellButton[] }
-export interface ProgressRow { team: string; name: string; colour: string; rank: string; cells: Cell[]; penalty: string; finish: string; official: string; gap: string; approvalWait: string }
+/** `rank`: "1", "4 · BỊ LOẠI" (SPEC §17.23), "—"; `out`: that team is eliminated (the row is marked). */
+export interface ProgressRow { team: string; name: string; colour: string; rank: string; out: boolean; cells: Cell[]; penalty: string; finish: string }
 
 const ANSWER_LABEL: Record<AnswerStatus, string> = { pending: 'chờ duyệt', approved: 'đã duyệt', penalized: 'bị phạt', wrong: 'chưa đúng', correct: 'đúng' };
 /** 0.1 → "0,1" (Vietnamese decimal comma; Number.toLocaleString depends on the Node / browser ICU). */
 const fmtNum = (n: number) => String(n).replace('.', ',');
 
-/** SPEC §13.6 minimal matrix: rows = teams (ranked first), columns = steps. grey = not yet, yellow = at the step (elapsed there),
- *  green = done ("HH:mm:ss · mm:ss": when · how long the step took). `mode` 't' shows T+ on each team's own clock.
+/** SPEC §13.6 minimal matrix: rows = teams (ranked first: real finish order, SPEC §17.22), columns = steps. grey = not yet,
+ *  yellow = at the step (elapsed there), green = done ("HH:mm:ss · mm:ss": when · how long the step took; SPEC §17.23: wall
+ *  clock only, no T+ per team).
  *  Phase 8 (D16): orange = an answer waits for the Host ("chờ duyệt mm:ss", Duyệt / Phạt in the cell), purple = a countdown
  *  ("⏳ mm:ss": the Host's penalty or a branch switch), "(A ↺1)" = branch A after one switch, "✗2" = two penalties; a photo
  *  task the team has started offers "Duyệt (đã nhận ảnh)"; the title lists every answer with the Host's notes. */
-export function progressTable(state: HostState, now: number, mode: 'real' | 't'): { head: { label: string; title: string }[]; rows: ProgressRow[] } {
+export function progressTable(state: HostState, now: number): { head: { label: string; title: string }[]; rows: ProgressRow[] } {
   const leg = state.leg;
   const tz = leg?.timezone ?? 'Asia/Ho_Chi_Minh';
   const steps = leg?.steps ?? [];
@@ -246,7 +204,7 @@ export function progressTable(state: HostState, now: number, mode: 'real' | 't')
   const teams = [...state.teams].sort((a, b) => (rankOf.get(a.id)?.rank ?? 1e9) - (rankOf.get(b.id)?.rank ?? 1e9) || a.slot - b.slot);
   const head = steps.map((s) => ({ label: s.label, title: s.name }));
   const rows = teams.map((t) => {
-    const when = (ms: number | null) => (ms === null ? '—' : mode === 't' && t.startAt !== null ? `T+${fmtDuration(ms - t.startAt)}` : fmtTimeOfDay(ms, tz));
+    const when = (ms: number | null) => (ms === null ? '—' : fmtTimeOfDay(ms, tz));
     const cells = steps.map((s, i): Cell => {
       const p = state.progress.find((x) => x.team === t.id && x.step === s.id);
       const lastDone = t.finishAt !== null && i === steps.length - 1;
@@ -298,16 +256,13 @@ export function progressTable(state: HostState, now: number, mode: 'real' | 't')
       return { state: 'active', text: `${p?.openedAt != null ? fmtMinSec(now - p.openedAt) : '…'}${tags}`, title, buttons: proofBtn };
     });
     const r = rankOf.get(t.id);
-    const wait = state.progress.reduce((n, x) => n + (x.team === t.id ? x.approvalWaitSeconds : 0), 0);
     return {
       team: t.id, name: t.name, colour: t.colour,
-      rank: r ? String(r.rank) : '—',
+      rank: r ? `${r.rank}${r.out ? ' · BỊ LOẠI' : ''}` : '—',
+      out: !!r?.out,
       cells,
       penalty: t.penaltyMinutes ? `+${t.penaltyMinutes} phút` : '—',
       finish: when(t.finishAt),
-      official: r?.officialMs != null ? fmtDuration(r.officialMs) : '—',
-      gap: r?.gapMs ? `+${fmtMinSec(r.gapMs)}` : '—',
-      approvalWait: wait ? fmtMinSec(wait * 1000) : '—',
     };
   });
   return { head, rows };
@@ -445,7 +400,7 @@ export function demoState(now = 1_000_000): HostState {
   const min = 60_000;
   type T = HostState['teams'][number];
   const team = (slot: number, name: string, colour: string, code: string, player: string, online: boolean, seenAgo: number | null, reconnects: number, p: ReturnType<typeof pose> | null, race: Partial<T> = {}, flagged = false): T =>
-    ({ slot, id: `t${slot}`, name, colour, online, code, player, lastSeen: seenAgo === null ? null : now - seenAgo, reconnects, pose: p, flagged, startAt: null, startOrder: null, step: 0, finishAt: null, penaltyMinutes: 0, joinedAt: null, ...race });
+    ({ slot, id: `t${slot}`, name, colour, online, code, player, lastSeen: seenAgo === null ? null : now - seenAgo, reconnects, pose: p, flagged, startOrder: null, step: 0, finishAt: null, penaltyMinutes: 0, joinedAt: null, ...race });
   const pt = (lat: number, lon: number, r: number, name: string) => ({ ...(({ x, z }) => ({ x, z }))(latLonToWorld(lat, lon)), r, name });
   const s = (id: string, type: 'route_info' | 'detour' | 'challenge' | 'pit_stop', label: string, p: ReturnType<typeof pt>, branches?: ReturnType<typeof pt>[]) =>
     ({ id, type, label, name: p.name, x: p.x, z: p.z, r: p.r, proof: false, ...(branches && { branches: branches.map((b, i) => ({ id: 'AB'[i]!, title: ['Tính', 'Ảnh'][i]!, ...b, proof: i === 1 })) }) });
@@ -461,14 +416,14 @@ export function demoState(now = 1_000_000): HostState {
     serverMs: now,
     status: 'running',
     teams: [
-      team(0, 'Đội Xanh', '#2c6bd8', 'K7M3QX', 'An', true, 0, 1, pose(120, -310), { startAt: t0, startOrder: 1, joinedAt: t0 + 2 * min, step: 5, finishAt: now - 4 * min }),
-      team(1, 'Đội Đỏ', '#d8342c', 'W9HT4B', 'Bình', true, 0, 0, pose(-80, 40), { startAt: t0 + 8 * min, startOrder: 2, joinedAt: t0 + 9 * min, step: 3, penaltyMinutes: 2 }, true),
-      team(2, 'Đội Vàng', '#e0b020', 'R2NZ8P', 'Chi', false, 95_000, 3, pose(400, -520), { startAt: t0 + 4 * min, startOrder: 3, joinedAt: t0 + 6 * min, step: 3 }),
+      team(0, 'Đội Xanh', '#2c6bd8', 'K7M3QX', 'An', true, 0, 1, pose(120, -310), { startOrder: 1, joinedAt: t0 + 2 * min, step: 5, finishAt: now - 4 * min }),
+      team(1, 'Đội Đỏ', '#d8342c', 'W9HT4B', 'Bình', true, 0, 0, pose(-80, 40), { startOrder: 2, joinedAt: t0 + 9 * min, step: 3, penaltyMinutes: 2 }, true),
+      team(2, 'Đội Vàng', '#e0b020', 'R2NZ8P', 'Chi', false, 95_000, 3, pose(400, -520), { startOrder: 3, joinedAt: t0 + 6 * min, step: 3 }),
       team(3, 'Đội Lục', '#2c9a4a', 'D5FY6E', '', false, null, 0, null),
       // Đội Tím: on Thử thách 1 for 46 min (the stuck warning), penalized twice, waiting out the countdown
-      team(4, 'Đội Tím', '#8a3fc4', 'M4PC7S', 'Dũng', false, 20 * min, 1, pose(60, -150), { startAt: now - 60 * min, startOrder: 4, joinedAt: now - 58 * min, step: 1 }),
+      team(4, 'Đội Tím', '#8a3fc4', 'M4PC7S', 'Dũng', false, 20 * min, 1, pose(60, -150), { startOrder: 4, joinedAt: now - 58 * min, step: 1 }),
       // Đội Cam: switched branch once, now waits for the Host on Lựa chọn kép (nhánh A, a typed answer)
-      team(5, 'Đội Cam', '#e07a20', 'H8LV2T', 'Em', false, 30_000, 0, pose(-200, -260), { startAt: t0 + 10 * min, startOrder: 5, joinedAt: t0 + 11 * min, step: 3 }),
+      team(5, 'Đội Cam', '#e07a20', 'H8LV2T', 'Em', false, 30_000, 0, pose(-200, -260), { startOrder: 5, joinedAt: t0 + 11 * min, step: 3 }),
     ],
     counters: { wsIn: 18_420, wsOut: 41_200, http: 12, alarms: 3, rows: 1_262 },
     bikes: [],
@@ -508,9 +463,9 @@ export function demoState(now = 1_000_000): HostState {
       { ...row('t5', 'D1', t0 + 38 * min, t0 + 45 * min, null, 'A', { branchSwitches: 1, branchOpenedAt: t0 + 46 * min, pending: true, submittedAt: now - 45_000, answers: [ans(1, 'bảy', now - 45_000, 'pending', 'A')] }), completedAt: null },
     ],
     ranking: [
-      { team: 't0', rank: 1, stepIndex: 5, finishAt: now - 4 * min, officialMs: 46 * min, gapMs: 0 },
-      { team: 't2', rank: 2, stepIndex: 3, finishAt: null, officialMs: null, gapMs: null },
-      { team: 't1', rank: 3, stepIndex: 3, finishAt: null, officialMs: null, gapMs: null },
+      { team: 't0', rank: 1, stepIndex: 5, finishAt: now - 4 * min, out: false },
+      { team: 't2', rank: 2, stepIndex: 3, finishAt: null, out: false },
+      { team: 't1', rank: 3, stepIndex: 3, finishAt: null, out: false },
     ],
     queue: [
       { team: 't2', step: 'D1', label: 'Lựa chọn kép', branch: 'B', id: 1, text: '', at: now - 72_000, reference: ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'], note: '', lockMinutes: 3 },
@@ -534,7 +489,7 @@ export function withLouvreDemo(state: HostState): HostState {
   const answers = [{ id: 1, text: '6 tác phẩm', at: now - 20 * min, status: 'wrong' as const, branch: null, correct: 2 }, { id: 2, text: '5 tác phẩm', at: now - 5 * min, status: 'wrong' as const, branch: null, correct: 3 }];
   return {
     ...state,
-    teams: state.teams.map((t) => (t.id === 't0' ? { ...t, step: 6 } : t.id === 't3' ? { ...t, step: at, startAt: t0, startOrder: 6, joinedAt: t0 + min } : t)),
+    teams: state.teams.map((t) => (t.id === 't0' ? { ...t, step: 6 } : t.id === 't3' ? { ...t, step: at, startOrder: 6, joinedAt: t0 + min } : t)),
     leg: { ...leg, steps: [...leg.steps.slice(0, at), lv, ...leg.steps.slice(at)] },
     progress: [
       ...state.progress,

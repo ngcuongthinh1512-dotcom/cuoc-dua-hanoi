@@ -47,9 +47,6 @@
   "clueBook": {
     "showLockedSlots": false
   },
-  "hostApproval": {
-    "approvalWaitCounts": false
-  },
   "specials": {
     "uTurn": {
       "enabled": false

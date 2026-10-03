@@ -1,7 +1,7 @@
 // Phase 7 track C: pure helpers of the race HUD (no DOM, tested in Node). Everything here works only from what the server
 // sent (ClueCard / RaceView / ZoneMember): never answers, destination names or a later step.
 import { LOUVRE } from '@race/shared';
-import { type AnswerStatus, type CardStatus, type ClueCard, type LouvreView, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
+import { type AnswerStatus, type CardStatus, type ClueCard, finishTexts, type FinishResult, type FinishTexts, type LouvreView, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
 import { raceClient, raceHud as C } from '../../config.ts';
 import { looksLikeIme } from '../../core/Input.ts';
 
@@ -55,13 +55,6 @@ export function formatDuration(ms: number): string {
   return h ? `${h}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
 }
 
-/** "01:42:15" (hours always 2 digits): the host NPC's sentence. Rounded to the second like the Host table
- *  (host/hostView.ts fmtDuration) and the stopped HUD clock (RaceClient.raceClock): the team and the Host read one time. */
-export const formatHms = (ms: number) => {
-  const t = Math.max(0, Math.round(ms / 1000));
-  return `${pad2(Math.floor(t / 3600))}:${pad2(Math.floor(t / 60) % 60)}:${pad2(t % 60)}`;
-};
-
 /** Time of day on the viewer's clock, "14:05:09". ponytail: browser time zone (players are in the leg's city), no leg timezone on the client. */
 export const formatTimeOfDay = (ms: number) => {
   const d = new Date(ms);
@@ -114,9 +107,24 @@ export class StartOrderBanner {
   }
 }
 
-/** The host NPC's line at the Pit Stop (D10: no "đội thứ n", the ranking is announced by the Host). */
-export const finishLine = (team: string, officialMs: number | null) =>
-  `${team}, các bạn đã về đích!${officialMs == null ? '' : ` Thời gian: ${formatHms(officialMs)}.`} Thứ hạng chính thức sẽ được Host công bố.`;
+/** SPEC §17.22 / §17.23: the finish announcement as shown (the server's texts; an empty one → the generic line, no place
+ *  name) + the card's title. */
+export function resultView(r: FinishResult, team: string): FinishTexts & { title: string } {
+  const own = { npc: r.npc, toast: r.toast, card: r.card };
+  return { ...finishTexts(r.kind, r.kind === 'finish' ? own : { [r.kind]: own }, r.rank, r.total, team), title: r.kind === 'out' ? 'BỊ LOẠI' : `Về đích thứ ${r.rank}` };
+}
+
+/** SPEC §17.21: clue cards and the Sổ mật thư may not be selected / copied (copy, cut, drag, right-click, selection start
+ *  are cancelled inside them); only the photo task's submission code and the typed answer box may. `target` = an event
+ *  target (an Element, or a Text node: its parent counts). Only a hurdle: a screenshot / devtools still read it. */
+export const COPY_OK = '.rc-code, input, textarea';
+export const NO_COPY_EVENTS = ['copy', 'cut', 'dragstart', 'contextmenu', 'selectstart'] as const;
+type Node0 = { closest?: (s: string) => unknown; parentElement?: Node0 | null } | null | undefined;
+export const copyBlocked = (target: unknown): boolean => {
+  const t = target as Node0;
+  const el = t?.closest ? t : t?.parentElement;
+  return !el?.closest?.(COPY_OK);
+};
 
 /** Penalty wait at the Pit Stop (SPEC §8.6): "Còn 02:14 phút phạt…" until RaceView.checkinAt, null when nothing to wait for. */
 export function penaltyLine(v: RaceView | null, serverNow: number): string | null {

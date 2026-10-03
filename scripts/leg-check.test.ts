@@ -440,6 +440,16 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     expect(runT('nomedia.json', k).report).not.toContain('Hình cần tải');
   });
 
+  it('SPEC §17.22: the finish texts (pit_stop.announce, they name the finish place) are secrets of the static scan too', () => {
+    const parsed = parseLeg(miniJson());
+    if (!parsed.ok) throw new Error('mini invalid');
+    const secrets = secretStrings(parsed.leg);
+    for (const x of ['(GIẢ) {tên đội} về đích thứ {n} tại cầu Iéna!', '(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}.']) expect(secrets).toContain(x);
+    const dir = mkdtempSync(join(tmpdir(), 'legann-'));
+    writeFileSync(join(dir, 'x.js'), JSON.stringify(['(GIẢ) {tên đội} về nhất tại cầu Iéna!']));
+    expect(errors(checkFile(legs('test/mini.json'), { root, map, scanDirs: [dir] }))).toEqual([expect.stringContaining('chứa nguyên văn "(GIẢ) {tên đội} về nhất')]);
+  });
+
   it('static scan (F1): a reference answer in a shipped folder is an error unless it is a place name of the map (then a warning)', () => {
     const parsed = parseLeg(miniJson());
     if (!parsed.ok) throw new Error('mini invalid');

@@ -5,6 +5,7 @@
 import { RACE_BBOX } from '../constants.ts';
 import { latLonToWorld } from '../projection.ts';
 import { MEDIA } from '../protocol/constants.ts';
+import { FINISH_HOLDERS } from '../protocol/finish.ts';
 import { LEG_LIMITS, type Leg, legSchema, LOUVRE, type MediaItem, STEP_TYPES, type Task } from './schema.ts';
 import { stepZones } from './zones.ts';
 
@@ -47,6 +48,8 @@ const FIELD: Record<string, string> = {
   louvre: 'phòng Louvre', artworks: 'tác phẩm', image: 'hình tác phẩm', note: 'ghi chú (chỉ Host)', credit: 'ghi nguồn',
   artist: 'tác giả', photo: 'tác giả ảnh', license: 'giấy phép', source: 'nguồn', hints: 'mốc gợi ý',
   countAtMinutes: 'phút gợi ý số lượng', correctAtMinutes: 'phút gợi ý số đúng',
+  // SPEC §17.22 / §17.23
+  announce: 'thông báo về đích', npc: 'lời NPC dẫn chương trình', toast: 'thông báo nhanh', card: 'thẻ về đích', first: 'bản về nhất', out: 'bản bị loại',
 };
 const TYPE: Record<string, string> = { number: 'một số', string: 'chữ (trong dấu ngoặc kép)', boolean: 'true hoặc false', array: 'danh sách [...]', object: 'một khối {...}' };
 
@@ -290,6 +293,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   });
 
   louvreRules(leg, add, geo);
+  announceRules(leg, add);
 
   // map data (CLI only): every point a team must reach (step zones, each detour branch's own place) is outside buildings
   // and walkable from every point of the step before (both branch places → the next step); bike racks outside buildings,
@@ -427,6 +431,24 @@ function louvreRules(leg: Leg, add: (level: LegIssue['level'], path: PropertyKey
 }
 
 const ART_ID = /^art-\d{2}$/;
+
+/** SPEC §17.22 / §17.23: the finish texts of the Pit Stop (announce): only the known placeholders; characters a team's screen
+ *  shows (no control characters: error; outside Latin / Vietnamese / common punctuation, e.g. emoji: warning, the system
+ *  font may draw a box). */
+function announceRules(leg: Leg, add: (level: LegIssue['level'], path: PropertyKey[], message: string) => void) {
+  leg.steps.forEach((s, i) => {
+    if (s.type !== 'pit_stop' || !s.announce) return;
+    walkStrings(s.announce, ['steps', i, 'announce'], (v, path) => {
+      const t = v.normalize('NFC');
+      const bad = [...new Set(t.match(/\{[^{}]*\}/g) ?? [])].filter((h) => !(FINISH_HOLDERS as readonly string[]).includes(h));
+      if (bad.length) add('error', path, `chỗ giữ ${bad.map((b) => `"${b}"`).join(', ')} không có; chỉ dùng ${FINISH_HOLDERS.join(', ')}`);
+      else if (/[{}]/.test(t.replace(/\{[^{}]*\}/g, ''))) add('error', path, `dấu { } lẻ: chỗ giữ phải viết đủ, ví dụ {n}; chỉ dùng ${FINISH_HOLDERS.join(', ')}`);
+      if (/[\p{Cc}\p{Cf}]/u.test(t.replace(/\n/g, ''))) add('error', path, 'có ký tự điều khiển / vô hình (thường do copy từ nơi khác): gõ lại đoạn này');
+      const odd = [...new Set(t.replace(/[\p{Cc}\p{Cf}\p{Script=Latin}\p{M}\p{N}\p{P}\p{Zs}\n+<=>^`|~°×$]/gu, ''))];
+      if (odd.length) add('warning', path, `có ký tự ngoài bảng chữ Việt / Latin (${odd.slice(0, 5).join(' ')}): máy người chơi có thể hiện ô vuông`);
+    });
+  });
+}
 
 /** Words of ≥ 4 letters / digits, lower case, no diacritics (rule 3: a file name carrying the note). */
 export const words = (s: string): string[] => normalizeAnswer(s).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4);

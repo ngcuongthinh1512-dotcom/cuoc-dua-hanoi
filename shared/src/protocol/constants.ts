@@ -6,7 +6,9 @@
 // 4 = Phase 8B Louvre room (docs/plans/phase8b.md §C): race pick / lock / view / credits, TaskView.louvre,
 //     AnswerView.correct, feed + welcome.feed, credits, notices lockWrong / pickLimit / creditsLocked,
 //     StepProgressView picks / hintCorrect, HostState.leg.steps[].louvre.
-export const PROTOCOL_VERSION = 4;
+// 5 = SPEC §17.22 / §17.23: no team clock (RaceView.startAt / officialMs, welcome.raceTime, host.team gone), RaceView.result,
+//     RankRow.out (ranking = real finish order).
+export const PROTOCOL_VERSION = 5;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */

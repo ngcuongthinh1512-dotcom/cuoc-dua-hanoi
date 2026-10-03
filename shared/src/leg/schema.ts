@@ -148,7 +148,13 @@ const challenge = z.strictObject({
   teaser: text().default(''),
   task: taskSchema.prefault({}),
 });
-const pitStop = z.strictObject({ id: stepId, type: z.literal('pit_stop'), label: text(), destination: destinationSchema });
+/** SPEC §17.22 / §17.23: what a team reads when it finishes (host NPC line, toast, finish card); each field optional
+ *  (missing → the generic FINISH_DEFAULTS, protocol/finish.ts). `first` = the winner's, `out` = "BỊ LOẠI" (the last team
+ *  to finish, or unfinished when the Host ends the race). Placeholders {n} {tổng} {tên đội}. Server-only until sent to
+ *  that team at its finish (the real text names the finish place). */
+const announceTexts = { npc: text().optional(), toast: text().optional(), card: text().optional() };
+export const announceSchema = z.strictObject({ ...announceTexts, first: z.strictObject(announceTexts).optional(), out: z.strictObject(announceTexts).optional() });
+const pitStop = z.strictObject({ id: stepId, type: z.literal('pit_stop'), label: text(), destination: destinationSchema, announce: announceSchema.optional() });
 
 export const stepSchema = z.discriminatedUnion('type', [routeInfo, detour, challenge, pitStop]);
 
@@ -193,10 +199,11 @@ export const legSchema = z.strictObject({
   /** Phase 8 (SPEC §17.14): the Host page warns when a team has been on one challenge / branch this long (repeats every
    *  period until it is done); computed on the Host page, nothing in game. */
   hostAlerts: z.strictObject({ stuckMinutes: z.number().positive().default(45) }).prefault({}),
-  /** SPEC §17.17: no Messenger / Facebook button in game: an old file's contactUrl / contactLabel are accepted and dropped. */
+  /** SPEC §17.17: no Messenger / Facebook button in game: an old file's contactUrl / contactLabel are accepted and dropped.
+   *  SPEC §17.23: no official time any more, so an old file's approvalWaitCounts is accepted and dropped too. */
   hostApproval: z
-    .strictObject({ approvalWaitCounts: z.boolean().default(false), contactUrl: z.unknown().optional(), contactLabel: z.unknown().optional() })
-    .transform(({ approvalWaitCounts }) => ({ approvalWaitCounts }))
+    .strictObject({ approvalWaitCounts: z.boolean().optional(), contactUrl: z.unknown().optional(), contactLabel: z.unknown().optional() })
+    .transform(() => ({}))
     .prefault({}),
   /** SPEC §9 (Phase 9 adds the per-element parameters). */
   specials: z.strictObject({ uTurn: on(false), yield: on(false), fastForward: on(false), speedBump: on(false), expressPass: on(true) }).prefault({}),
@@ -225,3 +232,4 @@ export type VehiclesConfig = Leg['vehicles'];
 export type LouvreTask = z.output<typeof louvreSchema>;
 export type Artwork = LouvreTask['artworks'][number];
 export type ArtCredit = NonNullable<Artwork['credit']>;
+export type Announce = z.output<typeof announceSchema>;

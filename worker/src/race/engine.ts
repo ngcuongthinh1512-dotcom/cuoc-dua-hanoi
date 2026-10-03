@@ -5,11 +5,11 @@
 // host.state parts.
 import { branchZone, jsonProblem, LOUVRE, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
 import { latLonToWorld } from '@race/shared';
-import type { BoxInfo, FeedMessage, HostMessage, HostState, PoseSample, RaceOp, RaceStatus, RaceView, ReviewItem, ServerMessage, ServerNotice, StepProgressView, Welcome, ZoneMember } from '@race/shared/protocol';
+import { finishTexts, type BoxInfo, type FeedMessage, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
-import { officialMs, ranking } from './ranking.ts';
+import { ranking } from './ranking.ts';
 import { advance, boxesOf, cardOf, creditsOf, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
 
 /** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
@@ -20,17 +20,19 @@ const ANSWERS_KEPT = 50;
 export interface TeamRace {
   /** Index of the current step. */
   step: number;
-  /** SPEC §17.12: server ms the team got its first clue outside the game (Host input), null = not entered. */
-  startAt: number | null;
   /** SPEC §17.12: 1 + the number of teams that entered the game before it; set at its first WebSocket entry, kept. */
   startOrder: number | null;
-  /** server ms of that first entry (step 1's clue_opened_at when no start time is set). */
+  /** server ms of that first entry (= step 1's clue_opened_at: SPEC §17.23, no Host start time any more). */
   joinedAt: number | null;
   finishAt: number | null;
   penaltyMinutes: number;
+  /** SPEC §17.22: the place fixed at the check-in (real finish order) or at the Host's "Kết thúc" (out), null = racing. */
+  rank: number | null;
+  /** SPEC §17.23: eliminated: the last team to finish (every other team already had), or unfinished at "Kết thúc". */
+  out: boolean;
 }
 
-export const NEW_TEAM_RACE: TeamRace = { step: 0, startAt: null, startOrder: null, joinedAt: null, finishAt: null, penaltyMinutes: 0 };
+export const NEW_TEAM_RACE: TeamRace = { step: 0, startOrder: null, joinedAt: null, finishAt: null, penaltyMinutes: 0, rank: null, out: false };
 
 export interface RaceIO {
   sql: SqlStorage;
@@ -48,6 +50,8 @@ export interface RaceIO {
   saveTeam(id: string, r: TeamRace): void;
   teamIds(): string[];
   slot(id: string): number;
+  /** The team's name (the finish texts' {tên đội}). */
+  name(id: string): string;
   /** Teams with an open socket. */
   online(): string[];
   /** The team's trusted pose (RaceRoom: TrustedPoint, D4; mode = its last pose's), null = none yet. */
@@ -84,7 +88,7 @@ export function feedLine(at: number, e: LockEvent): FeedMessage | null {
   return { t: 'feed', at, slot: e.slot, ok: e.ok, ...(e.ok ? {} : { minutes: e.minutes }), ...(e.public ? { n: e.c, of: LOUVRE.answers } : {}) };
 }
 
-export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.team' | 'host.leg' | 'host.review' }>;
+export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.leg' | 'host.review' }>;
 
 const STATUS_NOTICE = { lobby: 'raceNotOpen', paused: 'racePaused', finished: 'raceOver' } as const;
 /** host.race op → [from statuses, to]. */
@@ -94,8 +98,6 @@ const MOVES: Record<'start' | 'pause' | 'resume' | 'finish', [RaceStatus[], Race
   resume: [['paused'], 'running', 'Cuộc đua không ở trạng thái tạm dừng.'],
   finish: [['running', 'paused'], 'finished', 'Chỉ kết thúc được cuộc đua đang chạy hoặc đang tạm dừng.'],
 };
-/** host.team start times later than the server's now by more than this are refused (D15: Host typo). */
-const FUTURE_SLACK_MS = 60_000;
 const OVERRULED = 'Lưu ý: bài này vừa bị Phạt, nay đã được Duyệt (khóa phạt đã gỡ, đội nhận mật thư kế). Nếu không định sửa quyết định Phạt, hãy trao đổi với Host còn lại.';
 const LEG_LOCKED = 'Đã có đội vào game trong cuộc đua này. Muốn đổi chặng, hãy tạo cuộc đua mới (race id mới): nạp chặng → tạo đội → phát mã → mở.';
 
@@ -151,7 +153,7 @@ export class RaceEngine {
   }
 
   /** The race parts of a team's welcome (`first` = enter() said so; `pose` = its trusted pose, null = never seen). */
-  welcome(team: string, pose: PoseSample | null, first: boolean, now: number): Pick<Welcome, 'view' | 'raceTime' | 'boxes' | 'startOrder' | 'showStartOrder' | 'start'> {
+  welcome(team: string, pose: PoseSample | null, first: boolean, now: number): Pick<Welcome, 'view' | 'boxes' | 'startOrder' | 'showStartOrder' | 'start'> {
     const r = this.io.team(team)!;
     const view = this.view(team, now);
     const boxes: BoxInfo[] = [];
@@ -164,13 +166,12 @@ export class RaceEngine {
     // the current box: once opened (a branch box until the Host approves, S2), else within boxReveal.radius (§17.10)
     const cur = this.currentBox(team, now);
     if (cur && (cur.opened || (pose && Math.hypot(pose.x - cur.x, pose.z - cur.z) <= this.legV.boxReveal.radius))) boxes.push(cur);
-    return { view, raceTime: raceTime(r, now), boxes, startOrder: r.startOrder, showStartOrder: first, start: pose ? null : startSpot(this.legV, r.startOrder ?? 1) };
+    return { view, boxes, startOrder: r.startOrder, showStartOrder: first, start: pose ? null : startSpot(this.legV, r.startOrder ?? 1) };
   }
 
-  /** Login summary (SPEC §8.10 "Chào mừng trở lại"): race clock s + the current step's label. */
-  summary(team: string, now: number): { raceTime: number | null; step: string | null } {
-    const r = this.io.team(team);
-    return r ? { raceTime: raceTime(r, now), step: this.legV.steps[r.step]?.label ?? null } : { raceTime: null, step: null };
+  /** Login summary (SPEC §8.10 "Chào mừng trở lại"): the current step's label (SPEC §17.23: no race clock). */
+  summary(team: string): { step: string | null } {
+    return { step: this.legV.steps[this.io.team(team)?.step ?? -1]?.label ?? null };
   }
 
   /** A trusted pose (RaceRoom.onPose after TrustedPoint, respawns included): arrivals, Pit Stop, "Tại điểm này". */
@@ -214,30 +215,24 @@ export class RaceEngine {
     if (m.t === 'host.race') {
       const [from, to, refused] = MOVES[m.op];
       if (!from.includes(this.statusV)) return notice('error', refused);
-      this.meta('status', to);
+      // SPEC §17.23 (Chốt): "Kết thúc" with teams still racing → each is out, ranked after every finished team (furthest
+      // step first, then who got there sooner), written with the status in one transaction before anyone hears of it
+      const outs = to === 'finished' ? this.hostView(now).ranking.filter((x) => x.finishAt === null && !this.io.team(x.team)?.out) : [];
+      this.io.transaction(() => {
+        this.meta('status', to);
+        this.io.event(now, null, 'host.race', { op: m.op });
+        for (const x of outs) {
+          this.io.event(now, x.team, 'out', { rank: x.rank, total: this.io.teamIds().length, by: 'host' });
+          this.io.saveTeam(x.team, { ...this.io.team(x.team)!, rank: x.rank, out: true });
+        }
+      });
       this.statusV = to;
-      this.io.event(now, null, 'host.race', { op: m.op });
       for (const id of this.io.online()) {
         // D9: a team standing still in a zone / on the mat sends no pose: judge its last trusted pose now
         const p = this.io.pose(id);
         if (to === 'running' && p) this.onPose(id, p, now);
         this.io.send(id, { t: 'race', view: this.view(id, now) });
       }
-      return this.io.changed(now);
-    }
-    if (m.t === 'host.team') {
-      const r = this.io.team(m.team);
-      if (!r) return notice('error', 'Không có đội này.');
-      const at = m.at === 'now' ? now : m.at;
-      if (at !== null && at > now + FUTURE_SLACK_MS) return notice('error', 'Giờ xuất phát nằm trong tương lai; kiểm tra lại ngày giờ và múi giờ của chặng.');
-      if (at !== null && r.finishAt !== null && at > r.finishAt) return notice('error', 'Giờ xuất phát sau giờ về đích của đội; kiểm tra lại.');
-      this.io.transaction(() => {
-        this.io.event(now, m.team, 'host.start', { at });
-        this.io.saveTeam(m.team, { ...r, startAt: at });
-      });
-      if (at !== null && r.joinedAt !== null && at > r.joinedAt)
-        notice('warning', 'Đã lưu, nhưng giờ xuất phát muộn hơn lúc đội vào game: đội nhận mật thư ngoài game trước khi vào, giờ xuất phát thường sớm hơn.');
-      this.io.send(m.team, { t: 'race', view: this.view(m.team, now) });
       return this.io.changed(now);
     }
     if (m.t === 'host.review') {
@@ -349,7 +344,7 @@ export class RaceEngine {
           picks: parsePicks(row), hintCorrect: louvreView(leg, i, row, this.zones[i]!, now)?.hintCorrect ?? null,
         });
       }
-      return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, startAt: r.startAt, finishAt: r.finishAt, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null, approvalWaitMs: this.waitMs(id) }];
+      return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, finishAt: r.finishAt, rank: r.rank, out: r.out, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null }];
     });
     // D10: every answer waiting for the Host, oldest first (the reference answers are Host-only, like this whole message)
     const queue: ReviewItem[] = [];
@@ -381,7 +376,7 @@ export class RaceEngine {
         media: r2Names(leg), penalties: { retryLockMinutes: leg.penalties.retryLockMinutes, branchSwitchLockMinutes: leg.penalties.branchSwitchLockMinutes }, stuckMinutes: leg.hostAlerts.stuckMinutes,
       },
       progress,
-      ranking: ranking(ranks, leg.hostApproval.approvalWaitCounts),
+      ranking: ranking(ranks),
       queue,
     };
   }
@@ -430,13 +425,13 @@ export class RaceEngine {
     return m;
   }
 
-  /** Step i's row as the team sees it: step 1's clue_opened_at = its start time, else its first entry (D3, on read). */
+  /** Step i's row as the team sees it: step 1's clue_opened_at = its first entry (D3, on read; SPEC §17.23: no start time). */
   private row(team: string, i: number, r: TeamRace): StepProgressRow | undefined {
     const s = this.legV.steps[i];
     if (!s) return undefined;
     const row = this.teamRows(team).get(s.id);
     if (i > 0) return row;
-    const opened = r.startAt ?? r.joinedAt;
+    const opened = r.joinedAt;
     return opened === null && !row ? undefined : { ...(row ?? emptyProgress(team, s.id)), clue_opened_at: opened };
   }
 
@@ -444,13 +439,13 @@ export class RaceEngine {
     return { step: r.step, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes, ...rowFacts(this.teamRows(team).get(this.legV.steps[r.step]?.id ?? '')) };
   }
 
-  /** D23: ms the team waited for Host decisions (SPEC §8.9), deducted from its official time unless approvalWaitCounts. */
-  private waitMs(team: string): number {
-    return Math.round([...this.teamRows(team).values()].reduce((n, x) => n + x.approval_wait_seconds * 1000, 0));
-  }
-
-  private official(team: string, r: TeamRace): number | null {
-    return officialMs({ ...r, approvalWaitMs: this.waitMs(team) }, this.legV.hostApproval.approvalWaitCounts);
+  /** SPEC §17.22 / §17.23: the team's finish announcement (texts of the leg's pit_stop.announce, else the defaults). */
+  private result(team: string, r: TeamRace): FinishResult | null {
+    if (r.rank === null) return null;
+    const kind = r.out ? 'out' : r.rank === 1 ? 'first' : 'finish';
+    const total = this.io.teamIds().length;
+    const pit = this.legV.steps.at(-1);
+    return { rank: r.rank, total, kind, ...finishTexts(kind, pit?.type === 'pit_stop' ? pit.announce : undefined, r.rank, total, this.io.name(team)) };
   }
 
   private view(team: string, now: number): RaceView {
@@ -458,10 +453,10 @@ export class RaceEngine {
     const p = this.progress(team, r);
     const pit = this.legV.steps[r.step]?.type === 'pit_stop';
     return {
-      status: this.statusV, startAt: r.startAt, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
+      status: this.statusV, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
       card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now, this.zones) : null,
       checkinAt: pit && r.finishAt === null && r.penaltyMinutes > 0 && p.arrivedAt !== null ? p.arrivedAt + r.penaltyMinutes * 60_000 : null,
-      officialMs: this.official(team, r),
+      result: this.result(team, r),
     };
   }
 
@@ -492,6 +487,7 @@ export class RaceEngine {
     const events: [string, object][] = [];
     const out: ServerMessage[] = [];
     const parks: Extract<RaceEffect, { kind: 'park' }>[] = [];
+    let placed: Pick<TeamRace, 'rank' | 'out'> = { rank: r.rank, out: r.out };
     const feeds: FeedMessage[] = [];
     let picked = false;
     const hides: Extract<RaceEffect, { kind: 'hideBox' }>[] = [];
@@ -561,11 +557,15 @@ export class RaceEngine {
         if (!e.ok) notice('lockWrong'); // right: the `complete` after it says clueNew
       } else if (e.kind === 'finish') {
         edit(p.step).completed_at = now;
-        events.push(['finish', { officialMs: this.official(team, { ...r, finishAt: now }) }]);
+        // SPEC §17.22: the real finish order, fixed now; §17.23: the last team of the race (every other one finished) is out
+        const others = this.io.teamIds().filter((id) => id !== team);
+        const done = others.filter((id) => this.io.team(id)?.finishAt != null).length;
+        placed = { rank: done + 1, out: others.length > 0 && done === others.length };
+        events.push(['finish', { ...placed, total: others.length + 1 }]);
       }
     }
-    const next: TeamRace = { ...r, step: p.step, finishAt: p.finishAt };
-    const teamChanged = next.step !== r.step || next.finishAt !== r.finishAt;
+    const next: TeamRace = { ...r, step: p.step, finishAt: p.finishAt, ...placed };
+    const teamChanged = next.step !== r.step || next.finishAt !== r.finishAt || next.rank !== r.rank;
     if (dirty.size || events.length || teamChanged) {
       this.io.transaction(() => {
         for (const row of dirty.values()) this.io.counters.rows += writeProgress(this.io.sql, row);
@@ -660,9 +660,6 @@ export class RaceEngine {
     }
   }
 }
-
-/** s on the team's race clock (SPEC §17.12), stopped at the check-in; null = no start time. */
-const raceTime = (r: TeamRace, now: number) => (r.startAt === null ? null : Math.max(0, ((r.finishAt ?? now) - r.startAt) / 1000));
 
 const pick = (z: Zone) => ({ name: z.name, x: z.x, z: z.z, r: z.r });
 

@@ -183,6 +183,8 @@ export function secretStrings(leg: Leg, min = 12): string[] {
     const tasks = s.type === 'detour' ? s.branches.map((b) => (out.add(b.summary), b.task)) : s.type === 'challenge' ? [s.task] : [];
     for (const t of tasks) [t.title, t.description, t.proofInstruction, ...t.answers, ...t.referenceAnswers].forEach((x) => out.add(x)); // Phase 8: reference answers are Host-only
     for (const a of artworksOf(s)) [a.note, a.credit?.title ?? '', a.credit?.artist ?? ''].forEach((x) => out.add(x)); // Phase 8B rule 9: server-only
+    // SPEC §17.22: the finish texts name the finish place: server-only until the team finishes
+    if (s.type === 'pit_stop' && s.announce) for (const t of [s.announce, s.announce.first, s.announce.out]) [t?.npc, t?.toast, t?.card].forEach((x) => x && out.add(x));
   }
   return [...out].map((x) => x.trim()).filter((x) => x.length >= min);
 }

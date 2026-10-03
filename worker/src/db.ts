@@ -1,8 +1,8 @@
 // Durable Object SQLite schema (docs/plans/phase6.md §3.5, docs/plans/phase7.md §5.4). Rows written are quota (100 000 /
 // day on the Free plan, an index row counts too): hot data is batched into single JSON rows, only `events` carries an
 // index (the Host filters by team). v2 (Phase 7): step_progress (one row per team × step, WITHOUT ROWID on its primary
-// key = 1 row written per upsert); the loaded leg lives in meta ('leg' JSON, 'legId'); the new team fields (startAt,
-// startOrder, finishAt, penalty…) live in teams.state JSON, so no ALTER. v3 (Phase 8, docs/plans/phase8.md D4): four
+// key = 1 row written per upsert); the loaded leg lives in meta ('leg' JSON, 'legId'); the new team fields (startOrder,
+// finishAt, penalty…; SPEC §17.22 rank / out) live in teams.state JSON, so no ALTER (an old row's startAt is ignored). v3 (Phase 8, docs/plans/phase8.md D4): four
 // step_progress columns by ALTER (answers JSON, locked_until, branch_opened_at, host_note); no new table. v4 (Phase 8B,
 // docs/plans/phase8b.md §D): step_progress.picks by ALTER (the louvre picks of the last lock; live picks: engine memory +
 // the snapshot row).

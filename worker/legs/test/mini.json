@@ -158,6 +158,13 @@
         "lat": 48.8596,
         "lon": 2.29243,
         "radius": 25
+      },
+      "announce": {
+        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại cầu Iéna!",
+        "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
+        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại cầu Iéna.",
+        "first": { "npc": "(GIẢ) {tên đội} về nhất tại cầu Iéna!", "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội." },
+        "out": { "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.", "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}", "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}." }
       }
     }
   ]

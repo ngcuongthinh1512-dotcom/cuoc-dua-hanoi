@@ -2,6 +2,7 @@
 // (poses, ticks) are plain number arrays rounded to cm (SPEC §3); everything else is a small JSON object with a `t` tag.
 // Changing a shape = PROTOCOL_VERSION + 1. Leg literals come from the leg schema as types only (no zod in the client).
 import type { StepType, TaskKind, Transport, Verification, VehiclesConfig } from '../leg/schema.ts';
+import type { FinishKind, FinishTexts } from './finish.ts';
 
 export type { StepType, TaskKind, Transport, Verification, VehiclesConfig };
 
@@ -227,9 +228,6 @@ export interface ClueCard {
 /** The team's own race state (welcome.view, then `{t:'race', view}` on every change). */
 export interface RaceView {
   status: RaceStatus;
-  /** server ms the team's clock started (Host input: the first clue was handed over OUTSIDE the game, SPEC §17.12);
-   *  null = not entered yet (the HUD clock shows --:--). */
-  startAt: number | null;
   /** server ms of the Pit Stop check-in (SPEC §8.6), null = still racing. */
   finishAt: number | null;
   penaltyMinutes: number;
@@ -237,8 +235,15 @@ export interface RaceView {
   card: ClueCard | null;
   /** Pit Stop with a penalty: server ms from which the team may check in (SPEC §8.6), else null. */
   checkinAt: number | null;
-  /** After the check-in: official time, ms (SPEC §13.8; Host approval waits deducted when they do not count). */
-  officialMs: number | null;
+  /** SPEC §17.22 / §17.23: the team's place once it finished (fixed: real finish order) or is out (the last team to
+   *  finish, or still racing when the Host ended the race); texts from the leg (pit_stop.announce) or FINISH_DEFAULTS,
+   *  placeholders filled. null = still racing. */
+  result: FinishResult | null;
+}
+export interface FinishResult extends FinishTexts {
+  rank: number;
+  total: number;
+  kind: FinishKind;
 }
 /** "Tại điểm này" (SPEC §7): another online team inside the same point's zone and what it visibly does. */
 export interface ZoneMember {
@@ -275,7 +280,7 @@ export interface StepProgressView {
   lockedUntil: number | null;
   /** The last answer waits for the Host. */
   pending: boolean;
-  /** SPEC §8.9: s waited for Host decisions (deducted from the official time unless hostApproval.approvalWaitCounts). */
+  /** SPEC §8.9: s waited for Host decisions (information for the Host only: SPEC §17.23, no official time any more). */
   approvalWaitSeconds: number;
   /** Every answer of this step, all branches, with the Host's note per decision. */
   answers: (AnswerView & { branch: string | null; note?: string })[];
@@ -310,16 +315,16 @@ export interface ReviewItem {
 /** Phase 8 (SPEC §8.9 (2), docs/plans/phase8.md §12 q16): the code a team pastes with its photo on Messenger and the Host
  *  sees in the review queue: "<team name>-<step>[-<branch>]" (one pending answer per team at a time: no random part). */
 export const submitCode = (teamName: string, step: string, branch?: string | null) => `${teamName}-${step}${branch ? `-${branch}` : ''}`;
-/** SPEC §13.6 / §13.8 ranking: finished teams by official time, then the others by step reached. */
+/** SPEC §17.22 ranking: finished teams in real finish order, then the teams out at the Host's "Kết thúc", then the others
+ *  by step reached. */
 export interface RankRow {
   team: string;
   rank: number;
   /** Index of the current step (steps.length − 1 + finished = the Pit Stop). */
   stepIndex: number;
   finishAt: number | null;
-  officialMs: number | null;
-  /** Official time − the leader's, ms (finished teams only). */
-  gapMs: number | null;
+  /** SPEC §17.23: eliminated (the last team to finish, or unfinished when the Host ended the race). */
+  out: boolean;
 }
 export interface LegIssueView {
   level: 'error' | 'warning' | 'blank';
@@ -386,10 +391,6 @@ export type HostMessage =
   /** Phase 7: open the race (lobby → running), pause / resume (race ops refused while paused, clocks run on: decision
    *  D9), end the leg (SPEC §13.3). */
   | { t: 'host.race'; op: 'start' | 'pause' | 'resume' | 'finish' }
-  /** Phase 7 (SPEC §17.12): when the team got its first clue outside the game (server ms), null = clear, 'now' = the
-   *  server stamps its own clock (the "Bây giờ" button: the Host machine's clock may be off). Refused (host.notice) when
-   *  later than the server's now + 60 s; a warning when later than the team's first entry (it got the clue before). */
-  | { t: 'host.team'; op: 'startAt'; team: string; at: number | null | 'now' }
   /** Phase 7: load a bundled leg (`id`) or a leg file the Host picked (`json` text), lobby only; answer: host.legResult. */
   | { t: 'host.leg'; id?: string; json?: string }
   | HostReview;
@@ -422,8 +423,6 @@ export interface Welcome {
   presence: { renderRadius: number; showOthersOnMinimap: boolean; interestRadius: number };
   /** SPEC §8.10: where the team last stood (null = first login: the leg's start). bikeId = the bike it holds. */
   pose: (PoseSample & { bikeId: string | null }) | null;
-  /** s on this team's race clock at serverMs (now − its start time, SPEC §17.12), null = no start time yet / Host. */
-  raceTime: number | null;
   bikes: BikeInfo[];
   /** SPEC §17.10: this team's visible clue boxes now (never a future step; the current one only within boxReveal.radius). */
   boxes: BoxInfo[];
@@ -456,7 +455,7 @@ export type ServerMessage =
   | { t: 'box'; op: 'hide'; step: string }
   /** Phase 8 (D7): the team switched branch: drop that branch's box even if opened (`hide` never drops an opened box). */
   | { t: 'box'; op: 'remove'; step: string; branch: string }
-  /** Phase 7: the team's race state changed (step, start time, status, finish…). */
+  /** Phase 7: the team's race state changed (step, status, finish / result…). */
   | { t: 'race'; view: RaceView }
   /** Phase 7: answer to `race book`: every received card in order (SPEC §8.11; never a later step). */
   | { t: 'book'; cards: ClueCard[] }
@@ -480,9 +479,9 @@ export interface HostState {
   status: RaceStatus;
   teams: (TeamInfo & {
     code: string; player: string; lastSeen: number | null; reconnects: number; pose: PoseSample | null; flagged: boolean;
-    /** Phase 7: SPEC §17.12 start time (server ms, Host input), first-entry order, current step index, check-in, penalty. */
-    startAt: number | null; startOrder: number | null; step: number; finishAt: number | null; penaltyMinutes: number;
-    /** server ms of the team's first entry into the game (the start time should be before it). */
+    /** Phase 7: first-entry order, current step index, check-in, penalty (SPEC §17.23: no start time any more). */
+    startOrder: number | null; step: number; finishAt: number | null; penaltyMinutes: number;
+    /** server ms of the team's first entry into the game. */
     joinedAt: number | null;
   })[];
   counters: QuotaCounters;
@@ -497,7 +496,7 @@ export interface HostState {
   leg: {
     id: string;
     title: string;
-    /** IANA zone the Host's start-time input is read in (leg.timezone). */
+    /** IANA zone the Host page shows times in (leg.timezone). */
     timezone: string;
     start: { x: number; z: number };
     /** stepZones(leg) per step (+ branchZone of each detour branch). */

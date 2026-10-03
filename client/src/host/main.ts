@@ -6,7 +6,7 @@ import graphUrl from '@race/shared/data/roadgraph.json?url';
 import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { checkMediaFile, corridorPoints, counterLines, demoState, freshAlerts, freshQueue, inputToMs, legIssueLines, legPenaltyLine, louvreLines, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startPreview, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, warnings, withLouvreDemo } from './hostView.ts';
+import { checkMediaFile, corridorPoints, counterLines, demoState, freshAlerts, freshQueue, legIssueLines, legPenaltyLine, louvreLines, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, warnings, withLouvreDemo } from './hostView.ts';
 
 type State = HostState;
 /** Lazy: the corridor code + road graph load only when candidates are computed (docs/plans/phase6.md §2.4). */
@@ -99,7 +99,6 @@ const notifyBtn = el('button', { className: 'small', onclick: () => void askNoti
 const queueBox = el('section', { className: 'review-list' });
 /** "Chờ duyệt (n)": sticky at the top while something waits (D16 (1)). */
 const queueWrap = el('div', { className: 'queue-wrap' }, el('div', { className: 'row' }, queueHead, notifyBtn), queueBox);
-const matrixMode = el('span', { className: 'row' });
 const teamsBox = el('section');
 const counters = el('section');
 const bikes = el('section');
@@ -107,10 +106,7 @@ const candStatus = el('span', { className: 'note' }); // outlives render(): the 
 let computing = false;
 let lastAttempt = 0; // throttles automatic retries (D11: recomputed by itself whenever the server holds no candidates)
 let legResult: { ok: boolean; issues: LegIssueView[] } | null = null;
-let showT = false; // §13.6: real time ⇄ T+ on each team's own clock
 const notices: { level: 'error' | 'warning'; message: string; at: number }[] = [];
-const drafts = new Map<string, string>(); // team id → what the Host typed in its start-time input (survives a rebuild)
-const previews = new Map<string, { input: HTMLInputElement; out: HTMLElement }>();
 const sigs = { status: '', leg: '', start: '', queue: '', matrix: '', media: '' };
 
 function addNotice(level: 'error' | 'warning', message: string) {
@@ -126,9 +122,6 @@ function drawNotices() {
 
 function mainView() {
   const link = `${location.origin}/?race=${encodeURIComponent(race)}`;
-  const modeBtn = (label: string, t: boolean) => el('button', { className: `small${showT === t ? ' sel' : ''}`, onclick: () => ((showT = t), drawModes(), state && render(state)) }, label);
-  const drawModes = () => matrixMode.replaceChildren(modeBtn('Giờ thực', false), modeBtn('T+ (đồng hồ từng đội)', true));
-  drawModes();
   sigs.status = sigs.leg = sigs.start = sigs.queue = sigs.matrix = sigs.media = '';
   drawNotify();
   app.replaceChildren(
@@ -140,8 +133,8 @@ function mainView() {
     el('h2', {}, 'Hình mật thư (R2)'), mediaBox,
     el('h2', {}, 'Tạo đội'),
     el('section', {}, create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
-    el('h2', {}, 'Giờ xuất phát'), startBox,
-    el('div', { className: 'row' }, el('h2', {}, 'Tiến trình & xếp hạng'), matrixMode), matrixBox,
+    el('h2', {}, 'Thứ tự vào game'), startBox,
+    el('h2', {}, 'Tiến trình & xếp hạng (theo thứ tự về đích)'), matrixBox,
     el('h2', {}, 'Các đội'), teamsBox,
     el('h2', {}, 'Hạn mức Cloudflare (ước tính)'), counters,
     el('h2', {}, 'Xe chung'), bikes,
@@ -229,7 +222,7 @@ function once(key: keyof typeof sigs, sig: string, build: () => void) {
 }
 
 function drawStatus(s: State) {
-  once('status', JSON.stringify([s.status, s.leg?.id, s.leg?.issues, s.teams.map((t) => [t.name, t.startAt === null])]), () => {
+  once('status', JSON.stringify([s.status, s.leg?.id, s.leg?.issues, s.teams.map((t) => [t.name, t.finishAt === null])]), () => {
     statusBox.replaceChildren(
       el('div', { className: 'row' }, 'Trạng thái: ', el('b', { className: `st-${s.status}` }, STATUS_LABEL[s.status]),
         ...statusButtons(s).map((b) =>
@@ -238,7 +231,7 @@ function drawStatus(s: State) {
             if (!cur || (cur.confirm && !confirm(cur.confirm))) return;
             if (!send({ t: 'host.race', op: b.op })) addNotice('error', 'Đang mất kết nối, chưa gửi được.');
           } }, b.label))),
-      el('p', { className: 'note' }, 'Tạm dừng: đội vẫn đi lại được, đồng hồ vẫn chạy, thời gian tạm dừng không bị trừ.'),
+      el('p', { className: 'note' }, 'Tạm dừng: đội vẫn đi lại được nhưng không mở hòm / làm nhiệm vụ được. Xếp hạng theo thứ tự về đích thực (không có đồng hồ từng đội). Kết thúc: đội chưa về đích nhận thông báo BỊ LOẠI.'),
     );
   });
 }
@@ -263,50 +256,22 @@ function drawLeg(s: State) {
 }
 
 function drawStart(s: State) {
-  const tz = s.leg?.timezone ?? 'Asia/Ho_Chi_Minh';
   const rows = startRows(s);
-  once('start', JSON.stringify([tz, rows]), () => {
-    previews.clear();
-    const tbl = rows.map((r) => {
-      const input = el('input', { type: 'datetime-local', step: '1', value: drafts.get(r.id) ?? r.input });
-      input.addEventListener('input', () => (drafts.set(r.id, input.value), updatePreviews()));
-      const out = el('span', { className: 'note preview' });
-      previews.set(r.id, { input, out });
-      const save = () => {
-        const at = inputToMs(input.value, tz);
-        if (at === null) return void addNotice('error', `${r.name}: chưa hiểu giờ đã nhập (cần ngày và giờ).`);
-        if (send({ t: 'host.team', op: 'startAt', team: r.id, at })) drafts.delete(r.id);
-        else addNotice('error', 'Đang mất kết nối, chưa gửi được.');
-      };
-      // short columns first, the wide input last: "Bước hiện tại" / "Phạt" stay visible at 1024 px (review: Host tables)
-      return el('tr', {},
+  once('start', JSON.stringify(rows), () => {
+    // short columns first (review: Host tables at 1024 px); SPEC §17.23: no start-time input (no team clock any more)
+    const tbl = rows.map((r) =>
+      el('tr', {},
         el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
         el('td', {}, r.stepLabel),
         el('td', {}, r.penalty),
         el('td', {}, r.startOrder),
         el('td', {}, r.joined),
-        el('td', {}, input, ' ', el('button', { className: 'small', onclick: save }, 'Lưu'), ' ', el('button', { className: 'small', onclick: () => (drafts.delete(r.id), send({ t: 'host.team', op: 'startAt', team: r.id, at: 'now' })) }, 'Bây giờ'), ' ', el('button', { className: 'small', disabled: r.startAt === null, onclick: () => (drafts.delete(r.id), send({ t: 'host.team', op: 'startAt', team: r.id, at: null })) }, 'Xóa'), out),
-      );
-    });
+      ));
     startBox.replaceChildren(
-      el('p', { className: 'note' }, `Giờ nhập theo múi giờ của chặng: ${tz} (không phải múi giờ máy này). Đây là lúc đội nhận mật thư đầu tiên ngoài game.`),
-      tbl.length ? el('div', { className: 'scroll' }, el('table', { className: 'pin' }, el('tr', {}, ...['Đội', 'Bước hiện tại', 'Phạt', 'Thứ tự vào', 'Vào game lúc', 'Giờ xuất phát'].map((t) => el('th', {}, t))), ...tbl)) : 'Chưa có đội nào.',
+      el('p', { className: 'note' }, 'Thứ tự đội vào game lần đầu (thông báo "Xuất phát ở vị trí thứ n"). Không có giờ xuất phát riêng: xếp hạng theo thứ tự về đích.'),
+      tbl.length ? el('div', { className: 'scroll' }, el('table', { className: 'pin' }, el('tr', {}, ...['Đội', 'Bước hiện tại', 'Phạt', 'Thứ tự vào', 'Vào game lúc'].map((t) => el('th', {}, t))), ...tbl)) : 'Chưa có đội nào.',
     );
-    updatePreviews();
   });
-}
-
-/** "T+hh:mm:ss" under each input (the server's clock estimated now): a wrong time zone or day shows up before "Lưu". */
-function updatePreviews() {
-  const s = state;
-  if (!s) return;
-  const tz = s.leg?.timezone ?? 'Asia/Ho_Chi_Minh';
-  const now = s.serverMs + (Date.now() - receivedAt);
-  for (const [id, { input, out }] of previews) {
-    const p = input.value ? startPreview(inputToMs(input.value, tz), now, s.teams.find((t) => t.id === id)?.finishAt ?? null) : null;
-    out.textContent = p?.text ?? '';
-    out.className = `note preview ${p?.level ?? ''}`;
-  }
 }
 
 /** Review buttons: after one press the group stays off for hostPage.reviewLockMs (the answer leaves the queue when host.state
@@ -319,23 +284,23 @@ function fire(msg: ClientMessage, group: HTMLButtonElement[]) {
 
 const cellTexts: HTMLElement[][] = []; // matrix: per team row, per step: the text span (rewritten every second; the buttons are not)
 function drawMatrix(s: State, now: number) {
-  const { head, rows } = progressTable(s, now, showT ? 't' : 'real');
+  const { head, rows } = progressTable(s, now);
   if (!rows.length) return void ((sigs.matrix = ''), matrixBox.replaceChildren('Chưa có đội nào.'));
   const th = (t: string, title = '', className = '') => el('th', { title, className }, t);
   // Buttons in cells (D16 (3)): the table is rebuilt only when something but the running clocks changed, else a click that
   // lands while it is rebuilt is lost. The clocks ("chờ duyệt mm:ss", "⏳ mm:ss") are written in place below.
-  const sig = JSON.stringify([head, rows.map((r) => [r.team, r.name, r.colour, r.rank, r.official, r.gap, r.penalty, r.approvalWait, r.finish, r.cells.map((c) => [c.state, c.title, c.buttons])])]);
+  const sig = JSON.stringify([head, rows.map((r) => [r.team, r.name, r.colour, r.rank, r.penalty, r.finish, r.cells.map((c) => [c.state, c.title, c.buttons])])]);
   once('matrix', sig, () => {
     cellTexts.length = 0;
     // team (pinned) + ranking columns before the step columns: the result is readable at 1024 px without scrolling sideways
     matrixBox.replaceChildren(el('div', { className: 'scroll' }, el('table', { className: 'matrix pin' },
-      el('tr', {}, th('Đội'), th('Hạng'), th('Chính thức'), th('Cách'), th('Phạt'), th('Bù giờ chờ duyệt', 'Tổng thời gian đội chờ Host duyệt (trừ khỏi giờ chính thức khi chặng không tính thời gian chờ)', 'wrap'), th('Về đích'), ...head.map((h) => th(h.label, h.title))),
+      el('tr', {}, th('Đội'), th('Hạng', 'Thứ tự về đích thực (SPEC §17.22); BỊ LOẠI: đội về cuối cùng, hoặc chưa về khi Host bấm Kết thúc'), th('Phạt'), th('Về đích'), ...head.map((h) => th(h.label, h.title))),
       ...rows.map((r) => {
         const texts: HTMLElement[] = [];
         cellTexts.push(texts);
         return el('tr', {},
           el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
-          el('td', {}, r.rank), el('td', {}, r.official), el('td', {}, r.gap), el('td', {}, r.penalty), el('td', {}, r.approvalWait), el('td', {}, r.finish),
+          el('td', { className: r.out ? 'bad' : '' }, r.rank), el('td', {}, r.penalty), el('td', {}, r.finish),
           ...r.cells.map((c) => {
             const text = el('span', {}, c.text);
             texts.push(text);
@@ -535,7 +500,6 @@ function render(s: State) {
   drawLeg(s);
   drawMedia(s);
   drawStart(s);
-  updatePreviews();
   drawMatrix(s, now);
   const rows = teamRows(s, now).map((r) =>
     el('tr', {},

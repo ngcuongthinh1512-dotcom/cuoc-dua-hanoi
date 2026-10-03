@@ -31,7 +31,7 @@ const welcome = (bikes: BikeInfo[], pose: Welcome['pose'] = null): Welcome => ({
   t: 'welcome', v: PROTOCOL_VERSION, race: 'paris', serverMs: 0, status: 'running', role: 'team',
   teams: [{ slot: 2, id: 'vang', name: 'Đội Vàng', colour: '#e8c020', online: true }],
   movement: { footSpeed: 4, bikeSpeedMultiplier: 1.3 }, presence: { renderRadius: 300, showOthersOnMinimap: false, interestRadius: 500 },
-  pose, raceTime: null, bikes, boxes: [], view: null, startOrder: 1, showStartOrder: false, start: null, feed: [],
+  pose, bikes, boxes: [], view: null, startOrder: 1, showStartOrder: false, start: null, feed: [],
 });
 
 describe('BikeLink: server bikes → the local Bikes (review fix: was never wired)', () => {

@@ -6,16 +6,18 @@
 //  - Sổ mật thư (Tab, SPEC §8.11): reloaded from the server on every open (actions.book → showBook), current card pinned,
 //    read-only, never the answer history (SPEC §17.14);
 //  - "Xuất phát ở vị trí thứ n" at the right for raceHud.startOrderSeconds of sim time, then fades (SPEC §17.12);
-//  - "Bấm F để mở hòm mật thư" prompt, the centre countdown (Host "Phạt" / branch switch / Pit Stop wait), the host NPC's line
-//    after the check-in, "Tại điểm này".
+//  - "Bấm F để mở hòm mật thư" prompt, the centre countdown (Host "Phạt" / branch switch / Pit Stop wait), "Tại điểm này";
+//  - SPEC §17.22 / §17.23: the finish announcement (host NPC line, toast, finish card: "Về đích thứ n" / the winner's /
+//    "BỊ LOẠI"), texts from the server (the leg), once per result (also after a reload: localStorage);
+//  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box).
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
-import { NET, type ClueCard, type CreditItem, type FeedMessage, type LouvreView, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
+import { finishTexts, NET, type ClueCard, type CreditItem, type FeedMessage, type FinishResult, type LouvreView, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
 import { Feed } from '../../ui/Feed.ts';
 import { onCreditsRequest, openCredits, setCreditItems, setCreditsGate } from '../../ui/Credits.ts';
 import { raceHud as C } from '../../config.ts';
 import { toast } from '../../ui/Toasts.ts';
-import { bookEntries, type BookEntry, branchConfirmText, cardPanel, finishLine, hintNews, hudKey, liveStatus, lockLine, type MediaItem, penaltyLine, type CardSummary, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, zoneLines } from './format.ts';
+import { bookEntries, type BookEntry, branchConfirmText, cardPanel, copyBlocked, hintNews, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultView, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, zoneLines } from './format.ts';
 import './race.css';
 
 export interface RaceHudActions {
@@ -77,17 +79,18 @@ const setTime = (e: HTMLElement, s: string) => {
 };
 
 const SEEN_KEY = 'race.lastCard';
+const RESULT_KEY = 'race.result';
 const store = {
-  get: () => {
+  get: (k = SEEN_KEY) => {
     try {
-      return localStorage.getItem(SEEN_KEY);
+      return localStorage.getItem(k);
     } catch {
       return null;
     }
   },
-  set: (v: string) => {
+  set: (v: string, k = SEEN_KEY) => {
     try {
-      localStorage.setItem(SEEN_KEY, v);
+      localStorage.setItem(k, v);
     } catch {
       /* private window / blocked storage: the card just pops up again after a reload */
     }
@@ -110,6 +113,7 @@ export class RaceHud {
   private shown: string | null = null; // the live status the open full card was drawn with: a countdown running out redraws it
   private bookOpen = false;
   private bookWaiting = false;
+  private resultOpen = false;
   private wasOpen = false;
   private finishSince = -Infinity;
   // the open full card's controls (rebuilt with every redraw)
@@ -150,6 +154,17 @@ export class RaceHud {
     this.tl.append(this.compact, this.zonePanel);
     document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay, this.zoomEl);
     this.zoomEl.addEventListener('click', () => this.zoom(null));
+    // SPEC §17.21: the compact card + the overlay (full cards, Sổ) refuse selection / copy / drag / right-click, except in the
+    // submission code and the answer box; a page-wide select-all (Ctrl+A) does not take their text either
+    for (const root of [this.compact, this.overlay]) {
+      root.classList.add('rc-nocopy');
+      for (const type of NO_COPY_EVENTS) root.addEventListener(type, (e) => void (copyBlocked(e.target) && e.preventDefault()));
+    }
+    for (const type of ['copy', 'cut'] as const)
+      document.addEventListener(type, (e) => {
+        const sel = getSelection();
+        if (sel && !sel.isCollapsed && [this.compact, this.overlay].some((n) => sel.containsNode(n, true)) && copyBlocked(sel.anchorNode)) e.preventDefault();
+      });
     onCreditsRequest(() => this.actions.credits?.());
     // A clicked button / link gives the focus back (review R-1): Space / Enter then reach the card keys below (Space closes,
     // never presses "Đổi lựa chọn kép" again after a declined confirm), and Tab is no key of the button's.
@@ -211,6 +226,7 @@ export class RaceHud {
     if (this.open) return this.close();
     this.bookOpen = this.bookWaiting = true;
     this.fullCard = null;
+    this.resultOpen = false;
     this.failed.clear();
     this.renderBook(null);
     this.actions.book();
@@ -221,9 +237,9 @@ export class RaceHud {
     if (!this.open && this.view?.card) this.openFull(this.view.card, false, true);
   }
 
-  /** The book or a full card is open: the body stops, keys go to the panel (main.ts modal()). */
+  /** The book, a full card or the finish card is open: the body stops, keys go to the panel (main.ts modal()). */
   get open(): boolean {
-    return this.bookOpen || this.fullCard != null;
+    return this.bookOpen || this.fullCard != null || this.resultOpen;
   }
 
   /** SPEC §17.12: once, at the first entry (welcome.showStartOrder). */
@@ -232,10 +248,27 @@ export class RaceHud {
     setText(this.bannerEl, this.banner.text);
   }
 
-  /** SPEC §8.6: after the check-in, the host NPC's line (team name + official time when known). */
-  finished(team: string, officialMs: number | null): void {
-    setText(this.npcEl, finishLine(team, officialMs));
+  /** SPEC §17.22 / §17.23: the finish announcement (RaceView.result): host NPC line, toast, finish card. `fresh` = it just
+   *  happened (always shown); a welcome's (`fresh` false) only if this browser has not shown that result yet (a team offline
+   *  when the Host ended the race still reads "BỊ LOẠI"). */
+  result(r: FinishResult, fresh: boolean): void {
+    const key = `${r.kind}:${r.rank}/${r.total}`;
+    if (!fresh && store.get(RESULT_KEY) === key) return;
+    store.set(key, RESULT_KEY);
+    const t = resultView(r, this.teamName || this.demoTeam);
+    setText(this.npcEl, t.npc);
+    this.npcEl.classList.toggle('out', r.kind === 'out');
     this.finishSince = this.sim;
+    toast(t.toast);
+    this.bookOpen = this.bookWaiting = false;
+    this.fullCard = null;
+    this.resetControls();
+    this.resultOpen = true;
+    const box = el('div', `rc-full rc-result ${r.kind}`, undefined, el('h2', 'rc-result-title', t.title), el('p', 'rc-text', t.card), el('div', 'rc-actions', undefined, this.closeButton('Đóng (Tab)')));
+    box.style.width = `min(${C.fullWidth}px, 100%)`;
+    this.overlay.replaceChildren(box);
+    this.overlay.hidden = false;
+    this.sync();
   }
 
   // Phase 8B (docs/plans/phase8b.md §G): the louvre room flag, the public feed, the "Ghi nguồn" answer.
@@ -290,8 +323,8 @@ export class RaceHud {
 
   /** DEV, offline only (p7-* / p8-* presets): stand-in data from the URL (?card=route|detour|challenge|pit|teaser|answer|
    *  answer-pending|answer-locked|detour-choose|detour-chosen|detour-locked|branch-task|proof|media|media-off, ?full, ?book[=media],
-   *  ?lock=<s left of a countdown>, ?startOrder=n, ?finish, ?zone, ?checkin=<s of penalty wait left>). The clock / penalty
-   *  row: ui/HUD.ts (?raceTime, ?penalty). */
+   *  ?lock=<s left of a countdown>, ?startOrder=n, ?finish[=first|out|<n>] (the finish announcement, generic texts), ?zone,
+   *  ?checkin=<s of penalty wait left>). The penalty row: ui/HUD.ts (?penalty). */
   demo(q: URLSearchParams): void {
     const kind = q.get('card') ?? (q.has('full') || q.has('book') ? 'route' : null);
     if (kind) {
@@ -303,7 +336,7 @@ export class RaceHud {
       const card = base.lockedUntil != null && Number.isFinite(lock) ? { ...base, lockedUntil: DEMO_NOW + lock * 1000 } : base;
       this.seenKey = q.has('full') ? '' : `${card.step}@${card.receivedAt}`; // no popup unless asked ('' = not seen: the localStorage mark of an earlier preset of the same run must not hide it)
       const wait = Number(q.get('checkin') ?? NaN);
-      this.setView({ status: 'running', startAt: 0, finishAt: null, penaltyMinutes: Number(q.get('penalty') ?? 0), card, checkinAt: Number.isFinite(wait) ? wait * 1000 + DEMO_NOW : null, officialMs: null });
+      this.setView({ status: 'running', finishAt: null, penaltyMinutes: Number(q.get('penalty') ?? 0), card, checkinAt: Number.isFinite(wait) ? wait * 1000 + DEMO_NOW : null, result: null });
       if (q.has('book')) (this.bookWaiting = this.bookOpen = true), this.showBook(q.get('book') === 'media' ? DEMO_BOOK_MEDIA : DEMO_BOOK);
     }
     if (q.has('feed')) {
@@ -317,7 +350,11 @@ export class RaceHud {
       openCredits();
     }
     if (q.has('startOrder')) this.startOrder(Number(q.get('startOrder')) || 1, 0);
-    if (q.has('finish')) this.finished('Đội Xanh', 6135000);
+    if (q.has('finish')) {
+      const f = q.get('finish');
+      const [kind, rank] = f === 'out' ? (['out', 5] as const) : f === 'first' ? (['first', 1] as const) : (['finish', Number(f) || 2] as const);
+      this.result({ rank, total: 5, kind, ...finishTexts(kind, undefined, rank, 5, 'Đội Xanh') }, true);
+    }
     if (q.has('zone')) {
       const teams = DEMO_TEAMS;
       this.zone(
@@ -348,7 +385,7 @@ export class RaceHud {
   }
 
   private close() {
-    this.bookOpen = this.bookWaiting = false;
+    this.bookOpen = this.bookWaiting = this.resultOpen = false;
     this.fullCard = null;
     this.overlay.hidden = true;
     this.resetControls();
@@ -371,6 +408,7 @@ export class RaceHud {
 
   /** `focus`: the team asked for it (Enter): the answer box takes the keys at once; a popup leaves them to the game. */
   private openFull(card: ClueCard, animate = true, focus = false) {
+    this.resultOpen = false;
     if (this.draftStep !== card.step) (this.draft = ''), (this.draftStep = card.step);
     this.focusBox = focus;
     this.failed.clear();

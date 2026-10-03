@@ -135,6 +135,7 @@ export class RaceRoom extends DurableObject<Env> {
       },
       teamIds: () => this.teams().map((t) => t.id),
       slot: (id) => this.team(id)?.slot ?? -1,
+      name: (id) => this.team(id)?.name ?? '',
       online: () => [...this.online()],
       pose: (id) => this.live.get(id)?.valid ?? null,
       park: (team, rack, at, now) => this.bikes.park(team, rack, at, now),
@@ -210,7 +211,7 @@ export class RaceRoom extends DurableObject<Env> {
     const token = await signToken(this.env.HOST_PASSWORD, newClaims(this.race, team.id, now));
     if (this.count(team.id, 'login', now) <= NET.maxConnects) this.event(now, team.id, 'login', { ip });
     const s = this.teamState(team);
-    return json({ ok: true, token, team: this.info(team, this.online()), summary: { reconnects: s.reconnects, lastSeen: s.lastSeen, ...this.engine.summary(team.id, now) } });
+    return json({ ok: true, token, team: this.info(team, this.online()), summary: { reconnects: s.reconnects, lastSeen: s.lastSeen, ...this.engine.summary(team.id) } });
   }
 
   /** WebSocket upgrade: a valid token for this race → Hibernation API accept, one socket per team (§8.10), `welcome`. */
@@ -434,7 +435,6 @@ export class RaceRoom extends DurableObject<Env> {
         // D4: judged at the trusted pose (the client sends its pose right before the op, on the same socket)
         return this.engine.onOp(a.team, m, this.live.get(a.team)?.valid ?? null, now);
       case 'host.race':
-      case 'host.team':
       case 'host.leg':
       case 'host.review': // isClientMessage: Host sockets only
         this.engine.onHost(m, (r) => this.send(ws, r), now);
@@ -609,8 +609,8 @@ export class RaceRoom extends DurableObject<Env> {
     const online = this.online();
     const teams = this.teams().map((t) => {
       const s = this.teamState(t);
-      const { startAt, startOrder, step, finishAt, penaltyMinutes, joinedAt } = s;
-      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, startAt, startOrder, step, finishAt, penaltyMinutes, joinedAt };
+      const { startOrder, step, finishAt, penaltyMinutes, joinedAt } = s;
+      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, startOrder, step, finishAt, penaltyMinutes, joinedAt };
     });
     const race = this.engine.hostView(now);
     // ponytail: `steps` (Phase 6 corridor points: start + route / Pit Stop zones) stays until the Host page reads `leg`
@@ -700,7 +700,7 @@ export class RaceRoom extends DurableObject<Env> {
       // SPEC §8.10: last valid pose (from the snapshot row after a restart) + the bike it holds (track C's list).
       pose: team && l ? { ...l.valid, bikeId: myBikes.find((b) => b.owner === team.id)?.id ?? null } : null,
       bikes: myBikes,
-      ...(race ?? { raceTime: null, boxes: [], view: null, startOrder: null, showStartOrder: false, start: null }),
+      ...(race ?? { boxes: [], view: null, startOrder: null, showStartOrder: false, start: null }),
       feed: this.feed(),
     };
   }

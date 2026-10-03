@@ -146,7 +146,7 @@ describe.concurrent('Phase 8B louvre room (workerd)', () => {
     a!.send({ t: 'race', op: 'credits' });
     await notice(a!, 'creditsLocked');
     await walkTo(a!, at, P2);
-    await view(a!, (v) => v.finishAt !== null);
+    expect((await view(a!, (v) => v.finishAt !== null)).view.result).toMatchObject({ rank: 1, total: 2, kind: 'first' });
     a!.send({ t: 'race', op: 'credits' });
     const cr = (await a!.until((m) => m.t === 'credits')) as unknown as { items: { file: string }[] };
     expect(cr.items.map((i) => i.file)).toEqual(['art-02.webp', 'art-06.webp', 'art-09.webp', 'art-14.webp', 'art-18.webp', 'art-20.webp']);
@@ -154,7 +154,8 @@ describe.concurrent('Phase 8B louvre room (workerd)', () => {
     b!.send({ t: 'race', op: 'credits' });
     await notice(b!, 'creditsLocked');
     host.send({ t: 'host.race', op: 'finish' });
-    await view(b!, (v) => v.status === 'finished');
+    // SPEC §17.23 (Chốt): still racing at "Kết thúc" → BỊ LOẠI, ranked after A, the leg's (fake) text
+    expect((await view(b!, (v) => v.status === 'finished')).view.result).toMatchObject({ rank: 2, total: 2, kind: 'out', card: expect.stringContaining('BỊ LOẠI, hạng cuối 2/2') });
     b!.send({ t: 'race', op: 'credits' });
     expect(await b!.until((m) => m.t === 'credits')).toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ file: 'art-02.webp' })]) });
     for (const s of [a!, b!, host]) s.close();
