@@ -1184,7 +1184,7 @@ export const clueBox = {
 export const serverBikes = {
   claimTimeoutMs: 2000, // F → claim sent; no answer by then → F works again (the socket is probably reconnecting)
   candidateStep: 25, // m between sampled sidewalk points of a corridor when it has too few bicycle_parking nodes
-  minCandidates: 60, // per segment, after the parking nodes (spots to choose the spawned bikes from: ~1 per 25 m of a 1.5 km route)
+  minCandidates: 12, // per segment, after the parking nodes
   decoyCell: 150, // m: at most one decoy point per square this big (SPEC §6.2 (6): spread over the other streets)
   decoyMargin: 500, // m around the route's bounding box where decoy points may be
   groundRadius: 200, // m: a server bike (y unknown: the server has no DEM) is put on the ground once the player is this close

@@ -50,8 +50,8 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates
     });
   });
 
-  it('bicycle parking first: L3 → L4 (16 racks) keeps every rack, then fills with pavement points; L2 → L3 (none) is pavement only', () => {
-    expect(pairs(c.segments[3]!).filter(([x, z]) => parking.has(`${x},${z}`)).length).toBeGreaterThanOrEqual(16);
+  it('bicycle parking first: L3 → L4 (16 racks) is all racks; L2 → L3 (none) falls back to sampled pavement points', () => {
+    expect(pairs(c.segments[3]!).every(([x, z]) => parking.has(`${x},${z}`))).toBe(true);
     expect(pairs(c.segments[2]!).some(([x, z]) => parking.has(`${x},${z}`))).toBe(false);
   });
 
