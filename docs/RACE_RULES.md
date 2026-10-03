@@ -8,6 +8,7 @@ Chào mừng các đội đến với chặng đua giữa lòng Paris! Bạn có
 
 - Game chạy trên **máy tính Windows hoặc Mac**, ngay trong trình duyệt (Chrome, Edge, Firefox, Safari). Không hỗ trợ điện thoại và máy tính bảng.
 - **Mỗi đội chỉ có 1 người chơi**, 1 thiết bị, 1 nhân vật. Không cần tài khoản: Host đưa cho đội bạn một **mã đội 6 ký tự**, nhập mã là vào game. Mỗi mã chỉ đăng nhập trên một thiết bị tại một thời điểm.
+- **Tăng tốc:** giữ phím `Shift` để di chuyển **nhanh gấp 2** tốc độ thường, dùng được cả khi đi bộ lẫn khi đạp xe đạp; thả `Shift` là về tốc độ thường.
 - Mọi đội đua trong **cùng một Paris 3D**, và nhìn thấy nhau với màu áo và bảng tên đội. Các đội hiện dạng **"bóng mờ"**: đi xuyên qua nhau được, không ai chặn đường ai. Không có chat; bạn chỉ có thể **vẫy tay chào** (`G`) hoặc **bấm chuông** (`R`).
 - Minimap **không hiện vị trí đội khác**: muốn biết đối thủ ở đâu, bạn phải tận mắt nhìn thấy họ. Khi đứng trong khu vực của một điểm, bảng **"Tại điểm này"** (góc trên bên trái) cho biết đội nào đang có mặt và đang làm bước nào.
 - Bản đồ khớp với vị trí thật của trung tâm Paris, biển tên đường cũng là tên thật, và chúng có thể giúp bạn trong thử thách. Bản đồ **chỉ hiện tên đường, không hiện tên địa danh**; hộp mật thư và xe đạp không hiện trên bản đồ.
@@ -17,7 +18,7 @@ Chào mừng các đội đến với chặng đua giữa lòng Paris! Bạn có
 
 Game chỉ dùng những phím có trên cả Windows lẫn Mac, **không dùng** `Ctrl`, `Alt`/`Option`, `Cmd`/`Win`.
 
-- `W` `A` `S` `D`: di chuyển · giữ `Shift`: chạy nhanh **gấp 2** (cả đi bộ lẫn xe đạp; thả ra là về tốc độ thường) · `Space`: nhảy (khi bơi sát tường kè: leo lên bờ)
+- `W` `A` `S` `D`: di chuyển · giữ `Shift`: **Tăng tốc** gấp 2 (cả đi bộ lẫn xe đạp; thả ra là về tốc độ thường) · `Space`: nhảy (khi bơi sát tường kè: leo lên bờ)
 - `F`: tương tác (mở hòm mật thư, lấy xe, lên / xuống xe)
 - `Tab`: Sổ mật thư · `Enter`: mở lại **thẻ mật thư hiện tại** · `M`: bản đồ lớn
 - `C`: đổi góc camera · `Esc`: Menu · `G`: vẫy tay · `R`: bấm chuông
@@ -26,7 +27,7 @@ Game chỉ dùng những phím có trên cả Windows lẫn Mac, **không dùng*
 
 ## 3. Di chuyển & xe đạp
 
-- Mọi đội bắt đầu bằng **đôi chân**; giữ `Shift` để chạy nhanh gấp 2 (bơi cũng vậy). Lỡ rơi xuống sông Seine thì bơi tới sát tường kè rồi bấm `Space` để leo lên.
+- Mọi đội bắt đầu bằng **đôi chân**; giữ `Shift` để tăng tốc gấp 2 (bơi cũng vậy). Lỡ rơi xuống sông Seine thì bơi tới sát tường kè rồi bấm `Space` để leo lên.
 - Phương tiện duy nhất là **xe đạp**, nhanh hơn đi bộ **1,3 lần** (giữ `Shift` khi đạp cũng nhanh gấp 2). Xe xuất hiện ngẫu nhiên và rất ít trên các con phố (có cả xe "mồi" đặt khắp bản đồ, đừng đoán lộ trình theo chỗ có xe). Xe còn trống lấp lánh nhẹ khi bạn tới gần.
 - Đứng cách xe **không quá 2,5 m**, bấm `F` để lên xe. `W` đạp · `S` phanh (giữ tiếp thì lùi chậm) · `A` `D` rẽ · `R` bấm chuông. Xuống xe: bấm `F` khi xe gần như đã dừng.
 - Xe không đi được bậc thang; va chạm mạnh khi đang nhanh thì **ngã xe** (khoảng 2 giây sau tự đứng dậy). Đạp xe xuống sông thì xe ở lại trên bờ, bạn phải bơi.
