@@ -1053,3 +1053,7 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 
 ### 17.21 Không cho sao chép chữ trong mật thư (2026-10-03)
 - Chữ trên thẻ mật thư (thẻ thử thách, thẻ lộ trình, thẻ Lựa chọn kép, thẻ Louvre) và trong Sổ mật thư KHÔNG được bôi đen / sao chép: tắt chọn chữ (`user-select: none`), chặn sự kiện copy / cut / kéo thả / menu chuột phải trong vùng thẻ và Sổ. Ngoại lệ: mã bài nộp (nút "Copy" trên thẻ bài ảnh) vẫn sao chép được vì đội cần gửi kèm ảnh. Chỉ là rào cản thông thường (không chống được chụp màn hình hay công cụ nhà phát triển của trình duyệt).
+
+### 17.22 Về đích được thông báo thứ hạng ngay (2026-10-03; thay mặc định §17.13 "NPC không báo đội thứ n")
+- Khi đội về đích (vào vùng Chặng dừng / thảm), đội được thông báo NGAY thứ hạng "Về đích thứ n" (cùng thời gian của đội): ở NPC dẫn chương trình trên thảm, toast và thẻ về đích.
+- Mặc định (chờ người dùng xác nhận): n = thứ hạng theo thời gian CHÍNH THỨC (giờ về đích − giờ xuất phát riêng của đội − phạt) trong số các đội ĐÃ về đích tại thời điểm đó; là thứ hạng TẠM THỜI vì đội về sau có giờ xuất phát muộn hơn có thể vượt lên. Host vẫn công bố bảng xếp hạng cuối; đội về cuối cùng có thể bị loại (thông báo của Host, không do game).
