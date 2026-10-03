@@ -11,6 +11,7 @@ Chào mừng các đội đến với chặng đua giữa lòng Paris! Bạn có
 - Mọi đội đua trong **cùng một Paris 3D**, và nhìn thấy nhau với màu áo và bảng tên đội. Các đội hiện dạng **"bóng mờ"**: đi xuyên qua nhau được, không ai chặn đường ai. Không có chat; bạn chỉ có thể **vẫy tay chào** (`G`) hoặc **bấm chuông** (`R`).
 - Minimap **không hiện vị trí đội khác**: muốn biết đối thủ ở đâu, bạn phải tận mắt nhìn thấy họ. Khi đứng trong khu vực của một điểm, bảng **"Tại điểm này"** (góc trên bên trái) cho biết đội nào đang có mặt và đang làm bước nào.
 - Bản đồ khớp với vị trí thật của trung tâm Paris, biển tên đường cũng là tên thật, và chúng có thể giúp bạn trong thử thách. Bản đồ **chỉ hiện tên đường, không hiện tên địa danh**; hộp mật thư và xe đạp không hiện trên bản đồ.
+- Bấm `M` để mở **bản đồ lớn**: kéo để di chuyển, **lăn chuột để phóng to / thu nhỏ** (thu nhỏ để nhìn toàn khu vực, phóng to để đọc tên đường). **Nhấp chuột vào một điểm** để đánh dấu nơi cần tới: game vẽ **đường đi GPS** từ chỗ bạn đứng tới điểm đó; nhấp lại vào điểm đã đánh dấu để xóa.
 
 ## 2. Điều khiển
 
