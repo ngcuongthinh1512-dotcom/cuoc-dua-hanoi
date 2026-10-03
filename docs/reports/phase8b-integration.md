@@ -1,13 +1,13 @@
 # Phase 8B – Tích hợp (ghép track A → B → C → D)
 
-Trạng thái: **đang làm** (2026-10-03).
+Trạng thái: **xong** (2026-10-03). Commit ghép: 5ea154c (nối), 8956796 (tài nguyên), db072cf (tài liệu), + commit này.
 
 ## Tiến độ
 - [x] merge A, B, C, D (`--no-ff`, 0 xung đột)
 - [x] nối tích hợp (commit 5ea154c)
 - [x] process-assets louvre thật (commit 8956796)
-- [ ] kiểm toàn bộ
-- [ ] tài liệu
+- [x] kiểm toàn bộ
+- [x] tài liệu (CLAUDE.md, README, TODO.md Phase 8B, HANDOFF)
 
 ## Nối tích hợp
 - `initCredits()` gọi thường: Credits.ts của C không nhận tham số; cổng về đích qua `RaceHud.setView`, yêu cầu qua `actions.credits` → `race.credits()` (đã thêm vào actions trong main.ts). `{t:'credits'}` → `RaceClient.message` → `hud.credits` (đã có từ B).
@@ -26,3 +26,17 @@ Trạng thái: **đang làm** (2026-10-03).
 - Kết quả: 23 tệp `client/public/art/art-01…23` (17 `.webp` ≤ 300 KB cạnh dài ≤ 2048, 6 `.glb` 328–707 KB), tổng **7,27 MB** (≤ 8 MB).
 - Kiểm: WebP 0 EXIF / XMP / ICC / IPTC (sharp.metadata); GLB: JSON chỉ có tên `art-NN` (scene / node / mesh / material / texture / image / accessor…), `asset` = `{version, extras: {}}` (không generator / copyright), 0 extras.
 - Tìm tên (80 chuỗi từ manifest: tên tác phẩm, tác giả, tác giả ảnh / bản quét, tên tệp gốc; chỉ đếm): `client/public/art` 0, `client/dist` 0, commit message 0, tệp đang theo dõi 1 và lịch sử git 1 tệp — cả hai là chú thích landmark Phase 2 có sẵn (`client/src/world/landmarks/g2.ts`: cụm từ chung trong tên một landmark Paris, có từ trước Phase 8B; không phải nội dung phòng Louvre). `docs/SPEC.md` (không được sửa) 0 khớp nguyên chuỗi.
+
+## Kiểm
+- `npm run build` qua (bundle Worker 956,66 KiB); `grep ZodError client/dist` = 0; `client/dist/art` 23 tệp, 0 tên tác phẩm.
+- `npm test` (gốc): scripts 87, shared 76, client 729, worker 154 = **1046 qua, 0 skip** (track A trước ghép: 994).
+- `leg:check`: `worker/legs/test/louvre.json`, `mini.json`, `paris-demo.json`: 0 LỖI. Chặng test louvre (GIẢ) báo CÒN TRỐNG cho vài `image` kiểu cũ (vd. `art-02.webp` trong khi `art-02` thật là bản quét) – đúng với chặng giả.
+- `SCREENSHOT_PORT=5301 npm run screenshot -- p8b p8 p7 p6-boxes p5-hud`: 49 ảnh, 0 lỗi console. Đã xem `p8b-room-lock` (đếm ngược 02:00 giữa màn hình + prompt phòng qua RaceHud), `p8b-room-button` ("Bấm F: bỏ chọn"), `p8b-card-louvre`, `p8b-credits`.
+- `npm run ride-check`: lần 1 hỏng giữa chừng (`__GAME__` mất – trang tải lại khi máy tải nặng, ngay sau đợt chụp); chạy lại riêng: OK (đi bộ 4,0 / xe 5,2 m/s, ngã + lên lại, 11 lệnh vẽ).
+- `scripts/hud-check.ts`: mọi mục ok, 0 lỗi console.
+- `npm run sim -- --leg louvre --bots 3 --speedup 2` (xuất phát Bir-Hakeim): **3 / 3 về đích**, chốt sai 3 + đúng 3, feed ≥ 6 / bot, dòng ghi / đội 37 (≤ 160), ≈ 35 638 request cho 20 đội × 2 giờ (< 40 000).
+- Không còn `vite` / `wrangler` / `workerd` / Chrome headless chạy.
+
+## Không sửa (để reviewer)
+- Lỗi "nên sửa" trong `docs/reports/phase8b-track-*.md` (theo lệnh: lượt sửa riêng).
+- Chặng test louvre (GIẢ) chưa khớp kiểu tệp thật; preset `?louvre=1` chỉ hiện ô đánh số (chưa xem ảnh / bản quét thật trong phòng offline) – cần mắt người duyệt chất lượng bản quét đã giản lược.
