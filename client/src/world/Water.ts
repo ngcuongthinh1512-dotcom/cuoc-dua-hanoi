@@ -109,9 +109,12 @@ export function createWater(scene: Scene, water: WaterData, grid: HeightGrid): {
 
   // Phase 8C T1 (graphics8c.water): three's waternormals.jpg in two layers drifting apart (no visible tiling), the sky
   // environment (scene.environment once graphics8c.sky is on) for the reflection. Node tests: the ripple DataTexture.
+  // Low quality: the first layer only (one normal sample, three's own normal map path; fix B, review F1).
   const hd = graphics().on('water') && typeof document !== 'undefined';
+  const two = hd && graphics().quality === 'high';
   const normalMap = hd ? new TextureLoader().load(GW.normalMap) : rippleNormals();
   normalMap.wrapS = normalMap.wrapT = RepeatWrapping;
+  if (hd && !two) normalMap.repeat.setScalar(W.normalTile / GW.layers[0].tile);
   const layers = new Vector4(); // xy, zw = uv offsets of the two layers
   const material = new MeshStandardMaterial({
     color: hd ? GW.colour : W.colour,
@@ -122,7 +125,7 @@ export function createWater(scene: Scene, water: WaterData, grid: HeightGrid): {
     normalMap,
     normalScale: new Vector2().setScalar(hd ? GW.normalScale : W.normalScale),
   });
-  if (hd) {
+  if (two) {
     const [a, b] = GW.layers;
     material.onBeforeCompile = (shader) => {
       shader.uniforms.waterLayers = { value: layers };
@@ -157,12 +160,13 @@ export function createWater(scene: Scene, water: WaterData, grid: HeightGrid): {
 
   return {
     update(dt: number) {
-      if (hd) {
-        const [a, b] = GW.layers;
-        const step = (o: number, d: number, tile: number) => (o + (d / tile) * dt) % 1;
+      const [a, b] = GW.layers;
+      const step = (o: number, d: number, tile: number) => (o + (d / tile) * dt) % 1;
+      if (two) {
         layers.set(step(layers.x, a.drift[0], a.tile), step(layers.y, a.drift[1], a.tile), step(layers.z, b.drift[0], b.tile), step(layers.w, b.drift[1], b.tile));
         return;
       }
+      if (hd) return void normalMap.offset.set(step(normalMap.offset.x, a.drift[0], a.tile), step(normalMap.offset.y, a.drift[1], a.tile));
       normalMap.offset.x = (normalMap.offset.x + W.normalScroll * dt) % 1;
       normalMap.offset.y = (normalMap.offset.y + W.normalScroll * 0.6 * dt) % 1;
     },

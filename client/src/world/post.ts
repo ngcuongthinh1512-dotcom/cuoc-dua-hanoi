@@ -18,6 +18,8 @@ const P = graphics8c.post;
 export interface Post {
   render(): void;
   setSize(width: number, height: number): void;
+  /** Back to the plain renderer.render path (runtime downgrade): frees the targets, renderer.info resets per render again. */
+  dispose(): void;
 }
 
 export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Camera): Post | null {
@@ -37,6 +39,11 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Camera
     setSize(width, height) {
       composer.setPixelRatio(renderer.getPixelRatio());
       composer.setSize(width, height);
+    },
+    dispose() {
+      for (const p of composer.passes) p.dispose();
+      composer.dispose();
+      renderer.info.autoReset = true;
     },
   };
 }

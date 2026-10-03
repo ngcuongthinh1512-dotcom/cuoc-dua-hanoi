@@ -2,7 +2,7 @@
 // slot interpolated remote.interpolationMs behind the server clock, drawn with CharacterModel + CharacterAnimator (team
 // shirt, name tag) and a BikeModel while riding; ghosts (no Rapier body), hidden beyond presence.renderRadius.
 import { MOVE_MODES, PLAYER_ACTIONS, type GestureKind, type MoveMode, type PlayerAction, type PoseSample, type TeamInfo, type TickEntry } from '@race/shared/protocol';
-import { MathUtils, type Scene, Vector3 } from 'three';
+import { MathUtils, type Object3D, type Scene, Vector3 } from 'three';
 import { bell } from '../audio/sfx.ts';
 import { bike as B, bikeTopSpeed, movement, playerSetup, remote as R } from '../config.ts';
 import { CharacterAnimator } from '../player/Animation.ts';
@@ -125,6 +125,12 @@ export class RemotePlayers {
     /** m (Welcome.presence.renderRadius). */
     public renderRadius: number,
   ) {}
+
+  /** `o` is one of the remote characters / their bikes (kept drawn in the Louvre room: main.ts, world/hideWorld.ts). */
+  owns(o: Object3D): boolean {
+    for (const r of this.slots.values()) if (r.model.root === o || r.bike?.model.root === o) return true;
+    return false;
+  }
 
   /** Welcome.teams: names, colours, slots (also after a reconnect). */
   setTeams(teams: readonly TeamInfo[]) {

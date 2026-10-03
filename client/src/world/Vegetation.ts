@@ -41,6 +41,17 @@ type Cell = readonly [number, number, number, number];
 /** Atlas uv of (s, t) in a cell: s left → right, t bottom → top (TextureLoader flips y). */
 const cellUv = (c: Cell, s: number, t: number): [number, number] => [(c[0] + s * c[2]) / TREE_ATLAS.size[0], 1 - (c[1] + (1 - t) * c[3]) / TREE_ATLAS.size[1]];
 
+const WHITE = [1, 1, 1] as const;
+/** Vertex colour (× the bark map) at side i, ring j of a tube starting at height y0: olive-grey bark with hashed light
+ *  grey-cream patches where it has flaked off (graphics8c.trees.bark; the map's own dark brown is divided out). */
+function barkColour(i: number, j: number, y0: number): number[] {
+  const B = G8.trees.bark;
+  const t = Math.max(0, hash01(i, j, Math.round(y0 * 10) + 5) * 2 - 1) ** 0.7 * B.patch; // ~half the vertices: no patch
+  const [d, l, m] = [new THREE.Color(B.dark), new THREE.Color(B.light), new THREE.Color(B.mapMean)];
+  const lum = 0.2126 * m.r + 0.7152 * m.g + 0.0722 * m.b;
+  return d.lerp(l, t).multiplyScalar(1 / lum).toArray(); // linear: the map's mean brightness → c (its hue stays)
+}
+
 /** mulberry32: the same tree on every run. */
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -56,15 +67,18 @@ class Geo {
   pos: number[] = [];
   nrm: number[] = [];
   uv: number[] = [];
+  col: number[] = [];
   idx: number[] = [];
-  vert(p: THREE.Vector3, n: THREE.Vector3, uv: [number, number]) {
+  vert(p: THREE.Vector3, n: THREE.Vector3, uv: [number, number], c: readonly number[] = WHITE) {
     this.pos.push(p.x, p.y, p.z);
     this.nrm.push(n.x, n.y, n.z);
     this.uv.push(...uv);
+    this.col.push(c[0]!, c[1]!, c[2]!);
     return this.pos.length / 3 - 1;
   }
-  /** Tapered tube from a to b, radius ra → rb, `seg` sides; bark uv: once around (s 0 → 1 over half the cell), t 0 → 1. */
-  tube(a: THREE.Vector3, b: THREE.Vector3, ra: number, rb: number, seg: number) {
+  /** Tapered tube from a to b, radius ra → rb, `seg` sides, `rings` lengthwise; bark uv: once around (s 0 → 1 over half the
+   *  cell), t 0 → 1. Vertex colour: the platane's flaking bark, hashed patches between graphics8c.trees.bark colours. */
+  tube(a: THREE.Vector3, b: THREE.Vector3, ra: number, rb: number, seg: number, rings = 1) {
     const axis = b.clone().sub(a).normalize();
     const side = Math.abs(axis.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
     const u = side.cross(axis).normalize();
@@ -73,12 +87,17 @@ class Geo {
     for (let i = 0; i <= seg; i++) {
       const ang = (2 * Math.PI * i) / seg;
       const n = u.clone().multiplyScalar(Math.cos(ang)).addScaledVector(w, Math.sin(ang));
-      this.vert(a.clone().addScaledVector(n, ra), n, cellUv(TREE_ATLAS.bark, (0.5 * i) / seg, 0));
-      this.vert(b.clone().addScaledVector(n, rb), n, cellUv(TREE_ATLAS.bark, (0.5 * i) / seg, 1));
+      for (let j = 0; j <= rings; j++) {
+        const p = a.clone().lerp(b, j / rings).addScaledVector(n, ra + ((rb - ra) * j) / rings);
+        this.vert(p, n, cellUv(TREE_ATLAS.bark, (0.5 * i) / seg, j / rings), barkColour(i % seg, j, a.y));
+      }
     }
+    const r1 = rings + 1;
     for (let i = 0; i < seg; i++) {
-      const k = base + 2 * i;
-      this.idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+      for (let j = 0; j < rings; j++) {
+        const k = base + r1 * i + j;
+        this.idx.push(k, k + r1, k + 1, k + 1, k + r1, k + r1 + 1);
+      }
     }
   }
   /** A card (centre c, half axes u, v) seen from both sides, normals = `n` on both (lit like the crown's outside). */
@@ -95,6 +114,7 @@ class Geo {
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return g;
@@ -144,8 +164,8 @@ export function treeGeometries() {
   };
 
   const lod0 = new Geo();
-  lod0.tube(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3(0, S.forkY * 0.5, 0), 1.3 * S.trunkRadius, S.trunkRadius, 8);
-  lod0.tube(new THREE.Vector3(0, S.forkY * 0.5, 0), new THREE.Vector3(0, S.forkY, 0), S.trunkRadius, 0.85 * S.trunkRadius, 8);
+  lod0.tube(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3(0, S.forkY * 0.5, 0), 1.3 * S.trunkRadius, S.trunkRadius, 8, 4);
+  lod0.tube(new THREE.Vector3(0, S.forkY * 0.5, 0), new THREE.Vector3(0, S.forkY, 0), S.trunkRadius, 0.85 * S.trunkRadius, 8, 3);
   limbs(lod0, 5, 5, 3);
   crown(lod0, 48, 0.3 * S.height, 7);
 
@@ -164,14 +184,16 @@ export function treeGeometries() {
   return [lod0, lod1, lod2].map((g) => g.geometry());
 }
 
-/** Tree LOD levels for world/attach.ts. Textures load async (`onLoad` counts them for __READY__ via the callbacks). */
+/** Tree LOD levels for world/attach.ts. Textures load async (`onLoad` counts them for __READY__ via the callbacks).
+ *  Low quality: the colour map only (no normal map). */
 export function createTreeLods(quality: 'low' | 'high', track: <T>(p: Promise<T>) => Promise<T>): PropLods {
   const T = G8.trees;
-  const material = new THREE.MeshStandardMaterial({ alphaTest: 0.5, roughness: 0.85, metalness: 0 });
+  const material = new THREE.MeshStandardMaterial({ alphaTest: 0.5, roughness: 0.85, metalness: 0, vertexColors: true });
   if (typeof document !== 'undefined') {
     const loader = new THREE.TextureLoader();
     const suffix = quality === 'low' ? '_1k' : '';
-    for (const [slot, name] of [['map', 'col'], ['normalMap', 'nrm']] as const) {
+    const slots = [['map', 'col'], ['normalMap', 'nrm']] as const;
+    for (const [slot, name] of quality === 'low' ? slots.slice(0, 1) : slots) {
       void track(loader.loadAsync(`textures/trees_${name}${suffix}.webp`)).then(
         (t) => {
           t.colorSpace = name === 'col' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
@@ -190,7 +212,8 @@ export function createTreeLods(quality: 'low' | 'high', track: <T>(p: Promise<T>
     radius: Math.hypot(S.crownRadius, S.height / 2),
     levels: [
       ...(d0 > 0 ? [{ parts: [{ geometry: g0!, material }], distance: d0, castShadow: true }] : []),
-      { parts: [{ geometry: g1!, material }], distance: d1, castShadow: true },
+      // low quality: only the full crowns near the camera cast shadows (graphics8c.trees.lowShadow; fix B, review F1)
+      { parts: [{ geometry: g1!, material }], distance: d1, castShadow: quality !== 'low' || T.lowShadow },
       { parts: [{ geometry: g2!, material }], distance: Infinity, castShadow: false },
     ],
   };

@@ -166,6 +166,21 @@
   flex: 1;
   min-width: 0;
 }
+.menu-row select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  color-scheme: dark; /* the native option list follows the dark menu */
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--hud-radius, 3px);
+  padding: 5px 8px;
+}
+.menu-row select:focus-visible {
+  outline: 2px solid #ffd54a;
+  outline-offset: 2px;
+}
 .menu-row output {
   flex: 0 0 4em;
   text-align: right;
