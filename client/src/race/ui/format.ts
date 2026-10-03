@@ -132,14 +132,52 @@ export function penaltyLine(v: RaceView | null, serverNow: number): string | nul
   return `Phạt chờ: còn ${formatDuration(Math.ceil((v.checkinAt - serverNow) / 1000) * 1000)} trước khi về đích`; // a countdown: up
 }
 
-/** "Tại điểm này" lines, oldest arrival first: "Đội Xanh – đang làm Thử thách 2". */
-export function zoneLines(members: readonly ZoneMember[], teams: readonly TeamInfo[]): string[] {
-  // TODO(phase10 track C, plan §5.3): members with `left` → "… – vừa rời đi n phút trước (đang làm …)" after the present
-  // ones, dropped once now − left > NET.zoneLeftMs (RaceHud redraws when the minute changes). Until then they are hidden,
-  // so a server that already sends them never shows a gone team as "đang làm".
-  return members.filter((m) => m.left === undefined)
-    .sort((a, b) => a.since - b.since)
-    .map((m) => `${teams.find((t) => t.slot === m.slot)?.name ?? `Đội ${m.slot}`} – đang làm ${m.label}`);
+/** One line of "Tại điểm này"; `gone` = a team that left (drawn dimmer). */
+export interface ZoneLine {
+  text: string;
+  gone: boolean;
+}
+
+/** "Tại điểm này" lines at `now` (ms, server clock estimate). The teams here first, oldest arrival first: "Đội Xanh – đang làm
+ *  Thử thách 2"; then (Phase 10 V4, SPEC §17.24) the ones that left, the latest to leave first: "Đội Xanh – vừa rời đi 3 phút trước
+ *  (đang làm Thử thách 2)". The minutes round up, at least 1. A gone line is dropped once now − left > NET.zoneLeftMs: the server
+ *  runs no timer for that (it sends a `left` mark, the clock does the rest: ZoneList). */
+export function zoneLines(members: readonly ZoneMember[], teams: readonly TeamInfo[], now: number): ZoneLine[] {
+  const name = (m: ZoneMember) => teams.find((t) => t.slot === m.slot)?.name ?? `Đội ${m.slot}`;
+  const here = members.filter((m) => m.left === undefined).sort((a, b) => a.since - b.since);
+  const gone = members.filter((m) => m.left !== undefined && now - m.left <= NET.zoneLeftMs).sort((a, b) => b.left! - a.left!);
+  return [
+    ...here.map((m) => ({ text: `${name(m)} – đang làm ${m.label}`, gone: false })),
+    ...gone.map((m) => ({ text: `${name(m)} – vừa rời đi ${Math.max(1, Math.ceil((now - m.left!) / 60_000))} phút trước (đang làm ${m.label})`, gone: true })),
+  ];
+}
+
+/** The panel as RaceHud keeps it between `zone` messages: the server's last list + its lines at the latest clock. `update(now)` says
+ *  whether the lines differ from the previous call's (a gone team's "n phút" ticking over, its line expiring): only then does RaceHud
+ *  rebuild the DOM, never once per frame. `ticking` = a gone team is listed, so the clock alone can change the text.
+ *  ponytail: a string compare per frame while a gone team is listed (≤ 10 min after a team walked away); a timer to the next
+ *  minute mark if a profile ever shows it. */
+export class ZoneList {
+  lines: ZoneLine[] = [];
+  ticking = false;
+  private members: readonly ZoneMember[] = [];
+  private teams: readonly TeamInfo[] = [];
+  private key = '';
+
+  /** A `zone` message (the whole list: it replaces the last one). */
+  set(members: readonly ZoneMember[], teams: readonly TeamInfo[]): void {
+    this.members = members;
+    this.teams = teams;
+    this.ticking = members.some((m) => m.left !== undefined);
+  }
+
+  update(now: number): boolean {
+    this.lines = zoneLines(this.members, this.teams, now);
+    const key = this.lines.map((l) => (l.gone ? '~' : '') + l.text).join('\n');
+    const changed = key !== this.key;
+    this.key = key;
+    return changed;
+  }
 }
 
 // ── Phase 8 (docs/plans/phase8.md D15): the challenge / Lựa chọn kép card. A pure view model: RaceHud only draws it. ──

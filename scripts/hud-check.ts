@@ -277,6 +277,56 @@ await ev(`hud.result({ rank: 5, total: 5, kind: 'out', npc: '', toast: '', card:
 ok((await overlayShown()) && (await ev<string>(`document.querySelector('.rc-result.out').textContent`)).includes('BỊ LOẠIRất tiếc, Đội Xanh đã BỊ LOẠI khỏi cuộc đua. Thứ hạng cuối: 5/5.'), 'out (e.g. Host "Kết thúc" while offline): "BỊ LOẠI" card, generic text when the server sent none');
 await page.keyboard.press('Escape');
 
+console.log('Phase 10 V4: "Tại điểm này" – a team that left stays as "vừa rời đi n phút trước"; its minute moves, the panel is not redrawn per frame');
+await setup(`main: { ...base, task }`);
+const zoneText = () => ev<string[]>(`[...document.querySelectorAll('.rc-zone-line')].map((e) => e.textContent)`);
+await ev(`hud.zone([{ slot: 2, label: 'Lộ trình 3', type: 'route_info', branch: null, since: 9 }, { slot: 1, label: 'Thử thách 2', type: 'challenge', branch: null, since: 3, left: now - 10000 }], [{ slot: 1, id: 'a', name: 'Đội Xanh', colour: '#00f', online: true }])`);
+ok(JSON.stringify(await zoneText()) === JSON.stringify(['Đội 2 – đang làm Lộ trình 3', 'Đội Xanh – vừa rời đi 1 phút trước (đang làm Thử thách 2)']), 'the team here first, the one that left after it');
+ok(await ev<boolean>(`(() => { const l = document.querySelectorAll('.rc-zone-line'); return !l[0].classList.contains('rc-zone-left') && l[1].classList.contains('rc-zone-left') && getComputedStyle(l[1]).opacity === '0.7'; })()`), 'the gone line is dimmer (.rc-zone-left)');
+await ev(`window.muts = 0; new MutationObserver((r) => (muts += r.length)).observe(document.querySelector('.rc-zone'), { childList: true, subtree: true, characterData: true }); for (let i = 0; i < 100; i++) hud.update({ simTime: i / 60, serverNow: now + i * 400, inZone: false })`);
+ok((await ev<number>('muts')) === 0, '100 frames inside the same minute: the panel is not redrawn (0 DOM mutations)');
+await ev(`hud.update({ simTime: 2, serverNow: now + 50001, inZone: false })`);
+ok((await zoneText())[1] === 'Đội Xanh – vừa rời đi 2 phút trước (đang làm Thử thách 2)', 'the minute ticks over: "2 phút trước"');
+await ev(`hud.update({ simTime: 3, serverNow: now + 590000, inZone: false })`);
+ok((await zoneText())[1]?.includes('10 phút trước') ?? false, 'at 10 minutes: still there');
+await ev(`hud.update({ simTime: 4, serverNow: now + 590001, inZone: false })`);
+ok(JSON.stringify(await zoneText()) === JSON.stringify(['Đội 2 – đang làm Lộ trình 3']), 'a millisecond later the line is gone (the server sends nothing for it)');
+await ev(`hud.zone([{ slot: 1, label: 'Thử thách 2', type: 'challenge', branch: null, since: 3, left: now }], []); hud.update({ simTime: 5, serverNow: now + 600001, inZone: false })`);
+ok(await ev<boolean>(`document.querySelector('.rc-zone').hidden`), 'only a team that left, it expires: the panel hides by itself');
+
+console.log('Phase 10 V2: Hoàn tác – the Host takes back a Phạt / Duyệt: the next `race` view puts the card back, nothing of the old state stays');
+const asked = `{ ...c.main, status: 'pending', answers: [{ id: 1, text: '42', at: now - 20000, status: 'pending' }] }`;
+const fined = `{ ...c.main, status: 'locked', lockedUntil: now + 150000, lockKind: 'retry', answers: [{ id: 1, text: '42', at: now - 20000, status: 'penalized' }] }`;
+const next = `{ ...c.main, step: 'R2', type: 'route_info', label: 'Lộ trình 2', text: 'Mật thư mới', task: undefined, status: 'active', answers: [], receivedAt: now + 3000 }`;
+const frame = (s: number) => `hud.update({ simTime: ${s}, serverNow: now + ${s * 1000}, inZone: false })`;
+const chip = () => ev<string>(`(() => { const p = document.querySelector('.rc-penalty'); return p.hidden ? '' : p.textContent; })()`);
+const stateLine = () => ev<string>(`document.querySelector('.rc-state').textContent`);
+const overlayText = () => ev<string>(`document.querySelector('.rc-overlay').textContent`);
+const topLabel = () => ev<string>(`document.querySelector('.rc-card .rc-label').textContent`);
+await setup(`main: { ...base, task }`);
+await ev(`hud.setView(view(${asked})); ${frame(0)}`);
+await page.keyboard.press('Escape');
+await ev(`hud.setView(view(${fined})); ${frame(1)}`);
+ok((await chip()).startsWith('Phạt: còn 02:29') && (await stateLine()).startsWith('Phạt: còn 02:29') && !(await overlayShown()), 'Phạt, card closed: the centre countdown + the top-left line, no popup');
+await ev(`hud.setView(view(${asked})); ${frame(2)}`);
+ok((await chip()) === '' && (await stateLine()) === 'Chờ Host duyệt · 00:22' && !(await overlayShown()), 'Hoàn tác: the countdown is gone, the card waits for the Host again counting from the ORIGINAL send time, still no popup');
+await ev(`hud.openCurrent(); hud.setView(view(${fined})); ${frame(3)}`);
+ok(await ev<boolean>(`document.querySelector('.rc-timer.lock')?.textContent.startsWith('Phạt: còn 02:27') === true`), 'card open: the countdown is on the card');
+await ev(`hud.setView(view(${asked})); ${frame(4)}`);
+ok(await ev<boolean>(`!document.querySelector('.rc-timer.lock') && document.querySelector('.rc-timer.wait')?.textContent === 'Đang chờ Host duyệt · 00:24' && !document.querySelector('.rc-input') && document.querySelector('.rc-ans.pending') != null`), 'Hoàn tác, card open: "Đang chờ Host duyệt" again, no countdown, no answer box, the answer is "Chờ Host duyệt" again');
+await setup(`main: { ...base, task }`);
+await ev(`hud.setView(view(${asked})); ${frame(0)}`);
+await ev(`hud.setView(view(${next})); ${frame(1)}`);
+ok((await overlayShown()) && (await overlayText()).includes('Mật thư mới'), 'Duyệt: the next card pops up');
+await ev(`hud.setView(view(${asked})); ${frame(2)}`);
+ok((await overlayShown()) && (await overlayText()).includes('Thử thách 1') && !(await overlayText()).includes('Mật thư mới') && (await topLabel()) === 'Thử thách 1' && (await stateLine()) === 'Chờ Host duyệt · 00:22', 'Hoàn tác with the new card open: the old card is back everywhere (popup, top-left, wait counted from the original send)');
+await page.keyboard.press('Escape');
+await ev(`hud.setView(view(${next})); ${frame(3)}`);
+await page.keyboard.press('Escape');
+await ev(`hud.setView(view(${asked})); ${frame(4)}`);
+ok((await overlayShown()) && (await overlayText()).includes('Thử thách 1') && (await topLabel()) === 'Thử thách 1', 'Hoàn tác after the team closed the new card: the old card pops up again, not the new one');
+await page.keyboard.press('Escape');
+
 // main.ts on the real (offline DEV) game page: requestPointerLock is counted and never granted (like Firefox refusing a lock
 // asked from Esc), the card is the demo popup (?card=answer&full) over the map (?map) / the menu (?menu).
 console.log('game page: a card closed over the map / menu keeps the pointer free (R-2); a refused lock shows the help again (R-3)');
