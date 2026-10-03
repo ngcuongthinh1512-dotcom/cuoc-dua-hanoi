@@ -5,7 +5,7 @@ import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
 import { branchZone, normalizeAnswer, parseLeg, stepZones, type Task } from '@race/shared/leg';
 import { decodePose, type CardStatus, type ClueCard, type HostReview, type HostState, type RaceView, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { answersOf, type Bot, botMove, louvreAnswersOf, louvreMove, effectiveStatus, fastPenalties, legArg, legFailed, legRowBudget, legStats, playLeg, reviewsFor, runHostBot, runSim, SIM_PENALTIES } from './sim.ts';
+import { answersOf, type Bot, botMove, louvreAnswersOf, louvreMove, effectiveStatus, fastPenalties, legArg, legFailed, legRowBudget, legStats, playLeg, reviewsFor, runHostBot, runSim, scenarioFailed, SIM_PENALTIES } from './sim.ts';
 
 // Real workerd + Durable Object (createTestHarness) and real WebSockets: 3 bots walk 30 simulated seconds on the A* road graph.
 // speedup 2 (10 msg/s per bot) leaves margin under the server's 15 msg/s socket limit (1 s window) and is the CLI maximum;
@@ -383,10 +383,25 @@ describe('sim --leg (Phase 7 / 8)', () => {
     expect(legFailed(r)).toBe(false);
   });
 
+  // Phase 11: the Host-bot scenarios on the compacted leg (6 bots: undo bot 4's Duyệt, Cho qua bot 5, clear a red flag (speedup 2 flags
+  // everybody), bot 6 never checks in → the Host ends the race → BỊ LOẠI) and the organiser's export; budget for 8 teams within SPEC §3.
+  it('--full with 6 bots: Hoàn tác, Cho qua, Xóa cờ, Kết thúc → out, export ok; 8-team budget under the pro-rata limits', { timeout: 300_000 }, async () => {
+    const r = await runSim({ bots: 6, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-full', password: 'test-secret', log: () => {}, leg: { json: compactMini() }, full: true, teams: 8 });
+    expect(r.leg).toMatchObject({ id: 'mini', finished: 5, ranked: 6 });
+    expect(r.leg!.scenario).toMatchObject({ undone: 1, passed: 1, ended: true });
+    expect(r.leg!.scenario!.cleared).toBeGreaterThanOrEqual(1);
+    expect(r.leg!.export).toMatchObject({ ok: true, teams: 6 });
+    expect(r.leg!.export.events).toBeGreaterThan(20);
+    expect(r.budget).toMatchObject({ teams: 8, requestLimit: 16_000, rowLimit: 8_000, ok: true });
+    expect(legFailed(r)).toBe(false);
+    expect(scenarioFailed({ undone: 0, passed: 1, cleared: 1, flagged: 1, ended: true })).toBe(true);
+    expect(scenarioFailed({ undone: 1, passed: 1, cleared: 0, flagged: 0, ended: true })).toBe(false); // nobody flagged: nothing to clear
+  });
+
   it('a long leg is not reported as LỖI for the shared rows: the budget counts per-team race rows (organiser review)', () => {
     // the organiser's 4-step leg, 2 bots, 826 s at speedup 2: 324 rows = 2 × 40 race rows + 244 snapshot / replay rows (413 s real,
     // one every 2 s + one every 10 s); the old check divided all 324 by 2 → "162 > 110 ← LỖI"
-    const leg = { id: 'x', steps: 4, finished: 2, ranked: 2, out: 1, rowsPerTeam: 40, sharedRows: 244, rowBudget: legRowBudget(4), refused: [], stats: legStats([]) };
+    const leg = { id: 'x', steps: 4, finished: 2, ranked: 2, out: 1, rowsPerTeam: 40, sharedRows: 244, rowBudget: legRowBudget(4), refused: [], stats: legStats([]), scenario: null, export: { ok: true, why: [], teams: 2, events: 0, steps: 0 } };
     const r = { bots: 2, counters: { wsIn: 0, wsOut: 0, http: 0, alarms: 0, rows: 324 }, leg } as unknown as Parameters<typeof legFailed>[0];
     expect(legFailed(r)).toBe(false);
     expect(legFailed({ ...r, leg: { ...leg, rowsPerTeam: 161 } })).toBe(true);

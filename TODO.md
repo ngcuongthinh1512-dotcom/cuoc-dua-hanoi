@@ -6,7 +6,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - Đã soát ảnh mọi preset sau đợt sửa review (12 đại lộ ở Étoile, Champs-Élysées thẳng tới Concorde, đường cong sông Seine, cầu Iéna một mặt cầu, Louvre). Preset `eiffel` chưa thấy Trocadéro vì sương (cách ~1,4 km, sương hết ở ~1 km khi bay cao 250 m); preset `street` không thấy Khải Hoàn Môn (cách ~900 m, sau sương 700 m).
 - Nhà: mặt đất DEM AWS gồ lên 13–17 m dưới Louvre (thực tế ≈ +1 m so với Concorde). Nhà đo chiều cao từ mặt đất thấp nhất, nhưng không thấp hơn điểm cao nhất của chân nhà quá `buildings.groundSpan` (3 m), nên Louvre vẫn thấp (khoảng 7 m) nhìn từ Cour Carrée. DEM giữ nguồn AWS (người dùng đã chốt).
 - Nhà: thuyền, nhà thuyền, nhà hàng nổi (22 nhà có tâm nằm trong lòng sông) bị bỏ ở `build-chunks` (`dropped.buildingOnRiver`). Phase 12: mô hình sà lan / nhà thuyền nổi trên mặt nước.
-- Nhà: 4 trụ đầu cầu Alexandre III (building=yes nhỏ) đang dựng thành nhà Haussmann tí hon có cửa hàng + mái mansard; thay bằng model ở Phase 11.
+- Nhà: 4 trụ đầu cầu Alexandre III (building=yes nhỏ) đang dựng thành nhà Haussmann tí hon có cửa hàng + mái mansard; thay bằng model ở Phase 12 (Phase 11 chỉ test toàn trình, không thêm asset).
 - Nhà: tường chung (party wall) chỉ nhận ra giữa các nhà trong cùng một chunk và khi chung đúng cạnh; nhà sát ranh chunk vẫn có mặt tiền + mái mansard ở phía đó (ponytail trong `BuildingBuilder.ts`). Nâng cấp: `build-chunks` đánh dấu cạnh chung trên toàn bản đồ.
 - Nhà: một vài dải tường đá trơn trên mái trông như lơ lửng (thấy ở Champs-Élysées từ mặt đường), có lẽ là phần tường chung cao hơn nhà bên cạnh; chưa rõ nguyên nhân.
 - Nhà: bỏ qua tag `colour` / `roof:colour` / `roof:shape` (mọi nhà Haussmann đều mái mansard, nhà khác mái bằng) và `building:part`.
@@ -106,7 +106,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 
 ## Phase 6 – Server & presence (phần còn lại)
 Đã xong: `RaceRoom` thật (WebSocket Hibernation, SQLite, Alarms, một Durable Object mỗi cuộc đua theo `?race=`), đăng nhập Host / mã đội (token HMAC), vào lại bằng mã đội ("Chào mừng trở lại"), đá thiết bị cũ, người chơi khác (nội suy, `G` vẫy, `R` chuông), xe chung (server đặt xe, nhận xe nguyên tử, xe bị bỏ biến mất, đội thấy người đạp chứ không thấy xe hai lần), hộp mật thư chỉ gửi tọa độ khi vào 150 m (SPEC §17.10), kiểm tra tốc độ chỉ đánh dấu, trang Host tối giản (`/host.html`), bot `npm run sim`, test Durable Object bằng `createTestHarness` (wrangler; `@cloudflare/vitest-pool-workers` không tương thích Vitest 5). Kiểm đủ 8 kịch bản end-to-end với client + server thật. Báo cáo: `docs/reports/phase6-*.md`; kế hoạch `docs/plans/phase6.md`.
-- Ngân sách quota (cuộc đua 2 giờ, 20 đội đi liên tục): khoảng 36 460 request (giới hạn 40 000, biên chỉ 9 %), khoảng 7 250 dòng SQLite (giới hạn 20 000). Nếu thấy sát khi đo thật ở Phase 12: gửi 2 mẫu mỗi tin ở 2,5 Hz (kế hoạch câu hỏi mở 2).
+- Ngân sách quota (cuộc đua 2 giờ, 20 đội đi liên tục): khoảng 36 460 request (giới hạn 40 000, biên chỉ 9 %), khoảng 7 250 dòng SQLite (giới hạn 20 000). Phase 11 đo bằng bot cho 8 đội (quyết định người dùng): ≈ 13 800 / 16 000 request, xem `docs/reports/phase11.md`. Nếu thấy sát khi đo thật ở Phase 12: gửi 2 mẫu mỗi tin ở 2,5 Hz (kế hoạch câu hỏi mở 2).
 - Bộ đếm quota của Host hụt khoảng 15–20 % (một sự kiện ghi 3 dòng chứ không phải 2; bộ đếm chỉ lưu cùng snapshot nên mất phần sau snapshot cuối khi Durable Object ngủ).
 - Xe bị bỏ chỉ biến mất khi có đội đang di chuyển (vòng lặp chỉ chạy khi có người gửi vị trí trong 10 s gần nhất; cache xe dựng lại đặt lại mốc 60 s) nên có thể sống lâu hơn 60 s (~107 s đo được); F của đội thua đôi khi im lặng khi độ trễ mạng ≈ 0 (server bỏ xe đang có người đạp khỏi danh sách của đội khác nên client không thấy xe để báo lý do).
 - Ghi chú ponytail của track A (xem `docs/reports/phase6-track-a.md`): khóa đăng nhập sai chỉ giữ trong bộ nhớ; kiểm tra bỏ xe / socket chết / hộp chỉ chạy khi vòng lặp chạy; đội tạo sau khi các đội khác đã online chỉ xuất hiện ở lần `welcome` kế; bộ đệm replay (tối đa 10 s) mất khi Durable Object bị đuổi.
@@ -120,7 +120,7 @@ Những phần tạm (placeholder) hoặc hoãn sang phase sau. Làm xong thì x
 - **Việc của anh: nhập chặng thật** (SPEC §17.9). Cách: viết file JSON theo `docs/LEG_FORMAT.md` (đặt NGOÀI thư mục dự án) → `npm run leg:check -- <file>` → trang Host "Nạp chặng từ file". Đã nhận LT2 (memory `leg-content-draft`): điểm đến Palais de Tokyo; tâm tòa nhà bị `leg:check` từ chối (nằm trong nhà); điểm dùng được: sân trước Place de Tokyo 48.86470, 2.29690, bán kính 30, bãi xe gợi ý 48.86476, 2.29640. Điểm bắt đầu: tâm cầu Bir-Hakeim (demo: 48.85585, 2.28744 lối đi bộ dưới cầu cạn; tránh cửa vòm đá trên Île aux Cygnes).
 - **Cần anh xác nhận (mặc định đang áp dụng):** Host phải "Mở cuộc đua" trước khi đội mở được hộp; tạm dừng vẫn đi lại được nhưng không mở hộp, không trả lời / chọn nhánh, không check-in (Host vẫn duyệt được).
 - Ponytail / tồn: khóa đăng nhập sai và giới hạn nối lại (`NET.maxConnects`) chỉ giữ trong bộ nhớ, đội mạng chập chờn có thể bị khóa 14–75 s mà chỉ thấy "Mất kết nối" (Host không thấy); sau khi respawn xa hơn 30 m, nhận xe có thể bị báo "quá xa" oan; kiểm tra bỏ xe / socket chết / hộp chỉ chạy khi vòng lặp chạy; đội tạo sau khi các đội khác online chỉ hiện ở `welcome` kế; bộ đệm replay (≤ 10 s) mất khi Durable Object bị đuổi; bãi xe = một hàng đông–tây quanh tọa độ bãi, cách 0,9 m, chưa có model giá để xe (`BikeService.park`); xe NPC đã cam kết vào giao lộ hoặc xe buýt không có đường khác vẫn có thể chạy qua vùng hộp; ùn xe cũ ở phía tây Concorde quanh (−200, 62) (không liên quan vùng cấm); khi Host bấm "Kết thúc" đội chưa về đích chuyển sang chế độ chỉ xem ngay (Phase 8D: kèm thông báo "BỊ LOẠI", không có huy hiệu "Đã kết thúc"); `leg:check` "Xem" chưa vẽ vòng bán kính; một số điểm tâm tòa nhà (Palais de Tokyo) bị từ chối, cần chọn điểm ngoài trời.
-- Quota Phase 7 (ước tính): khoảng 90 dòng SQLite mỗi đội cho chặng 10 bước; 7 đội ≈ 9 000 request (xấu nhất 12 800), 20 đội ≈ 25 500 (xấu nhất 36 400, biên 9 %) cho 2 giờ; đo thật ở Phase 12.
+- Quota Phase 7: đo bằng bot ở Phase 11 (≈ 90 dòng SQLite / đội cho chặng 8 bước; 8 đội xấu nhất ≈ 13 800 request / 2 giờ); đo thật trên Cloudflare ở Phase 12.
 - Còn lại trong `docs/reports/phase7-review*.md`: ~30 lỗi nhỏ (định dạng, làm tròn, chữ).
 
 ## Phase 8 – Thử thách & Lựa chọn kép (phần còn lại)
@@ -164,8 +164,10 @@ Xong (commit `feat(phase10)`; cổng cuối `docs/reports/phase10-gate.md`; sử
 - Ponytail / tồn: danh sách "vừa rời đi" chỉ giữ trong bộ nhớ Durable Object (mất khi bị đuổi; ai đang đứng ở điểm nào được dựng lại từ vị trí snapshot khi DO thức, mốc "từ lúc" là lúc thức); số giây bị khóa trong tệp xuất vẫn tính một lần đổi nhánh đã bị Hoàn tác; Hoàn tác một Duyệt không đưa xe đã vào bãi trở lại (M4: đội tự ra bãi lấy xe); Hoàn tác một Phạt không kêu / thông báo lại bài chờ duyệt.
 - Kiểm tay chưa làm: 2 trình duyệt + Host thật (Hoàn tác Duyệt / Phạt, toast, hòm bước kế biến mất; "vừa rời đi" tăng phút); cuộn ma trận với chặng thật nhiều bước; mở tệp CSV xuất ra bằng Excel / Numbers thật.
 
-## Phase 11 – Test toàn trình
-- `npm run sim` (bot mô phỏng), `worker/legs/test/paris-demo.filled.json`, `worker/legs/test/specials.json`.
+## Phase 11 – Test toàn trình + đo hạn mức
+Xong (báo cáo `docs/reports/phase11.md`): `sim --full` (Host bot Hoàn tác / Xóa cờ / Cho qua / Kết thúc → BỊ LOẠI + kiểm tệp xuất), `--teams N` nội suy ngân sách 2 giờ theo số đội thật (8), `--louvre-right-only`, phạt Louvre rút trong sim, chặng test `worker/legs/test/full.json` (mọi loại bước). Đo 8 bot đi liên tục: 8 đội × 2 giờ ≈ 13 800 request (ngưỡng 16 000) · ≈ 2 800 dòng SQLite (ngưỡng 8 000) → đạt; 20 đội ≈ 34 500 / 40 000.
+- `specials.json` (Quay đầu, Nhường đường, Vé vượt…) không làm: SPEC §17.18 hoãn các thẻ đặc biệt.
+- Đo lại trên Cloudflare thật ở Phase 12 (bộ đếm Host hụt 15–20 %; biên request 14 % cho 8 đội là trường hợp xấu nhất – đội đứng yên không gửi vị trí).
 
 ## Phase 12 – Deploy
 - Bundle client ~4,9 MB (gzip ~1,8 MB), phần lớn là WASM nhúng base64 của `@dimforge/rapier3d-compat` (`chunkSizeWarningLimit` trong `client/vite.config.ts`). Khi tối ưu tải trang: dùng `@dimforge/rapier3d` (file `.wasm` riêng) hoặc tách chunk vendor để cache.
@@ -174,7 +176,7 @@ Xong (commit `feat(phase10)`; cổng cuối `docs/reports/phase10-gate.md`; sử
 - Giải phóng bản sao geometry trên CPU sau khi upload lên GPU.
 - Nhân vật: LOD / instancing cho nhân vật ở xa, thân nữ, texture KTX2.
 - `docs/DEPLOY.md` (hướng dẫn cho người không chuyên) + `npm run deploy`.
-- Đo số request / dòng ghi SQLite thực tế so với ngân sách ở SPEC §3.
+- Đo số request / dòng ghi SQLite thực tế trên Cloudflare so với ngân sách ở SPEC §3 (Phase 11 đã đo bằng bot trong máy: `docs/reports/phase11.md`).
 
 ## Khác
 - npm 11 cảnh báo `allowScripts` cho script cài đặt của `esbuild`, `workerd`, `fsevents`. Hiện vẫn chạy được vì binary lấy từ optional dependency; nếu bản npm sau chặn hẳn thì duyệt bằng `npm install-scripts approve`.

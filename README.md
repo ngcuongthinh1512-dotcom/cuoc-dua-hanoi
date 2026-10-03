@@ -45,7 +45,7 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 | `npm run process-assets` | Xử lý asset gốc đã duyệt trong `.cache/assets/` → `client/public/models/*.glb` (kể cả nhân vật `player.glb` + `player-anims.glb`) và `client/public/credits.json`. Đồ họa 8C: `-- hdri textures trees props flamme` (nguồn `.cache/assets/8c`, kiểm giấy phép) → `client/public/{textures,models}`. `-- --assets <thư mục> louvre`: 23 ảnh / bản quét phòng Louvre → `client/public/art/art-NN.*` (tên trung tính, xóa metadata; cách làm: `docs/LEG_FORMAT.md` mục 7.5). |
 | `npm run build-graph` | Dựng đồ thị đường từ `.cache/osm/` → `shared/data/roadgraph.json` (đường, vỉa hè, vạch qua đường, bậc thang, một chiều, bãi xe đạp). |
 | `npm run leg:check -- <file.json>` | Kiểm tra file chặng đua (cú pháp, luật, điểm trên bản đồ, đáp án lọt ra ngoài): [`docs/LEG_FORMAT.md`](docs/LEG_FORMAT.md). |
-| `npm run sim -- --leg <mã \| file.json>` | Bot chơi thử hết một chặng qua WebSocket thật (máy chủ tạm trong máy), in số đội về đích, xếp hạng, số dòng ghi; không có `--leg`: đo lưu lượng. `--help` xem tùy chọn. |
+| `npm run sim -- --leg <mã \| file.json>` | Bot chơi thử hết một chặng qua WebSocket thật (máy chủ tạm trong máy), in số đội về đích, xếp hạng, số dòng ghi, ngân sách Cloudflare nội suy cho `--teams N` đội × 2 giờ; `--full` (≥ 6 bot) thêm kịch bản Host (Hoàn tác, Xóa cờ, Cho qua, Kết thúc → BỊ LOẠI, kiểm tệp xuất); không có `--leg`: đo lưu lượng. `--help` xem tùy chọn. |
 | `npm run dev:api` | Chỉ chạy API + Durable Object (`wrangler dev` :8787) để dùng cùng `npm run dev` (Vite chuyển `/api` sang đó). |
 | `npm run ride-check` | Chơi thử tự động bằng phím thật trong Chrome headless: đi bộ → đạp xe 300 m → phanh → ngã xe → xuống bậc kè → bơi → lên bờ; in tốc độ đo được. |
 | `npm run build-chunks` | Cắt dữ liệu OSM thô thành các ô 250 m: `client/public/data/chunks/*.json` + `index.json` + `water.json`. |
@@ -98,7 +98,7 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 12 | Tối ưu & deploy | Chưa làm |
 
 ## Deploy
-Game được deploy lên Cloudflare Workers (mục tiêu: gói Free đủ cho một cuộc đua 2 giờ, 20 đội; sẽ đo thực tế ở Phase 12): cần tài khoản Cloudflare, tạo R2 bucket `cuoc-dua-paris-media`, đặt mật khẩu Host bằng `npx wrangler secret put HOST_PASSWORD` rồi deploy bằng wrangler. Hướng dẫn từng bước cho người không chuyên sẽ có trong `docs/DEPLOY.md` cùng lệnh `npm run deploy` ở Phase 12.
+Game được deploy lên Cloudflare Workers (mục tiêu: gói Free đủ cho một cuộc đua 2 giờ, 8 đội; đo bằng bot ở Phase 11, xem `docs/reports/phase11.md`; đo lại trên Cloudflare thật ở Phase 12): cần tài khoản Cloudflare, tạo R2 bucket `cuoc-dua-paris-media`, đặt mật khẩu Host bằng `npx wrangler secret put HOST_PASSWORD` rồi deploy bằng wrangler. Hướng dẫn từng bước cho người không chuyên sẽ có trong `docs/DEPLOY.md` cùng lệnh `npm run deploy` ở Phase 12.
 
 ---
 

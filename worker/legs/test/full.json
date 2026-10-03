@@ -1,0 +1,380 @@
+{
+  "id": "full",
+  "title": "Chặng đủ kịch bản để test (NỘI DUNG GIẢ): thử thách Host duyệt, Lựa chọn kép, phòng Louvre",
+  "start": {
+    "name": "Cầu Bir-Hakeim – lối đi bộ dưới cầu cạn metro, phía Passy",
+    "lat": 48.85585,
+    "lon": 2.28744,
+    "yawDeg": 33,
+    "spreadMeters": 5
+  },
+  "steps": [
+    {
+      "id": "L1",
+      "type": "route_info",
+      "label": "Lộ trình 1",
+      "clue": "(GIẢ) Lên quảng trường có tầm nhìn đẹp nhất ra 'bà đầm sắt'.",
+      "destination": {
+        "name": "Sân trước Palais de Chaillot",
+        "lat": 48.86215,
+        "lon": 2.28843,
+        "radius": 35,
+        "bikeParking": {
+          "lat": 48.8625,
+          "lon": 2.2878
+        },
+        "yawDeg": 150
+      },
+      "media": [
+        {
+          "url": "https://example.invalid/gia/video-l1",
+          "label": "(GIẢ) Video gợi ý"
+        },
+        "r2:test-gia.jpg"
+      ]
+    },
+    {
+      "id": "T1",
+      "type": "challenge",
+      "label": "Thử thách 1",
+      "task": {
+        "title": "(GIẢ) Câu hỏi ở vườn Trocadéro",
+        "description": "(GIẢ) 6 × 7 = ?",
+        "media": [
+          "https://example.invalid/gia/vuon-trocadero",
+          "r2:test-gia-2.jpg"
+        ],
+        "location": {
+          "name": "Vườn Trocadéro (phía dưới)",
+          "lat": 48.8605,
+          "lon": 2.2903,
+          "radius": 30,
+          "bikeParking": {
+            "lat": 48.8601,
+            "lon": 2.2899
+          }
+        },
+        "verification": "host_approval",
+        "answers": [
+          "42"
+        ],
+        "referenceAnswers": [
+          "42 (bốn mươi hai) – GIẢ"
+        ],
+        "timeLimitMinutes": 10
+      },
+      "teaser": "(GIẢ) Đi xuống vườn, tìm chỗ có tiếng nước."
+    },
+    {
+      "id": "L2",
+      "type": "route_info",
+      "label": "Lộ trình 2",
+      "clue": "(GIẢ) Qua sông, tới chân tháp. Bắt buộc: đi bộ.",
+      "transport": {
+        "mandatory": "walk"
+      },
+      "destination": {
+        "name": "Chân tháp Eiffel",
+        "lat": 48.8583,
+        "lon": 2.2945,
+        "radius": 40
+      }
+    },
+    {
+      "id": "D1",
+      "type": "detour",
+      "label": "Lựa chọn kép",
+      "clue": "(GIẢ) Chọn một trong hai.",
+      "branches": [
+        {
+          "id": "A",
+          "name": "Tính",
+          "summary": "(GIẢ) Một phép tính.",
+          "task": {
+            "title": "(GIẢ) Phép tính",
+            "description": "(GIẢ) 3 + 4 = ?",
+            "answers": [
+              "7",
+              "bảy"
+            ],
+            "location": {
+              "name": "Phía bắc chân tháp, lối ra sông",
+              "lat": 48.85878,
+              "lon": 2.29469,
+              "radius": 15,
+              "yawDeg": 135,
+              "bikeParking": {
+                "lat": 48.85899,
+                "lon": 2.29478
+              }
+            }
+          }
+        },
+        {
+          "id": "B",
+          "name": "Ảnh",
+          "summary": "(GIẢ) Gửi ảnh cho Host.",
+          "task": {
+            "title": "(GIẢ) Ảnh",
+            "description": "(GIẢ) Chụp màn hình dưới chân tháp.",
+            "kind": "free",
+            "verification": "host_approval",
+            "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook.",
+            "location": {
+              "name": "Bãi cỏ Champ de Mars",
+              "lat": 48.8562,
+              "lon": 2.2978,
+              "radius": 30,
+              "bikeParking": {
+                "lat": 48.8558,
+                "lon": 2.2972
+              }
+            },
+            "referenceAnswers": [
+              "(GIẢ) Ảnh thấy rõ chân tháp phía sau"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "L-LV",
+      "type": "route_info",
+      "label": "Lộ trình Louvre",
+      "clue": "(GIẢ) Ra bãi cỏ lớn phía đông-nam tháp: hòm này dẫn xuống phòng tranh.",
+      "destination": {
+        "name": "Bãi cỏ Champ de Mars, phía đông-nam (GIẢ)",
+        "lat": 48.8553,
+        "lon": 2.299,
+        "radius": 25,
+        "yawDeg": 90
+      }
+    },
+    {
+      "id": "T3",
+      "type": "challenge",
+      "label": "Thử thách 3",
+      "task": {
+        "title": "(GIẢ) Phòng Louvre",
+        "description": "(GIẢ) Bấm F ở hòm để xuống phòng. Chọn đúng 5 tác phẩm đang trưng bày ở đây rồi bấm nút chốt giữa phòng.",
+        "kind": "louvre",
+        "verification": "auto",
+        "answers": [
+          "art-17",
+          "art-03",
+          "art-21",
+          "art-08",
+          "art-12"
+        ],
+        "louvre": {
+          "artworks": [
+            {
+              "id": "art-01",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 1"
+            },
+            {
+              "id": "art-02",
+              "type": "painting",
+              "image": "art-02.webp",
+              "note": "(GIẢ) Tác phẩm 2",
+              "credit": {
+                "title": "(GIẢ) Tranh 2",
+                "artist": "(GIẢ) Họa sĩ 2",
+                "photo": "(GIẢ) Người chụp 2",
+                "license": "PD",
+                "source": "https://example.invalid/gia/art-2"
+              }
+            },
+            {
+              "id": "art-03",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 3"
+            },
+            {
+              "id": "art-04",
+              "type": "sculpture",
+              "note": "(GIẢ) Tác phẩm 4"
+            },
+            {
+              "id": "art-05",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 5"
+            },
+            {
+              "id": "art-06",
+              "type": "painting",
+              "image": "art-06.webp",
+              "note": "(GIẢ) Tác phẩm 6",
+              "credit": {
+                "title": "(GIẢ) Tranh 6",
+                "artist": "(GIẢ) Họa sĩ 6",
+                "photo": "(GIẢ) Người chụp 6",
+                "license": "PD-Art",
+                "source": "https://example.invalid/gia/art-6"
+              }
+            },
+            {
+              "id": "art-07",
+              "type": "sculpture",
+              "note": "(GIẢ) Tác phẩm 7"
+            },
+            {
+              "id": "art-08",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 8"
+            },
+            {
+              "id": "art-09",
+              "type": "painting",
+              "image": "art-09.webp",
+              "note": "(GIẢ) Tác phẩm 9",
+              "credit": {
+                "title": "(GIẢ) Tranh 9",
+                "artist": "(GIẢ) Họa sĩ 9",
+                "photo": "(GIẢ) Người chụp 9",
+                "license": "CC0",
+                "source": "https://example.invalid/gia/art-9"
+              }
+            },
+            {
+              "id": "art-10",
+              "type": "sculpture",
+              "note": "(GIẢ) Tác phẩm 10"
+            },
+            {
+              "id": "art-11",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 11"
+            },
+            {
+              "id": "art-12",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 12"
+            },
+            {
+              "id": "art-13",
+              "type": "sculpture",
+              "note": "(GIẢ) Tác phẩm 13"
+            },
+            {
+              "id": "art-14",
+              "type": "painting",
+              "image": "art-14.webp",
+              "note": "(GIẢ) Tác phẩm 14",
+              "credit": {
+                "title": "(GIẢ) Tranh 14",
+                "artist": "(GIẢ) Họa sĩ 14",
+                "photo": "(GIẢ) Người chụp 14",
+                "license": "CC-BY",
+                "source": "https://example.invalid/gia/art-14"
+              }
+            },
+            {
+              "id": "art-15",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 15"
+            },
+            {
+              "id": "art-16",
+              "type": "sculpture",
+              "note": "(GIẢ) Tác phẩm 16"
+            },
+            {
+              "id": "art-17",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 17"
+            },
+            {
+              "id": "art-18",
+              "type": "painting",
+              "image": "art-18.webp",
+              "note": "(GIẢ) Tác phẩm 18",
+              "credit": {
+                "title": "(GIẢ) Tranh 18",
+                "artist": "(GIẢ) Họa sĩ 18",
+                "photo": "(GIẢ) Người chụp 18",
+                "license": "CC-BY-SA",
+                "source": "https://example.invalid/gia/art-18"
+              }
+            },
+            {
+              "id": "art-19",
+              "type": "sculpture",
+              "note": "(GIẢ) Tác phẩm 19"
+            },
+            {
+              "id": "art-20",
+              "type": "sculpture",
+              "image": "art-20.webp",
+              "note": "(GIẢ) Tác phẩm 20",
+              "credit": {
+                "title": "(GIẢ) Tượng 20",
+                "artist": "(GIẢ) Họa sĩ 20",
+                "photo": "(GIẢ) Người chụp 20",
+                "license": "CC-BY-NC-SA",
+                "source": "https://example.invalid/gia/art-20"
+              }
+            },
+            {
+              "id": "art-21",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 21"
+            },
+            {
+              "id": "art-22",
+              "type": "painting",
+              "note": "(GIẢ) Tác phẩm 22"
+            },
+            {
+              "id": "art-23",
+              "type": "sculpture",
+              "note": "(GIẢ) Tác phẩm 23"
+            }
+          ],
+          "hints": {
+            "countAtMinutes": 0.05,
+            "correctAtMinutes": 0.1
+          }
+        }
+      }
+    },
+    {
+      "id": "L3",
+      "type": "route_info",
+      "label": "Lộ trình 3",
+      "clue": "(GIẢ) Chặng dừng ở giữa cây cầu nối tháp với quảng trường.",
+      "destination": {
+        "name": "Giữa cầu Iéna",
+        "lat": 48.8596,
+        "lon": 2.29243,
+        "radius": 25
+      }
+    },
+    {
+      "id": "PS",
+      "type": "pit_stop",
+      "label": "Về đích",
+      "destination": {
+        "name": "Giữa cầu Iéna",
+        "lat": 48.8596,
+        "lon": 2.29243,
+        "radius": 25
+      },
+      "announce": {
+        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại cầu Iéna!",
+        "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
+        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại cầu Iéna.",
+        "first": {
+          "npc": "(GIẢ) {tên đội} về nhất tại cầu Iéna!",
+          "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
+        },
+        "out": {
+          "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.",
+          "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}",
+          "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}."
+        }
+      }
+    }
+  ]
+}
