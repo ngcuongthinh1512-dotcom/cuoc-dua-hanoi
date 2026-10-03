@@ -3,7 +3,7 @@
 // step_progress (cache + writes) and the team race fields in teams.state; it applies steps.ts effects — SQLite first,
 // in one transaction, the cache patched only once it committed, THEN the answers (SPEC §3) — and builds the welcome /
 // host.state parts.
-import { branchZone, jsonProblem, LOUVRE, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
+import { branchZone, jsonProblem, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
 import { latLonToWorld } from '@race/shared';
 import { finishTexts, NET, type BoxInfo, type FeedMessage, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
@@ -83,10 +83,11 @@ export interface LockEvent {
   minutes: number;
 }
 
-/** The public line of a lock (SPEC §17.19 "Chốt thêm"), null = none (right before the 70-minute mark). */
+/** The public line of a lock (SPEC §17.19): only a WRONG lock is public, as "bị phạt n phút"; never the count of right works
+ *  (it would hand a late team the answer count) and no line for a right lock. */
 export function feedLine(at: number, e: LockEvent): FeedMessage | null {
-  if (e.ok && !e.public) return null;
-  return { t: 'feed', at, slot: e.slot, ok: e.ok, ...(e.ok ? {} : { minutes: e.minutes }), ...(e.public ? { n: e.c, of: LOUVRE.answers } : {}) };
+  if (e.ok) return null;
+  return { t: 'feed', at, slot: e.slot, ok: false, minutes: e.minutes };
 }
 
 export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.leg' | 'host.review' }>;

@@ -721,7 +721,7 @@ describe('RaceEngine: louvre room (docs/plans/phase8b.md §D, §E)', () => {
     expect(f.feeds).toEqual([]); // a pick is never public
   });
 
-  it('a wrong lock: its row + event BEFORE any message, then the feed to everyone (no n before 70, n after)', () => {
+  it('a wrong lock: its row + event BEFORE any message, then the feed to everyone (never an n)', () => {
     const { f, pick, lock, card } = inRoom();
     for (const id of [right[0]!, right[1]!, wrong[0]!]) pick(id, T0 + 1);
     f.log.length = 0;
@@ -739,13 +739,13 @@ describe('RaceEngine: louvre room (docs/plans/phase8b.md §D, §E)', () => {
     f.log.length = 0;
     lock(T0 + 30);
     expect(f.log).toEqual(['send notice']); // answerLocked, nothing written
-    // past the countdown and the 70-minute mark: the line carries n / of
+    // past the countdown and the 70-minute mark: still no count (only "bị phạt n phút")
     lock(T0 + 10 + 6000);
-    expect(f.feeds.at(-1)).toEqual({ t: 'feed', at: T0 + 6010, slot: 0, ok: false, minutes: 0.1, n: 3, of: 5 });
+    expect(f.feeds.at(-1)).toEqual({ t: 'feed', at: T0 + 6010, slot: 0, ok: false, minutes: 0.1 });
     expect(card()!.answers.at(-1)).toMatchObject({ status: 'wrong', correct: 3 });
   });
 
-  it('the right 5: lock + complete in one transaction → clueNew, L3; feed n 5/5 after 70, no line before', () => {
+  it('the right 5: lock + complete in one transaction → clueNew, L3; no public line (a right lock is never public)', () => {
     const before = inRoom();
     for (const id of right) before.pick(id, T0 + 1);
     before.f.log.length = 0;
@@ -758,7 +758,7 @@ describe('RaceEngine: louvre room (docs/plans/phase8b.md §D, §E)', () => {
     const after = inRoom();
     for (const id of right) after.pick(id, T0 + 1);
     after.lock(T0 + 7000);
-    expect(after.f.feeds).toEqual([{ t: 'feed', at: T0 + 7000, slot: 0, ok: true, n: 5, of: 5 }]);
+    expect(after.f.feeds).toEqual([]); // a right lock is never public
   });
 
   it('restorePicks: the newer of the snapshot and the last lock wins; a done step keeps its own', () => {

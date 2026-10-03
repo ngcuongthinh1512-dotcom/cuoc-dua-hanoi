@@ -116,19 +116,19 @@ describe.concurrent('Phase 8B louvre room (workerd)', () => {
     await room(a!, (l) => l.hintCorrect === 3);
     pick(a!, 'T3', w2);
     await room(a!, (l) => l.picks.length === 4 && l.hintCorrect === 3);
-    // a wrong lock past 70: public with n
+    // a wrong lock past 70: public without n
     lock(a!, 'T3');
     const second = await card(a!, (c) => c.status === 'locked' && c.answers.length === 2);
     expect(second.answers[1]).toMatchObject({ status: 'wrong', correct: 3 });
     expect(second.answers[0]).not.toHaveProperty('correct');
-    for (const s of [b!, host]) expect(await feed(s)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: false, minutes: 0.1, n: 3, of: 5 });
+    for (const s of [b!, host]) expect(await feed(s)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: false, minutes: 0.1 });
     await waitUntil(second.lockedUntil!);
     // a lock out of the room → boxFar (the room = the box's zone)
     let at: Pt = await walkTo(a!, P1, { x: P1.x - 45, z: P1.z });
     lock(a!, 'T3');
     await notice(a!, 'boxFar');
     at = await walkTo(a!, at, P1);
-    // the right 5 (any order): clueNew, L3, the public "đúng 5/5"
+    // the right 5 (any order): clueNew, L3, no public line
     pick(a!, 'T3', w2, false);
     await sleep(80);
     await picks(a!, [r4, r3]);
@@ -136,7 +136,6 @@ describe.concurrent('Phase 8B louvre room (workerd)', () => {
     lock(a!, 'T3');
     await notice(a!, 'clueNew');
     expect(await card(a!, (c) => c.step === 'L3')).toMatchObject({ status: 'active' });
-    for (const s of [b!, host]) expect(await feed(s)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: true, n: 5, of: 5 });
     // team B never got anything of A's room (only the public lines); its own card is still L-LV
     viewAgain(b!);
     const bv = await view(b!, () => true);
@@ -284,7 +283,7 @@ describe('Phase 8B after an eviction', () => {
     const a2 = await joinTeam(server, race, teams[0]!.code);
     expect(W(a2).view!.card!.task!.louvre).toMatchObject({ picks: [w0, r0, r1], attempts: 2, hintCorrect: 2 });
     const fl = W(a2).feed;
-    expect(fl.map((m) => [m.ok, m.n])).toEqual([[false, undefined], [false, 2]]);
+    expect(fl.map((m) => [m.ok, m.n])).toEqual([[false, undefined], [false, undefined]]);
     expect(fl[0]!.at).toBeLessThan(fl[1]!.at);
     for (const s of [a2, host]) s.close();
   }, 90_000);

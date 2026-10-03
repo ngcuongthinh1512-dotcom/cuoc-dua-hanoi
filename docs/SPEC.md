@@ -1072,3 +1072,7 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 ### 17.25 Xuất dữ liệu thô thời gian của từng đội (2026-10-03; thêm vào Phase 10)
 - Người dùng cần BẢNG THỜI GIAN mỗi đội tới từng lộ trình / bước, KHÔNG cần hiện trong bảng Host, nhưng cần DỮ LIỆU THÔ để XUẤT RA khi kết thúc chặng đua.
 - Trang Host có nút "Xuất dữ liệu thời gian" (dùng được bất kỳ lúc nào, dành cho cuối cuộc đua) tải về: (1) bảng theo đội × bước: đội, mã / tên bước, loại, nhánh, thời điểm tới điểm (`arrived_at`), mở hòm (`clue_opened_at`), bắt đầu nhiệm vụ (`task_started_at`), hoàn thành (`completed_at`) dạng mốc tuyệt đối (epoch ms + ISO UTC + giờ Việt Nam) và số giây kể từ lúc Host mở cuộc đua, số giây từ lúc hoàn thành bước trước, số lần sai / phạt, số giây bị khóa, số lần đổi nhánh, thời gian chờ Host duyệt; (2) bảng theo đội: thứ tự vào game, hạng về đích, thời điểm về đích, bị loại hay không; (3) toàn bộ nhật ký sự kiện (bảng `events`) dạng thô. Định dạng CSV (UTF-8 có BOM để Excel đọc tiếng Việt) và JSON. Chỉ Host (token) tải được; đọc từ SQLite, không ghi thêm dòng nào; không chứa đáp án của chặng (chỉ số lần sai / thời gian).
+
+### 17.26 Tin công khai của phòng Louvre (2026-10-03)
+- Tin công khai chỉ báo đội trả lời sai và bị phạt 3 phút. **Bỏ** phần công khai "đúng x/5" (kể cả sau phút 70) và tin khi đội chốt đúng, vì có thể lộ số đáp án đúng cho đội đến sau. "Đúng x/5" sống vẫn hiện riêng cho đội đó từ phút 70.
+- Lựa chọn kép: không phạt 3 phút, Host chỉ cần nút Duyệt (chặng đặt `retryLockMinutes: 0` cho hai nhánh).
