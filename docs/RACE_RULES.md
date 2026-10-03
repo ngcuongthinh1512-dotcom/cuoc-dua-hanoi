@@ -23,7 +23,8 @@ Chúc các bạn một chặng đua thật may mắn!
 - Không có chat giữa các đội. Bạn chỉ có thể **vẫy tay chào** hoặc **bấm còi**.
 - Theo mặc định, minimap **không hiện vị trí đội khác**. Muốn biết đối thủ ở đâu, bạn phải tận mắt nhìn thấy họ.
 - Khi đứng trong khu vực của một điểm, bảng **"Tại điểm này"** (góc trên bên trái, dưới thẻ mật thư) cho biết đội nào đang có mặt và đang làm bước nào, ví dụ *"Đội Xanh – đang làm Thử thách 2"*. Bảng không hiện thứ hạng hay tiến độ chi tiết của đội khác.
-- Đội nào đang offline thì nhân vật của đội đó bị ẩn và không có tên trong bảng "Tại điểm này".
+- Đội **vừa rời khỏi** điểm (đi ra ngoài khu vực, hoặc mất kết nối / thoát game) vẫn còn trong bảng **thêm 10 phút**, chữ mờ hơn, ví dụ *"Đội Vàng – vừa rời đi 3 phút trước (đang làm Thử thách 1)"*; số phút tự tăng, quá 10 phút thì dòng đó mất. Đội quay lại điểm thì trở về dòng "đang làm".
+- Đội nào đang offline thì nhân vật của đội đó bị ẩn.
 
 ### Bản đồ
 - Bản đồ khớp với vị trí thật của trung tâm Paris. Biển tên đường ở các góc phố cũng là tên thật. Hãy để ý, chúng có thể giúp bạn trong thử thách!
@@ -216,6 +217,8 @@ Các nhiệm vụ gõ chữ hoặc gửi ảnh của chặng không được gam
 4. Host bấm **Phạt**: có âm báo cùng thông báo *"Host chưa duyệt: chờ hết đếm ngược rồi trả lời lại"*, và giữa màn hình hiện **đồng hồ đếm ngược** *"Phạt: còn mm:ss trước khi trả lời lại"* (mặc định **3 phút**; chặng hoặc từng thử thách có thể quy định số khác). Hết đếm ngược thì gõ lại được; **không giới hạn số lần**. Thẻ ghi rõ lần gửi nào *"Bị phạt n phút"*. Bấm `Enter` để xem lại lần trước bạn đã gõ gì rồi sửa.
 5. **Ghi chú của Host không gửi cho đội**: bạn chỉ thấy đếm ngược, không thấy lý do.
 6. Thời gian **vẫn trôi** trong lúc chờ duyệt và lúc đếm ngược (đếm ngược chạy cả khi Host tạm dừng cuộc đua); không có bù giờ (mục 11).
+7. **Host bấm nhầm thì rút lại được trong 10 giây (Hoàn tác).** Bạn nhận thông báo *"Host đã rút lại quyết định vừa rồi. Thẻ mật thư trở lại như trước."*: rút lại một **Phạt** thì đếm ngược biến mất và câu trả lời lại *"Chờ Host duyệt"* (đồng hồ chờ tính từ lúc bạn gửi); rút lại một **Duyệt** thì mật thư mới vừa nhận biến mất, thẻ thử thách cũ hiện lại và câu trả lời lại chờ Host duyệt. Quá 10 giây, hoặc khi bạn đã mở hòm của bước kế, thì Host không rút lại được nữa.
+8. **Cho qua**: khi đội bị kẹt ở một thử thách hay nhánh Lựa chọn kép (lỗi, mất kết nối…), Host có thể cho đội qua bước đó mà không cần câu trả lời; bạn nhận mật thư tiếp theo như khi được duyệt.
 
 ### Gửi ảnh cho Host qua Messenger (ví dụ nhánh của Lựa chọn kép)
 Có nhiệm vụ cần bằng chứng (ảnh chụp màn hình) gửi cho Host qua Messenger. **Game không có nút mở Messenger / Facebook**: bạn tự mở Messenger ở ngoài trò chơi (điện thoại hoặc cửa sổ khác).
@@ -293,6 +296,7 @@ Khi đội bạn có phút phạt, tổng số phút hiện ở **góc dưới b
 - **Thứ hạng = thứ tự chạm thảm về đích thực**: đội chạm thảm trước hạng trước. Thứ hạng được báo **ngay** khi bạn check-in ("Về đích thứ n") và **không đổi** sau đó. Không cộng phạt vào thứ hạng: thời gian đứng chờ hết phạt, đếm ngược sau khi bị Phạt bài hay khi đổi Lựa chọn kép đã trôi thật nên đã nằm trong thời điểm bạn chạm thảm.
 - **Đội về cuối cùng bị loại** (mọi đội khác đã về đích): thông báo về đích của đội đó là **"BỊ LOẠI"** kèm thứ hạng cuối. Khi Host bấm **"Kết thúc"**, mọi đội **chưa về đích** cũng nhận **"BỊ LOẠI"**; thứ hạng của các đội này xếp sau mọi đội đã về, đội đi được xa hơn (bước xa nhất) xếp trước, cùng bước thì đội xong bước trước đó sớm hơn xếp trước.
 - **Host tạm dừng cuộc đua**: bạn vẫn đi lại được, nhưng không mở được hòm mật thư, không làm được nhiệm vụ và không check-in được cho tới khi Host cho tiếp tục (bấm `F` sẽ thấy *"Cuộc đua đang tạm dừng"*). Thời gian vẫn trôi. Việc bạn **tới** một điểm trong lúc tạm dừng vẫn được ghi đúng giờ. Khi Host cho tiếp tục, đội đang đứng trên thảm được check-in ngay, không cần di chuyển (nhiều đội cùng chờ trên thảm thì được check-in cùng lúc tiếp tục, thứ hạng theo thứ tự máy chủ xử lý).
+- **Bảng thời gian sau cuộc đua**: Host xuất được bảng thời gian của từng đội (giờ tới điểm, mở hòm, bắt đầu và xong từng bước, số lần sai / bị phạt, thời gian chờ duyệt, hạng về đích) để làm báo cáo. Bảng chỉ có thời gian và số lần, không có câu trả lời của đội, đáp án của chặng hay địa chỉ IP.
 - **Khi Host kết thúc chặng**, bạn chuyển **ngay** sang chế độ khán giả (camera bay tự do, bảng thông tin trên màn hình tắt hẳn); đội chưa về đích nhận thông báo **"BỊ LOẠI"** (vào lại game sau đó vẫn thấy thông báo này một lần). Từ lúc này không mở hòm, làm nhiệm vụ hay lấy xe được nữa.
 
 ## 12. Thoát ra & vào lại
@@ -330,7 +334,7 @@ Lỡ tải lại trang (`F5` trên Windows, `Cmd`+`R` trên Mac), tắt tab, m�
 - **Máy chủ quyết định mọi kết quả**: mở mật thư, lưu câu trả lời và quyết định của Host (Duyệt / Phạt), tính giờ, tính phạt, xếp hạng, nhận xe.
 - Mật thư chỉ được gửi tới máy của bạn khi đội bạn mở khóa, nên **không có cách nào đọc trước**. Đề bài của từng nhánh Lựa chọn kép chỉ được gửi khi bạn mở hòm của nhánh đó. **Hình** của mật thư và nhiệm vụ nằm trong kho riêng tư và chỉ tải được cho đội đã mở mật thư đó (biết tên hình cũng không tải được); video và trang web là liên kết bên ngoài.
 - Host duyệt bằng mắt: **đáp án và đáp án tham khảo không bao giờ được gửi tới máy đội**, và đội không xem được câu trả lời của đội khác. Phòng Louvre cũng vậy: ảnh các tác phẩm có sẵn trong game (ai cũng tải được, không mang tên), còn **5 tác phẩm đúng chỉ nằm ở máy chủ**; số đúng x/5 của bạn chỉ gửi cho đội bạn, đội khác chỉ thấy tin công khai.
-- Hệ thống luôn kiểm tra tốc độ di chuyển. Di chuyển bất thường được **đánh dấu để Host xem xét**.
+- Hệ thống luôn kiểm tra tốc độ di chuyển. Di chuyển bất thường được **đánh dấu để Host xem xét**: đội bị gắn **cờ đỏ** trên trang Host kèm lý do và giờ. Cờ đỏ chỉ là đánh dấu, **không tự phạt**; nếu bị gắn cờ oan, Host bấm **"Xóa cờ"** (nhật ký vi phạm vẫn được lưu, và đội bị gắn cờ lại nếu có bằng chứng mới).
 - Ra khỏi khu vực đua sẽ bị chặn lại kèm cảnh báo *"Bạn đang rời khu vực đua"*.
 - Mỗi mã đội chỉ chơi trên một thiết bị. Hãy giữ mã đội của mình thật cẩn thận!
 

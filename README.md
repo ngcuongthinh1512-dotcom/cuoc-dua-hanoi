@@ -15,6 +15,11 @@ Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự g
 ## Host duyệt bài trong lúc đua
 - Đội gõ câu trả lời trong game (hoặc bấm "Tôi đã gửi bài" sau khi gửi ảnh qua Messenger kèm **mã bài nộp** `<tên đội>-<bước>[-<nhánh>]`; đội tự mở Messenger ở ngoài trò chơi, game không có nút mở Messenger / Facebook). Bài hiện ở mục **Chờ duyệt (n)** đầu trang Host (có âm báo; bấm **Bật thông báo** để nhận thông báo của trình duyệt), kèm câu trả lời, mã bài nộp, thời gian chờ và **Đáp án tham khảo** (chỉ Host thấy).
 - **Duyệt** → đội nhận mật thư kế ngay. **Phạt n phút** → đội thấy đồng hồ đếm ngược rồi mới trả lời lại được. Ô ghi chú chỉ để Host đọc (không gửi cho đội). Bấm nhầm Phạt: ô của đội trong ma trận có nút **Duyệt lại**. Bài ảnh Host đã nhận trước khi đội bấm nút: nút **Duyệt (đã nhận ảnh)** trong ô của đội.
+- **Hoàn tác**: sau mỗi Duyệt / Phạt, dải trên cùng hiện **"Hoàn tác (còn n s)"** trong 10 giây; bấm để rút lại (thẻ của đội trở lại như trước). Quá 10 giây hoặc đội đã mở hòm kế thì không rút lại được.
+- **Cho qua**: ô của đội ở mọi thử thách / nhánh Lựa chọn kép đã mở có nút **Cho qua** (hỏi xác nhận) để đưa đội bị kẹt qua bước mà không cần câu trả lời.
+- **Cờ đỏ**: đội di chuyển bất thường bị gắn cờ (⚑ trong ma trận; lý do + giờ ở bảng "Các đội"). Cờ không tự phạt; gắn oan thì bấm **Xóa cờ**.
+- Ma trận tiến độ ghim cột "Đội" và hàng tiêu đề khi cuộn; khung "Chờ duyệt" thu gọn được.
+- **Xuất dữ liệu thời gian** (cuối cuộc đua, dùng được bất kỳ lúc nào): tải về `race-<mã>-thoi-gian.csv` (mở bằng Excel) + `.json`: thời gian từng đội × từng bước, bảng đội (hạng, giờ về đích), nhật ký sự kiện thô. Không có đáp án, câu trả lời hay IP.
 - Banner đỏ báo đội làm cùng một thử thách / nhánh quá 45 phút (`hostAlerts.stuckMinutes`), để Host gửi gợi ý qua Messenger. Không có bù giờ: thứ hạng là thứ tự về đích thực (SPEC §17.22, §17.23).
 
 ## Yêu cầu
