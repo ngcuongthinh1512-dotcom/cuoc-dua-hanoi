@@ -39,7 +39,7 @@ export interface SpawnerState {
   paused: boolean;
 }
 
-export type ClaimResult = { ok: true } | { ok: false; reason: 'taken' | 'far' | 'walkOnly' | 'finished' | 'gone' };
+export type ClaimResult = { ok: true } | { ok: false; reason: 'taken' | 'far' | 'walkOnly' | 'finished' | 'gone' | 'broken' };
 
 /** m between the claimer's last pose and the bike: bikeRules.interactRadius (2.5, client) + 1 m for a 5 Hz pose lag. */
 export const CLAIM_REACH = 3.5;
@@ -129,6 +129,7 @@ export function periodicSpawn(cfg: VehiclesConfig, cands: SpawnCandidates, state
  *  time, so the first claim wins. `at` = the claimer's last pose (null = unknown → too far). */
 export function claim(bike: ServerBike | undefined, team: string, at: PlayerSpot | null, blocked: false | 'walkOnly' | 'finished'): ClaimResult {
   if (!bike) return { ok: false, reason: 'gone' };
+  if (bike.segment === -1) return { ok: false, reason: 'broken' }; // decoy (SPEC §17.30): never granted, never changed
   if (bike.owner !== null && bike.owner !== team) return { ok: false, reason: 'taken' };
   if (blocked) return { ok: false, reason: blocked };
   // A ridden bike (here only ever the claimer's own) follows its rider on the server (BikeService.tick); a standing one,

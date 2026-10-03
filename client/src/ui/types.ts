@@ -47,4 +47,4 @@ export const NO_GPS: GpsView = { target: null, route: null, remaining: NaN };
 /** Short messages in the toast feed above the minimap (ui/Toasts.ts holds the Vietnamese texts). bikeStairs = the
  *  front wheel met a stair flight (SPEC §6.6); respawn / respawnStairs = "Kẹt? Về chỗ an toàn" / out of the Seine;
  *  Phase 6: the server's `notice` codes (claim lost, bike gone / parked, walk-only route). */
-export type NoticeCode = BikeRefusal | ServerNotice | 'bikeStairs' | 'respawn' | 'respawnStairs';
+export type NoticeCode = BikeRefusal | ServerNotice | 'bikeStairs' | 'respawn' | 'respawnStairs' | 'bikeBroken';

@@ -44,7 +44,8 @@ describe('notices', () => {
       'raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'clueNew', 'penaltyWait',
       'answerSent', 'answerWrong', 'answerPending', 'answerLocked', 'approved', 'penalized', 'branchChosen', 'branchSwitched', 'branchPending', 'taskNotStarted', // Phase 8
       'lockWrong', 'pickLimit', 'creditsLocked', // Phase 8B
-      'reviewUndone']; // Phase 10
+      'reviewUndone', // Phase 10
+      'bikeBroken']; // SPEC §17.30 decoy
     expect(Object.keys(NOTICES).sort()).toEqual([...codes].sort());
     expect(new Set(Object.values(NOTICES)).size).toBe(codes.length);
     expect(NOTICES.bikeStairs).toBe('Không đi xe trên bậc thang');

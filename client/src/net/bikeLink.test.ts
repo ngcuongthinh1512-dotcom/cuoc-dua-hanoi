@@ -47,6 +47,9 @@ describe('BikeLink: server bikes → the local Bikes (review fix: was never wire
     link.message({ t: 'bike', op: 'claim', id: 'a', ok: false, reason: 'taken' });
     expect(notes).toEqual(['bikeLost']);
     expect(c.riding).toBeNull();
+    link.message({ t: 'bike', op: 'claim', id: 'a', ok: false, reason: 'broken' }); // a decoy (SPEC §17.30)
+    expect(notes.at(-1)).toBe('bikeBroken');
+    expect(c.riding).toBeNull();
   });
 
   it('a team that was riding before an F5 gets back on its bike (SPEC §8.10)', () => {

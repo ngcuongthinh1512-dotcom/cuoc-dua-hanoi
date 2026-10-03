@@ -1088,3 +1088,6 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - Giữ `Shift` (trái / phải, theo `KeyboardEvent.code`; tay cầm `LB`) = **×2 tốc độ hiện tại**, áp dụng cho CẢ đi bộ (và bơi) LẪN xe đạp; thả = tốc độ thường. Hệ số `SPRINT_MULTIPLIER = 2` ở một chỗ (`shared/src/constants.ts`; client `movement.sprintMultiplier` đọc từ đó). Xe: chỉ trần tốc độ nhân 2, độ bám / cua gắt / ngã xe giữ nguyên theo tốc độ thật.
 - BỎ HẲN chức năng đi chậm cũ của Shift / LB (khóa `walkSlow`, `slowWalkFactor`, chế độ `slow` trên đường truyền).
 - Máy chủ (cờ tốc độ chỉ gắn cờ, §13.9) nới ngưỡng theo cùng hệ số: đi bộ ≤ footSpeed × 2 × 1,25, xe ≤ footSpeed × 1,3 × 2 × 1,25 (mặc định 10 / 13 m/s); điểm tin cậy chống dịch chuyển cũng đi tối đa ở tốc độ xe × 2 × 1,25. Vẫn bắt dịch chuyển tức thời và tốc độ vượt xa mức ×2.
+
+### 17.30 Xe mồi bấm F báo "Xe này bị hỏng" (2026-10-03)
+- Xe mồi (decoy, `segment = −1`) trông y hệt xe thường và KHÔNG gửi cờ nào cho client. Bấm `F` vào xe mồi: máy chủ từ chối (`bike claim` `reason: 'broken'`), client hiện toast **"Xe này bị hỏng"**, không lên xe; xe không đổi chủ, không ghi SQLite, vẫn đứng yên tại chỗ. Xe thật (segment ≥ 0), xe Host đặt (−2) và xe ở bãi không đổi; dọn xe / xe hoang với xe mồi giữ như cũ.

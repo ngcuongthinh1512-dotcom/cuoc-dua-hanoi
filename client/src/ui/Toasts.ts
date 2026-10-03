@@ -16,6 +16,7 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   respawnStairs: 'Đã đưa bạn lên bậc kè gần nhất',
   // Phase 6: the server's `notice` (SPEC §6.3–6.5)
   bikeLost: 'Chậm một bước! Xe đã có người lấy.',
+  bikeBroken: 'Xe này bị hỏng', // a decoy bike (SPEC §17.30): F refused, the bike stays
   bikeGone: 'Xe của bạn đã biến mất vì bị bỏ lại quá xa',
   bikeParked: 'Xe của bạn đã được để ở bãi xe cạnh điểm. Trong lúc bạn làm thử thách, đội khác có thể lấy mất!',
   walkOnly: 'Lộ trình này bắt buộc đi bộ',

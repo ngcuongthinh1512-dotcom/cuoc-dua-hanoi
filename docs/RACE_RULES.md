@@ -28,7 +28,7 @@ Game chỉ dùng những phím có trên cả Windows lẫn Mac, **không dùng*
 ## 3. Di chuyển & xe đạp
 
 - Mọi đội bắt đầu bằng **đôi chân**; giữ `Shift` để tăng tốc gấp 2 (bơi cũng vậy). Lỡ rơi xuống sông Seine thì bơi tới sát tường kè rồi bấm `Space` để leo lên.
-- Phương tiện duy nhất là **xe đạp**, nhanh hơn đi bộ **1,3 lần** (giữ `Shift` khi đạp cũng nhanh gấp 2). Xe xuất hiện ngẫu nhiên và rất ít trên các con phố (có cả xe "mồi" đặt khắp bản đồ, đừng đoán lộ trình theo chỗ có xe). Xe còn trống lấp lánh nhẹ khi bạn tới gần.
+- Phương tiện duy nhất là **xe đạp**, nhanh hơn đi bộ **1,3 lần** (giữ `Shift` khi đạp cũng nhanh gấp 2). Xe xuất hiện ngẫu nhiên và rất ít trên các con phố (có cả xe "mồi" trông y hệt đặt khắp bản đồ: bấm `F` vào sẽ thấy "Xe này bị hỏng", đừng đoán lộ trình theo chỗ có xe). Xe còn trống lấp lánh nhẹ khi bạn tới gần.
 - Đứng cách xe **không quá 2,5 m**, bấm `F` để lên xe. `W` đạp · `S` phanh (giữ tiếp thì lùi chậm) · `A` `D` rẽ · `R` bấm chuông. Xuống xe: bấm `F` khi xe gần như đã dừng.
 - Xe không đi được bậc thang; va chạm mạnh khi đang nhanh thì **ngã xe** (khoảng 2 giây sau tự đứng dậy). Đạp xe xuống sông thì xe ở lại trên bờ, bạn phải bơi.
 - **Ai lấy trước được trước.** Xe đã có đội dùng mang **biểu tượng khóa và màu của đội đó**, bạn không lấy được. Mỗi người giữ tối đa 1 xe; lấy xe khác thì chiếc cũ biến mất. Bỏ xe ngoài đường và ở xa nó quá lâu thì xe biến mất. Thoát game hay mất mạng không làm mất xe.
