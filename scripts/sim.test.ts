@@ -148,9 +148,9 @@ describe('sim report numbers (D18)', () => {
 
   it('answers, approvals, penalties and switches are read from host.state.progress', () => {
     const progress = [row('t0', 'T1', [a(1, 'approved')]), row('t1', 'T1', [a(1, 'penalized'), a(2, 'approved')]), row('t2', 'D1', [a(1, 'correct'), a(2, 'wrong')], 1), row('t1', 'D1', [], 2)];
-    expect(legStats(progress)).toEqual({ answers: 5, approved: 2, penalized: 1, wrong: 1, correct: 1, louvre: false, switches: 3 });
-    expect(legStats([])).toEqual({ answers: 0, approved: 0, penalized: 0, wrong: 0, correct: 0, louvre: false, switches: 0 });
-    expect(legStats([row('t0', 'T3', [a(1, 'wrong')])], new Set(['T3'])).louvre).toBe(true);
+    expect(legStats(progress)).toEqual({ answers: 5, approved: 2, penalized: 1, wrong: 1, correct: 1, louvre: false, louvreWrong: 0, louvreCorrect: 0, switches: 3 });
+    expect(legStats([])).toEqual({ answers: 0, approved: 0, penalized: 0, wrong: 0, correct: 0, louvre: false, louvreWrong: 0, louvreCorrect: 0, switches: 0 });
+    expect(legStats([row('t0', 'T3', [a(1, 'wrong'), a(2, 'correct')]), row('t0', 'T1', [a(1, 'correct')])], new Set(['T3']))).toMatchObject({ louvre: true, correct: 2, louvreWrong: 1, louvreCorrect: 1 });
   });
 
   it('the row budget is 16 per step (a 10-step leg: 160), never fewer than 10 steps', () => {
@@ -475,7 +475,8 @@ describe('sim --leg louvre', () => {
   it('3 bots finish: ≥ 3 wrong locks, every bot sees ≥ 3 public feed messages, ≤ 16 × steps rows per team', { timeout: 300_000 }, async () => {
     const r = await runSim({ bots: 3, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-louvre', password: 'test-secret', log: () => {}, leg: { json: nearLouvre() } });
     expect(r.leg).toMatchObject({ id: 'louvre', finished: 3, ranked: 3, out: 1 });
-    expect(r.leg!.stats.wrong).toBeGreaterThanOrEqual(3);
+    expect(r.leg!.stats.louvreWrong).toBeGreaterThanOrEqual(3);
+    expect(r.leg!.stats.louvreCorrect).toBe(3); // exactly one `correct` row per team per right lock
     expect(r.leg!.feed).toBeGreaterThanOrEqual(3);
     expect(r.leg!.rowsPerTeam!).toBeLessThanOrEqual(r.leg!.rowBudget);
   });

@@ -337,11 +337,12 @@ export function budgetFor(teams: number, bots: number, minutes: number, c: HostS
 }
 
 /** What the server says happened (host.state.progress): answers by status and branch switches, the numbers of the report. */
-export interface LegStats { answers: number; approved: number; penalized: number; wrong: number; switches: number; /** Phase 8B: right (auto-marked) answers; louvre = the leg has a louvre step. */ correct: number; louvre: boolean }
+export interface LegStats { answers: number; approved: number; penalized: number; wrong: number; switches: number; /** Phase 8B: right (auto-marked) answers of every step: louvre locks AND typed answers verified by the server. */ correct: number; louvre: boolean; /** Louvre steps only (one row per lock): wrong / right locks. */ louvreWrong: number; louvreCorrect: number }
 export function legStats(progress: StepProgressView[], louvreSteps: ReadonlySet<string> = new Set()): LegStats {
   const all = progress.flatMap((p) => p.answers);
-  const n = (s: string) => all.filter((a) => a.status === s).length;
-  return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), correct: n('correct'), louvre: progress.some((p) => louvreSteps.has(p.step)), switches: progress.reduce((t, p) => t + p.branchSwitches, 0) };
+  const lv = progress.filter((p) => louvreSteps.has(p.step)).flatMap((p) => p.answers);
+  const n = (s: string, xs = all) => xs.filter((a) => a.status === s).length;
+  return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), correct: n('correct'), louvre: progress.some((p) => louvreSteps.has(p.step)), louvreWrong: n('wrong', lv), louvreCorrect: n('correct', lv), switches: progress.reduce((t, p) => t + p.branchSwitches, 0) };
 }
 
 /** `--leg mini` → the bundled id and its file (for the answers; `paris-demo-filled` = test/paris-demo.filled.json, the id the Host
@@ -749,7 +750,7 @@ function print(r: SimReport) {
     console.log(`  Chặng ${r.leg.id} (${r.leg.steps} bước): ${r.leg.finished} / ${r.bots} đội về đích (bị loại: ${r.leg.out}) · xếp hạng ${r.leg.ranked} dòng · ${rows}${legFailed(r) ? ' ← LỖI' : ''}`);
     const s = r.leg.stats;
     console.log(`  Thử thách: ${s.answers} câu trả lời · Host duyệt ${s.approved}, phạt ${s.penalized}${s.wrong ? `, sai (tự chấm) ${s.wrong}` : ''} · đổi nhánh ${s.switches} lần (phạt rút còn ${SIM_PENALTIES.retryLockMinutes * 60} s / ${SIM_PENALTIES.branchSwitchLockMinutes * 60} s)`);
-    if (r.leg.stats.louvre) console.log(`  Phòng Louvre: chốt sai ${r.leg.stats.wrong}, tự chấm đúng ${r.leg.stats.correct} (kể cả nhánh gõ đáp án tự chấm) · tin feed công khai mỗi bot nhận ≥ ${r.leg.feed ?? 0}`);
+    if (s.louvre) console.log(`  Phòng Louvre: chốt sai ${s.louvreWrong}, chốt đúng ${s.louvreCorrect}${s.correct > s.louvreCorrect ? ` (+ ${s.correct - s.louvreCorrect} đáp án gõ tay tự chấm đúng ở bước khác)` : ''} · tin feed công khai mỗi bot nhận ≥ ${r.leg.feed ?? 0}`);
     if (r.leg.refused.length) console.log(`  Thao tác bị từ chối (thử lại): ${r.leg.refused.length}, ví dụ ${r.leg.refused.slice(0, 3).join('; ')}`);
     const sc = r.leg.scenario;
     if (sc) console.log(`  Kịch bản Host (--full): Hoàn tác ${sc.undone} · Cho qua ${sc.passed} · cờ đỏ ${sc.flagged} lần, Xóa cờ ${sc.cleared} · Kết thúc → đội dang dở BỊ LOẠI: ${sc.ended ? 'đúng' : 'KHÔNG'}${scenarioFailed(sc) ? ' ← LỖI' : ''}`);
