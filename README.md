@@ -9,7 +9,8 @@ Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự g
 2. Kiểm tra: `npm run leg:check -- <đường-dẫn-file.json>` → sửa tới khi dòng cuối là "Hợp lệ"; bảng cuối có link bản đồ / ảnh vệ tinh / ảnh 3D / link đứng thử trong game cho từng điểm.
 3. Chơi thử tự động: `npm run sim -- --leg <đường-dẫn-file.json> --bots 2 --speedup 2` (`--help` để xem tùy chọn).
 4. Nạp vào cuộc đua: `npm run dev:worker`, mở http://localhost:8787/host.html, nhập mã cuộc đua + mật khẩu Host (`HOST_PASSWORD` trong `worker/.dev.vars`), phần "Chặng" → **Nạp chặng từ file**. Đội vào bằng link `/?race=<mã>` mà trang Host in ra.
-5. Tải hình mật thư lên (chỉ khi chặng có `"r2:<tên>"`; `leg:check` in danh sách "Hình cần tải lên trang Host"): sau khi nạp chặng, mục **Hình mật thư (R2)** trên trang Host liệt kê từng tên → "Chọn file" (jpg / png / webp ≤ 5 MB) → ✓ "đã có"; nút **Xem** để kiểm. Hình lưu theo mã cuộc đua: diễn tập ở mã khác thì tải lại. Đội chỉ tải được hình của mật thư đã mở.
+5. Thử thách 3 (phòng Louvre, `kind: "louvre"`): ảnh 23 tác phẩm đã có sẵn trong game (`art-NN`), không tải lên Host; trong chặng chỉ cần `artworks` (mã, loại, tệp, ghi nguồn) + 5 mã đúng trong `answers` (`docs/LEG_FORMAT.md` mục 7.5).
+6. Tải hình mật thư lên (chỉ khi chặng có `"r2:<tên>"`; `leg:check` in danh sách "Hình cần tải lên trang Host"): sau khi nạp chặng, mục **Hình mật thư (R2)** trên trang Host liệt kê từng tên → "Chọn file" (jpg / png / webp ≤ 5 MB) → ✓ "đã có"; nút **Xem** để kiểm. Hình lưu theo mã cuộc đua: diễn tập ở mã khác thì tải lại. Đội chỉ tải được hình của mật thư đã mở.
 
 ## Host duyệt bài trong lúc đua
 - Đội gõ câu trả lời trong game (hoặc bấm "Tôi đã gửi bài" sau khi gửi ảnh qua Messenger kèm **mã bài nộp** `<tên đội>-<bước>[-<nhánh>]`; đội tự mở Messenger ở ngoài trò chơi, game không có nút mở Messenger / Facebook). Bài hiện ở mục **Chờ duyệt (n)** đầu trang Host (có âm báo; bấm **Bật thông báo** để nhận thông báo của trình duyệt), kèm câu trả lời, mã bài nộp, thời gian chờ và **Đáp án tham khảo** (chỉ Host thấy).
@@ -34,9 +35,9 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 | `npm run dev:worker` | Build client rồi chạy `wrangler dev` tại http://localhost:8787 (trang web + API + Durable Object + SQLite + R2 giả lập). |
 | `npm run build` | Kiểm tra kiểu toàn bộ, build client, kiểm tra bundle Worker (`wrangler deploy --dry-run`). |
 | `npm test` | Chạy toàn bộ unit test (Vitest). |
-| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`; gọi theo tên: `lm-<địa danh>`, `leg-L1`…`leg-L6`, nhóm nhân vật `p3` hoặc từng cái như `p3-swim`; nhóm cuộc đua thử `p6` / `p7` / `p8`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
+| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`; gọi theo tên: `lm-<địa danh>`, `leg-L1`…`leg-L6`, nhóm nhân vật `p3` hoặc từng cái như `p3-swim`; nhóm cuộc đua thử `p6` / `p7` / `p8` / `p8b`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
 | `npm run fetch-map` | Tải dữ liệu OSM thô (Overpass) vào `.cache/osm/` và độ cao (AWS Terrain Tiles) → `client/public/data/elevation.*`. Chỉ cần chạy một lần. |
-| `npm run process-assets` | Xử lý asset gốc đã duyệt trong `.cache/assets/` → `client/public/models/*.glb` (kể cả nhân vật `player.glb` + `player-anims.glb`) và `client/public/credits.json`. |
+| `npm run process-assets` | Xử lý asset gốc đã duyệt trong `.cache/assets/` → `client/public/models/*.glb` (kể cả nhân vật `player.glb` + `player-anims.glb`) và `client/public/credits.json`. `-- --assets <thư mục> louvre`: 23 ảnh / bản quét phòng Louvre → `client/public/art/art-NN.*` (tên trung tính, xóa metadata; cách làm: `docs/LEG_FORMAT.md` mục 7.5). |
 | `npm run build-graph` | Dựng đồ thị đường từ `.cache/osm/` → `shared/data/roadgraph.json` (đường, vỉa hè, vạch qua đường, bậc thang, một chiều, bãi xe đạp). |
 | `npm run leg:check -- <file.json>` | Kiểm tra file chặng đua (cú pháp, luật, điểm trên bản đồ, đáp án lọt ra ngoài): [`docs/LEG_FORMAT.md`](docs/LEG_FORMAT.md). |
 | `npm run sim -- --leg <mã \| file.json>` | Bot chơi thử hết một chặng qua WebSocket thật (máy chủ tạm trong máy), in số đội về đích, xếp hạng, số dòng ghi; không có `--leg`: đo lưu lượng. `--help` xem tùy chọn. |
@@ -82,7 +83,8 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 5 | HUD cơ bản | Xong |
 | 6 | Server & presence (Durable Object, WebSocket, vào lại) | Xong |
 | 7 | Race engine lõi: chặng từ file (`leg:check`), mật thư, hộp, Chặng dừng, giờ xuất phát lệch, trang Host tối giản | Xong |
-| 8 | Thử thách gõ đáp án + Host duyệt / phạt, Lựa chọn kép theo hòm nhánh, hình mật thư R2 | Đang review |
+| 8 | Thử thách gõ đáp án + Host duyệt / phạt, Lựa chọn kép theo hòm nhánh, hình mật thư R2 | Xong |
+| 8B | Phòng Louvre (Thử thách 3): 23 tác phẩm, chọn đúng 5, phạt 3 phút khi chốt sai, gợi ý phút 40 / 70, tin công khai, "Ghi nguồn" sau khi về đích | Đang review |
 | 9 | Yếu tố đặc biệt, phạt giờ | Chưa làm |
 | 10 | Màn hình Host đầy đủ | Chưa làm |
 | 11 | Chặng demo Paris & test toàn trình | Chưa làm |

@@ -1,4 +1,4 @@
-# Bàn giao phiên (cập nhật 2026-10-03, sau Phase 8) – đọc file này đầu tiên khi mở lại
+# Bàn giao phiên (cập nhật 2026-10-03, Phase 8B đã ghép, đang review) – đọc file này đầu tiên khi mở lại
 
 Mục đích: phiên mới không phải đọc lại hội thoại cũ. Đọc file này + `CLAUDE.md` + `TODO.md` là đủ; chỉ mở SPEC / kế hoạch phase khi cần.
 
@@ -8,11 +8,13 @@ Mục đích: phiên mới không phải đọc lại hội thoại cũ. Đọc 
 | 0–2B, 3, 4, 4B, 5, 6 | Xong (xem `git log`) |
 | 7 Race engine lõi | **Xong** (commit `feat(phase7)` trên main): schema chặng + `leg:check` + `docs/LEG_FORMAT.md`, máy trạng thái từng đội, hộp mật thư, Sổ mật thư, Chặng dừng, xếp hạng, đồng hồ đội, anti-teleport, trang Host, bot `sim --leg`; 3 vòng review + e2e client/server thật |
 | 8 Thử thách & Lựa chọn kép | **Đã ghép, đang review** (merge năm track trên main + commit `fix(phase8): ghép …`; chưa có commit `feat(phase8)` cuối): gõ đáp án trong game, Host duyệt / phạt (đếm ngược), Lựa chọn kép theo hòm nhánh + đổi nhánh 10 phút, hình mật thư R2, cảnh báo kẹt 45 phút trên trang Host, `leg:check` luật mới, `sim` có Host bot. Kế hoạch `docs/plans/phase8.md`, ghép `docs/reports/phase8-integration.md`, kiểm track `docs/reports/phase8-verify-*.md` |
+| 8B Phòng Louvre (Thử thách 3) | **Đã ghép, đang review** (merge 4 track A→D trên main + commit `fix(phase8b): ghép …`; chưa có commit `feat(phase8b)` cuối): phòng kín dưới hòm Lộ trình (F vào / ra), 23 tác phẩm `art-NN` thật trong `client/public/art/` (7,27 MB, không metadata), nút chọn / chốt do máy chủ chấm, phạt 3 phút, gợi ý phút 40 / 70, feed công khai, "Ghi nguồn" sau đích, Host ô + "Cho qua", `leg:check` bảng 23 tác phẩm, `process-assets louvre`, `sim --leg louvre`. Kế hoạch `docs/plans/phase8b.md`, ghép `docs/reports/phase8b-integration.md`, track `docs/reports/phase8b-track-*.md`. Bảng tên gốc → art-NN + `credits-snippet.json` chỉ ở `.cache/assets-louvre-run/` (ngoài repo) |
+| 8C Đồ họa | Kế hoạch `docs/plans/phase8c-graphics.md` (chưa làm) |
 | 9–12 | Chưa làm |
 
 ## Việc tiếp theo
 1. **Người dùng nhập chặng thật** (lộ trình + thử thách) theo `docs/LEG_FORMAT.md` hoặc gửi cho tôi; LT2 đã nhận (xem memory `leg-content-draft`, điểm Palais de Tokyo dùng sân trước 48.86470, 2.29690). Đừng tự bịa nội dung chặng thật.
-2. Phase 8 XONG (commit `feat(phase8)`; báo cáo `docs/reports/phase8-*.md`, cổng cuối `phase8-gate.md`). Việc kế: phòng Louvre / Thử thách 3 (SPEC §17.19, chờ người dùng xác nhận chi tiết), rồi Phase 10 (Phase 9 bỏ: SPEC §17.18), Phase 11 sim, Phase 12 deploy (cần tài khoản Cloudflare của người dùng).
+2. Phase 8 XONG (commit `feat(phase8)`). Phase 8B đang review (reviewer kiểm lại các lỗi "nên sửa" trong báo cáo track, rồi lượt sửa riêng + commit `feat(phase8b)`); người dùng dán `credits-snippet.json` + 5 mã đáp án vào chặng thật (TODO.md Phase 8B). Rồi Phase 8C đồ họa, Phase 10 (Phase 9 bỏ: SPEC §17.18), Phase 11 sim, Phase 12 deploy (cần tài khoản Cloudflare của người dùng).
 3. Workflow đã dùng cho Phase 6–7 (công cụ Workflow): kế hoạch + nền (Opus) → critic → track song song trong worktree → verifier đối kháng → merge → review (spec/code ∥ visual ∥ e2e thật) → skeptic → sửa → vòng 2 (kiểm lại bản sửa + critic độ đầy đủ + thử người tổ chức) → vòng 3 → dọn → cổng cuối.
 
 ## Quy tắc làm việc đã chốt (xem thêm memory `~/.claude/projects/-Users-nguyencuongthinh-Documents-cuoc-dua-paris/memory/`)
