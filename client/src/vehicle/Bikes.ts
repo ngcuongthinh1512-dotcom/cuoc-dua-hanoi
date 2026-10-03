@@ -4,7 +4,7 @@
 // own bike is reported back (update → mount / dismount). Offline nothing changes (presets, ride-check).
 // F within bikeRules.interactRadius on foot takes + mounts (one bike per player: the old one disappears), F again gets off.
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { BikeInfo, ClientMessage, ServerMessage, TeamInfo } from '@race/shared/protocol';
+import type { BikeInfo, ClientMessage, ServerMessage } from '@race/shared/protocol';
 import { type Scene, Vector3 } from 'three';
 import { bike as B, bikeRules as R, notices as N, serverBikes as S } from '../config.ts';
 import type { CharacterController } from '../player/CharacterController.ts';
@@ -18,32 +18,32 @@ export const canMount = (s: Readonly<PlayerState>) =>
   s.moveMode === 'walk' && s.grounded && !s.inWater && s.action === 'none';
 
 export const newBike = (id: string, x: number, y: number, z: number, yaw: number): BikeState => ({
-  id, position: new Vector3(x, y, z), yaw, speed: 0, steer: 0, lean: 0, wheelAngle: 0, crankAngle: 0, owner: null, ownerColour: null, rider: null,
+  id, position: new Vector3(x, y, z), yaw, speed: 0, steer: 0, lean: 0, wheelAngle: 0, crankAngle: 0, owner: null, rider: null,
 });
 
 const distance = (b: BikeState, feet: Vector3) => Math.hypot(b.position.x - feet.x, b.position.y - feet.y, b.position.z - feet.z);
 
-/** Nearest parked bike within interactRadius of the feet that `team` may take: available or already its own. */
-export function bikeInReach(bikes: readonly BikeState[], feet: Vector3, team: string): BikeState | undefined {
+/** Nearest standing bike within interactRadius of the feet: §17.34 no owner lock, any bike nobody rides may be taken. */
+export function bikeInReach(bikes: readonly BikeState[], feet: Vector3): BikeState | undefined {
   let best: BikeState | undefined;
   let bestD = R.interactRadius;
   for (const b of bikes) {
     const d = distance(b, feet);
-    if (!b.rider && (b.owner === null || b.owner === team) && d <= bestD) [best, bestD] = [b, d];
+    if (!b.rider && d <= bestD) [best, bestD] = [b, d];
   }
   return best;
 }
 
-/** Why F on foot found nothing to take (asked when bikeInReach found none): another team's bike in reach = 'bikeTaken'; a bike
- *  `team` may take beyond interactRadius but within notices.farReach = 'bikeTooFar'; else null (F stays silent: from Phase 7
+/** Why F on foot found nothing to take (asked when bikeInReach found none): a bike someone rides in reach = 'bikeTaken'; a
+ *  standing bike beyond interactRadius but within notices.farReach = 'bikeTooFar'; else null (F stays silent: from Phase 7
  *  it also opens clue boxes). */
-export function bikeRefusal(bikes: readonly BikeState[], feet: Vector3, team: string): BikeRefusal | null {
+export function bikeRefusal(bikes: readonly BikeState[], feet: Vector3): BikeRefusal | null {
   let far = false;
   for (const b of bikes) {
     const d = distance(b, feet);
-    if (b.owner !== null && b.owner !== team) {
+    if (b.rider) {
       if (d <= R.interactRadius) return 'bikeTaken';
-    } else if (!b.rider && d <= N.farReach) far = true;
+    } else if (d <= N.farReach) far = true;
   }
   return far ? 'bikeTooFar' : null;
 }
@@ -72,7 +72,6 @@ export class Bikes {
   ground: ((x: number, z: number, y: number) => number | null) | null = null;
   /** A refused claim → toast (main.ts: notice). */
   notify: (code: ClaimNotice) => void = () => {};
-  private readonly colours = new Map<string, string>();
   /** The claim in flight (F → server → onClaimResult), timed by `clock`. */
   private pending: { id: string; at: number } | null = null;
   /** Own bikes the server believes ridden (from its lists and what we sent): update() reports any difference. */
@@ -90,7 +89,6 @@ export class Bikes {
     private readonly scene: Scene | null,
     private readonly asset: BikeAsset | null,
     public team: string,
-    public colour: string,
     readonly playerId = 'local',
   ) {}
 
@@ -119,14 +117,13 @@ export class Bikes {
     const others = this.list.filter((o) => o !== b && o.owner === this.team);
     for (const o of others.slice(0, Math.max(0, others.length - (R.maxPerPlayer - 1)))) this.remove(o);
     b.owner = this.team;
-    b.ownerColour = this.colour;
   }
 
   /** What F would do now, no side effect (the HUD prompt): 'on' = a bike in reach to take (interact's conditions; a decoy the
    *  server will refuse still counts: the client cannot tell), 'off' = riding slow enough to get off, else null. */
   prompt(c: CharacterController): 'on' | 'off' | null {
     if (c.riding) return Math.abs(c.riding.speed) <= B.dismountMaxSpeed ? 'off' : null;
-    return canMount(c.state) && bikeInReach(this.list, c.state.position, this.team) ? 'on' : null;
+    return canMount(c.state) && bikeInReach(this.list, c.state.position) ? 'on' : null;
   }
 
   /** F: get off (at ≤ bike.dismountMaxSpeed) or take + mount the bike in reach. What happened, why nothing did
@@ -140,8 +137,8 @@ export class Bikes {
       return 'dismount';
     }
     if (!canMount(c.state)) return null;
-    const b = bikeInReach(this.list, c.state.position, this.team);
-    if (!b) return bikeRefusal(this.list, c.state.position, this.team);
+    const b = bikeInReach(this.list, c.state.position);
+    if (!b) return bikeRefusal(this.list, c.state.position);
     if (this.net) {
       // Online the server decides (atomic, SPEC §6.3); onClaimResult mounts. Silent until it answers.
       if (this.pending && this.clock - this.pending.at < S.claimTimeoutMs / 1000) return null;
@@ -167,16 +164,6 @@ export class Bikes {
 
   // ── Phase 6: server bikes ──
 
-  /** Team id → colour for the lock markers (welcome.teams). */
-  setTeams(teams: readonly TeamInfo[]) {
-    for (const t of teams) this.colours.set(t.id, t.colour);
-    for (const b of this.list) b.ownerColour = this.colourOf(b.owner);
-  }
-
-  private colourOf(owner: string | null) {
-    return owner === null ? null : owner === this.team ? this.colour : (this.colours.get(owner) ?? null);
-  }
-
   /** Server bikes: `welcome.bikes` (full: everything else goes) or a `bikes` message (changed ones + gone ids). The bike
    *  the local player rides keeps its local pose; another team's ridden bike is hidden (drawn under its rider). */
   applyServer(list: readonly BikeInfo[], gone: readonly string[] = [], full = false) {
@@ -189,10 +176,9 @@ export class Bikes {
       if (mine && s.rider) this.serverRiding.add(s.id);
       else this.serverRiding.delete(s.id);
       const here = this.c?.riding === b;
-      if (here && !mine) this.getOff(this.c!, b); // a task started / released by the server: off, the bike at the feet
+      if (here && !mine) this.getOff(this.c!, b); // a task started / released by the server: off; the bike goes where the server put it (§17.34: beside the clue box)
       b.owner = s.owner;
-      b.ownerColour = this.colourOf(s.owner);
-      if (here) continue; // own: keeps its local pose; just got off: stays where the rider stood (the server's x/z ≈ it)
+      if (here && mine) continue; // own, ridden here: keeps its local pose
       b.rider = s.rider && !mine ? REMOTE_RIDER : null; // own bike "ridden" but not here (reconnect): parked, update() reports it
       if (!old || b.position.x !== s.x || b.position.z !== s.z || b.position.y !== s.y) {
         b.position.set(s.x, s.y, s.z);
@@ -244,12 +230,11 @@ export class Bikes {
   }
 
   /** DEV stand-ins (no server in screenshots): the dev bikes, once placed, become shared bikes of these kinds in order —
-   *  free (sparkles), other (another team's: lock), mine (own, lock in the team colour), ridden (another team rides it:
+   *  free (sparkles), other (another team's, standing: takeable), mine (own, standing), ridden (another team rides it:
    *  hidden), lost (free, and a claim on it was just refused: toast). */
   private applyStandIns() {
     const kinds = this.standIns!.split(',');
     this.standIns = null;
-    this.setTeams([{ slot: 1, id: 'standin', name: 'Đội Xanh', colour: '#2c6bd8', online: true }]);
     const owner = { other: 'standin', ridden: 'standin', mine: this.team } as Record<string, string>;
     this.applyServer(this.list.slice(0, kinds.length).map((b, i) => ({
       id: b.id, x: b.position.x, y: b.position.y, z: b.position.z, yaw: b.yaw, owner: owner[kinds[i]!] ?? null, rider: kinds[i] === 'ridden', parked: false,
@@ -274,7 +259,7 @@ export class Bikes {
       if (b === ridden) {
         m.update({ ...b, position: riderPos, yaw: riderYaw }, false, dt);
         targets = m.riderTargets();
-      } else m.update(b, b.owner === null && b.position.distanceTo(viewer) <= R.sparkleRadius, dt);
+      } else m.update(b, b.rider === null && b.position.distanceTo(viewer) <= R.sparkleRadius, dt);
     }
     return targets;
   }

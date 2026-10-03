@@ -10,6 +10,7 @@ import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { ranking } from './ranking.ts';
+import type { BoxSpot } from './BikeService.ts';
 import { advance, boxesOf, cardOf, creditsOf, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
 
 /** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
@@ -57,7 +58,7 @@ export interface RaceIO {
   /** The team's trusted pose (RaceRoom: TrustedPoint, D4; mode = its last pose's), null = none yet. */
   pose(id: string): PoseSample | null;
   /** SPEC §6.4 / §17.32: the team off its bike (if it holds one); the bike stays next to the team, free, grouped under `rack`. */
-  park(team: string, rack: string, now: number): void;
+  park(team: string, rack: string, now: number, box: BoxSpot | null): void;
   /** A new leg was loaded (lobby, no team entered): the bikes start again from its `vehicles` block. */
   legLoaded(now: number): void;
   /** Phase 8 (D6, critic S1): the team switched away from `branch` of detour `step` (id): every socket of the team forgets
@@ -453,6 +454,13 @@ export class RaceEngine {
   }
 
   // ── internals ──
+  /** §17.34: the clue box (or mat) standing at the point of `rack`, null = none there (a task place of its own). */
+  private boxAt(rack: string): BoxSpot | null {
+    const zn = this.places.find((z) => z.rack === rack);
+    const box = zn && this.boxes.flat().find((b) => b && Math.hypot(b.x - zn.x, b.z - zn.z) < 1);
+    return box ? { x: box.x, z: box.z, yaw: box.yaw ?? 0 } : null;
+  }
+
   private setLeg(leg: Leg, issues: LegIssue[]) {
     this.legV = leg;
     this.issues = issues;
@@ -644,7 +652,7 @@ export class RaceEngine {
       this.io.changed(now);
     }
     for (const h of hides) this.io.hideBox(team, sid(h.step), h.branch); // before the card that says "switched"
-    for (const k of parks) this.io.park(team, k.rack, now);
+    for (const k of parks) this.io.park(team, k.rack, now, this.boxAt(k.rack));
     for (const m of out) this.io.send(team, m);
     for (const m of feeds) this.io.feed(m);
     if (dirty.size) {

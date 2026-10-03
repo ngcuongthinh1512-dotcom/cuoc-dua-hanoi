@@ -29,11 +29,11 @@ Game chỉ dùng những phím có trên cả Windows lẫn Mac, **không dùng*
 
 - Mọi đội bắt đầu bằng **đôi chân**; giữ `Shift` để tăng tốc gấp 2 (bơi cũng vậy). Lỡ rơi xuống sông Seine thì bơi tới sát tường kè rồi bấm `Space` để leo lên.
 - Phương tiện duy nhất là **xe đạp**, nhanh hơn đi bộ **1,5 lần** (giữ `Shift` khi đạp cũng nhanh gấp 2). Xe xuất hiện ngẫu nhiên và rất ít trên các con phố. Xe còn trống lấp lánh nhẹ khi bạn tới gần.
-- Tới gần xe còn trống sẽ hiện "Bấm F để lên xe". Đứng cách xe **không quá 2,5 m**, bấm `F` để lên xe. `W` đạp · `S` phanh (giữ tiếp thì lùi chậm) · `A` `D` rẽ · `R` bấm chuông. Xuống xe: bấm `F` khi xe gần như đã dừng.
+- Tới gần xe nào không có người ngồi sẽ hiện "Bấm F để lên xe đạp". Đứng cách xe **không quá 2,5 m**, bấm `F` để lên xe. `W` đạp · `S` phanh (giữ tiếp thì lùi chậm) · `A` `D` rẽ · `R` bấm chuông. Xuống xe: bấm `F` khi xe gần như đã dừng.
 - Xe không đi được bậc thang; va chạm mạnh khi đang nhanh thì **ngã xe** (khoảng 2 giây sau tự đứng dậy). Đạp xe xuống sông thì xe ở lại trên bờ, bạn phải bơi.
-- **Ai lấy trước được trước.** Xe đã có đội dùng mang **biểu tượng khóa và màu của đội đó**, bạn không lấy được. Mỗi người giữ tối đa 1 xe; lấy xe khác thì chiếc cũ biến mất. Bỏ xe ngoài đường và ở xa nó quá lâu thì xe biến mất. Thoát game hay mất mạng không làm mất xe.
+- **Ai lấy trước được trước:** xe nào không có người đang ngồi cũng lấy được, kể cả xe đội khác vừa để lại. Mỗi người giữ tối đa 1 xe; lấy xe khác thì chiếc cũ biến mất. Bỏ xe ngoài đường và ở xa nó quá lâu thì xe biến mất. Thoát game hay mất mạng không làm mất xe.
 - Bạn **phải xuống xe** mới mở được hòm mật thư. Gõ câu trả lời thì không cần xuống xe.
-- **Bắt đầu thử thách là xuống xe:** khi một thử thách (hoặc nhánh Lựa chọn kép) bắt đầu — kể cả khi bạn đang đạp xe lúc Host duyệt bước trước — bạn **được cho xuống xe ngay tại chỗ**, xe để lại cạnh bạn và **bất kỳ đội nào cũng lấy được**, kể cả bạn. Lộ trình bắt buộc đi bộ cũng vậy. Làm xong mà xe còn đó thì bấm `F` lấy lại; bị lấy mất thì đi bộ hoặc lấy chiếc khác. Quá nhiều xe bỏ lại ở một điểm thì chiếc để lâu nhất biến mất.
+- **Bắt đầu thử thách là xuống xe:** khi một thử thách (hoặc nhánh Lựa chọn kép) bắt đầu — kể cả khi bạn đang đạp xe lúc Host duyệt bước trước — bạn **được cho xuống xe ngay tại chỗ**, xe được để **cạnh hòm mật thư** của điểm đó (không có hòm thì cạnh bạn) và **bất kỳ đội nào cũng lấy được**, kể cả bạn. Lộ trình bắt buộc đi bộ cũng vậy. Làm xong mà xe còn đó thì bấm `F` lấy lại; bị lấy mất thì đi bộ hoặc lấy chiếc khác. Quá nhiều xe bỏ lại ở một điểm thì chiếc để lâu nhất biến mất.
 
 ## 4. Nguyên tắc tuần tự
 

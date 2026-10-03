@@ -48,7 +48,7 @@ items.forEach(([yawDeg, crankDeg], i) => {
   const b: BikeState = {
     id: `b${i}`, position: new THREE.Vector3(i * GAP - width / 2, 0, 0), yaw: yawDeg * DEG, speed, steer: num('steer') * DEG,
     lean: crash ? bikeModel.fallenLeanDeg * DEG : num('lean') * DEG, wheelAngle: 0, crankAngle: (crankDeg ?? 0) * DEG,
-    owner: q.has('owner') ? 'team' : null, ownerColour: q.get('owner'), rider: rider ? 'p' : null,
+    owner: q.has('owner') ? 'team' : null, rider: rider ? 'p' : null,
   };
   const model = new BikeModel(bikeAsset);
   scene.add(model.root);

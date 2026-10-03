@@ -1,6 +1,6 @@
 // Phase 6 review fix (docs/reports/phase6-track-c.md "main.ts / Player.ts"): the server's shared bikes → the local
 // player's Bikes. welcome = the full list (+ the bike the team rode before an F5, SPEC §8.10), `bikes` = changes,
-// `bike` = a claim answer. main.ts sets bikes.net / team / colour / ground / notify; this only routes messages.
+// `bike` = a claim answer. main.ts sets bikes.net / team / ground / notify; this only routes messages.
 import type { ServerMessage, Welcome } from '@race/shared/protocol';
 import { netClient } from '../config.ts';
 import type { CharacterController } from '../player/CharacterController.ts';
@@ -14,7 +14,6 @@ export class BikeLink {
   constructor(readonly bikes: Bikes) {}
 
   welcome(w: Welcome) {
-    this.bikes.setTeams(w.teams);
     this.bikes.applyServer(w.bikes, [], true);
     // the first welcome only: after a reconnect the body never left the bike (Bikes.sync reports it again)
     if (this.first && w.pose?.bikeId && w.pose.mode === 'bike') this.remount = { id: w.pose.bikeId, left: netClient.remountSeconds };

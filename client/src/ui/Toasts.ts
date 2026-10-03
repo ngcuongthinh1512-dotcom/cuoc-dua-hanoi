@@ -1,5 +1,5 @@
 // Phase 5 track C (docs/plans/phase5.md §6 C): the toast feed (STYLE_GUIDE: stacked just above the minimap), e.g.
-// "Không đi xe trên bậc thang", "Xe này đã có đội sử dụng". The same text within toasts.repeatGap s is dropped. The DOM
+// "Không đi xe trên bậc thang", "Chậm một bước! Xe đang có người đi". The same text within toasts.repeatGap s is dropped. The DOM
 // is created on first use (importing this module touches nothing: Player.ts imports it in Node tests).
 import { hud, toasts as T } from '../config.ts';
 import { fmtMin } from '../race/ui/format.ts';
@@ -11,7 +11,7 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   bikeStairs: 'Không đi xe trên bậc thang', // SPEC §6.6
   bikeTooFast: 'Đi chậm lại rồi mới xuống xe được',
   bikeTooFar: 'Lại gần xe hơn để lấy xe',
-  bikeTaken: 'Xe này đã có đội sử dụng', // SPEC §6.3
+  bikeTaken: 'Chậm một bước! Xe đang có người đi.', // §17.34: only a bike someone rides is refused
   respawn: 'Đã đưa bạn về chỗ an toàn',
   respawnStairs: 'Đã đưa bạn lên bậc kè gần nhất',
   // Phase 6: the server's `notice` (SPEC §6.3–6.5)

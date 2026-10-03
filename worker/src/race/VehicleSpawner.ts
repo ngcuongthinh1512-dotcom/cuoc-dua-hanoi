@@ -47,7 +47,7 @@ export const CLAIM_REACH = 3.5;
  *  BikeService) or where the last 1 s tick left it when the team dropped offline (≤ 1 s at bikeTopSpeed 5.2 m/s). */
 export const OWN_REACH = 10;
 /** m: no new bike this close to another one. */
-const MIN_GAP = 3;
+export const MIN_GAP = 3;
 /** mulberry32's increment: draw n of rng(seed) = the first draw of rng(seed + n · K). */
 const K = 0x6d2b79f5;
 
@@ -130,7 +130,7 @@ export function periodicSpawn(cfg: VehiclesConfig, cands: SpawnCandidates, state
 export function claim(bike: ServerBike | undefined, team: string, at: PlayerSpot | null, blocked: false | 'walkOnly' | 'finished'): ClaimResult {
   if (!bike) return { ok: false, reason: 'gone' };
   if (bike.segment === -1) return { ok: false, reason: 'broken' }; // decoy (SPEC §17.30): never granted, never changed
-  if (bike.owner !== null && bike.owner !== team) return { ok: false, reason: 'taken' };
+  if (bike.rider && bike.owner !== team) return { ok: false, reason: 'taken' }; // §17.34: no owner lock, only a rider holds it
   if (blocked) return { ok: false, reason: blocked };
   // A ridden bike (here only ever the claimer's own) follows its rider on the server (BikeService.tick); a standing one,
   // own included, must be in reach of the claimer's last pose: nobody summons a bike from afar.

@@ -18,10 +18,8 @@ export interface BikeState {
   /** Accumulated rotations, rad: wheel = distance / wheel radius, crank = wheel / gear ratio (bikeModel). */
   wheelAngle: number;
   crankAngle: number;
-  /** Team holding it (Phase 6 claim), null = available: sparkle ≤ bikeRules.sparkleRadius, anyone may take it. */
+  /** Team holding it (Phase 6 claim; its one bike), null = none. §17.34: no lock, anyone may take a bike nobody rides. */
   owner: string | null;
-  /** Owner team colour for the lock marker; null when available. */
-  ownerColour: string | null;
   /** Player id riding it now, null = parked (standing on its stand). */
   rider: string | null;
 }
@@ -39,6 +37,6 @@ export interface RiderTargets {
 export type RoadSurface = 'asphalt' | 'pave';
 
 /** Phase 5 (docs/plans/phase5.md §5): why F did nothing (Bikes.interact) → a toast (ui/Toasts.ts notice). tooFast = riding
- *  above bike.dismountMaxSpeed; tooFar = a takeable bike near but beyond bikeRules.interactRadius; taken = another
- *  team's bike in reach (SPEC §6.3 "Xe này đã có đội sử dụng"). */
+ *  above bike.dismountMaxSpeed; tooFar = a takeable bike near but beyond bikeRules.interactRadius; taken = a bike
+ *  someone rides in reach (§17.34: no owner lock any more). */
 export type BikeRefusal = 'bikeTooFast' | 'bikeTooFar' | 'bikeTaken';

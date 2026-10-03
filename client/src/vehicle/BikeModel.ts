@@ -1,6 +1,6 @@
 // Track A (docs/plans/phase4.md): the Vélib'-style bicycle (public/models/bike.glb from scripts/process-assets.ts), loaded
-// once and cloned per bike: wheels + crank spin from BikeState, lean and steer, kickstand, team lock marker, sparkle when
-// available. One skinned primitive (the parts are bones: 1 draw call) + the lock sprite + the sparkle points.
+// once and cloned per bike: wheels + crank spin from BikeState, lean and steer, kickstand, sparkle when
+// available. One skinned primitive (the parts are bones: 1 draw call) + the sparkle points.
 // Unreadable file → console.warn and a grey box (the game still runs).
 import {
   AdditiveBlending,
@@ -16,8 +16,6 @@ import {
   PointsMaterial,
   Quaternion,
   SkinnedMesh,
-  Sprite,
-  SpriteMaterial,
   Vector3,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -72,7 +70,7 @@ function texture(alpha: (x: number, y: number) => number, n = 32) {
   t.needsUpdate = true;
   return t;
 }
-let shared: { sparkle: PointsMaterial; lock: DataTexture } | undefined;
+let shared: { sparkle: PointsMaterial } | undefined;
 const sharedAssets = () =>
   (shared ??= {
     sparkle: new PointsMaterial({
@@ -83,8 +81,6 @@ const sharedAssets = () =>
       transparent: true,
       depthWrite: false,
     }),
-    // padlock: body y ∈ [-0.9, 0.1], shackle ring above it
-    lock: texture((x, y) => (Math.abs(x) < 0.75 && y > -0.9 && y < 0.1 ? 1 : 0) + (y >= 0.1 && Math.abs(Math.hypot(x, y - 0.1) - 0.45) < 0.14 ? 1 : 0)),
   });
 
 export class BikeModel {
@@ -99,7 +95,6 @@ export class BikeModel {
     saddle: new Vector3(), pedalL: new Vector3(), pedalR: new Vector3(), gripL: new Vector3(), gripR: new Vector3(),
   };
   private readonly sparkle: Points;
-  private readonly lock: Sprite;
   private roll: number | undefined;
   private time = 0;
 
@@ -136,15 +131,10 @@ export class BikeModel {
     this.sparkle = new Points(g, A.sparkle);
     this.sparkle.visible = false;
     this.root.add(this.sparkle);
-    this.lock = new Sprite(new SpriteMaterial({ map: A.lock, depthWrite: false }));
-    this.lock.scale.setScalar(C.lock.size);
-    this.lock.position.copy(this.local.saddle).setY(this.local.saddle.y + C.lock.lift);
-    this.lock.visible = false;
-    this.body.add(this.lock);
   }
 
-  /** Pose from the state: position (pivot at ground contact), yaw, lean, steer, wheel / crank angles, lock marker
-   *  (ownerColour), sparkle on/off (the caller decides: available and ≤ bikeRules.sparkleRadius from the local player). */
+  /** Pose from the state: position (pivot at ground contact), yaw, lean, steer, wheel / crank angles,
+   *  sparkle on/off (the caller decides: available and ≤ bikeRules.sparkleRadius from the local player). */
   update(b: Readonly<BikeState>, sparkle: boolean, dt: number) {
     this.time += dt;
     this.root.position.copy(b.position);
@@ -166,8 +156,6 @@ export class BikeModel {
     }
     B.fork?.quaternion.setFromAxisAngle(this.steerAxis, b.steer);
     B.stand?.quaternion.copy(b.rider === null && Math.abs(target) < 30 * DEG ? IDENTITY : this.fold);
-    this.lock.visible = b.ownerColour !== null && b.rider === null;
-    if (b.ownerColour) this.lock.material.color.set(b.ownerColour);
     this.sparkle.visible = sparkle;
     if (sparkle) {
       const c = this.sparkle.geometry.getAttribute('color') as Float32BufferAttribute;
@@ -200,7 +188,6 @@ export class BikeModel {
   dispose() {
     this.body.traverse((o) => o instanceof SkinnedMesh && o.skeleton.dispose());
     this.sparkle.geometry.dispose();
-    this.lock.material.dispose();
     this.root.removeFromParent();
   }
 }

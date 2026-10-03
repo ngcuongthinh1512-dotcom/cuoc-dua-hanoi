@@ -143,9 +143,9 @@ export class RaceRoom extends DurableObject<Env> {
       name: (id) => this.team(id)?.name ?? '',
       online: () => [...this.online()],
       pose: (id) => this.live.get(id)?.valid ?? null,
-      park: (team, rack, now) => {
+      park: (team, rack, now, box) => {
         const l = this.live.get(team);
-        this.bikes.park(team, rack, l ? { team, x: l.valid.x, z: l.valid.z } : null, now);
+        this.bikes.park(team, rack, l ? { team, x: l.valid.x, z: l.valid.z } : null, now, box);
       },
       legLoaded: (now) => this.bikes.resetForLeg(now),
       hideBox: (team, step, branch) => {

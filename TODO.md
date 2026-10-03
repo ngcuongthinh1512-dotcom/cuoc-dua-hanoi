@@ -182,6 +182,7 @@ Xong (báo cáo `docs/reports/phase11.md`): `sim --full` (Host bot Hoàn tác / 
 
 ## Khác
 - T1 "đúng x/4" (SPEC §17.31): dòng "đội chưa thấy số: còn n phút" cạnh ô nhập chỉ vẽ lại khi hàng chờ đổi (không tự đếm từng phút); nút Phạt trong ô ma trận step_progress không có ô nhập số (chỉ hàng chờ duyệt có).
+- Xe để lại cạnh hòm mật thư (SPEC §17.34): máy chủ không kiểm vùng đi được (DO không có bản đồ); hòm đặt sát tường / sông thì xe có thể đứng chỗ khó lấy — khi cần: Host tính sẵn ô đặt xe cạnh mỗi hòm (như ứng viên xe) rồi gửi lên.
 - npm 11 cảnh báo `allowScripts` cho script cài đặt của `esbuild`, `workerd`, `fsevents`. Hiện vẫn chạy được vì binary lấy từ optional dependency; nếu bản npm sau chặn hẳn thì duyệt bằng `npm install-scripts approve`.
 
 ## Hoãn (người dùng, 2026-10-03; SPEC §17.18)

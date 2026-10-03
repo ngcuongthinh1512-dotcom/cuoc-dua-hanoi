@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { QuotaCounters } from '../counters.ts';
 import { migrate, setMeta } from '../db.ts';
 import { login, openSocket, raceHarness, TEST_PASSWORD } from '../test/harness.ts';
-import { BikeService } from './BikeService.ts';
+import { besideBox, BikeService } from './BikeService.ts';
 import { legRules } from './leg.ts';
 import type { ServerBike } from './VehicleSpawner.ts';
 
@@ -229,6 +229,20 @@ describe('BikeService (memory SQLite, controlled clock)', () => {
     s.onTeam('t8', spot('t8', 503, -7), { t: 'bike', op: 'claim', id: id9 }, false, 500);
     s.park('t8', 'L2', null, 600);
     expect(s.list().find((b) => b.id === id9)).toMatchObject({ x: 503, z: -7, owner: null, parked: true });
+  });
+
+  it('park beside the clue box (§17.34): BOX_SIDE m to its right, the next one on its left, MIN_GAP apart; anyone takes it', () => {
+    const { s } = service();
+    const box = { x: 100, z: 50, yaw: Math.PI / 2 }; // front faces west: its right is north (−z)
+    ['t0', 't1', 't2'].forEach((t, i) => {
+      s.onHost({ t: 'host.bike', op: 'add', x: 0, z: 0 }, 10 * i);
+      s.onTeam(t, spot(t, 0, 0), { t: 'bike', op: 'claim', id: s.list().at(-1)!.id }, false, 10 * i + 1);
+      s.park(t, 'L1', spot(t, 90, 50), 10 * i + 2, box);
+    });
+    expect(s.list().map((b) => [Math.round(b.x), Math.round(b.z), b.owner])).toEqual([[100, 48, null], [100, 52, null], [100, 45, null]]);
+    expect(besideBox(box, [])).toEqual({ x: 100, z: 48 });
+    s.onTeam('t2', spot('t2', 100, 49), { t: 'bike', op: 'claim', id: s.list()[0]!.id }, false, 40); // t0's old bike
+    expect(s.list()[0]).toMatchObject({ owner: 't2', rider: true });
   });
 
   it('Host: release frees a team’s bike, remove deletes it', () => {

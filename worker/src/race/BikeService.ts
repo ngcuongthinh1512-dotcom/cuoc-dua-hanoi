@@ -8,7 +8,7 @@ import { HOST } from '../auth.ts';
 import type { QuotaCounters } from '../counters.ts';
 import { addEvent, getMeta, setMeta } from '../db.ts';
 import type { VehiclesConfig } from './leg.ts';
-import { abandoned, claim, initialSpawn, newBike, OWN_REACH, periodicSpawn, type PlayerSpot, type ServerBike, type SpawnCandidates, type SpawnerState } from './VehicleSpawner.ts';
+import { abandoned, claim, initialSpawn, MIN_GAP, newBike, OWN_REACH, periodicSpawn, type PlayerSpot, type ServerBike, type SpawnCandidates, type SpawnerState } from './VehicleSpawner.ts';
 
 export interface BikeIO {
   sql: SqlStorage;
@@ -37,6 +37,25 @@ interface Spawner extends SpawnerState {
 const VIEW_METERS = 250;
 /** m: a dismount's y outside the map's span (Seine bed … Eiffel top, as decodePose) is ignored. */
 const okY = (y: number | undefined): y is number => y !== undefined && y >= -100 && y <= 1000;
+
+/** A clue box: centre + heading of its front (rad, 0 = north / −Z, + = left / west). */
+export type BoxSpot = { x: number; z: number; yaw: number };
+/** m from the box centre to the first bike beside it. */
+const BOX_SIDE = 2;
+
+/** §17.34: the first spot beside the box (right, left, then MIN_GAP farther out on each side) ≥ MIN_GAP from every other
+ *  bike. ponytail: no walkability check (the DO has no map): the box stands on a walkable spot, a few metres to its side
+ *  usually is too; the client grounds the bike on whatever collider is there. */
+export function besideBox(box: BoxSpot, others: readonly { x: number; z: number }[]): { x: number; z: number } {
+  const [rx, rz] = [Math.cos(box.yaw), -Math.sin(box.yaw)]; // the box's right
+  let p = { x: box.x, z: box.z };
+  for (let k = 0; k < 40; k++) {
+    const d = (k % 2 ? -1 : 1) * (BOX_SIDE + MIN_GAP * Math.floor(k / 2));
+    p = { x: Math.round((box.x + rx * d) * 100) / 100, z: Math.round((box.z + rz * d) * 100) / 100 };
+    if (!others.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < MIN_GAP)) break;
+  }
+  return p;
+}
 
 const info = ({ id, x, y, z, yaw, owner, rider, parked }: ServerBike): BikeInfo => ({ id, x, y, z, yaw, owner, rider, parked });
 /** What a team was told of a bike: its own ridden one moves with it (no resend per tick). */
@@ -175,14 +194,16 @@ export class BikeService {
   }
 
   /** SPEC §6.4 / §17.32: the owner's task started (clue opened / accepted, branch opened, approved remotely, a walk-only
-   *  route, a task place elsewhere entered) → it is off its bike, which stays NEXT TO THE TEAM (`at` = its trusted pose;
-   *  null = offline / unknown: where the bike stands, i.e. the team's last known spot), free for anyone. `rack` groups the
-   *  bikes left for that point: past bikeParking.maxBikes the longest parked one goes. */
-  park(team: string, rack: string, at: PlayerSpot | null, now: number) {
+   *  route, a task place elsewhere entered) → it is off its bike, which stands NEXT TO THE CLUE BOX of that point (`box`,
+   *  §17.34: BOX_SIDE m to its side, more bikes MIN_GAP apart, alternating sides), else next to the team (`at` = its trusted
+   *  pose; null = offline / unknown: where the bike stands), free for anyone. `rack` groups the bikes left for that point:
+   *  past bikeParking.maxBikes the longest parked one goes. */
+  park(team: string, rack: string, at: PlayerSpot | null, now: number, box: BoxSpot | null = null) {
     const b = [...this.bikes.values()].find((o) => o.owner === team);
     if (!b) return;
     Object.assign(b, { owner: null, rider: false, parked: true, rack, parkedAt: now });
-    if (at) Object.assign(b, { x: at.x, z: at.z });
+    if (box) Object.assign(b, besideBox(box, [...this.bikes.values()].filter((o) => o !== b)));
+    else if (at) Object.assign(b, { x: at.x, z: at.z });
     const atRack = [...this.bikes.values()].filter((o) => o.rack === rack).sort((p, q) => (p.parkedAt ?? 0) - (q.parkedAt ?? 0));
     const gone = atRack.slice(0, Math.max(0, atRack.length - this.io.cfg.bikeParking.maxBikes)).map((o) => o.id);
     this.put(b);

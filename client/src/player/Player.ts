@@ -162,7 +162,7 @@ export class Player {
     const [id, name, colour] = team ? [team.id, team.name, team.colour] : [playerSetup.teamName, playerSetup.teamName, playerSetup.teamColour];
     const model = new CharacterModel(character, { shirt: colour, name });
     scene.add(model.root);
-    const bikes = new Bikes(scene, bike, id, colour);
+    const bikes = new Bikes(scene, bike, id);
     return new Player(model, bikes, { character, bike }, world, camera, env, o);
   }
 

@@ -55,7 +55,7 @@ export interface RaceHudFrame {
 }
 
 const BOX_PROMPT = 'Bấm F để mở hòm mật thư';
-const BIKE_PROMPT = { on: 'Bấm F để lên xe', off: 'Bấm F để xuống xe' } as const;
+const BIKE_PROMPT = { on: 'Bấm F để lên xe đạp', off: 'Bấm F để xuống xe' } as const;
 
 const ICONS = {
   route: '<path d="M4 19c7 0 4-13 11-13h3M15 3l4 3-4 3"/>',

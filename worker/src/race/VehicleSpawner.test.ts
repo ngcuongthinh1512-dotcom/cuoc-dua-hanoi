@@ -81,9 +81,10 @@ describe('claim (SPEC §6.3, §6.5)', () => {
   const bike = (owner: string | null = null) => ({ ...newBike('b1', 10, 10, 0, 0, 0), owner });
   const at = (d: number) => ({ team: 't0', x: 10 + d, z: 10 });
 
-  it('free → ok; another team’s → taken; beyond 3.5 m → far; walk-only route → walkOnly; vanished → gone', () => {
+  it('free → ok; another team’s standing → ok, ridden → taken (§17.34); beyond 3.5 m → far; walk-only route → walkOnly; vanished → gone', () => {
     expect(claim(bike(), 't0', at(2), false)).toEqual({ ok: true });
-    expect(claim(bike('t1'), 't0', at(1), false)).toEqual({ ok: false, reason: 'taken' });
+    expect(claim(bike('t1'), 't0', at(1), false)).toEqual({ ok: true });
+    expect(claim({ ...bike('t1'), rider: true }, 't0', at(1), false)).toEqual({ ok: false, reason: 'taken' });
     expect(claim(bike(), 't0', at(CLAIM_REACH + 0.1), false)).toEqual({ ok: false, reason: 'far' });
     expect(claim(bike(), 't0', null, false)).toEqual({ ok: false, reason: 'far' });
     const decoy = { ...bike(), segment: -1 };

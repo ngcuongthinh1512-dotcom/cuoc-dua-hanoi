@@ -18,7 +18,7 @@ function setup() {
     c.fixedUpdate(physics.fixedDt, { forward: 0, right: 0, cameraYaw: 0, sprint: false, jump: false });
     world.step();
   }
-  const bikes = new Bikes(null, null, 'xanh', '#2c6bd8');
+  const bikes = new Bikes(null, null, 'xanh');
   const sent: unknown[] = [];
   const notes: string[] = [];
   bikes.net = { send: (m) => void sent.push(m) };
@@ -38,7 +38,7 @@ describe('BikeLink: server bikes → the local Bikes (review fix: was never wire
   it('welcome / bikes / bike messages reach Bikes; F claims; a lost claim toasts', () => {
     const { c, bikes, sent, notes, link } = setup();
     link.welcome(welcome([bike('a', 1), bike('b', 40, 'vang')]));
-    expect(bikes.list.map((b) => [b.id, b.ownerColour])).toEqual([['a', null], ['b', '#e8c020']]);
+    expect(bikes.list.map((b) => [b.id, b.owner])).toEqual([['a', null], ['b', 'vang']]);
     expect(link.message({ t: 'bikes', list: [bike('c', 60)], gone: ['b'] })).toBe(true);
     expect(bikes.list.map((b) => b.id)).toEqual(['a', 'c']);
     expect(link.message({ t: 'notice', code: 'bikeGone' })).toBe(false);

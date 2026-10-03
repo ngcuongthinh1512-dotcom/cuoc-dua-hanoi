@@ -22,7 +22,7 @@ export async function loadBike(): Promise<BikeAsset> {
 
 export const bikeState = (o: Partial<BikeState> = {}): BikeState => ({
   id: 'b1', position: new Vector3(), yaw: 0, speed: 0, steer: 0, lean: 0, wheelAngle: 0, crankAngle: 0,
-  owner: null, ownerColour: null, rider: null, ...o,
+  owner: null, rider: null, ...o,
 });
 
 /** Skinned vertex positions (world), optionally only those of one bone. */
@@ -95,15 +95,12 @@ describe('bike.glb', async () => {
     expect(Math.max(...ys)).toBeLessThan(0.7);
   });
 
-  it('lock marker only while owned and parked; sparkle only when asked', () => {
+  it('no lock marker (§17.34); sparkle only when asked', () => {
     const m = new BikeModel(asset);
-    const lock = () => m.root.getObjectsByProperty('type', 'Sprite')[0]!.visible;
     const sparkle = () => m.root.getObjectsByProperty('type', 'Points')[0]!.visible;
-    m.update(bikeState(), true, 0.1);
-    expect([lock(), sparkle()]).toEqual([false, true]);
-    m.update(bikeState({ owner: 't', ownerColour: '#2c6bd8' }), false, 0.1);
-    expect([lock(), sparkle()]).toEqual([true, false]);
-    m.update(bikeState({ owner: 't', ownerColour: '#2c6bd8', rider: 'p' }), false, 0.1);
-    expect(lock()).toBe(false);
+    m.update(bikeState({ owner: 't' }), true, 0.1);
+    expect([m.root.getObjectsByProperty('type', 'Sprite').length, sparkle()]).toEqual([0, true]);
+    m.update(bikeState(), false, 0.1);
+    expect(sparkle()).toBe(false);
   });
 });

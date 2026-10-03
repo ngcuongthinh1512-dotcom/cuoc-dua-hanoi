@@ -16,7 +16,7 @@ function setup() {
     c.fixedUpdate(physics.fixedDt, { forward: 0, right: 0, cameraYaw: 0, sprint: false, jump: false });
     world.step();
   }
-  return { world, c, bikes: new Bikes(null, null, 'Đội A', '#e33') };
+  return { world, c, bikes: new Bikes(null, null, 'Đội A') };
 }
 
 describe('Bikes: take / mount / get off (SPEC §6.3)', () => {
@@ -38,13 +38,16 @@ describe('Bikes: take / mount / get off (SPEC §6.3)', () => {
     for (const m of ['swim', 'air', 'bike'] as const) expect(canMount({ ...c.state, moveMode: m })).toBe(false);
     expect(canMount({ ...c.state, grounded: false })).toBe(false);
   });
-  it("another team's bike cannot be taken", () => {
+  it("§17.34: another team's standing bike can be taken; one someone rides cannot", () => {
     const { c, bikes } = setup();
     const b = bikes.add(1, 0, 0, 0);
     b.owner = 'Đội B';
+    b.rider = REMOTE_RIDER;
     expect(bikes.interact(c)).toBe('bikeTaken');
     expect(c.riding).toBeNull();
-    expect(b.owner).toBe('Đội B');
+    b.rider = null;
+    expect(bikes.interact(c)).toBe('mount');
+    expect(b.owner).toBe('Đội A');
   });
   it('taking a second bike makes the first disappear; get off keeps the owner', () => {
     const { c, bikes } = setup();
@@ -70,15 +73,17 @@ describe('Bikes: take / mount / get off (SPEC §6.3)', () => {
   });
 });
 
-describe('Bikes.prompt: "Bấm F để lên xe" / "xuống xe", no side effect', () => {
-  it('free bike near → on; other team / too far / riding → not on', () => {
+describe('Bikes.prompt: "Bấm F để lên xe đạp" / "xuống xe", no side effect', () => {
+  it('any standing bike near → on (another team\'s too, §17.34); ridden / too far / riding → not on', () => {
     const { c, bikes } = setup();
     const b = bikes.add(bikeRules.interactRadius - 0.3, 0, 0, 0);
     expect(bikes.prompt(c)).toBe('on');
     expect([b.owner, b.rider, c.riding]).toEqual([null, null, null]); // nothing taken
     b.owner = 'Đội B';
+    expect(bikes.prompt(c)).toBe('on');
+    b.rider = REMOTE_RIDER;
     expect(bikes.prompt(c)).toBeNull();
-    b.owner = null;
+    [b.owner, b.rider] = [null, null];
     b.position.x = bikeRules.interactRadius + 0.3;
     expect(bikes.prompt(c)).toBeNull();
     b.position.x = bikeRules.interactRadius - 0.3;
@@ -109,10 +114,10 @@ describe('Bikes.interact: why F did nothing (Phase 5 track C, SPEC §6.3)', () =
     expect(c.riding).toBeNull();
   });
 
-  it("another team's bike in reach → bikeTaken; 4 m away it is silent; your own parked bike 4 m away → bikeTooFar", () => {
+  it("a ridden bike in reach → bikeTaken; 4 m away it is silent; your own parked bike 4 m away → bikeTooFar", () => {
     const { c, bikes } = setup();
     const other = bikes.add(1, 0, 0, 0);
-    other.owner = 'Đội B';
+    [other.owner, other.rider] = ['Đội B', REMOTE_RIDER];
     expect(bikes.interact(c)).toBe('bikeTaken');
     other.position.x = 4;
     expect(bikes.interact(c)).toBeNull();
@@ -121,9 +126,9 @@ describe('Bikes.interact: why F did nothing (Phase 5 track C, SPEC §6.3)', () =
     expect(bikes.interact(c)).toBe('bikeTooFar');
   });
 
-  it('a free bike in reach beats a taken one next to it: mounts', () => {
+  it('a free bike in reach beats a ridden one next to it: mounts', () => {
     const { c, bikes } = setup();
-    bikes.add(1, 0, 0, 0).owner = 'Đội B';
+    Object.assign(bikes.add(1, 0, 0, 0), { owner: 'Đội B', rider: REMOTE_RIDER });
     const free = bikes.add(-1.5, 0, 0, 0);
     expect(bikes.interact(c)).toBe('mount');
     expect(c.riding).toBe(free);
@@ -150,16 +155,15 @@ describe('Bikes online: shared bikes from the server (Phase 6 track C, SPEC §6.
     const sent: unknown[] = [];
     const notes: string[] = [];
     Object.assign(s.bikes, { team: 't0', net: { send: (m: unknown) => sent.push(m) }, notify: (n: string) => notes.push(n) });
-    s.bikes.setTeams([{ slot: 1, id: 't1', name: 'Đội B', colour: '#00f', online: true }]);
     const frame = () => s.bikes.update(1 / 60, s.c.state.position, s.c.riding, s.c.state.position, s.c.state.yaw);
     return { ...s, sent, notes, frame };
   }
 
-  it('applyServer: full list replaces, deltas update the same BikeState, gone removes; colours from the teams', () => {
+  it('applyServer: full list replaces, deltas update the same BikeState, gone removes', () => {
     const { bikes } = online();
     bikes.add(5, 0, 5, 0); // a dev bike: gone with the first full list
     bikes.applyServer([info('b1', 1), info('b2', 30, 't1')], [], true);
-    expect(bikes.list.map((b) => [b.id, b.owner, b.ownerColour])).toEqual([['b1', null, null], ['b2', 't1', '#00f']]);
+    expect(bikes.list.map((b) => [b.id, b.owner])).toEqual([['b1', null], ['b2', 't1']]);
     const b1 = bikes.list[0]!;
     bikes.applyServer([info('b1', 2, 't1', true)]);
     expect(bikes.list[0]).toBe(b1);
@@ -182,6 +186,16 @@ describe('Bikes online: shared bikes from the server (Phase 6 track C, SPEC §6.
     bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: true });
     expect(c.riding?.id).toBe('b1');
     expect(bikes.list.find((b) => b.id === 'b1')!.owner).toBe('t0');
+  });
+
+  it('§17.34: a task starts while riding → off the bike, which goes where the server put it (beside the clue box)', () => {
+    const { c, bikes } = online();
+    bikes.applyServer([info('b1', 1)], [], true);
+    bikes.interact(c);
+    bikes.onClaimResult({ t: 'bike', op: 'claim', id: 'b1', ok: true });
+    bikes.applyServer([{ ...info('b1', 7), z: 3, parked: true }]);
+    expect(c.riding).toBeNull();
+    expect([bikes.list[0]!.position.x, bikes.list[0]!.position.z, bikes.list[0]!.owner]).toEqual([7, 3, null]);
   });
 
   it('each refusal reason → its own toast: finished → raceOver (verify3 m4: was "Chậm một bước!"), far, walkOnly, else bikeLost', () => {

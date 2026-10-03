@@ -31,6 +31,7 @@ function fake() {
     },
   } as unknown as SqlStorage;
   const poses = new Map<string, PoseSample>();
+  const parks: unknown[] = [];
   const io = {
     sql, counters: new QuotaCounters(),
     transaction: <T,>(fn: () => T) => {
@@ -57,13 +58,13 @@ function fake() {
     name: (id: string) => `Đội ${id}`,
     online: () => [...teams.keys()],
     pose: (id: string) => poses.get(id) ?? null,
-    park: () => log.push('park'),
+    park: (_t: string, _r: string, _n: number, box: unknown) => (log.push('park'), parks.push(box)),
     legLoaded: () => {},
     hideBox: (team: string, step: string, branch: string) => log.push(`hideBox ${team} ${step} ${branch}`),
     feed: (m: FeedMessage) => (log.push('feed'), feeds.push(m)),
     touchSnapshot: () => log.push('touchSnapshot'),
   };
-  return { io, log, txs, sent, teams, events, feeds, poses, setFail: (v: boolean) => (fail = v) };
+  return { io, log, txs, sent, teams, events, feeds, poses, parks, setFail: (v: boolean) => (fail = v) };
 }
 
 const at = (i: number, mode: PoseSample['mode'] = 'walk'): PoseSample => ({ x: Z[i]!.x, y: 0, z: Z[i]!.z, yaw: 0, mode, action: 'none' });
@@ -312,11 +313,12 @@ describe('RaceEngine', () => {
   });
 
   it('a switch keeps the old branch\'s answers for the Host (b = A) while the team\'s card lists only the current branch; arrival cleared', () => {
-    const { e, op, card } = racing({ t0: 3 });
+    const { e, f, op, card } = racing({ t0: 3 });
     const za = branchZone(mini, Z, 3, 'A')!;
     const foot: PoseSample = { x: za.x, y: 0, z: za.z, yaw: 0, mode: 'walk', action: 'none' };
     op('t0', { t: 'race', op: 'branch', step: 'D1', branch: 'A' }, 5);
     op('t0', { t: 'race', op: 'open', step: 'D1', branch: 'A' }, 6, foot);
+    expect(f.parks.at(-1)).toEqual({ x: Math.round(za.x * 100) / 100, z: Math.round(za.z * 100) / 100, yaw: Math.round(za.yaw * 1000) / 1000 }); // §17.34: beside branch A's box
     op('t0', { t: 'race', op: 'answer', step: 'D1', text: '8' }, 7, foot); // auto: wrong
     expect(card('t0')).toMatchObject({ status: 'active', answers: [{ id: 1, text: '8', status: 'wrong' }] });
     expect(e.hostView(8).progress.find((p) => p.step === 'D1')).toMatchObject({ arrivedAt: 6, branchOpenedAt: 6, wrongAnswers: 1 });
@@ -634,6 +636,7 @@ describe('RaceEngine', () => {
     f.poses.set('t0', at(1)); // standing in T1's place on foot: the Duyệt racks its bike (L2 is walk-only, S3)
     review('t0', 'T1', 'approve', 20_000, { id: 1 });
     expect(f.log).toContain('park');
+    expect(f.parks.at(-1)).toBeNull(); // §17.34: T1's own place has no clue box → next to the team
     e.onPose('t0', at(2), 20_500); // arrives at L2's place
     expect(e.hostView(20_600).progress.find((p) => p.step === 'L2')).toMatchObject({ arrivedAt: 20_500 });
     const woken = new RaceEngine(f.io); // the Durable Object evicted: meta 'undo' read back (step_progress too, in a real one)
