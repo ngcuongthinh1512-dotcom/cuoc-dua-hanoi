@@ -4,7 +4,7 @@
 // logs in with its team code and walks an A* route on the real road graph at 0.9 × footSpeed, sending `pos` at 5 Hz.
 // Prints message / byte counts and the Host counters so the estimate can be compared with the §9 budget.
 // Phase 7: `--leg <id | file.json>` (e.g. `--leg mini`) plays the WHOLE leg instead: a Host bot loads it (host.leg), creates
-// the teams, enters every team's start time ('now') and opens the race; each bot walks the A* route to every step's zone
+// the teams and opens the race (no start times since SPEC §17.23); each bot walks the A* route to every step's zone
 // (5 Hz), opens the box / plays the challenge / checks in at the Pit Stop, and the run ends when every team finished; the
 // report adds the finish count, the ranking and the SQLite rows per team written while the race ran, without the shared
 // snapshot / replay rows (budget legRowBudget: 160 up to 10 steps; measured in the in-process harness only).

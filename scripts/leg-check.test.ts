@@ -555,6 +555,9 @@ describe('leg:check Phase 8B (louvre room: static pictures, rule 9)', () => {
     mkdirSync(join(dir, 'client/public/art'), { recursive: true });
     writeFileSync(join(dir, 'client/public/art/art-06.glb'), Buffer.from('glTF {"nodes":[{"name":"art-06"}],"meshes":[],"scenes":[],"images":[],"materials":[]}', 'latin1'));
     expect(artLeaks(leg, dir)).toEqual([]);
+    arts[2].credit = { ...arts[2].credit, source: 'Wikimedia Commons' }; // a host name, also in the 8C street-prop credits
+    writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ title: 'Áp phích (Wikimedia Commons)' }]));
+    expect(artLeaks(leg, dir)).toEqual([]);
     writeFileSync(join(dir, 'client/public/art/art-09.webp'), webp(['VP8 ', 'x'], ['EXIF', 'Artist=Jane Photographer']));
     writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ text: 'https://example.org/wiki/File:Secret_Name.jpg' }]));
     const out = artLeaks(leg, dir).map((i) => `${i.where}: ${i.message}`).join('\n');

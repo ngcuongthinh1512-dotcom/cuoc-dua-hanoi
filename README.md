@@ -15,7 +15,7 @@ Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự g
 ## Host duyệt bài trong lúc đua
 - Đội gõ câu trả lời trong game (hoặc bấm "Tôi đã gửi bài" sau khi gửi ảnh qua Messenger kèm **mã bài nộp** `<tên đội>-<bước>[-<nhánh>]`; đội tự mở Messenger ở ngoài trò chơi, game không có nút mở Messenger / Facebook). Bài hiện ở mục **Chờ duyệt (n)** đầu trang Host (có âm báo; bấm **Bật thông báo** để nhận thông báo của trình duyệt), kèm câu trả lời, mã bài nộp, thời gian chờ và **Đáp án tham khảo** (chỉ Host thấy).
 - **Duyệt** → đội nhận mật thư kế ngay. **Phạt n phút** → đội thấy đồng hồ đếm ngược rồi mới trả lời lại được. Ô ghi chú chỉ để Host đọc (không gửi cho đội). Bấm nhầm Phạt: ô của đội trong ma trận có nút **Duyệt lại**. Bài ảnh Host đã nhận trước khi đội bấm nút: nút **Duyệt (đã nhận ảnh)** trong ô của đội.
-- Banner đỏ báo đội làm cùng một thử thách / nhánh quá 45 phút (`hostAlerts.stuckMinutes`), để Host gửi gợi ý qua Messenger. Thời gian chờ duyệt được bù vào giờ chính thức (cột "Bù giờ chờ duyệt").
+- Banner đỏ báo đội làm cùng một thử thách / nhánh quá 45 phút (`hostAlerts.stuckMinutes`), để Host gửi gợi ý qua Messenger. Không có bù giờ: thứ hạng là thứ tự về đích thực (SPEC §17.22, §17.23).
 
 ## Yêu cầu
 - Node.js ≥ 22.13 (khuyên dùng 24), npm ≥ 10.
@@ -82,10 +82,11 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 4B | Xe cộ & người đi đường NPC, chỉ chạy trên máy người chơi (SPEC §17.5) | Xong |
 | 5 | HUD cơ bản | Xong |
 | 6 | Server & presence (Durable Object, WebSocket, vào lại) | Xong |
-| 7 | Race engine lõi: chặng từ file (`leg:check`), mật thư, hộp, Chặng dừng, giờ xuất phát lệch, trang Host tối giản | Xong |
+| 7 | Race engine lõi: chặng từ file (`leg:check`), mật thư, hộp, Chặng dừng, trang Host tối giản | Xong |
 | 8 | Thử thách gõ đáp án + Host duyệt / phạt, Lựa chọn kép theo hòm nhánh, hình mật thư R2 | Xong |
 | 8B | Phòng Louvre (Thử thách 3): 23 tác phẩm, chọn đúng 5, phạt 3 phút khi chốt sai, gợi ý phút 40 / 70, tin công khai, "Ghi nguồn" sau khi về đích | Xong |
 | 8C | Đồ họa: bầu trời HDRI, nước Seine, hậu kỳ, cây platane, đồ đường phố Paris, Ngọn lửa Tự do, ngói mái + nhựa đường; Esc → Cài đặt → "Chất lượng đồ họa" (Cao / Thấp, áp dụng sau khi tải lại) | Đang review |
+| 8D | Đợt việc nhỏ: không sao chép chữ mật thư, thứ hạng = thứ tự về đích, thông báo về đích / BỊ LOẠI (chữ trong file chặng `pit_stop.announce`), bỏ đồng hồ đội + giờ xuất phát | Xong |
 | 9 | Yếu tố đặc biệt, phạt giờ | Chưa làm |
 | 10 | Màn hình Host đầy đủ | Chưa làm |
 | 11 | Chặng demo Paris & test toàn trình | Chưa làm |

@@ -198,7 +198,7 @@ const artworksOf = (s: Leg['steps'][number]): Artwork[] => (s.type === 'challeng
  *  file reaches every team). */
 /** Words every GLB / WebP carries by itself (glTF keys, container tags) or that say nothing about a work: an English note such
  *  as "image of …" must not flag a picture for them. */
-const GENERIC = new Set(['image', 'images', 'mesh', 'meshes', 'node', 'nodes', 'scene', 'scenes', 'material', 'materials', 'texture', 'textures', 'model', 'webp', 'glb', 'gltf', 'photo', 'picture', 'painting', 'sculpture', 'statue', 'with', 'from', 'this', 'that', 'work', 'copy', 'public', 'domain', 'license', 'source', 'title', 'artist', 'version', 'creative', 'commons', 'note', 'test', 'tranh', 'tuong', 'tượng', 'giả']);
+const GENERIC = new Set(['image', 'images', 'mesh', 'meshes', 'node', 'nodes', 'scene', 'scenes', 'material', 'materials', 'texture', 'textures', 'model', 'webp', 'glb', 'gltf', 'photo', 'picture', 'painting', 'sculpture', 'statue', 'with', 'from', 'this', 'that', 'work', 'copy', 'public', 'domain', 'license', 'source', 'title', 'artist', 'version', 'creative', 'commons', 'wikimedia', 'wikimedia commons', 'note', 'test', 'tranh', 'tuong', 'tượng', 'giả']);
 
 /** Words this short are searched only in metadata: in compressed bytes 2.7 % of random 4-letter strings already match (F1). */
 const ART_RAW_MIN = 6;
