@@ -6,7 +6,7 @@ import graphUrl from '@race/shared/data/roadgraph.json?url';
 import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { checkMediaFile, corridorPoints, counterLines, demoState, freshAlerts, freshQueue, legIssueLines, legPenaltyLine, louvreLines, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, warnings, withLouvreDemo } from './hostView.ts';
+import { checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, legPenaltyLine, louvreLines, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, withLouvreDemo, type ExportFormat, type ExportResult } from './hostView.ts';
 
 type State = HostState;
 /** Lazy: the corridor code + road graph load only when candidates are computed (docs/plans/phase6.md §2.4). */
@@ -94,11 +94,16 @@ const legBox = el('section');
 const startBox = el('section');
 const matrixBox = el('section');
 const mediaBox = el('section');
-const queueHead = el('h2');
+const queueHead = el('summary');
 const notifyBtn = el('button', { className: 'small', onclick: () => void askNotify() });
 const queueBox = el('section', { className: 'review-list' });
-/** "Chờ duyệt (n)": sticky at the top while something waits (D16 (1)). */
-const queueWrap = el('div', { className: 'queue-wrap' }, el('div', { className: 'row' }, queueHead, notifyBtn), queueBox);
+/** Phase 10: the queue folds (a <details>, open at every page load). Its summary is just "Chờ duyệt (n)": a button INSIDE a summary
+ *  would fold the frame, so "Bật thông báo" is a sibling that host.css lays over the summary row. */
+const queueDetails = el('details', { open: true }, queueHead, queueBox);
+/** Phase 10 (V2): the "Hoàn tác (còn n s)" lines. Outside the <details>, so folding the queue never hides a button that has 10 s to live. */
+const undoBar = el('div', { className: 'undo-bar' });
+/** "Chờ duyệt (n)" + the undo lines: sticky at the top while something waits or can be undone (D16 (1)). */
+const queueWrap = el('div', { className: 'queue-wrap' }, queueDetails, notifyBtn, undoBar);
 const teamsBox = el('section');
 const counters = el('section');
 const bikes = el('section');
@@ -107,7 +112,7 @@ let computing = false;
 let lastAttempt = 0; // throttles automatic retries (D11: recomputed by itself whenever the server holds no candidates)
 let legResult: { ok: boolean; issues: LegIssueView[] } | null = null;
 const notices: { level: 'error' | 'warning'; message: string; at: number }[] = [];
-const sigs = { status: '', leg: '', start: '', queue: '', matrix: '', media: '' };
+const sigs = { status: '', leg: '', start: '', queue: '', undo: '', matrix: '', media: '' };
 
 function addNotice(level: 'error' | 'warning', message: string) {
   notices.push({ level, message, at: Date.now() });
@@ -122,7 +127,7 @@ function drawNotices() {
 
 function mainView() {
   const link = `${location.origin}/?race=${encodeURIComponent(race)}`;
-  sigs.status = sigs.leg = sigs.start = sigs.queue = sigs.matrix = sigs.media = '';
+  sigs.status = sigs.leg = sigs.start = sigs.queue = sigs.undo = sigs.matrix = sigs.media = '';
   drawNotify();
   app.replaceChildren(
     el('h1', {}, `Cuộc đua Paris – Host · ${race}`),
@@ -221,6 +226,39 @@ function once(key: keyof typeof sigs, sig: string, build: () => void) {
   build();
 }
 
+// Phase 10 (SPEC §17.25): "Xuất dữ liệu thời gian". Both outlive drawStatus, which rebuilds its row whenever the race state changes.
+const exportBtn = el('button', { title: 'Tải về bảng thời gian của từng đội (CSV cho Excel + JSON thô) để làm báo cáo cuối cuộc đua', onclick: () => void exportTimes() }, 'Xuất dữ liệu thời gian');
+const exportStat = el('span', { className: 'note' });
+const paintExport = (text: string, className: string) => Object.assign(exportStat, { textContent: text, className });
+/** Both files from the Worker (Host token in a header, never in the URL), each saved through a temporary <a download>; all or none,
+ *  so a failed half is not mistaken for a full export. `?demo=1` (no server, no token): a sample built here. */
+async function exportTimes() {
+  const s = state;
+  if (!s || exportBtn.disabled) return;
+  const ask = exportConfirm(s.status);
+  if (ask && !confirm(ask)) return;
+  exportBtn.disabled = true;
+  paintExport('Đang tải…', 'warn');
+  const files = await Promise.all((['csv', 'json'] as ExportFormat[]).map((f): Promise<ExportResult> | ExportResult => hostToken
+    ? fetchExport(fetch, net.apiBase, race, hostToken, f)
+    : { ok: true, name: exportFileName(race, f), blob: new Blob([demoExportText(s, f)], { type: f === 'csv' ? 'text/csv;charset=utf-8' : 'application/json' }) }));
+  const failed = files.flatMap((f) => (f.ok ? [] : [f.error]))[0];
+  if (failed) paintExport(failed, 'bad');
+  else {
+    for (const f of files) if (f.ok) saveBlob(f.blob, f.name);
+    paintExport(`Đã tải ${files.map((f) => (f.ok ? f.name : '')).join(' và ')}.`, 'on');
+  }
+  exportBtn.disabled = false;
+}
+function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = el('a', { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 function drawStatus(s: State) {
   once('status', JSON.stringify([s.status, s.leg?.id, s.leg?.issues, s.teams.map((t) => [t.name, t.finishAt === null])]), () => {
     statusBox.replaceChildren(
@@ -230,7 +268,8 @@ function drawStatus(s: State) {
             const cur = state && statusButtons(state).find((x) => x.op === b.op);
             if (!cur || (cur.confirm && !confirm(cur.confirm))) return;
             if (!send({ t: 'host.race', op: b.op })) addNotice('error', 'Đang mất kết nối, chưa gửi được.');
-          } }, b.label))),
+          } }, b.label)),
+        exportBtn, exportStat),
       el('p', { className: 'note' }, 'Tạm dừng: đội vẫn đi lại được nhưng không mở hòm / làm nhiệm vụ được. Xếp hạng theo thứ tự về đích thực (không có đồng hồ từng đội). Kết thúc: đội chưa về đích nhận thông báo BỊ LOẠI.'),
     );
   });
@@ -289,17 +328,20 @@ function drawMatrix(s: State, now: number) {
   const th = (t: string, title = '', className = '') => el('th', { title, className }, t);
   // Buttons in cells (D16 (3)): the table is rebuilt only when something but the running clocks changed, else a click that
   // lands while it is rebuilt is lost. The clocks ("chờ duyệt mm:ss", "⏳ mm:ss") are written in place below.
-  const sig = JSON.stringify([head, rows.map((r) => [r.team, r.name, r.colour, r.rank, r.penalty, r.finish, r.cells.map((c) => [c.state, c.title, c.buttons])])]);
+  const sig = JSON.stringify([head, rows.map((r) => [r.team, r.name, r.colour, r.rank, r.flagged, r.penalty, r.finish, r.cells.map((c) => [c.state, c.title, c.buttons])])]);
   once('matrix', sig, () => {
     cellTexts.length = 0;
-    // team (pinned) + ranking columns before the step columns: the result is readable at 1024 px without scrolling sideways
-    matrixBox.replaceChildren(el('div', { className: 'scroll' }, el('table', { className: 'matrix pin' },
-      el('tr', {}, th('Đội'), th('Hạng', 'Thứ tự về đích thực (SPEC §17.22); BỊ LOẠI: đội về cuối cùng, hoặc chưa về khi Host bấm Kết thúc'), th('Phạt'), th('Về đích'), ...head.map((h) => th(h.label, h.title))),
-      ...rows.map((r) => {
+    // Phase 10 (V1): the table scrolls inside its own box (.matrix-wrap: both ways), so the <thead> and the "Đội" column stay in
+    // view (host.css). team (pinned) + ranking columns before the step columns: the result is readable at 1024 px without
+    // scrolling sideways. A rebuild (any new answer) must not throw the Host back to the top left of a wide table.
+    const old = matrixBox.querySelector('.matrix-wrap');
+    const wrap = el('div', { className: 'scroll matrix-wrap' }, el('table', { className: 'matrix pin' },
+      el('thead', {}, el('tr', {}, th('Đội'), th('Hạng', 'Thứ tự về đích thực (SPEC §17.22); BỊ LOẠI: đội về cuối cùng, hoặc chưa về khi Host bấm Kết thúc'), th('Phạt'), th('Về đích'), ...head.map((h) => th(h.label, h.title)))),
+      el('tbody', {}, ...rows.map((r) => {
         const texts: HTMLElement[] = [];
         cellTexts.push(texts);
         return el('tr', {},
-          el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
+          el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name, r.flagged ? el('span', { className: 'flag', title: 'Đội đang bị gắn cờ đỏ (lý do + nút "Xóa cờ" ở bảng "Các đội")' }, ' ⚑') : ''),
           el('td', { className: r.out ? 'bad' : '' }, r.rank), el('td', {}, r.penalty), el('td', {}, r.finish),
           ...r.cells.map((c) => {
             const text = el('span', {}, c.text);
@@ -314,8 +356,12 @@ function drawMatrix(s: State, now: number) {
             return td;
           }),
         );
-      }),
-    )));
+      })),
+    ));
+    const [left, top] = old ? [old.scrollLeft, old.scrollTop] : [0, 0];
+    matrixBox.replaceChildren(wrap);
+    wrap.scrollLeft = left; // only once it is in the page (an element nobody lays out cannot scroll)
+    wrap.scrollTop = top;
   });
   rows.forEach((r, ri) => r.cells.forEach((c, ci) => { const t = cellTexts[ri]?.[ci]; if (t && t.textContent !== c.text) t.textContent = c.text; }));
 }
@@ -371,10 +417,10 @@ function soundNewQueue(s: State) {
   for (const r of fresh) notify(`${r.name}: chờ duyệt`, `${r.label}${r.branchName ? ` (nhánh ${r.branchName})` : ''} · ${r.text ? `«${r.text}»` : 'đã gửi bài qua Messenger'}`, r.key);
 }
 
-function drawQueue(s: State, now: number) {
+/** Returns how many answers wait. */
+function drawQueue(s: State, now: number): number {
   const rows = queueRows(s, now);
   queueHead.textContent = `Chờ duyệt (${rows.length})`;
-  queueWrap.classList.toggle('has', rows.length > 0);
   once('queue', queueSig(s), () => {
     queueWaits.clear();
     queueBox.replaceChildren(...rows.map((r) => {
@@ -405,6 +451,28 @@ function drawQueue(s: State, now: number) {
     const w = queueWaits.get(r.key);
     if (w && w.textContent !== r.waiting) w.textContent = r.waiting;
   }
+  return rows.length;
+}
+
+const undoButtons = new Map<string, HTMLButtonElement>(); // undo key → its "Hoàn tác (còn n s)" (ticks every refresh)
+/** Phase 10 (V2): one line + button per decision still undoable (host.state.undo; a reload keeps them). The lines are rebuilt only when
+ *  the set changes (a click that lands on a button rewritten under it is lost); the countdown is written in place, and a decision
+ *  that ran out of time drops out by itself, whether or not the server has sent a new state. Returns how many lines. */
+function drawUndo(s: State, now: number): number {
+  const rows = undoRows(s, now);
+  once('undo', JSON.stringify(rows.map((r) => [r.key, r.op])), () => {
+    undoButtons.clear();
+    undoBar.replaceChildren(...rows.map((r) => {
+      const btn = el('button', { className: 'small', title: 'Rút lại quyết định vừa rồi: thẻ của đội trở lại như trước (không hoàn tác được sau 10 giây, hoặc khi đội đã về đích / đi tiếp)', onclick: () => fire(undoMessage(r.team, r.step, r.id), [btn]) }, r.button);
+      undoButtons.set(r.key, btn);
+      return el('div', { className: `undo ${r.op}` }, el('span', { className: 'dot', style: `background:${r.colour}` }), r.text, btn);
+    }));
+  });
+  for (const r of rows) {
+    const b = undoButtons.get(r.key);
+    if (b && b.textContent !== r.button) b.textContent = r.button;
+  }
+  return rows.length;
 }
 
 const alerted = new Map<string, number>(); // team|step → the stuck period already sounded (D11: tải lại trang thì báo lại một lần)
@@ -491,16 +559,22 @@ setInterval(() => {
   for (const n of mediaNames(state)) if (mediaStat.get(n)?.s === 'missing') void headMedia(n, true);
 }, hostPage.mediaHeadRetryMs);
 
+/** When the mouse went down (0 = it is up). "Các đội" and the bike buttons are rewritten every second; a press that straddles a
+ *  rewrite never becomes a click, so that part of render() waits (≤ 1.5 s: a mouseup outside the window is never heard). */
+let pressedAt = 0;
+for (const [ev, down] of [['pointerdown', true], ['pointerup', false], ['pointercancel', false]] as const) addEventListener(ev, () => (pressedAt = down ? Date.now() : 0), true);
+
 function render(s: State) {
   const th = (...h: string[]) => el('tr', {}, ...h.map((t) => el('th', {}, t)));
   const now = s.serverMs + (Date.now() - receivedAt);
   banner.replaceChildren(...[...warnings(s), ...stuckLines(s, now)].map((w) => el('div', {}, w)));
-  drawQueue(s, now);
+  queueWrap.classList.toggle('has', drawQueue(s, now) + drawUndo(s, now) > 0);
   drawStatus(s);
   drawLeg(s);
   drawMedia(s);
   drawStart(s);
   drawMatrix(s, now);
+  if (Date.now() - pressedAt < 1500) return; // below: tables rewritten on every call, not under a mouse press (the click would be lost)
   const rows = teamRows(s, now).map((r) =>
     el('tr', {},
       el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
@@ -510,13 +584,18 @@ function render(s: State) {
       el('td', {}, r.lastSeen),
       el('td', {}, String(r.reconnects)),
       el('td', {}, r.position),
-      // TODO(phase10 track H, plan §4.3): flagText(flagWhy, flagAt, tz) + "Xóa cờ" button → send({t:'host.flag', op:'clear', team});
-      // §3.3: an undo bar (state.undo → "Hoàn tác (còn n s)" → reviewMessage(team, step, 'undo', id, '')) outside the queue <details>
-      el('td', { className: 'flag' }, r.flagged ? 'Vượt tốc' : ''),
+      // Phase 10 (V3): why + since when + "Xóa cờ". A mark only, no penalty; the server flags again if the team goes on (docs).
+      el('td', { className: 'flag', title: 'Cờ đỏ chỉ là đánh dấu, đội không bị phạt. Lịch sử vi phạm vẫn còn trong nhật ký máy chủ.' }, ...(r.flagged ? [
+        r.flagText, ' ',
+        el('button', { className: 'small', onclick: () => {
+          if (!confirm(`Xóa cờ đỏ của ${r.name}? Lịch sử vi phạm vẫn còn trong nhật ký máy chủ; nếu đội còn vi phạm, cờ sẽ gắn lại.`)) return;
+          if (!send({ t: 'host.flag', op: 'clear', team: r.id })) addNotice('error', 'Đang mất kết nối, chưa gửi được.');
+        } }, 'Xóa cờ'),
+      ] : [])),
       el('td', {}, r.pos ? el('button', { className: 'small', title: 'Đặt một xe chung cạnh đội này', onclick: () => send({ t: 'host.bike', op: 'add', x: r.pos!.x + hostPage.addBikeOffset, z: r.pos!.z }) }, 'Thêm xe') : ''),
     ),
   );
-  teamsBox.replaceChildren(rows.length ? el('table', {}, th('Đội', 'Mã đội', 'Người chơi', 'Trạng thái', 'Lần cuối', 'Vào lại', 'Vị trí (lat, lon)', '', 'Xe'), ...rows) : 'Chưa có đội nào.');
+  teamsBox.replaceChildren(rows.length ? el('div', { className: 'scroll' }, el('table', { className: 'pin' }, th('Đội', 'Mã đội', 'Người chơi', 'Trạng thái', 'Lần cuối', 'Vào lại', 'Vị trí (lat, lon)', 'Cờ', 'Xe'), ...rows)) : 'Chưa có đội nào.');
   counters.replaceChildren(el('dl', {}, ...counterLines(s).flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])));
   const paused = s.spawning.paused;
   bikes.replaceChildren(
@@ -538,7 +617,18 @@ if (q.has('demo')) {
   soundNewQueue(state); // the baseline: the demo queue is not "new"
   mediaStat.set('test-gia.jpg', { s: 'ok', size: 245_760 }); // canned (no server): one image uploaded, one missing
   mediaStat.set('test-gia-2.jpg', { s: 'missing' });
+  // DEV stand-ins for the p10-* pictures: ?undoLeft=<s> keeps the undo lines alive that much longer (the picture is taken a few
+  // seconds after the load), ?collapsed=1 folds the review queue, ?matrixScroll=<x|max>,<y> scrolls the matrix box (px)
+  const extra = Number(q.get('undoLeft')) * 1000 || 0;
+  if (extra) state = { ...state, undo: state.undo.map((u) => ({ ...u, until: u.until + extra })) };
   mainView();
+  if (q.has('collapsed')) queueDetails.open = false;
+  const [sx, sy] = (q.get('matrixScroll') ?? '').split(',');
+  const wrap = matrixBox.querySelector('.matrix-wrap');
+  if (wrap) {
+    wrap.scrollLeft = sx === 'max' ? wrap.scrollWidth : Number(sx) || 0;
+    wrap.scrollTop = Number(sy) || 0;
+  }
 } else loginView();
 // DEV / tests: the page can be read back without a server.
 (globalThis as { __READY__?: boolean }).__READY__ = true;

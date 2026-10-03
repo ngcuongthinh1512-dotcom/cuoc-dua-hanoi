@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { isClientMessage, MEDIA, NET, type HostState } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, billableRequests, checkMediaFile, corridorPoints, counterLines, demoState, fmtMinSec, freshAlerts, freshQueue, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, statusButtons, stuckAlerts, teamRows, warnings, withLouvreDemo, louvreLines } from './hostView.ts';
+import { ago, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, withLouvreDemo, louvreLines } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -101,7 +103,7 @@ describe('Host view', () => {
     expect(rows.map((r) => [r.name, r.rank])).toEqual([['Đội Xanh', '1'], ['Đội Vàng', '2'], ['Đội Đỏ', '3'], ['Đội Lục', '—'], ['Đội Tím', '—'], ['Đội Cam', '—']]);
     const blue = rows[0]!;
     expect(blue.cells.every((c) => c.state === 'done')).toBe(true);
-    expect(Object.keys(blue).sort()).toEqual(['cells', 'colour', 'finish', 'name', 'out', 'penalty', 'rank', 'team']);
+    expect(Object.keys(blue).sort()).toEqual(['cells', 'colour', 'finish', 'flagged', 'name', 'out', 'penalty', 'rank', 'team']);
     expect(blue.cells[0]!.text).toMatch(/^\d\d:\d\d:\d\d · 15:00$/); // when · how long the step took
     expect(blue.cells[3]!.text).toContain(' · Tính (A) ↺1'); // branch A after one switch
     const red = rows[2]!;
@@ -208,7 +210,7 @@ describe('step_progress matrix, Phase 8 cells (D16 (3))', () => {
     expect(c.title).toContain('ghi chú: Gần đúng, đọc lại đề');
     expect(c.title).toContain('Đã chờ duyệt: 02:10');
     // a mistaken "Phạt" is undone by approving that answer (the server takes the newest penalized one)
-    expect(c.buttons.map((b) => [b.op, b.id, b.label])).toEqual([['approve', 2, 'Duyệt câu vừa phạt']]); // not "Duyệt lại" (read as "review again", visual#3)
+    expect(c.buttons.map((b) => [b.op, b.id, b.label])).toEqual([['approve', 2, 'Duyệt câu vừa phạt'], ['approve', undefined, 'Cho qua']]); // not "Duyệt lại" (read as "review again", visual#3); Phase 10: + the way out
     expect(c.buttons[0]!.title).toContain('Nhầm tay bấm Phạt');
     // the countdown is over: the team is just "active" again
     expect(rowOf(s, 'Đội Tím', NOW + 3 * MIN).cells[1]!.state).toBe('active');
@@ -228,16 +230,16 @@ describe('step_progress matrix, Phase 8 cells (D16 (3))', () => {
   it('a photo task the team has started: "Duyệt (đã nhận ảnh)" with no answer id; not before the box / task is open, not on a typed branch', () => {
     const red = rowOf(s, 'Đội Đỏ').cells[3]!;
     expect(red.state).toBe('active');
-    expect(red.buttons).toEqual([expect.objectContaining({ op: 'approve', team: 't1', step: 'D1', label: 'Duyệt (đã nhận ảnh)' })]);
+    expect(red.buttons).toEqual([expect.objectContaining({ op: 'approve', team: 't1', step: 'D1', label: 'Duyệt (đã nhận ảnh)' }), expect.objectContaining({ op: 'approve', step: 'D1', label: 'Cho qua' })]);
     expect(red.buttons[0]!.id).toBeUndefined();
     // branch chosen but its box not opened yet → the server refuses, so no button
     expect(rowOf(withRow(s, 't1', 'D1', { branchOpenedAt: null }), 'Đội Đỏ').cells[3]!.buttons).toEqual([]);
-    // branch A is a typed answer, not a photo
-    expect(rowOf(withRow(s, 't1', 'D1', { branch: 'A' }), 'Đội Đỏ').cells[3]!.buttons).toEqual([]);
+    // branch A is a typed answer, not a photo (Phase 10: its box is open, so only the way out)
+    expect(rowOf(withRow(s, 't1', 'D1', { branch: 'A' }), 'Đội Đỏ').cells[3]!.buttons.map((b) => b.label)).toEqual(['Cho qua']);
     // a photo CHALLENGE: after "Nhận" (startedAt) yes, before no; also while the countdown runs (and then not "Duyệt câu vừa phạt")
     const photo: HostState = { ...s, leg: { ...s.leg!, steps: s.leg!.steps.map((x) => (x.id === 'T1' ? { ...x, proof: true } : x)) } };
-    expect(rowOf(photo, 'Đội Tím').cells[1]!.buttons.map((b) => b.label)).toEqual(['Duyệt (đã nhận ảnh)']);
-    expect(rowOf(withRow(photo, 't4', 'T1', { startedAt: null, lockedUntil: null }), 'Đội Tím').cells[1]!.buttons).toEqual([]);
+    expect(rowOf(photo, 'Đội Tím').cells[1]!.buttons.map((b) => b.label)).toEqual(['Duyệt (đã nhận ảnh)', 'Cho qua']);
+    expect(rowOf(withRow(photo, 't4', 'T1', { startedAt: null, lockedUntil: null }), 'Đội Tím').cells[1]!.buttons.map((b) => b.label)).toEqual(['Cho qua']);
   });
 
   it('done cells: ✗n penalties and (A ↺n) switches; the approval wait stays in the cell title (no official-time column)', () => {
@@ -390,5 +392,216 @@ describe('louvre cell (phase8b §H)', () => {
   it('the leg box line; no answers or artwork names anywhere in the demo', () => {
     expect(louvreLines(s.leg!)).toEqual(['Thử thách 3: phòng Louvre, 23 tác phẩm (ảnh / mô hình có sẵn trong game, không cần tải lên), gợi ý phút 40 / 70.']);
     expect(louvreLines(demoState(NOW).leg!)).toEqual([]);
+  });
+});
+
+// ── Phase 10 (docs/plans/phase10.md V1 / V2 / V3 / V5, SPEC §17.25), track H ──
+describe('undo lines (V2)', () => {
+  const s = demoState(NOW); // Đội Xanh's «42» on Thử thách 1 was approved 3 s ago: 7 s left
+
+  it('counts down against `until` on the clock the page estimates; the button reads "Hoàn tác (còn n s)", rounded up', () => {
+    expect(s.undo).toHaveLength(1);
+    expect(s.undo[0]!.until - s.undo[0]!.at).toBe(NET.undoMs);
+    const r = undoRows(s, NOW)[0]!;
+    expect(r).toMatchObject({ key: 't0|T1|2', team: 't0', step: 'T1', id: 2, op: 'approve', name: 'Đội Xanh', label: 'Thử thách 1', secondsLeft: 7, button: 'Hoàn tác (còn 7 s)' });
+    expect(r.text).toBe('Đã Duyệt «42» của Đội Xanh – Thử thách 1');
+    expect(undoRows(s, NOW + 1_000)[0]!.button).toBe('Hoàn tác (còn 6 s)');
+    expect(undoRows(s, NOW + 6_100)[0]!.button).toBe('Hoàn tác (còn 1 s)'); // never "0 s" while it still works
+    expect(undoRows(s, NOW + 6_999)[0]!.secondsLeft).toBe(1);
+  });
+
+  it('is gone once it ran out, with or without a newer host.state', () => {
+    expect(undoRows(s, NOW + 7_000)).toEqual([]);
+    expect(undoRows(s, NOW + 60_000)).toEqual([]);
+    expect(undoRows({ ...s, undo: [] }, NOW)).toEqual([]);
+  });
+
+  it('newest decision first whatever order the server sent; "Đã Phạt"; no «» without an answer text; unknown team / step by id; long answers cut', () => {
+    const two: HostState = { ...s, undo: [{ team: 't4', step: 'T1', id: 2, op: 'penalize', at: NOW - 6_000, until: NOW + 4_000 }, ...s.undo] };
+    expect(undoRows(two, NOW).map((r) => [r.key, r.secondsLeft])).toEqual([['t0|T1|2', 7], ['t4|T1|2', 4]]);
+    expect(undoRows(two, NOW)[1]!.text).toBe('Đã Phạt «43» của Đội Tím – Thử thách 1');
+    const none: HostState = { ...s, undo: [{ team: 'tX', step: 'ZZ', id: 9, op: 'approve', at: NOW, until: NOW + NET.undoMs }] };
+    expect(undoRows(none, NOW)[0]).toMatchObject({ name: 'tX', label: 'ZZ', text: 'Đã Duyệt của tX – ZZ', colour: '#8d99b0' });
+    const long = withRow(s, 't0', 'T1', { answers: [{ id: 2, text: 'x'.repeat(60), at: NOW, status: 'approved', branch: null }] });
+    expect(undoRows(long, NOW)[0]!.text).toBe(`Đã Duyệt «${'x'.repeat(40)}…» của Đội Xanh – Thử thách 1`);
+  });
+
+  it('the button sends host.review undo with the answer id: the codec takes it from the Host only, never without the id', () => {
+    const m = undoMessage('t0', 'T1', 2);
+    expect(m).toEqual({ t: 'host.review', team: 't0', step: 'T1', op: 'undo', id: 2 });
+    expect(isClientMessage(m, 'host')).toBe(true);
+    expect(isClientMessage(m, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'host.review', team: 't0', step: 'T1', op: 'undo' }, 'host')).toBe(false);
+  });
+});
+
+/** "HH:mm:ss" of server ms in the demo leg's zone (what the page prints). */
+const fmtTime = (ms: number) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(ms));
+
+describe('red flag (V3)', () => {
+  const tz = 'Asia/Ho_Chi_Minh';
+  const at = Date.UTC(2026, 9, 3, 7, 5, 9); // 14:05:09 in Vietnam, 09:05:09 in Paris (CEST)
+
+  it('"Vượt tốc · lúc 14:05:09 (7 phút trước)": the reasons in the server\'s order, no repeats, times in the leg zone', () => {
+    expect(flagText({ flagged: true, flagWhy: ['speed'], flagAt: at }, at + 7 * MIN, tz)).toBe('Vượt tốc · lúc 14:05:09 (7 phút trước)');
+    expect(flagText({ flagged: true, flagWhy: ['jump', 'speed', 'jump', 'respawn'], flagAt: at }, at + 7 * MIN, tz)).toBe('Dịch chuyển lạ · Vượt tốc · Hồi sinh nhiều · lúc 14:05:09 (7 phút trước)');
+    expect(flagText({ flagged: true, flagWhy: ['respawn', 'jump'], flagAt: at }, at, 'Europe/Paris')).toBe('Hồi sinh nhiều · Dịch chuyển lạ · lúc 09:05:09 (0 giây trước)');
+    expect(flagText({ flagged: true, flagWhy: ['speed'], flagAt: at }, at + 45_000, tz)).toContain('(45 giây trước)'); // the "n phút trước" runs with the page clock
+    expect(flagText({ flagged: true, flagWhy: ['speed'], flagAt: at }, at + 2 * 3600_000, tz)).toContain('(2 giờ trước)');
+  });
+
+  it('a flag with no known reason / time still says so; no flag = no text', () => {
+    expect(flagText({ flagged: true, flagWhy: [], flagAt: null }, at, tz)).toBe('Cờ đỏ');
+    expect(flagText({ flagged: true, flagWhy: ['speed'], flagAt: null }, at, tz)).toBe('Vượt tốc');
+    expect(flagText({ flagged: false, flagWhy: ['speed'], flagAt: at }, at, tz)).toBe('');
+    expect(flagText({ flagged: true, flagWhy: ['teleport' as never], flagAt: null }, at, tz)).toBe('teleport'); // a reason a newer server adds
+  });
+
+  it('teamRows carries the flag fields and its line, in the leg zone; the demo flags Đội Đỏ (one reason) and Đội Vàng (two)', () => {
+    const rows = teamRows(demoState(NOW), NOW);
+    expect(rows.filter((r) => r.flagged).map((r) => r.name)).toEqual(['Đội Đỏ', 'Đội Vàng']);
+    expect(rows[1]).toMatchObject({ flagWhy: ['speed'], flagAt: NOW - 7 * MIN });
+    expect(rows[1]!.flagText).toBe(`Vượt tốc · lúc ${fmtTime(NOW - 7 * MIN)} (7 phút trước)`);
+    expect(rows[2]!.flagText).toBe(`Dịch chuyển lạ · Hồi sinh nhiều · lúc ${fmtTime(NOW - 2 * MIN)} (2 phút trước)`);
+    expect(rows.filter((r) => !r.flagged).every((r) => r.flagText === '' && r.flagAt === null && r.flagWhy.length === 0)).toBe(true);
+  });
+
+  it('the matrix row carries `flagged` (the page marks the name)', () => {
+    expect(progressTable(demoState(NOW), NOW).rows.filter((r) => r.flagged).map((r) => r.name)).toEqual(['Đội Vàng', 'Đội Đỏ']); // finish order
+  });
+
+  it('"Xóa cờ" sends host.flag clear: the codec takes it from the Host only', () => {
+    const m = { t: 'host.flag', op: 'clear', team: 't1' };
+    expect(isClientMessage(m, 'host')).toBe(true);
+    expect(isClientMessage(m, 'team')).toBe(false);
+  });
+});
+
+describe('"Cho qua" for every kind of challenge (V5, plan M8)', () => {
+  const s = demoState(NOW);
+  const labels = (state: HostState, name: string, i: number) => rowOf(state, name).cells[i]!.buttons.map((b) => b.label);
+
+  it('a typed challenge, active or in a Phạt countdown: Cho qua = approve with no id, always behind a confirm that names team and step', () => {
+    const active = rowOf(withRow(s, 't4', 'T1', { lockedUntil: null }), 'Đội Tím').cells[1]!;
+    expect(active.state).toBe('active');
+    expect(active.buttons.map((b) => b.label)).toEqual(['Cho qua']);
+    const b = active.buttons[0]!;
+    expect(b).toMatchObject({ op: 'approve', team: 't4', step: 'T1', confirm: 'Cho Đội Tím qua Thử thách 1 mà không cần câu trả lời?' });
+    expect(b.id).toBeUndefined();
+    const m = reviewMessage(b.team, b.step, b.op, b.id, '');
+    expect(m).toEqual({ t: 'host.review', team: 't4', step: 'T1', op: 'approve' });
+    expect(isClientMessage(m, 'host')).toBe(true);
+    expect(rowOf(s, 'Đội Tím').cells[1]!.state).toBe('locked');
+    expect(labels(s, 'Đội Tím', 1)).toEqual(['Duyệt câu vừa phạt', 'Cho qua']);
+  });
+
+  it('a detour branch whose box is open (typed or photo), the louvre room, a photo challenge: all of them', () => {
+    expect(labels(s, 'Đội Đỏ', 3)).toEqual(['Duyệt (đã nhận ảnh)', 'Cho qua']); // photo branch B
+    expect(rowOf(s, 'Đội Đỏ').cells[3]!.buttons[1]!.confirm).toBe('Cho Đội Đỏ qua Lựa chọn kép (nhánh Ảnh (B)) mà không cần câu trả lời?');
+    expect(labels(withRow(s, 't1', 'D1', { branch: 'A' }), 'Đội Đỏ', 3)).toEqual(['Cho qua']); // typed branch A
+    const lv = withLouvreDemo(s);
+    expect(rowOf(lv, 'Đội Lục').cells[5]!.buttons.map((b) => [b.op, b.id, b.label])).toEqual([['approve', undefined, 'Cho qua']]);
+    expect(rowOf(lv, 'Đội Lục').cells[5]!.buttons[0]!.confirm).toBe('Cho Đội Lục qua phòng Louvre mà không cần chọn đúng?');
+  });
+
+  it('not where the server has nothing to approve: an answer waits (Duyệt / Phạt instead), the branch box is not open, a route, the Pit Stop, a done or later cell', () => {
+    expect(labels(s, 'Đội Vàng', 3)).toEqual(['Duyệt', 'Phạt']); // pending photo answer
+    expect(labels(s, 'Đội Cam', 3)).toEqual(['Duyệt', 'Phạt']); // pending typed answer
+    expect(labels(withRow(s, 't1', 'D1', { branchOpenedAt: null }), 'Đội Đỏ', 3)).toEqual([]); // branch chosen, box not opened
+    expect(labels(s, 'Đội Lục', 0)).toEqual([]); // Lộ trình 1: route_info
+    expect(labels(withTeam(s, 't3', { step: 5 }), 'Đội Lục', 5)).toEqual([]); // Về đích: pit_stop
+    expect(rowOf(s, 'Đội Xanh').cells.flatMap((c) => c.buttons)).toEqual([]); // finished team
+    expect(rowOf(s, 'Đội Đỏ').cells.filter((c) => c.state !== 'active').flatMap((c) => c.buttons)).toEqual([]);
+  });
+});
+
+describe('pinned matrix and folding review frame (V1): host.css, main.ts', () => {
+  const css = readFileSync(join(import.meta.dirname, 'host.css'), 'utf8');
+  const main = readFileSync(join(import.meta.dirname, 'main.ts'), 'utf8');
+  /** The declarations of the rule whose selector starts a line (so "a th" never matches inside "a, b th"). */
+  const rule = (sel: string) => new RegExp(`(?:^|\n)${sel.replace(/[.*+?^${}()|[\]\\>]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  const z = (sel: string) => Number(/z-index:\s*(\d+)/.exec(rule(sel))?.[1]);
+
+  it('the matrix scrolls in its own box; its header row sticks to the top, the Đội column to the left, the corner above both', () => {
+    expect(rule('.matrix-wrap')).toMatch(/max-height:\s*72vh/);
+    expect(rule('.matrix-wrap')).toMatch(/overflow:\s*auto/);
+    expect(rule('table.matrix thead th')).toMatch(/position:\s*sticky;\s*top:\s*0/);
+    expect(rule('table.matrix thead th')).toMatch(/background:\s*#/); // opaque, or the cells show through while scrolling
+    expect(rule('table.pin tr > :first-child')).toMatch(/position:\s*sticky;\s*left:\s*0/);
+    expect(rule('table.matrix thead th:first-child')).toMatch(/left:\s*0/);
+    expect(z('table.matrix thead th:first-child')).toBeGreaterThan(z('table.matrix thead th'));
+    expect(z('table.matrix thead th')).toBeGreaterThan(z('table.pin tr > :first-child'));
+  });
+
+  it('the review frame stays above the matrix while it is sticky; the undo bar is hidden when empty; the notify button is laid over the summary row', () => {
+    expect(rule('.queue-wrap.has')).toMatch(/position:\s*sticky;\s*top:\s*0/);
+    expect(z('.queue-wrap.has')).toBeGreaterThan(z('table.matrix thead th:first-child'));
+    expect(rule('.undo-bar:empty')).toMatch(/display:\s*none/);
+    expect(rule('.queue-wrap > button')).toMatch(/position:\s*absolute/);
+  });
+
+  it('main.ts builds what the CSS pins: a .matrix-wrap around a table.matrix with <thead>; the queue is a <details open> whose <summary> holds no button', () => {
+    expect(main).toContain("'scroll matrix-wrap'");
+    expect(main).toContain("el('table', { className: 'matrix pin' }");
+    expect(main).toContain("el('thead'");
+    expect(main).toContain("el('details', { open: true }, queueHead, queueBox)");
+    expect(main).toContain("const queueHead = el('summary');");
+    expect(main).toContain("el('div', { className: 'queue-wrap' }, queueDetails, notifyBtn, undoBar)");
+    expect(main).toContain("className: 'undo-bar'");
+  });
+});
+
+describe('"Xuất dữ liệu thời gian" (SPEC §17.25)', () => {
+  const s = demoState(NOW);
+  const res = (status: number, body = 'x') => (async () => new Response(body, { status })) as unknown as typeof fetch;
+
+  it('file names: race-<id>-thoi-gian.csv / .json; an odd id cannot make a path; the URL has the race and format, never a token', () => {
+    expect(exportFileName('paris', 'csv')).toBe('race-paris-thoi-gian.csv');
+    expect(exportFileName('hn-2026', 'json')).toBe('race-hn-2026-thoi-gian.json');
+    expect(exportFileName('../a b', 'csv')).toBe('race----a-b-thoi-gian.csv');
+    expect(exportPath('/api', 'paris', 'json')).toBe('/api/race/paris/export?format=json');
+    expect(exportPath('/api', 'a b', 'csv')).toBe('/api/race/a%20b/export?format=csv');
+  });
+
+  it('GET with the Host token in the Authorization header only; the body stays a Blob so the UTF-8 BOM survives', async () => {
+    const calls: [string, RequestInit | undefined][] = [];
+    const fake = (async (url: string, init?: RequestInit) => (calls.push([url, init]), new Response('\uFEFFĐội,Bước\r\n'))) as unknown as typeof fetch;
+    const r = await fetchExport(fake, '/api', 'paris', 'TOKEN123', 'csv');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toBe('/api/race/paris/export?format=csv');
+    expect(calls[0]![0]).not.toContain('TOKEN123');
+    expect(calls[0]![1]).toEqual({ headers: { Authorization: 'Bearer TOKEN123' } });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.name).toBe('race-paris-thoi-gian.csv');
+    expect([...new Uint8Array(await r.blob.arrayBuffer()).slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  });
+
+  it('errors in Vietnamese: 401 (session over), 403, 500, any other status, a dead network, a body that breaks off', async () => {
+    const err = (f: typeof fetch) => fetchExport(f, '/api', 'paris', 't', 'csv');
+    expect(await err(res(401))).toEqual({ ok: false, error: 'Phiên Host hết hạn, đăng nhập lại.' });
+    expect(await err(res(403))).toEqual({ ok: false, error: 'Chỉ Host mới xuất được dữ liệu.' });
+    expect(await err(res(500))).toEqual({ ok: false, error: 'Máy chủ lỗi (500), thử lại sau ít phút.' });
+    expect(await err(res(404))).toEqual({ ok: false, error: 'Máy chủ trả lỗi 404.' });
+    expect(exportErrorText(503)).toContain('503');
+    expect(await err((async () => { throw new TypeError('Failed to fetch'); }) as unknown as typeof fetch)).toEqual({ ok: false, error: 'Không kết nối được máy chủ.' });
+    expect(await err((async () => ({ ok: true, status: 200, blob: async () => { throw new Error('aborted'); } })) as unknown as typeof fetch)).toEqual({ ok: false, error: 'Tải bị gián đoạn, thử lại.' });
+  });
+
+  it('asks first while the race is not over ("dữ liệu có thể chưa đủ"), never for a finished one', () => {
+    for (const status of ['lobby', 'running', 'paused'] as const) expect(exportConfirm(status)).toContain('Cuộc đua chưa kết thúc, dữ liệu có thể chưa đủ');
+    expect(exportConfirm('finished')).toBeNull();
+  });
+
+  it('?demo=1 sample: UTF-8 BOM, a header, one row per team x step, ISO UTC times, no answers; JSON has the same rows; fields are quoted', () => {
+    const csv = demoExportText(s, 'csv');
+    expect(csv.startsWith('\uFEFFĐội,Mã bước,Tên bước,')).toBe(true);
+    const lines = csv.trimEnd().split('\r\n');
+    expect(lines).toHaveLength(1 + s.progress.length);
+    expect(lines[1]).toMatch(/^Đội Xanh,L1,Lộ trình 1,,\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z,/);
+    expect(csv).not.toContain('bảy'); // an answer of the leg never leaves the server
+    const json = JSON.parse(demoExportText(s, 'json')) as Record<string, unknown>[];
+    expect(json).toHaveLength(s.progress.length);
+    expect(json[0]).toMatchObject({ 'Đội': 'Đội Xanh', 'Mã bước': 'L1', 'Tên bước': 'Lộ trình 1' });
+    expect(csvLine(['Đội A, B', 'nói "chào"', 3, ''])).toBe('"Đội A, B","nói ""chào""",3,');
   });
 });
