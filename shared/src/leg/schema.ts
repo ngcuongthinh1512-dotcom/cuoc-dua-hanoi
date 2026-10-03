@@ -183,7 +183,7 @@ export const legSchema = z.strictObject({
       branchSwitchLockMinutes: z.number().min(0).default(10),
     })
     .prefault({}),
-  movement: z.strictObject({ footSpeed: z.number().positive().default(4), bikeSpeedMultiplier: z.number().positive().default(1.3) }).prefault({}),
+  movement: z.strictObject({ footSpeed: z.number().positive().default(4), bikeSpeedMultiplier: z.number().positive().default(1.5) }).prefault({}),
   vehicles: z
     .strictObject({
       corridorMeters: z.number().positive().default(150),

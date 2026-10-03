@@ -7,7 +7,8 @@ const FORBIDDEN = /^(Control|Alt|Meta|OS)(Left|Right)$|^F(5|11|12)$/;
 const F_KEY = /^F([1-9]|1[0-2])$/;
 
 describe('key bindings (SPEC §17.1)', () => {
-  it.each(Object.entries(keys))('%s', (_, codes) => {
+  it('debug panel has no key: players cannot open it (only ?debug=1)', () => expect(keys.debug).toEqual([]));
+  it.each(Object.entries(keys).filter(([name]) => name !== 'debug'))('%s', (_, codes) => {
     expect(codes.length).toBeGreaterThan(0);
     for (const code of codes) expect(code).not.toMatch(FORBIDDEN);
     expect(codes.every((c) => F_KEY.test(c))).toBe(false); // an F-key needs fn on a Mac → never the only key
@@ -15,9 +16,9 @@ describe('key bindings (SPEC §17.1)', () => {
 });
 
 describe('bike speed (SPEC §6.1)', () => {
-  it('is footSpeed × 1.3', () => {
-    expect(movement.bikeSpeedMultiplier).toBe(1.3);
-    expect(bikeTopSpeed() / movement.footSpeed).toBeCloseTo(1.3, 6);
+  it('is footSpeed × 1.5', () => {
+    expect(movement.bikeSpeedMultiplier).toBe(1.5);
+    expect(bikeTopSpeed() / movement.footSpeed).toBeCloseTo(1.5, 6);
   });
   it('SPEC §17.29: sprint = ×2, the shared constant the server reads too; Shift only (no Ctrl / Alt)', () => {
     expect(movement.sprintMultiplier).toBe(2);

@@ -73,7 +73,7 @@ Tham số URL của game (tiện khi thử): mặc định vào chế độ nhâ
 
 Camera bay tự do: `W` `A` `S` `D` bay, `Space` hoặc `E` lên, `Q` xuống, giữ `Shift` bay nhanh, lăn chuột đổi tốc độ (tay cầm: `RT`/`RB` lên, `LT`/`LB` xuống, bấm stick trái bay nhanh). `F` cũng mở hộp mật thư, `Enter` mở lại thẻ mật thư hiện tại (để trả lời, xem lịch sử câu trả lời), `Tab` mở Sổ mật thư (khi thẻ / Sổ mở thì chuột được nhả để bấm link, hình, nút, ô gõ), `M` bản đồ lớn, `Esc` menu. Đã gán nhưng chưa có tác dụng: `B` ống nhòm.
 
-Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh khi còn cách ≤ 30 m. Xe nhanh gấp 1,3 lần đi bộ (giữ `Shift`: cả hai nhanh gấp 2), đạt tốc độ tối đa trong khoảng 1 giây, chậm lại khi cua gắt hoặc va chạm; trên đá lát khó cua, khó phanh hơn. Đâm mạnh vào tường khi đang nhanh thì ngã, 2 giây sau đứng dậy, xe vẫn là của đội. Không đi xe lên bậc thang (xe dừng lại).
+Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh khi còn cách ≤ 30 m. Xe nhanh gấp 1,5 lần đi bộ (giữ `Shift`: cả hai nhanh gấp 2), đạt tốc độ tối đa trong khoảng 1 giây, chậm lại khi cua gắt hoặc va chạm; trên đá lát khó cua, khó phanh hơn. Đâm mạnh vào tường khi đang nhanh thì ngã, 2 giây sau đứng dậy, xe vẫn là của đội. Không đi xe lên bậc thang (xe dừng lại).
 
 ## Tiến độ
 | Phase | Nội dung | Trạng thái |

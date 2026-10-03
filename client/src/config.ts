@@ -555,7 +555,7 @@ export const preview = {
 export const movement = {
   footSpeed: 4, // m/s: standard on-foot speed (the "jog" clip)
   sprintMultiplier: SPRINT_MULTIPLIER, // SPEC §17.29: × the top speed (foot, swim, bike) while sprint (Shift / LB) is held; the server's limits use the same constant
-  bikeSpeedMultiplier: 1.3, // Phase 4: bike speed = footSpeed × this
+  bikeSpeedMultiplier: 1.5, // Phase 4: bike speed = footSpeed × this
 };
 
 const SPAWN_OUT = 14; // m from the obelisk toward the Arc: outside its fence (SPEC §17.4: ≥ 8–10 m)
