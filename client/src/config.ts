@@ -19,7 +19,9 @@ export const render = {
   near: 0.5, // m
   far: 12_000, // m; initial value, the game sets camera.far = fog far (world/Sky.ts); the preview keeps it
   background: 0xbfd3e6, // clear colour (preview; the game draws the sky texture)
-  sky: { zenith: '#6f9fd8', horizon: '#c9d9e6', clouds: 60, cloudAlpha: 0.35 }, // horizon = fog colour
+  // horizon = fog colour of the canvas sky, and the skyline's haze (landmarks/g5.ts): 8C T1 matched it to the displayed
+  // horizon of the HDRI (graphics8c.sky; was '#c9d9e6')
+  sky: { zenith: '#6f9fd8', horizon: '#bfc2cc', clouds: 60, cloudAlpha: 0.35 },
   // Haze (STYLE_GUIDE): hides chunk edges (the load radius follows fog far, world/ChunkManager.ts). near/far grow by
   // altitudeFactor × height above ground, so the topdown view (3.8 km up) stays clear.
   fog: { near: 250, far: 700, altitudeFactor: 1.3 }, // m, m, per m
@@ -908,9 +910,41 @@ export const graphics8c = {
     lowTexture: 1024, // px: the *_1k.webp variant of a texture (scripts/assets/pipeline.ts) on low quality
   },
   // [T1] sky + light (world/Sky.ts), river (world/Water.ts), post-processing (world/post.ts, hooked in main.ts)
-  sky: { enabled: false, lowOff: false },
-  water: { enabled: false, lowOff: false },
-  post: { enabled: false, lowOff: true },
+  sky: {
+    enabled: true,
+    lowOff: false, // low quality: the 1K .hdr (textures/sky_1k.hdr) instead of the 2K one, and no image-based light:
+    lowEnvironment: false, // scene.environment on low quality too (SwiftShader bench: −35 % FPS); off = Phase 7 hemi light
+    mode: 'hdri' as 'hdri' | 'shader', // 'shader' = three's Sky.js (no file); off = the Phase 7 canvas sky (render.sky)
+    sunPosition: { x: -313, y: 320, z: 216 }, // m from the target: south-west, 40° high (STYLE_GUIDE 35–45°); render.sun when off
+    sunIntensity: 2.4,
+    hemiIntensity: 0.35, // the environment light does most of the fill now (render.hemiLight.intensity when off)
+    environmentIntensity: 0.5, // scene.environmentIntensity: image-based light on every standard material
+    backgroundIntensity: 1,
+    horizonBandDeg: 6, // fog colour = mean HDRI radiance from the horizon up to this elevation
+    // mode 'shader': Sky.js uniforms, and the fog colour (linear radiance near its horizon, by eye)
+    shader: { turbidity: 4, rayleigh: 1.2, mieCoefficient: 0.004, mieDirectionalG: 0.8, cloudCoverage: 0.35, cloudDensity: 0.5 },
+    shaderHorizon: [0.55, 0.62, 0.72],
+    shaderEnvironmentScale: 0.25, // Preetham radiance is several times the HDRI's: × environmentIntensity
+  },
+  water: {
+    enabled: true,
+    lowOff: false,
+    normalMap: 'textures/waternormals.jpg',
+    layers: [
+      { tile: 34, drift: [0.35, 0.2] }, // m per repeat, m/s
+      { tile: 13, drift: [-0.18, 0.3] },
+    ],
+    normalScale: 0.45,
+    colour: '#2c434a', // Seine: dark green-grey; the sky reflection (Fresnel) brightens it at grazing angles
+    roughness: 0.04,
+    envMapIntensity: 1,
+  },
+  post: {
+    enabled: true,
+    lowOff: true, // weak GPU / ?quality=low: the plain renderer.render path (canvas MSAA)
+    smaa: true,
+    bloom: { strength: 0.2, radius: 0.35, threshold: 3 }, // light: only sun glints, gold, neon (strength 0 = no pass)
+  },
   // [T2] trees (world/Vegetation.ts + attach LOD), street furniture without the Wallace fountain (world/StreetProps.ts),
   // Flamme de la Liberté (landmarks/models.ts). No T5: pedestrians / NPC vehicles stay as they are (SPEC §17.20).
   trees: { enabled: false, lowOff: false },
