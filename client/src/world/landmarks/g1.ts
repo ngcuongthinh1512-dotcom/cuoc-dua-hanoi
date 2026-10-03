@@ -5,10 +5,11 @@
 //   Eiffel: the 4 legs up to the 1st platform (the area under the tower stays walkable, SPEC §17.4); its OSM parts are
 //           never extruded (they would close the space under the tower), only its numbers are used (config g1.eiffel).
 //   Arc:    4 piers + attic + transverse lintels, both arch passages open.
-import { landmarks as L } from '../../config.ts';
+import { graphics8c as G8, landmarks as L } from '../../config.ts';
 import type { BuildingRec, LandmarkId } from '../../geo/chunkData.ts';
 import type { BuildOut, MaterialId } from '../buildTypes.ts';
 import { MeshBuffer, type V3 } from '../geom.ts';
+import { flamme } from './g2.ts';
 import type { DetailFn } from './index.ts';
 import { box, collider, footprintFrame, loft, place, square } from './kit.ts';
 import { parseColour } from './parts.ts';
@@ -17,12 +18,15 @@ const G = L.g1;
 
 /** Model pose on its OSM outline: centre, ground y, yaw (THREE rotation.y: local +x → frame u), xz scale; the frame's
  *  u flipped when needed so local +z points toward the Concorde (Arc: the east face looks down the Champs-Élysées). */
-export function modelPose(rec: BuildingRec, minGround: number, id: 'eiffel' | 'arc') {
+export function modelPose(rec: BuildingRec, minGround: number, id: 'eiffel' | 'arc' | 'flamme') {
   const f = footprintFrame(rec.outer);
   const flip = id === 'arc' && -f.uz * -f.cx + f.ux * -f.cz < 0;
   const [ux, uz] = flip ? [-f.ux, -f.uz] : [f.ux, f.uz];
   const scale = id === 'eiffel' ? (f.a + f.b) / 2 / G.eiffel.halfBase : 1; // Arc: real size (the OSM outline is ~10 % larger)
-  return { frame: { ...f, ux, uz }, x: f.cx, y: minGround - G.sink, z: f.cz, yaw: Math.atan2(-uz, ux), scale };
+  // Flamme (Phase 8C): the scan sits on its round paving, a hair below the lowest ground (scaled to the outline by
+  // scripts/assets/flamme.ts); a round outline has no meaningful axis, the frame's is as good as any
+  const y = minGround - (id === 'flamme' ? G8.flamme.sink : G.sink);
+  return { frame: { ...f, ux, uz }, x: f.cx, y, z: f.cz, yaw: Math.atan2(-uz, ux), scale };
 }
 
 const empty = (): BuildOut => ({ meshes: [], instances: [], colliders: [] });
@@ -68,4 +72,6 @@ function arc(rec: BuildingRec, minGround: number, height: (x: number, z: number)
 export const details: Partial<Record<LandmarkId, DetailFn>> = {
   eiffel: (rec, _parts, ctx) => ({ ...empty(), colliders: [collider(eiffelLegs(rec, ctx.minGround))] }),
   arc: (rec, _parts, ctx) => arc(rec, ctx.minGround, ctx.height),
+  // Phase 8C: the Flamme scan (models.ts) is drawn on the main thread; the worker keeps g2's pedestal collider only
+  ...(G8.flamme.enabled ? { flamme: (rec: BuildingRec, _parts: unknown, ctx: { minGround: number }) => ({ ...empty(), colliders: flamme(rec, ctx).colliders }) } : {}),
 };

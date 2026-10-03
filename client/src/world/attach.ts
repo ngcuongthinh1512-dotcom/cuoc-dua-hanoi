@@ -4,8 +4,89 @@ import * as THREE from 'three';
 import { type BuildOut, type MaterialId, type PropKind, VERTEX_COLOR } from './buildTypes.ts';
 
 export type Materials = Record<MaterialId, THREE.Material>;
+/** One level of detail: drawn for the instances closer to the camera than `distance` (m) and farther than the previous
+ *  level's distance; one InstancedMesh (draw call) per part. */
+export interface PropLevel { parts: { geometry: THREE.BufferGeometry; material: THREE.Material }[]; distance: number; castShadow?: boolean }
+/** Phase 8C: a prop kind drawn per instance at the level its distance picks (beyond the last level: not drawn). `levels`
+ *  may be replaced later (a GLB that arrives after the first chunks): the chunks rebuild their meshes on the next frame.
+ *  radius = bounding radius of the model at instance scale (frustum culling). */
+export interface PropLods { levels: PropLevel[]; radius: number }
 /** renderOrder / castShadow: the metro well and its depth-only lid draw before everything else (StreetProps). */
-export type PropMeshes = Record<PropKind, { geometry: THREE.BufferGeometry; material: THREE.Material; renderOrder?: number; castShadow?: boolean }>;
+export type StaticProp = { geometry: THREE.BufferGeometry; material: THREE.Material; renderOrder?: number; castShadow?: boolean };
+export type PropMeshes = Record<PropKind, StaticProp | { lods: PropLods }>;
+
+const lodStep = 3; // m the camera moves before the instances are re-binned
+const v3 = new THREE.Vector3();
+
+/** One InstanceSet drawn with per-instance LOD. A THREE.LOD without levels: the renderer calls its update(camera) before
+ *  drawing its children (and not the shadow pass, which draws what the main pass binned); update re-bins the instances by
+ *  their distance to the camera whenever it moved ≥ lodStep m (or the levels changed), writing each level's matrices
+ *  into one InstancedBufferAttribute shared by the level's parts. */
+export function lodInstances(matrices: Float32Array, lods: PropLods) {
+  const n = matrices.length / 16;
+  const root = new THREE.LOD();
+  root.name = 'lod instances';
+  const box = new THREE.Box3();
+  for (let i = 0; i < n; i++) box.expandByPoint(v3.fromArray(matrices, 16 * i + 12));
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  sphere.radius += lods.radius;
+  let built: PropLevel[] | undefined;
+  let attrs: THREE.InstancedBufferAttribute[] = [];
+  let meshes: THREE.InstancedMesh[][] = [];
+  const level = new Int8Array(n);
+  const last = new THREE.Vector3(Infinity, 0, 0);
+  const levelOf = (d: number) => {
+    const k = lods.levels.findIndex((l) => d < l.distance);
+    return k; // −1: beyond the last level
+  };
+  function build() {
+    for (const m of meshes.flat()) (m.removeFromParent(), m.dispose());
+    built = lods.levels;
+    attrs = built.map(() => new THREE.InstancedBufferAttribute(new Float32Array(16 * n), 16).setUsage(THREE.DynamicDrawUsage));
+    meshes = built.map((l, k) =>
+      l.parts.map((p) => {
+        const m = new THREE.InstancedMesh(p.geometry, p.material, n);
+        m.instanceMatrix = attrs[k]!;
+        m.count = 0;
+        m.visible = false;
+        m.boundingSphere = sphere;
+        m.castShadow = !!l.castShadow;
+        m.receiveShadow = true;
+        root.add(m);
+        return m;
+      }),
+    );
+    level.fill(-2);
+    last.set(Infinity, 0, 0);
+  }
+  root.update = (camera: THREE.Camera) => {
+    if (built !== lods.levels) build();
+    v3.setFromMatrixPosition(camera.matrixWorld);
+    if (v3.distanceToSquared(last) < lodStep * lodStep) return;
+    last.copy(v3);
+    // whole set in one level, as last time: nothing to do
+    const [near, far] = [box.distanceToPoint(v3), Math.hypot(Math.max(Math.abs(v3.x - box.min.x), Math.abs(v3.x - box.max.x)), Math.max(Math.abs(v3.y - box.min.y), Math.abs(v3.y - box.max.y)), Math.max(Math.abs(v3.z - box.min.z), Math.abs(v3.z - box.max.z)))];
+    const k0 = levelOf(near);
+    if (k0 === levelOf(far) && level.every((k) => k === k0)) return;
+    const counts = attrs.map(() => 0);
+    let changed = false;
+    for (let i = 0; i < n; i++) {
+      const o = 16 * i;
+      const k = levelOf(Math.hypot(matrices[o + 12]! - v3.x, matrices[o + 13]! - v3.y, matrices[o + 14]! - v3.z));
+      if (k !== level[i]) changed = true;
+      level[i] = k;
+      if (k >= 0) attrs[k]!.array.set(matrices.subarray(o, o + 16), 16 * counts[k]!++);
+    }
+    if (!changed) return;
+    attrs.forEach((a, k) => {
+      a.needsUpdate = true;
+      a.clearUpdateRanges();
+      a.addUpdateRange(0, 16 * counts[k]!);
+      for (const m of meshes[k]!) [m.count, m.visible] = [counts[k]!, counts[k]! > 0];
+    });
+  };
+  return { object: root, dispose: () => meshes.flat().forEach((m) => m.dispose()) };
+}
 
 // Distinct flat colours, so a bucket whose package has no material yet is easy to spot in a screenshot.
 const FALLBACK_COLOUR: Record<MaterialId, number> = {
@@ -91,7 +172,14 @@ export function attachBuildOut(out: BuildOut, materials: Materials, propMeshes: 
   for (const set of out.instances) {
     const count = set.matrices.length / 16;
     if (!count) continue;
-    const { geometry, material, renderOrder = 0, castShadow = true } = propMeshes[set.kind];
+    const prop = propMeshes[set.kind];
+    if ('lods' in prop) {
+      const l = lodInstances(set.matrices, prop.lods);
+      object.add(l.object);
+      owned.push(l);
+      continue; // triangles: depend on the camera (renderer.info counts them)
+    }
+    const { geometry, material, renderOrder = 0, castShadow = true } = prop;
     const mesh = new THREE.InstancedMesh(geometry, material, count);
     mesh.instanceMatrix.array.set(set.matrices);
     mesh.computeBoundingSphere();

@@ -8,22 +8,26 @@
 import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { landmarks as L } from '../../config.ts';
+import { graphics8c as G8, landmarks as L } from '../../config.ts';
 import { type BuildingRec, type ChunkData, type ChunkKey, chunkBounds } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import { attachBuildOut, type Materials, type PropMeshes } from '../attach.ts';
 import type { BuildOut } from '../buildTypes.ts';
+import { propAssetsIdle } from '../StreetProps.ts';
 import { eiffelLegs, modelPose } from './g1.ts';
+import { flamme } from './g2.ts';
 import { generic } from './index.ts';
 import { recordGround, renderPart, Sink } from './parts.ts';
 
 const G = L.g1;
 
 /** key = the chunk holding the outline (build-chunks puts a record in the chunk of its centroid; checked by g1.test). */
-export const MODELS = [
+export const MODELS: readonly { id: 'eiffel' | 'arc' | 'flamme'; key: string; url: string; farParts: boolean }[] = [
   { id: 'eiffel', key: '-8_3', url: 'models/eiffel.glb', farParts: false },
   { id: 'arc', key: '-8_-4', url: 'models/arc.glb', farParts: true },
-] as const;
+  // Phase 8C T2 (graphics8c.flamme): the scan within detailDistance, g2's procedural flame beyond / as the fallback
+  ...(G8.flamme.enabled ? [{ id: 'flamme' as const, key: '-6_0', url: 'models/lm-flamme.glb', farParts: true }] : []),
+];
 
 export function createLandmarkModels(dataUrl: string, height: (x: number, z: number) => number, materials: Materials, props: PropMeshes) {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
@@ -50,6 +54,8 @@ export function createLandmarkModels(dataUrl: string, height: (x: number, z: num
         for (const p of rec.parts ?? []) renderPart(p, { ground: ground.ground, height, fallbackTop: G.eiffel.height }, sink);
         out = sink.out();
         out.meshes.push(eiffelLegs(rec, ground.minGround, 'metal'));
+      } else if (m.id === 'flamme') {
+        out = flamme(rec, ground);
       } else {
         out = generic(rec, rec.parts ?? [], { key: m.key, bounds: chunkBounds(m.key), height, def: LANDMARK_BY_ID.get(m.id)!, ...ground });
       }
@@ -91,9 +97,9 @@ export function createLandmarkModels(dataUrl: string, height: (x: number, z: num
         void placed.get(m.id)!.then((o) => o && group.parent && group.add(o));
       }
     },
-    /** No model load in flight (for __READY__). */
+    /** No model load in flight (for __READY__), street-furniture models and tree textures included (Phase 8C). */
     get idle() {
-      return pending === 0;
+      return pending === 0 && propAssetsIdle();
     },
   };
 }

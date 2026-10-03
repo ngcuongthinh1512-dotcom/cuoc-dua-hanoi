@@ -3,7 +3,8 @@ import { props as P } from '../config.ts';
 import { type ChunkData, chunkBounds, type RoadRec } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import type { BuildCtx } from './buildTypes.ts';
-import { buildStreetProps, createPropMeshes, findJunctions, placeLamps, placeSigns, propColliders, signCell, splitName } from './StreetProps.ts';
+import { buildStreetProps, createPropMeshes, findJunctions, inBuilding, placeBenches, placeBouquinistes, placeLamps, placeShelters, placeSigns, propColliders, signCell, splitName } from './StreetProps.ts';
+import { roadWidth } from './RoadBuilder.ts';
 import { buildVegetation } from './Vegetation.ts';
 
 const ctx: BuildCtx = { key: '0_0', bounds: chunkBounds('0_0'), height: () => 0 };
@@ -133,10 +134,47 @@ describe('street props placement', () => {
     expect(buildVegetation(fixture, ctx)).toEqual(buildVegetation(fixture, ctx));
   });
 
-  it(`prop meshes stay within ${P.maxTriangles} triangles`, () => {
-    for (const [kind, { geometry }] of Object.entries(createPropMeshes())) {
-      expect(geometry.index!.count / 3).toBeLessThanOrEqual(P.maxTriangles);
-      if (kind !== 'metroMask') expect(geometry.getAttribute('color')).toBeDefined(); // the lid writes depth only
+  it(`procedural prop meshes stay within ${P.maxTriangles} triangles; the plane tree's levels within their budgets`, () => {
+    const props = createPropMeshes();
+    for (const [kind, prop] of Object.entries(props)) {
+      if ('lods' in prop) continue;
+      expect(prop.geometry.index!.count / 3).toBeLessThanOrEqual(P.maxTriangles);
+      if (kind !== 'metroMask') expect(prop.geometry.getAttribute('color')).toBeDefined(); // the lid writes depth only
     }
+    const tree = props.tree;
+    if (!('lods' in tree)) return; // graphics8c.trees off: the Phase 7 tree above
+    const tris = tree.lods.levels.map((l) => l.parts[0]!.geometry.index!.count / 3);
+    expect(tris[0]).toBeLessThanOrEqual(700); // full crown (cards double-sided)
+    expect(tris[1]).toBeLessThanOrEqual(150);
+    expect(tris[2]).toBeLessThanOrEqual(12); // impostor
+    expect(tree.lods.levels.at(-1)!.distance).toBe(Infinity);
+  });
+
+  it('8C street furniture: benches / cafés / shelters / bouquinistes off the carriageway and out of buildings', () => {
+    // the fixture: a 20 m wide primary road along z = 100 with a building block north of it
+    const road = { pts: [0, 100, 250, 100], kind: 'primary', name: 'Quai Voltaire', oneway: false, roundabout: false, junctions: [] };
+    const house = { outer: [0, 80, 250, 80, 250, 60, 0, 60], kind: 'yes' };
+    const chunk = { ...fixture, roads: [road], buildings: [house], points: [{ kind: 'bus_shelter' as const, x: 120, z: 112 }], bridges: [], junctions: [] };
+    const hw = roadWidth(road) / 2;
+    const benches = placeBenches(chunk, []);
+    expect(benches.length).toBeGreaterThan(2);
+    for (const b of benches) {
+      expect(Math.abs(b.z - 100)).toBeCloseTo(hw + P.place8c.benchCurb, 5);
+      expect(inBuilding(chunk, b.x, b.z)).toBe(false);
+      expect(Math.cos(b.yaw) * Math.sign(b.z - 100)).toBeCloseTo(-1, 5); // front (+Z) to the road
+    }
+    const [shelter] = placeShelters(chunk);
+    expect(shelter!.z).toBeCloseTo(100 + hw + P.place8c.shelterCurb, 5); // the stop's side (south of the road)
+    expect(Math.cos(shelter!.yaw)).toBeCloseTo(-1, 5); // open side north, to the road
+    // a quay: the ground drops 7 m to the river 4 m beyond the south curb → stalls on that side, front to the road
+    const quay = (_x: number, z: number) => (z > 100 + hw + 4 ? -7 : 0);
+    const stalls = placeBouquinistes(chunk, { ...ctx, height: quay });
+    expect(stalls.length).toBeGreaterThan(10);
+    for (const s of stalls) {
+      expect(s.z).toBeGreaterThan(100 + hw);
+      expect(s.z).toBeLessThan(100 + hw + 4.5);
+      expect(Math.cos(s.yaw)).toBeCloseTo(-1, 5);
+    }
+    expect(placeBouquinistes({ ...chunk, roads: [{ ...road, name: 'Rue X' }] }, { ...ctx, height: quay })).toEqual([]);
   });
 });

@@ -21,7 +21,7 @@ const PUBLIC = new URL('../../../public/', import.meta.url);
 /** Relative error (tests: < 5 %). */
 const err = (v: number, target: number) => Math.abs(v / target - 1);
 
-function load(id: 'eiffel' | 'arc') {
+function load(id: (typeof MODELS)[number]['id']) {
   const m = MODELS.find((q) => q.id === id)!;
   const chunk = JSON.parse(readFileSync(new URL(`data/chunks/${m.key}.json`, PUBLIC), 'utf8')) as ChunkData;
   const rec = chunk.buildings.find((b) => b.landmark === id)!;

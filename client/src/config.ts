@@ -251,6 +251,36 @@ export const props = {
     metro: { halfWidth: 1.15, length: 5.1, front: 0.1, height: 1.1 },
     sink: 0.3,
   },
+  // Phase 8C T2 (graphics8c.props / .trees on): scripts/assets/props.ts → models/props.glb. Per kind: source fit (m, rad)
+  // and the triangle budgets [LOD0, LOD1] of the two levels in the GLB.
+  models: {
+    lamp: { scale: 1.25, tris: [1500, 250] }, // street_lamp_01 is 3.87 m → 4.8 m (Paris candélabres ≈ 4–5 m)
+    // scan units: column axis (x, z), poster band (y; cut away, replaced by the PD poster cylinder), its radius, the
+    // plinth radius / height above the scan floor that separate the plinth from the paving square; radius = game size
+    morris: { axis: [0.2, 0.8], band: [0.72, 4.02], scanRadius: 0.76, plinthRadius: 0.9, groundCut: 0.18, radius: 0.62, divider: '#2e4c38', tris: [2500, 400] },
+    shelter: { yaw: -Math.PI / 2, tris: [3000, 500] },
+    bench: { slab: 0.095, scale: [2.2, 1.2, 1.2], yaw: Math.PI, tris: [1200, 200] },
+    bouquiniste: { boxHeight: 1.2, stretch: [5.6, 14.1], depth: [-0.6, 0.85], groundCut: 0.05, tris: [5000, 800] },
+    cafe: { tris: [1200, 250] },
+  },
+  // Phase 8C T2: placement of the new street furniture (world/StreetProps.ts place*), m unless noted
+  place8c: {
+    curbClear: 0.6, // from every carriageway edge
+    keepClear: 7, // stalls from bus shelters, benches / terraces from both (centre to centre)
+    treeGap: 2.2, // from a tree trunk
+    junctionGap: 14, // benches: from a junction vertex
+    benchKinds: ['primary', 'secondary', 'trunk', 'tertiary'] as string[], // boulevards / avenues
+    benchSidewalk: 3, // only where the sidewalk is at least this wide
+    benchSpacing: 40, benchCurb: 1.8, benchShare: 0.5, // along the way; from the curb; hashed share of the slots kept
+    cafeOneIn: 4, cafeInset: 2.6, cafeSets: 3, cafeStart: 3, cafeStep: 2.2, cafeCurb: 1.2, cafeFacade: 5, // 1 in N junctions, sets from the corner, a façade this close
+    shelterReach: 25, shelterCurb: 1.8, // OSM stop within this of a carriageway; shelter centre from its curb
+    // bouquinistes (fr.wikipedia.org/wiki/Bouquinistes_de_Paris: right bank Pont Marie → Quai du Louvre, left bank
+    // Quai de la Tournelle → Quai Voltaire)
+    quays: ['Quai du Louvre', 'Quai de la Mégisserie', 'Quai de Gesvres', "Quai de l'Hôtel de Ville", 'Quai Voltaire', 'Quai Malaquais',
+      'Quai de Conti', 'Quai des Grands Augustins', 'Quai Saint-Michel', 'Quai de Montebello', 'Quai de la Tournelle'] as string[],
+    bouqStep: 9.4, bouqGapShare: 0.2, // one stretch (≈ 8.6 m) per step; hashed share of empty slots
+    wallSearch: [1, 16], riverDrop: 2.5, wallDrop: 0.4, parapetInset: 0.6, bridgeGap: 14, // a river drop within wallSearch of the curb; the quay edge where the ground first falls wallDrop
+  },
 };
 
 // ── Phase 2B · landmarks (geo/landmarks.ts registry, world/landmarks/: index + parts renderer + g1…g5 details) ──
@@ -947,9 +977,21 @@ export const graphics8c = {
   },
   // [T2] trees (world/Vegetation.ts + attach LOD), street furniture without the Wallace fountain (world/StreetProps.ts),
   // Flamme de la Liberté (landmarks/models.ts). No T5: pedestrians / NPC vehicles stay as they are (SPEC §17.20).
-  trees: { enabled: false, lowOff: false },
-  props: { enabled: false, lowOff: false },
-  flamme: { enabled: false, lowOff: false },
+  // trees: [LOD0, LOD1] distances (m, per tree from the camera): full crown → few big cards → impostor beyond (lowLod on
+  // low quality: no full crown). props: per kind [LOD0, LOD1] distances, nothing drawn beyond LOD1; × lowScale on low.
+  // flamme: the scan (models/lm-flamme.glb) on the OSM outline, `sink` m below its lowest ground; the scan's paving disc is
+  // fitted to the outline radius by scripts/assets/flamme.ts.
+  trees: { enabled: true, lowOff: false, lod: [60, 240], lowLod: [0, 150] },
+  props: {
+    enabled: true, lowOff: false, lowScale: 0.6,
+    lod: { lamp: [45, 300], morris: [60, 350], shelter: [60, 350], bench: [35, 160], bouquiniste: [70, 400], cafe: [30, 140] },
+  },
+  flamme: {
+    enabled: true, lowOff: false, sink: 0.05,
+    // scripts/assets/flamme.ts, scan units (slice / radial profiles): column axis (x, z), paving disc radius, plaza level;
+    // the outline's chunk; triangle budget, texture px
+    scan: { axis: [0.69, 1.07], disc: 3.0, floor: 0.17, chunk: '-6_0', tris: 40_000, texture: 2048 },
+  },
   // [T3] SPEC §17.20 (2026-10-03): ONLY the roof slates (roof_slates_03 on the 'roof' material, world/BuildingBuilder.ts
   // createBuildingMaterials) and the asphalt (asphalt_02 on 'asphalt', world/RoadBuilder.ts createRoadMaterials). Facade
   // stone / zinc, sidewalks, setts and terrain keep their Phase 7 canvas textures.

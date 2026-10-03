@@ -26,7 +26,8 @@ describe.skipIf(!has)('all real chunks', () => {
     for (const key of index.keys) {
       const chunk = JSON.parse(readFileSync(join(data, `chunks/${key}.json`), 'utf8')) as ChunkData;
       const out = buildChunk(chunk, grid, (builder, k, err) => problems.push(`${k} ${builder}: ${String(err)}`));
-      const buckets = out.meshes.length + out.instances.length;
+      // Phase 8C street furniture: per-instance LOD, nothing drawn beyond ≤ 400 m, so not a per-chunk draw call everywhere
+      const buckets = out.meshes.length + out.instances.filter((s) => !['bench', 'cafe', 'shelter', 'bouquiniste'].includes(s.kind)).length;
       const triangles = out.meshes.reduce((s, b) => s + b.index.length / 3, 0);
       const lm = chunk.buildings.some((b) => b.landmark);
       if (buckets > (lm ? MAX_BUCKETS_LANDMARK : MAX_BUCKETS)) problems.push(`${key}: ${buckets} draw buckets`);
