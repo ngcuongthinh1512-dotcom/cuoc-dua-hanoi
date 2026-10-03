@@ -137,6 +137,18 @@ export function targetAt(slots: readonly RoomSlot[], x: number, z: number, dx: n
 /** Pure: lit (green) or not (red) per slot — from THIS team's card picks only (SPEC §17.19: no other team's lights). */
 export const buttonStates = (slots: readonly RoomSlot[], picks: readonly string[]) => slots.map((s) => picks.includes(s.id));
 
+/** SPEC §17.33: the right lock's words (RaceHud.announce / the HUD prompt line); never public. */
+export const ROOM_TEXT = {
+  correct: 'CHÍNH XÁC',
+  autoExit: (s: number) => `Bạn sẽ ra khỏi phòng sau ${s} giây…`,
+}; // the card's "Vào phòng" button texts live in race/ui/format.ts (louvreInfo.enter)
+
+/** Pure (SPEC §17.33): whole seconds left before the automatic exit; `doneAt` = ms (performance clock) the step finished
+ *  while the team stood in the room, null = not yet. 0 = leave now; null = no countdown. */
+export function autoExitLeft(doneAt: number | null, now: number): number | null {
+  return doneAt == null ? null : Math.max(0, Math.ceil((doneAt + C.autoExitSeconds * 1000 - now) / 1000));
+}
+
 /** Pure: the prompt over the HUD in / at the room (null = none). */
 export function roomPrompt(t: RoomTarget | null, lv: LouvreView | null, o: { done: boolean; locked: boolean }): string | null {
   if (!t) return null;

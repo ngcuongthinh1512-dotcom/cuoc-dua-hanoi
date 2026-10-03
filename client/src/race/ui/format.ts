@@ -292,18 +292,22 @@ export interface LouvreInfo {
   text: string;
   /** Detail lines in order: picks, wrong locks, hint 40, hint 70. */
   lines: string[];
+  /** SPEC §17.33: the "Vào phòng" button: outside, step not done; enabled within louvreRoom.enterReach of the box (`nearBox`),
+   *  else dimmed with the hint. Null = no button (inside / done). */
+  enter: { enabled: boolean; hint: string | null } | null;
 }
-export function louvreInfo(card: ClueCard, lv: LouvreView, o: { now: number; inRoom?: boolean }): LouvreInfo {
+export function louvreInfo(card: ClueCard, lv: LouvreView, o: { now: number; inRoom?: boolean; nearBox?: boolean }): LouvreInfo {
   const status = liveStatus(card, o.now);
   const state = status === 'done' ? 'done' : status === 'locked' ? 'locked' : o.inRoom ? 'inside' : 'outside';
   const text = { done: 'Đã xong thử thách', locked: 'Chốt sai – đang bị phạt, lựa chọn vẫn giữ (bấm / bỏ được, chốt lại khi hết đếm ngược)', inside: 'Đang trong phòng – bấm F ở nút để bật / tắt tác phẩm hoặc để chốt', outside: 'Chưa vào phòng – bấm F ở hòm để vào phòng' }[state];
+  const enter = o.inRoom || status === 'done' ? null : { enabled: !!o.nearBox, hint: o.nearBox ? null : 'Tới sát hòm mật thư rồi bấm' };
   const of = louvreOf(lv);
   const k = lv.picks.length;
   const lines = [`Đang chọn ${k}${lv.maxPicks != null ? `/${of}` : ''} tác phẩm`];
   if (lv.attempts > 0) lines.push(`Chốt sai: ${lv.attempts} lần`);
   if (lv.hintCount != null) lines.push(`Đáp án bao gồm ${lv.hintCount} tác phẩm`);
   if (lv.hintCorrect != null) lines.push(k === 0 ? `Đúng 0/${of} (chưa chọn tác phẩm nào)` : `Đúng ${lv.hintCorrect}/${of}`);
-  return { state, text, lines };
+  return { state, text, lines, enter };
 }
 
 /** A clue / task attachment: an R2 image (fetched with the team token) or an https link (new tab, never embedded). */
@@ -356,7 +360,7 @@ export interface CardPanel {
   louvreInfo: LouvreInfo | null;
 }
 
-export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mode: 'card' | 'book'; live?: boolean; inRoom?: boolean }): CardPanel {
+export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mode: 'card' | 'book'; live?: boolean; inRoom?: boolean; nearBox?: boolean }): CardPanel {
   const s = summarize(card);
   const status = liveStatus(card, o.now);
   const book = o.mode === 'book';

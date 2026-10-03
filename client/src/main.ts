@@ -16,7 +16,7 @@ import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
 import { fakeTeams, fakeTick, parsePeers, RemotePlayers, underground } from './net/RemotePlayers.ts';
 import { fetchMedia, startSession } from './net/session.ts';
-import { demoLouvre, LouvreRoom, pickChange, preloadArt, roomCardOf, roomPrompt } from './race/LouvreRoom.ts';
+import { autoExitLeft, demoLouvre, LouvreRoom, pickChange, preloadArt, ROOM_TEXT, roomCardOf, roomPrompt } from './race/LouvreRoom.ts';
 import { PitHost } from './race/PitStop.ts';
 import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
@@ -259,6 +259,11 @@ async function start() {
           branch: (step, id) => race?.branch(step, id),
           accept: (step) => race?.accept(step),
           credits: () => race?.credits(), // Phase 8B: "Ghi nguồn" after the finish (Credits.ts asks through RaceHud)
+          // SPEC §17.33: the louvre card's "Vào phòng": like F at the box (within enterReach), without reopening the card
+          enterRoom: () => {
+            const rc = roomCard();
+            if (rc && room && !room.active && nearBox(rc)) enterRoom(rc.step, rc.lv, false);
+          },
           ...(session && { resolveMedia: (name: string) => fetchMedia(session, name) }), // none offline: "Hình chỉ tải được trong cuộc đua"
         },
         session?.team?.name ?? '',
@@ -291,28 +296,38 @@ async function start() {
     camera.getWorldDirection(view);
     return room!.nearest(player!.position.x, player!.position.z, view.x, view.z);
   };
-  /** In / out only change y (critic S5): Player.moveTo sends no `respawn`. The card opens on entering. */
-  const enterRoom = (step: string, lv: LouvreView) => {
+  /** The body stands within louvreRoom.enterReach of the card's box (F / the card's "Vào phòng" enter from here). */
+  const nearBox = (rc: { lv: LouvreView }) => Math.hypot(player!.position.x - rc.lv.room.x, player!.position.z - rc.lv.room.z) <= roomCfg.enterReach;
+  /** In / out only change y (critic S5): Player.moveTo sends no `respawn`. The card opens on entering (F); the card's own
+   *  "Vào phòng" button closes it instead (`openCard` false). */
+  const enterRoom = (step: string, lv: LouvreView, openCard = true) => {
     room!.build(step, lv);
     const e = room!.enter()!;
     player!.moveTo(e.x, e.z, e.yaw);
-    raceHud?.openCurrent();
+    if (openCard) raceHud?.openCurrent();
   };
+  let roomDoneAt: number | null = null; // SPEC §17.33: ms (performance clock) the step finished while inside → automatic exit
   const leaveRoom = () => {
+    roomDoneAt = null;
     const e = room!.leave();
     if (e) player!.moveTo(e.x, e.z, e.yaw);
   };
   /** F (docs/plans/phase8b.md §F): outside, at the box of a louvre card → in (gesture); inside: button / lock / door, no
    *  gesture ('quiet': the other teams in the room must not see what was pressed); false = not the room's F. */
-  const roomInteract = (x: number, z: number): boolean | 'quiet' => {
+  const roomInteract = (): boolean | 'quiet' => {
     if (!room) return false;
     const rc = roomCard();
     if (!room.active) {
-      if (!rc || Math.hypot(x - rc.lv.room.x, z - rc.lv.room.z) > roomCfg.enterReach) return false;
+      if (!rc || !nearBox(rc)) return false;
       return enterRoom(rc.step, rc.lv), true;
     }
     const t = roomTarget();
-    if (t?.kind === 'door') return leaveRoom(), 'quiet';
+    if (t?.kind === 'door') {
+      const done = rc?.step !== room.step;
+      leaveRoom(); // cancels the automatic exit (SPEC §17.33); the held next card opens on the court
+      if (done) raceHud?.openCurrent();
+      return 'quiet';
+    }
     if (!t || !rc || rc.step !== room.step) return 'quiet'; // the step is over: only the door
     const now = performance.now();
     if (t.kind === 'button') {
@@ -331,7 +346,7 @@ async function start() {
     player.onInteract = () => {
       const [x, z] = [player.position.x, player.position.z];
       if (!room?.active && race?.interact(boxes.boxes, x, z, performance.now())) return true; // no box opened from under the ground
-      const r = roomInteract(x, z);
+      const r = roomInteract();
       if (r !== false || race) return r;
       const b = !session && boxInReach(boxes.boxes, x, z);
       return !!b && (boxes.apply({ t: 'box', op: 'reveal', box: { ...b, opened: true } }), true);
@@ -628,17 +643,23 @@ async function start() {
       const rc = room && roomCard();
       if (rc && preloaded !== rc.step) (preloaded = rc.step), preloadArt(rc.lv.artworks);
       let prompt: string | null = null;
-      if (room && player?.active && !flying && !player.controller.riding && !modal()) {
+      let near = false; // within enterReach of the box: the card's "Vào phòng" button is live (SPEC §17.33)
+      if (room && player?.active && !flying && !player.controller.riding) {
         const done = rc?.step !== room.step;
         if (room.active) {
           room.setPicks(done ? null : rc!.lv.picks, done);
-          prompt = roomPrompt(roomTarget(), rc?.lv ?? null, { done, locked: rc?.status === 'locked' });
+          // SPEC §17.33: the step finished while inside (a right lock; also a Host "Cho qua") → "CHÍNH XÁC", then the
+          // automatic exit autoExitSeconds later, the next card opening on the court; F at the door earlier cancels it
+          if (done && roomDoneAt == null) (roomDoneAt = performance.now()), raceHud?.announce(ROOM_TEXT.correct);
+          const left = autoExitLeft(roomDoneAt, performance.now());
+          if (left === 0) leaveRoom(), raceHud?.openCurrent();
+          else if (!modal()) prompt = left != null ? ROOM_TEXT.autoExit(left) : roomPrompt(roomTarget(), rc?.lv ?? null, { done, locked: rc?.status === 'locked' });
         } else if (rc) {
-          const d = Math.hypot(player.position.x - rc.lv.room.x, player.position.z - rc.lv.room.z);
-          prompt = d <= roomCfg.enterReach ? 'Bấm F để vào phòng Louvre' : d <= rc.lv.room.r ? 'Phòng Louvre: tới sát hòm mật thư rồi bấm F để vào' : null;
+          near = nearBox(rc);
+          if (!modal()) prompt = near ? 'Bấm F để vào phòng Louvre' : Math.hypot(player.position.x - rc.lv.room.x, player.position.z - rc.lv.room.z) <= rc.lv.room.r ? 'Phòng Louvre: tới sát hòm mật thư rồi bấm F để vào' : null;
         }
       }
-      raceHud?.setRoom(!!room?.active); // the louvre card says "Đang trong phòng"
+      raceHud?.setRoom(!!room?.active, near); // the louvre card says "Đang trong phòng" / its "Vào phòng" button
       boxes.update(camera.position);
       if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
       // No HUD while loading or flying (V): hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).

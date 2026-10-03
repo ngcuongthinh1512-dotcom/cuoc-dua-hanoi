@@ -528,6 +528,29 @@
 .rc-louvre.done { border-left-color: #7be08f; }
 .rc-louvre-state { font-weight: 700; margin-bottom: 4px; }
 .rc-louvre-line { font-size: 15px; font-variant-numeric: tabular-nums; }
+.rc-louvre > .rc-task-btn { margin-top: 8px; }
+.rc-louvre > .rc-task-btn:disabled { opacity: 0.45; }
+.rc-louvre-hint { opacity: 0.75; margin-top: 2px; }
+
+/* SPEC §17.33: the big centre word ("CHÍNH XÁC") after a right Louvre lock; above the card overlay (z 1). */
+.rc-big {
+  position: fixed;
+  left: 50%;
+  top: 34%;
+  transform: translateX(-50%);
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #7be08f;
+  text-shadow: 0 0 18px rgba(47, 191, 74, 0.9), 0 2px 4px #000;
+  opacity: 0;
+  transition: opacity 0.4s;
+  pointer-events: none;
+  z-index: 2;
+}
+.rc-big.on {
+  opacity: 1;
+}
 
 /* SPEC §17.21: clue text is not selectable (cards, Sổ mật thư); the submission code and the answer box still are. RaceHud
    also cancels copy / cut / drag / right-click inside them (format.ts copyBlocked). */

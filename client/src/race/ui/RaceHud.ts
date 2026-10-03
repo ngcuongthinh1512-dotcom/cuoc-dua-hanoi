@@ -36,6 +36,9 @@ export interface RaceHudActions {
   resolveMedia?(name: string): Promise<string | null>;
   /** Phase 8B: "Ghi nguồn" opened after the finish: ask for the louvre credits (op `credits`; the answer is `credits()` below). */
   credits?(): void;
+  /** SPEC §17.33: the louvre card's "Vào phòng" button (enabled only within louvreRoom.enterReach of the box: setRoom's `nearBox`);
+   *  main.ts enters the room like F at the box; the card closes itself and the pointer locks again. */
+  enterRoom?(): void;
 }
 
 export interface RaceHudFrame {
@@ -149,6 +152,8 @@ export class RaceHud {
   private readonly npcEl = el('div', 'rc-npc hud-box');
   private readonly overlay = el('div', 'rc-overlay');
   private readonly zoomEl = html('div', 'rc-zoom', '<img alt="">');
+  private readonly bigEl = el('div', 'rc-big');
+  private bigTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Phase 8 (critic B1): called whenever `open` flips (track B sets it: release / re-take the pointer lock). */
   onOpenChange?: (open: boolean) => void;
@@ -157,7 +162,7 @@ export class RaceHud {
   constructor(readonly actions: RaceHudActions, readonly teamName = '') {
     this.compact.hidden = this.zonePanel.hidden = this.penaltyEl.hidden = this.promptEl.hidden = this.npcEl.hidden = this.overlay.hidden = this.zoomEl.hidden = true;
     this.tl.append(this.compact, this.zonePanel);
-    document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay, this.zoomEl);
+    document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay, this.zoomEl, this.bigEl);
     this.zoomEl.addEventListener('click', () => this.zoom(null));
     // SPEC §17.21: the compact card + the overlay (full cards, Sổ) refuse selection / copy / drag / right-click, except in the
     // submission code and the answer box; a page-wide select-all (Ctrl+A) does not take their text either
@@ -206,6 +211,9 @@ export class RaceHud {
     if (this.fullCard && !this.bookOpen && card.step === this.fullCard.step) return this.refreshFull(card); // same step: the card changed state, redraw in place
     if (card.status === 'done') return;
     const key = `${card.step}@${card.receivedAt}`;
+    // SPEC §17.33: the card after a right Louvre lock waits (seen, no envelope) while the team still stands in the room;
+    // main.ts opens it (openCurrent) right after the automatic / F exit
+    if (this.inRoom && was?.task?.louvre && !card.task?.louvre) return void (this.seenKey = key);
     const boxOpened = was?.step === card.step && !was.branchOpened && !!card.branchOpened;
     if (!boxOpened && (key === this.seenKey || (this.seenKey == null && key === store.get()))) return void (this.seenKey = key);
     this.seenKey = key;
@@ -278,11 +286,21 @@ export class RaceHud {
 
   // Phase 8B (docs/plans/phase8b.md §G): the louvre room flag, the public feed, the "Ghi nguồn" answer.
   private inRoom = false;
-  /** LouvreRoom.active (main.ts / track B): the louvre card says "Đang trong phòng" instead of "bấm F ở hòm để vào phòng". */
-  setRoom(inside: boolean): void {
-    if (inside === this.inRoom) return;
+  private nearBox = false;
+  /** LouvreRoom.active (main.ts / track B): the louvre card says "Đang trong phòng" instead of "bấm F ở hòm để vào phòng".
+   *  `nearBox` (SPEC §17.33): the body stands within louvreRoom.enterReach of the box → the card's "Vào phòng" button is live. */
+  setRoom(inside: boolean, nearBox = false): void {
+    if (inside === this.inRoom && nearBox === this.nearBox) return;
     this.inRoom = inside;
+    this.nearBox = nearBox;
     if (this.fullCard && !this.bookOpen) this.renderFull(false);
+  }
+  /** SPEC §17.33: a big word in the middle of the screen ("CHÍNH XÁC") for raceHud.announceSeconds. */
+  announce(text: string): void {
+    setText(this.bigEl, text);
+    this.bigEl.classList.add('on');
+    clearTimeout(this.bigTimer);
+    this.bigTimer = setTimeout(() => this.bigEl.classList.remove('on'), C.announceSeconds * 1000);
   }
   private readonly feedBox = new Feed();
   /** welcome.feed (the kept lines: `replace`, every welcome incl. a reconnect) and each `{t:'feed'}` (RaceClient). */
@@ -485,7 +503,7 @@ export class RaceHud {
   private detail(card: ClueCard, entry: BookEntry | null): HTMLElement {
     const s: CardSummary = summarize(card);
     const st = TYPE_STYLE[card.type];
-    const p = cardPanel(card, { now: this.now, teamName: this.teamName || this.demoTeam, mode: entry ? 'book' : 'card', live: this.view?.status !== 'finished', inRoom: this.inRoom }); // finished: the Host ended the race, read-only (SPEC §8.10)
+    const p = cardPanel(card, { now: this.now, teamName: this.teamName || this.demoTeam, mode: entry ? 'book' : 'card', live: this.view?.status !== 'finished', inRoom: this.inRoom, nearBox: this.nearBox }); // finished: the Host ended the race, read-only (SPEC §8.10)
     if (!entry) this.shown = p.status;
     const root = el('section', `rc-detail${entry?.pinned ? ' pinned' : ''}`);
     root.style.setProperty('--c', st.colour);
@@ -509,7 +527,17 @@ export class RaceHud {
       if (dim) other.push(blk);
       else root.append(blk);
     }
-    if (p.louvreInfo) root.append(el('div', `rc-louvre ${p.louvreInfo.state}`, undefined, el('div', 'rc-louvre-state', p.louvreInfo.text), ...p.louvreInfo.lines.map((l) => el('div', 'rc-louvre-line', l))));
+    if (p.louvreInfo) {
+      const blk = el('div', `rc-louvre ${p.louvreInfo.state}`, undefined, el('div', 'rc-louvre-state', p.louvreInfo.text), ...p.louvreInfo.lines.map((l) => el('div', 'rc-louvre-line', l)));
+      const en = p.louvreInfo.enter;
+      if (en && this.actions.enterRoom) {
+        // SPEC §17.33: like F at the box; closing here (inside the click handler) locks the pointer again (onOpenChange)
+        const btn = this.act('Vào phòng', () => (this.actions.enterRoom!(), this.close()), blk);
+        btn.disabled = !en.enabled;
+        if (en.hint) blk.append(el('div', 'rc-louvre-line rc-louvre-hint', en.hint));
+      }
+      root.append(blk);
+    }
     if (p.note) root.append(el('div', 'rc-timer info', p.note)); // the step's main instruction: framed like the countdown (visual#5)
     if (p.line) {
       root.append((this.timerEl = el('div', `rc-timer ${p.line.kind}`)));

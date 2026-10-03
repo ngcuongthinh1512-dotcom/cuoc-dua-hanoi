@@ -1243,6 +1243,7 @@ export const raceHud = {
   clueLines: 5, // lines of clue text kept on the compact card (the full card / book show everything)
   fullWidth: 520, // px, full card popup + Sổ mật thư
   finishSeconds: 14, // s (sim clock) the host NPC's finish line stays on screen
+  announceSeconds: 3, // s the big centre word ("CHÍNH XÁC" after a right Louvre lock, SPEC §17.33) stays on screen
   taskLockSeconds: 2, // s the card's server buttons (Nhận thử thách, Chọn / Đổi nhánh, Gửi) stay disabled after a click (the answer comes back as a new `race` view)
   // Phase 8 (docs/plans/phase8.md D9 / D15). Typed-answer / history limits are NET.answerMax / NET.answerHistory (shared: the server cuts at the same numbers).
   mediaMaxHeight: 260, // px, tallest an image on a card / in the Sổ gets (click = full-screen)
@@ -1271,7 +1272,8 @@ export const louvreRoom = {
   camera: { shoulder: 0.65, lift: 0.35 },
   lock: { plinthRadius: 0.35, buttonRadius: 0.26, reach: 2.5 }, // the lock button in the middle of the room
   doorReach: 2, // m: F at the door → back up to the court
-  enterReach: 3, // m from the box: F enters (closer than the zone radius: entering moves the feet to the door, x, z ± ≤ enterReach + inset only)
+  enterReach: 3, // m from the box: F / the card's "Vào phòng" button enters (closer than the zone radius: entering moves the feet to the door, x, z ± ≤ enterReach + inset only)
+  autoExitSeconds: 5, // SPEC §17.33: a right lock shows "CHÍNH XÁC", then the team is put back on the court this many s later (F at the door earlier cancels it)
   inset: 0.8, // m: entering, the feet land this far inside the door; leaving, this far in front of the box (both ≤ 2 m from it: only y changes much)
   ceilingLights: 6,
   pickGapMs: 150, // a pick is sent at most this often (the server's 15 msg/s limit counts poses too: verify-foundation #10)

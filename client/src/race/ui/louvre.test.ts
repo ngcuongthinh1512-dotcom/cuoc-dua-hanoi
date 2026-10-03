@@ -30,6 +30,15 @@ describe('louvre card', () => {
     expect(louvreInfo(card(lv(), { status: 'done' }), lv(), { now: 0, inRoom: true }).state).toBe('done');
   });
 
+  it('SPEC §17.33 "Vào phòng" button: live within enterReach, dimmed with the hint further away, none inside / done', () => {
+    expect(louvreInfo(card(lv()), lv(), { now: 0, nearBox: true }).enter).toEqual({ enabled: true, hint: null });
+    expect(louvreInfo(card(lv()), lv(), { now: 0 }).enter).toEqual({ enabled: false, hint: 'Tới sát hòm mật thư rồi bấm' });
+    expect(louvreInfo(card(lv(), { status: 'locked', lockedUntil: 180_000, lockKind: 'retry' }), lv(), { now: 0, nearBox: true }).enter?.enabled).toBe(true); // a wrong lock's penalty: back in to keep picking
+    expect(louvreInfo(card(lv()), lv(), { now: 0, inRoom: true, nearBox: true }).enter).toBeNull();
+    expect(louvreInfo(card(lv(), { status: 'done' }), lv(), { now: 0, nearBox: true }).enter).toBeNull();
+    expect(P(card(lv()), { nearBox: true }).louvreInfo?.enter?.enabled).toBe(true); // cardPanel passes it through
+  });
+
   it('a lock whose countdown ran out is "inside" again (liveStatus)', () => {
     expect(louvreInfo(card(lv(), { status: 'locked', lockedUntil: 1000, lockKind: 'retry' }), lv(), { now: 100_000, inRoom: true }).state).toBe('inside');
   });

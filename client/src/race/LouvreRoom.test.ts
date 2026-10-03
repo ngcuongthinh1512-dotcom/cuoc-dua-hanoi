@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { louvreRoom as C } from '../config.ts';
 import type { ClueCard, TaskView } from '@race/shared/protocol';
 import { raceClient } from '../config.ts';
-import { addColliders, buttonStates, demoLouvre, paintingSize, pickChange, roomCardOf, roomFrame, roomPrompt, targetAt, toLocal, toWorld, wallSlots } from './LouvreRoom.ts';
+import { addColliders, autoExitLeft, buttonStates, demoLouvre, paintingSize, pickChange, ROOM_TEXT, roomCardOf, roomFrame, roomPrompt, targetAt, toLocal, toWorld, wallSlots } from './LouvreRoom.ts';
 
 const lv = demoLouvre(100, -50, 1.1);
 const slots = wallSlots(lv.artworks);
@@ -155,5 +155,21 @@ describe('Phase 8B fix F2', () => {
 
   it('(7) a scan never overhangs its plinth', () => {
     expect(Math.max(C.plinth.glbBox[0], C.plinth.glbBox[2])).toBeLessThanOrEqual(C.plinth.size);
+  });
+});
+
+describe('SPEC §17.33: a right lock → "CHÍNH XÁC", the automatic exit autoExitSeconds later', () => {
+  it('no countdown before the step is done; whole seconds left; 0 = leave now, never negative', () => {
+    expect(autoExitLeft(null, 10_000)).toBeNull();
+    expect(autoExitLeft(10_000, 10_000)).toBe(C.autoExitSeconds);
+    expect(autoExitLeft(10_000, 10_000 + C.autoExitSeconds * 1000 - 1)).toBe(1);
+    expect(autoExitLeft(10_000, 10_000 + C.autoExitSeconds * 1000)).toBe(0);
+    expect(autoExitLeft(10_000, 10_000 + C.autoExitSeconds * 1000 + 999)).toBe(0);
+  });
+
+  it('the words: a big "CHÍNH XÁC", the small countdown line', () => {
+    expect(ROOM_TEXT.correct).toBe('CHÍNH XÁC');
+    expect(ROOM_TEXT.autoExit(5)).toBe('Bạn sẽ ra khỏi phòng sau 5 giây…');
+    expect(C.autoExitSeconds).toBe(5);
   });
 });
