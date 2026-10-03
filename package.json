@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "build": "tsc -p scripts && npm run build --workspaces --if-present",
+    "deploy": "npm run build && npm run deploy -w worker",
     "test": "vitest run --dir scripts && npm run test --workspaces --if-present",
     "dev": "npm run dev -w client",
     "dev:worker": "npm run dev -w worker",

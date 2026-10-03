@@ -94,11 +94,11 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 8D | Đợt việc nhỏ: không sao chép chữ mật thư, thứ hạng = thứ tự về đích, thông báo về đích / BỊ LOẠI (chữ trong file chặng `pit_stop.announce`), bỏ đồng hồ đội + giờ xuất phát | Xong |
 | 9 | Yếu tố đặc biệt, phạt giờ | Bỏ (SPEC §17.18) |
 | 10 | Công cụ Host (thu hẹp, SPEC §17.24–17.25): Hoàn tác 10 giây, xóa cờ đỏ, "vừa rời đi", Cho qua mọi thử thách, xuất dữ liệu thô thời gian (CSV + JSON), ghim bảng | Xong |
-| 11 | Chặng demo Paris & test toàn trình | Chưa làm |
-| 12 | Tối ưu & deploy | Chưa làm |
+| 11 | Test toàn trình + đo hạn mức bằng bot (`sim --full`) | Xong |
+| 12 | Deploy lên Cloudflare | Chuẩn bị xong (`docs/DEPLOY.md`, `npm run deploy`); chờ tài khoản Cloudflare của người dùng |
 
 ## Deploy
-Game được deploy lên Cloudflare Workers (mục tiêu: gói Free đủ cho một cuộc đua 2 giờ, 8 đội; đo bằng bot ở Phase 11, xem `docs/reports/phase11.md`; đo lại trên Cloudflare thật ở Phase 12): cần tài khoản Cloudflare, tạo R2 bucket `cuoc-dua-paris-media`, đặt mật khẩu Host bằng `npx wrangler secret put HOST_PASSWORD` rồi deploy bằng wrangler. Hướng dẫn từng bước cho người không chuyên sẽ có trong `docs/DEPLOY.md` cùng lệnh `npm run deploy` ở Phase 12.
+Game chạy trên Cloudflare Workers (gói Free đủ cho một cuộc đua 2 giờ, 8 đội: đo bằng bot ở Phase 11 ≈ 13 800 request / 2 800 dòng SQLite, ngưỡng 16 000 / 8 000; đo lại trên Cloudflare thật sau lần deploy đầu). Hướng dẫn từng bước cho người không chuyên: **`docs/DEPLOY.md`** – tài khoản Cloudflare + `npx wrangler login`, tạo bucket R2 `cuoc-dua-paris-media`, `npx wrangler secret put HOST_PASSWORD`, rồi `npm run deploy` (= `npm run build` + `wrangler deploy`), sau đó trang `/host.html`: nạp chặng thật từ file ngoài repo, tải hình R2, tạo đội + mã, link `/?race=<mã>`; checklist trước ngày đua và sự cố thường gặp cũng ở đó.
 
 ---
 

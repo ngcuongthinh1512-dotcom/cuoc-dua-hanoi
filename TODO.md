@@ -175,8 +175,8 @@ Xong (báo cáo `docs/reports/phase11.md`): `sim --full` (Host bot Hoàn tác / 
 - LOD cho nhà (ban công, ống khói dựng ở mọi khoảng cách; cửa sổ chỉ vẽ trên texture), cây (140 tam giác/cây) và đồ phố; lượng tử hóa + Meshopt.
 - Giải phóng bản sao geometry trên CPU sau khi upload lên GPU.
 - Nhân vật: LOD / instancing cho nhân vật ở xa, thân nữ, texture KTX2.
-- `docs/DEPLOY.md` (hướng dẫn cho người không chuyên) + `npm run deploy`.
-- Đo số request / dòng ghi SQLite thực tế trên Cloudflare so với ngân sách ở SPEC §3 (Phase 11 đã đo bằng bot trong máy: `docs/reports/phase11.md`).
+- Chuẩn bị XONG (2026-10-03, `docs/reports/phase12-prep.md`): `docs/DEPLOY.md` (hướng dẫn cho người không chuyên: tài khoản, bucket R2, secret, `npm run deploy`, trang Host sau deploy, checklist trước ngày đua, hạn mức Free + bộ đếm, sự cố, xóa dữ liệu cũ) + lệnh `npm run deploy` (root → `wrangler deploy` trong worker); dry-run qua, file tĩnh lớn nhất 6,1 MB (`sky_2k.hdr`) ≤ 25 MB, không có nội dung chặng thật / đáp án / `chang-that` trong `client/dist` hay bundle Worker. **Chờ người dùng**: tạo tài khoản Cloudflare + `wrangler login`, rồi làm theo DEPLOY.md §2–3 (chưa deploy thật, chưa tạo bucket / secret).
+- Sau lần deploy đầu: đo số request / dòng ghi SQLite thực tế trên Cloudflare (Dashboard Metrics + mục "Hạn mức Cloudflare (ước tính)" trên trang Host) so với ngân sách ở SPEC §3 (Phase 11 đã đo bằng bot trong máy: `docs/reports/phase11.md`); ghi vào đây.
 
 ## Khác
 - npm 11 cảnh báo `allowScripts` cho script cài đặt của `esbuild`, `workerd`, `fsevents`. Hiện vẫn chạy được vì binary lấy từ optional dependency; nếu bản npm sau chặn hẳn thì duyệt bằng `npm install-scripts approve`.
