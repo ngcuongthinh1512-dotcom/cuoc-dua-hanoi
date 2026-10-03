@@ -47,7 +47,7 @@ Sau mỗi merge: `tsc` + vitest của client (740 → 745 → 747) và scripts.
 | `lm-flamme` | 337 → 312 | 1,05 → 0,76 |
 | `lm-notre-dame` | – → 400 | – → 0,80 |
 
-Ngân sách ≤ 450 lệnh vẽ / ≤ 1,5 M tam giác: mọi cảnh mặt đất đạt. Cảnh trên cao `champs` / `etoile` / `topdown` vượt 450 (vốn đã vượt trước 8C; đều GIẢM). FPS SwiftShader (chỉ so tương đối): ~~bench Cao 1,7 → 1,1, Thấp 1,5 → 2,3~~ – **sai**: mốc "trước" đo lúc máy tải nặng ở thời điểm khác, không so được. Đo xen kẽ cùng điều kiện (reviewer 3, `phase8c-review-run.md` (3)): trước 8C ≈ 3,5, Cao ≈ 1,0 (≈ 29 %), Thấp ≈ 2,2 (≈ 64 %). Sau nhóm sửa B: xem `phase8c-fix-b.md`.
+Ngân sách ≤ 450 lệnh vẽ / ≤ 1,5 M tam giác: mọi cảnh mặt đất đạt. Cảnh trên cao `champs` / `etoile` / `topdown` vượt 450 (vốn đã vượt trước 8C; đều GIẢM). FPS SwiftShader (chỉ so tương đối): ~~bench Cao 1,7 → 1,1, Thấp 1,5 → 2,3~~ – **sai**: mốc "trước" đo lúc máy tải nặng ở thời điểm khác, không so được. Đo xen kẽ cùng điều kiện (reviewer 3, `phase8c-review-run.md` (3)): trước 8C ≈ 3,5, Cao ≈ 1,0 (≈ 29 %), Thấp ≈ 2,2 (≈ 64 %). Sau nhóm sửa B (`phase8c-fix-b.md`, 4 vòng xen kẽ): trước 8C 3,57, Thấp 3,28 (92 %), Cao 1,24 (35 %, SwiftShader).
 
 ### Ảnh
 Đã chụp: mặc định (topdown … p4b-*, p8b-*), `p8c` (14 preset), `p8b`, `p8`, `p7`, `p6-boxes`, `p5-hud`, `lm-flamme`, `lm-notre-dame`: 0 lỗi console, trừ một lỗi Vite `504 (Outdated Optimize Dep)` trong lượt mặc định đầu tiên (Vite tối ưu lại dependency mới `three/examples/jsm/postprocessing` giữa chừng; nhóm `p8b` chạy lại sạch). Đã xem: street / etoile / seine / topdown / eiffel so với `before-8c`, `p8c-flamme`, `p8c-props`, `p8c-post`, `p6-boxes`, `p8b-room`: cây platane, bầu trời mây, nước Seine, ngói, nhựa đường, đồ phố hiện đúng, không vỡ hình.
