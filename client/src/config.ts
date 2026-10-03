@@ -1001,7 +1001,7 @@ export const graphics8c = {
   // flamme: the scan (models/lm-flamme.glb) on the OSM outline, `sink` m below its lowest ground; the scan's paving disc is
   // fitted to the outline radius by scripts/assets/flamme.ts.
   // Low quality (fix B, SwiftShader bench: the leaf cards were the whole FPS gap to Phase 7): lowLod[0] > 0 = the full
-  // crown right around the camera (under a tree LOD1's big flat cards show), the impostor from 60 m, and only those
+  // crown right around the camera (under a tree LOD1's big flat cards show), the impostor from lowLod[1], and only those
   // full crowns cast shadows unless lowShadow (LOD1 shadows ≈ −10 % FPS there)
   trees: {
     enabled: true, lowOff: false, lod: [60, 240], lowLod: [18, 45], lowShadow: false,

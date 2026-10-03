@@ -90,7 +90,7 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 7 | Race engine lõi: chặng từ file (`leg:check`), mật thư, hộp, Chặng dừng, trang Host tối giản | Xong |
 | 8 | Thử thách gõ đáp án + Host duyệt / phạt, Lựa chọn kép theo hòm nhánh, hình mật thư R2 | Xong |
 | 8B | Phòng Louvre (Thử thách 3): 23 tác phẩm, chọn đúng 5, phạt 3 phút khi chốt sai, gợi ý phút 40 / 70, tin công khai, "Ghi nguồn" sau khi về đích | Xong |
-| 8C | Đồ họa: bầu trời HDRI, nước Seine, hậu kỳ, cây platane, đồ đường phố Paris, Ngọn lửa Tự do, ngói mái + nhựa đường; Esc → Cài đặt → "Chất lượng đồ họa" (Cao / Thấp, áp dụng sau khi tải lại) | Đang review |
+| 8C | Đồ họa: bầu trời HDRI, nước Seine, hậu kỳ, cây platane, đồ đường phố Paris, Ngọn lửa Tự do, ngói mái + nhựa đường; Esc → Cài đặt → "Chất lượng đồ họa" (Cao / Thấp, áp dụng sau khi tải lại; máy yếu tự chọn Thấp, Cao tự hạ cấp khi FPS thấp) | Xong |
 | 8D | Đợt việc nhỏ: không sao chép chữ mật thư, thứ hạng = thứ tự về đích, thông báo về đích / BỊ LOẠI (chữ trong file chặng `pit_stop.announce`), bỏ đồng hồ đội + giờ xuất phát | Xong |
 | 9 | Yếu tố đặc biệt, phạt giờ | Chưa làm |
 | 10 | Màn hình Host đầy đủ | Chưa làm |
