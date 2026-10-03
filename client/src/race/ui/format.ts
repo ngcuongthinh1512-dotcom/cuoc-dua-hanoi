@@ -175,13 +175,35 @@ export function timerLine(card: ClueCard, now: number): { kind: 'wait' | 'lock';
   return lock ? { kind: 'lock', text: lock } : wait ? { kind: 'wait', text: wait } : null;
 }
 
-/** One short state line of the top-left card: waiting for the Host / countdown / which branch. */
+/** One short state line of the top-left card: waiting for the Host / countdown / which branch; a louvre card adds
+ *  "Chọn k/5 · Đúng x/5" (louvreShort: the numbers the team needs while it walks between the buttons). */
 export function statusLine(card: ClueCard, now: number): { kind: 'wait' | 'lock' | 'info'; text: string } | null {
+  const lv = card.status === 'done' ? null : card.task?.louvre;
+  const room = lv ? louvreShort(lv) : '';
   const left = lockLeft(card, now);
-  if (left != null) return { kind: 'lock', text: card.lockKind === 'switch' ? `Đổi nhánh: còn ${countDown(left)}` : `Phạt: còn ${countDown(left)}` };
+  if (left != null) return { kind: 'lock', text: (card.lockKind === 'switch' ? `Đổi nhánh: còn ${countDown(left)}` : `Phạt: còn ${countDown(left)}`) + (room && ` · ${room}`) };
   const wait = pendingLine(card, now);
   if (wait) return { kind: 'wait', text: wait.replace('Đang chờ', 'Chờ') };
+  if (room) return { kind: 'info', text: room };
   return liveStatus(card, now) === 'goToBranch' ? { kind: 'info', text: `Nhánh ${branchName(card, card.branch)} · tới hòm nhánh` } : null;
+}
+
+/** "Chọn 3" (before minute 40), "Chọn 3/5" (from 40), "Chọn 3/5 · Đúng 2/5" (from 70): the compact card's louvre line. */
+export function louvreShort(lv: LouvreView): string {
+  const of = louvreOf(lv);
+  const pick = `Chọn ${lv.picks.length}${lv.maxPicks != null ? `/${of}` : ''}`;
+  return lv.hintCorrect == null ? pick : `${pick} · Đúng ${lv.hintCorrect}/${of}`;
+}
+
+/** Toasts for the hints that just came (null → a value on the same louvre step), once each: SPEC §17.19 minutes 40 / 70
+ *  must reach a team that keeps the full card closed. A first view (F5, new card) toasts nothing. */
+export function hintNews(was: ClueCard | null | undefined, card: ClueCard | null | undefined): string[] {
+  const [a, b] = [was?.task?.louvre, card?.task?.louvre];
+  if (!a || !b || was!.step !== card!.step) return [];
+  const out: string[] = [];
+  if (a.hintCount == null && b.hintCount != null) out.push(`Gợi ý: đáp án gồm ${b.hintCount} tác phẩm – chỉ chọn tối đa ${louvreOf(b)}`);
+  if (a.hintCorrect == null && b.hintCorrect != null) out.push(`Gợi ý: đang đúng ${b.hintCorrect}/${louvreOf(b)} – số này đổi theo mỗi lần chọn / bỏ`);
+  return out;
 }
 
 /** "Đổi lựa chọn kép" confirm: names the penalty and what is lost (SPEC §17.16). */

@@ -7,15 +7,36 @@
 // of someone standing at the door looking in… mirrored: x' = x cos yaw + z sin yaw, z' = −x sin yaw + z cos yaw (three's
 // rotation.y = yaw), so local (0, 0, −1) is the box's front direction (−sin yaw, −cos yaw).
 import RAPIER from '@dimforge/rapier3d-compat';
-import type { ArtworkView, LouvreView } from '@race/shared/protocol';
+import type { ArtworkView, CardStatus, ClueCard, LouvreView } from '@race/shared/protocol';
 import {
   Box3, BoxGeometry, BufferGeometry, CanvasTexture, Color, CylinderGeometry, Float32BufferAttribute, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
-  type Object3D, PlaneGeometry, RepeatWrapping, type Scene, SRGBColorSpace, type Texture, TextureLoader, Vector3,
+  MeshMatcapMaterial, type Object3D, PlaneGeometry, RepeatWrapping, type Scene, SRGBColorSpace, type Texture, TextureLoader, Vector3,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { louvreRoom as C } from '../config.ts';
+import { liveStatus } from './ui/format.ts';
+
+/** The card's Louvre room at server time `now` (null = the card has none). The status is the LIVE one (fix F2 (1)): the
+ *  server sends no new card when a wrong lock's countdown ends, so card.status stays 'locked' until the next pick. */
+export function roomCardOf(card: ClueCard | null | undefined, now: number): { step: string; status: CardStatus; lv: LouvreView } | null {
+  return card?.task?.louvre ? { step: card.step, status: liveStatus(card, now), lv: card.task.louvre } : null;
+}
+
+/** A pick the server took: the step's picks grew (true: lit) or shrank (false); null = no change (refused, paused, a
+ *  dropped send). The click sound plays on this, never on the send (fix F2 (7)). */
+export function pickChange(was: readonly string[] | undefined, now: readonly string[] | undefined): boolean | null {
+  if (!was || !now) return null;
+  return now.some((p) => !was.includes(p)) ? true : was.some((p) => !now.includes(p)) ? false : null;
+}
+
+/** A painting's picture size (m) for image aspect k = width / height: painting.height tall, a wide one maxWidth wide. */
+export function paintingSize(k: number): [number, number] {
+  const P = C.painting;
+  const w = Math.min(P.height * k, P.maxWidth);
+  return [w, w / k];
+}
 
 /** One place along the walls (room-local metres: origin = room centre, −z = the door wall), its button in front of it. */
 export interface RoomSlot {
@@ -130,10 +151,15 @@ export function roomPrompt(t: RoomTarget | null, lv: LouvreView | null, o: { don
   return 'Bấm F: chọn tác phẩm này';
 }
 
-/** DEV ?louvre=1 stand-in (no server): 15 paintings + 8 sculptures, numbered placeholders, a few picks. */
-export function demoLouvre(x: number, z: number, yaw = 0, picks = ['art-04', 'art-11']): LouvreView {
-  const sculpture = new Set([3, 6, 10, 13, 16, 19, 21, 23]);
-  const artworks = Array.from({ length: 23 }, (_, i) => ({ id: `art-${String(i + 1).padStart(2, '0')}`, type: sculpture.has(i + 1) ? ('sculpture' as const) : ('painting' as const), image: '' }));
+/** DEV ?louvre=1 stand-in (no server): 15 paintings + 8 sculptures, numbered placeholders, a few picks. `real` (DEV
+ *  ?artGlb=…&artPhoto=…, p8b-real-*): the files in public/art — those numbers are sculptures (.glb scan / photo on a
+ *  plinth), every other one a painting (.webp). */
+export function demoLouvre(x: number, z: number, yaw = 0, picks = ['art-04', 'art-11'], real?: { glb: number[]; photo: number[] }): LouvreView {
+  const sculpture = new Set(real ? [...real.glb, ...real.photo] : [3, 6, 10, 13, 16, 19, 21, 23]);
+  const artworks = Array.from({ length: 23 }, (_, i) => {
+    const id = `art-${String(i + 1).padStart(2, '0')}`;
+    return { id, type: sculpture.has(i + 1) ? ('sculpture' as const) : ('painting' as const), image: real ? `${id}.${real.glb.includes(i + 1) ? 'glb' : 'webp'}` : '' };
+  });
   return { artworks, room: { x, z, r: 25, yaw }, picks, attempts: 0, hintAt: [0, 0], hintCount: null, hintCorrect: null, maxPicks: null };
 }
 
@@ -231,13 +257,13 @@ function bakeLight(g: BufferGeometry) {
   }
 }
 
-function signTexture(text: string): CanvasTexture {
+function signTexture(text: string, bg = C.colours.exitSign): CanvasTexture {
   const cv = Object.assign(document.createElement('canvas'), { width: 512, height: 96 });
   const g = cv.getContext('2d')!;
-  g.fillStyle = '#1d5a34';
+  g.fillStyle = bg;
   g.fillRect(0, 0, 512, 96);
   g.fillStyle = '#fff';
-  g.font = 'bold 40px sans-serif';
+  g.font = 'bold 50px sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(text, 256, 50);
@@ -258,6 +284,23 @@ function floorTexture(): CanvasTexture {
   t.repeat.set(C.size.width / 4, C.size.depth / 4);
   t.colorSpace = SRGBColorSpace;
   return t;
+}
+
+/** Lit-marble look for an untextured scan (no lights underground): a sphere lit from the upper left. */
+let matcap: CanvasTexture | null = null;
+function marbleMatcap(): CanvasTexture {
+  if (matcap) return matcap;
+  const cv = Object.assign(document.createElement('canvas'), { width: 128, height: 128 });
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(46, 40, 4, 64, 64, 64);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.55, '#c9c4bb');
+  grad.addColorStop(1, '#5d5a55');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  matcap = new CanvasTexture(cv);
+  matcap.colorSpace = SRGBColorSpace;
+  return matcap;
 }
 
 /** Pure-ish (Rapier only): floor + 4 walls + plinths / button posts + the lock plinth. NO ceiling collider (critic C2:
@@ -351,6 +394,7 @@ export class LouvreRoom {
       box(0.06, C.door.height, 0.1, 0, 0, -D / 2 + 0.05, '#2c1c10'), // the gap between the two leaves
       cyl(C.lock.plinthRadius, C.plinth.height, 0, 0, 0, c.plinth, 24),
       cyl(C.lock.buttonRadius, 0.12, 0, C.plinth.height, 0, c.lock, 24),
+      ...[-0.9, 0.9].map((x) => box(0.02, H - C.lockSign.y - C.lockSign.size[1], 0.02, x * (C.lockSign.size[0] / 2), C.lockSign.y + C.lockSign.size[1], 0, c.post)), // the lock sign's wires
     ];
     for (let i = 0; i < C.ceilingLights; i++) {
       const [col, row] = [i % 3, Math.floor(i / 3)];
@@ -358,17 +402,21 @@ export class LouvreRoom {
     }
     const P = C.painting;
     const pictures: Mesh[] = [];
+    // gilt frames: one instanced draw call, each hugging its picture (resized when the image's aspect is known)
+    const frames = new InstancedMesh(new BoxGeometry(1, 1, 0.05).translate(0, 0, 0.025), new MeshBasicMaterial({ color: c.frame }), Math.max(1, this.slots.length));
+    frames.count = 0;
+    const frameAt = new Matrix4();
     this.slots.forEach((s, i) => {
       const a = view.artworks[i]!;
       const post = cyl(0.05, C.button.postHeight, s.button.x, 0, s.button.z, c.post, 8);
       parts.push(post);
       let mesh: Mesh;
+      let fi = -1;
       if (a.type === 'painting') {
-        const fw = P.width + 2 * P.frame;
-        parts.push(box(fw, P.height + 2 * P.frame, 0.05, s.x, P.centreY - P.height / 2 - P.frame, s.z, c.frame, s.yaw));
         parts.push(box(0.5, 0.04, 0.12, s.x + s.nx * 0.08, P.centreY + P.height / 2 + 0.12, s.z + s.nz * 0.08, c.light, s.yaw)); // picture light
-        mesh = new Mesh(new PlaneGeometry(P.width, P.height), new MeshBasicMaterial());
+        mesh = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial());
         mesh.position.set(s.x + s.nx * 0.056, P.centreY, s.z + s.nz * 0.056);
+        fi = frames.count++;
       } else {
         const L = C.plinth;
         const d = L.fromWall + L.size / 2;
@@ -379,12 +427,18 @@ export class LouvreRoom {
         if (/\.glb$/.test(a.image)) void this.placeGlb(a.image, mesh, step);
       }
       mesh.rotation.y = s.yaw;
-      const [bw, bh] = a.type === 'painting' ? [P.width, P.height] : C.plinth.photo;
+      const [bw, bh] = C.plinth.photo;
       const fit = (tex: Texture) => {
         const img = tex.image as { width: number; height: number } | undefined;
         if (!img?.width || !img.height) return;
         const k = img.width / img.height;
-        mesh.scale.set(Math.min(1, (bh * k) / bw), Math.min(1, bw / k / bh), 1);
+        if (fi < 0) return void mesh.scale.set(Math.min(1, (bh * k) / bw), Math.min(1, bw / k / bh), 1);
+        const [w, h] = paintingSize(k);
+        mesh.scale.set(w, h, 1);
+        frameAt.makeRotationY(s.yaw).scale(new Vector3(w + 2 * P.frame, h + 2 * P.frame, 1)).setPosition(s.x, P.centreY, s.z);
+        frames.setMatrixAt(fi, frameAt);
+        frames.instanceMatrix.needsUpdate = true;
+        frames.computeBoundingSphere();
       };
       const tex = picture(a, i + 1, (tx) => {
         (mesh.material as MeshBasicMaterial).map = tx;
@@ -392,7 +446,7 @@ export class LouvreRoom {
         fit(tx);
       });
       (mesh.material as MeshBasicMaterial).map = tex;
-      if (/\.webp$/.test(a.image) && textures.has(a.image)) fit(tex);
+      fit(tex); // the cached picture, else the placeholder's aspect until it loads
       pictures.push(mesh);
     });
     const wallGeo = mergeGeometries(walls)!;
@@ -404,10 +458,14 @@ export class LouvreRoom {
     const mk = (colour: string) => new InstancedMesh(btn, new MeshBasicMaterial({ color: colour }), Math.max(1, this.slots.length));
     this.buttons = { off: mk(c.off), on: mk(c.on) };
     this.lit = '\u0000'; // forces the first setPicks
-    const sign = new Mesh(new PlaneGeometry(1.8, 0.34), new MeshBasicMaterial({ map: signTexture('Lối ra – bấm F') }));
-    sign.position.set(0, C.door.height + 0.3, -D / 2 + 0.03);
+    const sign = new Mesh(new PlaneGeometry(...C.exitSign), new MeshBasicMaterial({ map: signTexture('Lối ra – bấm F') }));
+    sign.position.set(0, C.door.height + 0.1 + C.exitSign[1] / 2, -D / 2 + 0.03);
     this.sign = { mesh: sign, done: false };
-    g.add(staticMesh, floor, this.buttons.off, this.buttons.on, sign, ...pictures);
+    // "Chốt đáp án" hanging over the lock button, readable from both halves of the room (two faces, one texture)
+    const [lw, lh] = C.lockSign.size;
+    const lockGeo = mergeGeometries([new PlaneGeometry(lw, lh), new PlaneGeometry(lw, lh).rotateY(Math.PI)])!.translate(0, C.lockSign.y + lh / 2, 0);
+    const lockSign = new Mesh(lockGeo, new MeshBasicMaterial({ map: signTexture('Chốt đáp án', c.lockSign) }));
+    g.add(staticMesh, floor, frames, this.buttons.off, this.buttons.on, sign, lockSign, ...pictures);
     this.scene.add(g);
     this.setPicks(view.picks, false);
   }
@@ -421,8 +479,11 @@ export class LouvreRoom {
     m.traverse((o) => {
       const mesh = o as Mesh;
       if (!mesh.isMesh) return;
-      const old = mesh.material as MeshBasicMaterial;
-      mesh.material = new MeshBasicMaterial({ map: old.map ?? null, color: old.map ? 0xffffff : old.color });
+      const old = mesh.material as MeshBasicMaterial & { normalMap?: Texture | null };
+      if (!old.map && !mesh.geometry.getAttribute('normal')) mesh.geometry.computeVertexNormals(); // art-02 ships none: the matcap needs them
+      // a textured scan keeps its baked look; an untextured one (colour + normal / AO only, art-02) gets the marble matcap
+      // and its normal map, else it is a flat grey silhouette (visual review M1)
+      mesh.material = old.map ? new MeshBasicMaterial({ map: old.map }) : new MeshMatcapMaterial({ color: old.color.clone().multiplyScalar(1 / Math.max(0.05, old.color.r, old.color.g, old.color.b)), matcap: marbleMatcap(), normalMap: old.normalMap ?? null });
     });
     const bb = new Box3().setFromObject(m);
     const size = bb.getSize(new Vector3());
@@ -501,12 +562,12 @@ export class LouvreRoom {
   demoSpot(at: string | null, picks: readonly string[]): { x: number; z: number; yaw: number } | null {
     const f = this.frame;
     if (!f) return null;
-    const s = this.slots.find((q) => picks.includes(q.id));
+    const s = this.slots.find((q) => q.id === at) ?? this.slots.find((q) => picks.includes(q.id)); // roomAt=<art id>: in front of that one
     // beside the button / lock (the third-person camera behind the body sees it past the shoulder), facing it
     const [lx, lz, fx, fz] =
       at === 'view' ? [0, -C.size.depth / 2 + 5, 0, 1]
       : at === 'lock' ? [1, -1.6, -1, 1.6]
-      : at === 'button' && s ? [s.button.x + s.nx * 1.2 - s.nz, s.button.z + s.nz * 1.2 + s.nx, -s.nx * 1.2 + s.nz, -s.nz * 1.2 - s.nx]
+      : (at === 'button' || at === s?.id) && s ? [s.button.x + s.nx * 1.2 - s.nz, s.button.z + s.nz * 1.2 + s.nx, -s.nx * 1.2 + s.nz, -s.nz * 1.2 - s.nx]
       : [NaN, 0, 0, 0];
     if (Number.isNaN(lx)) return f.enter;
     const a = at === 'view' ? 0 : 0.6; // turned off the target: the camera behind the body sees it beside the shoulder (within button.aimDot)

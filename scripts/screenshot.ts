@@ -389,10 +389,17 @@ Object.assign(PRESETS, {
   // [C] the same on a small window (visual review: the card and the feed against the minimap / clock)
   'p8b-card-louvre-small': '/?player&npc=0&wait=1&card=louvre&full',
   'p8b-feed-small': '/?player&npc=0&wait=1&feed=5',
+  // fix F2: the room with the 23 real files of public/art (6 scans, 4 sculpture photos), framed pictures, scans on plinths
+  ...Object.fromEntries(
+    Object.entries({ 'p8b-real-view': 'view', 'p8b-real-view-small': 'view', 'p8b-real-art-02': 'art-02', 'p8b-real-art-16': 'art-16', 'p8b-real-art-01': 'art-01', 'p8b-real-lock': 'lock' }).map(([k, at]) => [
+      k,
+      `/?player&npc=0&wait=1&louvre=1&card=louvre&artGlb=2,7,11,13,15,16&artPhoto=8,12,18,21&roomAt=${at}`,
+    ]),
+  ),
   // [D] Host page: a louvre cell "chọn k/23 · ✗n · 💡40 / 💡70 (x/5)" + its title history (demoState)
   'p8b-host': '/host.html?demo=1&louvre=1',
 });
-Object.assign(VIEWPORT, { 'p8b-card-louvre-small': { width: 1024, height: 640 }, 'p8b-feed-small': { width: 1024, height: 640 } });
+Object.assign(VIEWPORT, { 'p8b-card-louvre-small': { width: 1024, height: 640 }, 'p8b-feed-small': { width: 1024, height: 640 }, 'p8b-real-view-small': { width: 1024, height: 640 } });
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { path: { type: 'string' }, name: { type: 'string' } } });

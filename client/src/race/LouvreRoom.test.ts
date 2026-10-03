@@ -1,7 +1,9 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { louvreRoom as C } from '../config.ts';
-import { addColliders, buttonStates, demoLouvre, roomFrame, roomPrompt, targetAt, toLocal, toWorld, wallSlots } from './LouvreRoom.ts';
+import type { ClueCard, TaskView } from '@race/shared/protocol';
+import { raceClient } from '../config.ts';
+import { addColliders, buttonStates, demoLouvre, paintingSize, pickChange, roomCardOf, roomFrame, roomPrompt, targetAt, toLocal, toWorld, wallSlots } from './LouvreRoom.ts';
 
 const lv = demoLouvre(100, -50, 1.1);
 const slots = wallSlots(lv.artworks);
@@ -119,5 +121,39 @@ describe('colliders: floor + walls + plinths, NO ceiling (critic C2)', () => {
     const p = toWorld(f, 0, 2);
     const wall = world.castRay(new RAPIER.Ray({ x: p.x, y: f.floorY + 2.5, z: p.z }, dir), 50, true);
     expect(wall?.timeOfImpact).toBeCloseTo(D / 2 - 2);
+  });
+});
+
+describe('Phase 8B fix F2', () => {
+  const task: TaskView = { title: 'P', description: '', media: [], kind: 'louvre', verification: 'auto', input: 'room', proofInstruction: '', timeLimitMinutes: null, louvre: lv };
+  const locked: ClueCard = { step: 'T3', type: 'challenge', label: 'Thử thách 3', text: '', media: [], status: 'locked', lockedUntil: 180_000, lockKind: 'retry', answers: [], receivedAt: 0, completedAt: null, retryPenaltyMinutes: 3, task };
+
+  it('(1) a wrong lock whose 3 minutes ran out unlocks the lock button with no new card from the server', () => {
+    expect(roomCardOf(locked, 100_000)?.status).toBe('locked');
+    const after = roomCardOf(locked, 180_000 + raceClient.lockEndSlackMs);
+    expect(after?.status).toBe('active');
+    expect(roomPrompt({ kind: 'lock' }, after!.lv, { done: false, locked: after!.status === 'locked' })).toBe(`Bấm F để chốt (đang chọn ${lv.picks.length})`);
+    expect(roomCardOf({ ...locked, task: undefined }, 0)).toBeNull();
+  });
+
+  it('(7) the click plays only for a pick the server took', () => {
+    expect(pickChange(['a'], ['a', 'b'])).toBe(true);
+    expect(pickChange(['a', 'b'], ['a'])).toBe(false);
+    expect(pickChange(['a'], ['a'])).toBeNull(); // refused / paused: same picks
+    expect(pickChange(undefined, ['a'])).toBeNull();
+  });
+
+  it('(6) the picture keeps its aspect: painting.height tall, a wide one maxWidth wide', () => {
+    const P = C.painting;
+    expect(paintingSize(0.67)).toEqual([P.height * 0.67, P.height]);
+    const [w, h] = paintingSize(3);
+    expect(w).toBe(P.maxWidth);
+    expect(h).toBeCloseTo(P.maxWidth / 3);
+    // the widest frame still fits between two neighbours
+    expect(P.maxWidth + 2 * P.frame).toBeLessThan(Math.min(...slots.slice(1).map((s, i) => Math.hypot(s.x - slots[i]!.x, s.z - slots[i]!.z))));
+  });
+
+  it('(7) a scan never overhangs its plinth', () => {
+    expect(Math.max(C.plinth.glbBox[0], C.plinth.glbBox[2])).toBeLessThanOrEqual(C.plinth.size);
   });
 });

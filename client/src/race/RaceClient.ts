@@ -47,7 +47,7 @@ export class RaceClient {
   welcome(w: Welcome, simTime: number) {
     this.teams = w.teams;
     this.setView(w.view);
-    this.deps.hud?.feed(w.feed ?? [], w.teams); // Phase 8B: the public feed so far (a Phase 8 welcome has none)
+    this.deps.hud?.feed(w.feed ?? [], w.teams, true); // Phase 8B: the public feed so far, replacing ours (a reconnect must not repeat it)
     if (w.showStartOrder && w.startOrder) this.deps.hud?.startOrder(w.startOrder, simTime);
     // SPEC §8.10: back after the check-in, or after the Host ended the race (read-only) → spectator at once
     if (w.view?.finishAt != null || w.view?.status === 'finished') this.deps.finished?.(false);

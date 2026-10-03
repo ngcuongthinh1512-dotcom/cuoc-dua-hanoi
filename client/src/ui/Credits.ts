@@ -4,13 +4,19 @@
 // (CreditItem[]: the artwork credits never reach a team earlier). Offline (no race) it shows everything it has.
 import type { CreditItem } from '@race/shared/protocol';
 import { notice } from './Toasts.ts';
-interface Credit { title: string; text: string; licence: string; url: string }
+export interface Credit { title: string; text: string; licence: string; url: string }
 
 export const CREDITS_LOCKED = 'Mở sau khi về đích';
 
 /** One line per artwork picture: "art-03.webp · «title» – artist · photo · license". Pure (the link is added by the DOM). */
 export const creditLines = (items: readonly CreditItem[]): { text: string; license: string; href: string }[] =>
   items.map((c) => ({ text: [c.file, [c.title && `«${c.title}»`, c.artist].filter(Boolean).join(' – '), c.photo].filter(Boolean).join(' · '), license: c.license, href: /^https?:\/\//i.test(c.source) ? c.source : '' }));
+
+export const LOUVRE_TITLE = 'Phòng Louvre';
+/** credits.json lines to draw: the static "Phòng Louvre" stand-in goes once the real section is there; a licence already said
+ *  by the text ("…: xem bảng Ghi nguồn sau khi về đích · xem bảng Ghi nguồn…") is not repeated (link kept on the text). Pure. */
+export const baseLines = (all: readonly Credit[], louvreShown: boolean): { text: string; licence: string; url: string }[] =>
+  all.filter((c) => !(louvreShown && c.title === LOUVRE_TITLE)).map((c) => (c.text.endsWith(c.licence) ? { text: c.text.slice(0, -c.licence.length).replace(/[:·\s]+$/, ''), licence: c.licence, url: c.url } : c));
 
 // null = offline (no race): everything shown; false = in a race, not finished; true = finished / race over.
 let gate: boolean | null = null;
@@ -44,13 +50,13 @@ export function onCreditsRequest(fn: () => void): void {
 export function initCredits() {
   const $ = (id: string) => document.getElementById(id)!;
   const [panel, list] = [$('credits-panel'), $('credits-list')];
-  let base: HTMLElement[] | null = null; // credits.json lines, once loaded
+  let base: Credit[] | null = null; // credits.json, once loaded
   let loading = false;
   let asked = false; // one request per opening
   const section = (): HTMLElement[] => {
     if (!louvre?.length) return [];
     return [
-      Object.assign(document.createElement('li'), { innerHTML: '<b>Phòng Louvre</b>', style: 'list-style:none;margin-left:-18px' }),
+      Object.assign(document.createElement('li'), { innerHTML: `<b>${LOUVRE_TITLE}</b>`, style: 'list-style:none;margin-left:-18px' }),
       ...creditLines(louvre).map((c) => {
         const li = document.createElement('li');
         li.append(`${c.text} · `, c.href ? Object.assign(document.createElement('a'), { href: c.href, target: '_blank', rel: 'noopener', textContent: c.license }) : c.license);
@@ -63,7 +69,15 @@ export function initCredits() {
     if (gate === false) return void (list.textContent = CREDITS_LOCKED);
     if (gate === true && !louvre && !asked) (asked = true), request?.();
     if (!base && loading) return void (list.textContent = 'Đang tải…');
-    list.replaceChildren(...section(), ...(base ?? [Object.assign(document.createElement('li'), { textContent: 'Không tải được danh sách ghi nguồn.' })])); // the louvre pictures first: they are the news
+    const lou = section();
+    const lines = base
+      ? baseLines(base, lou.length > 0).map((c) => {
+          const li = document.createElement('li');
+          li.append(`${c.text} · `, Object.assign(document.createElement('a'), { href: c.url, target: '_blank', rel: 'noopener', textContent: c.licence }));
+          return li;
+        })
+      : [Object.assign(document.createElement('li'), { textContent: 'Không tải được danh sách ghi nguồn.' })];
+    list.replaceChildren(...lou, ...lines); // the louvre pictures first: they are the news
   };
   redraw = draw;
   const load = async () => {
@@ -72,12 +86,7 @@ export function initCredits() {
     try {
       const res = await fetch(new URL('credits.json', location.href));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      base = ((await res.json()) as Credit[]).map((c) => {
-        const li = document.createElement('li');
-        const a = Object.assign(document.createElement('a'), { href: c.url, target: '_blank', rel: 'noopener', textContent: c.licence });
-        li.append(`${c.text} · `, a);
-        return li;
-      });
+      base = (await res.json()) as Credit[];
     } catch (err) {
       console.warn('credits.json missing or unreadable', err);
     }

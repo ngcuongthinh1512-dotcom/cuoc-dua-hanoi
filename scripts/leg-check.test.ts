@@ -440,7 +440,7 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     expect(runT('nomedia.json', k).report).not.toContain('Hình cần tải');
   });
 
-  it('static scan: reference answers copied into a shipped folder are found (a lone one = warning, two = error)', () => {
+  it('static scan (F1): a reference answer in a shipped folder is an error unless it is a place name of the map (then a warning)', () => {
     const parsed = parseLeg(miniJson());
     if (!parsed.ok) throw new Error('mini invalid');
     const secrets = secretStrings(parsed.leg);
@@ -449,8 +449,16 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     const lone = mkdtempSync(join(tmpdir(), 'legref1-'));
     writeFileSync(join(lone, 'x.json'), JSON.stringify({ a: refs[0] }));
     const r1 = checkFile(legs('test/mini.json'), { root, map, scanDirs: [lone] });
-    expect(r1.ok).toBe(true);
-    expect(r1.issues.map((i) => i.level)).toEqual(['warning']);
+    expect(r1.ok).toBe(false); // not a place of the map: a leaked answer
+    expect(errors(r1)).toEqual([expect.stringContaining('chứa nguyên văn "42 (bốn mươi hai)')]);
+    // a reference answer equal to a landmark name (other case / accents) shipped in a static file: a warning only
+    const j = miniJson();
+    j.steps.find((s: { id: string }) => s.id === 'T1').task.referenceAnswers = ['cau alexandre iii'];
+    const place = mkdtempSync(join(tmpdir(), 'legref3-'));
+    writeFileSync(join(place, 'x.json'), JSON.stringify({ a: 'cau alexandre iii' }));
+    const r3 = checkFile(put('ref-place.json', j), { root: tmp, map, scanDirs: [place] });
+    expect(r3.ok).toBe(true);
+    expect(r3.issues.filter((i) => i.where.endsWith('x.json')).map((i) => [i.level, i.message.includes('trùng địa danh có sẵn trong bản đồ (không sao)')])).toEqual([['warning', true]]);
     const both = mkdtempSync(join(tmpdir(), 'legref2-'));
     writeFileSync(join(both, 'x.json'), JSON.stringify(refs));
     const r2 = checkFile(legs('test/mini.json'), { root, map, scanDirs: [both] });
@@ -467,6 +475,38 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
   });
 });
 
+/** A WebP file (RIFF) with these chunks. */
+function webp(...chunks: [string, string | Buffer][]) {
+  const body = Buffer.concat(chunks.map(([tag, d]) => {
+    const b = typeof d === 'string' ? Buffer.from(d, 'utf8') : d;
+    const h = Buffer.alloc(8);
+    h.write(tag, 0, 'latin1');
+    h.writeUInt32LE(b.length, 4);
+    return Buffer.concat([h, b, Buffer.alloc(b.length & 1)]);
+  }));
+  const h = Buffer.alloc(12);
+  h.write('RIFF', 0, 'latin1');
+  h.writeUInt32LE(body.length + 4, 4);
+  h.write('WEBP', 8, 'latin1');
+  return Buffer.concat([h, body]);
+}
+/** A GLB file: JSON chunk + BIN chunk. */
+function glb(json: unknown, bin: Buffer) {
+  const pad = (b: Buffer, c: number) => Buffer.concat([b, Buffer.alloc((4 - (b.length % 4)) % 4, c)]);
+  const chunk = (type: number, d: Buffer) => {
+    const h = Buffer.alloc(8);
+    h.writeUInt32LE(d.length, 0);
+    h.writeUInt32LE(type, 4);
+    return Buffer.concat([h, d]);
+  };
+  const body = Buffer.concat([chunk(0x4e4f534a, pad(Buffer.from(JSON.stringify(json)), 0x20)), chunk(0x004e4942, pad(bin, 0))]);
+  const h = Buffer.alloc(12);
+  h.write('glTF', 0, 'latin1');
+  h.writeUInt32LE(2, 4);
+  h.writeUInt32LE(12 + body.length, 8);
+  return Buffer.concat([h, body]);
+}
+
 describe('leg:check Phase 8B (louvre room: static pictures, rule 9)', () => {
   const louvre = () => (parseLeg(JSON.parse(readFileSync(legs('test/louvre.json'), 'utf8'))) as { leg: Parameters<typeof artLeaks>[0] }).leg;
 
@@ -482,8 +522,8 @@ describe('leg:check Phase 8B (louvre room: static pictures, rule 9)', () => {
     mkdirSync(join(dir, 'client/public/art'), { recursive: true });
     expect(artLeaks(louvre(), dir)).toEqual([]);
     writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ title: 'Phòng Louvre', text: 'Ảnh: (GIẢ) Tranh 2 – (GIẢ) Họa sĩ 2' }]));
-    writeFileSync(join(dir, 'client/public/art/art-06.webp'), Buffer.concat([Buffer.from([0x52, 0x49, 0x46, 0x46, 0, 0]), Buffer.from('XMP dc:title=(GIẢ) Tác Phẩm 6', 'utf8')]));
-    writeFileSync(join(dir, 'client/public/art/art-09.webp'), Buffer.from([0x52, 0x49, 0x46, 0x46, 1, 2, 3]));
+    writeFileSync(join(dir, 'client/public/art/art-06.webp'), webp(['VP8 ', 'xx'], ['XMP ', 'dc:title=(GIẢ) Tác Phẩm 6']));
+    writeFileSync(join(dir, 'client/public/art/art-09.webp'), webp(['VP8 ', '\x01\x02\x03']));
     const out = artLeaks(louvre(), dir).map((i) => `${i.where}: ${i.message}`);
     expect(out).toHaveLength(2);
     expect(out[0]).toMatch(/^client\/public\/credits.json: chứa tên \/ ghi chú tác phẩm phòng Louvre "\(GIẢ\) Tranh 2", "\(GIẢ\) Họa sĩ 2"/);
@@ -505,11 +545,30 @@ describe('leg:check Phase 8B (louvre room: static pictures, rule 9)', () => {
     mkdirSync(join(dir, 'client/public/art'), { recursive: true });
     writeFileSync(join(dir, 'client/public/art/art-06.glb'), Buffer.from('glTF {"nodes":[{"name":"art-06"}],"meshes":[],"scenes":[],"images":[],"materials":[]}', 'latin1'));
     expect(artLeaks(leg, dir)).toEqual([]);
-    writeFileSync(join(dir, 'client/public/art/art-09.webp'), Buffer.from('EXIF Artist=Jane Photographer', 'latin1'));
+    writeFileSync(join(dir, 'client/public/art/art-09.webp'), webp(['VP8 ', 'x'], ['EXIF', 'Artist=Jane Photographer']));
     writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ text: 'https://example.org/wiki/File:Secret_Name.jpg' }]));
     const out = artLeaks(leg, dir).map((i) => `${i.where}: ${i.message}`).join('\n');
     expect(out).toMatch(/credits.json: chứa tên.*example.org/);
     expect(out).toMatch(/art-09.webp: chứa chữ "jane"/);
+  });
+
+  it('F1 rule 9: only metadata is searched (WebP non-image chunks, GLB JSON + its embedded pictures\' metadata); never digits; unknown bytes need ≥ 6 letters', () => {
+    const leg = louvre();
+    const arts = (leg.steps.find((x) => x.type === 'challenge' && x.task.kind === 'louvre') as any).task.louvre.artworks;
+    arts[1].credit = { ...arts[1].credit, title: 'Zéphyrine 1887', artist: 'Jane Bartholomew' };
+    const dir = mkdtempSync(join(tmpdir(), 'legart3-'));
+    const art = join(dir, 'client/public/art');
+    mkdirSync(art, { recursive: true });
+    const put = (n: string, b: Buffer) => writeFileSync(join(art, n), b);
+    put('a.webp', webp(['VP8X', 'flags'], ['VP8 ', 'jane 1887 zéphyrine bartholomew'], ['ALPH', 'jane'])); // compressed data only
+    put('b.webp', webp(['VP8L', 'x'], ['XMP ', 'shot 1887'])); // a year: never a word
+    put('c.webp', webp(['VP8 ', 'x'], ['EXIF', 'Artist=Jane'])); // metadata: 4 letters are enough
+    const inner = webp(['VP8 ', 'jane'], ['XMP ', 'dc:title=Zéphyrine']);
+    put('d.glb', glb({ nodes: [{ name: 'art-02' }], images: [{ bufferView: 1, mimeType: 'image/webp' }], bufferViews: [{ byteOffset: 0, byteLength: 4 }, { byteOffset: 4, byteLength: inner.length }] }, Buffer.concat([Buffer.from('jane'), inner])));
+    put('e.glb', glb({ nodes: [{ name: 'Bartholomew' }] }, Buffer.from('jane')));
+    put('f.bin', Buffer.from('xx jane yy bartholomew zz')); // unknown format: long words only
+    const out = Object.fromEntries(artLeaks(leg, dir).map((i) => [i.where.split('/').pop(), [...i.message.matchAll(/"([^"]+)"/g)].map((m) => m[1])]));
+    expect(out).toEqual({ 'c.webp': ['jane'], 'd.glb': ['zéphyrine'], 'e.glb': ['bartholomew'], 'f.bin': ['bartholomew'] });
   });
 
   it('track D: the report prints the 23-file table with present / missing / size and no artwork name', () => {

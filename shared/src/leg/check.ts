@@ -276,6 +276,17 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
         : [[t.answers, 'đáp án'], [t.referenceAnswers, 'đáp án tham khảo']]) as [readonly string[], string][])
         for (const a of list.filter((x) => !held(x)).map(normalizeAnswer).filter((a) => a.length >= 3))
           for (const [x, p] of texts) if (normalizeAnswer(x).includes(a)) add('warning', p, `chứa ${what} "${a}" của bước ${i + 1} (${s.id}${branch ? `, nhánh ${branch}` : ''}): đội đọc được trước khi giải`);
+    // F1 (verify-foundation #7): one telling word (≥ 6 letters) of a right artwork's title is a partial leak; a text that
+    // already holds a whole title / note has its warning above
+    const [lt] = tasks[0]!;
+    if (lt.kind !== 'louvre') return;
+    const whole = louvreSecrets(lt).map(normalizeAnswer).filter((a) => a.length >= 3);
+    const telling = new Set((lt.louvre?.artworks ?? []).filter((a) => lt.answers.includes(a.id)).flatMap((a) => words(a.credit?.title ?? '')).filter((w) => w.length >= 6 && !COMMON_ART_WORDS.has(w)));
+    for (const [x, p] of texts) {
+      if (whole.some((a) => normalizeAnswer(x).includes(a))) continue;
+      const own = new Set(words(x));
+      for (const w of telling) if (own.has(w)) add('warning', p, `chứa từ "${w}" trong tên một tác phẩm đúng của bước ${i + 1} (${s.id}): lộ một phần tên; đổi cách viết nếu từ này đủ để đoán ra tác phẩm`);
+    }
   });
 
   louvreRules(leg, add, geo);
@@ -330,6 +341,9 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
 /** Phase 8B rule 4: the texts that give a louvre task away (title + Host note of its 5 right artworks). */
 const louvreSecrets = (t: Task): string[] =>
   (t.louvre?.artworks ?? []).filter((a) => t.answers.includes(a.id)).flatMap((a) => [a.credit?.title ?? '', a.note]);
+
+/** Words of ≥ 6 letters (normalized) that say nothing about which work it is: not a partial leak (rule 4). */
+const COMMON_ART_WORDS = new Set(['louvre', 'portrait', 'painting', 'sculpture', 'statue', 'museum', 'musee', 'peinture', 'tableau', 'untitled', 'unknown', 'anonymous', 'anonyme']);
 
 /** Track D (verifier): the id and file name of the 5 right artworks ("art-17", "art-17.webp") are as good as the answer. */
 const louvreCodes = (t: Task): string[] =>

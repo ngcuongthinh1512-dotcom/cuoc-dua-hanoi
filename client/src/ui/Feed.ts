@@ -17,7 +17,17 @@ export function feedText(m: FeedMessage, teams: readonly TeamInfo[]): string {
   return `${name} trả lời sai và bị phạt ${fmtMin(m.minutes ?? 0)} phút${count ? ` · đúng ${count}` : ''}`;
 }
 
-export interface FeedEntry { text: string; time: string; shownAt: number }
+export interface FeedEntry { text: string; time: string; shownAt: number; key: string }
+
+const keyOf = (m: FeedMessage) => `${m.at}:${m.slot}:${m.ok}:${m.n ?? ''}`;
+
+/** Entries after a batch. `replace` (welcome, also after a reconnect: the server's whole kept list) swaps the list: a line
+ *  already on the client keeps its shownAt (a faded one stays faded, never twice), only unseen ones show as new. Pure. */
+export function feedEntries(old: readonly FeedEntry[], ms: readonly FeedMessage[], teams: readonly TeamInfo[], now: number, replace: boolean): FeedEntry[] {
+  const seen = new Map(old.map((e) => [e.key, e.shownAt]));
+  const add = ms.map((m) => ({ text: feedText(m, teams), time: formatTimeOfDay(m.at).slice(0, 5), shownAt: seen.get(keyOf(m)) ?? now, key: keyOf(m) }));
+  return (replace ? add : [...old, ...add]).slice(-F.lines * 2); // older than the box can ever show again
+}
 
 /** The lines on screen at `now` (s): younger than `seconds`, the newest `max`. Pure: the DOM below only draws the result. */
 export const liveEntries = (all: readonly FeedEntry[], now: number, seconds: number, max: number): FeedEntry[] => all.filter((e) => now - e.shownAt < seconds).slice(-max);
@@ -26,18 +36,16 @@ const clock = () => performance.now() / 1000;
 
 export class Feed {
   /** Every line received so far (welcome.feed first, oldest first). */
-  readonly lines: FeedMessage[] = [];
+  lines: FeedMessage[] = [];
   private entries: FeedEntry[] = [];
   private box: HTMLElement | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
-  /** New lines (welcome: the kept ones; then one per `{t:'feed'}`). ponytail: the welcome batch shows like new lines (its age is
-   *  unknown on the client clock), fine at ≤ NET.feedKept lines, cut to feed.lines and fading with the rest. */
-  push(ms: readonly FeedMessage[], teams: readonly TeamInfo[]): void {
-    this.lines.push(...ms);
-    const now = clock();
-    this.entries.push(...ms.map((m) => ({ text: feedText(m, teams), time: formatTimeOfDay(m.at).slice(0, 5), shownAt: now })));
-    this.entries = this.entries.slice(-F.lines * 2); // older than the box can ever show again
+  /** New lines (welcome: the kept ones, `replace`; then one per `{t:'feed'}`). ponytail: the first welcome batch shows like new
+   *  lines (its age is unknown on the client clock), fine at ≤ NET.feedKept lines, cut to feed.lines and fading with the rest. */
+  push(ms: readonly FeedMessage[], teams: readonly TeamInfo[], replace = false): void {
+    this.lines = replace ? [...ms] : [...this.lines, ...ms];
+    this.entries = feedEntries(this.entries, ms, teams, clock(), replace);
     if (typeof document !== 'undefined') this.draw();
   }
 

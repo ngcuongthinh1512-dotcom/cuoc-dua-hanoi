@@ -1119,16 +1119,21 @@ export const louvreRoom = {
   door: { width: 2, height: 2.6 }, // middle of the front wall (facing room.yaw), standing at the box's x, z: going in / out only changes y
   // 9 + 5 + 5 + 2 + 2 = 23 places along the walls, leg order; cornerMargin: m kept free at each corner (and beside the door)
   slots: { back: 9, side: 5, frontEachSide: 2, minSpacing: 2.6, cornerMargin: 1.2 },
-  painting: { width: 1.6, height: 1.2, centreY: 1.85, frame: 0.07 }, // m: frame on the wall, the picture inside
-  plinth: { size: 0.6, height: 1.0, fromWall: 0.4, photo: [0.8, 1.0], glbBox: [0.8, 1.2, 0.8] }, // a sculpture: plinth `fromWall` m off the wall, photo standing on it, or its .glb fitted in glbBox
-  button: { radius: 0.125, postHeight: 0.9, fromWall: 1.6, reach: 2.2, aimDot: 0.2 }, // under each artwork, in front of a plinth; F picks the nearest within reach the camera faces (dot > aimDot)
+  // m: the picture `height` tall (a wide one: maxWidth wide, shorter), centre at centreY; the gilt frame hugs it, `frame` m each side (fix F2 (6))
+  painting: { height: 1.7, maxWidth: 2.3, centreY: 2.1, frame: 0.07 },
+  plinth: { size: 0.9, height: 1.0, fromWall: 0.4, photo: [0.8, 1.0], glbBox: [0.8, 1.2, 0.8] }, // a sculpture: plinth `fromWall` m off the wall, photo standing on it, or its .glb fitted in glbBox (≤ size: no base over the edge)
+  button: { radius: 0.125, postHeight: 0.9, fromWall: 1.8, reach: 2.2, aimDot: 0.2 }, // under each artwork, in front of a plinth; F picks the nearest within reach the camera faces (dot > aimDot)
+  exitSign: [2.6, 0.5], // m, the "Lối ra – bấm F" sign over the door
+  lockSign: { size: [2.0, 0.45], y: 3.0 }, // m, the two-faced "Chốt đáp án" sign hanging over the lock button (bottom edge y)
+  // In the room the third-person camera sits further over the right shoulder and higher (the body hid a sculpture being aimed at)
+  camera: { shoulder: 0.65, lift: 0.35 },
   lock: { plinthRadius: 0.35, buttonRadius: 0.26, reach: 2.5 }, // the lock button in the middle of the room
   doorReach: 2, // m: F at the door → back up to the court
   enterReach: 3, // m from the box: F enters (closer than the zone radius: entering moves the feet to the door, x, z ± ≤ enterReach + inset only)
   inset: 0.8, // m: entering, the feet land this far inside the door; leaving, this far in front of the box (both ≤ 2 m from it: only y changes much)
   ceilingLights: 6,
   pickGapMs: 150, // a pick is sent at most this often (the server's 15 msg/s limit counts poses too: verify-foundation #10)
-  colours: { wall: '#efe6d2', floor: '#8a5a35', floorLine: '#6e4527', ceiling: '#c9c2b4', frame: '#b8902f', plinth: '#e8e2d6', post: '#55504a', door: '#5a3b22', off: '#c8281e', on: '#2fbf4a', lock: '#f2c230', light: '#fff6dc' },
+  colours: { wall: '#efe6d2', floor: '#8a5a35', floorLine: '#6e4527', ceiling: '#c9c2b4', frame: '#b8902f', plinth: '#e8e2d6', post: '#55504a', door: '#5a3b22', off: '#c8281e', on: '#2fbf4a', lock: '#f2c230', light: '#fff6dc', exitSign: '#1d5a34', lockSign: '#7a5a10' },
 };
 
 // ── C · public feed (ui/Feed.ts): "Đội X trả lời sai và bị phạt 3 phút" (SPEC §17.19 (b): bottom corner, configurable) ──

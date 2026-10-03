@@ -16,7 +16,7 @@ import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
 import { fakeTeams, fakeTick, parsePeers, RemotePlayers, underground } from './net/RemotePlayers.ts';
 import { fetchMedia, startSession } from './net/session.ts';
-import { demoLouvre, LouvreRoom, preloadArt, roomPrompt } from './race/LouvreRoom.ts';
+import { demoLouvre, LouvreRoom, pickChange, preloadArt, roomCardOf, roomPrompt } from './race/LouvreRoom.ts';
 import { PitHost } from './race/PitStop.ts';
 import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
@@ -206,8 +206,9 @@ async function start() {
   // DEV ?louvre=1 (offline, p8b-room*): the room at the spawn with a stand-in card (?card=louvre-locked: penalised),
   // ?roomAt=view|button|lock; F picks / unpicks locally.
   let demo: { step: string; status: CardStatus; lv: LouvreView } | undefined;
+  const nums = (k: string) => query.get(k)?.split(',').map(Number); // DEV ?artGlb=2,7&artPhoto=8 (p8b-real-*: the real files)
   if (import.meta.env.DEV && !session && player && room && query.get('louvre') === '1') {
-    demo = { step: 'T3', status: query.get('card') === 'louvre-locked' ? 'locked' : 'active', lv: demoLouvre(player.position.x, player.position.z) };
+    demo = { step: 'T3', status: query.get('card') === 'louvre-locked' ? 'locked' : 'active', lv: demoLouvre(player.position.x, player.position.z, 0, undefined, nums('artGlb') && { glb: nums('artGlb')!, photo: nums('artPhoto') ?? [] }) };
     room.build(demo.step, demo.lv);
     room.enter();
     player.bikesPlaced = true; // no dev bikes in the room
@@ -279,12 +280,9 @@ async function start() {
           },
         })
       : undefined;
-  /** Phase 8B: the current card's Louvre room (the stand-in offline), null when the card has none. */
-  const roomCard = (): { step: string; status: CardStatus; lv: LouvreView } | null => {
-    if (demo) return demo;
-    const c = race?.view?.card;
-    return c?.task?.louvre ? { step: c.step, status: c.status, lv: c.task.louvre } : null;
-  };
+  /** Phase 8B: the current card's Louvre room (the stand-in offline), null when the card has none; its status is the live
+   *  one (a wrong lock's countdown that ran out unlocks the lock button without a new card: fix F2 (1)). */
+  const roomCard = (): { step: string; status: CardStatus; lv: LouvreView } | null => demo ?? roomCardOf(race?.view?.card, net ? net.serverNow() : Date.now());
   const roomTarget = () => {
     camera.getWorldDirection(view);
     return room!.nearest(player!.position.x, player!.position.z, view.x, view.z);
@@ -316,8 +314,9 @@ async function start() {
     if (t.kind === 'button') {
       const on = !rc.lv.picks.includes(t.id);
       if (on && rc.lv.maxPicks !== null && rc.lv.picks.length >= rc.lv.maxPicks) return notice('pickLimit'), 'quiet'; // §17.19 (c): not sent
-      const sent = race ? race.pick(rc.step, t.id, on, now) : !!demo && ((demo.lv.picks = on ? [...demo.lv.picks, t.id] : demo.lv.picks.filter((p) => p !== t.id)), true);
-      if (sent) clickSound(on);
+      // online the click plays when the server took it (the new card's picks, `message` below); offline at once
+      if (!race && demo) (demo.lv.picks = on ? [...demo.lv.picks, t.id] : demo.lv.picks.filter((p) => p !== t.id)), clickSound(on);
+      else race?.pick(rc.step, t.id, on, now);
     } else if (!rc.lv.picks.length) toast('Chưa chọn tác phẩm nào'); // N4: an empty lock is stopped here
     else if (rc.status === 'locked') notice('answerLocked');
     else race?.lock(rc.step, now);
@@ -359,7 +358,13 @@ async function start() {
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
         if (m.t === 'feed' && m.slot !== mySlot) popSound(); // Phase 8B: another team's public line
-        if (race?.message(m)) return; // race / book / zone (Phase 7); feed / credits (Phase 8B) → RaceHud
+        const before = room?.active ? roomCard() : null;
+        if (race?.message(m)) {
+          const after = before && roomCard();
+          const lit = after?.step === before?.step ? pickChange(before?.lv.picks, after?.lv.picks) : null;
+          if (lit !== null) clickSound(lit); // fix F2 (7): only a pick the server took clicks
+          return;
+        } // race / book / zone (Phase 7); feed / credits (Phase 8B) → RaceHud
         if (m.t === 'team') remote?.setOnline(m.slot, m.online);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') {
@@ -598,6 +603,7 @@ async function start() {
       }
       if (flying) fly.update(dt, input);
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
+      if (player) player.camera.override = room?.active ? roomCfg.camera : null; // fix F2 (5): over the shoulder, higher, in the room
       player?.update(dt, flying ? null : input, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
       if (room?.active && !flying) camera.position.y = Math.min(camera.position.y, room.floorY + roomCfg.size.height - 0.3); // no ceiling collider (C2): the camera stays under it
       // ponytail: the streets above are still drawn in the room (≈ 270 calls hidden by the ceiling), hide the chunks while room.active if FPS needs it
@@ -634,7 +640,7 @@ async function start() {
         Object.assign(frame, {
           x, z, heading: Math.atan2(-view.x, -view.z), bodyYaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z),
           riding: !!player.controller.riding, swimming: s.moveMode === 'swim', time: Math.max(0, player.simTime),
-          street: streets?.at(x, z), district: districtAt(water?.districts, x, z),
+          street: room?.active ? 'Phòng Louvre' : streets?.at(x, z), district: room?.active ? 0 : districtAt(water?.districts, x, z), // fix F2 (7): not the court's street underground
           raceTime: race ? race.raceTime() : undefined, penaltyMinutes: race?.view?.penaltyMinutes, raceStatus: race?.view?.status,
         } satisfies HudFrame);
         const riding = !!player.controller.riding;

@@ -105,6 +105,22 @@ describe('louvre task (schema + checkLeg rules 1–8)', () => {
     expect(lines(e, 'warning').filter((l) => l.includes('tác phẩm đúng'))).toEqual([]);
   });
 
+  it('F1 rule 4: one telling word (≥ 6 letters) of a right title in a text = warning; common / short words, a wrong work = nothing', () => {
+    const j = fresh();
+    task(j).answers[0] = 'art-02';
+    task(j).louvre.artworks[1].credit.title = '(GIẢ) Louvre tranh Zéphyrine';
+    task(j).louvre.artworks[3].credit = { ...task(j).louvre.artworks[1].credit, title: '(GIẢ) Bartholomée' }; // art-04: not a right answer
+    const partial = (desc: string) => {
+      const k = clone(j);
+      task(k).description += desc;
+      return lines(k, 'warning').filter((l) => l.includes('lộ một phần tên'));
+    };
+    expect(partial(' tượng tranh louvre')).toEqual([]);
+    expect(partial(' Bartholomée')).toEqual([]);
+    expect(partial(' nàng ZEPHYRINE')).toEqual([expect.stringMatching(/mô tả: chứa từ "zephyrine" trong tên một tác phẩm đúng/)]);
+    expect(partial(' (GIẢ) Louvre tranh Zéphyrine')).toEqual([]); // the whole title: the warning above, not this one
+  });
+
   it('rule 5: the 5 answers next to each other (also wrapping, the first 5, the last 5) = warning', () => {
     for (const ids of [[5, 6, 7, 8, 9], [1, 2, 3, 4, 5], [19, 20, 21, 22, 23], [22, 23, 1, 2, 3]]) {
       const j = fresh();

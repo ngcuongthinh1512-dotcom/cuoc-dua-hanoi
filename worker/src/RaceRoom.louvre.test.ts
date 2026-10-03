@@ -287,4 +287,21 @@ describe('Phase 8B after an eviction', () => {
     expect(fl[0]!.at).toBeLessThan(fl[1]!.at);
     for (const s of [a2, host]) s.close();
   }, 90_000);
+
+  it('F1 #1: the first lock after a hibernation wake is kept once in the feed (not read back from events AND pushed)', async () => {
+    const race = 'p8b-hib-feed';
+    const { host, teams, socks: [a] } = await newRace(race, 1);
+    await toRoom(a!);
+    await picks(a!, [w0]);
+    lock(a!, 'T3');
+    const c1 = await card(a!, (c) => c.status === 'locked');
+    await feed(host);
+    await waitUntil(c1.lockedUntil!);
+    await server.getWorker().evictDurableObject('RaceRoom', { name: race, webSockets: 'hibernate' });
+    lock(a!, 'T3'); // wakes the object: feedV is null when the engine feeds the new line
+    await feed(host);
+    const a2 = await joinTeam(server, race, teams[0]!.code);
+    expect(W(a2).feed).toHaveLength(2);
+    for (const s of [a2, host]) s.close();
+  }, 90_000);
 });

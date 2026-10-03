@@ -14,7 +14,8 @@ import { NET, type ClueCard, type CreditItem, type FeedMessage, type LouvreView,
 import { Feed } from '../../ui/Feed.ts';
 import { onCreditsRequest, openCredits, setCreditItems, setCreditsGate } from '../../ui/Credits.ts';
 import { raceHud as C } from '../../config.ts';
-import { bookEntries, type BookEntry, branchConfirmText, cardPanel, finishLine, hudKey, liveStatus, lockLine, type MediaItem, penaltyLine, type CardSummary, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, zoneLines } from './format.ts';
+import { toast } from '../../ui/Toasts.ts';
+import { bookEntries, type BookEntry, branchConfirmText, cardPanel, finishLine, hintNews, hudKey, liveStatus, lockLine, type MediaItem, penaltyLine, type CardSummary, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, zoneLines } from './format.ts';
 import './race.css';
 
 export interface RaceHudActions {
@@ -179,6 +180,7 @@ export class RaceHud {
     this.view = view;
     setCreditsGate(view != null && (view.finishAt != null || view.status === 'finished')); // §17.20: "Ghi nguồn" opens after the finish
     const card = view?.card ?? null;
+    for (const t of hintNews(was, card)) toast(t); // Phase 8B fix F2 (2): minutes 40 / 70 also when the full card is closed
     this.renderCompact(card);
     if (!card) return;
     if (this.fullCard && !this.bookOpen && card.step === this.fullCard.step) return this.refreshFull(card); // same step: the card changed state, redraw in place
@@ -245,9 +247,9 @@ export class RaceHud {
     if (this.fullCard && !this.bookOpen) this.renderFull(false);
   }
   private readonly feedBox = new Feed();
-  /** welcome.feed (the kept lines) and each `{t:'feed'}` (RaceClient). */
-  feed(ms: readonly FeedMessage[], teams: readonly TeamInfo[]): void {
-    this.feedBox.push(ms, teams);
+  /** welcome.feed (the kept lines: `replace`, every welcome incl. a reconnect) and each `{t:'feed'}` (RaceClient). */
+  feed(ms: readonly FeedMessage[], teams: readonly TeamInfo[], replace = false): void {
+    this.feedBox.push(ms, teams, replace);
   }
   /** `{t:'credits'}` after the finish: the "Ghi nguồn" panel gets a "Phòng Louvre" section (ui/Credits.ts). */
   credits(items: readonly CreditItem[]): void {

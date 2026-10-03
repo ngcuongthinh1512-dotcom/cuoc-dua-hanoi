@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { latLonToWorld, RACE_BBOX, worldToLatLon } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, WayFlag, pathPolyline, segPoint, shortestPath } from '@race/shared/graph';
 import { MEDIA } from '@race/shared/protocol';
-import { type Artwork, type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, mediaItems, parseLeg, placeOf, r2Names, startSpot, words } from '@race/shared/leg';
+import { type Artwork, type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, mediaItems, normalizeAnswer, parseLeg, placeOf, r2Names, startSpot, words } from '@race/shared/leg';
 import { landmarks, roads, traffic } from '../client/src/config.ts';
 import { CHUNK_SIZE, type ChunkData, type WaterData } from '../client/src/geo/chunkData.ts';
 import { districtAt, inRing } from '../client/src/geo/districts.ts';
@@ -191,11 +191,53 @@ export function secretStrings(leg: Leg, min = 12): string[] {
 const artworksOf = (s: Leg['steps'][number]): Artwork[] => (s.type === 'challenge' && s.task.kind === 'louvre' ? (s.task.louvre?.artworks ?? []) : []);
 
 /** Phase 8B rule 9 (docs/plans/phase8b.md §B): no artwork title / artist / Host note in the static "Ghi nguồn" file (whole
- *  text, ≥ 4 characters, plain + JSON-escaped) nor in the bytes of the room's pictures client/public/art/* (every word of ≥ 4
- *  letters: EXIF / XMP / GLB node names): the room's secret is only the 5 ids. ERROR (the file reaches every team). */
+ *  text, ≥ 4 characters, plain + JSON-escaped) nor in the metadata of the room's pictures client/public/art/* (every word of
+ *  ≥ 4 letters, not all digits: EXIF / XMP / GLB node names; artRegions): the room's secret is only the 5 ids. ERROR (the
+ *  file reaches every team). */
 /** Words every GLB / WebP carries by itself (glTF keys, container tags) or that say nothing about a work: an English note such
  *  as "image of …" must not flag a picture for them. */
 const GENERIC = new Set(['image', 'images', 'mesh', 'meshes', 'node', 'nodes', 'scene', 'scenes', 'material', 'materials', 'texture', 'textures', 'model', 'webp', 'glb', 'gltf', 'photo', 'picture', 'painting', 'sculpture', 'statue', 'with', 'from', 'this', 'that', 'work', 'copy', 'public', 'domain', 'license', 'source', 'title', 'artist', 'version', 'creative', 'commons', 'note', 'test', 'tranh', 'tuong', 'tượng', 'giả']);
+
+/** Words this short are searched only in metadata: in compressed bytes 2.7 % of random 4-letter strings already match (F1). */
+const ART_RAW_MIN = 6;
+/** WebP chunks holding the picture itself (compressed: never searched). ANMF = an animation frame (its own VP8 inside). */
+const WEBP_IMAGE = new Set(['VP8 ', 'VP8L', 'ALPH', 'ANMF']);
+
+/** Rule 9 (F1): where a picture / model keeps text. WebP: every chunk but the image data (EXIF, XMP, ICCP, VP8X…); GLB: the
+ *  JSON chunk (node / material / image names) + the same for each embedded picture. `raw`: bytes of an unknown format (or a
+ *  non-WebP picture in a GLB), searched for long words only. */
+export function artRegions(b: Buffer): { meta: Buffer[]; raw: Buffer[] } {
+  const tag = (o: number) => b.toString('latin1', o, o + 4);
+  if (b.length >= 12 && tag(0) === 'RIFF' && tag(8) === 'WEBP') {
+    const meta: Buffer[] = [];
+    for (let o = 12; o + 8 <= b.length; ) {
+      const n = b.readUInt32LE(o + 4);
+      if (!WEBP_IMAGE.has(tag(o))) meta.push(b.subarray(o + 8, o + 8 + n));
+      o += 8 + n + (n & 1);
+    }
+    return { meta, raw: [] };
+  }
+  if (b.length >= 20 && tag(0) === 'glTF') {
+    const n = b.readUInt32LE(12); // glTF 2.0: the first chunk is the JSON one, the BIN chunk (if any) right after
+    const json = b.subarray(20, 20 + n);
+    const bin = b.subarray(28 + n, 28 + n + (b.length >= 28 + n ? b.readUInt32LE(20 + n) : 0));
+    const out = { meta: [json], raw: [] as Buffer[] };
+    try {
+      const g = JSON.parse(json.toString('utf8')) as { images?: { bufferView?: number }[]; bufferViews?: { byteOffset?: number; byteLength: number }[] };
+      for (const img of g.images ?? []) {
+        const v = img.bufferView === undefined ? undefined : g.bufferViews?.[img.bufferView];
+        if (!v) continue;
+        const r = artRegions(bin.subarray(v.byteOffset ?? 0, (v.byteOffset ?? 0) + v.byteLength));
+        out.meta.push(...r.meta);
+        out.raw.push(...r.raw);
+      }
+    } catch {
+      out.raw.push(bin); // a broken JSON chunk: the whole BIN, long words only
+    }
+    return out;
+  }
+  return { meta: [], raw: [b] };
+}
 
 export function artLeaks(leg: Leg, root = ROOT): LegIssue[] {
   const arts = leg.steps.flatMap(artworksOf);
@@ -211,14 +253,16 @@ export function artLeaks(leg: Leg, root = ROOT): LegIssue[] {
   const dir = join(root, 'client/public/art');
   if (existsSync(dir)) {
     const text = (a: Artwork) => `${a.note} ${a.credit?.title ?? ''} ${a.credit?.artist ?? ''} ${a.credit?.photo ?? ''}`;
-    // as written (UTF-8 metadata keeps the accents) and without diacritics (ASCII metadata)
-    const toks = [...new Set(arts.flatMap((a) => [...text(a).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4), ...words(text(a))]))].filter((w) => !GENERIC.has(w));
+    // as written (UTF-8 metadata keeps the accents) and without diacritics (ASCII metadata); never all digits (a year in a
+    // photo name matched compressed bytes, F1)
+    const toks = [...new Set(arts.flatMap((a) => [...text(a).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4), ...words(text(a))]))].filter((w) => !GENERIC.has(w) && !/^\d+$/.test(w));
     const latin = (s: string) => Buffer.from(s, 'utf8').toString('latin1').toLowerCase();
     for (const n of readdirSync(dir)) {
       const f = join(dir, n);
       if (!statSync(f).isFile()) continue;
-      const hay = readFileSync(f).toString('latin1').toLowerCase();
-      const hits = toks.filter((t) => hay.includes(latin(t)));
+      const { meta, raw } = artRegions(readFileSync(f));
+      const [hay, rawHay] = [meta, raw].map((b) => Buffer.concat(b).toString('latin1').toLowerCase()) as [string, string];
+      const hits = toks.filter((t) => hay.includes(latin(t)) || (t.length >= ART_RAW_MIN && rawHay.includes(latin(t))));
       if (hits.length) out.push({ level: 'error', where: relative(root, f), message: `chứa chữ ${hits.map((h) => `"${h}"`).join(', ')} của tên / ghi chú tác phẩm (metadata, tên node GLB?): xử lý lại bằng npm run process-assets (xóa metadata, đổi tên node thành art-NN)` });
     }
   }
@@ -241,10 +285,20 @@ function* walkFiles(dir: string): Generator<string> {
   }
 }
 
+/** F1: the answers (answers + referenceAnswers) equal to a place name the game already ships (road names of the map,
+ *  landmark names), compared like answers (case / accents / spaces). */
+export function placeAnswers(leg: Leg, places: Iterable<string>): Set<string> {
+  const known = new Set([...places].map(normalizeAnswer));
+  return new Set([...answerStrings(leg)].filter((a) => known.has(normalizeAnswer(a))));
+}
+
+/** The place names the game ships: road names (roadgraph = the same OSM names the chunks carry) + landmark names. */
+const mapPlaces = (map: MapData) => [...map.graph.file.names, ...LANDMARKS.map((l) => l.name)];
+
 /** SPEC §3: leg content must not sit in files the browser downloads. Plain text and its JSON-escaped form are searched.
- *  A clue / task text found, or 2+ different secrets in one file = ERROR (a copy of the leg). A lone answer in `weak` =
- *  WARNING: answers are often street / landmark names that the map files legitimately contain. */
-export function scanLeaks(dirs: string[], strings: string[], root = ROOT, weak: Set<string> = new Set()): LegIssue[] {
+ *  Any secret found = ERROR, except when every hit is in `places` (answers equal to a road / landmark name the map files
+ *  legitimately contain, placeAnswers) = WARNING. */
+export function scanLeaks(dirs: string[], strings: string[], root = ROOT, places: Set<string> = new Set()): LegIssue[] {
   const out: LegIssue[] = [];
   const cut = (s: string) => `"${s.slice(0, 40)}${s.length > 40 ? '…' : ''}"`;
   const keys = strings.map((s) => [s, JSON.stringify(s).slice(1, -1), JSON.stringify(s).slice(1, -1).replace(/[^\x00-\x7f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)] as const);
@@ -256,8 +310,8 @@ export function scanLeaks(dirs: string[], strings: string[], root = ROOT, weak: 
       const hits = keys.filter(([s, ...forms]) => text.includes(s) || forms.some((x) => text.includes(x))).map(([s]) => s);
       if (!hits.length) continue;
       const where = relative(root, f);
-      if (hits.length === 1 && weak.has(hits[0]!))
-        out.push({ level: 'warning', where, message: `chứa chữ ${cut(hits[0]!)} trùng một đáp án của chặng. Thường chỉ là tên đường / địa danh có sẵn trong bản đồ (không sao); nếu file này là bản chép chặng do bạn bỏ vào client/ thì xóa nó` });
+      if (hits.every((h) => places.has(h)))
+        out.push({ level: 'warning', where, message: `chứa chữ ${hits.map(cut).join(', ')} trùng một đáp án của chặng: trùng địa danh có sẵn trong bản đồ (không sao); nếu file này là bản chép chặng do bạn bỏ vào client/ thì xóa nó` });
       else out.push({ level: 'error', where, message: `chứa nguyên văn ${hits.map(cut).join(', ')} của chặng: file này tới máy người chơi, đội đọc được đáp án / mật thư. Nếu bạn đã bỏ file chặng hoặc bản chép của nó vào thư mục client/ thì xóa đi và build lại` });
     }
   }
@@ -489,7 +543,7 @@ export function checkFile(file: string, opts: { root?: string; scanDirs?: string
     issues.push(...rep.issues);
     const media = mediaReport(leg);
     issues.push(...media.issues);
-    issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(leg), root, answerStrings(leg)));
+    issues.push(...scanLeaks(opts.scanDirs ?? [join(root, 'client/public'), join(root, 'client/dist')], secretStrings(leg), root, placeAnswers(leg, mapPlaces(map))));
     issues.push(...artLeaks(leg, root));
     lines.push(...media.lines, ...rep.lines, ...louvreTable(leg, root));
   }

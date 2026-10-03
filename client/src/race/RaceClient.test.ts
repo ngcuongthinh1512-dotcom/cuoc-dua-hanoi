@@ -158,14 +158,14 @@ describe('Phase 8B: Louvre room ops + feed / credits routing (docs/plans/phase8b
 
   it('welcome.feed, a feed line and the credits reach the HUD (team names from welcome.teams)', () => {
     const got: unknown[] = [];
-    const hud = { setView() {}, feed: (ms: unknown, teams: unknown) => got.push(['feed', ms, teams]), credits: (items: unknown) => got.push(['credits', items]) } as unknown as RaceHud;
+    const hud = { setView() {}, feed: (ms: unknown, teams: unknown, replace?: boolean) => got.push(['feed', ms, teams, !!replace]), credits: (items: unknown) => got.push(['credits', items]) } as unknown as RaceHud;
     const c = new RaceClient({ hud, send: () => {}, serverNow: () => 0 });
     const teams = [{ slot: 1, id: 't1', name: 'Đội Đỏ', colour: '#f00', online: true }];
     const line: FeedMessage = { t: 'feed', at: 5, slot: 1, ok: false, minutes: 3 };
     c.welcome({ teams, view: null, feed: [line], showStartOrder: false, startOrder: null } as unknown as Welcome, 0);
     expect(c.message(line)).toBe(true);
     expect(c.message({ t: 'credits', items: [] })).toBe(true);
-    expect(got).toEqual([['feed', [line], teams], ['feed', [line], teams], ['credits', []]]);
+    expect(got).toEqual([['feed', [line], teams, true], ['feed', [line], teams, false], ['credits', []]]); // welcome replaces (fix F2 (3)), a line appends
   });
 
   it('frame(): `view` once per hint mark (hintAt[i] + lockEndSlackMs), none when the card has that hint already', () => {

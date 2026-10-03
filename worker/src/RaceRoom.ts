@@ -147,9 +147,12 @@ export class RaceRoom extends DurableObject<Env> {
         }
       },
       feed: (m) => {
-        const kept = this.feed();
-        kept.push(m);
-        kept.splice(0, kept.length - NET.feedKept);
+        // not read since the wake: the read below already holds m (its event is written before the feed)
+        if (!this.feedV) this.feed();
+        else {
+          this.feedV.push(m);
+          this.feedV.splice(0, this.feedV.length - NET.feedKept);
+        }
         this.broadcast(m);
       },
       touchSnapshot: (now) => {
