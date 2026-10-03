@@ -150,25 +150,13 @@ Mỗi loại thẻ có tiêu đề và màu riêng, nhìn là nhận ra ngay.
 ### Thử thách
 - Nhiệm vụ bắt buộc, không có nhánh để chọn.
 - Có thể có câu gợi ý trước; khi đó bấm **"Nhận thử thách"** (hoặc `Enter`) để xem nội dung.
-- Đội **gõ câu trả lời ngay trong game**, ở ô nhập trên thẻ thử thách, và **gõ được ở bất kỳ đâu** sau khi đã nhận thử thách (mục 6). Game không tự chấm các thử thách gõ chữ: **Host xem câu trả lời rồi bấm Duyệt hoặc Phạt** (mục 7). Ngoại lệ là **Thử thách 3 (phòng Louvre)**: máy chủ tự chấm, xem mục "Thử thách 3" ngay bên dưới.
+- Đội **gõ câu trả lời ngay trong game**, ở ô nhập trên thẻ thử thách, và **gõ được ở bất kỳ đâu** sau khi đã nhận thử thách (mục 6). Game không tự chấm các thử thách gõ chữ: **Host xem câu trả lời rồi bấm Duyệt hoặc Phạt** (mục 7). Có thử thách do máy chủ tự chấm; thẻ thử thách cho biết cách làm.
 - Thẻ liệt kê **lịch sử các câu trả lời của chính đội bạn** ở thử thách đó (nội dung, giờ gửi, trạng thái). Lịch sử chỉ có trên thẻ thử thách, **không** nằm trong Sổ mật thư; đóng thẻ rồi muốn xem lại thì bấm `Enter`.
 - Thử thách này được Host duyệt thì **mật thư của thử thách kế tiếp hiện ngay**, bạn không phải đi tới đâu (ví dụ Thử thách 2 hiện ngay khi Thử thách 1 được duyệt).
-- **Trừ Thử thách 3 (phòng Louvre, có gợi ý ngay trong game), các thử thách không có gợi ý trong game.** Nếu đội làm một thử thách quá lâu (mặc định 45 phút, chặng có thể quy định khác), trang Host báo cho Host; Host có thể gửi gợi ý **riêng cho đội bạn qua Messenger**.
+- **Gợi ý (nếu có) hiện ngay trên thẻ thử thách; các thử thách khác không có gợi ý trong game.** Nếu đội làm một thử thách quá lâu (mặc định 45 phút, chặng có thể quy định khác), trang Host báo cho Host; Host có thể gửi gợi ý **riêng cho đội bạn qua Messenger**.
 - Bỏ qua thử thách bằng cách **bỏ cuộc** (bị phạt giờ) hoặc dùng **Vé ưu tiên**: chưa có trong bản game này.
 
 Nhiệm vụ ghi *"Địa điểm: …"* trên thẻ là nơi bạn được hướng dẫn tới làm nhiệm vụ (tới đó thì Host thấy đội đã tới, và xe vào bãi của nơi đó, mục 3); nhiệm vụ không ghi địa điểm thì làm ngay tại điểm vừa tới. Dù vậy câu trả lời vẫn gõ được ở bất kỳ đâu. Kết quả do Host duyệt (mục 7); chặng có thể bật **tự chấm** cho một số thử thách, khi đó game báo đúng hay sai ngay.
-
-### Thử thách 3: phòng Louvre
-Thử thách đặc biệt, **không gõ chữ**: bạn vào một căn phòng mô phỏng một phòng trong Louvre và tự tìm ra điều mật thư yêu cầu. Cách giải thế nào thì đội tự khám phá; luật chỉ nói cách thao tác.
-
-- **Vào phòng bằng `F`**: sau khi mở hòm Lộ trình ngay trước đó, bấm `F` khi đứng gần hòm để xuống phòng; muốn ra thì đứng gần cửa phòng và bấm `F`. Vào / ra không làm bạn bị coi là dịch chuyển bất thường và không cần "Về chỗ an toàn". Thấy nhân vật của các đội khác đang ở trong phòng, nhưng các đội ở ngoài phố không thấy bạn khi bạn ở dưới phòng.
-- Trong phòng có các tác phẩm, dưới mỗi tác phẩm có **một nút**: **đỏ** là chưa chọn, **xanh lá** là đã chọn; đứng gần nút và bấm `F` để chọn, bấm lại để bỏ chọn. **Đèn / nút chỉ hiện cho chính đội bạn.** Tên tác phẩm không hiện trong game.
-- **Nút chốt ở giữa phòng**: bấm `F` ở đó để chốt các tác phẩm đang chọn (không có hộp xác nhận). Máy chủ tự chấm; đúng thì bước xong và mật thư kế tiếp hiện ngay.
-- **Sai bị phạt 3 phút** (chặng có thể quy định số khác): giữa màn hình hiện đồng hồ đếm ngược, đếm ngược vẫn chạy kể cả khi Host tạm dừng. Trong lúc bị phạt, **lựa chọn của bạn được giữ nguyên và bạn vẫn bấm / bỏ chọn được**, chỉ chưa chốt được cho tới khi hết đếm ngược. Số lần chốt không giới hạn.
-- Thử thách này có thể hiện **gợi ý theo thời gian** ngay trên thẻ; đội đọc thẻ để biết.
-- **Tin công khai cho mọi đội**, hiện thành một đoạn chat nhỏ ở **góc dưới bên trái** màn hình: *"Đội X trả lời sai và bị phạt 3 phút"*. Tin này không nói gì khác về lựa chọn của đội.
-- **Ra khỏi phòng bất kỳ lúc nào** (`F` ở cửa), lựa chọn vẫn được giữ; tải lại trang khi đang ở trong phòng thì vào lại đúng trong phòng (mục 12). Khi đã chốt đúng, bạn vẫn đứng trong phòng và tự ra bằng `F` ở cửa.
-- **Ghi nguồn:** ảnh và mô hình các tác phẩm có bản quyền riêng; **bảng "Ghi nguồn" (trong menu `Esc`) chỉ mở sau khi đội bạn về đích** hoặc cuộc đua kết thúc, trước đó bấm vào chỉ thấy *"Mở sau khi về đích"*. Tên tác phẩm, tác giả, giấy phép và nguồn ảnh chỉ hiện ở bảng đó.
 
 ### Các kiểu nhiệm vụ bạn có thể gặp
 
@@ -197,13 +185,13 @@ Xe dùng trong nhiệm vụ chở hàng hay đạp xe qua cổng là **xe riêng
 - Câu trả lời của thử thách gõ vào **ô nhập trên thẻ thử thách** (tối đa 200 ký tự). Bấm `Enter` hoặc nút **"Gửi câu trả lời"** để gửi. Thẻ đang đóng thì bấm `Enter` để mở lại. Trong ô gõ, `Space` và phím số chỉ là chữ bạn gõ (không đóng thẻ); `Esc` lần đầu bỏ con trỏ khỏi ô, lần hai đóng thẻ.
 - **Gõ được ở bất kỳ đâu** sau khi thử thách đã bắt đầu: không cần đứng ở điểm thử thách, không cần xuống xe, đang đạp xe cũng gõ được (thử thách có câu gợi ý thì phải bấm **"Nhận thử thách"** trước).
 - **Mọi câu trả lời đều được lưu.** Thẻ hiện danh sách các lần bạn đã gửi ở thử thách đó: nội dung đã gõ, giờ gửi và trạng thái (*Chờ Host duyệt*, *Đã duyệt*, *Bị phạt 3 phút*). Đội vừa bị phạt xem lại lần trước đã gõ gì để khỏi gõ lại y nguyên. Chỉ có lịch sử của **chính đội bạn**, và chỉ ở thẻ thử thách, không ở Sổ mật thư.
-- Game **không tự chấm** đúng hay sai các thử thách gõ chữ: câu trả lời tới tay Host, Host quyết định (mục 7). Ngoại lệ: thử thách tự chấm và Thử thách 3 (phòng Louvre, không gõ chữ, máy chủ chấm). Mỗi lúc chỉ có **một câu chờ duyệt**: khi câu trước chưa có quyết định, bạn thấy *"Câu trả lời trước đang chờ Host duyệt"* và chưa gửi thêm được. Đang bị phạt đếm ngược thì chưa gửi được (*"Đang bị phạt, chờ hết đếm ngược rồi trả lời lại"*).
+- Game **không tự chấm** đúng hay sai các thử thách gõ chữ: câu trả lời tới tay Host, Host quyết định (mục 7). Ngoại lệ: thử thách do máy chủ tự chấm. Mỗi lúc chỉ có **một câu chờ duyệt**: khi câu trước chưa có quyết định, bạn thấy *"Câu trả lời trước đang chờ Host duyệt"* và chưa gửi thêm được. Đang bị phạt đếm ngược thì chưa gửi được (*"Đang bị phạt, chờ hết đếm ngược rồi trả lời lại"*).
 - Số lần gửi **không giới hạn**; **không có luật "sai 3 lần thì khóa"**. Hậu quả duy nhất của một câu chưa được là đếm ngược trước khi gửi lại (mục 7).
 - Chặng có thể bật **tự chấm** cho một số thử thách: khi đó chữ hoa hay chữ thường, có dấu hay không dấu, khoảng trắng thừa đều được bỏ qua khi so đáp án; trả lời sai sẽ thấy *"Chưa đúng, hãy thử lại!"* và gõ lại ngay, không bị khóa.
 
 ## 7. Nhiệm vụ Host duyệt
 
-Các nhiệm vụ gõ chữ hoặc gửi ảnh của chặng không được game tự chấm: **Host xem bài của đội bạn và quyết định** (ngoại lệ: thử thách tự chấm và Thử thách 3, phòng Louvre, do máy chủ chấm). Có hai kiểu bài.
+Các nhiệm vụ gõ chữ hoặc gửi ảnh của chặng không được game tự chấm: **Host xem bài của đội bạn và quyết định** (ngoại lệ: thử thách do máy chủ tự chấm). Có hai kiểu bài.
 
 ### Gõ câu trả lời trong game (ví dụ Thử thách 1 và 2)
 1. Bấm **"Nhận thử thách"** nếu thẻ có câu gợi ý, đọc đề, gõ câu trả lời vào ô trên thẻ rồi bấm `Enter` (mục 6). Gõ được ở bất kỳ đâu.
@@ -313,7 +301,6 @@ Lỡ tải lại trang (`F5` trên Windows, `Cmd`+`R` trên Mac), tắt tab, m�
 
 ### Nhiệm vụ đang làm dở
 - Tìm và nhặt đồ vật: giữ nguyên những vật đã nhặt.
-- Phòng Louvre (Thử thách 3): giữ nguyên **các tác phẩm đang chọn** (tối đa mất vài giây bấm cuối nếu máy chủ vừa khởi động lại; bấm lại là được), số lần chốt sai và **đồng hồ đếm ngược phạt**; gợi ý trong game tính lại đúng theo giờ. Tải lại trang khi đang ở trong phòng thì bạn xuất hiện lại **đúng trong phòng**; nếu bạn đã chốt đúng mà chưa ra khỏi phòng rồi mới tải lại, bạn đứng trên **sân Louvre** (coi như đã ra).
 - Thử thách gõ câu trả lời: giữ nguyên **lịch sử các câu bạn đã gửi** (bấm `Enter` để xem trên thẻ), câu đang chờ Host duyệt và **đồng hồ đếm ngược phạt**. Đếm ngược chạy cả lúc bạn offline: còn bao nhiêu thì vào lại thấy đúng bấy nhiêu, hết thì gõ lại được.
 - Lựa chọn kép: giữ nguyên nhánh đã chọn, hòm nhánh đã mở, số lần đã đổi nhánh và **đồng hồ đếm ngược đổi nhánh**. Hòm nhánh hiện lại khi bạn tới gần (hòm của nhánh vừa đổi hiện khi hết đếm ngược).
 - Nhiệm vụ bấm giờ (chở hàng, đạp xe qua cổng, mini-game trên màn hình): lượt đang chạy bị hủy, vào lại làm lại từ đầu lượt đó.
@@ -321,14 +308,14 @@ Lỡ tải lại trang (`F5` trên Windows, `Cmd`+`R` trên Mac), tắt tab, m�
 
 ### Sau khi về đích
 - Vào lại sẽ thấy màn hình kết quả và chế độ khán giả.
-- **Bảng "Ghi nguồn"** (menu `Esc`) mở được từ lúc đội bạn về đích hoặc cuộc đua kết thúc: ghi công đầy đủ tên, tác giả, giấy phép và nguồn các tác phẩm trong phòng Louvre. Chế độ chơi thử không có cuộc đua thì bảng mở ngay.
+- **Bảng "Ghi nguồn"** (menu `Esc`) mở được từ lúc đội bạn về đích hoặc cuộc đua kết thúc: ghi công đầy đủ tên, tác giả, giấy phép và nguồn của các hình ảnh, mô hình dùng trong game. Chế độ chơi thử không có cuộc đua thì bảng mở ngay.
 - Kể cả khi Host đã kết thúc chặng, bạn vẫn vào được bằng mã đội để xem lại Sổ mật thư và kết quả (chỉ xem, không thay đổi được).
 
 ## 13. Chơi đẹp
 
 - **Máy chủ quyết định mọi kết quả**: mở mật thư, lưu câu trả lời và quyết định của Host (Duyệt / Phạt), tính giờ, tính phạt, xếp hạng, nhận xe.
 - Mật thư chỉ được gửi tới máy của bạn khi đội bạn mở khóa, nên **không có cách nào đọc trước**. Đề bài của từng nhánh Lựa chọn kép chỉ được gửi khi bạn mở hòm của nhánh đó. **Hình** của mật thư và nhiệm vụ nằm trong kho riêng tư và chỉ tải được cho đội đã mở mật thư đó (biết tên hình cũng không tải được); video và trang web là liên kết bên ngoài.
-- Host duyệt bằng mắt: **đáp án và đáp án tham khảo không bao giờ được gửi tới máy đội**, và đội không xem được câu trả lời của đội khác. Phòng Louvre cũng vậy: ảnh các tác phẩm có sẵn trong game (ai cũng tải được, không mang tên), còn **5 tác phẩm đúng chỉ nằm ở máy chủ**; số đúng x/5 của bạn chỉ gửi cho đội bạn, đội khác chỉ thấy tin công khai.
+- Host duyệt bằng mắt: **đáp án và đáp án tham khảo không bao giờ được gửi tới máy đội**, và đội không xem được câu trả lời của đội khác.
 - Hệ thống luôn kiểm tra tốc độ di chuyển. Di chuyển bất thường được **đánh dấu để Host xem xét**: đội bị gắn **cờ đỏ** trên trang Host kèm lý do và giờ. Cờ đỏ chỉ là đánh dấu, **không tự phạt**; nếu bị gắn cờ oan, Host bấm **"Xóa cờ"** (nhật ký vi phạm vẫn được lưu, và đội bị gắn cờ lại nếu có bằng chứng mới).
 - Ra khỏi khu vực đua sẽ bị chặn lại kèm cảnh báo *"Bạn đang rời khu vực đua"*.
 - Mỗi mã đội chỉ chơi trên một thiết bị. Hãy giữ mã đội của mình thật cẩn thận!

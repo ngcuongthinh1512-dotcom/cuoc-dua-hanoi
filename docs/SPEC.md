@@ -1079,3 +1079,5 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 
 ### 17.27 Luật đua không lộ chi tiết Thử thách 3 (2026-10-03)
 - `docs/RACE_RULES.md` (mở trong game) chỉ nói cách thao tác phòng Louvre (vào / ra, nút đỏ xanh, nút chốt, phạt 3 phút, tin công khai). Không nêu số tác phẩm, số đáp án, mốc gợi ý phút 40 / 70, giới hạn 5, hay cách dò đáp án.
+
+- **Cập nhật 17.27 (2026-10-03):** `docs/RACE_RULES.md` không nhắc gì tới Thử thách 3 / phòng Louvre (mục riêng, số tác phẩm, đáp án, gợi ý, ghi nguồn riêng cho phòng đều bỏ). Người chơi vào chơi mới biết; thẻ thử thách trong game tự nói cách làm.
