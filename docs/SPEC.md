@@ -1067,3 +1067,4 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 
 ### 17.24 Phạm vi Phase 10 (2026-10-03)
 - Phase 10 THU HẸP: chỉ làm công cụ Host cần cho buổi thật: (1) trang Host ghim cột "Đội" + hàng tiêu đề khi cuộn ngang, khung "Chờ duyệt" thu gọn được; (2) nút Hoàn tác 10 giây sau Duyệt / Phạt; (3) khóa bài khi nhiều Host cùng duyệt một câu; (4) nút xóa cờ đỏ (flagged) cho đội bị gắn cờ oan; (5) bảng "vừa rời đi n phút trước" ở bảng "Tại điểm này". BỎ soạn chặng trên bản đồ (người dùng nhập chặng bằng file JSON). Có thể bổ sung các mục nhỏ còn tồn trong TODO.md nếu rẻ.
+- **Sửa (2026-10-03):** chỉ có MỘT Host, nên BỎ việc "khóa bài khi nhiều Host cùng duyệt" khỏi Phase 10 (phạm vi còn: ghim cột / tiêu đề + khung thu gọn, Hoàn tác 10 giây, xóa cờ đỏ, "vừa rời đi n phút trước").
