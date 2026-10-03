@@ -33,7 +33,7 @@ Game chỉ dùng những phím có trên cả Windows lẫn Mac, **không dùng*
 - Xe không đi được bậc thang; va chạm mạnh khi đang nhanh thì **ngã xe** (khoảng 2 giây sau tự đứng dậy). Đạp xe xuống sông thì xe ở lại trên bờ, bạn phải bơi.
 - **Ai lấy trước được trước.** Xe đã có đội dùng mang **biểu tượng khóa và màu của đội đó**, bạn không lấy được. Mỗi người giữ tối đa 1 xe; lấy xe khác thì chiếc cũ biến mất. Bỏ xe ngoài đường và ở xa nó quá lâu thì xe biến mất. Thoát game hay mất mạng không làm mất xe.
 - Bạn **phải xuống xe** mới mở được hòm mật thư. Gõ câu trả lời thì không cần xuống xe.
-- **Bãi xe cạnh điểm:** khi bạn mở mật thư của một nhiệm vụ làm tại điểm, xe của bạn tự vào bãi cạnh điểm đó, và **bất kỳ đội nào cũng lấy được**, kể cả bạn. Làm xong nhiệm vụ mà xe còn ở bãi thì bấm `F` lấy lại; bị lấy mất thì đi bộ hoặc lấy chiếc khác. Bãi đầy thì chiếc để lâu nhất biến mất.
+- **Bắt đầu thử thách là xuống xe:** khi một thử thách (hoặc nhánh Lựa chọn kép) bắt đầu — kể cả khi bạn đang đạp xe lúc Host duyệt bước trước — bạn **được cho xuống xe ngay tại chỗ**, xe để lại cạnh bạn và **bất kỳ đội nào cũng lấy được**, kể cả bạn. Lộ trình bắt buộc đi bộ cũng vậy. Làm xong mà xe còn đó thì bấm `F` lấy lại; bị lấy mất thì đi bộ hoặc lấy chiếc khác. Quá nhiều xe bỏ lại ở một điểm thì chiếc để lâu nhất biến mất.
 
 ## 4. Nguyên tắc tuần tự
 

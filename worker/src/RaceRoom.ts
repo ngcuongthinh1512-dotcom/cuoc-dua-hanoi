@@ -143,7 +143,10 @@ export class RaceRoom extends DurableObject<Env> {
       name: (id) => this.team(id)?.name ?? '',
       online: () => [...this.online()],
       pose: (id) => this.live.get(id)?.valid ?? null,
-      park: (team, rack, at, now) => this.bikes.park(team, rack, at, now),
+      park: (team, rack, now) => {
+        const l = this.live.get(team);
+        this.bikes.park(team, rack, l ? { team, x: l.valid.x, z: l.valid.z } : null, now);
+      },
       legLoaded: (now) => this.bikes.resetForLeg(now),
       hideBox: (team, step, branch) => {
         // S1: forget the revealed box first, so the box of the branch switched back to is revealed again

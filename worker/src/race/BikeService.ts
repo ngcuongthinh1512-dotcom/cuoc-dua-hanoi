@@ -35,8 +35,6 @@ interface Spawner extends SpawnerState {
  *  lag). A bike another team rides never does (RemotePlayers draws it from the tick), so `bikes` shows no rider, no route
  *  far ahead and no other team's stops (SPEC §7, §17.10; plan decisions 5 / 18). */
 const VIEW_METERS = 250;
-/** m between two bikes side by side in a rack row (handlebars ≈ 0.6 m wide). */
-const RACK_SPACING = 0.9;
 /** m: a dismount's y outside the map's span (Seine bed … Eiffel top, as decodePose) is ignored. */
 const okY = (y: number | undefined): y is number => y !== undefined && y >= -100 && y <= 1000;
 
@@ -176,27 +174,17 @@ export class BikeService {
     }
   }
 
-  /** Phase 7 (SPEC §6.4, D18): the owner opened a task clue / a walk-only route (or entered a task place elsewhere) → its
-   *  bike goes to the rack of the point it stands at, free for anyone; a full rack (bikeParking.maxBikes) loses its
-   *  longest parked bike. `at` = the rack's spot (leg bikeParking); ponytail: null (none in the leg file) → the bike stays
-   *  where it stood (`npm run leg:check` suggests a spot to add). */
-  park(team: string, rack: string, at: { x: number; z: number } | null, now: number) {
+  /** SPEC §6.4 / §17.32: the owner's task started (clue opened / accepted, branch opened, approved remotely, a walk-only
+   *  route, a task place elsewhere entered) → it is off its bike, which stays NEXT TO THE TEAM (`at` = its trusted pose;
+   *  null = offline / unknown: where the bike stands, i.e. the team's last known spot), free for anyone. `rack` groups the
+   *  bikes left for that point: past bikeParking.maxBikes the longest parked one goes. */
+  park(team: string, rack: string, at: PlayerSpot | null, now: number) {
     const b = [...this.bikes.values()].find((o) => o.owner === team);
     if (!b) return;
     Object.assign(b, { owner: null, rider: false, parked: true, rack, parkedAt: now });
+    if (at) Object.assign(b, { x: at.x, z: at.z });
     const atRack = [...this.bikes.values()].filter((o) => o.rack === rack).sort((p, q) => (p.parkedAt ?? 0) - (q.parkedAt ?? 0));
     const gone = atRack.slice(0, Math.max(0, atRack.length - this.io.cfg.bikeParking.maxBikes)).map((o) => o.id);
-    if (at) {
-      // ponytail: no rack model (SPEC §6.4): one east–west row from the leg's rack spot, every bike facing north, each in
-      // the first free place (0, −1, +1, −2 … × RACK_SPACING). Upgrade: a rack model + the OSM rack's direction.
-      const stand = atRack.filter((o) => o !== b && !gone.includes(o.id));
-      for (let k = 0; ; k++) {
-        const x = at.x + (k % 2 ? -1 : 1) * Math.ceil(k / 2) * RACK_SPACING;
-        if (stand.some((o) => Math.hypot(o.x - x, o.z - at.z) < RACK_SPACING / 2)) continue;
-        Object.assign(b, { x, z: at.z, yaw: 0 });
-        break;
-      }
-    }
     this.put(b);
     this.drop(gone);
     this.event(now, team, 'bikePark', { id: b.id, rack, gone });

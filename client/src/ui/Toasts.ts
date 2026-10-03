@@ -18,7 +18,7 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   bikeLost: 'Chậm một bước! Xe đã có người lấy.',
   bikeBroken: 'Xe này bị hỏng', // a decoy bike (SPEC §17.30): F refused, the bike stays
   bikeGone: 'Xe của bạn đã biến mất vì bị bỏ lại quá xa',
-  bikeParked: 'Xe của bạn đã được để ở bãi xe cạnh điểm. Trong lúc bạn làm thử thách, đội khác có thể lấy mất!',
+  bikeParked: 'Bạn được xuống xe để làm thử thách. Xe để lại cạnh bạn, đội khác có thể lấy!',
   walkOnly: 'Lộ trình này bắt buộc đi bộ',
   // Phase 7: race ops (SPEC §8)
   raceNotOpen: 'Cuộc đua chưa bắt đầu, hãy chờ Host',

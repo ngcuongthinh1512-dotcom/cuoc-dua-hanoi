@@ -56,8 +56,8 @@ export interface RaceIO {
   online(): string[];
   /** The team's trusted pose (RaceRoom: TrustedPoint, D4; mode = its last pose's), null = none yet. */
   pose(id: string): PoseSample | null;
-  /** SPEC §6.4: the team's bike (if it holds one) to the rack `rack` at (x, z) (null = where the bike stands). */
-  park(team: string, rack: string, at: { x: number; z: number } | null, now: number): void;
+  /** SPEC §6.4 / §17.32: the team off its bike (if it holds one); the bike stays next to the team, free, grouped under `rack`. */
+  park(team: string, rack: string, now: number): void;
   /** A new leg was loaded (lobby, no team entered): the bikes start again from its `vehicles` block. */
   legLoaded(now: number): void;
   /** Phase 8 (D6, critic S1): the team switched away from `branch` of detour `step` (id): every socket of the team forgets
@@ -644,7 +644,7 @@ export class RaceEngine {
       this.io.changed(now);
     }
     for (const h of hides) this.io.hideBox(team, sid(h.step), h.branch); // before the card that says "switched"
-    for (const k of parks) this.io.park(team, k.rack, k.at, now);
+    for (const k of parks) this.io.park(team, k.rack, now);
     for (const m of out) this.io.send(team, m);
     for (const m of feeds) this.io.feed(m);
     if (dirty.size) {

@@ -206,7 +206,7 @@ describe('BikeService (memory SQLite, controlled clock)', () => {
     expect(sent.slice(n)).toEqual([['t1', { t: 'bikes', list: [], full: true }]]); // t1's first (empty) view only
   });
 
-  it('park: free for anyone at the rack; a full rack loses its longest parked bike', () => {
+  it('park (§17.32): free for anyone, next to the team; a full rack loses its longest parked bike', () => {
     const { s, sent } = service();
     for (let i = 0; i <= cfg.bikeParking.maxBikes; i++) {
       s.onHost({ t: 'host.bike', op: 'add', x: 3 * i, z: 0 }, i);
@@ -221,29 +221,14 @@ describe('BikeService (memory SQLite, controlled clock)', () => {
     s.onTeam('t9', spot('t9', 3, 0), { t: 'bike', op: 'claim', id: s.list()[0]!.id }, false, 300); // anyone may take it back
     expect(s.list()[0]).toMatchObject({ owner: 't9', parked: false });
     const id9 = s.list()[0]!.id;
-    s.park('t9', 'L2', { x: 50, z: -7 }, 400); // D18: moved onto the rack's spot from the leg
-    expect(s.list().find((b) => b.id === id9)).toMatchObject({ x: 50, z: -7, owner: null, parked: true });
-  });
-
-  it('bikes parked at one rack spot stand side by side in a row, never on top of each other (SPEC §6.4, review F6)', () => {
-    const { s } = service();
-    const parkOne = (i: number) => {
-      s.onHost({ t: 'host.bike', op: 'add', x: 3 * i, z: 0 }, 10 * i);
-      const id = s.list().at(-1)!.id;
-      s.onTeam(`t${i}`, spot(`t${i}`, 3 * i, 0), { t: 'bike', op: 'claim', id }, false, 10 * i);
-      s.park(`t${i}`, 'R', { x: 50, z: -7 }, 10 * i);
-      return id;
-    };
-    const row = () => s.list().filter((b) => b.parked).map((b) => [Math.round(b.x * 10) / 10, b.z, b.yaw]);
-    const ids = [0, 1, 2].map(parkOne);
-    expect(row()).toEqual([[50, -7, 0], [49.1, -7, 0], [50.9, -7, 0]]);
-    s.onTeam('t9', spot('t9', 49, -7), { t: 'bike', op: 'claim', id: ids[1]! }, false, 25); // its place is free again
-    parkOne(3);
-    expect(row()).toEqual([[50, -7, 0], [50.9, -7, 0], [49.1, -7, 0]]);
-    for (let i = 4; i <= cfg.bikeParking.maxBikes + 1; i++) parkOne(i); // full: the longest parked goes, its place is reused
-    const xs = row().map(([x]) => x);
-    expect(xs).toHaveLength(cfg.bikeParking.maxBikes);
-    expect(new Set(xs).size).toBe(xs.length);
+    // riding 500 m away when the task starts: off the bike right there (the team's trusted pose), never a rack spot
+    s.tick([spot('t9', 500, -7)], new Set(['t9']), 350);
+    s.park('t9', 'L2', spot('t9', 503, -7), 400);
+    expect(s.list().find((b) => b.id === id9)).toMatchObject({ x: 503, z: -7, owner: null, rider: false, parked: true });
+    // offline (no pose): the bike stays where it stands
+    s.onTeam('t8', spot('t8', 503, -7), { t: 'bike', op: 'claim', id: id9 }, false, 500);
+    s.park('t8', 'L2', null, 600);
+    expect(s.list().find((b) => b.id === id9)).toMatchObject({ x: 503, z: -7, owner: null, parked: true });
   });
 
   it('Host: release frees a team’s bike, remove deletes it', () => {

@@ -189,10 +189,10 @@ export class Bikes {
       if (mine && s.rider) this.serverRiding.add(s.id);
       else this.serverRiding.delete(s.id);
       const here = this.c?.riding === b;
-      if (here && !mine) this.getOff(this.c!, b); // parked / released by the server
+      if (here && !mine) this.getOff(this.c!, b); // a task started / released by the server: off, the bike at the feet
       b.owner = s.owner;
       b.ownerColour = this.colourOf(s.owner);
-      if (here && mine) continue;
+      if (here) continue; // own: keeps its local pose; just got off: stays where the rider stood (the server's x/z ≈ it)
       b.rider = s.rider && !mine ? REMOTE_RIDER : null; // own bike "ridden" but not here (reconnect): parked, update() reports it
       if (!old || b.position.x !== s.x || b.position.z !== s.z || b.position.y !== s.y) {
         b.position.set(s.x, s.y, s.z);

@@ -71,14 +71,14 @@ export type RaceEffect =
   /** Step done; the team now holds the clue of step + 1 (received at the same `now`). */
   | { kind: 'complete'; step: number }
   | { kind: 'finish' }
-  /** SPEC §6.4: the team's bike (if it holds one) goes to the rack of the point where the team STANDS — never the point
-   *  ahead (docs/plans/phase7.md D18). Emitted:
-   *   - with `complete` of step k when the clue now received (k + 1) is a task done at that point or a walk-only route,
-   *     and the team stands on foot in the zone step k was completed in (a box opened: always; an approval / a right
-   *     answer from anywhere: only then, Phase 8 S3) → that zone (NOT zones[k + 1]);
+  /** SPEC §6.4 + §17.32: a task starts → the team is forced off its bike (if it holds one); the bike stays NEXT TO THE
+   *  TEAM (its trusted pose, never a rack spot), free for anyone. Emitted:
+   *   - with `complete` of step k when the clue now received (k + 1) is a task done at that point or a walk-only route —
+   *     wherever the team is (riding past, approved remotely: it gets off there);
+   *   - with `accept` of a teaser challenge done at the point, with `openBranch` of a branch done at the point;
    *   - with `arrive` in a task zone somewhere else (challenge task.location, the chosen detour branch's location).
-   *  `rack` = Zone.rack (keyed by point), `at` = Zone.parking (null = the bike stays where it stands). */
-  | { kind: 'park'; rack: string; at: { x: number; z: number } | null }
+   *  `rack` = Zone.rack of the step's point (keyed by point): groups the bikes left for that task (bikeParking.maxBikes). */
+  | { kind: 'park'; rack: string }
   | { kind: 'refuse'; code: ServerNotice }
   // Phase 8 (D4–D6): RaceEngine.apply writes them (step_progress row + events in one transaction, then the messages).
   // `step` = index in leg.steps.
@@ -169,13 +169,13 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     if (!hit) return false;
     p.arrivedAt = now;
     fx.push({ kind: 'arrive', step: p.step });
-    if (hit.own) fx.push({ kind: 'park', rack: hit.zone.rack, at: hit.zone.parking });
+    if (hit.own) fx.push({ kind: 'park', rack: hit.zone.rack });
     return true;
   };
-  /** Step i done at `at`; the bike goes to its rack only when the team is `standing` there (S3). */
-  const complete = (i: number, at: Zone, standing: boolean) => {
+  /** Step i done at `at`; a task-here / walk-only clue received → off the bike wherever the team is (§17.32). */
+  const complete = (i: number, at: Zone) => {
     fx.push({ kind: 'complete', step: i });
-    if (standing && parksOnReceive(leg, i)) fx.push({ kind: 'park', rack: at.rack, at: at.parking });
+    if (parksOnReceive(leg, i)) fx.push({ kind: 'park', rack: at.rack });
     p = { ...p, step: i + 1, arrivedAt: null, startedAt: null, branch: null, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, picks: [] };
   };
   /** A trusted position: arrivals, then whatever completes by standing there (route → Pit Stop zone, check-in). */
@@ -184,7 +184,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
       const i = p.step, s = steps[i]!;
       if (!arrive(x, z, 0) || !running) return;
       if (s.type === 'route_info' && steps[i + 1]?.type === 'pit_stop') {
-        complete(i, zones[i]!, true);
+        complete(i, zones[i]!);
         continue;
       }
       if (s.type === 'pit_stop' && !riding && now >= p.arrivedAt! + p.penaltyMinutes * 60_000) {
@@ -223,6 +223,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     if (!inside(branchZone(leg, zones, i, p.branch!)!, input.x, input.z, slack)) return refuse('boxFar');
     arrive(input.x, input.z, slack);
     fx.push({ kind: 'openBranch', step: i, branch: p.branch! });
+    if (!taskOf(s, p.branch)!.location) fx.push({ kind: 'park', rack: branchZone(leg, zones, i, p.branch!)!.rack }); // the task starts here
     p.branchOpenedAt = p.startedAt = now;
     return { p, effects: fx };
   }
@@ -232,17 +233,17 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     if (input.riding) return refuse('boxRiding');
     if (!inside(zones[i]!, input.x, input.z, slack)) return refuse('boxFar');
     arrive(input.x, input.z, slack);
-    complete(i, zones[i]!, true);
+    complete(i, zones[i]!);
     settle(input.x, input.z, input.riding); // the next step may be done right here (a task at the point)
     return { p, effects: fx };
   }
   if (i < p.step) return silent; // a done step: nothing more to do there
-  /** Step i's task is done (an approval / a right auto answer, from anywhere): complete where it is done, the bike racked
-   *  only when the team stands there on foot (S3), then the pose settles the next step (a task right there…). */
+  /** Step i's task is done (an approval / a right auto answer, from anywhere): complete where it is done, then the pose
+   *  settles the next step (a task right there…). */
   const done = (pose: StandAt) => {
     const place = placesOf(leg, zones, i, p.branch)[0]?.zone;
     if (!place) return;
-    complete(i, place, !!pose && !pose.riding && inside(place, pose.x, pose.z, slack));
+    complete(i, place);
     if (pose) settle(pose.x, pose.z, pose.riding);
   };
   if (input.kind === 'approve') {
@@ -252,7 +253,9 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   if (input.kind === 'accept') {
     if (s.type !== 'challenge' || s.teaser === '' || p.startedAt !== null) return silent;
     p.startedAt = now;
-    return { p, effects: [{ kind: 'accept', step: i }] };
+    fx.push({ kind: 'accept', step: i });
+    if (!s.task.location) fx.push({ kind: 'park', rack: zones[i]!.rack }); // the task starts here, wherever the team is
+    return { p, effects: fx };
   }
   if (input.kind === 'branch') {
     if (s.type !== 'detour' || !s.branches.some((b) => b.id === input.branch) || p.branch === input.branch) return silent;

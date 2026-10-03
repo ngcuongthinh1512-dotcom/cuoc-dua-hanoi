@@ -206,7 +206,8 @@ describe('RaceEngine', () => {
     expect(f.log).toEqual([]);
     // N4: the Host clicked "Phạt" by mistake: "Duyệt" on that answer completes the step, one toast (M8: no clueNew)
     review('t0', 'T1', 'approve', 50_000, { id: 1 });
-    expect(f.log.filter((l) => !l.startsWith('send'))).toEqual(['sql INSERT INTO step_progress', 'sql INSERT INTO step_progress', 'event review', 'event complete', 'sql INSERT INTO meta', 'saveTeam']);
+    // §17.32: L2 is walk-only → off the bike wherever the team is ('park' after the rows)
+    expect(f.log.filter((l) => !l.startsWith('send'))).toEqual(['sql INSERT INTO step_progress', 'sql INSERT INTO step_progress', 'event review', 'event complete', 'sql INSERT INTO meta', 'saveTeam', 'park']);
     expect(to('t0').slice(-2)).toEqual([{ t: 'notice', code: 'approved' }, { t: 'race', view: expect.objectContaining({ card: expect.objectContaining({ step: 'L2', receivedAt: 50_000 }) }) }]);
     expect(f.teams.get('t0')!.step).toBe(2);
     // review R-11: the Host who clicked "Duyệt" hears it overruled a "Phạt" (a page a second old); one Host (§17.24): the way back is «Hoàn tác»
