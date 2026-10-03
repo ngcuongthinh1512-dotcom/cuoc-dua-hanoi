@@ -188,6 +188,8 @@ export const roads = {
   // m; mergeGap: parallel same-layer road decks closer than this (centre lines) are joined into one deck, no inner parapets
   bridge: { deckThickness: 1, railingHeight: 1.1, railingThickness: 0.3, endSample: 5, railLayerStep: 6, mergeGap: 30,
     riverDeck: 1.3, // m: road deck under an upper rail deck over the river when none is in its chunk (Bir-Hakeim ≈ 1.1–1.5)
+    endRamp: 15, // m of slab beyond a real chain end, blending down to the ground: covers the carved trench behind the quay wall
+    rampGrade: 0.25, // max rise per m where the deck follows steep ground (the quay band's one-cell face); player.maxSlopeDeg 45
     bare: ['Pont Neuf', 'Pont des Arts'] as string[] }, // named decks without railings: world/landmarks/g2.ts draws their parapets
   colours: { asphalt: '#3b3c40', sidewalk: '#bab5aa', pave: '#7f756a', marking: '#f0f0ec', bridge: '#b7aa8f', railing: '#26292c' },
   textureTile: { asphalt: 4, sidewalk: 3, pave: 1.2 }, // m covered by one canvas texture (uv = world metres)

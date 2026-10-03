@@ -185,8 +185,9 @@ export interface WaterData {
    *  line at their top landings (quayMesh leaves the parapet out there). */
   stairs?: number[];
   stairGaps?: number[];
-  /** Bridge decks (layer ≤ 1) crossing a river edge: [x, z, halfWidth, …] on the wall line (deck half width + margin);
-   *  quayMesh leaves the parapet out there, else a 1 m wall bars both ends of every bridge. */
+  /** Road / foot bridge decks crossing a river edge: [x, z, halfWidth, inlandX, inlandZ, …] on the wall line (deck half
+   *  width + margin, wider on an oblique edge; inland = unit vector towards the bank). quayMesh leaves wall and coping out
+   *  within halfWidth, carveRiver digs no trench under the deck footprint, else a wall or a hole bars every bridge end. */
   bridgeGaps?: number[];
   /** Phase 5 (HUD location label, street-sign district line; geo/districts.ts): arrondissements (boundary=administrative +
    *  admin_level=9), n = 1…20 (8 = "8e"), sorted by n. */

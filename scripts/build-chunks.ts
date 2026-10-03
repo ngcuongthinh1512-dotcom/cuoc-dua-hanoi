@@ -11,7 +11,7 @@ import { parseArgs } from 'node:util';
 import type { MultiPolygon, Polygon, Position } from 'geojson';
 import osmtogeojson from 'osmtogeojson';
 import { RACE_BBOX, latLonToWorld } from '@race/shared';
-import { props, stairs as ST, terrain as TR } from '../client/src/config.ts';
+import { props, roads as RD, stairs as ST, terrain as TR } from '../client/src/config.ts';
 import {
   type BuildingRec, CHUNK_SIZE, type ChunkData, type ChunkIndex, type ChunkKey, type JunctionArm, type JunctionRec, type LandmarkPoint,
   type PartRec, type SkylineData, type StairRec, type WaterData, type XZ, chunkBounds, chunkKey, ringArea,
@@ -431,8 +431,23 @@ for (const w of roadWays) {
 }
 
 // --- bridges: ways merged into bank-to-bank chains, whole chain in the chunk of its midpoint; chains longer than
-// SPLIT_BRIDGE are split per chunk like roads, each piece knowing the whole chain (deck heights, end caps) ---
-for (const { pts, members } of mergeChains(bridgeWays)) {
+// SPLIT_BRIDGE are split per chunk like roads, each piece knowing the whole chain (deck heights, end caps). An OSM stub
+// (a road chain shorter than BRIDGE_STUB over or within BRIDGE_STUB_NEAR of the river: a slip lane split off the deck at
+// the quay) is dropped: its own deck would dive to the river bed beside the real one and open the quay wall. ---
+const BRIDGE_STUB = 20; // m
+const riverRings = water.filter((w) => w.river).flatMap((w) => [w.outer, ...(w.holes ?? [])]);
+const BRIDGE_STUB_NEAR = 10; // m
+const riverAt = (x: number, z: number) => water.some((w) => w.river && inPoly(x, z, w));
+const riverNear = (x: number, z: number) =>
+  riverAt(x, z) ||
+  riverRings.some((r) => r.some((_, i) => i % 2 === 0 && segDist(x, z, r, i, (i + 2) % r.length) <= BRIDGE_STUB_NEAR));
+const bridgeChains = mergeChains(bridgeWays).filter(({ pts, members }) => {
+  const { kind } = bridgeWays[members[0]!]!.facts;
+  const stub = polylineLength(pts) < BRIDGE_STUB && STREET.has(kind) && !RD.footKinds.includes(kind) && riverNear(...midpoint(pts));
+  if (stub) bump('dropped.bridgeStubs');
+  return !stub;
+});
+for (const { pts, members } of bridgeChains) {
   bump('bridges.ways', members.length);
   const facts = bridgeWays[members[0]!]!.facts;
   const length = polylineLength(pts);
@@ -453,17 +468,25 @@ for (const { pts, members } of mergeChains(bridgeWays)) {
 }
 
 // --- quays: keep lines near the Seine, inside the water rect ---
-const riverRings = water.filter((w) => w.river).flatMap((w) => [w.outer, ...(w.holes ?? [])]);
 
-// --- bridge gaps: where a deck (layer ≤ 1) crosses a river edge the quay parapet must open (Terrain.quayMesh), else a
-// 1 m wall bars both ends of every bridge. [x, z, halfWidth] per crossing, half width = BridgeBuilder's deck edge + margin. ---
+// --- bridge gaps: where a road / foot deck (any layer: Petit-Pont is layer 2) crosses a river edge the quay parapet must
+// open (Terrain.quayMesh) and the carved trench behind the wall must not be dug (Terrain.carveRiver), else a 1 m wall
+// or a 10 m hole bars both ends of every bridge. [x, z, halfWidth, inlandX, inlandZ] per crossing, half width =
+// BridgeBuilder's deck edge + margin (wider along an oblique edge), inland = unit vector from the crossing to the bank.
+// The chain is extended by BridgeBuilder's endRamp tongue, so a chain ending a hair short of the edge still opens the wall. ---
 const BRIDGE_GAP_MARGIN = 0.3; // m beyond the deck edge (railing face); wider = a hole into the trench beside the deck
 const bridgeGaps: number[] = [];
-for (const { pts, members } of mergeChains(bridgeWays)) {
+for (const { pts: chain, members } of bridgeChains) {
   const facts = bridgeWays[members[0]!]!.facts;
-  if (facts.layer > 1) continue;
+  if (RD.railKinds.includes(facts.kind)) continue;
   const way = { ...facts, oneway: false };
   const half = r1(roadWidth(way) / 2 + sidewalkWidth(way) + BRIDGE_GAP_MARGIN);
+  const n = chain.length;
+  const ext = (x: number, z: number, px: number, pz: number) => {
+    const l = Math.hypot(x - px, z - pz) || 1;
+    return [x + ((x - px) / l) * RD.bridge.endRamp, z + ((z - pz) / l) * RD.bridge.endRamp];
+  };
+  const pts = [...ext(chain[0]!, chain[1]!, chain[2]!, chain[3]!), ...chain, ...ext(chain[n - 2]!, chain[n - 1]!, chain[n - 4]!, chain[n - 3]!)];
   for (let i = 0; i + 3 < pts.length; i += 2) {
     const [ax, az, bx, bz] = [pts[i]!, pts[i + 1]!, pts[i + 2]!, pts[i + 3]!];
     for (const r of riverRings) {
@@ -473,12 +496,19 @@ for (const { pts, members } of mergeChains(bridgeWays)) {
         if (!den) continue;
         const t = ((cx - ax) * (dz - cz) - (cz - az) * (dx - cx)) / den;
         const u = ((cx - ax) * (bz - az) - (cz - az) * (bx - ax)) / den;
-        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) bridgeGaps.push(r1(ax + t * (bx - ax)), r1(az + t * (bz - az)), half);
+        // Along the edge the opening is wider when the deck crosses it obliquely (half / sin of the crossing angle).
+        const sin = Math.abs(den) / ((Math.hypot(bx - ax, bz - az) || 1) * (Math.hypot(dx - cx, dz - cz) || 1));
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+          const [gx, gz] = [ax + t * (bx - ax), az + t * (bz - az)];
+          const len = Math.hypot(bx - ax, bz - az) || 1;
+          const inland = riverAt(gx + ((bx - ax) / len) * 3, gz + ((bz - az) / len) * 3) ? -1 : 1;
+          bridgeGaps.push(r1(gx), r1(gz), r1(half / Math.max(sin, 0.3)), +(((bx - ax) / len) * inland).toFixed(3), +(((bz - az) / len) * inland).toFixed(3));
+        }
       }
     }
   }
 }
-bump('water.bridgeGaps', bridgeGaps.length / 3);
+bump('water.bridgeGaps', bridgeGaps.length / 5);
 // ponytail: brute force point × river edge (~1 s), a segment grid if the map or the quay count grows.
 const nearRiver = (x: number, z: number) =>
   riverRings.some((r) => r.some((_, i) => i % 2 === 0 && segDist(x, z, r, i, (i + 2) % r.length) <= QUAY_NEAR_RIVER));

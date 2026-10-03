@@ -127,6 +127,23 @@ export function carveRiver(g: HeightGrid, water: WaterData): void {
       }
     }
   }
+  // Under a bridge deck's footprint on the bank (WaterData.bridgeGaps: crossing, half width, inland direction; as deep as
+  // the quay slab it replaces) the bank nodes outside the polygon stay at street level: no trench there, the quay slab is
+  // left out and the deck is the floor.
+  const bg = water.bridgeGaps ?? [];
+  for (let k = 0; k < g.h.length; k++) {
+    if (!bed[k] || mask[k]) continue;
+    const x = g.minX + (k % cols) * cell;
+    const z = g.minZ + Math.floor(k / cols) * cell;
+    for (let i = 0; i < bg.length; i += 5) {
+      const [px, pz, ux, uz] = [x - bg[i]!, z - bg[i + 1]!, bg[i + 3]!, bg[i + 4]!];
+      const along = px * ux + pz * uz;
+      if (along >= -cell && along <= T.copingWidth + cell && Math.abs(px * uz - pz * ux) <= bg[i + 2]! + cell) {
+        bed[k] = 0;
+        break;
+      }
+    }
+  }
   // Two-pass chamfer distance (m) to the nearest bed node, 8-neighbour (≤ 8 % long).
   const dist = new Float32Array(cols * rows).map((_, k) => (bed[k] ? 0 : Infinity));
   const diag = cell * Math.SQRT2;
@@ -202,15 +219,25 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
   const sg = water.stairGaps ?? [];
   for (let g = 0; g < sg.length; g += 2) gaps.push([sg[g]!, sg[g + 1]!, stairHalf, false]);
   const bg = water.bridgeGaps ?? [];
-  for (let g = 0; g < bg.length; g += 3) gaps.push([bg[g]!, bg[g + 1]!, bg[g + 2]!, true]);
-  const openings = (ax: number, az: number, bx: number, bz: number): [number, number, boolean][] => {
-    const [dx, dz] = [bx - ax, bz - az];
-    const len = Math.hypot(dx, dz) || 1;
+  for (let g = 0; g < bg.length; g += 5) gaps.push([bg[g]!, bg[g + 1]!, bg[g + 2]!, true]);
+  // A gap is a disc: every edge it reaches opens (the crossed one and its neighbours round a corner of the bank); a bridge
+  // gap also opens the slab of an edge whose inland slab line it reaches (the side walls of an abutment notch lay their
+  // slabs sideways under the deck).
+  const openings = (ax: number, az: number, bx: number, bz: number, ox: number, oz: number, qx: number, qz: number): [number, number, boolean][] => {
     const out: [number, number, boolean][] = [];
-    for (const [gx, gz, gapHalf, bridge] of gaps) {
+    const hit = (ax: number, az: number, bx: number, bz: number, gx: number, gz: number, gapHalf: number): [number, number] | undefined => {
+      const [dx, dz] = [bx - ax, bz - az];
+      const len = Math.hypot(dx, dz) || 1;
       const [px, pz] = [gx - ax, gz - az];
       const t = (px * dx + pz * dz) / len;
-      if (Math.abs(px * dz - pz * dx) / len < 0.5 && t > -gapHalf && t < len + gapHalf) out.push([(t - gapHalf) / len, (t + gapHalf) / len, bridge]);
+      const d = Math.abs(px * dz - pz * dx) / len;
+      if (d >= gapHalf) return undefined;
+      const hw = Math.sqrt(gapHalf * gapHalf - d * d);
+      return t > -hw && t < len + hw ? [(t - hw) / len, (t + hw) / len] : undefined;
+    };
+    for (const [gx, gz, gapHalf, bridge] of gaps) {
+      const h = hit(ax, az, bx, bz, gx, gz, gapHalf) ?? (bridge ? hit(ox, oz, qx, qz, gx, gz, gapHalf) : undefined);
+      if (h) out.push([...h, bridge]);
     }
     return out;
   };
@@ -226,7 +253,7 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
         const j = (i + 1) % n;
         const [ax, az, bx, bz] = [ring[2 * i]!, ring[2 * i + 1]!, ring[2 * j]!, ring[2 * j + 1]!];
         if (onExtent(ax, az, bx, bz) || uses.get(edge(ax, az, bx, bz))! > 1) continue;
-        const open = openings(ax, az, bx, bz);
+        const open = openings(ax, az, bx, bz, out[2 * i]!, out[2 * i + 1]!, out[2 * j]!, out[2 * j + 1]!);
         const clamp = (u: number) => Math.min(Math.max(u, 0), 1);
         const cuts = [...new Set([0, 1, ...open.flatMap(([t0, t1]) => [clamp(t0), clamp(t1)])])].sort((p, q) => p - q);
         const lerp = (u: number, y: number): V3 => [ax + (bx - ax) * u, y, az + (bz - az) * u];
