@@ -66,7 +66,7 @@ Tham số URL của game (tiện khi thử): mặc định vào chế độ nhâ
 | Lấy xe / lên xe (trong 2,5 m) / xuống xe (khi xe gần dừng) | `F` | `X` |
 | Trên xe: đạp / phanh (dừng hẳn thì lùi chậm) / rẽ | `W` / `S` / `A` `D` | stick trái |
 | Trên xe: bấm chuông | `R` | D-pad → |
-| Bảng debug | `F3` hoặc `` ` `` | – |
+| Bảng debug | không có phím (chỉ mở bằng `?debug=1` ở thế giới thử `?offline=1`) | – |
 | Camera bay tự do (khi bảng debug đang mở) | `V` | – |
 | Hiện đồ thị đường (khi bảng debug đang mở) | `N` | – |
 | Nhả chuột (menu ở Phase 5) | `Esc` | – |

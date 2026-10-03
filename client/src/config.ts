@@ -77,7 +77,7 @@ const keyTable = {
   camera: ['KeyC'],
   binoculars: ['KeyB'],
   menu: ['Escape'],
-  debug: ['F3'],
+  debug: [], // no key: the debug panel only opens with ?debug=1 (offline test world); players have no way to open it
   wave: ['KeyG'], // vẫy tay chào
   bell: ['KeyR'], // bấm chuông/còi xe đạp
   flyUp: ['Space', 'KeyE'],

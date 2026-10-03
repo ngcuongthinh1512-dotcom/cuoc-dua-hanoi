@@ -102,7 +102,7 @@ Luật chơi cho đội: `docs/RACE_RULES.md` (cũng mở được trong game).
 ## 5. Checklist kiểm trước ngày đua (làm trên bản đã deploy, mã cuộc đua diễn tập riêng)
 
 - [ ] `npm run deploy` xong không lỗi; mở link game, thấy Paris + nhân vật ở Bir-Hakeim / xuất phát của chặng.
-- [ ] **FPS máy thật**: trong game bấm **F3** (hoặc dấu `` ` ``) → góc trên hiện FPS. Mục tiêu ≥ 30 ổn định. Nếu thấp: **Esc → Cài đặt → Chất lượng đồ họa → Thấp**, tải lại trang. Máy yếu tự chọn Thấp; ở Cao, nếu FPS tụt game tự hạ cấp (hiện thông báo nhỏ). Nhớ dặn các đội cách này.
+- [ ] **FPS máy thật**: game không còn phím mở bảng FPS (người chơi không thấy). Để tự kiểm, mở `https://<địa chỉ>/?offline=1&debug=1` (thế giới thử, có bảng thông số). Mục tiêu ≥ 30 ổn định. Nếu thấp: **Esc → Cài đặt → Chất lượng đồ họa → Thấp**, tải lại trang. Máy yếu tự chọn Thấp; ở Cao, nếu FPS tụt game tự hạ cấp (hiện thông báo nhỏ). Nhớ dặn các đội cách này.
 - [ ] Thử trên **2 trình duyệt** (Chrome + Edge hoặc Firefox / Safari) và ít nhất một máy Windows + một macOS: đăng nhập mã đội, đi, lấy xe (F), mở hòm (F), Sổ mật thư (Tab), Enter mở lại thẻ.
 - [ ] Trang Host trên một máy khác: nạp chặng, tải đủ hình R2 (mọi dòng "đã có", bấm Xem được), tạo 2 đội thử, chép mã, đăng nhập 2 đội trên 2 tab / 2 máy, thấy nhau trên bản đồ.
 - [ ] Chạy thử một bước có thử thách: đội gõ đáp án → Host **Duyệt**, rồi bấm **Hoàn tác** trong 10 giây → thẻ đội quay lại; Duyệt lại. Thử **Phạt** (đội thấy đếm ngược) và **Cho qua**.
