@@ -48,7 +48,7 @@ Game chỉ dùng những phím có trên cả Windows lẫn Mac, **không dùng*
 ## 5. Các loại thẻ mật thư
 
 ### Thông tin lộ trình
-Cho biết nơi bạn cần tới tiếp theo (chỉ dẫn rõ ràng hoặc **một câu đố về địa điểm**), có thể kèm **hình** và **liên kết** (bấm để xem). Hoàn thành khi bạn tới đúng điểm và mở hòm mật thư ở đó. Lộ trình dẫn tới Chặng dừng thì chỉ cần bước vào khu vực Chặng dừng.
+Cho biết nơi bạn cần tới tiếp theo (chỉ dẫn rõ ràng hoặc **một câu đố về địa điểm**), có thể kèm **hình** và **liên kết** (bấm để xem). Hoàn thành khi bạn tới đúng điểm và mở hòm mật thư ở đó. Lộ trình dẫn tới Chặng dừng không có hòm: chỉ cần **bước lên thảm đỏ** của Chặng dừng.
 
 ### Lựa chọn kép
 - Thẻ giới thiệu **2 nhánh** với **hai nút chọn nhánh** (hoặc phím `1` / `2`). Sau khi chọn, **chỉ hòm của nhánh bạn đã chọn** mới hiện. **Đề bài của nhánh nằm trong hòm của nhánh**: tới hòm, bấm `F` thì mới thấy mô tả, hình và liên kết.
@@ -62,9 +62,9 @@ Cho biết nơi bạn cần tới tiếp theo (chỉ dẫn rõ ràng hoặc **m�
 - Nếu đội làm một thử thách quá lâu, Host có thể gửi gợi ý **riêng cho đội bạn qua Messenger**.
 
 ### Chặng dừng
-- Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**: thảm đỏ lớn (8 × 16 m), người dẫn chương trình đứng cạnh, một **cột sáng đỏ** cao và **biển "VỀ ĐÍCH"** để nhận ra từ xa (hiện cùng lúc với hòm mật thư của Lộ trình dẫn tới đó). Đi bộ (không ngồi trên xe) bước vào khu vực thảm để check-in, không cần bấm phím: **ngay lúc đó** bạn được báo **"Về đích thứ n"**. Hạng **cố định**, không đổi sau đó.
+- Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**: thảm đỏ lớn (16 × 32 m), người dẫn chương trình đứng cạnh, một **cột sáng đỏ** cao để nhận ra từ xa (hiện cùng lúc với hòm mật thư của Lộ trình dẫn tới đó). Đi bộ (không ngồi trên xe) **bước lên thảm** để check-in, không cần bấm phím: **ngay lúc đó** bạn được báo **"Về đích thứ n"**. **Đứng ngoài thảm không tính về đích**, dù chỉ cách mép một bước. Hạng **cố định**, không đổi sau đó.
 - **Đội về cuối cùng bị loại**: khi mọi đội khác đã về đích, đội chạm thảm sau cùng nhận thông báo **"BỊ LOẠI"** kèm hạng cuối. Host bấm **"Kết thúc"** khi đội bạn chưa về đích thì đội bạn cũng "BỊ LOẠI", xếp sau mọi đội đã về.
-- Nếu đội có **phút phạt** (mục 8), bạn phải **đứng chờ cạnh thảm cho hết** rồi mới check-in được; trong lúc đó đội tới sau có thể check-in trước!
+- Nếu đội có **phút phạt** (mục 8), bạn phải **đứng chờ cho hết** (trên thảm hay cạnh thảm đều được) rồi **đứng trên thảm** mới check-in được; trong lúc đó đội tới sau có thể check-in trước!
 - Sau khi check-in bạn trở thành **khán giả**: nhân vật đứng yên, bay camera tự do để xem các đội còn lại (`W` `A` `S` `D` bay, `Space` / `E` lên, `Q` xuống, giữ `Shift` bay nhanh).
 
 ## 6. Nhập đáp án

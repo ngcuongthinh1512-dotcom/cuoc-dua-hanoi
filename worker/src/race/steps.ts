@@ -6,6 +6,7 @@
 // come from the row + now (taskState): no timer, nothing in memory.
 // Phase 8B foundation (docs/plans/phase8b.md §E): the louvre contract — inputs pick / lock, effects pick / lock, guard C1,
 // louvreView (what a team sees of the room, x/5 live), creditsOf. Track A implements the pick / lock transitions.
+import { onPitMat } from '@race/shared';
 import { branchZone, LOUVRE, stepZones, type Leg, type LouvreTask, type MediaItem, type Step, type Task, type Zone } from '@race/shared/leg';
 import { MEDIA, NET, type AnswerView, type BoxInfo, type CardStatus, type ClueCard, type CreditItem, type HostReview, type LouvreView, type MediaView, type ServerNotice, type TaskView } from '@race/shared/protocol';
 import { parseAnswers, parsePicks, type AnswerRec, type StepProgressRow } from '../db.ts';
@@ -103,7 +104,8 @@ export type RaceEffect =
    *  countdown of a wrong lock (feed); ok → a `complete` follows. */
   | { kind: 'lock'; step: number; rec: AnswerRec; ok: boolean; correct: number; public: boolean; lockedUntil: number | null; minutes: number; picks: string[] };
 
-export const inside = (zn: Zone, x: number, z: number, slack: number) => Math.hypot(x - zn.x, z - zn.z) <= zn.r + slack;
+/** (x, z) is in zone `zn` (+ slack m): within r — the Pit Stop's: ON the mat (SPEC §17.38, PIT_MAT's own slack). */
+export const inside = (zn: Zone, x: number, z: number, slack: number) => (zn.mat ? onPitMat(x, z, zn) : Math.hypot(x - zn.x, z - zn.z) <= zn.r + slack);
 
 /** The task of step s (a detour: branch `branch`'s), null = none. */
 export const taskOf = (s: Step, branch: string | null): Task | null =>
@@ -179,7 +181,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     if (parksOnReceive(leg, i)) fx.push({ kind: 'park', rack: at.rack });
     p = { ...p, step: i + 1, arrivedAt: null, startedAt: null, branch: null, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, picks: [] };
   };
-  /** A trusted position: arrivals, then whatever completes by standing there (route → Pit Stop zone, check-in). */
+  /** A trusted position: arrivals, then whatever completes by standing there (route → onto the Pit Stop mat, check-in). */
   const settle = (x: number, z: number, riding: boolean) => {
     for (let guard = 0; guard < steps.length; guard++) {
       const i = p.step, s = steps[i]!;

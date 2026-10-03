@@ -168,7 +168,7 @@ export class ClueBoxes {
       if (this.drawn.has(key)) continue;
       const root = b.kind === 'mat' ? matMesh() : boxMesh(b.opened);
       root.position.set(b.x, this.terrainAt(b.x, b.z), b.z);
-      if (b.kind !== 'mat') root.rotation.y = boxRotation(b.yaw); // ponytail: the mat keeps its Phase 7 heading (PitHost stands at a fixed offset)
+      root.rotation.y = b.kind === 'mat' ? (b.yaw ?? 0) : boxRotation(b.yaw); // the mat: long axis along the zone yaw (= the server's onPitMat rectangle, SPEC §17.38)
       this.scene.add(root);
       this.drawn.set(key, { root, info: b, placed: false });
     }

@@ -1,6 +1,7 @@
 // Phase 7 track B (docs/plans/phase7.md §5.3, §6 B): the team's race state on the client, ONLY from the server
 // (welcome.view, `race`, `book`, `zone`): drives the race HUD (track C's RaceHud), F on the current box (D23), the periodic
 // Pit Stop check-in (D19), the finish (SPEC §17.22 / §17.23 announcement, celebrate, then spectator: main.ts).
+import { onPitMat } from '@race/shared';
 import type { BoxInfo, ClientMessage, RaceOp, RaceView, ServerMessage, TeamInfo, TickArray, Welcome } from '@race/shared/protocol';
 import { louvreRoom, raceClient as C } from '../config.ts';
 import type { RaceHud } from './ui/RaceHud.ts';
@@ -22,9 +23,9 @@ export interface RaceDeps {
 export const boxInReach = (boxes: readonly BoxInfo[], x: number, z: number): BoxInfo | undefined =>
   boxes.find((b) => !b.opened && b.kind !== 'mat' && Math.hypot(b.x - x, b.z - z) <= b.r);
 
-/** The Pit Stop mat zone holding (x, z). */
+/** The Pit Stop mat (x, z) stands ON (SPEC §17.38: the PIT_MAT rectangle, not the zone radius). */
 export const matAt = (boxes: readonly BoxInfo[], x: number, z: number): BoxInfo | undefined =>
-  boxes.find((b) => b.kind === 'mat' && Math.hypot(b.x - x, b.z - z) <= b.r);
+  boxes.find((b) => b.kind === 'mat' && onPitMat(x, z, b));
 
 export class RaceClient {
   view: RaceView | null = null;
@@ -75,7 +76,7 @@ export class RaceClient {
     return true;
   }
 
-  /** Every frame → the HUD's "Bấm F" flag. On the Pit Stop mat zone, racing, on foot, not finished: `race checkin`
+  /** Every frame → the HUD's "Bấm F" flag. ON the Pit Stop mat, racing, on foot, not finished: `race checkin`
    *  every raceClient.checkinEveryMs once a penalty wait is over (standing still sends no pose: D9, D19).
    *  Phase 8 (D9): lockEndSlackMs after the card's countdown ends, the pose once (a team standing still sends none, the
    *  server's tick loop sleeps: this wakes it to reveal the branch box). */

@@ -72,10 +72,10 @@ describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', 
     expect([root.name, root.position.y, glow(), part(root, 'lid').rotation.x]).toEqual(['box', 1.5, true, 0]);
     cb.apply({ t: 'box', op: 'reveal', box: box('L1', true) });
     expect([scene.children.length, scene.children[0], glow()]).toEqual([1, root, false]);
-    cb.apply({ t: 'box', op: 'reveal', box: { step: 'PS', x: 40, z: 0, opened: false, r: 20, kind: 'mat' } });
+    cb.apply({ t: 'box', op: 'reveal', box: { step: 'PS', x: 40, z: 0, opened: false, r: 20, kind: 'mat', yaw: 0.5 } });
     expect(cb.mat?.name).toBe('mat');
-    expect(cb.mat?.position.x).toBe(40);
-    expect(cb.mat!.children.length).toBe(8); // carpet, 4 stripes, red column, gate posts, "VỀ ĐÍCH" banner
+    expect([cb.mat?.position.x, cb.mat?.rotation.y]).toEqual([40, 0.5]); // SPEC §17.38: the long axis along the zone yaw (no + π: symmetric)
+    expect(cb.mat!.children.length).toBe(6); // carpet, 4 stripes, red column (no gate)
     expect(seen).toEqual([1, 1, 2]);
     cb.dispose();
   });

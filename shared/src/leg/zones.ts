@@ -17,6 +17,8 @@ export interface Zone {
   parking: { x: number; z: number } | null;
   /** Phase 8 (D7): heading of the box's front, rad (destination.yawDeg; 0 = north, + = left / west, like PlayerState.yaw). */
   yaw: number;
+  /** SPEC §17.38: the Pit Stop's zone: "inside" = on the PIT_MAT rectangle (long axis along yaw), not within r. */
+  mat?: true;
 }
 
 const rackId = (x: number, z: number) => `rack:${Math.round(x)}_${Math.round(z)}`;
@@ -26,15 +28,15 @@ const xz = (p: { lat: number; lon: number }) => {
   return { x: w.x, z: w.z };
 };
 
-const zone = (d: Destination): Zone => {
+const zone = (d: Destination, mat = false): Zone => {
   const p = latLonToWorld(d.lat, d.lon);
-  return { x: p.x, z: p.z, r: d.radius, name: d.name, rack: rackId(p.x, p.z), parking: d.bikeParking ? xz(d.bikeParking) : null, yaw: (d.yawDeg * Math.PI) / 180 };
+  return { x: p.x, z: p.z, r: d.radius, name: d.name, rack: rackId(p.x, p.z), parking: d.bikeParking ? xz(d.bikeParking) : null, yaw: (d.yawDeg * Math.PI) / 180, ...(mat && { mat }) };
 };
 
 /** Index-aligned with leg.steps:
  *  - route_info → its destination, except the route right before the Pit Stop → the Pit Stop's (SPEC §8.1: that route is
- *    done by entering the Pit Stop zone);
- *  - pit_stop → its destination (the mat);
+ *    done by stepping onto the Pit Stop mat);
+ *  - pit_stop → its destination (the mat: `mat` set, SPEC §17.38);
  *  - challenge → task.location, else where the team already is (the zone of the step before);
  *  - detour → the zone of the step before (each branch may have its own: branchZone). */
 export function stepZones(leg: Leg): Zone[] {
@@ -44,8 +46,8 @@ export function stepZones(leg: Leg): Zone[] {
   leg.steps.forEach((s, i) => {
     const next = leg.steps[i + 1];
     const z =
-      s.type === 'route_info' ? zone(next?.type === 'pit_stop' ? next.destination : s.destination)
-      : s.type === 'pit_stop' ? zone(s.destination)
+      s.type === 'route_info' ? (next?.type === 'pit_stop' ? zone(next.destination, true) : zone(s.destination))
+      : s.type === 'pit_stop' ? zone(s.destination, true)
       : s.type === 'challenge' && s.task.location ? zone(s.task.location)
       : prev;
     out.push(z);

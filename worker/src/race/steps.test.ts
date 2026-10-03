@@ -339,6 +339,23 @@ describe('advance: route to the Pit Stop + check-in', () => {
     expect(run(r.p, { kind: 'checkin', ...at(Z[5]!) }, 1500).effects).toEqual([{ kind: 'finish' }]);
   });
 
+  it('SPEC §17.38: only ON the 16 × 32 m mat (turned to the zone yaw), not anywhere within the radius', () => {
+    const on = (dx: number, dz: number, riding = false): RaceInput => ({ kind: 'pose', x: Z[5]!.x + dx, z: Z[5]!.z + dz, riding });
+    expect(Z[5]!.mat && Z[4]!.mat).toBe(true);
+    expect(Z[0]!.mat).toBeUndefined();
+    // mini's PS: yawDeg 0 → long axis north-south (z); r = 25: 10 m beside the mat / 17 m past its end used to count
+    expect([run(P(4), on(10, 0)).effects, run(P(4), on(0, 17)).effects, run(P(4), on(8.6, 0)).effects]).toEqual([[], [], []]);
+    expect(run(P(4), on(7.9, 15.9)).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']); // a corner
+    expect(run(P(4), on(-8.4, -16.4)).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']); // the 0.5 m slack
+    expect(run(P(5), { kind: 'checkin', x: Z[5]!.x + 9, z: Z[5]!.z }).effects).toEqual([{ kind: 'refuse', code: 'boxFar' }]); // the geofence slack does not widen it
+    expect(run(P(5), { kind: 'checkin', x: Z[5]!.x, z: Z[5]!.z - 15 }).effects).toEqual([{ kind: 'arrive', step: 5 }, { kind: 'finish' }]);
+    // the zone yaw turns the rectangle: yawDeg 90 → long axis east-west
+    const turned = variant((s) => (s[5].destination.yawDeg = 90));
+    const tz = stepZones(turned)[5]!;
+    expect(run(P(4), { kind: 'pose', x: tz.x + 15, z: tz.z, riding: false }, 1000, turned).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']);
+    expect(run(P(4), { kind: 'pose', x: tz.x, z: tz.z + 10, riding: false }, 1000, turned).effects).toEqual([]);
+  });
+
   it('with a penalty: check-in refused until the wait is over', () => {
     const p = P(5, { arrivedAt: 10_000, penaltyMinutes: 2 });
     expect(run(p, { kind: 'checkin', ...at(Z[5]!) }, 10_000 + 60_000)).toEqual({ p, effects: [{ kind: 'refuse', code: 'penaltyWait' }] });

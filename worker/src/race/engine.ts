@@ -735,9 +735,9 @@ export class RaceEngine {
   }
 
   // ── D21 "Tại điểm này" ──
-  /** The place (rack key) a trusted pose stands in, null = none. */
+  /** The place (rack key) a trusted pose stands in (the Pit Stop: on its mat, SPEC §17.38), null = none. */
   private placeAt(x: number, z: number): string | null {
-    return this.places.find((zn) => Math.hypot(x - zn.x, z - zn.z) <= zn.r)?.rack ?? null;
+    return this.places.find((zn) => inside(zn, x, z, 0))?.rack ?? null;
   }
 
   /** Review fix (e2e F1): `where` is memory only, so after an eviction / hibernation a team standing still was in no place

@@ -189,7 +189,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   if (pit?.type === 'pit_stop' && before?.type === 'route_info') {
     const [a, b] = [latLonToWorld(before.destination.lat, before.destination.lon), latLonToWorld(pit.destination.lat, pit.destination.lon)];
     if (Math.hypot(a.x - b.x, a.z - b.z) > 5)
-      add('warning', ['steps', last - 1, 'destination'], `cách thảm Chặng dừng ${Math.round(Math.hypot(a.x - b.x, a.z - b.z))} m; lộ trình cuối hoàn thành khi vào vùng Chặng dừng nên điểm này không được dùng`);
+      add('warning', ['steps', last - 1, 'destination'], `cách thảm Chặng dừng ${Math.round(Math.hypot(a.x - b.x, a.z - b.z))} m; lộ trình cuối hoàn thành khi dẫm lên thảm Chặng dừng nên điểm này không được dùng`);
   }
 
   // blanks the Host must fill (SPEC §10, §13.1 readiness)

@@ -172,7 +172,8 @@ describe('zones', () => {
     expect(zones[0]).toMatchObject({ x: at(48.8662, 2.3195).x, z: at(48.8662, 2.3195).z, r: 20 });
     expect(zones[1]).toBe(zones[0]); // T1 at L1
     expect(zones[2]).toBe(zones[0]); // D1 at L1
-    expect(zones[3]).toEqual(zones[4]); // L2 is done entering the Pit Stop zone
+    expect(zones[3]).toEqual(zones[4]); // L2 is done stepping onto the Pit Stop mat
+    expect([zones[0]!.mat, zones[3]!.mat, zones[4]!.mat]).toEqual([undefined, true, true]); // SPEC §17.38: inside = on the mat there
     expect(branchZone(leg, zones, 2, 'A')).toBe(zones[0]);
     expect(branchZone(leg, zones, 2, 'B')).toMatchObject({ r: 30, x: at(48.867, 2.318).x });
     expect(branchZone(leg, zones, 1, 'A')).toBeNull();
