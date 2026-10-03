@@ -1081,3 +1081,5 @@ Kiểm tra ngày 2026-09-27 bằng centroid polygon OSM (Overpass). Anh đã đ�
 - `docs/RACE_RULES.md` (mở trong game) chỉ nói cách thao tác phòng Louvre (vào / ra, nút đỏ xanh, nút chốt, phạt 3 phút, tin công khai). Không nêu số tác phẩm, số đáp án, mốc gợi ý phút 40 / 70, giới hạn 5, hay cách dò đáp án.
 
 - **Cập nhật 17.27 (2026-10-03):** `docs/RACE_RULES.md` không nhắc gì tới Thử thách 3 / phòng Louvre (mục riêng, số tác phẩm, đáp án, gợi ý, ghi nguồn riêng cho phòng đều bỏ). Người chơi vào chơi mới biết; thẻ thử thách trong game tự nói cách làm.
+
+- **Cập nhật 17.28 (2026-10-03):** `docs/RACE_RULES.md` rút gọn từ 323 còn 124 dòng, chỉ giữ phần người chơi cần: bỏ yếu tố đặc biệt đã hoãn (Quay đầu, Nhường đường, Vé, Gờ giảm tốc), kiểu mini-game chưa có, luật đi bộ bắt buộc / bỏ cuộc, chi tiết công cụ Host (Hoàn tác, cờ đỏ, Cho qua, xuất CSV), chú giải kỹ thuật.
