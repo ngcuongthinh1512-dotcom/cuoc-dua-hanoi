@@ -553,7 +553,7 @@ export interface HostState {
   ranking: RankRow[];
   /** Phase 8 (D10): every answer waiting for the Host, oldest first. */
   queue: ReviewItem[];
-  /** Phase 10 (V2): decisions still undoable (≤ NET.undoKept, newest last), gone from the list once past `until`. */
+  /** Phase 10 (V2): decisions still undoable (within NET.undoMs, newest last), gone from the list once past `until`. */
   undo: UndoItem[];
 }
 

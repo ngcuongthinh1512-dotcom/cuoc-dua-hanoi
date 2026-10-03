@@ -76,7 +76,8 @@ th.wrap { white-space: normal; line-height: 1.2; min-width: 4.5em; }
 /* Phase 10 (track H): pinned matrix, undo lines, flags. The matrix scrolls inside its own box (both ways), so the header row can
    stick to the top of THAT box (a sticky `top` needs its own scroll container; on the page it hid under the review queue). z-index:
    corner 3 > header 2 > team column 1. The header's bottom edge is a shadow: collapsed borders scroll away under a sticky cell. */
-.matrix-wrap { max-height: 72vh; overflow: auto; }
+/* review fix (e2e F5): the sticky "Chờ duyệt" frame (its height in --queue-h, main.ts) is taken off, so the box fits a low screen */
+.matrix-wrap { max-height: max(200px, min(72vh, calc(100vh - var(--queue-h, 0px) - 24px))); overflow: auto; }
 table.matrix thead th { position: sticky; top: 0; z-index: 2; background: #141a26; box-shadow: 0 1px 0 #34405a; }
 table.matrix thead th:first-child { left: 0; z-index: 3; box-shadow: 2px 0 0 #222b3d, 0 1px 0 #34405a; }
 td.flag { white-space: normal; min-width: 13em; }

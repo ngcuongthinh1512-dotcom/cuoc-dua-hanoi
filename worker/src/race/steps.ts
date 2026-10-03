@@ -444,7 +444,7 @@ const NOTHING = 'Đội chưa gửi câu trả lời.';
 
 /** Phase 8 (D5, D10, critic N4 / N11): a Host decision on step i of a team (its row, the engine checked i ≤ its step).
  *  Only checks + edits the row: approve (the pending answer `id`, or the newest "Phạt" one when the Host clicked wrong;
- *  no `id` = the pending one, else "Cho qua", while active / locked) → `approve: true` and the engine runs
+ *  no `id` = the pending one, else "Cho qua", while teaser / active / locked) → `approve: true` and the engine runs
  *  advance({kind:'approve'}) (complete + settle, S3); penalize → locked_until = now + retryLockMinutes (0 = none); note
  *  → host_note ('' clears it). A note sent with a decision goes on the answer (n) AND becomes host_note. A decision
  *  waits approval_wait_seconds (sent → decided, SPEC §8.9). A second decision on the same answer is refused: nothing
@@ -467,9 +467,10 @@ export function review(leg: Leg, i: number, row: StepProgressRow, m: HostReview,
   if (id === undefined) {
     // approve without id, nothing pending (critic M2: a photo task the Host got on Messenger before "Tôi đã gửi bài";
     // Phase 8B: a team stuck in the louvre room; Phase 10 V5 "Cho qua": any task, SPEC §13.9 "push a team on past a bug")
-    if (m.op !== 'approve' || (state !== 'active' && state !== 'locked')) return { refuse: NOTHING };
+    // review fix: also from the teaser (a team stuck before "Nhận thử thách"); its task starts now, so its times stay true
+    if (m.op !== 'approve' || (state !== 'active' && state !== 'locked' && state !== 'teaser')) return { refuse: NOTHING };
     const rec: AnswerRec = { id: (last?.id ?? 0) + 1, b, text: '', at: now, s: 'approved', d: now, ...n };
-    return { row: { ...row, ...decided, answers: JSON.stringify([...answers, rec]), locked_until: null }, approve: true, id: rec.id };
+    return { row: { ...row, ...decided, task_started_at: row.task_started_at ?? now, answers: JSON.stringify([...answers, rec]), locked_until: null }, approve: true, id: rec.id };
   }
   const a = answers.find((x) => x.id === id);
   if (!a) return { refuse: NOTHING };

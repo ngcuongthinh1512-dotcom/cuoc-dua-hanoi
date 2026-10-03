@@ -452,7 +452,6 @@ export const exportConfirm = (status: RaceStatus): string | null => (status === 
 export function exportErrorText(status: number): string {
   switch (status) {
     case 401: return 'Phiên Host hết hạn, đăng nhập lại.';
-    case 403: return 'Chỉ Host mới xuất được dữ liệu.';
     default: return status >= 500 ? `Máy chủ lỗi (${status}), thử lại sau ít phút.` : `Máy chủ trả lỗi ${status}.`;
   }
 }

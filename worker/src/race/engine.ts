@@ -149,7 +149,9 @@ export class RaceEngine {
    *  when it comes back. ponytail: memory only (0 rows), lost on an eviction like `where`; persist it if that matters. */
   private readonly gone = new Map<string, Map<string, Gone>>();
   private readonly sentZone = new Map<string, string>();
-  /** Phase 10 (V2): decisions still undoable, oldest first (≤ NET.undoKept), mirrored in meta 'undo'. */
+  /** `where` rebuilt once since this engine was built (restoreWhere). */
+  private whereRestored = false;
+  /** Phase 10 (V2): decisions still undoable, oldest first (only those within NET.undoMs), mirrored in meta 'undo'. */
   private undoV: UndoRec[];
 
   constructor(readonly io: RaceIO) {
@@ -356,6 +358,7 @@ export class RaceEngine {
 
   /** A team's socket went: in the "Tại điểm này" lists of the others it becomes "vừa rời đi" (Phase 10, V4). */
   left(team: string, now: number) {
+    this.restoreWhere(now, null, team);
     const w = this.where.get(team);
     this.where.delete(team);
     this.sentZone.delete(team);
@@ -618,7 +621,7 @@ export class RaceEngine {
         // Phase 10 (V2): the rows it changed as they were (the cache is patched only after the commit)
         if (undo) {
           const rows = Object.fromEntries([...dirty.keys()].map((id) => [id, this.teamRows(team).get(id) ?? null]));
-          undos = [...this.undoV.filter((x) => now - x.at <= NET.undoMs), { ...undo, rows, stepAfter: next.step }].slice(-NET.undoKept);
+          undos = [...this.undoV.filter((x) => now - x.at <= NET.undoMs), { ...undo, rows, stepAfter: next.step }]; // cut by time only (review: 6 Duyệt in 10 s is normal)
           this.meta('undo', JSON.stringify(undos));
         }
         if (teamChanged) this.io.saveTeam(team, next); // last: RaceRoom patches its cache only after this write
@@ -699,7 +702,21 @@ export class RaceEngine {
     return this.places.find((zn) => Math.hypot(x - zn.x, z - zn.z) <= zn.r)?.rack ?? null;
   }
 
+  /** Review fix (e2e F1): `where` is memory only, so after an eviction / hibernation a team standing still was in no place
+   *  and never heard who came back. Rebuilt once from the trusted poses (RaceRoom's snapshot) of the online teams (+ `also`:
+   *  a socket closing), not `skip` (its pose is the new one already). ponytail: `since` = the wake, not the real arrival. */
+  private restoreWhere(now: number, skip: string | null, also: string | null = null) {
+    if (this.whereRestored) return;
+    this.whereRestored = true;
+    for (const t of new Set([...this.io.online(), ...(also ? [also] : [])])) {
+      const p = t === skip || this.where.has(t) ? null : this.io.pose(t);
+      const key = p && this.placeAt(p.x, p.z);
+      if (key) this.where.set(t, { key, since: now });
+    }
+  }
+
   private moveZone(team: string, pose: PoseSample, now: number) {
+    this.restoreWhere(now, team);
     const key = this.placeAt(pose.x, pose.z);
     const was = this.where.get(team);
     if ((was?.key ?? null) === key) return;

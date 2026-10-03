@@ -522,6 +522,19 @@ describe('RaceEngine', () => {
     expect(host.at(-1)).toEqual({ t: 'host.notice', level: 'warning', message: 'Không còn gì để hoàn tác cho bài này.' });
   });
 
+  it('undo (review #1): 6 Duyệt of 6 teams within 10 s all stay undoable until their own NET.undoMs (no count cap)', () => {
+    const ids = ['t0', 't1', 't2', 't3', 't4', 't5'];
+    const { e, review, op } = racing(Object.fromEntries(ids.map((t) => [t, 1])));
+    for (const t of ids) {
+      op(t, { t: 'race', op: 'accept', step: 'T1' }, 5);
+      op(t, { t: 'race', op: 'answer', step: 'T1', text: '42' }, 10);
+    }
+    ids.forEach((t, i) => review(t, 'T1', 'approve', 20_000 + i * 1000, { id: 1 }));
+    expect(e.hostView(20_000 + NET.undoMs - 1).undo.map((u) => u.team)).toEqual(ids);
+    review('t0', 'T1', 'undo', 20_000 + NET.undoMs - 1, { id: 1 });
+    expect(e.hostView(20_000 + NET.undoMs).undo.map((u) => u.team)).toEqual(ids.slice(1));
+  });
+
   it('undo (V2): a Phạt undone — the lock gone, the answer pending, back in the queue; no team field / box touched', () => {
     const { f, e, review, card } = pendingT1();
     review('t0', 'T1', 'penalize', 20_000, { id: 1, note: 'sai' });
@@ -654,6 +667,19 @@ describe('RaceEngine', () => {
     e.onPose('t1', at(1), 300 + NET.zoneLeftMs + 1);
     expect(last('t1')).toEqual([]);
     expect(f.log.filter((l) => !l.startsWith('send'))).toEqual([]); // memory only
+  });
+
+  it('"Tại điểm này" after an eviction / hibernation (review e2e F1): a team standing still hears the one that comes back', () => {
+    const { f, e, to } = racing({ t0: 2, t1: 1 }); // t0 (on L2) back at T1's place, done: its list there is shown
+    const last = (team: string) => (to(team).filter((m) => (m as { t: string }).t === 'zone').at(-1) as { teams: unknown[] } | undefined)?.teams;
+    e.onPose('t0', at(1), 10);
+    e.onPose('t1', at(1), 11);
+    e.onPose('t1', { ...at(1), x: 1e5, z: 1e5 }, 100);
+    expect(last('t0')).toEqual([expect.objectContaining({ slot: 1, left: 100 })]);
+    f.poses.set('t0', at(1)); // its trusted pose (RaceRoom's snapshot), it sends nothing: standing still
+    const woken = new RaceEngine(f.io); // memory gone
+    woken.onPose('t1', at(1), 200);
+    expect(last('t0')).toEqual([{ slot: 1, label: 'Thử thách 1', type: 'challenge', branch: null, since: 200 }]);
   });
 });
 

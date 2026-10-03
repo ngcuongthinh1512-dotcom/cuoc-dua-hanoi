@@ -60,8 +60,6 @@ export const NET = {
   /** Phase 10 (M1): a Host Duyệt / Phạt / Cho qua may be undone this long after the server handled it (server clock);
    *  HostState.undo lists what still can be. */
   undoMs: 10_000,
-  /** Phase 10: newest decisions kept undoable per race (older ones drop out even before undoMs; one Host never gets near it). */
-  undoKept: 5,
   /** Phase 10 (M6): a team that left a point stays in the others' "Tại điểm này" list this long as "vừa rời đi n phút
    *  trước" (ZoneMember.left; memory only, the client hides expired lines itself). */
   zoneLeftMs: 600_000,

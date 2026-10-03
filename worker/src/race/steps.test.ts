@@ -221,7 +221,6 @@ describe('review (D5, D10)', () => {
     expect(review(mini, 1, T1({ answers: decided }), m('approve', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
     expect(review(mini, 1, T1({ answers: recs(pend(1)) }), m('approve', 2), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' });
     expect(review(mini, 1, T1(), m('penalize'), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // nothing pending to penalize
-    expect(review(mini, 1, T1({ task_started_at: null }), m('approve'), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // teaser: no "Cho qua"
     expect(review(mini, 1, T1({ answers: recs(pend(1)), completed_at: 8 }), m('approve', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
     expect(review(mini, 1, T1({ answers: recs({ ...pend(1), s: 'penalized' }) }), m('penalize', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
     expect(review(mini, 0, T1(), m('approve', 1), 9)).toMatchObject({ refuse: expect.stringContaining('không có thử thách') });
@@ -263,6 +262,10 @@ describe('review (D5, D10)', () => {
     const p = ok(review(mini, 1, T1({ answers: recs(pend(1, 1000)) }), approve(), 3000));
     expect(p).toMatchObject({ approve: true, id: 1, row: { approval_wait_seconds: 2 } });
     expect(p.answers).toHaveLength(1);
+    // review fix: a team stuck on the teaser (never pressed "Nhận thử thách") passes too; its task starts now
+    const t = ok(review(mini, 1, T1({ task_started_at: null }), approve(), 7000));
+    expect(t).toMatchObject({ approve: true, id: 1, row: { task_started_at: 7000, decided_at: 7000 } });
+    expect(review(mini, 1, T1({ task_started_at: null }), m('penalize'), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // no Phạt there
   });
 
   it('note: the step\'s Host note only ("" clears it), any step the team holds', () => {

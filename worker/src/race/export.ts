@@ -33,7 +33,7 @@ export const STEP_COLS: Col[] = [
   ...TIMES.flatMap(([k, , h]) => at(k, h, true)),
   ['wrongAnswers', 'Số lần sai'], ['rejections', 'Số lần bị phạt'], ['lockedSeconds', 'Số giây bị khóa'], ['branchSwitches', 'Số lần đổi nhánh'], ['approvalWaitSeconds', 'Giây chờ Host duyệt'],
 ];
-export const TEAM_COLS: Col[] = [['team', 'Đội (id)'], ['name', 'Tên đội'], ['startOrder', 'Thứ tự vào game'], ...at('joinedAt', 'Vào game lần đầu'), ['rank', 'Hạng về đích'], ...at('finishAt', 'Về đích'), ['out', 'Bị loại']];
+export const TEAM_COLS: Col[] = [['team', 'Đội (id)'], ['name', 'Tên đội'], ['startOrder', 'Thứ tự vào game'], ...at('joinedAt', 'Vào game lần đầu'), ['rank', 'Hạng về đích'], ...at('finishAt', 'Về đích'), ['out', 'Bị loại'], ['finalRank', 'Hạng cuối (kể cả bị loại)']];
 export const EVENT_COLS: Col[] = [['id', 'STT'], ...at('t', 'Thời điểm'), ['type', 'Loại'], ['team', 'Đội (id)'], ['teamName', 'Tên đội'], ['step', 'Bước'], ['data', 'Dữ liệu (JSON)']];
 
 /** The three tables (JSON keys = STEP_COLS / TEAM_COLS / EVENT_COLS keys). Steps: those each team holds (≤ its current
@@ -78,7 +78,7 @@ export function exportRace(leg: Leg, teams: ExportTeam[], rows: StepProgressRow[
   });
   return {
     exportedAt: now, raceStartAt: start,
-    teams: teams.map((t): Row => ({ team: t.id, name: t.name, startOrder: t.startOrder, ...stamp('joinedAt', t.joinedAt), rank: t.rank, ...stamp('finishAt', t.finishAt), out: t.out })),
+    teams: teams.map((t): Row => ({ team: t.id, name: t.name, startOrder: t.startOrder, ...stamp('joinedAt', t.joinedAt), rank: t.finishAt === null ? null : t.rank, ...stamp('finishAt', t.finishAt), out: t.out, finalRank: t.rank })), // out at the Host's "Kết thúc": no finish rank
     steps,
     events: evs.map((e): Row => ({ id: e.id, ...stamp('t', e.t), type: e.type, team: e.team, teamName: e.team === null ? null : (names.get(e.team) ?? null), step: typeof e.d.step === 'string' ? e.d.step : null, data: e.d })),
   };

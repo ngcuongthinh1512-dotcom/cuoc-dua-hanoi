@@ -523,7 +523,8 @@ describe('pinned matrix and folding review frame (V1): host.css, main.ts', () =>
   const z = (sel: string) => Number(/z-index:\s*(\d+)/.exec(rule(sel))?.[1]);
 
   it('the matrix scrolls in its own box; its header row sticks to the top, the Đội column to the left, the corner above both', () => {
-    expect(rule('.matrix-wrap')).toMatch(/max-height:\s*72vh/);
+    expect(rule('.matrix-wrap')).toMatch(/max-height:[^;]*72vh[^;]*calc\(100vh - var\(--queue-h/); // review F5: minus the review frame
+    expect(main).toMatch(/new ResizeObserver\(\(\) => document\.documentElement\.style\.setProperty\('--queue-h', `\$\{queueWrap\.offsetHeight\}px`\)\)\.observe\(queueWrap\)/);
     expect(rule('.matrix-wrap')).toMatch(/overflow:\s*auto/);
     expect(rule('table.matrix thead th')).toMatch(/position:\s*sticky;\s*top:\s*0/);
     expect(rule('table.matrix thead th')).toMatch(/background:\s*#/); // opaque, or the cells show through while scrolling
@@ -576,10 +577,9 @@ describe('"Xuất dữ liệu thời gian" (SPEC §17.25)', () => {
     expect([...new Uint8Array(await r.blob.arrayBuffer()).slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
   });
 
-  it('errors in Vietnamese: 401 (session over), 403, 500, any other status, a dead network, a body that breaks off', async () => {
+  it('errors in Vietnamese: 401 (session over, a team token too), 500, any other status, a dead network, a body that breaks off', async () => {
     const err = (f: typeof fetch) => fetchExport(f, '/api', 'paris', 't', 'csv');
     expect(await err(res(401))).toEqual({ ok: false, error: 'Phiên Host hết hạn, đăng nhập lại.' });
-    expect(await err(res(403))).toEqual({ ok: false, error: 'Chỉ Host mới xuất được dữ liệu.' });
     expect(await err(res(500))).toEqual({ ok: false, error: 'Máy chủ lỗi (500), thử lại sau ít phút.' });
     expect(await err(res(404))).toEqual({ ok: false, error: 'Máy chủ trả lỗi 404.' });
     expect(exportErrorText(503)).toContain('503');

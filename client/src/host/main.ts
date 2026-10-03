@@ -104,6 +104,8 @@ const queueDetails = el('details', { open: true }, queueHead, queueBox);
 const undoBar = el('div', { className: 'undo-bar' });
 /** "Chờ duyệt (n)" + the undo lines: sticky at the top while something waits or can be undone (D16 (1)). */
 const queueWrap = el('div', { className: 'queue-wrap' }, queueDetails, notifyBtn, undoBar);
+// review fix (e2e F5): the matrix box's max-height subtracts this (host.css .matrix-wrap), so both fit an 800 px screen
+new ResizeObserver(() => document.documentElement.style.setProperty('--queue-h', `${queueWrap.offsetHeight}px`)).observe(queueWrap);
 const teamsBox = el('section');
 const counters = el('section');
 const bikes = el('section');

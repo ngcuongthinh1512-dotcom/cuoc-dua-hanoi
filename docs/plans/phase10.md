@@ -43,7 +43,7 @@ M8. V5 "Cho qua" áp dụng cho thử thách gõ chữ, bài ảnh, nhánh Lựa
 - `HostReview.op` thêm `'undo'`: `{t:'host.review', team, step, op:'undo', id}` – `id` **bắt buộc** = `id` câu trả lời của quyết định (Duyệt không `id` / Cho qua: máy chủ đã tạo câu trả lời mới, `id` của nó nằm trong `HostState.undo`).
 - `HostState.undo: UndoItem[]` với `UndoItem = { team, step, id, op: 'approve'|'penalize', at, until }` (`until = at + NET.undoMs`): trang Host vẽ nút từ **trạng thái máy chủ** (tải lại trang vẫn còn nút; không giữ bộ nhớ riêng).
 - `ServerNotice` thêm `'reviewUndone'` (chữ ở `client/src/ui/Toasts.ts`: "Host đã rút lại quyết định vừa rồi. Thẻ mật thư trở lại như trước.").
-- `NET.undoMs = 10_000`, `NET.undoKept = 5` (số quyết định gần nhất còn hoàn tác được; vượt → quyết định cũ nhất không hoàn tác được nữa dù chưa đủ 10 s – không xảy ra với một Host bấm tay).
+- `NET.undoMs = 10_000` (sửa sau review: bỏ `NET.undoKept`, danh sách chỉ cắt theo thời gian – 20 đội nộp cùng lúc, Host Duyệt 6 lần trong 10 s là bình thường).
 - `codec.ts isClientMessage('host.review')`: `op === 'undo'` đòi `isInt(o.id, 1, 10_000)`.
 - `PROTOCOL_VERSION` + 1 (sau số mà `phase8d-small` đặt).
 
@@ -106,7 +106,7 @@ interface UndoRec { team: string; step: string; id: number; op: 'approve' | 'pen
 - **Không** có timer để báo "hết 10 phút": client tự ẩn dòng quá hạn (5.3); lần `zone` kế (ai đó vào / ra) máy chủ gửi danh sách đã cắt. 0 dòng SQLite, không alarm.
 
 ### 5.3 Client (`client/src/race/ui/format.ts`, `RaceHud.ts`, `race.css`)
-- `zoneLines(members, teams, now)`: đang ở → "Đội Xanh – đang làm Thử thách 2"; có `left` → "Đội Xanh – vừa rời đi 3 phút trước (đang làm Thử thách 2)" (dưới 1 phút: "vừa rời đi"; bỏ dòng khi `now − left > NET.zoneLeftMs`); thứ tự: đang ở trước (theo `since`), rời đi sau (mới rời trước).
+- `zoneLines(members, teams, now)`: đang ở → "Đội Xanh – đang làm Thử thách 2"; có `left` → "Đội Xanh – vừa rời đi 3 phút trước (đang làm Thử thách 2)" (làm tròn lên, tối thiểu "1 phút": người dùng đã duyệt sau review Phase 10; bỏ dòng khi `now − left > NET.zoneLeftMs`); thứ tự: đang ở trước (theo `since`), rời đi sau (mới rời trước).
 - `RaceHud.zone()` lưu `members`; `update()` vẽ lại dòng mỗi khi phút đổi (so chuỗi, tránh vẽ mỗi khung hình) với `this.now` (giờ máy chủ ước lượng). Dòng rời đi dùng lớp `.rc-zone-left` (mờ hơn, `opacity .7`).
 - Ẩn panel khi không còn dòng (như nay).
 

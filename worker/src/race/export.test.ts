@@ -57,6 +57,9 @@ describe('exportRace (SPEC §17.25)', () => {
       expect.objectContaining({ team: 't0', name: 'Đỏ, "A"', startOrder: 1, joinedAtVn: '2026-10-03 14:00:00', rank: null, finishAt: null, out: false }),
       expect.objectContaining({ team: 't1', startOrder: 2, joinedAtFromStart: -50 }),
     ]);
+    // review fix (e2e F2): out at the Host's "Kết thúc" without finishing → no finish rank, the final one kept
+    const out = exportRace(mini, [{ ...NEW_TEAM_RACE, id: 't0', name: 'x', joinedAt: T, rank: 2, out: true }, { ...NEW_TEAM_RACE, id: 't1', name: 'y', joinedAt: T, rank: 1, finishAt: T + 9 * S }], [], [], T + 10 * S);
+    expect(out.teams.map((t) => [t.rank, t.finalRank, t.out])).toEqual([[null, 2, true], [1, 1, false]]);
     expect(x.events.map((e) => [e.id, e.type, e.team, e.teamName, e.step, e.tFromStart])).toEqual([[1, 'host.leg', null, null, null, -61], [2, 'host.race', null, null, null, 0], [3, 'review', 't0', 'Đỏ, "A"', 'T1', 270]]);
     expect(x.events[2]!.data).toEqual({ step: 'T1', op: 'penalize', id: 1, by: 'host' });
   });
@@ -79,7 +82,7 @@ describe('exportRace (SPEC §17.25)', () => {
     expect(lines.filter((l) => l.startsWith('Bảng '))).toEqual(['Bảng 1 – Thời gian đội × bước', 'Bảng 2 – Đội', 'Bảng 3 – Nhật ký sự kiện thô (bảng events)']);
     expect(lines[2]!.startsWith(`t0,"Đỏ, ""A""",L1,Lộ trình 1,route_info,,${T + 290 * S},2026-10-03T07:04:50.000Z,2026-10-03 14:04:50,230,`)).toBe(true);
     expect(csv).toContain(`\r\nt1,'=cmd,2,`); // a team name never runs as a formula
-    expect(csv).toContain(',không\r\n'); // out: false
+    expect(csv).toContain(',không,\r\n'); // out: false, no final rank
     expect(csv).toContain(`,"{""step"":""T1"",""op"":""penalize"",""id"":1,""by"":""host""}"\r\n`);
     expect(csv.endsWith('\r\n')).toBe(true);
     expect(csv).not.toContain('\n\n'); // only CRLF line ends
