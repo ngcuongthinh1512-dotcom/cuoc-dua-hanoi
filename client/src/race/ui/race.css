@@ -67,6 +67,10 @@
   text-transform: uppercase;
   color: var(--hud-dim);
 }
+/* Phase 10 V4: a team that left ("vừa rời đi n phút trước") is dimmer than the ones still here. */
+.rc-zone-left {
+  opacity: 0.7;
+}
 
 /* "Xuất phát ở vị trí thứ n": right side, fades like the street label. */
 .rc-banner {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ClueCard, FinishResult, RaceView, TaskView } from '@race/shared/protocol';
+import { type AnswerStatus, type ClueCard, type FinishResult, NET, type RaceView, type TaskView, type TeamInfo, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
 import { fmtMinSec } from '../../host/hostView.ts';
-import { bookEntries, COPY_OK, copyBlocked, formatDuration, penaltyLine, resultView, StartOrderBanner, summarize, transportLabel, zoneLines } from './format.ts';
+import { bookEntries, cardPanel, COPY_OK, copyBlocked, formatDuration, lockLine, penaltyLine, resultView, StartOrderBanner, statusLine, summarize, transportLabel, ZoneList, zoneLines } from './format.ts';
 
 const task: TaskView = { title: 'Nhiệm vụ', description: 'Mô tả', media: [], kind: 'answer', verification: 'auto', input: 'text', proofInstruction: '', timeLimitMinutes: 20 };
 const card = (o: Partial<ClueCard>): ClueCard => ({ step: 's', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư', media: [], status: 'done', lockedUntil: null, lockKind: null, answers: [], receivedAt: 1000, completedAt: null, ...o });
@@ -112,11 +112,109 @@ describe('SPEC §17.21: no copying clue text', () => {
   });
 });
 
-describe('zone panel', () => {
-  it('oldest arrival first, team name from welcome.teams (slot fallback)', () => {
-    const teams = [{ slot: 1, id: 'a', name: 'Đội Xanh', colour: '#00f', online: true }];
-    const m = (slot: number, label: string, since: number) => ({ slot, label, type: 'challenge' as const, branch: null, since });
-    expect(zoneLines([m(2, 'Lộ trình 3', 9), m(1, 'Thử thách 2', 3)], teams)).toEqual(['Đội Xanh – đang làm Thử thách 2', 'Đội 2 – đang làm Lộ trình 3']);
-    expect(zoneLines([], teams)).toEqual([]);
+describe('zone panel (SPEC §7, Phase 10 V4)', () => {
+  const teams: TeamInfo[] = [{ slot: 1, id: 'a', name: 'Đội Xanh', colour: '#00f', online: true }];
+  const m = (slot: number, label: string, since: number, left?: number): ZoneMember => ({ slot, label, type: 'challenge', branch: null, since, ...(left !== undefined && { left }) });
+  const texts = (ms: ZoneMember[], now = 0) => zoneLines(ms, teams, now).map((l) => l.text);
+  const T = 5_000_000; // a server clock reading (ms)
+  /** The line of one team that left `age` ms before T, read at T (undefined = dropped). */
+  const gone = (age: number) => texts([m(1, 'X', 0, T - age)], T)[0];
+
+  it('the teams here: oldest arrival first, name from welcome.teams (slot fallback), nothing for an empty list', () => {
+    expect(texts([m(2, 'Lộ trình 3', 9), m(1, 'Thử thách 2', 3)])).toEqual(['Đội Xanh – đang làm Thử thách 2', 'Đội 2 – đang làm Lộ trình 3']);
+    expect(zoneLines([], teams, T)).toEqual([]);
+  });
+
+  it('a team that left: "vừa rời đi n phút trước (đang làm …)" AFTER the teams still here, flagged `gone` (drawn dimmer)', () => {
+    expect(zoneLines([m(1, 'Thử thách 2', 5, T - 125_000), m(2, 'Lộ trình 3', 9)], teams, T)).toEqual([
+      { text: 'Đội 2 – đang làm Lộ trình 3', gone: false },
+      { text: 'Đội Xanh – vừa rời đi 3 phút trước (đang làm Thử thách 2)', gone: true }, // 2 min 5 s → 3, though it came first in the list
+    ]);
+  });
+
+  it('the minutes round UP and are at least 1 (also for a `left` a little ahead of this client\'s clock estimate)', () => {
+    const n = (age: number) => /vừa rời đi (\d+) phút trước/.exec(gone(age) ?? '')?.[1];
+    expect([-2_000, 0, 1, 59_999, 60_000].map(n)).toEqual(['1', '1', '1', '1', '1']);
+    expect([60_001, 120_000, 120_001, 599_999].map(n)).toEqual(['2', '2', '3', '10']);
+  });
+
+  it('dropped once now − left > NET.zoneLeftMs: still there AT the limit, gone a millisecond later (the server runs no timer)', () => {
+    expect(gone(NET.zoneLeftMs)).toContain(`${Math.ceil(NET.zoneLeftMs / 60_000)} phút trước`);
+    expect(gone(NET.zoneLeftMs + 1)).toBeUndefined();
+    expect(texts([m(1, 'X', 0, T - NET.zoneLeftMs - 1), m(2, 'Y', 1)], T)).toEqual(['Đội 2 – đang làm Y']); // an expired one never hides a team that is here
+  });
+
+  it('order: the teams here by arrival, then the gone ones, the latest to leave first; the input list is left as it was', () => {
+    const list = [m(3, 'C', 7, T - 180_000), m(1, 'A', 2), m(4, 'D', 1, T - 60_000), m(2, 'B', 1), m(5, 'E', 3, T - NET.zoneLeftMs - 1)];
+    expect(texts(list, T)).toEqual(['Đội 2 – đang làm B', 'Đội Xanh – đang làm A', 'Đội 4 – vừa rời đi 1 phút trước (đang làm D)', 'Đội 3 – vừa rời đi 3 phút trước (đang làm C)']);
+    expect(list.map((x) => x.slot)).toEqual([3, 1, 4, 2, 5]);
+  });
+});
+
+describe('ZoneList (RaceHud rebuilds the panel only when a line changes)', () => {
+  const teams: TeamInfo[] = [{ slot: 1, id: 'a', name: 'Đội Xanh', colour: '#00f', online: true }];
+  const m = (slot: number, label: string, since: number, left?: number): ZoneMember => ({ slot, label, type: 'challenge', branch: null, since, ...(left !== undefined && { left }) });
+  const T = 5_000_000; // the moment team 1 left
+  const here = 'Đội 2 – đang làm Lộ trình 3';
+
+  it('a team that left: no redraw within one minute (60 fps), one when the minute ticks over, one when the line expires', () => {
+    const z = new ZoneList();
+    z.set([m(2, 'Lộ trình 3', 9), m(1, 'Thử thách 2', 3, T)], teams);
+    expect(z.ticking).toBe(true);
+    expect(z.update(T + 10_000)).toBe(true); // the first frame draws
+    expect(z.lines.map((l) => l.text)).toEqual([here, 'Đội Xanh – vừa rời đi 1 phút trước (đang làm Thử thách 2)']);
+    for (const age of [10_016, 11_000, 30_000, 59_999, 60_000]) expect(z.update(T + age)).toBe(false); // "1 phút" for the whole first minute
+    expect(z.update(T + 60_001)).toBe(true);
+    expect(z.lines[1]!.text).toContain('vừa rời đi 2 phút trước');
+    expect(z.update(T + 120_000)).toBe(false);
+    expect(z.update(T + 120_001)).toBe(true); // "3 phút trước"
+    expect(z.update(T + NET.zoneLeftMs)).toBe(true); // the last minute
+    expect(z.lines[1]!.text).toContain(`vừa rời đi ${Math.ceil(NET.zoneLeftMs / 60_000)} phút trước`);
+    expect(z.update(T + NET.zoneLeftMs + 1)).toBe(true); // expired: the line goes, the team still here stays
+    expect(z.lines.map((l) => l.text)).toEqual([here]);
+    expect(z.update(T + NET.zoneLeftMs + 2)).toBe(false);
+  });
+
+  it('the team comes back (a new list without the gone line): the line turns into "đang làm" at once; a list of teams that are here never ticks', () => {
+    const z = new ZoneList();
+    z.set([m(1, 'Thử thách 2', 3, T)], teams);
+    expect(z.update(T + 1_000)).toBe(true);
+    z.set([m(1, 'Thử thách 2', 8)], teams);
+    expect(z.ticking).toBe(false);
+    expect(z.update(T + 2_000)).toBe(true);
+    expect(z.lines).toEqual([{ text: 'Đội Xanh – đang làm Thử thách 2', gone: false }]);
+    expect(z.update(T + 9e9)).toBe(false); // time changes nothing for a team that is here
+    z.set([m(1, 'Thử thách 2', 8)], teams); // the server sends the same list again (a new object)
+    expect(z.update(T + 9e9)).toBe(false);
+  });
+
+  it('nothing to draw at the start; a list that empties out redraws once (the panel hides)', () => {
+    const z = new ZoneList();
+    expect(z.update(T)).toBe(false); // the panel starts hidden
+    z.set([m(2, 'Lộ trình 3', 9)], teams);
+    expect(z.update(T)).toBe(true);
+    z.set([], teams);
+    expect(z.update(T)).toBe(true);
+    expect(z.lines).toEqual([]);
+    expect(z.update(T + 1)).toBe(false);
+  });
+});
+
+describe('Hoàn tác (Phase 10 V2): the card is what the latest `race` view says, nothing of the old one is kept', () => {
+  const sent = (status: AnswerStatus) => ({ id: 1, text: '42', at: 100_000, status });
+  const asked = (o: Partial<ClueCard>) => card({ step: 'T1', type: 'challenge', label: 'Thử thách 1', task, retryPenaltyMinutes: 3, ...o });
+  const view = (c: ClueCard): RaceView => ({ status: 'running', finishAt: null, penaltyMinutes: 3, card: c, checkinAt: null, result: null });
+  const penalized = asked({ status: 'locked', lockedUntil: 280_000, lockKind: 'retry', answers: [sent('penalized')] });
+  const undone = asked({ status: 'pending', answers: [sent('pending')] }); // the same answer, back to waiting for the Host
+
+  it('Phạt then Hoàn tác: the countdown is gone from the centre, the top-left card and the full card; the wait counts from the ORIGINAL send time; no answer box', () => {
+    const now = 130_000;
+    expect(lockLine(view(penalized), now)).toBe('Phạt: còn 02:30 trước khi trả lời lại');
+    expect(statusLine(penalized, now)).toEqual({ kind: 'lock', text: 'Phạt: còn 02:30' });
+    expect(lockLine(view(undone), now)).toBeNull();
+    expect(statusLine(undone, now)).toEqual({ kind: 'wait', text: 'Chờ Host duyệt · 00:30' });
+    const p = cardPanel(undone, { now, teamName: 'Đội Xanh', mode: 'card' });
+    expect(p).toMatchObject({ status: 'pending', answerBox: false, line: { kind: 'wait', text: 'Đang chờ Host duyệt · 00:30' } });
+    expect(p.history.map((h) => [h.status, h.label])).toEqual([['pending', 'Chờ Host duyệt']]);
   });
 });

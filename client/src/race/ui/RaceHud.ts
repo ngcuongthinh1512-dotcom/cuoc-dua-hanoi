@@ -6,7 +6,8 @@
 //  - Sổ mật thư (Tab, SPEC §8.11): reloaded from the server on every open (actions.book → showBook), current card pinned,
 //    read-only, never the answer history (SPEC §17.14);
 //  - "Xuất phát ở vị trí thứ n" at the right for raceHud.startOrderSeconds of sim time, then fades (SPEC §17.12);
-//  - "Bấm F để mở hòm mật thư" prompt, the centre countdown (Host "Phạt" / branch switch / Pit Stop wait), "Tại điểm này";
+//  - "Bấm F để mở hòm mật thư" prompt, the centre countdown (Host "Phạt" / branch switch / Pit Stop wait), "Tại điểm này"
+//    (Phase 10 V4: the teams that just left stay 10 min as "vừa rời đi n phút trước", the minutes move with the clock);
 //  - SPEC §17.22 / §17.23: the finish announcement (host NPC line, toast, finish card: "Về đích thứ n" / the winner's /
 //    "BỊ LOẠI"), texts from the server (the leg), once per result (also after a reload: localStorage);
 //  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box).
@@ -17,7 +18,7 @@ import { Feed } from '../../ui/Feed.ts';
 import { onCreditsRequest, openCredits, setCreditItems, setCreditsGate } from '../../ui/Credits.ts';
 import { raceHud as C } from '../../config.ts';
 import { toast } from '../../ui/Toasts.ts';
-import { bookEntries, type BookEntry, branchConfirmText, cardPanel, copyBlocked, hintNews, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultView, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, zoneLines } from './format.ts';
+import { bookEntries, type BookEntry, branchConfirmText, cardPanel, copyBlocked, hintNews, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultView, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
 import './race.css';
 
 export interface RaceHudActions {
@@ -138,6 +139,7 @@ export class RaceHud {
   private readonly compact = el('div', 'rc-card hud-box');
   private readonly stateEl = el('div', 'rc-state');
   private readonly zonePanel = el('div', 'rc-zone hud-box');
+  private readonly zoneList = new ZoneList(); // the server's last "Tại điểm này" list; the panel is redrawn only when its lines change
   private readonly bannerEl = el('div', 'rc-banner hud-hand');
   private readonly penaltyEl = el('div', 'rc-penalty hud-box');
   private readonly promptEl = el('div', 'rc-prompt hud-box', BOX_PROMPT);
@@ -289,16 +291,25 @@ export class RaceHud {
     setCreditItems(items);
   }
 
-  /** SPEC §7 "Tại điểm này" (`zone` message): the other teams here, named from welcome.teams. */
+  /** SPEC §7 "Tại điểm này" (`zone` message): the other teams here, named from welcome.teams, then (Phase 10 V4) the ones that
+   *  left within NET.zoneLeftMs: "vừa rời đi n phút trước" (dimmer); update() keeps their minutes moving. */
   zone(members: readonly ZoneMember[], teams: readonly TeamInfo[]): void {
-    const lines = zoneLines(members, teams);
-    this.zonePanel.replaceChildren(...(lines.length ? [el('div', 'rc-zone-title', 'Tại điểm này'), ...lines.map((l) => el('div', 'rc-zone-line', l))] : []));
+    this.zoneList.set(members, teams);
+    this.drawZone();
+  }
+
+  /** The panel's lines at this frame's clock; the DOM is rebuilt only when they changed (ZoneList.update). */
+  private drawZone() {
+    if (!this.zoneList.update(this.now)) return;
+    const lines = this.zoneList.lines;
+    this.zonePanel.replaceChildren(...(lines.length ? [el('div', 'rc-zone-title', 'Tại điểm này'), ...lines.map((l) => el('div', `rc-zone-line${l.gone ? ' rc-zone-left' : ''}`, l.text))] : []));
     this.zonePanel.hidden = !lines.length;
   }
 
   update(f: RaceHudFrame): void {
     this.sim = f.simTime;
     this.now = f.serverNow + this.clockOffset;
+    if (this.zoneList.ticking) this.drawZone(); // a gone team's "n phút trước" moves with the clock (and expires), nothing else does
     this.bannerEl.classList.toggle('on', this.banner.text !== '' && this.banner.visible(f.simTime));
     const lock = lockLine(this.view, this.now);
     const pen = lock ?? penaltyLine(this.view, this.now);
@@ -323,7 +334,7 @@ export class RaceHud {
 
   /** DEV, offline only (p7-* / p8-* presets): stand-in data from the URL (?card=route|detour|challenge|pit|teaser|answer|
    *  answer-pending|answer-locked|detour-choose|detour-chosen|detour-locked|branch-task|proof|media|media-off, ?full, ?book[=media],
-   *  ?lock=<s left of a countdown>, ?startOrder=n, ?finish[=first|out|<n>] (the finish announcement, generic texts), ?zone,
+   *  ?lock=<s left of a countdown>, ?startOrder=n, ?finish[=first|out|<n>] (the finish announcement, generic texts), ?zone (two teams here + one that left 2 min 10 s ago),
    *  ?checkin=<s of penalty wait left>). The penalty row: ui/HUD.ts (?penalty). */
   demo(q: URLSearchParams): void {
     const kind = q.get('card') ?? (q.has('full') || q.has('book') ? 'route' : null);
@@ -357,10 +368,12 @@ export class RaceHud {
     }
     if (q.has('zone')) {
       const teams = DEMO_TEAMS;
+      this.clockOffset = this.now = DEMO_NOW; // the gone line reads the demo clock (the offline serverNow stays 0)
       this.zone(
         [
           { slot: 1, label: 'Thử thách 2', type: 'challenge', branch: null, since: 1 },
           { slot: 2, label: 'Lựa chọn kép', type: 'detour', branch: 'A', since: 2 },
+          { slot: 3, label: 'Thử thách 1', type: 'challenge', branch: null, since: 0, left: DEMO_NOW - 130_000 }, // "vừa rời đi 3 phút trước" (2 min 10 s, rounded up)
         ],
         teams,
       );
