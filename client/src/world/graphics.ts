@@ -52,7 +52,7 @@ export function graphics() {
 }
 
 /** Pure frame-rate watch: frame(dt s) → true once, when the mean FPS of a whole `seconds` window (after `graceSeconds`)
- *  is below `fps`. A frame longer than 3 s (a hidden tab, a stall) restarts the window. */
+ *  is below `fps`. A frame longer than 10 s (a hidden tab: no frames at all) restarts the window. */
 export class FpsWatch {
   private played = 0;
   private time = 0;
@@ -61,7 +61,7 @@ export class FpsWatch {
   constructor(private readonly cfg: { fps: number; seconds: number; graceSeconds: number } = G.quality.autoDowngrade) {}
   frame(dt: number): boolean {
     if (this.fired) return false;
-    if (dt > 3) {
+    if (dt > 10) {
       [this.time, this.frames] = [0, 0];
       return false;
     }

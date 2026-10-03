@@ -33,7 +33,7 @@ describe('FpsWatch (runtime downgrade)', () => {
     const w = new FpsWatch(cfg);
     expect(run(w, 30, 13)).toBe(0); // grace + one good window
     expect(run(w, 10, 6)).toBe(0);
-    w.frame(30); // back from a hidden tab
+    w.frame(60); // back from a hidden tab
     expect(run(w, 10, 7)).toBe(0);
     expect(run(w, 10, 1.5)).toBe(1);
     expect(graphics8c.quality.autoDowngrade.fps).toBeGreaterThan(0);

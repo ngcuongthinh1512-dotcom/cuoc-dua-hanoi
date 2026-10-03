@@ -939,9 +939,9 @@ export const graphics8c = {
     weakGpu: /swiftshader|llvmpipe|softpipe|basic render|intel(?!.*\barc\b)|mali|adreno|powervr/i,
     lowTexture: 1024, // px: the *_1k.webp variant of a texture (scripts/assets/pipeline.ts) on low quality
     anisotropy: 8, // PBR texture sets (world/textures.ts), clamped to the GPU's maximum
-    // low quality = close to Phase 7 cost (fix B, review F1): PBR sets diffuse only (no normal / ARM map) with this
-    // roughness, trees without a normal map, the river with one normal layer
-    lowRoughness: 0.9,
+    // low quality = close to Phase 7 cost (fix B, review F1): PBR sets colour map only (no normal / ARM map), the ARM
+    // map's mean AO (as a grey colour) and roughness instead; trees without a normal map, the river with one normal layer
+    lowArm: { roof_slates_03: { ao: 0.82, roughness: 0.5 }, asphalt_02: { ao: 0.72, roughness: 0.77 } } as Record<string, { ao: number; roughness: number }>,
     // Runtime downgrade (world/graphics.ts FpsWatch): on high quality, a mean FPS below `fps` over `seconds` (after
     // `graceSeconds` of play) turns post-processing + the image-based light off for the session (the stored choice stays)
     autoDowngrade: { fps: 24, seconds: 8, graceSeconds: 5 },
@@ -958,7 +958,7 @@ export const graphics8c = {
     environmentIntensity: 0.25, // scene.environmentIntensity: image-based light on every standard material
     // without the image-based light (low quality, or the runtime downgrade): sun + hemisphere only, tuned so the street
     // has the same mean brightness as high quality and before 8C (docs/reports/phase8c-fix-b.md)
-    low: { sunIntensity: 2.8, hemiIntensity: 2.6 },
+    low: { sunIntensity: 2.8, hemiIntensity: 2.3 },
     backgroundIntensity: 1,
     horizonBandDeg: 6, // fog colour = mean HDRI radiance from the horizon up to this elevation
     // mode 'shader': Sky.js uniforms, and the fog colour (linear radiance near its horizon, by eye)

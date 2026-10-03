@@ -27,9 +27,13 @@ export function pbrTexture(name: string, map: PbrMap): THREE.Texture {
 }
 
 /** MeshStandardMaterial parameters for set `name` (spread into the constructor / Object.assign). Low quality: the
- *  colour map only (no normal / ARM map: Phase 7 shading cost), roughness graphics8c.quality.lowRoughness. */
+ *  colour map only (no normal / ARM map: Phase 7 shading cost), the ARM map's mean AO / roughness from
+ *  graphics8c.quality.lowArm. */
 export function pbrMaps(name: string): THREE.MeshStandardMaterialParameters {
-  if (graphics().quality === 'low') return { map: pbrTexture(name, 'col'), roughness: graphics8c.quality.lowRoughness, metalness: 0 };
+  if (graphics().quality === 'low') {
+    const { ao, roughness } = graphics8c.quality.lowArm[name] ?? { ao: 1, roughness: 0.9 };
+    return { map: pbrTexture(name, 'col'), color: new THREE.Color(ao, ao, ao), roughness, metalness: 0 };
+  }
   const arm = pbrTexture(name, 'arm');
   return { map: pbrTexture(name, 'col'), normalMap: pbrTexture(name, 'nrm'), aoMap: arm, roughnessMap: arm, metalnessMap: arm, roughness: 1, metalness: 1 };
 }
