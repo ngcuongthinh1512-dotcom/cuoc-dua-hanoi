@@ -60,7 +60,8 @@
   padding: 6px 12px;
   font-size: 13px;
 }
-.rc-zone-title {
+.rc-zone-title,
+.rc-hints-title {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -70,6 +71,20 @@
 /* Phase 10 V4: a team that left ("vừa rời đi n phút trước") is dimmer than the ones still here. */
 .rc-zone-left {
   opacity: 0.7;
+}
+/* SPEC §17.36: the small "Gợi ý" panel (hint 1 / hint 2 as received or counting down, the pick count) pinned top-left on a
+   louvre card: ≈ 200 × 80 px, so the pictures and plinths stay visible; in the room it stands in for the compact card. */
+.rc-hints {
+  box-sizing: border-box;
+  width: 200px;
+  padding: 5px 10px 6px;
+  border-left: 4px solid var(--c, #f0643c);
+  font-size: 12.5px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.rc-hints-line {
+  white-space: nowrap;
 }
 
 /* "Xuất phát ở vị trí thứ n": right side, fades like the street label. */

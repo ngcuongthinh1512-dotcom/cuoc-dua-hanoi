@@ -378,11 +378,14 @@ Object.assign(PRESETS, {
   ...Object.fromEntries(
     Object.entries({
       // [B] the room (?louvre=1: the room at the spawn point, 23 placeholders, stand-in card ?card=louvre)
-      'p8b-room': 'louvre=1&card=louvre&roomAt=view', // from the door looking in: 23 numbered placeholders (15 frames + 8 plinths), lock button in the middle
+      'p8b-room': 'louvre=1&card=louvre&roomAt=view', // from the door looking in: 23 numbered placeholders (15 frames + 8 plinths), lock button in the middle; SPEC §17.36: the small "Gợi ý" panel top-left instead of the compact card (both hints in)
+      'p8b-room-hint': 'louvre=1&card=louvre-hint1&roomAt=view', // SPEC §17.36: the panel with hint 1 in, hint 2 counting down ("② sau 20:00"), "Đang chọn 4/5"
       'p8b-room-button': 'louvre=1&card=louvre&roomAt=button', // next to a green (picked) button: "Bấm F: bỏ chọn"
       'p8b-room-lock': 'louvre=1&card=louvre-locked&roomAt=lock&lock=120', // at the lock button: the wrong-lock countdown in the middle of the screen
       // [C] HUD (RaceHud.demo stand-ins)
       'p8b-card-louvre': 'card=louvre&full', // louvre card: "Đang chọn k/5", "Chốt sai: n lần", hint lines, lock history "· đúng c/5", no input box
+      'p8b-card-hint1': 'card=louvre-hint1&full', // minute 40: "Đáp án bao gồm 5 tác phẩm", no x/5 yet
+      'p8b-card-hint2': 'card=louvre&full', // minute 60: "Đúng x/5" for the current picks
       'p8b-feed': 'feed=3', // 3 feed lines bottom-left above the minimap (feed.corner)
       'p8b-credits': 'credits=louvre', // "Ghi nguồn" after the finish: credits.json + "Phòng Louvre" lines (stand-in items)
     }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
@@ -397,7 +400,7 @@ Object.assign(PRESETS, {
       `/?player&npc=0&wait=1&louvre=1&card=louvre&artGlb=2,7,11,13,15,16&artPhoto=8,12,18,21&roomAt=${at}`,
     ]),
   ),
-  // [D] Host page: a louvre cell "chọn k/23 · ✗n · 💡40 / 💡70 (x/5)" + its title history (demoState)
+  // [D] Host page: a louvre cell "chọn k/23 · ✗n · 💡40 / 💡60 (x/5)" + its title history (demoState)
   'p8b-host': '/host.html?demo=1&louvre=1',
 });
 Object.assign(VIEWPORT, { 'p8b-card-louvre-small': { width: 1024, height: 640 }, 'p8b-feed-small': { width: 1024, height: 640 }, 'p8b-real-view-small': { width: 1024, height: 640 } });

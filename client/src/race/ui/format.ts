@@ -310,6 +310,21 @@ export function louvreInfo(card: ClueCard, lv: LouvreView, o: { now: number; inR
   return { state, text, lines, enter };
 }
 
+/** SPEC §17.36: the small "Gợi ý" panel pinned top-left while a louvre card is current (RaceHud.hintEl; in the room it stands
+ *  in for the compact card): hint 1 / hint 2 as received, else "sau mm:ss" counting down to the server's hintAt (never a
+ *  hard-coded 40 / 60), then the live pick count. Numbers and times only, never a name. null = no panel (done / not louvre). */
+export function hintPanel(card: ClueCard, now: number): string[] | null {
+  const lv = card.status === 'done' ? null : card.task?.louvre;
+  if (!lv) return null;
+  const of = louvreOf(lv);
+  const due = (i: 0 | 1) => `sau ${countDown(Math.max(0, lv.hintAt[i] - now))}`;
+  return [
+    lv.hintCount != null ? `① Đáp án gồm ${lv.hintCount} tác phẩm` : `① ${due(0)}`,
+    lv.hintCorrect != null ? `② Đúng ${lv.hintCorrect}/${of}` : `② ${due(1)}`,
+    `Đang chọn ${lv.picks.length}${lv.maxPicks != null ? `/${of}` : ''}`,
+  ];
+}
+
 /** A clue / task attachment: an R2 image (fetched with the team token) or an https link (new tab, never embedded). */
 export type MediaItem = { kind: 'image'; name: string; label: string } | { kind: 'link'; href: string; label: string };
 const HTTP = /^https?:\/\/\S+$/i;

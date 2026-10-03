@@ -10,7 +10,9 @@
 //    (Phase 10 V4: the teams that just left stay 10 min as "vừa rời đi n phút trước", the minutes move with the clock);
 //  - SPEC §17.22 / §17.23: the finish announcement (host NPC line, toast, finish card: "Về đích thứ n" / the winner's /
 //    "BỊ LOẠI"), texts from the server (the leg), once per result (also after a reload: localStorage);
-//  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box).
+//  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box);
+//  - SPEC §17.36: the small "Gợi ý" panel pinned top-left while a louvre card is current (format.ts hintPanel: hint 1 / 2 as
+//    received or counting down to the server's hintAt, the pick count); in the room it stands in for the compact card.
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
 import { finishTexts, NET, type ClueCard, type CreditItem, type FeedMessage, type FinishResult, type LouvreView, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
@@ -18,7 +20,7 @@ import { Feed } from '../../ui/Feed.ts';
 import { onCreditsRequest, openCredits, setCreditItems, setCreditsGate } from '../../ui/Credits.ts';
 import { raceHud as C } from '../../config.ts';
 import { toast } from '../../ui/Toasts.ts';
-import { bookEntries, type BookEntry, branchConfirmText, cardPanel, copyBlocked, hintNews, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultView, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
+import { bookEntries, type BookEntry, branchConfirmText, cardPanel, copyBlocked, hintNews, hintPanel, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultView, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
 import './race.css';
 
 export interface RaceHudActions {
@@ -144,6 +146,7 @@ export class RaceHud {
   private readonly tl = el('div', 'rc-tl');
   private readonly compact = el('div', 'rc-card hud-box');
   private readonly stateEl = el('div', 'rc-state');
+  private readonly hintEl = el('div', 'rc-hints hud-box'); // SPEC §17.36
   private readonly zonePanel = el('div', 'rc-zone hud-box');
   private readonly zoneList = new ZoneList(); // the server's last "Tại điểm này" list; the panel is redrawn only when its lines change
   private readonly bannerEl = el('div', 'rc-banner hud-hand');
@@ -160,8 +163,9 @@ export class RaceHud {
 
   /** `teamName`: the submission code "<team>-<step>[-<branch>]" (submitCode) on photo task cards. */
   constructor(readonly actions: RaceHudActions, readonly teamName = '') {
-    this.compact.hidden = this.zonePanel.hidden = this.penaltyEl.hidden = this.promptEl.hidden = this.npcEl.hidden = this.overlay.hidden = this.zoomEl.hidden = true;
-    this.tl.append(this.compact, this.zonePanel);
+    this.compact.hidden = this.hintEl.hidden = this.zonePanel.hidden = this.penaltyEl.hidden = this.promptEl.hidden = this.npcEl.hidden = this.overlay.hidden = this.zoomEl.hidden = true;
+    this.hintEl.style.setProperty('--c', TYPE_STYLE.challenge.colour); // a louvre card is a challenge card
+    this.tl.append(this.compact, this.hintEl, this.zonePanel);
     document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay, this.zoomEl, this.bigEl);
     this.zoomEl.addEventListener('click', () => this.zoom(null));
     // SPEC §17.21: the compact card + the overlay (full cards, Sổ) refuse selection / copy / drag / right-click, except in the
@@ -205,7 +209,7 @@ export class RaceHud {
     this.view = view;
     setCreditsGate(view != null && (view.finishAt != null || view.status === 'finished')); // §17.20: "Ghi nguồn" opens after the finish
     const card = view?.card ?? null;
-    for (const t of hintNews(was, card)) toast(t); // Phase 8B fix F2 (2): minutes 40 / 70 also when the full card is closed
+    for (const t of hintNews(was, card)) toast(t); // Phase 8B fix F2 (2): minutes 40 / 60 also when the full card is closed
     this.renderCompact(card);
     if (!card) return;
     if (this.fullCard && !this.bookOpen && card.step === this.fullCard.step) return this.refreshFull(card); // same step: the card changed state, redraw in place
@@ -342,8 +346,15 @@ export class RaceHud {
     this.npcEl.hidden = f.simTime - this.finishSince >= C.finishSeconds;
     const card = this.view?.card;
     if (!card) return;
+    // SPEC §17.36: the "Gợi ý" panel while a louvre card is current, not under an open card / Sổ / finish card, nor once the
+    // race is over for the team; in the room it stands in for the compact card, and its lines replace the compact card's
+    // "Chọn k/5 · Đúng x/5" (the "Phạt: còn …" line stays)
+    const v = this.view!;
+    const hints = this.open || v.result || v.finishAt != null || v.status === 'finished' ? null : hintPanel(card, this.now);
+    this.drawHints(hints);
+    this.compact.hidden = this.inRoom && hints != null;
     const st = statusLine(card, this.now);
-    this.stateEl.hidden = !st;
+    this.stateEl.hidden = !st || (hints != null && st.kind === 'info');
     this.stateEl.dataset.k = st?.kind ?? '';
     setText(this.stateEl, st?.text ?? '');
     const full = this.fullCard;
@@ -402,6 +413,15 @@ export class RaceHud {
   }
 
   // ── rendering ──
+
+  /** SPEC §17.36: the panel's DOM is rebuilt only when its lines change (a countdown ticks once a second). */
+  private drawHints(lines: string[] | null) {
+    this.hintEl.hidden = !lines;
+    const key = lines?.join('\n') ?? '';
+    if (this.hintEl.dataset.t === key) return;
+    this.hintEl.dataset.t = key;
+    this.hintEl.replaceChildren(el('div', 'rc-hints-title', 'Gợi ý'), ...(lines ?? []).map((l) => el('div', 'rc-hints-line', l)));
+  }
 
   /** `open` may have flipped: tell main.ts (it frees / re-takes the pointer, critic B1). */
   private sync() {
@@ -719,6 +739,8 @@ const DEMO_LOUVRE: LouvreView = {
 };
 const louvreTask: TaskView = { ...task, title: 'Phòng tác phẩm', description: 'Chọn các tác phẩm theo gợi ý rồi bấm nút chốt trong phòng.', kind: 'louvre', verification: 'auto', input: 'room', place: 'Sân minh họa', louvre: DEMO_LOUVRE };
 DEMO_CARDS.louvre = { ...NEW, step: 'T3', type: 'challenge', label: 'Thử thách 3', text: 'Gợi ý minh họa: hãy vào phòng và chọn các tác phẩm.', status: 'active', retryPenaltyMinutes: 3, task: louvreTask, answers: [A(1, '4 tác phẩm', 'penalized', 420), A(2, '5 tác phẩm', 'penalized', 130)].map((a, i) => ({ ...a, correct: i === 0 ? 1 : 2 })), receivedAt: T0, completedAt: null };
+// p8b-card-hint1: minute 40 only ("Đáp án bao gồm 5 tác phẩm"), no "Đúng x/5" yet (that is hint 2, minute 60); p8b-card-hint2 = the `louvre` card above
+DEMO_CARDS['louvre-hint1'] = { ...DEMO_CARDS.louvre, task: { ...louvreTask, louvre: { ...DEMO_LOUVRE, hintAt: [DEMO_NOW - 60_000, DEMO_NOW + 1_200_000], hintCorrect: null, picks: ['art-03', 'art-08', 'art-12', 'art-05'] } }, answers: [A(1, '4 tác phẩm', 'penalized', 420), A(2, '5 tác phẩm', 'penalized', 130)] };
 DEMO_CARDS['louvre-locked'] = { ...DEMO_CARDS.louvre, status: 'locked', lockedUntil: DEMO_NOW + 150_000, lockKind: 'retry', task: { ...louvreTask, louvre: { ...DEMO_LOUVRE, hintAt: [DEMO_NOW - 600_000, DEMO_NOW + 600_000], hintCorrect: null, attempts: 1 } }, answers: [{ ...A(1, '5 tác phẩm', 'penalized', 30) }] };
 const DEMO_BOOK: ClueCard[] = [
   { ...DEMO_CARDS.route!, label: 'Lộ trình 1', status: 'done', receivedAt: T0, completedAt: T0 + 1_240_000 },
