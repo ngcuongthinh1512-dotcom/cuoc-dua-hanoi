@@ -2,26 +2,30 @@
 // Module top level must not touch the DOM: the worker imports build*(); canvas textures only inside create*().
 import {
   BoxGeometry,
-  type BufferGeometry,
+  BufferGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
   Float32BufferAttribute,
   type Material,
+  Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  type Object3D,
   PlaneGeometry,
   SphereGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { props as P, stairs as ST } from '../config.ts';
+import { graphics8c as G8, props as P, roads as R, stairs as ST } from '../config.ts';
 import { type ChunkData, type ChunkKey, chunkKey } from '../geo/chunkData.ts';
 import { districtPlaque } from '../geo/districts.ts';
-import type { PropMeshes } from './attach.ts';
+import type { PropLods, PropMeshes } from './attach.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind, TriMesh } from './buildTypes.ts';
 import { hash01, MeshBuffer } from './geom.ts';
+import { graphics } from './graphics.ts';
 import { quadOut } from './landmarks/kit.ts';
-import { roadWidth } from './RoadBuilder.ts';
+import { roadWidth, sidewalkWidth } from './RoadBuilder.ts';
+import { createTreeLods } from './Vegetation.ts';
 
 const CAR = new Set(P.carKinds);
 const STREET = new Set([...P.carKinds, ...P.streetKinds]);
@@ -282,6 +286,174 @@ function buildSigns(spots: SignSpot[], ctx: BuildCtx): Pick<BuildOut, 'meshes' |
   return { meshes: [buf.bucket()], textures: [{ material: 'sign', image }] };
 }
 
+// ── Phase 8C T2: Paris street furniture (graphics8c.props). Visual only: no colliders (ride-check unchanged, SPEC §17.20
+// plan row T2); every spot is kept off the carriageways and out of the buildings. ──
+
+const Q = P.place8c;
+const SIDEWALK = R.lift + R.curbHeight; // m: props stand on the raised sidewalk
+
+/** Point in the outer ring of a building of this chunk (bounding box first). */
+export function inBuilding(chunk: ChunkData, x: number, z: number) {
+  for (const b of chunk.buildings) {
+    const o = b.outer;
+    let [minX, maxX, minZ, maxZ] = [Infinity, -Infinity, Infinity, -Infinity];
+    for (let i = 0; i < o.length; i += 2) [minX, maxX, minZ, maxZ] = [Math.min(minX, o[i]!), Math.max(maxX, o[i]!), Math.min(minZ, o[i + 1]!), Math.max(maxZ, o[i + 1]!)];
+    if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
+    let inside = false;
+    for (let i = 0, j = o.length - 2; i < o.length; j = i, i += 2) {
+      const [xi, zi, xj, zj] = [o[i]!, o[i + 1]!, o[j]!, o[j + 1]!];
+      if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+    }
+    if (inside) return true;
+  }
+  return false;
+}
+
+/** Distance from (x, z) to the edge of the nearest car carriageway of this chunk (negative: on it). */
+function toCarriageway(chunk: ChunkData, x: number, z: number) {
+  let best = Infinity;
+  for (const r of chunk.roads) {
+    if (!CAR.has(r.kind)) continue;
+    const hw = roadWidth(r) / 2;
+    for (let i = 0; i + 1 < r.pts.length / 2; i++) {
+      const [x0, z0, x1, z1] = [r.pts[2 * i]!, r.pts[2 * i + 1]!, r.pts[2 * i + 2]!, r.pts[2 * i + 3]!];
+      const l2 = (x1 - x0) ** 2 + (z1 - z0) ** 2;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - x0) * (x1 - x0) + (z - z0) * (z1 - z0)) / l2)) : 0;
+      best = Math.min(best, Math.hypot(x0 + t * (x1 - x0) - x, z0 + t * (z1 - z0) - z) - hw);
+    }
+  }
+  return best;
+}
+
+/** A spot is free when it is on no carriageway (clear m from every curb), in no building (nor `foot` m around it in
+ *  4 directions) and not within Q.treeGap m of a tree. */
+function free(chunk: ChunkData, x: number, z: number, foot: number, clear = Q.curbClear) {
+  if (toCarriageway(chunk, x, z) < clear) return false;
+  for (const [dx, dz] of [[0, 0], [foot, 0], [-foot, 0], [0, foot], [0, -foot]] as const) if (inBuilding(chunk, x + dx, z + dz)) return false;
+  return !chunk.points.some((p) => p.kind === 'tree' && Math.hypot(p.x - x, p.z - z) < Q.treeGap);
+}
+
+/** Walks every segment of road r at `step` m (from `start`): f(x, z, tangent, arc length). */
+function along(r: { pts: number[] }, step: number, start: number, f: (x: number, z: number, tx: number, tz: number, s: number) => void) {
+  let [next, s] = [start, 0];
+  for (let i = 0; i + 1 < r.pts.length / 2; i++) {
+    const [x0, z0, x1, z1] = [r.pts[2 * i]!, r.pts[2 * i + 1]!, r.pts[2 * i + 2]!, r.pts[2 * i + 3]!];
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    if (len < 1e-6) continue;
+    const [tx, tz] = [(x1 - x0) / len, (z1 - z0) / len];
+    for (; next <= s + len; next += step) f(x0 + tx * (next - s), z0 + tz * (next - s), tx, tz, next);
+    s += len;
+  }
+}
+
+export interface Spot { x: number; z: number; yaw: number; y?: number } // yaw: local +Z (the prop's front) → (sin yaw, cos yaw); y: ground if not the terrain's
+const facing = (fx: number, fz: number) => Math.atan2(fx, fz);
+
+/** Benches on the sidewalks of the boulevards (Q.benchKinds), between the lamps, facing the street. */
+export function placeBenches(chunk: ChunkData, junctionPts: { x: number; z: number }[]): Spot[] {
+  const out: Spot[] = [];
+  for (const r of chunk.roads) {
+    if (!Q.benchKinds.includes(r.kind) || sidewalkWidth(r) < Q.benchSidewalk) continue;
+    const off = roadWidth(r) / 2 + Q.benchCurb;
+    along(r, Q.benchSpacing, Q.benchSpacing / 2 + P.lampSpacing / 4, (x, z, tx, tz) => {
+      if (junctionPts.some((j) => Math.hypot(j.x - x, j.z - z) < Q.junctionGap)) return;
+      for (const side of [1, -1]) {
+        const [nx, nz] = [tz * side, -tx * side];
+        const [bx, bz] = [x + nx * off, z + nz * off];
+        if (hash01(bx, bz, 21) >= Q.benchShare || !free(chunk, bx, bz, 0.8)) continue;
+        out.push({ x: bx, z: bz, yaw: facing(-nx, -nz) });
+      }
+    });
+  }
+  return out;
+}
+
+/** Café terraces: at 1 in Q.cafeOneIn street junctions, Q.cafeSets table sets along one arm from a corner. */
+export function placeCafes(chunk: ChunkData, junctions: Junction[]): Spot[] {
+  const out: Spot[] = [];
+  for (const j of junctions) {
+    if (hash01(j.x, j.z, 31) >= 1 / Q.cafeOneIn) continue;
+    const k = Math.floor(hash01(j.x, j.z, 32) * j.arms.length);
+    const [cx, cz] = corner(j, k, Q.cafeInset);
+    const a = j.arms[k]!;
+    for (let i = 0; i < Q.cafeSets; i++) {
+      const s = Q.cafeStart + i * Q.cafeStep;
+      const [x, z] = [cx + a.dx * s, cz + a.dz * s];
+      // a terrace sits in front of a façade: a building within cafeFacade m (not on a traffic island)
+      const facade = Array.from({ length: 8 }, (_, q) => (q * Math.PI) / 4).some((t) => inBuilding(chunk, x + Math.cos(t) * Q.cafeFacade, z + Math.sin(t) * Q.cafeFacade));
+      if (facade && free(chunk, x, z, 0.9, Q.cafeCurb)) out.push({ x, z, yaw: facing(a.dx, a.dz) });
+    }
+  }
+  return out;
+}
+
+/** Bus shelters at OSM bus stops with shelter=yes (points 'bus_shelter'): beside the nearest carriageway, on the stop's
+ *  side (the right of the way's direction when the stop sits on it), open side to the street. */
+export function placeShelters(chunk: ChunkData): Spot[] {
+  const out: Spot[] = [];
+  for (const p of chunk.points) {
+    if (p.kind !== 'bus_shelter') continue;
+    let best: { d: number; x: number; z: number; tx: number; tz: number; hw: number } | undefined;
+    for (const r of chunk.roads) {
+      if (!CAR.has(r.kind)) continue;
+      for (let i = 0; i + 1 < r.pts.length / 2; i++) {
+        const [x0, z0, x1, z1] = [r.pts[2 * i]!, r.pts[2 * i + 1]!, r.pts[2 * i + 2]!, r.pts[2 * i + 3]!];
+        const l2 = (x1 - x0) ** 2 + (z1 - z0) ** 2;
+        if (l2 < 1e-6) continue;
+        const t = Math.max(0, Math.min(1, ((p.x - x0) * (x1 - x0) + (p.z - z0) * (z1 - z0)) / l2));
+        const [x, z] = [x0 + t * (x1 - x0), z0 + t * (z1 - z0)];
+        const d = Math.hypot(p.x - x, p.z - z);
+        const l = Math.sqrt(l2);
+        if (!best || d < best.d) best = { d, x, z, tx: (x1 - x0) / l, tz: (z1 - z0) / l, hw: roadWidth(r) / 2 };
+      }
+    }
+    if (!best || best.d > Q.shelterReach) continue;
+    const [lx, lz] = [best.tz, -best.tx]; // left normal
+    const side = best.d < 0.5 ? -1 : Math.sign((p.x - best.x) * lx + (p.z - best.z) * lz) || -1;
+    const [nx, nz] = [lx * side, lz * side];
+    const off = best.hw + Q.shelterCurb;
+    const [x, z] = [best.x + nx * off, best.z + nz * off];
+    if (free(chunk, x, z, 1.2, Q.shelterCurb - 0.6)) out.push({ x, z, yaw: facing(-nx, -nz) });
+  }
+  return out;
+}
+
+/** Bouquinistes: along the quays named in Q.quays, every Q.bouqStep m (hashed gaps), on the parapet: the side where the
+ *  ground drops to the river (carved height grid) within Q.wallSearch m of the curb, front to the street. */
+export function placeBouquinistes(chunk: ChunkData, ctx: BuildCtx): Spot[] {
+  const out: Spot[] = [];
+  const near = (x: number, z: number) => chunk.bridges.some((b) => {
+    for (let i = 0; i < b.pts.length; i += 2) if (Math.hypot(b.pts[i]! - x, b.pts[i + 1]! - z) < Q.bridgeGap) return true;
+    return false;
+  });
+  for (const r of chunk.roads) {
+    if (!r.name || !Q.quays.includes(r.name) || !CAR.has(r.kind)) continue;
+    const hw = roadWidth(r) / 2;
+    along(r, Q.bouqStep, Q.bouqStep / 2, (x, z, tx, tz) => {
+      const y0 = ctx.height(x, z);
+      for (const side of [1, -1]) {
+        const [nx, nz] = [tz * side, -tx * side];
+        const h = (d: number) => ctx.height(x + nx * d, z + nz * d);
+        let wall = 0;
+        for (let d = hw + Q.wallSearch[0]; d <= hw + Q.wallSearch[1]; d += 0.5) {
+          if (h(d) < y0 - Q.riverDrop) {
+            wall = d;
+            break;
+          }
+        }
+        if (!wall) continue; // no river on this side
+        // back up to where the quay top ends: the 5 m grid slopes from the last top node to the bed over one cell
+        const top = h(Math.max(hw, wall - 6));
+        while (wall - 0.25 > hw && h(wall - 0.25) < top - Q.wallDrop) wall -= 0.25;
+        const [bx, bz] = [x + nx * (wall - Q.parapetInset), z + nz * (wall - Q.parapetInset)];
+        if (hash01(bx, bz, 41) < Q.bouqGapShare || near(bx, bz) || inBuilding(chunk, bx, bz) || toCarriageway(chunk, bx, bz) < 0.5) continue;
+        out.push({ x: bx, z: bz, yaw: facing(-nx, -nz), y: top }); // the quay top (the grid slopes toward the bed there)
+      }
+    });
+  }
+  return out;
+}
+
 export const buildStreetProps: Builder = (chunk, ctx) => {
   const { owned, points } = findJunctions(chunk, ctx.key);
   const lamps: number[] = [];
@@ -308,6 +480,25 @@ export const buildStreetProps: Builder = (chunk, ctx) => {
 
   const signs = buildSigns(spots, ctx);
   const sets: [PropKind, number[]][] = [['lamp', lamps], ['morris', morris], ['metro', metro], ['metroMask', metro]];
+  if (G8.props.enabled) {
+    // the worker cannot know the quality: placement is the same everywhere, the main thread only picks the levels
+    const at = (list: Spot[]) => {
+      const m: number[] = [];
+      for (const s of list) pushMatrix(m, s.x, (s.y ?? ctx.height(s.x, s.z)) + SIDEWALK, s.z, s.yaw);
+      return m;
+    };
+    // the real bus stops first; then the stalls, benches, terraces keep clear of what is already placed
+    const away = (list: Spot[], from: Spot[], d: number) => list.filter((s) => from.every((o) => Math.hypot(o.x - s.x, o.z - s.z) >= d));
+    const shelters = placeShelters(chunk);
+    const stalls = away(placeBouquinistes(chunk, ctx), shelters, Q.keepClear);
+    const taken = [...shelters, ...stalls];
+    sets.push(
+      ['bench', at(away(placeBenches(chunk, points), taken, Q.keepClear))],
+      ['cafe', at(away(placeCafes(chunk, owned), taken, Q.keepClear))],
+      ['shelter', at(shelters)],
+      ['bouquiniste', at(stalls)],
+    );
+  }
   const instances = sets.filter(([, m]) => m.length).map(([kind, m]) => ({ kind, matrices: new Float32Array(m) }));
   const col = propColliders(instances);
   return {
@@ -415,11 +606,81 @@ export function createPropMeshes(): PropMeshes {
   const lid = new PlaneGeometry(2 * W - 0.04, WELL - 0.06).rotateX(-Math.PI / 2).translate(0, LID, -WELL / 2);
   lid.deleteAttribute('uv');
   lid.deleteAttribute('normal');
-  return {
-    tree: mesh(tree, 0.9), lamp: mesh(lamp, 0.5), morris: mesh(morris, 0.7),
+  const g = graphics();
+  const lods = (radius: number, levels: PropLods['levels'] = []) => ({ lods: { levels, radius } });
+  const [oldLamp, oldMorris] = [mesh(lamp, 0.5), mesh(morris, 0.7)];
+  const on = g.on('props');
+  const out: PropMeshes = {
+    tree: g.on('trees') ? { lods: createTreeLods(g.quality, track) } : mesh(tree, 0.9),
+    // graphics8c.props: the Phase 7 lamp / Morris column until models/props.glb arrives, then its two levels
+    lamp: on ? lods(2.6, [{ parts: [oldLamp], distance: Infinity, castShadow: true }]) : oldLamp,
+    morris: on ? lods(2.4, [{ parts: [oldMorris], distance: Infinity, castShadow: true }]) : oldMorris,
     metro: { ...mesh([...metro, ...metroWell()], 0.6), renderOrder: -2 },
     metroMask: { geometry: lid, material: new MeshBasicMaterial({ colorWrite: false }), renderOrder: -1, castShadow: false },
+    bench: lods(1.2), cafe: lods(1.2), shelter: lods(3.1), bouquiniste: lods(4.6),
   };
+  if (on && typeof document !== 'undefined') void track(loadPropModels(out, g.quality));
+  return out;
+}
+
+let pending = 0;
+function track<T>(p: Promise<T>): Promise<T> {
+  pending++;
+  return p.finally(() => pending--);
+}
+/** No props.glb / tree texture load in flight (landmarks/models.ts `idle` includes it, for __READY__). */
+export const propAssetsIdle = () => pending === 0;
+
+/** A GLTFLoader geometry (meshopt-quantized: normalized int attributes) → plain float position / normal / uv + index. */
+function floatGeometry(src: BufferGeometry) {
+  const g = new BufferGeometry();
+  const n = src.getAttribute('position').count;
+  for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2]] as const) {
+    const a = src.getAttribute(name);
+    const arr = new Float32Array(n * size);
+    if (a) for (let i = 0; i < n; i++) for (let c = 0; c < size; c++) arr[i * size + c] = a.getComponent(i, c);
+    g.setAttribute(name, new Float32BufferAttribute(arr, size));
+  }
+  if (!src.getAttribute('normal')) g.computeVertexNormals();
+  g.setIndex(src.index ? Array.from(src.index.array) : Array.from({ length: n }, (_, i) => i));
+  return g;
+}
+
+/** models/props.glb (scripts/assets/props.ts): node `<kind>` = level 0, `<kind>_lod1` = level 1, distances from
+ *  graphics8c.props.lod (× lowScale on low quality). Lamp and Morris column stand on the raised sidewalk (their matrices
+ *  are at ground level, like their colliders). Replaces each kind's `levels`: the chunks rebuild on their next frame. */
+async function loadPropModels(out: PropMeshes, quality: 'low' | 'high') {
+  const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
+    import('three/examples/jsm/loaders/GLTFLoader.js'),
+    import('three/examples/jsm/libs/meshopt_decoder.module.js'),
+  ]);
+  let scene: Object3D;
+  try {
+    scene = (await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('models/props.glb')).scene;
+  } catch (err) {
+    return void console.warn('models/props.glb missing or unreadable (npm run process-assets -- props):', err);
+  }
+  scene.updateMatrixWorld(true);
+  const D = G8.props.lod;
+  const k = quality === 'low' ? G8.props.lowScale : 1;
+  for (const kind of Object.keys(D) as (keyof typeof D)[]) {
+    const levels = [kind, `${kind}_lod1`].map((name, i) => {
+      const node = scene.getObjectByName(name);
+      if (!node) return undefined;
+      const byMat = new Map<Material, BufferGeometry[]>();
+      node.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        const geo = floatGeometry(o.geometry).applyMatrix4(o.matrixWorld);
+        if (kind === 'lamp' || kind === 'morris') geo.translate(0, SIDEWALK, 0);
+        byMat.set(o.material as Material, [...(byMat.get(o.material as Material) ?? []), geo]);
+      });
+      const parts = [...byMat].map(([material, geos]) => ({ geometry: mergeGeometries(geos)!, material }));
+      return { parts, distance: D[kind][i]! * k, castShadow: i === 0 };
+    });
+    const prop = out[kind];
+    if (levels.every((l) => l?.parts.length) && 'lods' in prop) prop.lods.levels = levels as PropLods['levels'];
+    else console.warn(`models/props.glb: no ${kind} / ${kind}_lod1`);
+  }
 }
 
 const W = 1; // m, half width of the Guimard stairwell (railings at ±1.05)

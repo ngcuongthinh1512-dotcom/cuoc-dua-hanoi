@@ -9,7 +9,7 @@ import { heightAt, parseHeightGrid } from '../../geo/heightGrid.ts';
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { carveRiver } from '../Terrain.ts';
-import { details, site } from './g2.ts';
+import { details, flamme, site } from './g2.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
 import { recordGround } from './parts.ts';
 
@@ -26,14 +26,15 @@ describe.skipIf(!has)('g2 Seine bridges', () => {
     for (const key of index.keys) {
       const chunk = JSON.parse(readFileSync(join(data, `chunks/${key}.json`), 'utf8')) as ChunkData;
       for (const rec of chunk.buildings) {
-        if (!rec.landmark || !(rec.landmark in details)) continue;
+        if (!rec.landmark || !(rec.landmark in details || rec.landmark === 'flamme')) continue; // 8C: flamme left g2's details
         const height = (x: number, z: number) => heightAt(grid, x, z);
         const ctx: LandmarkCtx = { key, bounds: chunkBounds(key), height, def: LANDMARK_BY_ID.get(rec.landmark)!, ...recordGround(rec.outer, height) };
         recs.set(rec.landmark, [...(recs.get(rec.landmark) ?? []), { rec, ctx }]);
       }
     }
   }
-  const build = (id: LandmarkId) => recs.get(id)!.map(({ rec, ctx }) => details[id]!(rec, rec.parts ?? [], ctx, helpers));
+  // Phase 8C: with graphics8c.flamme on, the Flamme's procedural model is only the scan's far level (no g2 detail)
+  const build = (id: LandmarkId) => recs.get(id)!.map(({ rec, ctx }) => (id === 'flamme' ? flamme(rec, ctx) : details[id]!(rec, rec.parts ?? [], ctx, helpers)));
   const tris = (outs: BuildOut[]) => outs.reduce((s, o) => s + o.meshes.reduce((t, m) => t + m.index.length / 3, 0), 0);
   const ys = (o: BuildOut, mat: string) => o.meshes.filter((m) => m.material === mat).flatMap((m) => [...m.position].filter((_, i) => i % 3 === 1));
   const sane = (outs: BuildOut[]) =>

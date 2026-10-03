@@ -1,6 +1,10 @@
 // Package E: plane trees (InstanceSet 'tree') from PointRecs.
 // Module top level must not touch the DOM: the worker imports build*(); canvas textures only inside create*().
-import { props as P } from '../config.ts';
+// Phase 8C T2 (graphics8c.trees): createTreeLods() = a procedural platane (bark trunk + limbs, leaf-cluster cards) at three
+// levels of detail, all on one atlas made by scripts/assets/trees.ts; world/attach.ts picks the level per tree by distance.
+import * as THREE from 'three';
+import { graphics8c as G8, props as P } from '../config.ts';
+import type { PropLods } from './attach.ts';
 import type { Builder } from './buildTypes.ts';
 import { hash01 } from './geom.ts';
 import { pushMatrix } from './StreetProps.ts';
@@ -16,3 +20,178 @@ export const buildVegetation: Builder = (chunk, ctx) => {
   }
   return { meshes: [], instances: m.length ? [{ kind: 'tree', matrices: new Float32Array(m) }] : [], colliders: [] };
 };
+
+/** Cells of textures/trees_{col,nrm}.webp (2048 × 1024 px): [left, top, width, height] in px. */
+export const TREE_ATLAS = {
+  size: [2048, 1024],
+  bark: [0, 0, 1024, 1024],
+  leavesA: [1024, 0, 512, 512],
+  leavesB: [1536, 0, 512, 512],
+  side: [1024, 512, 512, 512],
+  top: [1536, 512, 512, 512],
+} as const;
+
+/** Proportions of the platane at instance scale k (m): the impostor cells are painted to match. */
+export function treeShape(k = 1) {
+  const H = P.treeHeight * k;
+  return { height: H, trunkRadius: 0.022 * H, forkY: 0.34 * H, crownY: 0.62 * H, crownRadius: 0.36 * H, crownHeight: 0.6 * H };
+}
+
+type Cell = readonly [number, number, number, number];
+/** Atlas uv of (s, t) in a cell: s left → right, t bottom → top (TextureLoader flips y). */
+const cellUv = (c: Cell, s: number, t: number): [number, number] => [(c[0] + s * c[2]) / TREE_ATLAS.size[0], 1 - (c[1] + (1 - t) * c[3]) / TREE_ATLAS.size[1]];
+
+/** mulberry32: the same tree on every run. */
+function rng(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+class Geo {
+  pos: number[] = [];
+  nrm: number[] = [];
+  uv: number[] = [];
+  idx: number[] = [];
+  vert(p: THREE.Vector3, n: THREE.Vector3, uv: [number, number]) {
+    this.pos.push(p.x, p.y, p.z);
+    this.nrm.push(n.x, n.y, n.z);
+    this.uv.push(...uv);
+    return this.pos.length / 3 - 1;
+  }
+  /** Tapered tube from a to b, radius ra → rb, `seg` sides; bark uv: once around (s 0 → 1 over half the cell), t 0 → 1. */
+  tube(a: THREE.Vector3, b: THREE.Vector3, ra: number, rb: number, seg: number) {
+    const axis = b.clone().sub(a).normalize();
+    const side = Math.abs(axis.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    const u = side.cross(axis).normalize();
+    const w = axis.clone().cross(u);
+    const base = this.pos.length / 3;
+    for (let i = 0; i <= seg; i++) {
+      const ang = (2 * Math.PI * i) / seg;
+      const n = u.clone().multiplyScalar(Math.cos(ang)).addScaledVector(w, Math.sin(ang));
+      this.vert(a.clone().addScaledVector(n, ra), n, cellUv(TREE_ATLAS.bark, (0.5 * i) / seg, 0));
+      this.vert(b.clone().addScaledVector(n, rb), n, cellUv(TREE_ATLAS.bark, (0.5 * i) / seg, 1));
+    }
+    for (let i = 0; i < seg; i++) {
+      const k = base + 2 * i;
+      this.idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+    }
+  }
+  /** A card (centre c, half axes u, v) seen from both sides, normals = `n` on both (lit like the crown's outside). */
+  card(c: THREE.Vector3, u: THREE.Vector3, v: THREE.Vector3, cell: Cell, n: (p: THREE.Vector3) => THREE.Vector3) {
+    const corners: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    const k = corners.map(([a, b]) => {
+      const p = c.clone().addScaledVector(u, a).addScaledVector(v, b);
+      return this.vert(p, n(p), cellUv(cell, 0.03 + 0.47 * (a + 1), 0.03 + 0.47 * (b + 1))); // 3 % inset: no mip bleed from the next cell
+    }) as [number, number, number, number];
+    this.idx.push(k[0], k[1], k[2], k[0], k[2], k[3], k[0], k[2], k[1], k[0], k[3], k[2]);
+  }
+  geometry() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    g.setIndex(this.idx);
+    g.computeBoundingSphere();
+    return g;
+  }
+}
+
+/** The three tree geometries (scale 1, foot at the origin): LOD0 full crown, LOD1 a few big cards, LOD2 impostor. */
+export function treeGeometries() {
+  const S = treeShape();
+  const centre = new THREE.Vector3(0, S.crownY, 0);
+  const up = new THREE.Vector3(0, 1, 0);
+  // crown normals: outward from the crown centre, bent up (sunlit top, darker underside)
+  const outward = (p: THREE.Vector3) => p.clone().sub(centre).normalize().addScaledVector(up, 0.6).normalize();
+  const crown = (geo: Geo, n: number, size: number, seed: number) => {
+    const r = rng(seed);
+    for (let i = 0; i < n; i++) {
+      const a = r() * 2 * Math.PI;
+      const h = 2 * r() - 1;
+      const rho = 0.45 + 0.55 * Math.sqrt(r());
+      const ring = Math.sqrt(1 - h * h) * rho;
+      const p = new THREE.Vector3(Math.cos(a) * ring * S.crownRadius, S.crownY + h * rho * (S.crownHeight / 2), Math.sin(a) * ring * S.crownRadius);
+      const s = size * (0.8 + 0.4 * r());
+      const yaw = r() * Math.PI;
+      const tilt = (r() - 0.5) * 0.8;
+      const cell = r() < 0.5 ? TREE_ATLAS.leavesA : TREE_ATLAS.leavesB;
+      for (const turn of [0, Math.PI / 2]) {
+        const d = new THREE.Vector3(Math.cos(yaw + turn), 0, Math.sin(yaw + turn));
+        const v = new THREE.Vector3(0, 1, 0).applyAxisAngle(d, tilt).multiplyScalar(s / 2);
+        geo.card(p, d.multiplyScalar(s / 2), v, cell, outward);
+      }
+      // upper clusters also lie flat: seen from above the crown is foliage, not crossed blades
+      if (h > -0.2) {
+        // tilted 25–45° about its own axis: never edge-on as one long line at eye level
+        const d = new THREE.Vector3(Math.cos(yaw), 0, Math.sin(yaw));
+        const v = new THREE.Vector3(-d.z, 0, d.x).applyAxisAngle(d, (r() < 0.5 ? -1 : 1) * (0.45 + 0.35 * r()));
+        geo.card(p, d.multiplyScalar(s / 2), v.multiplyScalar(s / 2), cell, outward);
+      }
+    }
+  };
+  const limbs = (geo: Geo, n: number, seg: number, seed: number) => {
+    const r = rng(seed);
+    for (let i = 0; i < n; i++) {
+      const a = (2 * Math.PI * (i + r() * 0.5)) / n;
+      const tip = new THREE.Vector3(Math.cos(a) * 0.5 * S.crownRadius, S.crownY + (r() - 0.3) * 0.3 * S.crownHeight, Math.sin(a) * 0.5 * S.crownRadius);
+      geo.tube(new THREE.Vector3(0, S.forkY, 0), tip, 0.55 * S.trunkRadius, 0.18 * S.trunkRadius, seg);
+    }
+  };
+
+  const lod0 = new Geo();
+  lod0.tube(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3(0, S.forkY * 0.5, 0), 1.3 * S.trunkRadius, S.trunkRadius, 8);
+  lod0.tube(new THREE.Vector3(0, S.forkY * 0.5, 0), new THREE.Vector3(0, S.forkY, 0), S.trunkRadius, 0.85 * S.trunkRadius, 8);
+  limbs(lod0, 5, 5, 3);
+  crown(lod0, 48, 0.3 * S.height, 7);
+
+  const lod1 = new Geo();
+  lod1.tube(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3(0, S.forkY, 0), 1.2 * S.trunkRadius, 0.85 * S.trunkRadius, 5);
+  crown(lod1, 12, 0.48 * S.height, 11);
+
+  // impostor: two crossed upright quads (the side cell) + one horizontal quad (the top cell) at the crown's middle
+  const lod2 = new Geo();
+  const half = (S.height * 1.02) / 2;
+  for (const d of [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1)]) {
+    lod2.card(new THREE.Vector3(0, half, 0), d.clone().multiplyScalar(half), new THREE.Vector3(0, half, 0), TREE_ATLAS.side, () => up.clone().add(d.clone().cross(up).multiplyScalar(0.3)).normalize());
+  }
+  const rTop = S.crownRadius / 0.92; // the top cell's crown fills 92 % of the cell
+  lod2.card(new THREE.Vector3(0, S.crownY + S.crownHeight * 0.15, 0), new THREE.Vector3(rTop, 0, 0), new THREE.Vector3(0, 0, -rTop), TREE_ATLAS.top, () => up);
+  return [lod0, lod1, lod2].map((g) => g.geometry());
+}
+
+/** Tree LOD levels for world/attach.ts. Textures load async (`onLoad` counts them for __READY__ via the callbacks). */
+export function createTreeLods(quality: 'low' | 'high', track: <T>(p: Promise<T>) => Promise<T>): PropLods {
+  const T = G8.trees;
+  const material = new THREE.MeshStandardMaterial({ alphaTest: 0.5, roughness: 0.85, metalness: 0 });
+  if (typeof document !== 'undefined') {
+    const loader = new THREE.TextureLoader();
+    const suffix = quality === 'low' ? '_1k' : '';
+    for (const [slot, name] of [['map', 'col'], ['normalMap', 'nrm']] as const) {
+      void track(loader.loadAsync(`textures/trees_${name}${suffix}.webp`)).then(
+        (t) => {
+          t.colorSpace = name === 'col' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+          t.anisotropy = 4;
+          material[slot] = t;
+          material.needsUpdate = true;
+        },
+        () => console.warn(`textures/trees_${name}${suffix}.webp missing (npm run process-assets -- trees)`),
+      );
+    }
+  }
+  const [g0, g1, g2] = treeGeometries();
+  const [d0, d1] = quality === 'low' ? T.lowLod : T.lod;
+  const S = treeShape(P.treeScale[1]);
+  return {
+    radius: Math.hypot(S.crownRadius, S.height / 2),
+    levels: [
+      ...(d0 > 0 ? [{ parts: [{ geometry: g0!, material }], distance: d0, castShadow: true }] : []),
+      { parts: [{ geometry: g1!, material }], distance: d1, castShadow: true },
+      { parts: [{ geometry: g2!, material }], distance: Infinity, castShadow: false },
+    ],
+  };
+}

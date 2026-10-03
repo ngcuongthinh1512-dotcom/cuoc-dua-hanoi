@@ -6,7 +6,7 @@
 // springAbove over the water, the body stops topGap under BridgeBuilder's deck line (same formula, estimated here).
 // Built in a bridge frame (x = s along the axis, y = world y, z = w across), placed once at the end.
 import { latLonToWorld } from '@race/shared';
-import { buildings as B, landmarks as LM, roads as R, terrain as T } from '../../config.ts';
+import { buildings as B, graphics8c as G8, landmarks as LM, roads as R, terrain as T } from '../../config.ts';
 import type { BuildingRec, LandmarkId, LandmarkPoint } from '../../geo/chunkData.ts';
 import type { BuildOut, MaterialId, TriMesh } from '../buildTypes.ts';
 import { hash01, mergeBuckets, MeshBuffer, type V3 } from '../geom.ts';
@@ -659,7 +659,8 @@ function alma(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
 
 // ── Flamme de la Liberté (1989): gilded copper replica of the Statue of Liberty's flame (3.5 m) on a black marble pedestal ──
 
-function flamme(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
+/** Phase 8C (graphics8c.flamme): the scan replaces it (g1 details + landmarks/models.ts); this stays its far level / fallback. */
+export function flamme(rec: BuildingRec, ctx: Pick<LandmarkCtx, 'minGround'>): BuildOut {
   const F = C.flamme;
   const fp = footprintFrame(rec.outer);
   const o = new Out(fp);
@@ -697,5 +698,5 @@ export const details: Partial<Record<LandmarkId, DetailFn>> = {
   'pont-neuf': (rec, _parts, ctx) => pontNeuf(rec, ctx),
   'pont-des-arts': (rec, _parts, ctx) => pontDesArts(rec, ctx),
   alma: (rec, _parts, ctx) => alma(rec, ctx),
-  flamme: (rec, _parts, ctx) => flamme(rec, ctx),
+  ...(G8.flamme.enabled ? {} : { flamme: (rec, _parts, ctx) => flamme(rec, ctx) }),
 };

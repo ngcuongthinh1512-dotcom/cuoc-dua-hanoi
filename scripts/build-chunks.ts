@@ -231,6 +231,16 @@ for (const { geometry: g, p } of features) {
     }
     continue;
   }
+  // Phase 8C street furniture: bus stops with a shelter (highway=bus_stop + shelter=yes; one per 15 m: platform duplicates)
+  if (g.type === 'Point' && tags.highway === 'bus_stop' && /^yes/.test(tags.shelter ?? '')) {
+    const [x, z] = project(g.coordinates);
+    const c = chunkAt(x!, z!);
+    if (c && !c.points.some((q) => q.kind === 'bus_shelter' && Math.hypot(q.x - x!, q.z - z!) < 15)) {
+      c.points.push({ kind: 'bus_shelter', x: x!, z: z! });
+      bump('points.busShelter');
+    } else bump('dropped.busShelterDuplicate');
+    continue;
+  }
   const def = OUTLINES.get(`${p.type}/${p.id}`);
   const cat = def ? 'building' : classify(tags, shape);
   if (cat === undefined) continue;

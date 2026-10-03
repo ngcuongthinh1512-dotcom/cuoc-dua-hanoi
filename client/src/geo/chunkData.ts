@@ -123,7 +123,7 @@ export interface AreaRec {
 } // clipped to chunk bounds
 
 export interface PointRec {
-  kind: 'tree' | 'subway_entrance';
+  kind: 'tree' | 'subway_entrance' | 'bus_shelter'; // bus_shelter: highway=bus_stop + shelter=yes (Phase 8C street furniture)
   x: number;
   z: number;
 } // tree_row pre-expanded to trees

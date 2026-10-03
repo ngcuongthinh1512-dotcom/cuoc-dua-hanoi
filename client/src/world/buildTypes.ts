@@ -38,8 +38,9 @@ export type MaterialId =
 export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'wall', 'shopfront', 'roof', 'masonry', 'metal', 'neon']);
 
 /** metro = Guimard railings + the stairwell under them, metroMask = the depth-only lid that cuts the ground open over it
- *  (StreetProps.createPropMeshes). */
-export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro' | 'metroMask';
+ *  (StreetProps.createPropMeshes). Phase 8C (graphics8c.props): bench, cafe (table + 2 chairs), shelter (bus stop),
+ *  bouquiniste (a stretch of book stalls on the quay parapet), from models/props.glb. */
+export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro' | 'metroMask' | 'bench' | 'cafe' | 'shelter' | 'bouquiniste';
 
 /** One indexed triangle list for one material. uv in metres unless the material says otherwise. */
 export interface MeshBucket {

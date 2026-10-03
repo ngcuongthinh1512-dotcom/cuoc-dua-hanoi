@@ -412,8 +412,8 @@ Object.assign(PRESETS, {
   // [T2] plane trees (street level / from above: LOD), Paris street furniture, quay bouquinistes, Flamme de la Liberté
   'p8c-trees': cam(CHAMPS[0], CHAMPS[1], 1.7, CHAMPS[2] + 25, 2),
   'p8c-trees-top': cam(CHAMPS[0], CHAMPS[1], 120, CHAMPS[2], -35),
-  'p8c-props': '/?player=105.1,-201.1,-26&wait=2&npcDensity=1',
-  'p8c-quay': cam(48.8584, 2.3318, 3, -90, -4), // Quai Voltaire, looking east along the parapet
+  'p8c-props': camAt(184, -878, 2.5, -50, -10), // a corner with a café terrace, Morris column, benches (0_-4)
+  'p8c-quay': '/?cam=706.2,3.2,708.6,260,-4', // fixed y: the uncarved DEM here is below the quay top // Quai Voltaire sidewalk, looking east along the bouquinistes on the parapet
   'p8c-flamme': camAt(FLAMME.x, FLAMME.z - 25, 6, 180, -8), // 25 m north of the flame (Place de l'Alma), facing south
   // [T3] SPEC §17.20: only roof slates + asphalt. Rue Royale roofs from 60 m (oblique), the carriageway at walking height
   'p8c-roof': camAt(87.8, -184.5, 60, -26, -35),
