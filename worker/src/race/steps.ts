@@ -98,11 +98,12 @@ export type RaceEffect =
   /** Memory only (the engine's row cache .picks + the snapshot row within NET.snapshotMs): 0 rows. */
   | { kind: 'pick'; step: number; picks: string[] }
   /** A lock: rec (text "k tác phẩm", s wrong / correct, c = right ones) appended to answers; picks written; wrong →
-   *  rejections + 1, locked_until = lockedUntil; event louvre.lock {ok, k, c, public, slot}; `public` = at ≥ hintAt[1]
-   *  (the feed line carries n); `minutes` = the countdown of a wrong lock (feed); ok → a `complete` follows. */
+   *  rejections + 1, locked_until = lockedUntil; event louvre.lock {ok, k, c, public, slot}; `public` = at ≥ hintAt[0]
+   *  (SPEC §17.35: the feed line carries n only then: the ≤ 5 rule is on, n/5 means something); `minutes` = the
+   *  countdown of a wrong lock (feed); ok → a `complete` follows. */
   | { kind: 'lock'; step: number; rec: AnswerRec; ok: boolean; correct: number; public: boolean; lockedUntil: number | null; minutes: number; picks: string[] };
 
-const inside = (zn: Zone, x: number, z: number, slack: number) => Math.hypot(x - zn.x, z - zn.z) <= zn.r + slack;
+export const inside = (zn: Zone, x: number, z: number, slack: number) => Math.hypot(x - zn.x, z - zn.z) <= zn.r + slack;
 
 /** The task of step s (a detour: branch `branch`'s), null = none. */
 export const taskOf = (s: Step, branch: string | null): Task | null =>
@@ -279,7 +280,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     if (t?.kind !== 'louvre' || !t.louvre) return silent;
     const state = stateOf(leg, i, p, now);
     if (state === 'teaser') return refuse('taskNotStarted');
-    const [h40, h70] = marks(t.louvre, p.startedAt ?? now);
+    const [h40] = marks(t.louvre, p.startedAt ?? now);
     if (input.kind === 'pick') {
       const on = p.picks.includes(input.art);
       if (on === input.on || !t.louvre.artworks.some((a) => a.id === input.art)) return silent;
@@ -297,7 +298,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     const minutes = ok ? 0 : retryLockMinutes(leg, t);
     const lockedUntil = minutes > 0 ? now + minutes * 60_000 : null;
     const rec: AnswerRec = { id: p.lastAnswerId + 1, b: null, text: `${p.picks.length} tác phẩm`, at: now, s: ok ? 'correct' : 'wrong', c: correct };
-    fx.push({ kind: 'lock', step: i, rec, ok, correct, public: now >= h70, lockedUntil, minutes, picks: p.picks });
+    fx.push({ kind: 'lock', step: i, rec, ok, correct, public: now >= h40, lockedUntil, minutes, picks: p.picks });
     p.lastAnswerId = rec.id;
     if (ok) done(input.pose);
     else p.lockedUntil = lockedUntil;
@@ -374,7 +375,7 @@ export const scoreOf = (a: AnswerRec, of: number | undefined): { score: number; 
 /** SPEC §17.31: server ms from which a Phạt on this task tells the team its count (null = the task has no scoreOf). */
 export const scoreFrom = (t: Task, row: StepProgressRow | undefined): number | null => (t.scoreOf && row?.task_started_at != null ? row.task_started_at + t.scoreFromMinutes * 60_000 : null);
 
-/** Server ms of the 40 / 70-minute marks of a louvre room started at t0. */
+/** Server ms of the 40 / 60-minute marks of a louvre room started at t0. */
 const marks = (lv: LouvreTask, t0: number): [number, number] => [t0 + lv.hints.countAtMinutes * 60_000, t0 + lv.hints.correctAtMinutes * 60_000];
 
 /** Phase 8B: server ms of the two hints of a louvre step (task_started_at = the previous route's box opened: a louvre

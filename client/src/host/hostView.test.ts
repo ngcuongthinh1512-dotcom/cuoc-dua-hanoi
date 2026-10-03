@@ -359,10 +359,10 @@ describe('louvre cell (phase8b §H)', () => {
   const s = withLouvreDemo(demoState(NOW));
   const cellOf = (state: HostState, name: string, now = NOW) => rowOf(state, name, now).cells[5]!;
 
-  it('shows picks / misses / the 70 min hint with the live x, a countdown while locked, and the exit button', () => {
+  it('shows picks / misses / the 60 min hint with the live x, a countdown while locked, and the exit button', () => {
     const c = cellOf(s, 'Đội Lục');
     expect(c.state).toBe('locked');
-    expect(c.text).toBe('⏳ 02:10 · chọn 5/23 · ✗2 · 💡70 (3/5)');
+    expect(c.text).toBe('⏳ 02:10 · chọn 5/23 · ✗2 · 💡60 (3/5)');
     expect(c.buttons.map((b) => [b.op, b.id, b.step])).toEqual([['approve', undefined, 'T3']]); // approve without id = the way out
     expect(c.buttons[0]!.confirm).toContain('Đội Lục');
     expect(c.title).toContain('Đang chọn (5): art-04, art-09, art-11, art-15, art-20');
@@ -370,12 +370,12 @@ describe('louvre cell (phase8b §H)', () => {
     expect(c.title).toContain('đúng 3/5');
   });
 
-  it('hint marks follow the clock: nothing, 40, then 70 (x only when the server sent it)', () => {
+  it('hint marks follow the clock: nothing, 40, then 60 (x only when the server sent it)', () => {
     const at = (min: number, more: Partial<Row> = {}) => cellOf(withRow(s, 't3', 'T3', { lockedUntil: null, startedAt: NOW - min * MIN, ...more }), 'Đội Lục');
     expect(at(10).text).toBe('chọn 5/23 · ✗2');
     expect(at(41).text).toBe('chọn 5/23 · ✗2 · 💡40');
-    expect(at(71, { hintCorrect: 0 }).text).toBe('chọn 5/23 · ✗2 · 💡70 (0/5)');
-    expect(at(71, { hintCorrect: null }).text).toBe('chọn 5/23 · ✗2 · 💡70');
+    expect(at(71, { hintCorrect: 0 }).text).toBe('chọn 5/23 · ✗2 · 💡60 (0/5)');
+    expect(at(71, { hintCorrect: null }).text).toBe('chọn 5/23 · ✗2 · 💡60');
     expect(at(10).state).toBe('active');
   });
 
@@ -390,7 +390,7 @@ describe('louvre cell (phase8b §H)', () => {
   });
 
   it('the leg box line; no answers or artwork names anywhere in the demo', () => {
-    expect(louvreLines(s.leg!)).toEqual(['Thử thách 3: phòng Louvre, 23 tác phẩm (ảnh / mô hình có sẵn trong game, không cần tải lên), gợi ý phút 40 / 70.']);
+    expect(louvreLines(s.leg!)).toEqual(['Thử thách 3: phòng Louvre, 23 tác phẩm (ảnh / mô hình có sẵn trong game, không cần tải lên), gợi ý phút 40 / 60.']);
     expect(louvreLines(demoState(NOW).leg!)).toEqual([]);
   });
 });

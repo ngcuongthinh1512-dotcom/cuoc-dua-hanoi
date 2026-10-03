@@ -237,14 +237,14 @@ export function statusLine(card: ClueCard, now: number): { kind: 'wait' | 'lock'
   return liveStatus(card, now) === 'goToBranch' ? { kind: 'info', text: `Nhánh ${branchName(card, card.branch)} · tới hòm nhánh` } : null;
 }
 
-/** "Chọn 3" (before minute 40), "Chọn 3/5" (from 40), "Chọn 3/5 · Đúng 2/5" (from 70): the compact card's louvre line. */
+/** "Chọn 3" (before minute 40), "Chọn 3/5" (from 40), "Chọn 3/5 · Đúng 2/5" (from 60): the compact card's louvre line. */
 export function louvreShort(lv: LouvreView): string {
   const of = louvreOf(lv);
   const pick = `Chọn ${lv.picks.length}${lv.maxPicks != null ? `/${of}` : ''}`;
   return lv.hintCorrect == null ? pick : `${pick} · Đúng ${lv.hintCorrect}/${of}`;
 }
 
-/** Toasts for the hints that just came (null → a value on the same louvre step), once each: SPEC §17.19 minutes 40 / 70
+/** Toasts for the hints that just came (null → a value on the same louvre step), once each: SPEC §17.19 minutes 40 / 60
  *  must reach a team that keeps the full card closed. A first view (F5, new card) toasts nothing. */
 export function hintNews(was: ClueCard | null | undefined, card: ClueCard | null | undefined): string[] {
   const [a, b] = [was?.task?.louvre, card?.task?.louvre];
@@ -270,7 +270,7 @@ export interface AnswerLine {
  *  the card's (a test leg may say 0,1): never hard-coded. */
 export function answerLines(card: ClueCard): AnswerLine[] {
   const pen = card.retryPenaltyMinutes;
-  const lv = (card.task ?? card.branches?.find((b) => b.id === card.branch)?.task)?.louvre; // Phase 8B: a lock "5 tác phẩm", "· đúng c/5" only from the 70-minute mark (AnswerView.correct)
+  const lv = (card.task ?? card.branches?.find((b) => b.id === card.branch)?.task)?.louvre; // Phase 8B: a lock "5 tác phẩm", "· đúng c/5" only from the 60-minute mark (AnswerView.correct)
   return card.answers
     .slice(-NET.answerHistory)
     .reverse()
@@ -290,7 +290,7 @@ export interface LouvreInfo {
   state: 'outside' | 'inside' | 'locked' | 'done';
   /** The state line ("Chưa vào phòng – bấm F ở hòm để vào phòng"). */
   text: string;
-  /** Detail lines in order: picks, wrong locks, hint 40, hint 70. */
+  /** Detail lines in order: picks, wrong locks, hint 40, hint 60. */
   lines: string[];
   /** SPEC §17.33: the "Vào phòng" button: outside, step not done; enabled within louvreRoom.enterReach of the box (`nearBox`),
    *  else dimmed with the hint. Null = no button (inside / done). */

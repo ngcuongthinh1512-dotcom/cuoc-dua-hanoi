@@ -141,9 +141,10 @@ export interface CreditItem {
   license: string;
   source: string;
 }
-/** Public line of the bottom-corner feed (every team socket + the Host), one per lock (never per pick): wrong before the
- *  team's correctAtMinutes → "Đội X trả lời sai và bị phạt 3 phút"; wrong after → "… · đúng n/5"; right after → "Đội X
- *  đúng 5/5"; right before → no line. The client words it (team name from welcome.teams[slot]). */
+/** Public line of the bottom-corner feed (every team socket + the Host), one per lock (never per pick), only for a WRONG
+ *  lock: "Đội X trả lời sai và bị phạt 3 phút", with " · đúng n/5" when the server sent `n` (SPEC §17.35: the locking
+ *  team was past its 40-minute mark AND the recipient is a Host, or a team in the room past its own 40 minutes — 60 for
+ *  its own lock). A right lock has no line. The client words it (team name from welcome.teams[slot]). */
 export interface FeedMessage {
   t: 'feed';
   /** server ms of the lock. */
@@ -152,7 +153,7 @@ export interface FeedMessage {
   ok: boolean;
   /** Penalty minutes of a wrong lock. */
   minutes?: number;
-  /** Right ones of that lock (only past the team's correctAtMinutes mark) out of `of` (5). */
+  /** Right ones of that lock out of `of` (5); present only when this recipient may see it (SPEC §17.35). */
   n?: number;
   of?: number;
 }

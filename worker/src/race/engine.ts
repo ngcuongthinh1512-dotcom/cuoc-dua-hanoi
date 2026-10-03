@@ -4,14 +4,14 @@
 // in one transaction, the cache patched only once it committed, THEN the answers (SPEC §3) — and builds the welcome /
 // host.state parts.
 import { branchZone, jsonProblem, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
-import { latLonToWorld } from '@race/shared';
+import { latLonToWorld, LOUVRE } from '@race/shared';
 import { finishTexts, NET, type BoxInfo, type FeedMessage, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { ranking } from './ranking.ts';
 import type { BoxSpot } from './BikeService.ts';
-import { advance, boxesOf, cardOf, creditsOf, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
+import { advance, boxesOf, cardOf, creditsOf, hintAt, inside, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
 
 /** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
  *  `auto` answers a minute for hours would grow one row and every host.state); raise it if a Host needs the whole log. */
@@ -65,8 +65,9 @@ export interface RaceIO {
    *  its revealed box (attachment), then gets {t:'box', op:'remove', step, branch} (dropped even if opened). Phase 10
    *  (undo): no `branch` → {t:'box', op:'hide', step} (an unopened box of that step). */
   hideBox(team: string, step: string, branch?: string): void;
-  /** Phase 8B: a public feed line to every socket (teams + Hosts), kept for the welcome (the event is written already). */
-  feed(m: FeedMessage): void;
+  /** Phase 8B: a public feed line to every socket (teams + Hosts), kept for the welcome (the event is written already).
+   *  SPEC §17.35: sent as `feedFor(m, engine.seesFeedCount(team, m, now))` to a team, whole to a Host. */
+  feed(m: FeedMessage, now: number): void;
   /** Phase 8B: a louvre pick changed live picks (memory only): the snapshot row goes out within NET.snapshotMs. */
   touchSnapshot(now: number): void;
 }
@@ -78,17 +79,26 @@ export interface LockEvent {
   /** picks locked / right ones among them. */
   k: number;
   c: number;
-  /** At or past the team's correctAtMinutes mark: the line carries n. */
+  /** SPEC §17.35: locked at or past the team's countAtMinutes (40) mark: the line carries n (the ≤ 5 rule was on). */
   public: boolean;
   slot: number;
   minutes: number;
 }
 
-/** The public line of a lock (SPEC §17.19): only a WRONG lock is public, as "bị phạt n phút"; never the count of right works
- *  (it would hand a late team the answer count) and no line for a right lock. */
+/** The public line of a lock (SPEC §17.19, §17.35): only a WRONG lock is public, as "bị phạt n phút"; no line for a right
+ *  lock. `n`/`of` (right ones of that lock) only for a lock past the locking team's 40-minute mark — and the line is
+ *  then cut per recipient with `feedFor` (RaceRoom): a team sees the count only in the room past its own 40 minutes
+ *  (another team's lock) or 60 minutes (its own lock). */
 export function feedLine(at: number, e: LockEvent): FeedMessage | null {
   if (e.ok) return null;
-  return { t: 'feed', at, slot: e.slot, ok: false, minutes: e.minutes };
+  return { t: 'feed', at, slot: e.slot, ok: false, minutes: e.minutes, ...(e.public ? { n: e.c, of: LOUVRE.answers } : {}) };
+}
+
+/** SPEC §17.35: the line as one recipient gets it: whole (`count`: a Host, or a team allowed the count) or without n / of. */
+export function feedFor(m: FeedMessage, count: boolean): FeedMessage {
+  if (count || m.n === undefined) return m;
+  const { n: _n, of: _of, ...rest } = m;
+  return rest;
 }
 
 export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.leg' | 'host.review' }>;
@@ -386,7 +396,7 @@ export class RaceEngine {
           submittedAt: row.submitted_at, decidedAt: row.decided_at, rejections: row.rejections, wrongAnswers: row.wrong_answers, branchSwitches: row.branch_switches,
           branchOpenedAt: row.branch_opened_at, lockedUntil: row.locked_until, pending: answers.at(-1)?.s === 'pending', approvalWaitSeconds: row.approval_wait_seconds,
           answers: answers.map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, branch: a.b, ...(a.n ? { note: a.n } : {}), ...(a.c !== undefined ? { correct: a.c } : {}) })), note: row.host_note,
-          // Phase 8B: the Host sees the picks + the live x/5 past the 70-minute mark (louvreView: the same numbers as the team's card)
+          // Phase 8B: the Host sees the picks + the live x/5 past the 60-minute mark (louvreView: the same numbers as the team's card)
           picks: parsePicks(row), hintCorrect: louvreView(leg, i, row, this.zones[i]!, now)?.hintCorrect ?? null,
         });
       }
@@ -473,6 +483,18 @@ export class RaceEngine {
   private meta(key: string, value: string) {
     setMeta(this.io.sql, key, value);
     this.io.counters.rows += 1;
+  }
+
+  /** SPEC §17.35: this team may see the "đúng x/5" of public line `m`: its trusted pose stands in the louvre step's zone
+   *  under LOUVRE.roomY (the room, 30 m below the street; RaceRoom's last tick, ≤ 1 tick late) AND it has passed its own
+   *  mark — hint 1 (40, countAtMinutes) for another team's lock, hint 2 (60, correctAtMinutes) for its own lock (a team
+   *  learns its own score only from 60, like the card). No louvre step / no pose / not there → false. */
+  seesFeedCount(team: string, m: FeedMessage, now: number): boolean {
+    const i = this.legV.steps.findIndex((s) => s.type === 'challenge' && s.task.kind === 'louvre');
+    const p = this.io.pose(team);
+    if (i < 0 || !p || p.y > LOUVRE.roomY || !inside(this.zones[i]!, p.x, p.z, NET.geofenceSlack)) return false;
+    const row = this.teamRows(team).get(this.legV.steps[i]!.id);
+    return !!row && now >= hintAt(this.legV, i, row, now)![m.slot === this.io.slot(team) ? 1 : 0];
   }
 
   private teamRows(team: string) {
@@ -654,7 +676,7 @@ export class RaceEngine {
     for (const h of hides) this.io.hideBox(team, sid(h.step), h.branch); // before the card that says "switched"
     for (const k of parks) this.io.park(team, k.rack, now, this.boxAt(k.rack));
     for (const m of out) this.io.send(team, m);
-    for (const m of feeds) this.io.feed(m);
+    for (const m of feeds) this.io.feed(m, now);
     if (dirty.size) {
       this.io.changed(now);
       // its lists change with a new step, an arrival where it already stands (moveZone sees no move), or a branch switch

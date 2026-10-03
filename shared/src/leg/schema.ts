@@ -89,7 +89,7 @@ export const louvreSchema = z.strictObject({
   artworks: z.array(artwork).length(LOUVRE.artworks),
   /** Minutes after task_started_at (= the previous route's box opened): "Đáp án bao gồm 5 tác phẩm" + max 5 picks, then
    *  "Đúng x/5" (live). */
-  hints: z.strictObject({ countAtMinutes: z.number().positive().default(40), correctAtMinutes: z.number().positive().default(70) }).prefault({}),
+  hints: z.strictObject({ countAtMinutes: z.number().positive().default(40), correctAtMinutes: z.number().positive().default(60) }).prefault({}),
 });
 
 /** SPEC §6.5. */

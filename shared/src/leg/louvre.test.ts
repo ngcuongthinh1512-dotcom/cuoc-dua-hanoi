@@ -27,11 +27,11 @@ describe('louvre task (schema + checkLeg rules 1–8)', () => {
     expect(t.louvre!.hints).toEqual({ countAtMinutes: 0.05, correctAtMinutes: 0.1 });
   });
 
-  it('old legs: no louvre block, defaults unchanged; hints default to 40 / 70', () => {
+  it('old legs: no louvre block, defaults unchanged; hints default to 40 / 60', () => {
     const j = fresh();
     delete task(j).louvre.hints;
     const r = parseLeg(j);
-    expect(r.ok && r.leg.steps[1]!.type === 'challenge' && r.leg.steps[1].task.louvre!.hints).toEqual({ countAtMinutes: 40, correctAtMinutes: 70 });
+    expect(r.ok && r.leg.steps[1]!.type === 'challenge' && r.leg.steps[1].task.louvre!.hints).toEqual({ countAtMinutes: 40, correctAtMinutes: 60 });
     expect(r.ok && r.leg.steps[1]!.type === 'challenge' && r.leg.steps[1].task.louvre!.artworks[0]).toEqual({ id: 'art-01', type: 'painting', image: '', note: '(GIẢ) Tác phẩm 1' });
   });
 

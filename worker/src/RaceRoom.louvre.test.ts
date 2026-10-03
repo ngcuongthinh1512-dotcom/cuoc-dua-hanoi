@@ -2,7 +2,7 @@
 // (L-LV box 60 m east of the start = the room, hints 3 s / 6 s after it opened, a wrong lock = 6 s, the Pit Stop 60 m
 // further). Picks write no row (memory + the snapshot row), a lock writes before anyone hears, the feed reaches every
 // socket, nothing of a team's room reaches another team, evictions keep picks / countdowns / the feed.
-import type { ClueCard, FeedMessage, HostState, RaceView, Welcome } from '@race/shared/protocol';
+import { encodePose, type ClueCard, type FeedMessage, type HostState, type RaceView, type Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import louvre from '../legs/test/louvre.json';
 import { answer, joinTeam, lock, nearLouvreLeg, nearPoint, openSocket, pick, raceHarness, review, setupRace, sleep, viewAgain, walkTo } from './test/harness.ts';
@@ -62,7 +62,7 @@ async function toRoom(s: Sock): Promise<ClueCard> {
 }
 
 describe.concurrent('Phase 8B louvre room (workerd)', () => {
-  it('two teams: picks 0 rows + own card only, ≤ 5 from 40, wrong lock written first + public feed, live x/5 from 70, right 5, credits after the finish', async () => {
+  it('two teams: picks 0 rows + own card only, ≤ 5 from 40, wrong lock written first + public feed (n per recipient, §17.35), live x/5 from 60, right 5, credits after the finish', async () => {
     const race = 'p8b-room';
     const { host, teams, socks: [a, b] } = await newRace(race, 2);
     const ida = teams[0]!.id;
@@ -95,20 +95,22 @@ describe.concurrent('Phase 8B louvre room (workerd)', () => {
     await room(a!, (l) => l.picks.length === 5);
     pick(a!, 'T3', w1);
     await notice(a!, 'pickLimit');
-    // a wrong lock before 70: locked_until + picks in SQLite when the team hears; the feed to every socket, no n
+    // a wrong lock past 40, before 60: locked_until + picks in SQLite when the team hears; the feed to every socket: the
+    // count (SPEC §17.35) to the Host, not to B (on the street) nor to A itself (its own lock before its 60 minutes; on the court, y 0)
     lock(a!, 'T3');
     await notice(a!, 'lockWrong');
     const locked = await card(a!, (c) => c.status === 'locked');
     expect(locked.task!.louvre).toMatchObject({ attempts: 1, picks: [w2, r0, r1, r2, r3] });
     expect(locked.answers).toEqual([{ id: 1, text: '5 tác phẩm', at: expect.any(Number), status: 'wrong' }]);
     expect(await rowOf(race, ida, 'T3')).toMatchObject({ locked_until: locked.lockedUntil, rejections: 1, picks: JSON.stringify([w2, r0, r1, r2, r3]) });
-    for (const s of [b!, host]) expect(await feed(s)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: false, minutes: 0.1 });
+    for (const s of [a!, b!]) expect(await feed(s)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: false, minutes: 0.1 });
+    expect(await feed(host)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: false, minutes: 0.1, n: 4, of: 5 });
     // locked: picks still work, the lock does not
     pick(a!, 'T3', w2, false);
     await room(a!, (l) => l.picks.length === 4);
     lock(a!, 'T3');
     await notice(a!, 'answerLocked');
-    // past the countdown (and the 70-minute mark): x/5 live on the card only, follows the picks
+    // past the countdown (and the 60-minute mark): x/5 live on the card only, follows the picks
     await waitUntil(Math.max(locked.lockedUntil!, lv.hintAt[1]));
     viewAgain(a!);
     expect((await card(a!, (c) => c.status === 'active')).task!.louvre!.hintCorrect).toBe(4);
@@ -116,12 +118,16 @@ describe.concurrent('Phase 8B louvre room (workerd)', () => {
     await room(a!, (l) => l.hintCorrect === 3);
     pick(a!, 'T3', w2);
     await room(a!, (l) => l.picks.length === 4 && l.hintCorrect === 3);
-    // a wrong lock past 70: public without n
+    // a wrong lock past 60 (SPEC §17.35): n to the Host and to A itself (its own lock, past its 60 minutes, 28 m under the
+    // court = in the room), never to B on the street
+    a!.send(encodePose({ x: P1.x, y: -28, z: P1.z, yaw: 0, mode: 'walk', action: 'none' }));
+    await sleep(250);
     lock(a!, 'T3');
     const second = await card(a!, (c) => c.status === 'locked' && c.answers.length === 2);
     expect(second.answers[1]).toMatchObject({ status: 'wrong', correct: 3 });
     expect(second.answers[0]).not.toHaveProperty('correct');
-    for (const s of [b!, host]) expect(await feed(s)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: false, minutes: 0.1 });
+    expect(await feed(b!)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: false, minutes: 0.1 });
+    for (const s of [a!, host]) expect(await feed(s)).toEqual({ t: 'feed', at: expect.any(Number), slot, ok: false, minutes: 0.1, n: 3, of: 5 });
     await waitUntil(second.lockedUntil!);
     // a lock out of the room → boxFar (the room = the box's zone)
     let at: Pt = await walkTo(a!, P1, { x: P1.x - 45, z: P1.z });
@@ -252,7 +258,7 @@ describe('Phase 8B after an eviction', () => {
     expect(W(a2).view!.card).toMatchObject({ step: 'T3', status: 'locked', lockedUntil: locked.lockedUntil, task: { louvre: { picks: [w0, r0, r1], attempts: 1 } } });
     expect(W(a2).feed).toEqual([line]);
     expect(line).not.toHaveProperty('n');
-    // past 70 (6 s after the box): x/5 from the restored picks
+    // past 60 (6 s after the box): x/5 from the restored picks
     await waitUntil(t3.task!.louvre!.hintAt[1]);
     viewAgain(a2);
     expect((await room(a2, (l) => l.hintCorrect !== null)).task!.louvre!.hintCorrect).toBe(2);
@@ -270,7 +276,7 @@ describe('Phase 8B after an eviction', () => {
     const { host, teams, socks: [a] } = await newRace(race, 1);
     const t3 = await toRoom(a!);
     await picks(a!, [w0]);
-    lock(a!, 'T3'); // before 70: line 1 without n
+    lock(a!, 'T3'); // before 60: line 1 without n
     const c1 = await card(a!, (c) => c.status === 'locked');
     await waitUntil(Math.max(c1.lockedUntil!, t3.task!.louvre!.hintAt[1]));
     await picks(a!, [r0]);

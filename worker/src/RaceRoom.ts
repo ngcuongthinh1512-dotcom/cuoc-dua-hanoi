@@ -13,7 +13,7 @@ import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, readProgress, setMeta, type EventRow, type TeamRow } from './db.ts';
 import type { Env } from './index.ts';
 import { BikeService } from './race/BikeService.ts';
-import { feedLine, NEW_TEAM_RACE, RaceEngine, type LockEvent, type TeamRace } from './race/engine.ts';
+import { feedFor, feedLine, NEW_TEAM_RACE, RaceEngine, type LockEvent, type TeamRace } from './race/engine.ts';
 import { exportCsv, exportRace } from './race/export.ts';
 import { needsTick, tickEntries, tickKey, type Peer } from './race/presence.ts';
 import type { PlayerSpot } from './race/VehicleSpawner.ts';
@@ -155,14 +155,18 @@ export class RaceRoom extends DurableObject<Env> {
           this.send(ws, branch === undefined ? { t: 'box', op: 'hide', step } : { t: 'box', op: 'remove', step, branch });
         }
       },
-      feed: (m) => {
+      feed: (m, now) => {
         // not read since the wake: the read below already holds m (its event is written before the feed)
         if (!this.feedV) this.feed();
         else {
           this.feedV.push(m);
           this.feedV.splice(0, this.feedV.length - NET.feedKept);
         }
-        this.broadcast(m);
+        // SPEC §17.35: the count only to a Host or a team in the room past its mark (40, own lock 60; decided now, per socket)
+        for (const ws of this.sockets()) {
+          const a = att(ws);
+          this.send(ws, feedFor(m, a.role !== TEAM || this.engine.seesFeedCount(a.team, m, now)));
+        }
       },
       touchSnapshot: (now) => {
         this.snapshotAt ??= now + NET.snapshotMs;
@@ -742,13 +746,13 @@ export class RaceRoom extends DurableObject<Env> {
       pose: team && l ? { ...l.valid, bikeId: myBikes.find((b) => b.owner === team.id)?.id ?? null } : null,
       bikes: myBikes,
       ...(race ?? { boxes: [], view: null, startOrder: null, showStartOrder: false, start: null }),
-      feed: this.feed(),
+      feed: team ? this.feed().map((m) => feedFor(m, this.engine.seesFeedCount(team.id, m, now))) : this.feed(), // §17.35, judged now
     };
   }
 
   /** Phase 8B (§D): the kept feed lines, read once per wake from the newest `louvre.lock` events.
    *  ponytail: scans `events` from the newest id down (no index on type, a few thousand rows once per wake); add an index
-   *  on (type) if a race ever logs far more. A right lock before the 70-minute mark has no line: read 2 × kept. */
+   *  on (type) if a race ever logs far more. A right lock before the 60-minute mark has no line: read 2 × kept. */
   private feed(): FeedMessage[] {
     return (this.feedV ??= this.sql
       .exec<{ t: number; data: string }>("SELECT t, data FROM events WHERE type = 'louvre.lock' ORDER BY id DESC LIMIT ?", NET.feedKept * 2)

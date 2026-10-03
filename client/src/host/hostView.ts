@@ -594,13 +594,13 @@ export function demoState(now = 1_000_000): HostState {
 }
 
 /** Phase 8B (`/host.html?demo=1&louvre=1`): demoState + a louvre step "Thử thách 3" before "Về đích". Đội Xanh has done it,
- *  Đội Lục is in the room past the 70 min mark (6 lit, two misses, a countdown). Neutral wording: no artwork names, no answers. */
+ *  Đội Lục is in the room past the 60 min mark (6 lit, two misses, a countdown). Neutral wording: no artwork names, no answers. */
 export function withLouvreDemo(state: HostState): HostState {
   const leg = state.leg!;
   const now = state.serverMs;
   const min = 60_000;
   const at = leg.steps.findIndex((x) => x.id === 'PS');
-  const lv = { id: 'T3', type: 'challenge' as const, label: 'Thử thách 3', name: 'Phòng Louvre (demo)', x: 1200, z: -400, r: 25, proof: false, louvre: { hints: [40, 70] as [number, number] } };
+  const lv = { id: 'T3', type: 'challenge' as const, label: 'Thử thách 3', name: 'Phòng Louvre (demo)', x: 1200, z: -400, r: 25, proof: false, louvre: { hints: [40, 60] as [number, number] } };
   const done = state.progress.find((p) => p.team === 't0' && p.step === 'L3')!;
   const base = { ...done, branch: null, answers: [], picks: [], hintCorrect: null, rejections: 0, lockedUntil: null };
   const t0 = now - 120 * min; // T3 opened at t0 + 40 = 80 min ago: past both marks

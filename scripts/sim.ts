@@ -17,7 +17,7 @@
 // takes ~6 min at --speedup 2.
 // Phase 8B: a louvre step (card.task.louvre, input 'room') is played by louvreMove: a WRONG set of 5 (pick one by one, no live x) →
 // lock → wait out the countdown (`lockWrong`, feed to everybody) → unpick the wrong ones, pick the 5 right ids (louvreAnswersOf:
-// the leg's `answers` array) → lock. The "toggle after minute 70" scenario lives in the worker harness, not here (rowsPerTeam stays comparable).
+// the leg's `answers` array) → lock. The "toggle after minute 60" scenario lives in the worker harness, not here (rowsPerTeam stays comparable).
 // --speedup k plays k× faster (5k messages/s per bot, SAME messages per simulated minute; the server's speed check
 // then flags the bots (expected, flag only), and the server closes a socket beyond 15 msg/s in a 1 s window, so k ≤ 2:
 // 10 msg/s nominal leaves room for timer jitter; 15 would sit exactly on the limit).

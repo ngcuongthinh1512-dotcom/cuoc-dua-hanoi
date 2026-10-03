@@ -193,7 +193,7 @@ describe('Phase 8B: Louvre room ops + feed / credits routing (docs/plans/phase8b
     now = 20_000 + raceClient.lockEndSlackMs;
     c.frame([], 0, 0, false, 0);
     c.frame([], 0, 0, false, 0);
-    expect(views()).toBe(2); // the 70-minute mark, once
+    expect(views()).toBe(2); // the 60-minute mark, once
     const d = new RaceClient({ hud: undefined, send: (m) => sent.push(m), serverNow: () => now });
     d.message({ t: 'race', view: card(lv({ hintCount: 5, hintCorrect: 2, maxPicks: 5 })) }); // F5 after both marks: welcome had them
     d.frame([], 0, 0, false, 0);

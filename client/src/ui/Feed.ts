@@ -9,7 +9,7 @@ import { fmtMin, formatTimeOfDay } from '../race/ui/format.ts';
 import './menu.css';
 
 /** The Vietnamese line of one feed message (team name from welcome.teams by slot). The count "x/5" only when the server sent it
- *  (a team's own 70-minute mark), so a wrong lock before it never says how close the team was. */
+ *  (SPEC §17.35: to a Host, or to a team in the room past its own 40-minute mark — 60 for its own lock — for a lock past the locker's 40 minutes). */
 export function feedText(m: FeedMessage, teams: readonly TeamInfo[]): string {
   const name = teams.find((t) => t.slot === m.slot)?.name ?? `Đội ${m.slot}`;
   const count = m.n == null ? '' : `${m.n}/${m.of ?? LOUVRE.answers}`;

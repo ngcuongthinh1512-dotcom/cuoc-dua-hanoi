@@ -58,7 +58,7 @@ describe('louvre card', () => {
     expect(louvreInfo(card(l), l, { now: 0 }).lines).toEqual(['Đang chọn 2/5 tác phẩm', 'Đáp án bao gồm 5 tác phẩm']);
   });
 
-  it('after minute 70: live "Đúng x/5"; 0 picks says so; wrong locks counted', () => {
+  it('after minute 60: live "Đúng x/5"; 0 picks says so; wrong locks counted', () => {
     const l = lv({ picks: ['a', 'b', 'c'], attempts: 2, hintCount: 5, maxPicks: 5, hintCorrect: 2 });
     expect(louvreInfo(card(l), l, { now: 0 }).lines).toEqual(['Đang chọn 3/5 tác phẩm', 'Chốt sai: 2 lần', 'Đáp án bao gồm 5 tác phẩm', 'Đúng 2/5']);
     const none = lv({ hintCount: 5, maxPicks: 5, hintCorrect: 0 });
@@ -71,7 +71,7 @@ describe('louvre card', () => {
     expect(P({ ...card(lv()), task: { ...task(lv()), input: 'text', louvre: undefined } }).louvreInfo).toBeNull();
   });
 
-  it('lock history: "· đúng c/5" only when the server sent correct (from minute 70)', () => {
+  it('lock history: "· đúng c/5" only when the server sent correct (from minute 60)', () => {
     const a = (id: number, o: Partial<AnswerView> = {}): AnswerView => ({ id, text: '5 tác phẩm', at: id * 1000, status: 'penalized', ...o });
     const lines = answerLines(card(lv({ hintCount: 5, maxPicks: 5 }), { answers: [a(1), a(2, { correct: 3 })] }));
     expect(lines.map((l) => l.label)).toEqual(['Bị phạt 3 phút · đúng 3/5', 'Bị phạt 3 phút']);
@@ -87,9 +87,9 @@ describe('louvre card', () => {
 describe('feedText', () => {
   const teams: TeamInfo[] = [{ slot: 1, id: 't1', name: 'Đội Xanh', colour: '#fff', online: true }];
   const m = (o: Partial<FeedMessage>): FeedMessage => ({ t: 'feed', at: 0, slot: 1, ok: false, ...o });
-  it('wrong before minute 70: no count', () => expect(feedText(m({ minutes: 3 }), teams)).toBe('Đội Xanh trả lời sai và bị phạt 3 phút'));
-  it('wrong after minute 70: with the count', () => expect(feedText(m({ minutes: 3, n: 2, of: 5 }), teams)).toBe('Đội Xanh trả lời sai và bị phạt 3 phút · đúng 2/5'));
-  it('right after minute 70', () => expect(feedText(m({ ok: true, n: 5, of: 5 }), teams)).toBe('Đội Xanh đúng 5/5'));
+  it('wrong before minute 60: no count', () => expect(feedText(m({ minutes: 3 }), teams)).toBe('Đội Xanh trả lời sai và bị phạt 3 phút'));
+  it('wrong after minute 60: with the count', () => expect(feedText(m({ minutes: 3, n: 2, of: 5 }), teams)).toBe('Đội Xanh trả lời sai và bị phạt 3 phút · đúng 2/5'));
+  it('right after minute 60', () => expect(feedText(m({ ok: true, n: 5, of: 5 }), teams)).toBe('Đội Xanh đúng 5/5'));
   it('unknown slot falls back to "Đội <slot>"; a 0,1 minute test penalty', () => expect(feedText(m({ slot: 7, minutes: 0.1 }), teams)).toBe('Đội 7 trả lời sai và bị phạt 0,1 phút'));
   it('liveEntries: fades after feed.seconds, keeps the newest feed.lines', () => {
     const e = Array.from({ length: F.lines + 2 }, (_, i) => ({ text: `l${i}`, time: '', shownAt: i, key: `k${i}` }));

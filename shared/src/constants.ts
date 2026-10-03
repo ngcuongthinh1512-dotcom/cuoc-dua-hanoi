@@ -15,6 +15,9 @@ export const LOUVRE = {
   answers: 5,
   /** §17.19 (c): from hints.countAtMinutes on, at most this many lit buttons at once (switching off always works). */
   maxPicks: 5,
+  /** SPEC §17.35: a trusted pose with y ≤ this (m) inside the louvre step's zone = the team stands in the room (floor = street −
+   *  `louvreRoom.below` 30 m; no street in RACE_BBOX lies under −9 m: the carved Seine bed). The server has no terrain. */
+  roomY: -15,
   artId: /^[A-Za-z0-9_-]{1,16}$/,
   /** A static client asset client/public/art/<name>: a photo (webp) or, for a statue with a licensed 3D scan, a GLB. */
   artFile: /^art-\d{2}\.(webp|glb)$/,

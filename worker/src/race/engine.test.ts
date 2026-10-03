@@ -6,7 +6,7 @@ import { NET, type FeedMessage, type HostReview, type PoseSample, type RaceOp, t
 import { describe, expect, it } from 'vitest';
 import { QuotaCounters } from '../counters.ts';
 import { bundledLeg } from './leg.ts';
-import { NEW_TEAM_RACE, RaceEngine, type TeamRace } from './engine.ts';
+import { feedFor, NEW_TEAM_RACE, RaceEngine, type TeamRace } from './engine.ts';
 
 const mini = bundledLeg('mini')!;
 const Z = stepZones(mini);
@@ -738,12 +738,12 @@ describe('RaceEngine: louvre room (docs/plans/phase8b.md §D, §E)', () => {
     expect(f.log).toEqual(['touchSnapshot', 'send race', 'touchSnapshot', 'send race']);
     expect(card()!.task!.louvre).toMatchObject({ picks: [right[0], wrong[0]], hintCorrect: null });
     expect(e.livePicks()).toEqual({ t0: { T3: [right[0], wrong[0]] } }); // t1 is not in a room
-    pick(right[1]!, T0 + 6000); // past 70: x follows the picks
+    pick(right[1]!, T0 + 6000); // past 60: x follows the picks
     expect(card()!.task!.louvre!.hintCorrect).toBe(2);
     expect(f.feeds).toEqual([]); // a pick is never public
   });
 
-  it('a wrong lock: its row + event BEFORE any message, then the feed to everyone (never an n)', () => {
+  it('a wrong lock: its row + event BEFORE any message, then the feed to everyone (n only from the locker\'s 40-minute mark)', () => {
     const { f, pick, lock, card } = inRoom();
     for (const id of [right[0]!, right[1]!, wrong[0]!]) pick(id, T0 + 1);
     f.log.length = 0;
@@ -761,10 +761,32 @@ describe('RaceEngine: louvre room (docs/plans/phase8b.md §D, §E)', () => {
     f.log.length = 0;
     lock(T0 + 30);
     expect(f.log).toEqual(['send notice']); // answerLocked, nothing written
-    // past the countdown and the 70-minute mark: still no count (only "bị phạt n phút")
+    // past the countdown and the 40-minute mark (SPEC §17.35): the line carries n (cut per recipient by RaceRoom)
     lock(T0 + 10 + 6000);
-    expect(f.feeds.at(-1)).toEqual({ t: 'feed', at: T0 + 6010, slot: 0, ok: false, minutes: 0.1 });
+    expect(f.feeds.at(-1)).toEqual({ t: 'feed', at: T0 + 6010, slot: 0, ok: false, minutes: 0.1, n: 3, of: 5 });
+    expect(f.events.at(-1)).toEqual(['louvre.lock', expect.objectContaining({ public: true, c: 3 })]);
     expect(card()!.answers.at(-1)).toMatchObject({ status: 'wrong', correct: 3 });
+  });
+
+  it('SPEC §17.35 seesFeedCount: in the room (zone + y ≤ LOUVRE.roomY) past its own mark only (40: another team, 60: own lock); feedFor cuts n / of', () => {
+    const { f, e } = inRoom();
+    const under = { ...room, y: -28 };
+    const other: FeedMessage = { t: 'feed', at: 1, slot: 1, ok: false, minutes: 3, n: 2, of: 5 }; // t1's lock
+    const own: FeedMessage = { ...other, slot: 0 }; // t0's own lock
+    f.poses.set('t0', under);
+    expect(e.seesFeedCount('t0', other, T0 + 2999)).toBe(false); // before 40
+    expect(e.seesFeedCount('t0', other, T0 + 3000)).toBe(true);
+    expect(e.seesFeedCount('t0', own, T0 + 5999)).toBe(false); // its own score only from 60
+    expect(e.seesFeedCount('t0', own, T0 + 6000)).toBe(true);
+    f.poses.set('t0', room); // on the court above the room
+    expect(e.seesFeedCount('t0', other, T0 + 9000)).toBe(false);
+    f.poses.set('t0', { ...under, x: under.x + 60 }); // underground elsewhere
+    expect(e.seesFeedCount('t0', other, T0 + 9000)).toBe(false);
+    f.poses.set('t1', under); // never opened L-LV: no mark yet
+    expect(e.seesFeedCount('t1', own, T0 + 99_000)).toBe(false);
+    const line: FeedMessage = { t: 'feed', at: 1, slot: 0, ok: false, minutes: 3, n: 2, of: 5 };
+    expect(feedFor(line, true)).toBe(line);
+    expect(feedFor(line, false)).toEqual({ t: 'feed', at: 1, slot: 0, ok: false, minutes: 3 });
   });
 
   it('the right 5: lock + complete in one transaction → clueNew, L3; no public line (a right lock is never public)', () => {
