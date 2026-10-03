@@ -163,4 +163,18 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
     const ys = meshes[0]!.geometry.getAttribute('position').array as Float32Array;
     expect(Array.from(ys).filter((_, i) => i % 3 === 1).some((y) => Math.abs(y - level) < 1e-4)).toBe(true);
   });
+
+  it('quay wall + coping open under bridge decks (water.bridgeGaps): no wall across a bridge end', async () => {
+    await RAPIER.init();
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+    createTerrainCollider(world, grid);
+    world.step();
+    // [bank crossing x, z, axis towards the river, deck y there (BridgeBuilder's line)]: a ray along the deck 0.5 m up
+    // (player.maxStep 0.4) from 10 m inland must pass the wall line.
+    for (const [x, z, ux, uz, deck] of [[-1427, 161, 0.07, 1, 1.37], [-1420, 278, -0.07, -1, 1.05], [-84, 171, -0.4, 0.92, 1.46]]) {
+      const ray = new RAPIER.Ray({ x: x! - ux! * 10, y: deck! + 0.5, z: z! - uz! * 10 }, { x: ux!, y: 0, z: uz! });
+      expect(world.castRay(ray, 20, true), `wall across the deck at ${x}, ${z}`).toBeNull();
+    }
+    world.free();
+  });
 });

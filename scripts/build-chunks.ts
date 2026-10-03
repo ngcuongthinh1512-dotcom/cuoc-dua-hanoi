@@ -24,6 +24,7 @@ import {
   type Tags, bridgeFacts, buildingFacts, classify, parseNumber, partFacts, pointFacts, roadFacts, stairFacts,
 } from '../client/src/geo/osm.ts';
 import { offsetPolyline } from '../client/src/world/geom.ts';
+import { roadWidth, sidewalkWidth } from '../client/src/world/RoadBuilder.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const { values: args } = parseArgs({
@@ -453,6 +454,31 @@ for (const { pts, members } of mergeChains(bridgeWays)) {
 
 // --- quays: keep lines near the Seine, inside the water rect ---
 const riverRings = water.filter((w) => w.river).flatMap((w) => [w.outer, ...(w.holes ?? [])]);
+
+// --- bridge gaps: where a deck (layer ≤ 1) crosses a river edge the quay parapet must open (Terrain.quayMesh), else a
+// 1 m wall bars both ends of every bridge. [x, z, halfWidth] per crossing, half width = BridgeBuilder's deck edge + margin. ---
+const BRIDGE_GAP_MARGIN = 0.3; // m beyond the deck edge (railing face); wider = a hole into the trench beside the deck
+const bridgeGaps: number[] = [];
+for (const { pts, members } of mergeChains(bridgeWays)) {
+  const facts = bridgeWays[members[0]!]!.facts;
+  if (facts.layer > 1) continue;
+  const way = { ...facts, oneway: false };
+  const half = r1(roadWidth(way) / 2 + sidewalkWidth(way) + BRIDGE_GAP_MARGIN);
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const [ax, az, bx, bz] = [pts[i]!, pts[i + 1]!, pts[i + 2]!, pts[i + 3]!];
+    for (const r of riverRings) {
+      for (let k = 0; k < r.length; k += 2) {
+        const [cx, cz, dx, dz] = [r[k]!, r[k + 1]!, r[(k + 2) % r.length]!, r[(k + 3) % r.length]!];
+        const den = (bx - ax) * (dz - cz) - (bz - az) * (dx - cx);
+        if (!den) continue;
+        const t = ((cx - ax) * (dz - cz) - (cz - az) * (dx - cx)) / den;
+        const u = ((cx - ax) * (bz - az) - (cz - az) * (bx - ax)) / den;
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) bridgeGaps.push(r1(ax + t * (bx - ax)), r1(az + t * (bz - az)), half);
+      }
+    }
+  }
+}
+bump('water.bridgeGaps', bridgeGaps.length / 3);
 // ponytail: brute force point × river edge (~1 s), a segment grid if the map or the quay count grows.
 const nearRiver = (x: number, z: number) =>
   riverRings.some((r) => r.some((_, i) => i % 2 === 0 && segDist(x, z, r, i, (i + 2) % r.length) <= QUAY_NEAR_RIVER));
@@ -603,7 +629,7 @@ bump('parks.overview', parkOverview.length);
 bump('parks.overviewVertices', parkOverview.reduce((s, r) => s + r.length / 2, 0));
 const waterJson = JSON.stringify({
   v: 1, polygons: water, quays,
-  stairs: quayFlights.flatMap((f) => f.pts.slice(-2)), stairGaps: quayFlights.flatMap((f) => f.gap),
+  stairs: quayFlights.flatMap((f) => f.pts.slice(-2)), stairGaps: quayFlights.flatMap((f) => f.gap), bridgeGaps,
   districts: districts.sort((a, b) => a.n - b.n), parks: parkOverview,
 } satisfies WaterData);
 const waterBytes = Buffer.byteLength(waterJson);

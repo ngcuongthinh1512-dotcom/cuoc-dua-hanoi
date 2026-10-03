@@ -194,17 +194,23 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
       uses.set(k, (uses.get(k) ?? 0) + 1);
     }
   }
-  // Parapet gaps over the quay stair landings (WaterData.stairGaps): [t0, t1] intervals of the edge a → b.
-  const gaps = water.stairGaps ?? [];
-  const gapHalf = ST.quay.landing / 2 + 0.2;
-  const openings = (ax: number, az: number, bx: number, bz: number): [number, number][] => {
+  // Gaps on the wall line as [t0, t1] intervals of the edge a → b: over the quay stair landings (WaterData.stairGaps) the
+  // parapet is left out; under bridge decks (WaterData.bridgeGaps, own half width) wall AND coping are left out, else
+  // the coping (0.1–0.6 m above a deck end) and the parapet bar both ends of every bridge.
+  const stairHalf = ST.quay.landing / 2 + 0.2;
+  const gaps: [number, number, number, boolean][] = []; // x, z, half width, bridge
+  const sg = water.stairGaps ?? [];
+  for (let g = 0; g < sg.length; g += 2) gaps.push([sg[g]!, sg[g + 1]!, stairHalf, false]);
+  const bg = water.bridgeGaps ?? [];
+  for (let g = 0; g < bg.length; g += 3) gaps.push([bg[g]!, bg[g + 1]!, bg[g + 2]!, true]);
+  const openings = (ax: number, az: number, bx: number, bz: number): [number, number, boolean][] => {
     const [dx, dz] = [bx - ax, bz - az];
     const len = Math.hypot(dx, dz) || 1;
-    const out: [number, number][] = [];
-    for (let g = 0; g < gaps.length; g += 2) {
-      const [px, pz] = [gaps[g]! - ax, gaps[g + 1]! - az];
+    const out: [number, number, boolean][] = [];
+    for (const [gx, gz, gapHalf, bridge] of gaps) {
+      const [px, pz] = [gx - ax, gz - az];
       const t = (px * dx + pz * dz) / len;
-      if (Math.abs(px * dz - pz * dx) / len < 0.5 && t > -gapHalf && t < len + gapHalf) out.push([(t - gapHalf) / len, (t + gapHalf) / len]);
+      if (Math.abs(px * dz - pz * dx) / len < 0.5 && t > -gapHalf && t < len + gapHalf) out.push([(t - gapHalf) / len, (t + gapHalf) / len, bridge]);
     }
     return out;
   };
@@ -221,18 +227,19 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
         const [ax, az, bx, bz] = [ring[2 * i]!, ring[2 * i + 1]!, ring[2 * j]!, ring[2 * j + 1]!];
         if (onExtent(ax, az, bx, bz) || uses.get(edge(ax, az, bx, bz))! > 1) continue;
         const open = openings(ax, az, bx, bz);
-        quad([bx, bed, bz], [ax, bed, az], [ax, open.length ? top : cap, az], [bx, open.length ? top : cap, bz]); // wall seen from the river: bottom-left = b
-        let from = 0; // parapet above the coping, left open over the stair landings
-        const lerp = (u: number): V3 => [ax + (bx - ax) * u, 0, az + (bz - az) * u];
-        for (const [t0, t1] of open.length ? [...open.sort((p, q) => p[0] - q[0]), [1, 1] as [number, number]] : []) {
-          const u = Math.min(Math.max(t0, 0), 1);
-          if (u > from) {
-            const [p, q] = [lerp(from), lerp(u)];
-            quad([q[0], top, q[2]], [p[0], top, p[2]], [p[0], cap, p[2]], [q[0], cap, q[2]]);
-          }
-          from = Math.max(from, Math.min(t1, 1));
+        const clamp = (u: number) => Math.min(Math.max(u, 0), 1);
+        const cuts = [...new Set([0, 1, ...open.flatMap(([t0, t1]) => [clamp(t0), clamp(t1)])])].sort((p, q) => p - q);
+        const lerp = (u: number, y: number): V3 => [ax + (bx - ax) * u, y, az + (bz - az) * u];
+        const lerpOut = (u: number, y: number): V3 => [out[2 * i]! + (out[2 * j]! - out[2 * i]!) * u, y, out[2 * i + 1]! + (out[2 * j + 1]! - out[2 * i + 1]!) * u];
+        for (let k = 0; k + 1 < cuts.length; k++) {
+          const [u0, u1] = [cuts[k]!, cuts[k + 1]!];
+          const mid = (u0 + u1) / 2;
+          const inside = open.filter(([t0, t1]) => mid > t0 && mid < t1);
+          if (inside.some(([, , bridge]) => bridge)) continue; // a deck: no wall, no coping (BridgeBuilder's slab is the floor)
+          const y = inside.length ? top : cap;
+          quad(lerp(u1, bed), lerp(u0, bed), lerp(u0, y), lerp(u1, y)); // wall seen from the river: bottom-left = b
+          quad(lerp(u0, top), lerpOut(u0, top), lerpOut(u1, top), lerp(u1, top)); // coping (+Y)
         }
-        quad([ax, top, az], [out[2 * i]!, top, out[2 * i + 1]!], [out[2 * j]!, top, out[2 * j + 1]!], [bx, top, bz]); // coping (+Y)
       }
     }
   }
