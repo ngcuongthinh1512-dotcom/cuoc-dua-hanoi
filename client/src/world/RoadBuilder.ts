@@ -4,9 +4,10 @@
 // uvs (so overlaps are invisible), different materials are ordered by polygonOffset (sidewalk < asphalt < pave <
 // marking). Sidewalks are raised slabs, cut where another carriageway crosses them, so crossing roads stay flat.
 import { CanvasTexture, type Material, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
-import { roads as C } from '../config.ts';
+import { graphics8c, roads as C } from '../config.ts';
 import type { RoadRec, XZ } from '../geo/chunkData.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
+import { pbrMaps } from './textures.ts';
 import { hash01, MeshBuffer, offsetPolyline } from './geom.ts';
 
 type WayLike = { kind: string; name?: string; width?: number; lanes?: number; oneway?: boolean; roundabout?: boolean; surface?: string };
@@ -344,11 +345,19 @@ function paintSett(g: CanvasRenderingContext2D, n: number) {
 const withOffset = (m: MeshStandardMaterial, f: number) =>
   Object.assign(m, { polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f });
 
+/** asphalt_02 PBR (Phase 8C T3, uv = world metres, repeat = 1 / tile) or the canvas texture when switched off. */
+function asphaltMaterial() {
+  if (!graphics8c.asphalt.enabled) return new MeshStandardMaterial({ map: canvasTexture(C.colours.asphalt, C.textureTile.asphalt, 0.35), roughness: 0.95 });
+  const m = new MeshStandardMaterial(pbrMaps('asphalt_02'));
+  for (const t of [m.map!, m.normalMap!, m.aoMap!]) t.repeat.set(1 / graphics8c.asphalt.tile, 1 / graphics8c.asphalt.tile);
+  return m;
+}
+
 /** Road and bridge materials (asphalt, pave, sidewalk, marking, bridge, railing). */
 export function createRoadMaterials(): Partial<Record<MaterialId, Material>> {
   const { colours: K, textureTile: T, polygonOffset: O } = C;
   return {
-    asphalt: withOffset(new MeshStandardMaterial({ map: canvasTexture(K.asphalt, T.asphalt, 0.35), roughness: 0.95 }), O.asphalt),
+    asphalt: withOffset(asphaltMaterial(), O.asphalt),
     sidewalk: withOffset(new MeshStandardMaterial({ map: canvasTexture(K.sidewalk, T.sidewalk, 0.18), roughness: 0.9 }), O.sidewalk),
     pave: withOffset(new MeshStandardMaterial({ map: canvasTexture(K.pave, T.pave, 0.15, paintSett), roughness: 0.85 }), O.pave),
     marking: withOffset(new MeshStandardMaterial({ color: K.marking, roughness: 0.7 }), O.marking),
