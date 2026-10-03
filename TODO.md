@@ -144,12 +144,19 @@ Xong (commit `feat(phase8b)`; cổng cuối `docs/reports/phase8b-gate.md`): ph�
 - Ponytail / tồn: thế giới phía trên vẫn được vẽ khi ở trong phòng (~270 draw call bị trần che); không có collider trần (camera kẹp dưới trần); feed quét `events` không có index theo `type`; lựa chọn (đèn) mất tối đa 2 s khi Durable Object bị đuổi; tiếng click chỉ kêu khi thẻ mới của máy chủ đổi picks (chậm theo mạng).
 - Kiểm tay trên máy thật (không headless): hiệu ứng vào / ra phòng, tiếng click / pop, toast "Chỉ được chọn tối đa 5", chơi thật 2 trình duyệt + Host một lượt.
 
+## Phase 8C – Nâng cấp đồ họa (đang review)
+Đã ghép vào main (`docs/reports/phase8c-integration.md`; track `phase8c-{foundation,track-t1,track-t2,track-t3}.md`): bầu trời HDRI + ánh sáng môi trường + sương theo HDRI, Seine hai lớp, hậu kỳ (bloom nhẹ + SMAA), mục "Chất lượng đồ họa" (Cao / Thấp, Esc → Cài đặt, áp dụng sau tải lại; máy yếu tự chọn Thấp), cây platane 3 LOD, đồ đường phố Paris (cột Morris, nhà chờ xe buýt, hộp sách bờ kè, ghế, cột đèn, bàn ghế quán), Ngọn lửa Tự do (bản quét, landmark DUY NHẤT được nâng cấp, SPEC §17.20), ngói mái + nhựa đường PBR. Ghi nguồn 8C gộp theo nhóm trong `client/public/credits.json`.
+- Không làm: bồ câu (đã tải, để trong `UNUSED` của `scripts/assets/manifest.ts`); đài Wallace / T5 (SPEC §17.20); texture mặt tiền / vỉa hè / địa hình.
+- Lucarne (cửa sổ mái) chưa có.
+- FPS thật trên máy người dùng chưa đo (headless SwiftShader chỉ so tương đối; preset `p8c-bench` / `p8c-bench-low`); không tự hạ chất lượng giữa trận (ponytail trong `world/graphics.ts`).
+- LOD pop (cây / đồ phố đổi mức chi tiết theo khoảng cách) cần xem trên máy thật.
+
 ## Phase 11 – Test toàn trình
 - `npm run sim` (bot mô phỏng), `worker/legs/test/paris-demo.filled.json`, `worker/legs/test/specials.json`.
 
 ## Phase 12 – Deploy
 - Bundle client ~4,9 MB (gzip ~1,8 MB), phần lớn là WASM nhúng base64 của `@dimforge/rapier3d-compat` (`chunkSizeWarningLimit` trong `client/vite.config.ts`). Khi tối ưu tải trang: dùng `@dimforge/rapier3d` (file `.wasm` riêng) hoặc tách chunk vendor để cache.
-- Đồ họa SPEC §14: cascaded shadow map (hiện 1 hộp bóng 160 m đi theo camera, chưa snap theo texel nên mép bóng hơi rung), mặt trời thật + ngày–đêm (hiện cố định buổi chiều), bầu trời động, bloom, SMAA, cài đặt đồ họa. SPEC không gán phase riêng; làm cùng phase này.
+- Đồ họa SPEC §14 còn lại sau 8C: cascaded shadow map (hiện 1 hộp bóng 160 m đi theo camera, chưa snap theo texel nên mép bóng hơi rung), mặt trời thật + ngày–đêm (hiện cố định buổi chiều), bầu trời động (bloom, SMAA, cài đặt chất lượng đã có ở 8C).
 - LOD cho nhà (ban công, ống khói dựng ở mọi khoảng cách; cửa sổ chỉ vẽ trên texture), cây (140 tam giác/cây) và đồ phố; lượng tử hóa + Meshopt.
 - Giải phóng bản sao geometry trên CPU sau khi upload lên GPU.
 - Nhân vật: LOD / instancing cho nhân vật ở xa, thân nữ, texture KTX2.
