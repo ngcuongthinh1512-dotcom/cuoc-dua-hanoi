@@ -21,6 +21,7 @@ Game chỉ dùng những phím có trên cả Windows lẫn Mac, **không dùng*
 - `W` `A` `S` `D`: di chuyển · giữ `Shift`: **Tăng tốc** gấp 2 (cả đi bộ lẫn xe đạp; thả ra là về tốc độ thường) · `Space`: nhảy (khi bơi sát tường kè: leo lên bờ)
 - `F`: tương tác (mở hòm mật thư, lấy xe, lên / xuống xe)
 - `Tab`: Sổ mật thư · `Enter`: mở lại **thẻ mật thư hiện tại** · `M`: bản đồ lớn
+- **Bản đồ lớn (`M`):** nhấp chuột vào một điểm để **đánh dấu** nơi cần tới (game vẽ đường đi GPS; nhấp lại vào điểm đã đánh dấu để xóa); lăn chuột để **phóng to / thu nhỏ** xem tên đường; kéo chuột để di chuyển bản đồ.
 - `C`: đổi góc camera · `Esc`: Menu · `G`: vẫy tay · `R`: bấm chuông
 - Nhấp vào màn hình game để khóa con trỏ rồi di chuột để nhìn quanh. Khi **thẻ mật thư, Sổ hoặc bản đồ lớn đang mở**, chuột được thả để bạn bấm liên kết, hình, nút và ô gõ; đóng lại (`Tab`, `Esc`, `Space` hoặc nút **Đóng**) thì chuột khóa lại.
 - Có hỗ trợ tay cầm: stick trái đi, stick phải nhìn quanh, `A` nhảy, giữ `LB` chạy nhanh gấp 2, `View` đổi camera.
