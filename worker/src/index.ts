@@ -48,6 +48,17 @@ export default {
     }
     const media = /^\/api\/race\/([^/]+)\/media\/([^/]+)$/.exec(pathname);
     if (media) return serveMedia(request, env, media[1]!, media[2]!);
+    // SPEC §17.25: the raw timing data, Host token in `Authorization: Bearer` (never in the URL), ?format=csv (default) | json
+    const exp = /^\/api\/race\/([^/]+)\/export$/.exec(pathname);
+    if (exp && request.method === 'GET') {
+      const race = exp[1]!;
+      if (!RACE_ID.test(race)) return json({ ok: false, error: 'bad_race' }, 400);
+      const token = /^Bearer (.+)$/.exec(request.headers.get('Authorization') ?? '')?.[1];
+      if ((await verifyToken(env.HOST_PASSWORD, token, race))?.t !== HOST) return json({ ok: false, error: 'bad_token' }, 401);
+      const format = url.searchParams.get('format') ?? 'csv';
+      if (format !== 'csv' && format !== 'json') return json({ ok: false, error: 'bad_format' }, 400);
+      return env.RACE_ROOM.getByName(race).fetch(`https://do/export?format=${format}`);
+    }
     return json({ ok: false, error: 'not_found' }, 404);
   },
 } satisfies ExportedHandler<Env>;
