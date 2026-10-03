@@ -1224,10 +1224,15 @@ export const raceClient = {
   // to a team standing still (a client clock 1–2 s early would send `answer` into answerLocked: critic N8)
   lockEndSlackMs: 1000,
   // Pit Stop (SPEC §8.6): a red mat with yellow stripes at the zone centre (the check-in zone is the whole radius) + the host NPC
-  mat: { length: 7, width: 3.2, colour: '#b3201c', stripe: '#f2c230', stripeWidth: 0.25, lift: 0.04 },
+  // 2026-10-03: big enough to read from afar (the check-in zone is still the leg's radius)
+  mat: { length: 16, width: 8, colour: '#b3201c', stripe: '#f2c230', stripeWidth: 0.5, lift: 0.04 },
+  // the finish marker, drawn with the mat (so revealed by the same rule, SPEC §17.10): a red light column at the mat centre
+  // (taller and redder than a clue box's yellow one, MeshBasic: no bloom needed) + a "VỀ ĐÍCH" gate across the mat's middle
+  matBeam: { height: 40, width: 0.5, spread: 0.01, colour: '#ff3b2f', opacity: 0.8 }, // spread: m of width per m of distance (≥ width)
+  matGate: { height: 4.6, post: 0.25, banner: 1.2, text: 'VỀ ĐÍCH', cloth: '#b3201c', ink: '#ffffff', frame: '#f2c230' },
   // offset [side, along] m from the mat centre; tag: name tag colour (the dark suit colour was unreadable, visual review);
   // tagDistance: m from the camera beyond which its tag hides (screen-size tags: farther away it sat on the team's own, p7-mat)
-  host: { shirt: '#23262d', tag: '#ffd75e', tagDistance: 12, name: 'Người dẫn chương trình', offset: [2.4, 0.6], waveEveryS: 6, waveRadius: 25 },
+  host: { shirt: '#23262d', tag: '#ffd75e', tagDistance: 12, name: 'Người dẫn chương trình', offset: [5.4, 1.5], scale: 1.12, waveEveryS: 6, waveRadius: 25 },
 };
 
 // ── C · race HUD widgets (race/ui/*: clue card, Sổ mật thư, start-order banner, Pit Stop line, zone panel; ui/HUD.ts clock) ──

@@ -61,7 +61,7 @@ Cho biết nơi bạn cần tới tiếp theo (chỉ dẫn rõ ràng hoặc **m�
 - Nếu đội làm một thử thách quá lâu, Host có thể gửi gợi ý **riêng cho đội bạn qua Messenger**.
 
 ### Chặng dừng
-- Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**. Đi bộ (không ngồi trên xe) bước vào khu vực thảm để check-in, không cần bấm phím: **ngay lúc đó** bạn được báo **"Về đích thứ n"**. Hạng **cố định**, không đổi sau đó.
+- Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**: thảm đỏ lớn (8 × 16 m), người dẫn chương trình đứng cạnh, một **cột sáng đỏ** cao và **biển "VỀ ĐÍCH"** để nhận ra từ xa (hiện cùng lúc với hòm mật thư của Lộ trình dẫn tới đó). Đi bộ (không ngồi trên xe) bước vào khu vực thảm để check-in, không cần bấm phím: **ngay lúc đó** bạn được báo **"Về đích thứ n"**. Hạng **cố định**, không đổi sau đó.
 - **Đội về cuối cùng bị loại**: khi mọi đội khác đã về đích, đội chạm thảm sau cùng nhận thông báo **"BỊ LOẠI"** kèm hạng cuối. Host bấm **"Kết thúc"** khi đội bạn chưa về đích thì đội bạn cũng "BỊ LOẠI", xếp sau mọi đội đã về.
 - Nếu đội có **phút phạt** (mục 8), bạn phải **đứng chờ cạnh thảm cho hết** rồi mới check-in được; trong lúc đó đội tới sau có thể check-in trước!
 - Sau khi check-in bạn trở thành **khán giả**: nhân vật đứng yên, bay camera tự do để xem các đội còn lại (`W` `A` `S` `D` bay, `Space` / `E` lên, `Q` xuống, giữ `Shift` bay nhanh).

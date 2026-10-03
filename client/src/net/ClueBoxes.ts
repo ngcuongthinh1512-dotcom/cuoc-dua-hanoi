@@ -142,8 +142,9 @@ export class ClueBoxes {
       const beam = d.root.getObjectByName('beam');
       if (!eye || !beam?.visible) continue;
       const dist = Math.hypot(d.info.x - eye.x, d.info.z - eye.z);
-      beam.scale.x = beam.scale.z = Math.max(1, (dist * C.beam.spread) / C.beam.width);
-      near = Math.min(near, dist);
+      const { width = C.beam.width, spread = C.beam.spread } = beam.userData as { width?: number; spread?: number }; // the mat's own column (PitStop.ts)
+      beam.scale.x = beam.scale.z = Math.max(1, (dist * spread) / width);
+      if (d.info.kind !== 'mat') near = Math.min(near, dist); // the mat's column never fades
     }
     // ponytail: one shared fade (the nearest closed box); the server only ever sends one unopened box at a time
     if (!eye || !parts) return;

@@ -75,6 +75,7 @@ describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', 
     cb.apply({ t: 'box', op: 'reveal', box: { step: 'PS', x: 40, z: 0, opened: false, r: 20, kind: 'mat' } });
     expect(cb.mat?.name).toBe('mat');
     expect(cb.mat?.position.x).toBe(40);
+    expect(cb.mat!.children.length).toBe(8); // carpet, 4 stripes, red column, gate posts, "VỀ ĐÍCH" banner
     expect(seen).toEqual([1, 1, 2]);
     cb.dispose();
   });
