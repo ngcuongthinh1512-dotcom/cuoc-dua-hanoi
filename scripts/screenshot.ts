@@ -3,7 +3,7 @@
 // Landmarks (Phase 2B): lm-<id> (oblique view per geo/landmarks.ts `view`), leg-L1…leg-L6 (street level at the demo
 // leg destinations). Several at once: npm run screenshot -- lm-notre-dame lm-pantheon
 // Player (Phase 3): p3-* presets; a bare prefix runs its group: npm run screenshot -- p3
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -393,9 +393,53 @@ Object.assign(PRESETS, {
   'p8b-host': '/host.html?demo=1&louvre=1',
 });
 Object.assign(VIEWPORT, { 'p8b-card-louvre-small': { width: 1024, height: 640 }, 'p8b-feed-small': { width: 1024, height: 640 } });
+// Phase 8C (docs/plans/phase8c-graphics.md §6–7): p8c-* presets (`npm run screenshot -- p8c`; not in the default run). The
+// foundation fixed the NAMES with stand-in views; each track only changes the values on its own lines. ?quality=low|high
+// (world/graphics.ts) is read by every track; the -low twins check the weak-GPU path. *-bench presets: after __READY__
+// the page's frame times are sampled for BENCH_MS (avg / p5 FPS added to the logged __STATS__ as `fps`).
+const CHAMPS = [48.8703, 2.306, yawTo(48.8703, 2.306, 48.8738, 2.295)] as const; // the `street` spot, facing the Arc
+const FLAMME = latLonToWorld(48.86424, 2.30113); // Flamme de la Liberté, Place de l'Alma
+Object.assign(PRESETS, {
+  // [T0] FPS / draw calls / triangles: riding up the Champs-Élysées toward the Arc, NPCs at density 1
+  'p8c-bench': playerAt(...CHAMPS, '&bike&autoMove=walk&wait=1&npcDensity=1'),
+  'p8c-bench-low': playerAt(...CHAMPS, '&bike&autoMove=walk&wait=1&npcDensity=1&quality=low'),
+  // [T1] sky + light (street level, looking up a little), river + quays, gilded dome (env reflections), post-processing
+  'p8c-sky': cam(CHAMPS[0], CHAMPS[1], 1.7, CHAMPS[2], 12),
+  'p8c-sky-low': cam(CHAMPS[0], CHAMPS[1], 1.7, CHAMPS[2], 12) + '&quality=low',
+  'p8c-seine': cam(48.86365, 2.31354, 12, -90, -5),
+  'p8c-gold': cam(48.8578, 2.3125, 25, 180, 4), // Esplanade side, facing the Invalides dome to the south
+  'p8c-post': '/?player=87.8,-184.5,-25.97&wait=1&npcDensity=1',
+  // [T2] plane trees (street level / from above: LOD), Paris street furniture, quay bouquinistes, Flamme de la Liberté
+  'p8c-trees': cam(CHAMPS[0], CHAMPS[1], 1.7, CHAMPS[2] + 25, 2),
+  'p8c-trees-top': cam(CHAMPS[0], CHAMPS[1], 120, CHAMPS[2], -35),
+  'p8c-props': '/?player=105.1,-201.1,-26&wait=2&npcDensity=1',
+  'p8c-quay': cam(48.8584, 2.3318, 3, -90, -4), // Quai Voltaire, looking east along the parapet
+  'p8c-flamme': camAt(FLAMME.x, FLAMME.z - 25, 6, 180, -8), // 25 m north of the flame (Place de l'Alma), facing south
+  // [T3] SPEC §17.20: only roof slates + asphalt. Rue Royale roofs from 60 m (oblique), the carriageway at walking height
+  'p8c-roof': camAt(87.8, -184.5, 60, -26, -35),
+  'p8c-road': '/?player=87.8,-184.5,-25.97&autoMove=walk&wait=2&npc=0',
+});
+const BENCH_MS = 15_000;
+/** In the page: frame intervals over `ms` of requestAnimationFrame → { avg, p5 } FPS (p5 = the slowest 5 % of frames). A
+ *  string, not a function: tsx's keepNames would put an undefined `__name` helper into the page. */
+const benchFps = (ms: number) => `new Promise((done) => {
+  const dts = [];
+  let last = performance.now();
+  const end = last + ${ms};
+  requestAnimationFrame(function step(now) {
+    dts.push(now - last);
+    last = now;
+    if (now < end) return requestAnimationFrame(step);
+    const sorted = [...dts].sort((a, b) => a - b);
+    const mean = dts.reduce((s, d) => s + d, 0) / dts.length;
+    done({ avg: +(1000 / mean).toFixed(1), p5: +(1000 / sorted[Math.floor(sorted.length * 0.95)]).toFixed(1), frames: dts.length });
+  });
+})`;
+
 const PORT = Number(process.env.SCREENSHOT_PORT ?? 5174); // not Vite's default 5173, so it can run next to `npm run dev`
 
-const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { path: { type: 'string' }, name: { type: 'string' } } });
+// --out <dir under screenshots/> (e.g. before-8c): PNGs + stats.json ({ preset: __STATS__ }) go there
+const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { path: { type: 'string' }, name: { type: 'string' }, out: { type: 'string' } } });
 const group = (p: string) => (p in PRESETS ? [p] : Object.keys(PRESETS).filter((k) => k.startsWith(`${p}-`)));
 const unknown = positionals.filter((p) => !group(p).length);
 if (!opt.path && unknown.length) {
@@ -408,9 +452,9 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8)-/.test(k))); // landmark / player / online / Phase 8 views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c)-/.test(k))); // landmark / player / online / Phase 8 / 8C views by name
 
-const outDir = join(root, 'screenshots');
+const outDir = join(root, 'screenshots', opt.out ?? '');
 const errors: string[] = [];
 
 // Vite runs in-process so it always dies with this script (no orphaned dev server).
@@ -434,15 +478,26 @@ try {
     for (const [name, path] of Object.entries(jobs)) {
       await page.setViewportSize(VIEWPORT[name] ?? { width: 1280, height: 720 }); // Playwright's default size otherwise
       await page.goto(`http://localhost:${PORT}${path}`);
-      const timeout = TIMEOUT_MS[name] ?? (name.startsWith('p4b-') ? 90_000 : DEFAULT_TIMEOUT_MS); // p4b: NPCs make each frame heavier (review m7)
+      const timeout = TIMEOUT_MS[name] ?? (/^p(4b|8c)-/.test(name) ? 90_000 : DEFAULT_TIMEOUT_MS); // p4b: NPCs make each frame heavier (review m7)
       await page
         .waitForFunction(() => (globalThis as { __READY__?: boolean }).__READY__ === true, null, { timeout })
         .catch(() => void errors.push(`[${name}] không thấy window.__READY__ sau ${timeout} ms (vẫn chụp để xem lỗi)`));
-      const stats = await page.evaluate(() => (globalThis as { __STATS__?: unknown }).__STATS__);
-      if (stats !== undefined) console.log(`[${name}] __STATS__ ${JSON.stringify(stats)}`);
       const file = join(outDir, `${name}.png`);
-      await page.screenshot({ path: file, fullPage: path.startsWith('/host.html') }); // the Host page scrolls, game pages don't
+      await page.screenshot({ path: file, fullPage: path.startsWith('/host.html'), timeout }); // the Host page scrolls, game pages don't; a slow software frame can take a while
       console.log(`Đã chụp ${file}`);
+      // *-bench: after the picture (a slow frame rate can starve page.screenshot), frame times over BENCH_MS of rAF (the
+      // game loop renders once per rAF) → mean FPS and the 5th percentile
+      const fps = /-bench(-low)?$/.test(name) ? await page.evaluate(benchFps(BENCH_MS)) : undefined;
+      const raw = await page.evaluate(() => (globalThis as { __STATS__?: object }).__STATS__);
+      const stats = raw && fps ? { ...raw, fps } : raw;
+      if (stats !== undefined) console.log(`[${name}] __STATS__ ${JSON.stringify(stats)}`);
+      if (fps) await page.goto('about:blank'); // stop the bench ride before the next page loads
+      if (opt.out) {
+        // merged after every preset: a later failure keeps the numbers so far
+        const json = join(outDir, 'stats.json');
+        const old = existsSync(json) ? (JSON.parse(readFileSync(json, 'utf8')) as Record<string, unknown>) : {};
+        writeFileSync(json, `${JSON.stringify({ ...old, [name]: stats ?? null }, null, 1)}\n`);
+      }
     }
   } finally {
     await browser.close();
@@ -450,7 +505,6 @@ try {
 } finally {
   await server.close();
 }
-
 if (errors.length) {
   console.error(`Có ${errors.length} lỗi trong trang:\n${errors.join('\n')}`);
   process.exit(1);

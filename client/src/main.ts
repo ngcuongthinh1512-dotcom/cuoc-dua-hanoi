@@ -52,6 +52,7 @@ import { createSky } from './world/Sky.ts';
 import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
 import { carveRiver, createTerrainCollider, createTerrainMaterials, flattenPads, riverLevel } from './world/Terrain.ts';
 import { createWater } from './world/Water.ts';
+import { createPost } from './world/post.ts';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -116,9 +117,11 @@ async function start() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(R.fov, 1, R.near, R.far);
+  const post = createPost(renderer, scene, camera); // Phase 8C T1: null = plain renderer.render
   const resize = () => {
     renderer.setPixelRatio(Math.min(devicePixelRatio, R.maxPixelRatio));
     renderer.setSize(innerWidth, innerHeight);
+    post?.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
   };
@@ -660,7 +663,8 @@ async function start() {
       edge.hidden = edgeDistance(p.x, p.z) >= bounds.warnDistance;
     },
     render: () => {
-      renderer.render(scene, camera);
+      if (post) post.render();
+      else renderer.render(scene, camera);
       const cs = chunks.stats;
       const colliders = world.colliders.len();
       const ps = player?.controller.state;

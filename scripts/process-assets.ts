@@ -22,6 +22,7 @@ import { bikeModel, landmarks, npc, npcAssets } from '../client/src/config.ts';
 import { UAL_CLIPS } from '../client/src/player/Animation.ts';
 import { footprintFrame } from '../client/src/world/landmarks/kit.ts';
 import { processLouvre } from './assets/louvre.ts';
+import './assets/graphics8c.ts'; // Phase 8C graphics targets (hdri, textures, trees, props, flamme) + their credits.json lines
 import { inChrome, readFbxAvatar, readFbxClip, type RawAvatar, type RawClip, readFbxSoup, unb64 } from './fbx.ts';
 
 const G = landmarks.g1;
