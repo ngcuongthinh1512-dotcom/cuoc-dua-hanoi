@@ -40,7 +40,7 @@ li.warning { color: #f0c24a; }
 li.blank { color: #8d99b0; }
 .scroll { overflow-x: auto; }
 /* the team column stays put while the Host scrolls a wide table sideways */
-table.pin tr > :first-child { position: sticky; left: 0; z-index: 1; background: #141a26; text-align: left; }
+table.pin tr > :first-child { position: sticky; left: 0; z-index: 1; background: #141a26; text-align: left; box-shadow: 2px 0 0 #222b3d, inset 0 -1px 0 #222b3d; }
 .preview { display: block; white-space: normal; }
 table.matrix td { text-align: center; }
 table.matrix td.cell { font-variant-numeric: tabular-nums; font-size: 13px; min-width: 7em; border-left: 1px solid #222b3d; }
@@ -51,9 +51,12 @@ h2 { margin-bottom: 8px; }
 .row h2 { margin: 24px 16px 8px 0; }
 /* Phase 8 (track E): review queue (sticky), orange / purple matrix cells with buttons, R2 images */
 button.ok { background: #2c9a4a; }
-.queue-wrap h2 { margin: 12px 16px 6px 0; }
+.queue-wrap { position: relative; }
+.queue-wrap summary { font-size: 16px; font-weight: 600; color: #9cc7ff; margin: 12px 0 6px; cursor: pointer; }
+.queue-wrap.has summary { color: #ffb45c; }
+.queue-wrap > button { position: absolute; top: 12px; right: 0; z-index: 1; }
 .queue-wrap.has { position: sticky; top: 0; z-index: 5; background: #0b0f16; padding-bottom: 6px; box-shadow: 0 6px 8px -6px #000; }
-.queue-wrap.has section { max-height: 46vh; overflow-y: auto; border: 1px solid #b86a1c; }
+.queue-wrap.has section { max-height: 40vh; overflow-y: auto; border: 1px solid #b86a1c; }
 .review { padding: 6px 0 8px; border-bottom: 1px solid #222b3d; }
 .review:last-child { border-bottom: 0; }
 .review .answer { margin: 4px 0; font-size: 16px; }
@@ -70,3 +73,16 @@ th.wrap { white-space: normal; line-height: 1.2; min-width: 4.5em; }
 #err:empty { display: none; }
 .media-grid { display: grid; grid-template-columns: repeat(4, max-content); gap: 6px 12px; align-items: center; }
 .media-grid .row { display: contents; }
+/* Phase 10 (track H): pinned matrix, undo lines, flags. The matrix scrolls inside its own box (both ways), so the header row can
+   stick to the top of THAT box (a sticky `top` needs its own scroll container; on the page it hid under the review queue). z-index:
+   corner 3 > header 2 > team column 1. The header's bottom edge is a shadow: collapsed borders scroll away under a sticky cell. */
+.matrix-wrap { max-height: 72vh; overflow: auto; }
+table.matrix thead th { position: sticky; top: 0; z-index: 2; background: #141a26; box-shadow: 0 1px 0 #34405a; }
+table.matrix thead th:first-child { left: 0; z-index: 3; box-shadow: 2px 0 0 #222b3d, 0 1px 0 #34405a; }
+td.flag { white-space: normal; min-width: 13em; }
+.undo-bar { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 2px; max-height: 20vh; overflow-y: auto; }
+.undo-bar:empty { display: none; }
+.undo-bar .undo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 3px 10px; border-radius: 8px; background: #12301c; border: 1px solid #2c9a4a; }
+.undo-bar .undo.penalize { background: #331614; border-color: #b83a30; }
+.undo-bar button { font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .queue-wrap > button { position: static; margin: 0 0 6px; } }

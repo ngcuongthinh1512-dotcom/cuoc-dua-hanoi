@@ -2,7 +2,7 @@
 // testable in Node. Phase 10 replaces the page with SPEC §13; keep the page thin.
 import { LOUVRE } from '@race/shared';
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import { MEDIA, NET, submitCode, type AnswerStatus, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type StepProgressView } from '@race/shared/protocol';
+import { MEDIA, NET, submitCode, type AnswerStatus, type FlagWhy, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type StepProgressView, type UndoItem } from '@race/shared/protocol';
 
 /** Durable Object requests as Cloudflare bills them (same formula as worker/src/counters.ts, docs/plans/phase6.md §3.7). */
 export const billableRequests = (c: QuotaCounters) => c.http + c.alarms + Math.ceil(c.wsIn / 20);
@@ -20,6 +20,10 @@ export interface TeamRow {
   /** World metres, for "Thêm xe" (null = no pose yet). */
   pos: { x: number; z: number } | null;
   flagged: boolean;
+  /** Phase 10 (V3): why and since when (server ms) the red flag is up, and its line on the page ('' = no flag, see flagText). */
+  flagWhy: FlagWhy[];
+  flagAt: number | null;
+  flagText: string;
   /** Phase 7: team id, start-order, current step label, penalty, first entry (server ms; SPEC §17.23: no start time). */
   id: string;
   startOrder: number | null;
@@ -37,8 +41,21 @@ export function ago(ms: number | null, now: number): string {
   return s < 60 ? `${s} giây trước` : s < 3600 ? `${Math.floor(s / 60)} phút trước` : `${Math.floor(s / 3600)} giờ trước`;
 }
 
+/** The leg's IANA zone: every wall-clock time on the Host page is shown in it (no leg yet: Vietnam). */
+const legZone = (state: HostState) => state.leg?.timezone ?? 'Asia/Ho_Chi_Minh';
+
+const FLAG_LABEL: Record<FlagWhy, string> = { speed: 'Vượt tốc', jump: 'Dịch chuyển lạ', respawn: 'Hồi sinh nhiều' };
+/** Phase 10 (V3): "Vượt tốc · Dịch chuyển lạ · lúc 14:05:09 (7 phút trước)" for a flagged team, '' for the others. The reasons keep
+ *  the server's order (first raised first, no repeats); a flag with no known reason is just "Cờ đỏ"; `flagAt` = first raise of this flag. */
+export function flagText(t: { flagged: boolean; flagWhy: readonly FlagWhy[]; flagAt: number | null }, now: number, tz: string): string {
+  if (!t.flagged) return '';
+  const why = [...new Set(t.flagWhy)].map((w) => FLAG_LABEL[w] ?? w); // `?? w`: a reason a newer server adds shows as it is
+  return [why.length ? why.join(' · ') : 'Cờ đỏ', ...(t.flagAt === null ? [] : [`lúc ${fmtTimeOfDay(t.flagAt, tz)} (${ago(t.flagAt, now)})`])].join(' · ');
+}
+
 /** `now` = the server's clock estimated at the moment of drawing (state.serverMs + time since it arrived), so "x giây trước" runs. */
 export function teamRows(state: HostState, now: number = state.serverMs): TeamRow[] {
+  const tz = legZone(state);
   return state.teams.map((t) => {
     const ll = t.pose && worldToLatLon(t.pose.x, t.pose.z);
     return {
@@ -53,6 +70,9 @@ export function teamRows(state: HostState, now: number = state.serverMs): TeamRo
       position: ll ? `${ll.lat.toFixed(5)}, ${ll.lon.toFixed(5)}` : '—',
       pos: t.pose && { x: t.pose.x, z: t.pose.z },
       flagged: t.flagged,
+      flagWhy: t.flagWhy,
+      flagAt: t.flagAt,
+      flagText: flagText(t, now, tz),
       id: t.id,
       startOrder: t.startOrder,
       stepLabel: t.finishAt !== null ? 'Đã về đích' : (state.leg?.steps[t.step]?.label ?? '—'),
@@ -170,7 +190,7 @@ export function legIssueLines(issues: LegIssueView[]): { level: LegIssueView['le
 export interface StartRow { id: string; name: string; colour: string; startOrder: string; joined: string; stepLabel: string; penalty: string }
 /** One row of the "Thứ tự vào game" table (SPEC §17.12 order; §17.23: no start-time input); times in the leg's zone. */
 export function startRows(state: HostState): StartRow[] {
-  const tz = state.leg?.timezone ?? 'Asia/Ho_Chi_Minh';
+  const tz = legZone(state);
   return teamRows(state).map((r) => ({
     id: r.id, name: r.name, colour: r.colour,
     startOrder: r.startOrder === null ? '—' : String(r.startOrder),
@@ -180,11 +200,13 @@ export function startRows(state: HostState): StartRow[] {
   }));
 }
 
-/** A button inside a matrix cell: host.review on `team` / `step` (`id` absent = approve a photo task before "Tôi đã gửi bài"). */
-export interface CellButton { op: 'approve' | 'penalize'; team: string; step: string; id?: number; label: string; title: string; /** window.confirm text before sending (Phase 8B: the louvre exit). */ confirm?: string }
+/** A button inside a matrix cell: host.review on `team` / `step` (`id` absent = approve a photo task before "Tôi đã gửi bài", or
+ *  Phase 10 "Cho qua"). */
+export interface CellButton { op: 'approve' | 'penalize'; team: string; step: string; id?: number; label: string; title: string; /** window.confirm text before sending ("Cho qua"). */ confirm?: string }
 export interface Cell { state: 'todo' | 'active' | 'done' | 'pending' | 'locked'; text: string; title: string; buttons: CellButton[] }
-/** `rank`: "1", "4 · BỊ LOẠI" (SPEC §17.23), "—"; `out`: that team is eliminated (the row is marked). */
-export interface ProgressRow { team: string; name: string; colour: string; rank: string; out: boolean; cells: Cell[]; penalty: string; finish: string }
+/** `rank`: "1", "4 · BỊ LOẠI" (SPEC §17.23), "—"; `out`: that team is eliminated (the row is marked); `flagged`: it wears the red
+ *  flag (Phase 10: the matrix marks the name, the reason and "Xóa cờ" are in "Các đội"). */
+export interface ProgressRow { team: string; name: string; colour: string; rank: string; out: boolean; flagged: boolean; cells: Cell[]; penalty: string; finish: string }
 
 const ANSWER_LABEL: Record<AnswerStatus, string> = { pending: 'chờ duyệt', approved: 'đã duyệt', penalized: 'bị phạt', wrong: 'chưa đúng', correct: 'đúng' };
 /** 0.1 → "0,1" (Vietnamese decimal comma; Number.toLocaleString depends on the Node / browser ICU). */
@@ -195,10 +217,11 @@ const fmtNum = (n: number) => String(n).replace('.', ',');
  *  clock only, no T+ per team).
  *  Phase 8 (D16): orange = an answer waits for the Host ("chờ duyệt mm:ss", Duyệt / Phạt in the cell), purple = a countdown
  *  ("⏳ mm:ss": the Host's penalty or a branch switch), "(A ↺1)" = branch A after one switch, "✗2" = two penalties; a photo
- *  task the team has started offers "Duyệt (đã nhận ảnh)"; the title lists every answer with the Host's notes. */
+ *  task the team has started offers "Duyệt (đã nhận ảnh)"; the title lists every answer with the Host's notes.
+ *  Phase 10 (V5): every challenge / opened detour branch the team is at (yellow or purple) also offers "Cho qua". */
 export function progressTable(state: HostState, now: number): { head: { label: string; title: string }[]; rows: ProgressRow[] } {
   const leg = state.leg;
-  const tz = leg?.timezone ?? 'Asia/Ho_Chi_Minh';
+  const tz = legZone(state);
   const steps = leg?.steps ?? [];
   const rankOf = new Map(state.ranking.map((r) => [r.team, r]));
   const teams = [...state.teams].sort((a, b) => (rankOf.get(a.id)?.rank ?? 1e9) - (rankOf.get(b.id)?.rank ?? 1e9) || a.slot - b.slot);
@@ -228,6 +251,11 @@ export function progressTable(state: HostState, now: number): { head: { label: s
       // the team is at this step. A photo task it has started (a detour: its branch box opened) may be approved at once.
       const proof = s.type === 'detour' ? p?.branchOpenedAt != null && !!s.branches?.find((b) => b.id === p.branch)?.proof : !!s.proof && p?.startedAt != null;
       const proofBtn: CellButton[] = proof ? [{ op: 'approve', team: t.id, step: s.id, label: 'Duyệt (đã nhận ảnh)', title: 'Host đã nhận ảnh qua Messenger: duyệt mà đội chưa bấm "Tôi đã gửi bài"' }] : [];
+      // Phase 10 (V5, plan M8): "Cho qua" for EVERY challenge / detour branch whose box is open (the way out when a bug holds a team);
+      // the same host.review approve without an `id` as the photo button, always behind a confirm. Not while an answer waits (below).
+      const skip: CellButton[] = s.type === 'challenge' || (s.type === 'detour' && p?.branchOpenedAt != null)
+        ? [{ op: 'approve', team: t.id, step: s.id, label: 'Cho qua', title: 'Lối thoát: đội kẹt (lỗi, mất kết nối…) được qua bước, nhận mật thư kế mà không cần câu trả lời', confirm: `Cho ${t.name} qua ${s.louvre ? 'phòng Louvre mà không cần chọn đúng' : `${s.label}${p?.branch ? ` (nhánh ${branchTag(state, s.id, p.branch)})` : ''} mà không cần câu trả lời`}?` }]
+        : [];
       const last = p?.answers.at(-1);
       if (s.louvre) {
         // Phase 8B: the Host never reviews (the server marks); the cell shows picks / misses / hint marks, and a way out for a stuck team.
@@ -235,9 +263,8 @@ export function progressTable(state: HostState, now: number): { head: { label: s
         const [m1, m2] = s.louvre.hints;
         const hint = base === null ? '' : now >= base + m2 * 60_000 ? ` · 💡${fmtNum(m2)}${p?.hintCorrect != null ? ` (${p.hintCorrect}/${LOUVRE.answers})` : ''}` : now >= base + m1 * 60_000 ? ` · 💡${fmtNum(m1)}` : '';
         const locked = p?.lockedUntil != null && p.lockedUntil > now;
-        const exit: CellButton[] = [{ op: 'approve', team: t.id, step: s.id, label: 'Cho qua', title: 'Lối thoát: đội kẹt trong phòng Louvre (lỗi, mất kết nối…) được qua bước, nhận mật thư kế', confirm: `Cho ${t.name} qua phòng Louvre mà không cần chọn đúng?` }];
         const text = `chọn ${p?.picks.length ?? 0}/${LOUVRE.artworks}${p?.rejections ? ` · ✗${p.rejections}` : ''}${hint}`;
-        return locked ? { state: 'locked', text: `⏳ ${fmtMinSec(p!.lockedUntil! - now)} · ${text}`, title, buttons: exit } : { state: 'active', text, title, buttons: exit };
+        return locked ? { state: 'locked', text: `⏳ ${fmtMinSec(p!.lockedUntil! - now)} · ${text}`, title, buttons: skip } : { state: 'active', text, title, buttons: skip };
       }
       if (p?.pending && last) {
         const lock = state.queue.find((q) => q.team === t.id && q.step === s.id && q.id === last.id)?.lockMinutes ?? leg?.penalties.retryLockMinutes;
@@ -251,15 +278,16 @@ export function progressTable(state: HostState, now: number): { head: { label: s
         // countdown of a branch switch (branch box not open: the last answer belongs to the branch the team left)
         const retry = s.type !== 'detour' || p.branchOpenedAt != null;
         const redo: CellButton[] = !proof && retry && last?.status === 'penalized' && last.branch === p.branch ? [{ op: 'approve', team: t.id, step: s.id, id: last.id, label: 'Duyệt câu vừa phạt', title: 'Nhầm tay bấm Phạt? Duyệt lại câu vừa bị phạt: đội nhận mật thư kế, hết đếm ngược' }] : [];
-        return { state: 'locked', text: `⏳ ${fmtMinSec(p.lockedUntil - now)}${tags}`, title, buttons: [...proofBtn, ...redo] };
+        return { state: 'locked', text: `⏳ ${fmtMinSec(p.lockedUntil - now)}${tags}`, title, buttons: [...proofBtn, ...redo, ...skip] };
       }
-      return { state: 'active', text: `${p?.openedAt != null ? fmtMinSec(now - p.openedAt) : '…'}${tags}`, title, buttons: proofBtn };
+      return { state: 'active', text: `${p?.openedAt != null ? fmtMinSec(now - p.openedAt) : '…'}${tags}`, title, buttons: [...proofBtn, ...skip] };
     });
     const r = rankOf.get(t.id);
     return {
       team: t.id, name: t.name, colour: t.colour,
       rank: r ? `${r.rank}${r.out ? ' · BỊ LOẠI' : ''}` : '—',
       out: !!r?.out,
+      flagged: t.flagged,
       cells,
       penalty: t.penaltyMinutes ? `+${t.penaltyMinutes} phút` : '—',
       finish: when(t.finishAt),
@@ -313,6 +341,44 @@ export function freshQueue(seen: Set<string>, rows: QueueRow[], silent: boolean)
   const fresh = rows.filter((r) => !seen.has(r.key));
   for (const r of rows) seen.add(r.key);
   return silent ? [] : fresh;
+}
+
+/** The host.review the "Hoàn tác" button sends: `id` = the answer the decision was on (HostState.undo lists it; a "Cho qua" made one). */
+export const undoMessage = (team: string, step: string, id: number): HostReview => reviewMessage(team, step, 'undo', id, '');
+
+export interface UndoRow {
+  /** team|step|id */
+  key: string;
+  team: string;
+  name: string;
+  colour: string;
+  step: string;
+  label: string;
+  op: UndoItem['op'];
+  id: number;
+  /** Whole seconds the button still has (≥ 1). */
+  secondsLeft: number;
+  /** "Đã Duyệt «42» của Đội Xanh – Thử thách 1" (the answer is left out when it has no text: a photo, a "Cho qua"). */
+  text: string;
+  /** "Hoàn tác (còn 7 s)". */
+  button: string;
+}
+/** Phase 10 (V2): the decisions the Host may still take back, newest first. The countdown runs on `now` (the server's clock the page
+ *  estimates, state.serverMs + time since it arrived) against each `until`; one that ran out is not listed (the server refuses it). */
+export function undoRows(state: HostState, now: number): UndoRow[] {
+  const teams = new Map(state.teams.map((t) => [t.id, t]));
+  return state.undo.filter((u) => u.until > now).sort((a, b) => b.at - a.at).map((u) => {
+    const t = teams.get(u.team);
+    const name = t?.name ?? u.team;
+    const label = state.leg?.steps.find((s) => s.id === u.step)?.label ?? u.step;
+    const said = state.progress.find((p) => p.team === u.team && p.step === u.step)?.answers.find((a) => a.id === u.id)?.text ?? '';
+    const secondsLeft = Math.ceil((u.until - now) / 1000);
+    return {
+      key: `${u.team}|${u.step}|${u.id}`, team: u.team, name, colour: t?.colour ?? '#8d99b0', step: u.step, label, op: u.op, id: u.id, secondsLeft,
+      text: `Đã ${u.op === 'approve' ? 'Duyệt' : 'Phạt'}${said ? ` «${said.length > 40 ? `${said.slice(0, 40)}…` : said}»` : ''} của ${name} – ${label}`,
+      button: `Hoàn tác (còn ${secondsLeft} s)`,
+    };
+  });
 }
 
 /** A detour branch for the Host: "Tính (A)" (the team says "Tính"; the submit code has "A"), the id alone if unnamed. */
@@ -373,6 +439,47 @@ export function mediaErrorText(status: number): string {
     default: return `Máy chủ trả lỗi ${status}.`;
   }
 }
+// ── Phase 10 (SPEC §17.25): "Xuất dữ liệu thời gian" – the raw per-team timing as CSV + JSON, served by the Worker to the Host only ──
+
+export type ExportFormat = 'csv' | 'json';
+/** `/api/race/<race>/export?format=csv|json`: a GET with `Authorization: Bearer <Host token>` (the token is never in the URL). */
+export const exportPath = (apiBase: string, race: string, format: ExportFormat) => `${apiBase}/race/${encodeURIComponent(race)}/export?format=${format}`;
+/** The name the file is saved under: race-<id>-thoi-gian.csv / .json (anything but a-z, 0-9, "-" in the id becomes "-"). */
+export const exportFileName = (race: string, format: ExportFormat) => `race-${race.replace(/[^a-z0-9-]/gi, '-')}-thoi-gian.${format}`;
+/** Asked before exporting a race that is not over ('' = no question): the numbers of a team still racing are not final. */
+export const exportConfirm = (status: RaceStatus): string | null => (status === 'finished' ? null : 'Cuộc đua chưa kết thúc, dữ liệu có thể chưa đủ. Vẫn xuất dữ liệu thời gian?');
+/** Worker answer to the export GET → Vietnamese. */
+export function exportErrorText(status: number): string {
+  switch (status) {
+    case 401: return 'Phiên Host hết hạn, đăng nhập lại.';
+    case 403: return 'Chỉ Host mới xuất được dữ liệu.';
+    default: return status >= 500 ? `Máy chủ lỗi (${status}), thử lại sau ít phút.` : `Máy chủ trả lỗi ${status}.`;
+  }
+}
+export type ExportResult = { ok: true; blob: Blob; name: string } | { ok: false; error: string };
+/** One export file. `fetchFn` is injected (tests). The body is kept as a Blob, not text: `Response.text()` would drop the UTF-8 BOM
+ *  that lets Excel read the Vietnamese. */
+export async function fetchExport(fetchFn: typeof fetch, apiBase: string, race: string, token: string, format: ExportFormat): Promise<ExportResult> {
+  const r = await fetchFn(exportPath(apiBase, race, format), { headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+  if (!r) return { ok: false, error: 'Không kết nối được máy chủ.' };
+  if (!r.ok) return { ok: false, error: exportErrorText(r.status) };
+  const blob = await r.blob().catch(() => null);
+  return blob ? { ok: true, blob, name: exportFileName(race, format) } : { ok: false, error: 'Tải bị gián đoạn, thử lại.' };
+}
+
+/** One CSV line (RFC 4180): a field with a comma, a quote or a line break is quoted. */
+export const csvLine = (fields: readonly (string | number)[]): string => fields.map((v) => { const s = String(v); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(',');
+/** `/host.html?demo=1` has no server: a small SAMPLE of the export (one row per team x step, ISO UTC times) so the button can be tried.
+ *  The real files (all of SPEC §17.25: more columns, the team table, the event log) come from the Worker. CSV starts with the UTF-8 BOM. */
+export function demoExportText(state: HostState, format: ExportFormat): string {
+  const head = ['Đội', 'Mã bước', 'Tên bước', 'Nhánh', 'Mở hòm', 'Tới điểm', 'Bắt đầu nhiệm vụ', 'Hoàn thành', 'Số lần phạt', 'Chờ Host duyệt (giây)'];
+  const iso = (ms: number | null) => (ms === null ? '' : new Date(ms).toISOString());
+  const names = new Map(state.teams.map((t) => [t.id, t.name]));
+  const labels = new Map((state.leg?.steps ?? []).map((s) => [s.id, s.label]));
+  const rows = state.progress.map((p) => [names.get(p.team) ?? p.team, p.step, labels.get(p.step) ?? p.step, p.branch ?? '', iso(p.openedAt), iso(p.arrivedAt), iso(p.startedAt), iso(p.completedAt), p.rejections, p.approvalWaitSeconds]);
+  return format === 'csv' ? `﻿${[head, ...rows].map(csvLine).join('\r\n')}\r\n` : JSON.stringify(rows.map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]]))), null, 1);
+}
+
 /** Under the leg title (D16 (5)): "Phạt 3 / 10 phút (trả lời lại / đổi nhánh) · cảnh báo kẹt sau 45 phút." */
 export const legPenaltyLine = (leg: Leg): string => `Phạt ${fmtNum(leg.penalties.retryLockMinutes)} / ${fmtNum(leg.penalties.branchSwitchLockMinutes)} phút (trả lời lại / đổi nhánh) · cảnh báo kẹt sau ${fmtNum(leg.stuckMinutes)} phút.`;
 
@@ -418,7 +525,8 @@ export function demoState(now = 1_000_000): HostState {
     teams: [
       team(0, 'Đội Xanh', '#2c6bd8', 'K7M3QX', 'An', true, 0, 1, pose(120, -310), { startOrder: 1, joinedAt: t0 + 2 * min, step: 5, finishAt: now - 4 * min }),
       team(1, 'Đội Đỏ', '#d8342c', 'W9HT4B', 'Bình', true, 0, 0, pose(-80, 40), { startOrder: 2, joinedAt: t0 + 9 * min, step: 3, penaltyMinutes: 2 }, true),
-      team(2, 'Đội Vàng', '#e0b020', 'R2NZ8P', 'Chi', false, 95_000, 3, pose(400, -520), { startOrder: 3, joinedAt: t0 + 6 * min, step: 3 }),
+      // Đội Vàng: two reasons for its flag (Phase 10 V3, the p10 picture)
+      team(2, 'Đội Vàng', '#e0b020', 'R2NZ8P', 'Chi', false, 95_000, 3, pose(400, -520), { startOrder: 3, joinedAt: t0 + 6 * min, step: 3, flagged: true, flagWhy: ['jump', 'respawn'], flagAt: now - 2 * min }),
       team(3, 'Đội Lục', '#2c9a4a', 'D5FY6E', '', false, null, 0, null),
       // Đội Tím: on Thử thách 1 for 46 min (the stuck warning), penalized twice, waiting out the countdown
       team(4, 'Đội Tím', '#8a3fc4', 'M4PC7S', 'Dũng', false, 20 * min, 1, pose(60, -150), { startOrder: 4, joinedAt: now - 58 * min, step: 1 }),
@@ -471,7 +579,8 @@ export function demoState(now = 1_000_000): HostState {
       { team: 't2', step: 'D1', label: 'Lựa chọn kép', branch: 'B', id: 1, text: '', at: now - 72_000, reference: ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'], note: '', lockMinutes: 3 },
       { team: 't5', step: 'D1', label: 'Lựa chọn kép', branch: 'A', id: 1, text: 'bảy', at: now - 45_000, reference: ['7', 'bảy'], note: '', lockMinutes: 3 },
     ],
-    // Phase 10 (V2): Đội Xanh's «42» on Thử thách 1 was approved 3 s ago: the undo button has 7 s left (track H draws it)
+    // Phase 10 (V2): Đội Xanh's «42» on Thử thách 1 was approved 3 s ago: the undo button has 7 s left (`?undoLeft=<s>` on the page
+    // keeps it that much longer, for screenshots)
     undo: [{ team: 't0', step: 'T1', id: 2, op: 'approve', at: now - 3_000, until: now - 3_000 + NET.undoMs }],
   };
 }
