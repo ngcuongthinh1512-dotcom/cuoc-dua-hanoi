@@ -991,9 +991,11 @@ export const graphics8c = {
   // low quality: no full crown). props: per kind [LOD0, LOD1] distances, nothing drawn beyond LOD1; × lowScale on low.
   // flamme: the scan (models/lm-flamme.glb) on the OSM outline, `sink` m below its lowest ground; the scan's paving disc is
   // fitted to the outline radius by scripts/assets/flamme.ts.
-  // lowLod[0] > 0: the full crown right around the camera on low quality too (under a tree LOD1's big flat cards show)
+  // Low quality (fix B, SwiftShader bench: the leaf cards were the whole FPS gap to Phase 7): lowLod[0] > 0 = the full
+  // crown right around the camera (under a tree LOD1's big flat cards show), the impostor from 60 m, and only those
+  // full crowns cast shadows unless lowShadow (LOD1 shadows ≈ −10 % FPS there)
   trees: {
-    enabled: true, lowOff: false, lod: [60, 240], lowLod: [18, 150],
+    enabled: true, lowOff: false, lod: [60, 240], lowLod: [18, 45], lowShadow: false,
     // trunk / limb vertex colours (world/Vegetation.ts barkColour): the bark map (mean colour mapMean, near black-brown)
     // tinted to olive-grey `dark` with flaked grey-cream `light` patches (up to `patch` of the way)
     bark: { mapMean: '#454730', dark: '#7a7a72', light: '#d4d2c4', patch: 0.9 },

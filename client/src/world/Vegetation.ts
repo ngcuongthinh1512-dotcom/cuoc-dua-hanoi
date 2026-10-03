@@ -212,7 +212,8 @@ export function createTreeLods(quality: 'low' | 'high', track: <T>(p: Promise<T>
     radius: Math.hypot(S.crownRadius, S.height / 2),
     levels: [
       ...(d0 > 0 ? [{ parts: [{ geometry: g0!, material }], distance: d0, castShadow: true }] : []),
-      { parts: [{ geometry: g1!, material }], distance: d1, castShadow: true },
+      // low quality: only the full crowns near the camera cast shadows (graphics8c.trees.lowShadow; fix B, review F1)
+      { parts: [{ geometry: g1!, material }], distance: d1, castShadow: quality !== 'low' || T.lowShadow },
       { parts: [{ geometry: g2!, material }], distance: Infinity, castShadow: false },
     ],
   };
