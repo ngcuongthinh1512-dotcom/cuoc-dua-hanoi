@@ -12,11 +12,15 @@
 // a neighbour in another chunk gets a facade + mansard slope there. Upgrade: build-chunks marks shared edges globally.
 import * as THREE from 'three';
 import { type BuildingRec, ringArea, type XZ } from '../geo/chunkData.ts';
-import { buildings as B } from '../config.ts';
+import { buildings as B, graphics8c } from '../config.ts';
+import { pbrMaps } from './textures.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
 import { hash01, MeshBuffer, mergeBuckets, triangulate, type V3 } from './geom.ts';
 
 const PLAIN_WALL_UV = [0, 0.55] as const; // pure stone pixel of the wall tile (pier centre, between joint lines)
+// Phase 8C T3: with graphics8c.roofs.enabled the roof uv is WORLD METRES (slope: along the edge × up the slope, caps: x, z;
+// material.map.repeat = 1 / tile) for the roof_slates_03 slates, instead of the canvas bay layout below (dormers dropped).
+const ROOF_PBR = graphics8c.roofs.enabled;
 const PLAIN_ROOF_UV = [0.5, 0.1] as const; // plain zinc band of the roof texture
 const SLAB_UV = [0.5, 0.06] as const; // solid bottom rail of the balcony texture
 
@@ -138,7 +142,7 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
     haussmann: minH === 0 && housing && h >= B.haussmannHeight[0]! && h <= B.haussmannHeight[1]!,
     windows: housing && h > 5,
     tint,
-    roofTint: [rb, rb, rb * 1.03],
+    roofTint: ROOF_PBR ? [rb * 1.35, rb * 1.5, rb * 1.8] : [rb, rb, rb * 1.03], // slate diffuse is dark and warm: lift + cool it
   };
 }
 
@@ -235,7 +239,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
           wallQuad(wall, shopTop, wallTop, 0, 0, bays, floorsV(wallTop));
         } else wallQuad(wall, bottom, wallTop, 0, floorsV(bottom), bays, floorsV(wallTop));
         // mansard slope
-        roof.quad([ax, wallTop, az], [bx, wallTop, bz], [q[2 * j]!, top, q[2 * j + 1]!], [q[2 * i]!, top, q[2 * i + 1]!], 0, 0.25, bays, 1);
+        roof.quad([ax, wallTop, az], [bx, wallTop, bz], [q[2 * j]!, top, q[2 * j + 1]!], [q[2 * i]!, top, q[2 * i + 1]!], 0, ROOF_PBR ? 0 : 0.25, ROOF_PBR ? len : bays, ROOF_PBR ? Math.hypot(top - wallTop, B.mansardInset) : 1);
 
         if (ri === 0 && len >= B.balconyMinEdge) {
           const ox = ((bz - az) / len) * -B.balconyDepth; // right of travel = outside
@@ -263,7 +267,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     const flatFace = (rings: XZ[], idx: number[], y: number, ny: number) => {
       const pts = rings.flat();
       const b0 = roof.vertexCount;
-      for (let i = 0; i < pts.length; i += 2) roof.vertex(pts[i]!, y, pts[i + 1]!, 0, ny, 0, PLAIN_ROOF_UV[0], PLAIN_ROOF_UV[1]);
+      for (let i = 0; i < pts.length; i += 2) roof.vertex(pts[i]!, y, pts[i + 1]!, 0, ny, 0, ROOF_PBR ? pts[i]! : PLAIN_ROOF_UV[0], ROOF_PBR ? pts[i + 1]! : PLAIN_ROOF_UV[1]);
       for (let i = 0; i < idx.length; i += 3) {
         if (ny > 0) roof.face(b0 + idx[i]!, b0 + idx[i + 1]!, b0 + idx[i + 2]!);
         else roof.face(b0 + idx[i]!, b0 + idx[i + 2]!, b0 + idx[i + 1]!);
@@ -517,12 +521,20 @@ function railingCanvas(iron: string) {
   return c;
 }
 
+// ponytail: one slate map for slopes and flat caps alike (no dormers); upgrade: a second uv set / atlas for dormers.
+function roofMaterial(zinc: string, limestone: string) {
+  if (!graphics8c.roofs.enabled) return new THREE.MeshStandardMaterial({ map: texture(roofCanvas(zinc, limestone), true), vertexColors: true, roughness: 0.6 });
+  const m = new THREE.MeshStandardMaterial({ ...pbrMaps('roof_slates_03'), vertexColors: true });
+  for (const t of [m.map!, m.normalMap!, m.aoMap!]) t.repeat.set(1 / graphics8c.roofs.tile, 1 / graphics8c.roofs.tile);
+  return m;
+}
+
 export function createBuildingMaterials(): Partial<Record<MaterialId, THREE.Material>> {
   const { limestone, zinc, iron } = B.colours;
   return {
     wall: new THREE.MeshStandardMaterial({ map: texture(wallCanvas(limestone), false, [0.5, 0.5]), vertexColors: true, roughness: 0.9 }),
     shopfront: new THREE.MeshStandardMaterial({ map: texture(shopCanvas(limestone), true, [0.25, 1]), vertexColors: true, roughness: 0.75 }),
-    roof: new THREE.MeshStandardMaterial({ map: texture(roofCanvas(zinc, limestone), true), vertexColors: true, roughness: 0.6 }),
+    roof: roofMaterial(zinc, limestone),
     balcony: new THREE.MeshStandardMaterial({
       map: texture(railingCanvas(iron), true),
       alphaTest: 0.5,

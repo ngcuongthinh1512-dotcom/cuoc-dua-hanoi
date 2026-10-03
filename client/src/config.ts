@@ -919,8 +919,8 @@ export const graphics8c = {
   // [T3] SPEC §17.20 (2026-10-03): ONLY the roof slates (roof_slates_03 on the 'roof' material, world/BuildingBuilder.ts
   // createBuildingMaterials) and the asphalt (asphalt_02 on 'asphalt', world/RoadBuilder.ts createRoadMaterials). Facade
   // stone / zinc, sidewalks, setts and terrain keep their Phase 7 canvas textures.
-  roofs: { enabled: false, lowOff: false },
-  asphalt: { enabled: false, lowOff: false },
+  roofs: { enabled: true, lowOff: false, tile: 2 }, // tile = m covered by one slate texture (roof uv = world metres)
+  asphalt: { enabled: true, lowOff: false, tile: 3 }, // m per asphalt_02 repeat (replaces roads.textureTile.asphalt)
 };
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════
