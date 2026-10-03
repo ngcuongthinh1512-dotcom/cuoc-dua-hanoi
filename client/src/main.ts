@@ -34,7 +34,7 @@ import './ui/hud.css';
 import { netDownText } from './ui/Login.ts';
 import { MapTiles } from './ui/MapTiles.ts';
 import { Menu } from './ui/Menu.ts';
-import { Minimap } from './ui/Minimap.ts';
+import { Minimap, setArrowColour } from './ui/Minimap.ts';
 import { lockWrongText, notice, penalizedText, toast } from './ui/Toasts.ts';
 import { type HudFrame, NO_GPS } from './ui/types.ts';
 import { loadBikeAsset } from './vehicle/BikeModel.ts';
@@ -463,6 +463,7 @@ async function start() {
   document.body.classList.add('hud-off'); // until the world is ready (the loop toggles it)
   const hud = player && new HUD();
   const minimap = player && new Minimap(tiles);
+  setArrowColour(session?.team?.colour); // the map arrow wears the team's colour (white is hard to see on the pale streets)
   let gps: Gps | undefined;
   let fullMap: FullMap | undefined;
   let streets: StreetLocator | undefined;

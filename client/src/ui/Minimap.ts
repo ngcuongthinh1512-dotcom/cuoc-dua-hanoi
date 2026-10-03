@@ -94,6 +94,10 @@ export function visibleChunks(v: View, w: number, h: number): ChunkKey[] {
   return out.sort((a, b) => a[1] - b[1]).map(([k]) => k);
 }
 
+/** The team's colour for the arrow on the minimap and the big map (null = the default white arrow, offline / the Host). */
+let arrowFill: string | null = null;
+export const setArrowColour = (colour: string | null | undefined) => void (arrowFill = colour || null);
+
 /** Player arrow (tip up, notched base), px. */
 export function drawArrow(g: CanvasRenderingContext2D, x: number, y: number, angle: number, size: number) {
   g.save();
@@ -106,7 +110,7 @@ export function drawArrow(g: CanvasRenderingContext2D, x: number, y: number, ang
   g.lineTo(0, 4);
   g.lineTo(-7, 8);
   g.closePath();
-  g.fillStyle = col.player;
+  g.fillStyle = arrowFill ?? col.player;
   g.strokeStyle = col.playerEdge;
   g.lineWidth = 2;
   g.lineJoin = 'round';
