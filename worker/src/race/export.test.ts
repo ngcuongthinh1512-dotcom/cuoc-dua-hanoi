@@ -66,6 +66,12 @@ describe('exportRace (SPEC §17.25)', () => {
     for (const secret of ['ĐÁP ÁN', 'GHI CHÚ', 'bốn mươi hai', '"42"', 'answers', 'referenceAnswers']) expect(all).not.toContain(secret);
   });
 
+  it('a player\'s IP (the `login` event) is never exported: the event stays, without it', () => {
+    const x = exportRace(mini, [{ ...NEW_TEAM_RACE, id: 't0', name: 'x', joinedAt: T }], [], [ev(1, T, 't0', 'login', { ip: '203.0.113.7' })], T);
+    expect(x.events[0]).toMatchObject({ type: 'login', team: 't0', data: {} });
+    for (const s of [JSON.stringify(x), exportCsv(x)]) expect(s).not.toContain('203.0.113.7');
+  });
+
   it('CSV: UTF-8 BOM, CRLF, three titled tables with Vietnamese headers, RFC 4180 quoting, no spreadsheet formula, yes / no', () => {
     const csv = exportCsv(data());
     expect(csv.startsWith('﻿Bảng 1 – Thời gian đội × bước\r\nĐội (id),Tên đội,Mã bước,Tên bước,Loại bước,Nhánh,Tới điểm (epoch ms),')).toBe(true);

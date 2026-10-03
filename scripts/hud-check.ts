@@ -302,6 +302,7 @@ const frame = (s: number) => `hud.update({ simTime: ${s}, serverNow: now + ${s *
 const chip = () => ev<string>(`(() => { const p = document.querySelector('.rc-penalty'); return p.hidden ? '' : p.textContent; })()`);
 const stateLine = () => ev<string>(`document.querySelector('.rc-state').textContent`);
 const overlayText = () => ev<string>(`document.querySelector('.rc-overlay').textContent`);
+const envelope = () => ev<boolean>(`document.querySelector('.rc-overlay .rc-env') != null`);
 const topLabel = () => ev<string>(`document.querySelector('.rc-card .rc-label').textContent`);
 await setup(`main: { ...base, task }`);
 await ev(`hud.setView(view(${asked})); ${frame(0)}`);
@@ -317,14 +318,14 @@ ok(await ev<boolean>(`!document.querySelector('.rc-timer.lock') && document.quer
 await setup(`main: { ...base, task }`);
 await ev(`hud.setView(view(${asked})); ${frame(0)}`);
 await ev(`hud.setView(view(${next})); ${frame(1)}`);
-ok((await overlayShown()) && (await overlayText()).includes('Mật thư mới'), 'Duyệt: the next card pops up');
+ok((await overlayShown()) && (await overlayText()).includes('Mật thư mới') && (await envelope()), 'Duyệt: the next card pops up (envelope animation)');
 await ev(`hud.setView(view(${asked})); ${frame(2)}`);
-ok((await overlayShown()) && (await overlayText()).includes('Thử thách 1') && !(await overlayText()).includes('Mật thư mới') && (await topLabel()) === 'Thử thách 1' && (await stateLine()) === 'Chờ Host duyệt · 00:22', 'Hoàn tác with the new card open: the old card is back everywhere (popup, top-left, wait counted from the original send)');
+ok((await overlayShown()) && (await overlayText()).includes('Thử thách 1') && !(await overlayText()).includes('Mật thư mới') && (await topLabel()) === 'Thử thách 1' && (await stateLine()) === 'Chờ Host duyệt · 00:22' && !(await envelope()), 'Hoàn tác with the new card open: the old card is back everywhere (popup without the envelope, top-left, wait counted from the original send)');
 await page.keyboard.press('Escape');
 await ev(`hud.setView(view(${next})); ${frame(3)}`);
 await page.keyboard.press('Escape');
 await ev(`hud.setView(view(${asked})); ${frame(4)}`);
-ok((await overlayShown()) && (await overlayText()).includes('Thử thách 1') && (await topLabel()) === 'Thử thách 1', 'Hoàn tác after the team closed the new card: the old card pops up again, not the new one');
+ok((await overlayShown()) && (await overlayText()).includes('Thử thách 1') && (await topLabel()) === 'Thử thách 1' && !(await envelope()), 'Hoàn tác after the team closed the new card: the old card pops up again (no envelope), not the new one');
 await page.keyboard.press('Escape');
 
 // main.ts on the real (offline DEV) game page: requestPointerLock is counted and never granted (like Firefox refusing a lock

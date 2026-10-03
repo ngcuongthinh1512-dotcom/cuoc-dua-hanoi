@@ -4,6 +4,8 @@
 // the same after an eviction). Teams walk (5 Hz poses) on the fake `nearLeg` (points 60 m apart, box within 40 m).
 import { CLOSE, encodePose, NET, type ClueCard, type HostState, type RaceView, type Welcome, type ZoneMember } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+// the Host page's own message / request builders (client/src/host), so the contract is tested on the page's real path
+import { fetchExport, progressTable, reviewMessage, teamRows, undoMessage, undoRows } from '../../client/src/host/hostView.ts';
 import { answer, exportData, joinTeam, nearLeg, nearPoint, openSocket, raceHarness, review, setupRace, sleep, undo, walkTo } from './test/harness.ts';
 
 const server = raceHarness();
@@ -198,6 +200,86 @@ describe.concurrent('Phase 10 (workerd)', () => {
     for (const s of [text, csvText]) for (const secret of ['BÍ MẬT', 'bốn mươi hai']) expect(s).not.toContain(secret);
     expect(await rowsNow(host)).toBe(r0); // read only
     for (const s of [a!, host]) s.close();
+  }, 60_000);
+});
+
+/** RFC 4180 → rows of cells (a quoted cell may hold "," / CRLF / ""). */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [[]];
+  let cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (q) c === '"' ? (text[i + 1] === '"' ? ((cell += '"'), i++) : (q = false)) : (cell += c);
+    else if (c === '"') q = true;
+    else if (c === ',') rows.at(-1)!.push(cell), (cell = '');
+    else if (c === '\r' && text[i + 1] === '\n') rows.at(-1)!.push(cell), (cell = ''), rows.push([]), i++;
+    else cell += c;
+  }
+  return rows.slice(0, -1); // the file ends with CRLF
+}
+
+describe('Phase 10 Host page ↔ server (integration)', () => {
+  it('the page\'s matrix Duyệt / Phạt / Cho qua, its Hoàn tác line, its "Xóa cờ" and its export fetch work against the real server', async () => {
+    const race = 'p10-page';
+    const { host, hostToken, socks: [a] } = await newRace(race, 1);
+    const press = async (step: string, label: string) => {
+      const st = await hostState(host, (s) => progressTable(s, s.serverMs).rows[0]!.cells.some((c) => c.buttons.some((b) => b.step === step && b.label === label)));
+      const b = progressTable(st, st.serverMs).rows[0]!.cells.flatMap((c) => c.buttons).find((x) => x.step === step && x.label === label)!;
+      host.send(reviewMessage(b.team, b.step, b.op, b.id, ''));
+    };
+    await pendingT1(a!);
+    await press('T1', 'Duyệt');
+    await step(a!, 'L2');
+    const st = await hostState(host, (s) => undoRows(s, s.serverMs).length > 0);
+    const [u] = undoRows(st, st.serverMs);
+    host.send(undoMessage(u!.team, u!.step, u!.id)); // the "Hoàn tác (còn n s)" button
+    await notice(a!, 'reviewUndone');
+    expect(await card(a!, (c) => c.step === 'T1')).toMatchObject({ status: 'pending', answers: [{ id: 1, status: 'pending' }] });
+    await press('T1', 'Phạt');
+    await card(a!, (c) => c.status === 'locked');
+    await press('T1', 'Cho qua'); // behind window.confirm on the page
+    await step(a!, 'L2');
+    // export: the page's fetch (Authorization: Bearer) on the real route
+    const sfetch = ((u: string, i?: { headers?: Record<string, string> }) => server.fetch(u, i)) as unknown as typeof fetch;
+    expect(await fetchExport(sfetch, '/api', race, 'wrong', 'csv')).toMatchObject({ ok: false });
+    const csv = await fetchExport(sfetch, '/api', race, hostToken, 'csv');
+    const json = await fetchExport(sfetch, '/api', race, hostToken, 'json');
+    if (!csv.ok || !json.ok) throw new Error('export failed');
+    expect([csv.name, json.name]).toEqual([`race-${race}-thoi-gian.csv`, `race-${race}-thoi-gian.json`]);
+    const bytes = new Uint8Array(await csv.blob.arrayBuffer());
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const text = new TextDecoder().decode(bytes); // drops the BOM
+    expect(text.replaceAll('\r\n', '')).not.toMatch(/[\r\n]/); // CRLF only (no quoted line break in this race)
+    const rows = parseCsv(text);
+    const titles = rows.flatMap((r, i) => (r[0]?.startsWith('Bảng ') ? [i] : []));
+    expect(titles).toHaveLength(3);
+    for (const [k, t] of titles.entries()) { // each table: header width = every row's width (opens as columns in a spreadsheet)
+      const end = titles[k + 1] === undefined ? rows.length : titles[k + 1]! - 1; // a blank line between tables
+      const body = rows.slice(t + 1, end);
+      expect(body.length).toBeGreaterThan(1);
+      for (const r of body) expect(r.length).toBe(body[0]!.length);
+    }
+    const j = JSON.parse(await json.blob.text()) as { teams: unknown[]; steps: { step: string }[]; events: { type: string; data: Record<string, unknown> }[] };
+    expect(j.steps.map((s) => s.step)).toEqual(['L1', 'T1', 'L2']);
+    expect(j.teams).toHaveLength(1);
+    expect(j.events.map((e) => e.type)).toEqual(expect.arrayContaining(['login', 'review', 'host.undo']));
+    for (const e of j.events.filter((x) => x.type === 'login')) expect(e.data).not.toHaveProperty('ip');
+    for (const s of [text, JSON.stringify(j)]) expect(s).not.toMatch(/"ip"|"local"/); // the harness IP is "local"
+    for (const s of [a!, host]) s.close();
+  }, 90_000);
+
+  it('the page\'s "Xóa cờ" (teamRows → host.flag clear) lowers the red flag', async () => {
+    const race = 'p10-page-flag';
+    const { host, teams } = await setupRace(server, race, 1); // the default leg: 4 m/s on foot
+    const a = await joinTeam(server, race, teams[0]!.code);
+    const s0 = W(a).start!;
+    await walkTo(a, s0, { x: s0.x + 60, z: s0.z }, 20);
+    const st = await hostState(host, (s) => teamRows(s)[0]!.flagged);
+    const r = teamRows(st)[0]!;
+    expect(r.flagText).not.toBe('');
+    host.send({ t: 'host.flag', op: 'clear', team: r.id }); // main.ts "Xóa cờ"
+    await hostState(host, (s) => !teamRows(s)[0]!.flagged);
+    for (const s of [a, host]) s.close();
   }, 60_000);
 });
 

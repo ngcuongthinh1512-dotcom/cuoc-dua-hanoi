@@ -208,7 +208,7 @@ export class RaceHud {
     this.seenKey = key;
     store.set(key);
     this.bookOpen = false;
-    this.openFull(card);
+    this.openFull(card, !(was && card.receivedAt < was.receivedAt)); // Phase 10: a card put back by a Host "Hoàn tác" is not a new envelope
   }
 
   /** `book` answer (the cards in order). */

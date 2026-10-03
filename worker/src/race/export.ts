@@ -40,7 +40,8 @@ export const EVENT_COLS: Col[] = [['id', 'STT'], ...at('t', 'Thời điểm'), [
  *  one), step 1 received at its first entry (SPEC §17.23), "since the step before" = since the previous step's completion
  *  (step 1: since that entry). `now` ends a lock still running. */
 export function exportRace(leg: Leg, teams: ExportTeam[], rows: StepProgressRow[], events: EventRow[], now: number) {
-  const evs = events.map((e) => ({ ...e, d: JSON.parse(e.data) as Row }));
+  // a player's IP (the `login` event keeps it for the login limits) never leaves the server: timing only (Phase 10 integration)
+  const evs = events.map((e) => { const { ip: _ip, ...d } = JSON.parse(e.data) as Row; return { ...e, d }; });
   const start = evs.find((e) => e.type === 'host.race' && e.d.op === 'start')?.t ?? null;
   const names = new Map(teams.map((t) => [t.id, t.name]));
   const stamp = (k: string, t: number | null, prev?: number | null): Row => ({ [k]: t, [`${k}Utc`]: iso(t), [`${k}Vn`]: vn(t), [`${k}FromStart`]: secs(t, start), ...(prev !== undefined ? { [`${k}FromPrev`]: secs(t, prev) } : {}) });
