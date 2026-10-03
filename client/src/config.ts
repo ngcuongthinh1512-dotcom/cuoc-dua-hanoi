@@ -892,6 +892,38 @@ export const npcRender = {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// Phase 8C (docs/plans/phase8c-graphics.md §6): graphics upgrade. Each track edits ONLY its own sub-block of graphics8c
+// (and the older blocks its plan row names); `quality` belongs to the foundation. Every item has:
+//   enabled: false = the Phase 7 look, kept as the fallback path (each track sets true once its item works);
+//   lowOff:  true = ?quality=low / a weak GPU turns the item off (world/graphics.ts `graphics().on(item)`).
+// Finer low-quality choices (texture size, LOD distances) read `graphics().quality` in main-thread create*() code only:
+// the chunk worker never knows the quality (its builds stay identical on every machine).
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+export const graphics8c = {
+  // [T0] ?quality=low|high > localStorage[storageKey] ('low' | 'high', T1's settings item writes it; reload applies) >
+  // auto: 'low' when the WebGL renderer string matches weakGpu (software / integrated GPUs, SPEC §14: ≥ 30 FPS there)
+  quality: {
+    storageKey: 'cuoc-dua-paris.quality',
+    weakGpu: /swiftshader|llvmpipe|softpipe|basic render|intel(?!.*\barc\b)|mali|adreno|powervr/i,
+    lowTexture: 1024, // px: the *_1k.webp variant of a texture (scripts/assets/pipeline.ts) on low quality
+  },
+  // [T1] sky + light (world/Sky.ts), river (world/Water.ts), post-processing (world/post.ts, hooked in main.ts)
+  sky: { enabled: false, lowOff: false },
+  water: { enabled: false, lowOff: false },
+  post: { enabled: false, lowOff: true },
+  // [T2] trees (world/Vegetation.ts + attach LOD), street furniture without the Wallace fountain (world/StreetProps.ts),
+  // Flamme de la Liberté (landmarks/models.ts). No T5: pedestrians / NPC vehicles stay as they are (SPEC §17.20).
+  trees: { enabled: false, lowOff: false },
+  props: { enabled: false, lowOff: false },
+  flamme: { enabled: false, lowOff: false },
+  // [T3] SPEC §17.20 (2026-10-03): ONLY the roof slates (roof_slates_03 on the 'roof' material, world/BuildingBuilder.ts
+  // createBuildingMaterials) and the asphalt (asphalt_02 on 'asphalt', world/RoadBuilder.ts createRoadMaterials). Facade
+  // stone / zinc, sidewalks, setts and terrain keep their Phase 7 canvas textures.
+  roofs: { enabled: false, lowOff: false },
+  asphalt: { enabled: false, lowOff: false },
+};
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
 // Phase 5 (docs/plans/phase5.md §5.3): HUD. Each track edits ONLY its own block and adds no imports; the foundation
 // block belongs to the integrator. UI texts are Vietnamese (in the modules), sizes in CSS px.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════
