@@ -11,7 +11,6 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { graphics8c } from '../config.ts';
-import { mountQualitySetting } from '../ui/settings.ts';
 import { graphics } from './graphics.ts';
 
 const P = graphics8c.post;
@@ -22,7 +21,6 @@ export interface Post {
 }
 
 export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Camera): Post | null {
-  mountQualitySetting(); // the Esc menu's "Chất lượng" row (ui/settings.ts); here because post is created once, early
   if (!graphics().on('post')) return null;
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));

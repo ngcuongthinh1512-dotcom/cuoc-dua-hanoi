@@ -5,7 +5,7 @@
 // reaches the game (core/Input.ts ignores keys typed into an <input>).
 import { menu as M } from '../config.ts';
 import './menu.css';
-import { clampSensitivity, saveSettings, settings } from './settings.ts';
+import { clampSensitivity, qualityRow, saveSettings, settings } from './settings.ts';
 
 export interface MenuActions {
   /** "Tiếp tục": main.ts locks the pointer again (a click is a user gesture). */
@@ -125,6 +125,7 @@ export class Menu {
       el('label', { className: 'menu-check' }, invert, 'Đảo trục Y (đẩy chuột lên = nhìn xuống)'),
       el('div', { className: 'menu-row' }, el('label', { htmlFor: 'menu-sens', textContent: 'Độ nhạy chuột' }), sens, shown),
       el('p', { className: 'menu-hint', textContent: 'Áp dụng cho cả chuột và tay cầm. Lưu trên trình duyệt này.' }),
+      qualityRow(),
     );
 
     // The key table lives in index.html (#keys-src): main.ts toggles #help-player / #help-fly by id, so the elements move here.

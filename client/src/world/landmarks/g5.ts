@@ -1026,10 +1026,13 @@ export function createSkyline(sky: SkylineData | undefined, groundAt: (x: number
   g.setIndex(new THREE.BufferAttribute(b.index, 1));
   const S = G.skyline;
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, fog: false });
+  // Haze = the scene's fog colour, read every frame (8C: world/Sky.ts sets it from the HDRI once loaded; R.sky.horizon
+  // until then). Mixed after colorspace_fragment like three's own fogColor: sRGB components on the canvas, linear into a
+  // render target (post-processing tone-maps and converts at the end).
+  const haze = new THREE.Color(R.sky.horizon).convertLinearToSRGB();
   m.onBeforeCompile = (s) => {
     s.uniforms.skyHaze = { value: new THREE.Vector4(S.hazeDistance, S.maxHaze, S.shell, S.fadeHeight) };
-    // mixed after colorspace_fragment (output is sRGB already), like three's own fogColor: sRGB components
-    s.uniforms.skyHazeColor = { value: new THREE.Color(R.sky.horizon).convertLinearToSRGB() };
+    s.uniforms.skyHazeColor = { value: haze };
     s.vertexShader = `uniform vec4 skyHaze;\nvarying float vSkyHaze;\n${s.vertexShader.replace(
       '#include <project_vertex>',
       `vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
@@ -1047,6 +1050,11 @@ export function createSkyline(sky: SkylineData | undefined, groundAt: (x: number
   };
   const mesh = new THREE.Mesh(g, m);
   mesh.name = 'skyline';
+  mesh.onBeforeRender = (renderer, scene) => {
+    if (!(scene.fog instanceof THREE.Fog)) return;
+    haze.copy(scene.fog.color);
+    if (!renderer.getRenderTarget()) haze.convertLinearToSRGB();
+  };
   mesh.frustumCulled = false;
   return mesh;
 }

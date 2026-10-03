@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { graphics8c, menu } from '../config.ts';
 import { pickQuality } from '../world/graphics.ts';
-import { clampSensitivity, loadSettings, mountQualitySetting, saveQuality, saveSettings, type SettingsStore, settings } from './settings.ts';
+import { clampSensitivity, loadSettings, saveQuality, saveSettings, type SettingsStore, settings } from './settings.ts';
 
 const fake = (init: Record<string, string> = {}) => {
   const data = { ...init };
@@ -65,7 +65,6 @@ describe('settings storage', () => {
     expect(pickQuality(null, data[graphics8c.quality.storageKey]!, 'Google SwiftShader')).toBe('high');
     expect(saveQuality('high', broken)).toBe(false);
     expect(saveQuality('high', undefined)).toBe(false);
-    expect(() => mountQualitySetting()).not.toThrow(); // Node: no DOM, no-op
   });
 
   it('sensitivity is clamped into [min, max], on load and by clampSensitivity', () => {

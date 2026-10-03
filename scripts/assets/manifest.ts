@@ -40,9 +40,9 @@ export function readManifest8c(dir: string): Asset8c[] {
 }
 
 /** Downloaded but not used (SPEC §17.20 2026-10-03: T3 only roof slates + asphalt; no Wallace fountain; no new pedestrians /
- *  vehicles, T5 dropped): never processed, never credited. */
+ *  vehicles, T5 dropped; no pigeons (T2); spare HDRI qwantani): never processed, never credited. */
 export const UNUSED =
-  /^(polyhaven\/textures\/(large_sandstone_blocks|box_profile_metal_sheet|concrete_pavers|cobblestone_floor_08|patterned_cobblestone|bicolour_gravel)\/|ambientcg\/(Metal028|Ground108|Grass004)_|rocketbox\/|sketchfab\/(fontaine_wallace|french_delivery_van|garbage_truck|isuzu_erga_mio_bus|low-poly_sedan_car|low_poly_small_car))/;
+  /^(polyhaven\/textures\/(large_sandstone_blocks|box_profile_metal_sheet|concrete_pavers|cobblestone_floor_08|patterned_cobblestone|bicolour_gravel)\/|ambientcg\/(Metal028|Ground108|Grass004)_|polyhaven\/hdri\/qwantani_|rocketbox\/|sketchfab\/(animated_bird_pigeon|fontaine_wallace|french_delivery_van|garbage_truck|isuzu_erga_mio_bus|low-poly_sedan_car|low_poly_small_car))/;
 
 const verified = new Set<string>();
 /** Path of `file` in <dir> after checking its sha256 / md5 against the manifest (once per run). */

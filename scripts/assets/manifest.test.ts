@@ -63,9 +63,11 @@ describe('credits8c', () => {
     a('ambientcg/Metal028_2K-JPG.zip', 'CC0 1.0 Universal'),
     a('sketchfab/fontaine_wallace.glb', 'CC-BY-4.0'),
     a('sketchfab/garbage_truck.glb', 'CC-BY-4.0'),
+    a('sketchfab/animated_bird_pigeon.glb', 'CC-BY-4.0'),
+    a('polyhaven/hdri/qwantani_puresky_1k.hdr', 'CC0 1.0 Universal'),
     a('sketchfab/french_colonne_morris.glb', 'CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)', { title: 'French Colonne Morris', author: 'BigMax', pageUrl: 'https://sketchfab.com/3d-models/m' }),
   ];
-  it('groups CC0, one line per CC BY work, unused sets (facade textures, Rocketbox, cars, Wallace) left out', () => {
+  it('groups CC0, one line per CC BY work, unused sets (facade textures, Rocketbox, cars, Wallace, pigeon, spare HDRI) left out', () => {
     const c = credits8c(list);
     expect(c).toHaveLength(2);
     expect(c[0]).toMatchObject({ title: 'Cột Morris: French Colonne Morris', licence: 'CC BY 4.0', url: 'https://sketchfab.com/3d-models/m', set: '8c' });

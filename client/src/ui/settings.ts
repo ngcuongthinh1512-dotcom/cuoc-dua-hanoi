@@ -67,8 +67,8 @@ export function saveQuality(q: Quality, store: SettingsStore | undefined = brows
   }
 }
 
-/** The "Chất lượng đồ họa" row (select Cao / Thấp + hint) for the Esc menu's settings pane. */
-function qualityRow(): HTMLElement {
+/** The "Chất lượng đồ họa" row (select Cao / Thấp + hint) for the Esc menu's settings pane (ui/Menu.ts build). */
+export function qualityRow(): HTMLElement {
   const select = document.createElement('select');
   select.id = 'menu-quality';
   select.append(new Option('Cao', 'high'), new Option('Thấp (máy yếu: tắt hậu kỳ, ảnh nhẹ hơn)', 'low'));
@@ -91,17 +91,4 @@ function qualityRow(): HTMLElement {
   const box = document.createElement('div');
   box.append(row, hint);
   return box;
-}
-
-/** Adds the quality row to the Esc menu once ui/Menu.ts has built it (on the first open; Menu.ts is not a Phase 8C
- *  file, so the row joins its settings pane from here). No-op outside a browser. */
-export function mountQualitySetting(): void {
-  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
-  const watch = new MutationObserver(() => {
-    const pane = document.querySelector('.menu .menu-pane > div'); // the first pane = "Cài đặt"
-    if (!pane) return;
-    watch.disconnect();
-    pane.append(qualityRow());
-  });
-  watch.observe(document.body, { childList: true });
 }
