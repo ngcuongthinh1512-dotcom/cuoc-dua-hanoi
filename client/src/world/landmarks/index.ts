@@ -9,7 +9,7 @@ import { landmarks as L } from '../../config.ts';
 import type { BuildingRec, LandmarkId, PartRec } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID, type LandmarkDef } from '../../geo/landmarks.ts';
 import { buildingHeight } from '../BuildingBuilder.ts';
-import { skyEnvironment } from '../Water.ts';
+import { sceneEnvironmentOn, skyEnvironment } from '../Water.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId } from '../buildTypes.ts';
 import { mergeBuckets } from '../geom.ts';
 import { details as g1 } from './g1.ts';
@@ -123,7 +123,8 @@ function canvasTexture(draw: (g: CanvasRenderingContext2D) => void) {
 
 export function createLandmarkMaterials(): Partial<Record<MaterialId, Material>> {
   const C = L.colours;
-  const envMap = skyEnvironment(); // shared equirect sky; three builds its PMREM once for all three metals
+  // Shared equirect sky (three builds its PMREM once for all three metals); null = scene.environment, the HDRI (8C T1).
+  const envMap = sceneEnvironmentOn() ? null : skyEnvironment();
   const panes = canvasTexture((g) => {
     g.fillStyle = 'rgba(255,255,255,0.55)';
     g.fillRect(0, 0, 64, 64);

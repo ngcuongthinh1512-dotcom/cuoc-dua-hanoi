@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { menu } from '../config.ts';
-import { clampSensitivity, loadSettings, saveSettings, type SettingsStore, settings } from './settings.ts';
+import { graphics8c, menu } from '../config.ts';
+import { pickQuality } from '../world/graphics.ts';
+import { clampSensitivity, loadSettings, mountQualitySetting, saveQuality, saveSettings, type SettingsStore, settings } from './settings.ts';
 
 const fake = (init: Record<string, string> = {}) => {
   const data = { ...init };
@@ -53,6 +54,18 @@ describe('settings storage', () => {
     loadSettings(fake({ [menu.storageKey]: JSON.stringify({ invertY: true }) }).store);
     expect(settings).toEqual({ invertY: true, mouseSensitivity: 1 });
     expect(settings).toBe(before);
+  });
+
+  it('quality (8C): saved under graphics8c.quality.storageKey, read back by pickQuality; blocked storage → false', () => {
+    const { data, store } = fake();
+    expect(saveQuality('low', store)).toBe(true);
+    expect(data[graphics8c.quality.storageKey]).toBe('low');
+    expect(pickQuality(null, data[graphics8c.quality.storageKey]!, 'NVIDIA GeForce RTX 3060')).toBe('low');
+    expect(saveQuality('high', store)).toBe(true);
+    expect(pickQuality(null, data[graphics8c.quality.storageKey]!, 'Google SwiftShader')).toBe('high');
+    expect(saveQuality('high', broken)).toBe(false);
+    expect(saveQuality('high', undefined)).toBe(false);
+    expect(() => mountQualitySetting()).not.toThrow(); // Node: no DOM, no-op
   });
 
   it('sensitivity is clamped into [min, max], on load and by clampSensitivity', () => {

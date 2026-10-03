@@ -15,15 +15,21 @@ import {
   MeshStandardMaterial,
   RepeatWrapping,
   type Scene,
+  ShaderChunk,
   SRGBColorSpace,
   type Texture,
+  TextureLoader,
   Vector2,
+  Vector4,
 } from 'three';
-import { water as W } from '../config.ts';
+import { graphics8c, water as W } from '../config.ts';
 import type { WaterData } from '../geo/chunkData.ts';
 import { type HeightGrid, heightAt } from '../geo/heightGrid.ts';
 import { triangulate } from './geom.ts';
+import { graphics } from './graphics.ts';
 import { quayMesh, riverLevel } from './Terrain.ts';
+
+const GW = graphics8c.water;
 
 /** Tileable ripple normal map: a few integer-frequency sine waves, analytic derivatives. */
 function rippleNormals(size = 128): Texture {
@@ -53,6 +59,11 @@ function rippleNormals(size = 128): Texture {
   Object.assign(t, { wrapS: RepeatWrapping, wrapT: RepeatWrapping, magFilter: LinearFilter, minFilter: LinearMipmapLinearFilter, generateMipmaps: true, needsUpdate: true });
   return t;
 }
+
+/** Phase 8C T1: world/Sky.ts sets scene.environment (the HDRI image-based light on every standard material); off on low
+ *  quality unless graphics8c.sky.lowEnvironment (SwiftShader bench: −35 % FPS). Off → materials that need a reflection
+ *  (landmark metals, the river) keep their own skyEnvironment(). */
+export const sceneEnvironmentOn = () => graphics().on('sky') && (graphics().quality === 'high' || graphics8c.sky.lowEnvironment);
 
 /** Equirect sky gradient; three converts it to a PMREM cube-UV map for the standard material on first use.
  *  Also the reflection of the landmark metals (gold / bronze / metal), which render black without one. */
@@ -96,23 +107,41 @@ export function createWater(scene: Scene, water: WaterData, grid: HeightGrid): {
     for (const k of triangulate(p.outer, holes)) index.push(base + k);
   }
 
-  const normalMap = rippleNormals();
+  // Phase 8C T1 (graphics8c.water): three's waternormals.jpg in two layers drifting apart (no visible tiling), the sky
+  // environment (scene.environment once graphics8c.sky is on) for the reflection. Node tests: the ripple DataTexture.
+  const hd = graphics().on('water') && typeof document !== 'undefined';
+  const normalMap = hd ? new TextureLoader().load(GW.normalMap) : rippleNormals();
+  normalMap.wrapS = normalMap.wrapT = RepeatWrapping;
+  const layers = new Vector4(); // xy, zw = uv offsets of the two layers
+  const material = new MeshStandardMaterial({
+    color: hd ? GW.colour : W.colour,
+    roughness: hd ? GW.roughness : W.roughness,
+    metalness: 0,
+    envMap: sceneEnvironmentOn() ? null : skyEnvironment(),
+    envMapIntensity: hd ? GW.envMapIntensity : 1,
+    normalMap,
+    normalScale: new Vector2().setScalar(hd ? GW.normalScale : W.normalScale),
+  });
+  if (hd) {
+    const [a, b] = GW.layers;
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.waterLayers = { value: layers };
+      shader.fragmentShader = `uniform vec4 waterLayers;\n${shader.fragmentShader}`.replace(
+        '#include <normal_fragment_maps>',
+        ShaderChunk.normal_fragment_maps.replace(
+          'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
+          `vec3 mapN = texture2D( normalMap, vNormalMapUv * ${(W.normalTile / a.tile).toFixed(4)} + waterLayers.xy ).xyz` +
+            ` + texture2D( normalMap, vNormalMapUv * ${(W.normalTile / b.tile).toFixed(4)} + waterLayers.zw ).xyz - 1.0;`,
+        ),
+      );
+    };
+  }
   const surface = new BufferGeometry();
   surface.setAttribute('position', new Float32BufferAttribute(pos, 3));
   surface.setAttribute('normal', new Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
   surface.setAttribute('uv', new Float32BufferAttribute(uv, 2));
   surface.setIndex(index);
-  const waterMesh = new Mesh(
-    surface,
-    new MeshStandardMaterial({
-      color: W.colour,
-      roughness: W.roughness,
-      metalness: 0,
-      envMap: skyEnvironment(),
-      normalMap,
-      normalScale: new Vector2(W.normalScale, W.normalScale),
-    }),
-  );
+  const waterMesh = new Mesh(surface, material);
   waterMesh.receiveShadow = true;
   waterMesh.name = 'water';
 
@@ -128,6 +157,12 @@ export function createWater(scene: Scene, water: WaterData, grid: HeightGrid): {
 
   return {
     update(dt: number) {
+      if (hd) {
+        const [a, b] = GW.layers;
+        const step = (o: number, d: number, tile: number) => (o + (d / tile) * dt) % 1;
+        layers.set(step(layers.x, a.drift[0], a.tile), step(layers.y, a.drift[1], a.tile), step(layers.z, b.drift[0], b.tile), step(layers.w, b.drift[1], b.tile));
+        return;
+      }
       normalMap.offset.x = (normalMap.offset.x + W.normalScroll * dt) % 1;
       normalMap.offset.y = (normalMap.offset.y + W.normalScroll * 0.6 * dt) % 1;
     },

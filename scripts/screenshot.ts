@@ -401,14 +401,15 @@ const CHAMPS = [48.8703, 2.306, yawTo(48.8703, 2.306, 48.8738, 2.295)] as const;
 const FLAMME = latLonToWorld(48.86424, 2.30113); // Flamme de la Liberté, Place de l'Alma
 Object.assign(PRESETS, {
   // [T0] FPS / draw calls / triangles: riding up the Champs-Élysées toward the Arc, NPCs at density 1
-  'p8c-bench': playerAt(...CHAMPS, '&bike&autoMove=walk&wait=1&npcDensity=1'),
+  // quality=high explicitly: headless SwiftShader matches graphics8c.quality.weakGpu, which would pick 'low'
+  'p8c-bench': playerAt(...CHAMPS, '&bike&autoMove=walk&wait=1&npcDensity=1&quality=high'),
   'p8c-bench-low': playerAt(...CHAMPS, '&bike&autoMove=walk&wait=1&npcDensity=1&quality=low'),
   // [T1] sky + light (street level, looking up a little), river + quays, gilded dome (env reflections), post-processing
-  'p8c-sky': cam(CHAMPS[0], CHAMPS[1], 1.7, CHAMPS[2], 12),
+  'p8c-sky': cam(CHAMPS[0], CHAMPS[1], 1.7, CHAMPS[2], 12) + '&quality=high',
   'p8c-sky-low': cam(CHAMPS[0], CHAMPS[1], 1.7, CHAMPS[2], 12) + '&quality=low',
-  'p8c-seine': cam(48.86365, 2.31354, 12, -90, -5),
-  'p8c-gold': cam(48.8578, 2.3125, 25, 180, 4), // Esplanade side, facing the Invalides dome to the south
-  'p8c-post': '/?player=87.8,-184.5,-25.97&wait=1&npcDensity=1',
+  'p8c-seine': cam(48.86365, 2.31354, 12, -90, -5) + '&quality=high',
+  'p8c-gold': cam(48.8578, 2.3125, 25, 180, 4) + '&quality=high', // Esplanade side, facing the Invalides dome to the south
+  'p8c-post': '/?player=87.8,-184.5,-25.97&wait=1&npcDensity=1&quality=high',
   // [T2] plane trees (street level / from above: LOD), Paris street furniture, quay bouquinistes, Flamme de la Liberté
   'p8c-trees': cam(CHAMPS[0], CHAMPS[1], 1.7, CHAMPS[2] + 25, 2),
   'p8c-trees-top': cam(CHAMPS[0], CHAMPS[1], 120, CHAMPS[2], -35),
