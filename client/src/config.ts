@@ -258,7 +258,8 @@ export const props = {
     // scan units: column axis (x, z), poster band (y; cut away, replaced by the PD poster cylinder), its radius, the
     // plinth radius / height above the scan floor that separate the plinth from the paving square; radius = game size
     morris: { axis: [0.2, 0.8], band: [0.72, 4.02], scanRadius: 0.76, plinthRadius: 0.9, groundCut: 0.18, radius: 0.62, divider: '#2e4c38', tris: [2500, 400] },
-    shelter: { yaw: -Math.PI / 2, tris: [3000, 500] },
+    // textures above `floor` (scan m, the advert / map / signs) → flat `panel` colour (linear RGB; SPEC §17.20)
+    shelter: { yaw: -Math.PI / 2, floor: 0.1, panel: [0.3, 0.31, 0.32], tris: [3000, 500] },
     bench: { slab: 0.095, scale: [2.2, 1.2, 1.2], yaw: Math.PI, tris: [1200, 200] },
     bouquiniste: { boxHeight: 1.2, stretch: [5.6, 14.1], depth: [-0.6, 0.85], groundCut: 0.05, tris: [5000, 800] },
     cafe: { tris: [1200, 250] },
@@ -370,7 +371,15 @@ export const landmarks = {
       railing: 1.1, railPostStep: 1.5, lampHeight: 3.2,
     },
     alma: { pierWidth: 4, girderDepth: 2, haunchDepth: 4.5, haunchLength: 45, zouaveHeight: 5.2, zouaveBase: 1 },
-    flamme: { flame: 3.5, pedestal: 3, pedestalSize: 1.6, step: 0.3, segments: 20, rings: 12 }, // flame 3.5 m (fr.wikipedia.org/wiki/Flamme_de_la_Liberté)
+    // Sized on the scan (models/lm-flamme.glb, 3.65 m in all; en.wikipedia: "about 3.5 metres" with its pedestal): flame +
+    // collar `flame` m on a black pedestal `pedestal` m (`pedestalSize` m square) on round granite steps `tiers` [outer
+    // radius, top above the lowest ground] (also the steps of the scan's GLB, scripts/assets/flamme.ts, and the colliders),
+    // a paving disc [radius, top] (visual only); flame radius × flameWidth (the scan's tongues spread ≈ 1.8 m)
+    flamme: {
+      flame: 1.7, pedestal: 1.25, pedestalSize: 1.1, flameWidth: 1.6, segments: 20, rings: 12,
+      paving: [3.05, 0.06] as [number, number],
+      tiers: [[2.5, 0.27], [2.05, 0.42], [1.6, 0.57], [1.1, 0.7]] as [number, number][],
+    },
   },
   // g3 (world/landmarks/g3.ts): Louvre–Concorde–Opéra. Published figures are cited in g3.ts; "est." = estimate
   // (no published figure found on fr/en.wikipedia, 2026-09-28: proportions from photos / storey counts).
@@ -989,8 +998,10 @@ export const graphics8c = {
   flamme: {
     enabled: true, lowOff: false, sink: 0.05,
     // scripts/assets/flamme.ts, scan units (slice / radial profiles): column axis (x, z), paving disc radius, plaza level;
-    // the outline's chunk; triangle budget, texture px
-    scan: { axis: [0.69, 1.07], disc: 3.0, floor: 0.17, chunk: '-6_0', tris: 40_000, texture: 2048 },
+    // the outline's chunk; triangle budget (pedestal + flame only), texture px. Kept from the scan: above `cut` (the top of
+    // the scanned steps; they are replaced by landmarks.g2.flamme.tiers), within `keepRadius` of the axis below `flameFrom`
+    // (flowers / debris around the pedestal dropped; the flame's tongues spread wider), parts of ≥ `minPart` triangles
+    scan: { axis: [0.69, 1.07], disc: 3.0, floor: 0.17, chunk: '-6_0', tris: 40_000, texture: 2048, cut: 0.72, keepRadius: 0.95, flameFrom: 1.8, minPart: 200 },
   },
   // [T3] SPEC §17.20 (2026-10-03): ONLY the roof slates (roof_slates_03 on the 'roof' material, world/BuildingBuilder.ts
   // createBuildingMaterials) and the asphalt (asphalt_02 on 'asphalt', world/RoadBuilder.ts createRoadMaterials). Facade

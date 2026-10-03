@@ -7,11 +7,12 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { Ray, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { landmarks as L } from '../../config.ts';
+import { graphics8c as G8, landmarks as L } from '../../config.ts';
 import { type ChunkData, chunkBounds } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { details, modelPose } from './g1.ts';
+import { flamme } from './g2.ts';
 import { helpers } from './index.ts';
 import { MODELS } from './models.ts';
 import { recordGround } from './parts.ts';
@@ -161,5 +162,49 @@ describe('g1 colliders on the OSM outlines', () => {
       expect(m.lod).toBe('near');
       for (let i = 0; i < m.position.length; i += 3) expect(Math.hypot(m.position[i]! - x, m.position[i + 2]! - z)).toBeLessThan(4);
     }
+  });
+
+  // Phase 8C fix A: the scan's round steps are solid (no sinking half a body into them), the pedestal box hugs the scan
+  it('Flamme: round granite steps as colliders, pedestal box ±pedestalSize / 2, nothing beyond the steps', () => {
+    if (!G8.flamme.enabled) return;
+    const { out, pose } = load('flamme');
+    const F = L.g2.flamme;
+    const [x, z] = [pose.x, pose.z]; // ground 0
+    expect(finite(out)).toBe(true);
+    expect(out.meshes).toEqual([]);
+    expect(out.colliders.length).toBe(F.tiers.length + 1);
+    const down = (r: number, y: number) => hits(out, [x + r, 3, z], [x + r, y, z]);
+    F.tiers.forEach(([r, top], i) => {
+      const mid = (r + (F.tiers[i + 1]?.[0] ?? F.pedestalSize / 2)) / 2; // on this tread
+      expect(down(mid, top + 0.01)).toBe(false);
+      expect(down(mid, top - 0.01)).toBe(true);
+    });
+    expect(down(F.tiers[0]![0] + 0.1, 0.01)).toBe(false); // the paving disc is visual only
+    const hs = F.pedestalSize / 2;
+    expect(hits(out, [x - 3, 1.5, z], [x + 3, 1.5, z])).toBe(true);
+    expect(hits(out, [x - 3, 1.5, z + hs + 0.05], [x + 3, 1.5, z + hs + 0.05])).toBe(false);
+    expect(maxY(out.colliders.flatMap((c) => [...c.vertices]))).toBeCloseTo(F.tiers.at(-1)![1] + F.pedestal, 5);
+  });
+});
+
+describe('Flamme scan (models/lm-flamme.glb)', () => {
+  it('≤ 41k triangles, pedestal + flame without debris, as tall as g2 far model (≈ 3.5 m, en.wikipedia)', async () => {
+    if (!G8.flamme.enabled) return;
+    const t = await glbTriangles('models/lm-flamme.glb');
+    const { rec, pose } = load('flamme');
+    const S = G8.flamme.scan;
+    expect(t.every(Number.isFinite)).toBe(true);
+    expect(t.length / 9).toBeLessThanOrEqual(S.tris + 1000);
+    const top = maxY(t) + pose.y;
+    expect(top).toBeGreaterThan(3.3);
+    expect(top).toBeLessThan(3.9);
+    // between the top step and the flame only the pedestal (flowers / debris cut away)
+    for (let i = 0; i < t.length; i += 3) {
+      const y = t[i + 1]! + pose.y;
+      if (y > L.g2.flamme.tiers.at(-1)![1] + 0.05 && y < S.flameFrom - 0.1) expect(Math.hypot(t[i]!, t[i + 2]!)).toBeLessThan(S.keepRadius + 0.05);
+    }
+    expect(extent(t, 0)).toBeLessThanOrEqual(L.g2.flamme.paving[0] + 0.01);
+    const far = flamme(rec, { minGround: 0 });
+    expect(err(maxY(far.meshes.flatMap((m) => [...m.position])), top)).toBeLessThan(0.1); // no LOD jump at detailDistance
   });
 });

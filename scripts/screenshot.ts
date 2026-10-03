@@ -424,9 +424,13 @@ Object.assign(PRESETS, {
   'p8c-props': camAt(184, -878, 2.5, -50, -10), // a corner with a café terrace, Morris column, benches (0_-4)
   'p8c-quay': '/?cam=706.2,3.2,708.6,260,-4', // fixed y: the uncarved DEM here is below the quay top // Quai Voltaire sidewalk, looking east along the bouquinistes on the parapet
   'p8c-flamme': camAt(FLAMME.x, FLAMME.z - 25, 6, 180, -8), // 25 m north of the flame (Place de l'Alma), facing south
+  // fix A: a player 5 m north of the flame (scale), and one spawned on its stone steps (collider: stands on the tier)
+  // (outline centre −1487.5, 144: chunk −6_0, ≈ 20 m from the FLAMME lat/lon)
+  'p8c-flamme-near': '/?player=-1487.5,139,180&wait=2&npc=0&quality=high',
+  'p8c-flamme-step': '/?player=-1487.5,142.1,180&wait=2&npc=0&quality=high',
   // [T3] SPEC §17.20: only roof slates + asphalt. Rue Royale roofs from 60 m (oblique), the carriageway at walking height
   'p8c-roof': camAt(87.8, -184.5, 60, -26, -35),
-  'p8c-road': '/?player=87.8,-184.5,-25.97&autoMove=walk&wait=2&npc=0',
+  'p8c-road': '/?player=30,203,90&wait=2&npc=0', // Quai des Tuileries carriageway (asphalt_02; Rue Royale is paving)
 });
 // Phase 10 (docs/plans/phase10.md §6, track H): p10-* presets (`npm run screenshot -- p10`; not in the default run). The Host page on
 // demo data: ?louvre=1 adds Thử thách 3 (a wide matrix); ?undoLeft=<s> keeps the undo line alive until the picture is taken;

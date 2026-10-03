@@ -236,7 +236,7 @@ async function morris(ctx: Ctx) {
   const M = P.morris; // scan units, measured with slice bounding boxes (axis, poster band, radius)
   const [[cx, cz], [lo, hi], r0] = [M.axis, M.band, M.scanRadius];
   const ground = b.lo[1]! + M.groundCut;
-  const kept = crop(raw, (x, y, z) => !(y < ground && Math.hypot(x - cx, z - cz) > M.plinthRadius) && (y < lo || y > hi));
+  const kept = await keepUsed(crop(raw, (x, y, z) => !(y < ground && Math.hypot(x - cx, z - cz) > M.plinthRadius) && (y < lo || y > hi)), 1024);
   // poster cylinder: 6 columns × 2 rows of posters, green dividers
   const posters = ctx.assets.filter((a) => a.file.startsWith('commons/posters/')).map((a) => a.file).sort();
   const [cw, ch, cols] = [256, 512, 6];
@@ -265,9 +265,13 @@ async function morris(ctx: Ctx) {
   return atlas(move([...kept, cyl], { from: [cx, ground, cz], scale: [k, k, k] }), 2048, 1024);
 }
 
-/** Bus shelter: centred, open side (+x in the source) turned to +z. */
+/** Bus shelter: centred, open side (+x in the source) turned to +z. Every texture above the floor slab (RATP advert with a
+ *  real person, RATP network map, "Bus 60" sign with the RATP logo, a pictogram) is third-party content outside the
+ *  modeller's CC BY → replaced by a flat neutral colour (SPEC §17.20: unknown licence); only the floor's concrete stays. */
 async function shelter(ctx: Ctx) {
-  const s = await readSoups(ctx.file('sketchfab/abribus_bus_stop_bus_station.glb'));
+  const s = (await readSoups(ctx.file('sketchfab/abribus_bus_stop_bus_station.glb'))).map((q) =>
+    q.mat.image && bounds([q]).hi[1]! > P.shelter.floor ? { ...q, mat: { ...q.mat, image: undefined, color: [...P.shelter.panel, 1] } } : q,
+  );
   const b = bounds(s);
   return atlas(move(s, { from: [(b.lo[0]! + b.hi[0]!) / 2, b.lo[1]!, (b.lo[2]! + b.hi[2]!) / 2], yaw: P.shelter.yaw }), 1024, 512);
 }
@@ -278,7 +282,7 @@ async function bench(ctx: Ctx) {
   const b = bounds(s);
   const cut = b.lo[1]! + P.bench.slab;
   const k = P.bench.scale;
-  return shrink(move(crop(s, (_x, y) => y > cut), { from: [(b.lo[0]! + b.hi[0]!) / 2, cut, (b.lo[2]! + b.hi[2]!) / 2], scale: [...k], yaw: P.bench.yaw }), 1024);
+  return keepUsed(move(crop(s, (_x, y) => y > cut), { from: [(b.lo[0]! + b.hi[0]!) / 2, cut, (b.lo[2]! + b.hi[2]!) / 2], scale: [...k], yaw: P.bench.yaw }), 1024);
 }
 
 /** Bouquinistes: the row's axis from the stalls (vertices above the parapet), one stretch of it, ground + stands cut
@@ -307,12 +311,44 @@ async function bouquiniste(ctx: Ctx) {
   // local frame: x along the row (centred on the stretch), +z toward the sidewalk, y from the cut floor. move() maps
   // (ux, uz) to +x and the across direction (−uz, ux) to +z with yaw = atan2(uz, ux); half a turn more when side < 0.
   const [cx, cz] = [mx + (ux * (s0 + s1)) / 2, mz + (uz * (s0 + s1)) / 2];
-  return shrink(move(kept, { from: [cx, floor, cz], yaw: Math.atan2(uz, ux) + (side > 0 ? 0 : Math.PI) }), 2048);
+  return keepUsed(move(kept, { from: [cx, floor, cz], yaw: Math.atan2(uz, ux) + (side > 0 ? 0 : Math.PI) }), 1024);
 }
 
-/** Source textures down to `px` (the atlas / writeGlb would carry 4K scans otherwise). */
-async function shrink(soups: Soup[], px: number) {
-  for (const s of soups) if (s.mat.image) s.mat.image = await sharp(s.mat.image).resize(px, px, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
+/** Scans cropped to a part: each texture cut to the uv box its kept triangles use (uv remapped), every pixel no kept
+ *  triangle samples (± `pad` output px, for filtering / mips) painted neutral grey, then down to ≤ `px`. Nothing of the
+ *  cut-away scan (modern posters, passers-by, book covers…) stays in the shipped file. */
+export async function keepUsed(soups: Soup[], px: number, pad = 3): Promise<Soup[]> {
+  for (const s of soups) {
+    if (!s.mat.image) continue;
+    if (!s.uv.every((u) => u >= -0.002 && u <= 1.002)) throw new Error('keepUsed: uv outside [0, 1] (tiled texture)');
+    const { data, info } = await sharp(s.mat.image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const [W, H] = [info.width, info.height];
+    const d = (pad * Math.max(W, H)) / px; // pad in source px
+    const used = new Uint8Array(W * H);
+    let [x0, y0, x1, y1] = [W, H, 0, 0];
+    for (let t = 0; t < s.uv.length; t += 6) {
+      const p = [0, 2, 4].map((k) => [s.uv[t + k]! * W, s.uv[t + k + 1]! * H] as const);
+      const sgn = Math.sign((p[1]![0] - p[0]![0]) * (p[2]![1] - p[0]![1]) - (p[1]![1] - p[0]![1]) * (p[2]![0] - p[0]![0])) || 1;
+      const [bx0, by0] = [Math.max(0, Math.floor(Math.min(...p.map((q) => q[0])) - d)), Math.max(0, Math.floor(Math.min(...p.map((q) => q[1])) - d))];
+      const [bx1, by1] = [Math.min(W - 1, Math.ceil(Math.max(...p.map((q) => q[0])) + d)), Math.min(H - 1, Math.ceil(Math.max(...p.map((q) => q[1])) + d))];
+      [x0, y0, x1, y1] = [Math.min(x0, bx0), Math.min(y0, by0), Math.max(x1, bx1), Math.max(y1, by1)];
+      // pixel centre within d of the triangle: signed distance to every edge ≥ −d (degenerate edges ignored)
+      const edges = [0, 1, 2].map((i) => {
+        const [a, b] = [p[i]!, p[(i + 1) % 3]!];
+        const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        return l < 1e-9 ? undefined : { a, nx: (sgn * (b[0] - a[0])) / l, ny: (sgn * (b[1] - a[1])) / l };
+      });
+      for (let y = by0; y <= by1; y++)
+        for (let x = bx0; x <= bx1; x++) {
+          if (used[y * W + x]) continue;
+          if (edges.every((e) => !e || e.nx * (y + 0.5 - e.a[1]) - e.ny * (x + 0.5 - e.a[0]) >= -d)) used[y * W + x] = 1;
+        }
+    }
+    for (let i = 0; i < W * H; i++) if (!used[i]) data.fill(128, 3 * i, 3 * i + 3);
+    const [w, h] = [x1 - x0 + 1, y1 - y0 + 1];
+    s.mat.image = await sharp(data, { raw: { width: W, height: H, channels: 3 } }).extract({ left: x0, top: y0, width: w, height: h }).resize(px, px, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
+    for (let k = 0; k < s.uv.length; k += 2) [s.uv[k], s.uv[k + 1]] = [(s.uv[k]! * W - x0) / w, (s.uv[k + 1]! * H - y0) / h];
+  }
   return soups;
 }
 

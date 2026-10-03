@@ -43,6 +43,13 @@ class Out {
     this.colliders.push(collider(place(b.bucket(), f, 0)));
   }
 
+  /** Convex prism collider (plan ring of x, z pairs in the frame) from y0 to y1. */
+  solidPrism(pts: number[][], y0: number, y1: number, f = this.f) {
+    const b = new MeshBuffer('stone');
+    prismUp(b, pts, y0, y1);
+    this.colliders.push(collider(place(b.bucket(), f, 0)));
+  }
+
   out(): BuildOut {
     return { meshes: mergeBuckets(this.items.map(({ b, f, lod }) => place(b.bucket(lod), f, 0))), instances: [], colliders: this.colliders };
   }
@@ -659,29 +666,36 @@ function alma(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
 
 // ── Flamme de la Liberté (1989): gilded copper replica of the Statue of Liberty's flame (3.5 m) on a black marble pedestal ──
 
-/** Phase 8C (graphics8c.flamme): the scan replaces it (g1 details + landmarks/models.ts); this stays its far level / fallback. */
+/** Phase 8C (graphics8c.flamme): the scan replaces it within detailDistance (g1 details + landmarks/models.ts); this stays
+ *  its far level / fallback, sized like the scan, and its colliders (round steps as 24-gon prisms + the pedestal box) are
+ *  the scan's too (g1). */
 export function flamme(rec: BuildingRec, ctx: Pick<LandmarkCtx, 'minGround'>): BuildOut {
   const F = C.flamme;
   const fp = footprintFrame(rec.outer);
   const o = new Out(fp);
   const y0 = ctx.minGround;
+  const granite = o.buf('masonry', K.granite);
+  const ring = (r: number) => circle(0, 0, r, 24, 0).map((p) => [p[0], p[2]]);
+  prismUp(granite, ring(F.paving[0]), y0 - 0.3, y0 + F.paving[1]);
+  for (const [r, top] of F.tiers) {
+    prismUp(granite, ring(r), y0 - 0.3, y0 + top);
+    o.solidPrism(ring(r), y0 - 0.3, y0 + top);
+  }
   const black = o.buf('masonry', K.black);
   const hs = F.pedestalSize / 2;
-  const R0 = Math.max(fp.b, hs + 0.8);
-  prismUp(o.buf('masonry', K.granite), circle(0, 0, R0, 24, 0).map((p) => [p[0], p[2]]), y0 - 0.3, y0 + F.step);
-  const b = y0 + F.step;
-  box(black, -hs - 0.15, hs + 0.15, b, b + 0.4, -hs - 0.15, hs + 0.15);
-  loft(black, [[b + 0.4, hs], [b + F.pedestal - 0.35, hs * 0.85]].map(([y, s]) => [[-s!, y!, -s!], [s!, y!, -s!], [s!, y!, s!], [-s!, y!, s!]] as V3[]));
-  box(black, -hs * 0.95, hs * 0.95, b + F.pedestal - 0.35, b + F.pedestal, -hs * 0.95, hs * 0.95);
-  o.solid(-hs - 0.15, hs + 0.15, b, b + F.pedestal, -hs - 0.15, hs + 0.15);
-  // flame: lathe whose radius swells to ~0.6 m and licks upward in 5 twisting tongues
+  const b = y0 + F.tiers.at(-1)![1];
+  box(black, -hs - 0.1, hs + 0.1, b, b + 0.2, -hs - 0.1, hs + 0.1);
+  loft(black, [[b + 0.2, hs], [b + F.pedestal - 0.15, hs * 0.9]].map(([y, s]) => [[-s!, y!, -s!], [s!, y!, -s!], [s!, y!, s!], [-s!, y!, s!]] as V3[]));
+  box(black, -hs * 0.95, hs * 0.95, b + F.pedestal - 0.15, b + F.pedestal, -hs * 0.95, hs * 0.95);
+  o.solid(-hs, hs, b, b + F.pedestal, -hs, hs);
+  // flame: lathe whose radius swells to ~0.6 m × flameWidth and licks upward in 5 twisting tongues
   const g = o.buf('gold');
   const f0 = b + F.pedestal;
   lathe(g, 0, 0, [[0.28, f0], [0.36, f0 + 0.12], [0.22, f0 + 0.22]], F.segments);
   const rings: V3[][] = [];
   for (let k = 0; k <= F.rings; k++) {
     const t = k / F.rings;
-    const r = 0.2 * Math.sqrt(1 - t) + 0.48 * Math.sin(Math.PI * t ** 0.75) * (1 - t) ** 0.4;
+    const r = F.flameWidth * (0.2 * Math.sqrt(1 - t) + 0.48 * Math.sin(Math.PI * t ** 0.75) * (1 - t) ** 0.4);
     rings.push(Array.from({ length: F.segments }, (_, i) => {
       const a = (2 * Math.PI * i) / F.segments;
       const rr = Math.max(0.005, r * (1 + 0.35 * t * Math.sin(5 * a + 6 * t)));
