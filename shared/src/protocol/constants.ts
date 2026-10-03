@@ -8,7 +8,9 @@
 //     StepProgressView picks / hintCorrect, HostState.leg.steps[].louvre.
 // 5 = SPEC §17.22 / §17.23: no team clock (RaceView.startAt / officialMs, welcome.raceTime, host.team gone), RaceView.result,
 //     RankRow.out (ranking = real finish order).
-export const PROTOCOL_VERSION = 5;
+// 6 = Phase 10 Host tools (docs/plans/phase10.md §3.1 / §4.1 / §5.1): host.review op 'undo' + HostState.undo, host.flag
+//     clear + teams[].flagWhy / flagAt, ZoneMember.left, notice reviewUndone.
+export const PROTOCOL_VERSION = 6;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */
@@ -55,6 +57,14 @@ export const NET = {
   answerHistory: 20,
   /** Phase 8: longest Host note on a review. */
   noteMax: 500,
+  /** Phase 10 (M1): a Host Duyệt / Phạt / Cho qua may be undone this long after the server handled it (server clock);
+   *  HostState.undo lists what still can be. */
+  undoMs: 10_000,
+  /** Phase 10: newest decisions kept undoable per race (older ones drop out even before undoMs; one Host never gets near it). */
+  undoKept: 5,
+  /** Phase 10 (M6): a team that left a point stays in the others' "Tại điểm này" list this long as "vừa rời đi n phút
+   *  trước" (ZoneMember.left; memory only, the client hides expired lines itself). */
+  zoneLeftMs: 600_000,
   /** SPEC §17.10: the server compares each online team's last pose with its current clue box this often (one sqrt per
    *  team, no SQLite); radius + hysteresis come from the leg file (boxReveal). */
   boxCheckMs: 2_000,

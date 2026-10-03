@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodePose, decodeTick, encodePose, encodeTick, isClientMessage, parseFrame, POSE_LEN, samePose } from './codec.ts';
 import { NET, PROTOCOL_VERSION } from './constants.ts';
-import { type FeedMessage, type LouvreView, MOVE_MODES, PLAYER_ACTIONS, type PoseSample, type RaceOp, type ServerMessage, submitCode, TAG } from './types.ts';
+import { type FeedMessage, type HostMessage, type LouvreView, MOVE_MODES, PLAYER_ACTIONS, type PoseSample, type RaceOp, type ServerMessage, submitCode, TAG, type UndoItem, type ZoneMember } from './types.ts';
 
 const pose: PoseSample = { x: 123.456, y: 1.234, z: -910.117, yaw: 2.5, mode: 'bike', action: 'none' };
 
@@ -171,6 +171,32 @@ describe('frames and JSON messages', () => {
       [{ t: 'host.review', team: 't0', step: 'T1', op: 'note', note: 'x'.repeat(NET.noteMax + 1) }, 'host'],
     ];
     for (const [m, role] of bad) expect(isClientMessage(m, role), JSON.stringify(m).slice(0, 80)).toBe(false);
+  });
+
+  it('Phase 10 (v6): host.review undo needs an id, host.flag clear; both from the Host only', () => {
+    expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(6);
+    const ok: HostMessage[] = [
+      { t: 'host.review', team: 't0', step: 'T1', op: 'undo', id: 2 },
+      { t: 'host.flag', op: 'clear', team: 't0' },
+    ];
+    for (const m of ok) {
+      const back = parseFrame(JSON.stringify(m), NET.maxHostBytes);
+      expect(back).toEqual(m);
+      expect(isClientMessage(back, 'host')).toBe(true);
+      expect(isClientMessage(back, 'team')).toBe(false);
+    }
+    const bad: unknown[] = [
+      { t: 'host.review', team: 't0', step: 'T1', op: 'undo' }, // which decision?
+      { t: 'host.review', team: 't0', step: 'T1', op: 'undo', id: 0 },
+      { t: 'host.flag', op: 'set', team: 't0' },
+      { t: 'host.flag', op: 'clear' },
+      { t: 'host.flag', op: 'clear', team: '' },
+    ];
+    for (const m of bad) expect(isClientMessage(m, 'host'), JSON.stringify(m)).toBe(false);
+    // server → client shapes with the new optional / required fields survive a JSON round trip
+    const zone: ZoneMember = { slot: 2, label: 'Thử thách 2', type: 'challenge', branch: null, since: 1_000, left: 2_000 };
+    const undo: UndoItem = { team: 't0', step: 'T1', id: 2, op: 'approve', at: 5_000, until: 5_000 + NET.undoMs };
+    expect(JSON.parse(JSON.stringify({ zone, undo }))).toEqual({ zone, undo });
   });
 
   it('Phase 8B (v4): pick / lock / view / credits from a team only, through a JSON frame; view / credits carry no step', () => {

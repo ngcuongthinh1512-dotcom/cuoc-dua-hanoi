@@ -6,7 +6,7 @@
 // (role, team, revealed box) from the socket attachment (docs/plans/phase6.md §3, §6 A).
 import { DurableObject } from 'cloudflare:workers';
 import { startSpot } from '@race/shared/leg';
-import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FeedMessage, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
+import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FeedMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
 import { HOST, newClaims, signToken, verifyToken } from './auth.ts';
 import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, setMeta, type TeamRow } from './db.ts';
@@ -33,6 +33,9 @@ interface TeamState extends TeamRace {
   lastSeen: number | null;
   /** Over the speed limit or a suspicious respawn (SPEC §13.9): red on the Host, never cleared automatically. */
   flagged: boolean;
+  /** Phase 10 (V3): why / since when (HostState.teams[].flagWhy / flagAt); [] / null while not flagged. */
+  flagWhy: FlagWhy[];
+  flagAt: number | null;
 }
 
 /** Poses of a team (memory; `valid` reaches the snapshot row). */
@@ -439,6 +442,10 @@ export class RaceRoom extends DurableObject<Env> {
       case 'host.review': // isClientMessage: Host sockets only
         this.engine.onHost(m, (r) => this.send(ws, r), now);
         return this.soon(now);
+      case 'host.flag':
+        // TODO(phase10 track S, plan §4.2): no team → error; not flagged → warning "Đội này không có cờ."; else one
+        // transaction: event host.unflag {why, since} + saveTeamState {flagged: false, flagWhy: [], flagAt: null} (3 rows), then soon(now)
+        return this.send(ws, { t: 'host.notice', level: 'warning', message: 'Xóa cờ chưa được hỗ trợ (Phase 10 đang làm).' });
     }
   }
 
@@ -610,7 +617,7 @@ export class RaceRoom extends DurableObject<Env> {
     const teams = this.teams().map((t) => {
       const s = this.teamState(t);
       const { startOrder, step, finishAt, penaltyMinutes, joinedAt } = s;
-      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, startOrder, step, finishAt, penaltyMinutes, joinedAt };
+      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, flagWhy: s.flagWhy, flagAt: s.flagAt, startOrder, step, finishAt, penaltyMinutes, joinedAt };
     });
     const race = this.engine.hostView(now);
     // ponytail: `steps` (Phase 6 corridor points: start + route / Pit Stop zones) stays until the Host page reads `leg`
@@ -628,7 +635,7 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   private teamState(row?: TeamRow): TeamState {
-    return { reconnects: 0, lastSeen: null, flagged: false, ...NEW_TEAM_RACE, ...(row ? (JSON.parse(row.state) as Partial<TeamState>) : {}) };
+    return { reconnects: 0, lastSeen: null, flagged: false, flagWhy: [], flagAt: null, ...NEW_TEAM_RACE, ...(row ? (JSON.parse(row.state) as Partial<TeamState>) : {}) };
   }
 
   /** 1 row written. */
@@ -639,6 +646,8 @@ export class RaceRoom extends DurableObject<Env> {
     this.counters.rows += 1;
   }
 
+  // TODO(phase10 track S, plan §4.2): flag(t, why: FlagWhy, now): first flag → {flagged, flagWhy: [why], flagAt: now} (1 row);
+  // a new `why` on a flagged team → appended (1 row); known → 0 rows. Callers: onPose → 'speed', teleport → its `type`.
   private flag(t: TeamRow) {
     const s = this.teamState(t);
     if (!s.flagged) this.saveTeamState(t, { ...s, flagged: true });

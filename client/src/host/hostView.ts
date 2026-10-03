@@ -400,7 +400,7 @@ export function demoState(now = 1_000_000): HostState {
   const min = 60_000;
   type T = HostState['teams'][number];
   const team = (slot: number, name: string, colour: string, code: string, player: string, online: boolean, seenAgo: number | null, reconnects: number, p: ReturnType<typeof pose> | null, race: Partial<T> = {}, flagged = false): T =>
-    ({ slot, id: `t${slot}`, name, colour, online, code, player, lastSeen: seenAgo === null ? null : now - seenAgo, reconnects, pose: p, flagged, startOrder: null, step: 0, finishAt: null, penaltyMinutes: 0, joinedAt: null, ...race });
+    ({ slot, id: `t${slot}`, name, colour, online, code, player, lastSeen: seenAgo === null ? null : now - seenAgo, reconnects, pose: p, flagged, flagWhy: flagged ? ['speed'] : [], flagAt: flagged ? now - 7 * min : null, startOrder: null, step: 0, finishAt: null, penaltyMinutes: 0, joinedAt: null, ...race });
   const pt = (lat: number, lon: number, r: number, name: string) => ({ ...(({ x, z }) => ({ x, z }))(latLonToWorld(lat, lon)), r, name });
   const s = (id: string, type: 'route_info' | 'detour' | 'challenge' | 'pit_stop', label: string, p: ReturnType<typeof pt>, branches?: ReturnType<typeof pt>[]) =>
     ({ id, type, label, name: p.name, x: p.x, z: p.z, r: p.r, proof: false, ...(branches && { branches: branches.map((b, i) => ({ id: 'AB'[i]!, title: ['Tính', 'Ảnh'][i]!, ...b, proof: i === 1 })) }) });
@@ -471,6 +471,8 @@ export function demoState(now = 1_000_000): HostState {
       { team: 't2', step: 'D1', label: 'Lựa chọn kép', branch: 'B', id: 1, text: '', at: now - 72_000, reference: ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'], note: '', lockMinutes: 3 },
       { team: 't5', step: 'D1', label: 'Lựa chọn kép', branch: 'A', id: 1, text: 'bảy', at: now - 45_000, reference: ['7', 'bảy'], note: '', lockMinutes: 3 },
     ],
+    // Phase 10 (V2): Đội Xanh's «42» on Thử thách 1 was approved 3 s ago: the undo button has 7 s left (track H draws it)
+    undo: [{ team: 't0', step: 'T1', id: 2, op: 'approve', at: now - 3_000, until: now - 3_000 + NET.undoMs }],
   };
 }
 

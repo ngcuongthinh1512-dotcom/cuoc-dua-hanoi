@@ -452,6 +452,9 @@ const NOTHING = 'Đội chưa gửi câu trả lời.';
 export function review(leg: Leg, i: number, row: StepProgressRow, m: HostReview, now: number): { row: StepProgressRow; approve: boolean; id: number | null } | { refuse: string } {
   const s = leg.steps[i]!;
   if (m.op === 'note') return { row: { ...row, host_note: m.note ?? '' }, approve: false, id: null };
+  if (m.op === 'undo') return { refuse: 'Hoàn tác không đi qua review().' }; // Phase 10: the engine handles undo before calling here
+  // TODO(phase10 track S, V5 / plan M8): "Cho qua" = approve without id for EVERY t.kind while active / locked (drop the
+  // `t.kind !== 'free' && t.kind !== 'louvre'` condition below); still refused while an answer is pending.
   if (s.type !== 'challenge' && s.type !== 'detour') return { refuse: 'Bước này không có thử thách để duyệt.' };
   if (row.completed_at != null) return { refuse: HANDLED };
   const t = taskOf(s, row.branch);

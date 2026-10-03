@@ -254,6 +254,9 @@ export interface ZoneMember {
   branch: string | null;
   /** server ms it entered the zone. */
   since: number;
+  /** Phase 10 (V4): server ms it LEFT the zone (walked out / disconnected); absent = it is there now. Sent for up to
+   *  NET.zoneLeftMs after; the client words it "vừa rời đi n phút trước" and drops it itself once expired. */
+  left?: number;
 }
 /** Host table rows (SPEC §8.1 step_progress; Host only). */
 export interface StepProgressView {
@@ -368,16 +371,35 @@ export type RaceOp =
   | { t: 'race'; op: 'credits' };
 
 /** Phase 8 (D5 / D10): the Host decides on a team's answer. approve / penalize name the answer (`id`); approve without
- *  `id` = a photo task approved before the team pressed "Tôi đã gửi bài" (the Host already has the photo); note = save the
- *  step's Host note only. Idempotent: a second decision on the same answer is refused with a host.notice. */
+ *  `id` = a photo task approved before the team pressed "Tôi đã gửi bài" (the Host already has the photo), or Phase 10
+ *  (V5) "Cho qua": any challenge / opened branch while active / locked. note = save the step's Host note only.
+ *  Idempotent: a second decision on the same answer is refused with a host.notice.
+ *  Phase 10 (V2): `undo` takes back a Duyệt / Phạt / Cho qua within NET.undoMs; `id` REQUIRED (codec) = the answer the
+ *  decision was on, as listed in HostState.undo (a Cho qua created that answer). Refused (host.notice) when expired, the
+ *  team finished, moved on / got a newer decision, or the race is over (plan M3). */
 export interface HostReview {
   t: 'host.review';
   team: string;
   step: string;
-  op: 'approve' | 'penalize' | 'note';
+  op: 'approve' | 'penalize' | 'note' | 'undo';
   id?: number;
   /** ≤ NET.noteMax; stored with the decision (never sent to the team). */
   note?: string;
+}
+
+/** Phase 10 (V3): why a team wears the red flag (SPEC §13.9: a mark only, no penalty). */
+export type FlagWhy = 'speed' | 'jump' | 'respawn';
+
+/** Phase 10 (V2): a decision the Host may still undo (HostState.undo; the page draws the button from this, so a reload
+ *  keeps it). `until` = at + NET.undoMs (server ms). */
+export interface UndoItem {
+  team: string;
+  step: string;
+  /** The answer the decision was on (host.review undo names it). */
+  id: number;
+  op: 'approve' | 'penalize';
+  at: number;
+  until: number;
 }
 
 /** Host screen only (Phase 6: minimal Host page; Phase 10: the rest). */
@@ -393,7 +415,9 @@ export type HostMessage =
   | { t: 'host.race'; op: 'start' | 'pause' | 'resume' | 'finish' }
   /** Phase 7: load a bundled leg (`id`) or a leg file the Host picked (`json` text), lobby only; answer: host.legResult. */
   | { t: 'host.leg'; id?: string; json?: string }
-  | HostReview;
+  | HostReview
+  /** Phase 10 (V3): clear a team's red flag (event host.unflag; the server flags again on new evidence, plan M5). */
+  | { t: 'host.flag'; op: 'clear'; team: string };
 
 // ── server → client ──
 export type ServerNotice =
@@ -405,7 +429,9 @@ export type ServerNotice =
   | 'branchChosen' | 'branchSwitched' | 'branchPending' | 'taskNotStarted'
   // Phase 8B (docs/plans/phase8b.md §C): a wrong lock (countdown on the card), a 6th pick after the 40-minute mark, the
   // credits asked before the finish (a right lock = clueNew)
-  | 'lockWrong' | 'pickLimit' | 'creditsLocked';
+  | 'lockWrong' | 'pickLimit' | 'creditsLocked'
+  // Phase 10 (V2): the Host undid its last decision on this team; the `race` view before it restores the card
+  | 'reviewUndone';
 export type KickReason = 'badToken' | 'otherDevice' | 'raceClosed' | 'protocol';
 
 export interface Welcome {
@@ -479,6 +505,9 @@ export interface HostState {
   status: RaceStatus;
   teams: (TeamInfo & {
     code: string; player: string; lastSeen: number | null; reconnects: number; pose: PoseSample | null; flagged: boolean;
+    /** Phase 10 (V3): reasons of the current flag (no repeats; [] when not flagged) and server ms it was first raised
+     *  (null when not flagged). History = the `speed` / `jump` / `respawn` / `host.unflag` events. */
+    flagWhy: FlagWhy[]; flagAt: number | null;
     /** Phase 7: first-entry order, current step index, check-in, penalty (SPEC §17.23: no start time any more). */
     startOrder: number | null; step: number; finishAt: number | null; penaltyMinutes: number;
     /** server ms of the team's first entry into the game. */
@@ -524,6 +553,8 @@ export interface HostState {
   ranking: RankRow[];
   /** Phase 8 (D10): every answer waiting for the Host, oldest first. */
   queue: ReviewItem[];
+  /** Phase 10 (V2): decisions still undoable (≤ NET.undoKept, newest last), gone from the list once past `until`. */
+  undo: UndoItem[];
 }
 
 /** Estimated Cloudflare usage (SPEC §3: the Host debug view shows these). */

@@ -126,8 +126,11 @@ export function isClientMessage(m: unknown, role: 'team' | 'host'): boolean {
           return false;
       }
     case 'host.review':
-      return role === 'host' && str(o.team) && str(o.step, 16) && (o.op === 'approve' || o.op === 'penalize' || o.op === 'note') &&
-        (o.id === undefined || isInt(o.id, 1, 10_000)) && (o.note === undefined || text(o.note, NET.noteMax));
+      // Phase 10 (V2): undo names the answer (`id` required); the rest as before
+      return role === 'host' && str(o.team) && str(o.step, 16) && (o.op === 'approve' || o.op === 'penalize' || o.op === 'note' || o.op === 'undo') &&
+        (o.id === undefined ? o.op !== 'undo' : isInt(o.id, 1, 10_000)) && (o.note === undefined || text(o.note, NET.noteMax));
+    case 'host.flag':
+      return role === 'host' && o.op === 'clear' && str(o.team);
     case 'host.race':
       return role === 'host' && (o.op === 'start' || o.op === 'pause' || o.op === 'resume' || o.op === 'finish');
     case 'host.leg':

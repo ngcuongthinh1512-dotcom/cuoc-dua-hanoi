@@ -510,6 +510,8 @@ function render(s: State) {
       el('td', {}, r.lastSeen),
       el('td', {}, String(r.reconnects)),
       el('td', {}, r.position),
+      // TODO(phase10 track H, plan §4.3): flagText(flagWhy, flagAt, tz) + "Xóa cờ" button → send({t:'host.flag', op:'clear', team});
+      // §3.3: an undo bar (state.undo → "Hoàn tác (còn n s)" → reviewMessage(team, step, 'undo', id, '')) outside the queue <details>
       el('td', { className: 'flag' }, r.flagged ? 'Vượt tốc' : ''),
       el('td', {}, r.pos ? el('button', { className: 'small', title: 'Đặt một xe chung cạnh đội này', onclick: () => send({ t: 'host.bike', op: 'add', x: r.pos!.x + hostPage.addBikeOffset, z: r.pos!.z }) }, 'Thêm xe') : ''),
     ),

@@ -134,7 +134,10 @@ export function penaltyLine(v: RaceView | null, serverNow: number): string | nul
 
 /** "Tại điểm này" lines, oldest arrival first: "Đội Xanh – đang làm Thử thách 2". */
 export function zoneLines(members: readonly ZoneMember[], teams: readonly TeamInfo[]): string[] {
-  return [...members]
+  // TODO(phase10 track C, plan §5.3): members with `left` → "… – vừa rời đi n phút trước (đang làm …)" after the present
+  // ones, dropped once now − left > NET.zoneLeftMs (RaceHud redraws when the minute changes). Until then they are hidden,
+  // so a server that already sends them never shows a gone team as "đang làm".
+  return members.filter((m) => m.left === undefined)
     .sort((a, b) => a.since - b.since)
     .map((m) => `${teams.find((t) => t.slot === m.slot)?.name ?? `Đội ${m.slot}`} – đang làm ${m.label}`);
 }

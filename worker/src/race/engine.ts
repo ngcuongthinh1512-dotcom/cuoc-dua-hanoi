@@ -114,6 +114,9 @@ export class RaceEngine {
   private readonly rows = new Map<string, Map<string, StepProgressRow>>();
   /** D21: the place (Zone.rack) each team stands in now + since when; the zone list last sent to it. Memory only. */
   private readonly where = new Map<string, { key: string; since: number }>();
+  // TODO(phase10 track S, plan §5.2): `gone` = rack key → teams that left it {team, slot, label, type, branch, since, left,
+  // stepIdx}; filled by moveZone (key changed) and left() (disconnect), cleared when the team re-enters; refreshZones
+  // appends those within NET.zoneLeftMs with stepIdx ≤ the viewer's step as ZoneMember {…, left}. Memory only, 0 rows.
   private readonly sentZone = new Map<string, string>();
 
   constructor(readonly io: RaceIO) {
@@ -238,6 +241,11 @@ export class RaceEngine {
     if (m.t === 'host.review') {
       // Phase 8 (D5, D10, D24): any status but finished (paused too); idempotent (a second decision is refused, nothing written)
       if (this.statusV === 'finished') return notice('error', 'Cuộc đua đã kết thúc.');
+      // TODO(phase10 track S, plan §3.2): this.undo(m.team, m.step, m.id!, now): find the UndoRec (memory + meta 'undo'),
+      // refuse past NET.undoMs / finished team / moved on / not the newest decision (M3), else one transaction restoring
+      // the saved rows (write back or DELETE) + teams.state + event host.undo; then race view + notice reviewUndone + box
+      // hide of the next step + refreshZones. review() below must never see 'undo' (it would read it as a Phạt).
+      if (m.op === 'undo') return notice('warning', 'Hoàn tác chưa được hỗ trợ (Phase 10 đang làm).');
       const r = this.io.team(m.team);
       if (!r) return notice('error', 'Không có đội này.');
       const i = this.legV.steps.findIndex((s) => s.id === m.step);
@@ -252,6 +260,8 @@ export class RaceEngine {
         ? advance(this.legV, this.zones, this.progress(m.team, r), { kind: 'approve', step: m.step, pose: stand(this.io.pose(m.team)) }, now, this.statusV === 'running')
         : { p: this.progress(m.team, r), effects: [] };
       this.apply(m.team, r, p, [decision, ...effects], now);
+      // TODO(phase10 track S, plan §3.2): snapshot TeamRace + the team's rows BEFORE apply(), diff after → UndoRec pushed
+      // to this.undoV (≤ NET.undoKept, within NET.undoMs) + meta('undo') (1 row); not for op 'note'.
       // N4 "Duyệt" over a "Phạt": the Host's own fix, or a second Host whose screen was a second old (review R-11)
       if (m.op === 'approve' && parseAnswers(row).find((a) => a.id === res.id)?.s === 'penalized') notice('warning', OVERRULED);
       return;
@@ -323,8 +333,8 @@ export class RaceEngine {
     if (w) this.refreshZones(new Set([w.key]), now);
   }
 
-  /** host.state parts: leg summary, step_progress, ranking, review queue. */
-  hostView(now: number): Pick<HostState, 'leg' | 'progress' | 'ranking' | 'queue'> {
+  /** host.state parts: leg summary, step_progress, ranking, review queue, undoable decisions. */
+  hostView(now: number): Pick<HostState, 'leg' | 'progress' | 'ranking' | 'queue' | 'undo'> {
     const leg = this.legV;
     const s0 = latLonToWorld(leg.start.lat, leg.start.lon);
     const progress: StepProgressView[] = [];
@@ -378,6 +388,8 @@ export class RaceEngine {
       progress,
       ranking: ranking(ranks),
       queue,
+      // TODO(phase10 track S, plan §3.2): this.undoV.filter((u) => now - u.at <= NET.undoMs).map(({team, step, id, op, at}) => ({…, until: at + NET.undoMs}))
+      undo: [],
     };
   }
 

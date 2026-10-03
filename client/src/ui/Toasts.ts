@@ -44,6 +44,8 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   lockWrong: 'Chưa đúng! Bị phạt – lựa chọn vẫn giữ, bấm / bỏ được, chốt lại khi hết đếm ngược',
   pickLimit: 'Chỉ được chọn tối đa 5 tác phẩm – bỏ một tác phẩm trước',
   creditsLocked: 'Bảng Ghi nguồn mở sau khi về đích',
+  // Phase 10 (V2, docs/plans/phase10.md §3.1): the Host undid its Duyệt / Phạt within 10 s
+  reviewUndone: 'Host đã rút lại quyết định vừa rồi. Thẻ mật thư trở lại như trước.',
 };
 
 export interface Toast {
