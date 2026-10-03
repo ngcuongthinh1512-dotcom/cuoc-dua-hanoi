@@ -216,6 +216,26 @@ describe('review (D5, D10)', () => {
     expect([z.locked_until, taskState(zero, 1, z, 2000)]).toEqual([null, 'active']);
   });
 
+  it('SPEC §17.31 scoreOf: a Phạt keeps the Host\'s count; the team sees "đúng x/n" only from scoreFromMinutes on; out of range / Duyệt = none', () => {
+    const scored = variant((s) => ((s[1].task.scoreOf = 4), (s[1].task.scoreFromMinutes = 30)));
+    const pm = (score?: number) => ({ ...m('penalize', 1), ...(score !== undefined ? { score } : {}) });
+    const started = T1({ task_started_at: 1000, answers: recs(pend(1, 2000)) });
+    const early = ok(review(scored, 1, started, pm(2), 1000 + 10 * MIN)); // minute 10: stored, not shown
+    expect(early.answers[0]).toMatchObject({ s: 'penalized', sc: 2 });
+    expect(early.answers[0]!.sv).toBeUndefined();
+    expect(cardOf(scored, 1, early.row, 1000 + 11 * MIN).answers[0]).toEqual({ id: 1, text: 'x', at: 2000, status: 'penalized' });
+    const late = ok(review(scored, 1, started, pm(2), 1000 + 30 * MIN)); // minute 30: shown
+    expect(late.answers[0]).toMatchObject({ sc: 2, sv: true });
+    expect(cardOf(scored, 1, late.row, 1000 + 31 * MIN).answers[0]).toMatchObject({ status: 'penalized', score: 2, of: 4 });
+    expect(ok(review(scored, 1, started, pm(5), 1000 + 30 * MIN)).answers[0]!.sc).toBeUndefined(); // 5/4: ignored
+    expect(ok(review(scored, 1, started, pm(), 1000 + 30 * MIN)).answers[0]!.sc).toBeUndefined(); // blank box
+    expect(ok(review(mini, 1, started, pm(2), 1000 + 30 * MIN)).answers[0]!.sc).toBeUndefined(); // the task has no scoreOf
+    // N4: Duyệt over that Phạt drops the count
+    const fixed = ok(review(scored, 1, late.row, m('approve', 1), 1000 + 32 * MIN));
+    expect(fixed.answers[0]).toMatchObject({ s: 'approved' });
+    expect([fixed.answers[0]!.sc, fixed.answers[0]!.sv]).toEqual([undefined, undefined]);
+  });
+
   it('refusals in Vietnamese: a decided answer, a wrong id, nothing sent, a done step (idempotent: a double click)', () => {
     const decided = recs({ ...pend(1), s: 'approved', d: 5 });
     expect(review(mini, 1, T1({ answers: decided }), m('approve', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });

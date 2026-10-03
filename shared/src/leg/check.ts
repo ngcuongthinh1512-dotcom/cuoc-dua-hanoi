@@ -42,7 +42,7 @@ const FIELD: Record<string, string> = {
   spreadMeters: 'khoảng rải đội (m)',
   // Phase 8 (docs/plans/phase8.md D2)
   referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
-  hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
+  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
   walkOnlyViolationMinutes: 'phút phạt đi xe ở lộ trình đi bộ', quitTaskMinutes: 'phút phạt bỏ thử thách',
   // Phase 8B (docs/plans/phase8b.md §B)
   louvre: 'phòng Louvre', artworks: 'tác phẩm', image: 'hình tác phẩm', note: 'ghi chú (chỉ Host)', credit: 'ghi nguồn',

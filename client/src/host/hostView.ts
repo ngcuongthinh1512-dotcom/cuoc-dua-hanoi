@@ -2,7 +2,7 @@
 // testable in Node. Phase 10 replaces the page with SPEC §13; keep the page thin.
 import { LOUVRE } from '@race/shared';
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import { MEDIA, NET, submitCode, type AnswerStatus, type FlagWhy, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type StepProgressView, type UndoItem } from '@race/shared/protocol';
+import { MEDIA, NET, submitCode, type AnswerStatus, type FlagWhy, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type ReviewItem, type StepProgressView, type UndoItem } from '@race/shared/protocol';
 
 /** Durable Object requests as Cloudflare bills them (same formula as worker/src/counters.ts, docs/plans/phase6.md §3.7). */
 export const billableRequests = (c: QuotaCounters) => c.http + c.alarms + Math.ceil(c.wsIn / 20);
@@ -299,9 +299,17 @@ export function progressTable(state: HostState, now: number): { head: { label: s
 // ── Phase 8 (docs/plans/phase8.md D10, D11, D14, D16, track E): review queue, stuck alerts, R2 images ──
 
 /** host.review of a cell / queue button. `note` '' = none (op 'note' sends '' to clear the Host note); never longer than NET.noteMax. */
-export function reviewMessage(team: string, step: string, op: HostReview['op'], id: number | undefined, note: string): HostReview {
+export function reviewMessage(team: string, step: string, op: HostReview['op'], id: number | undefined, note: string, score?: number): HostReview {
   const n = note.trim().slice(0, NET.noteMax);
-  return { t: 'host.review', team, step, op, ...(id !== undefined ? { id } : {}), ...(op === 'note' || n ? { note: n } : {}) };
+  return { t: 'host.review', team, step, op, ...(id !== undefined ? { id } : {}), ...(op === 'note' || n ? { note: n } : {}), ...(op === 'penalize' && score !== undefined ? { score } : {}) };
+}
+
+/** SPEC §17.31: the "Đúng ?/n" box next to Phạt: `scoreOf` = n (undefined = no box), `scoreHint` = whether the team would be told
+ *  the number now ("đội sẽ thấy số" / "đội chưa thấy số: còn n phút"). */
+export function scoreBox(q: Pick<ReviewItem, 'scoreOf' | 'scoreFrom'>, now: number): { scoreOf: number; scoreHint: string } | undefined {
+  if (!q.scoreOf) return undefined;
+  const left = (q.scoreFrom ?? 0) - now;
+  return { scoreOf: q.scoreOf, scoreHint: left <= 0 ? 'đội sẽ thấy số' : `đội chưa thấy số: còn ${Math.ceil(left / 60_000)} phút` };
 }
 
 export interface QueueRow {
@@ -324,6 +332,8 @@ export interface QueueRow {
   reference: string[];
   note: string;
   lockMinutes: number;
+  /** SPEC §17.31: task.scoreOf → the "Đúng ?/n" box next to Phạt. */
+  score?: { scoreOf: number; scoreHint: string };
 }
 /** The review queue ("Chờ duyệt"), oldest answer first. `now` = the server's clock estimated at drawing. */
 export function queueRows(state: HostState, now: number): QueueRow[] {
@@ -331,7 +341,7 @@ export function queueRows(state: HostState, now: number): QueueRow[] {
   return [...state.queue].sort((a, b) => a.at - b.at).map((q) => {
     const t = teams.get(q.team);
     const name = t?.name ?? q.team;
-    return { key: `${q.team}|${q.step}|${q.id}`, team: q.team, name, colour: t?.colour ?? '#8d99b0', step: q.step, label: q.label, branch: q.branch, branchName: q.branch ? branchTag(state, q.step, q.branch) : '', id: q.id, code: submitCode(name, q.step, q.branch), text: q.text, waiting: fmtMinSec(now - q.at), reference: q.reference, note: q.note, lockMinutes: q.lockMinutes };
+    return { key: `${q.team}|${q.step}|${q.id}`, team: q.team, name, colour: t?.colour ?? '#8d99b0', step: q.step, label: q.label, branch: q.branch, branchName: q.branch ? branchTag(state, q.step, q.branch) : '', id: q.id, code: submitCode(name, q.step, q.branch), text: q.text, waiting: fmtMinSec(now - q.at), reference: q.reference, note: q.note, lockMinutes: q.lockMinutes, ...(q.scoreOf ? { score: scoreBox(q, now) } : {}) };
   });
 }
 /** The queue only rebuilds (so a note box keeps its focus) when this changes: who, which step, which answer, when. */

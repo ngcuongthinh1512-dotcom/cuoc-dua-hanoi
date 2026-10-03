@@ -106,6 +106,10 @@ export function toast(text: string): void {
 export const lockWrongText = (minutes: number | undefined): string =>
   minutes ? `Chưa đúng! Bị phạt ${fmtMin(minutes)} phút – lựa chọn vẫn giữ, bấm / bỏ được, chốt lại khi hết đếm ngược` : NOTICES.lockWrong;
 
+/** SPEC §17.31: `penalized` with the Host's count ("đúng 2/4") when the server sent one; else the fixed text. */
+export const penalizedText = (score: number | undefined, of: number | undefined): string =>
+  score !== undefined && of ? `Host chưa duyệt: đúng ${score}/${of}. Chờ hết đếm ngược rồi trả lời lại` : NOTICES.penalized;
+
 /** A fixed game message (its Vietnamese text lives here). */
 export function notice(code: NoticeCode): void {
   toast(NOTICES[code]);

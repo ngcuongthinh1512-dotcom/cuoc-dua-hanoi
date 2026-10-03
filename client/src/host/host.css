@@ -63,6 +63,8 @@ button.ok { background: #2c9a4a; }
 .review .ref { color: #ffd9a0; margin-bottom: 4px; }
 .review textarea { flex: 1 1 16em; min-height: 0; width: auto; height: 2.2em; resize: vertical; }
 .review button { padding: 6px 12px; }
+.review input.score { width: 3.2em; padding: 4px; text-align: center; }
+.review .score-hint { color: #9aa6bd; }
 code.code { font-size: 14px; letter-spacing: 0.02em; }
 td.pending { background: #6b3c0c; color: #ffd9a0; }
 td.locked { background: #3e2a6b; color: #d6c4ff; }

@@ -35,7 +35,7 @@ import { netDownText } from './ui/Login.ts';
 import { MapTiles } from './ui/MapTiles.ts';
 import { Menu } from './ui/Menu.ts';
 import { Minimap } from './ui/Minimap.ts';
-import { lockWrongText, notice, toast } from './ui/Toasts.ts';
+import { lockWrongText, notice, penalizedText, toast } from './ui/Toasts.ts';
 import { type HudFrame, NO_GPS } from './ui/types.ts';
 import { loadBikeAsset } from './vehicle/BikeModel.ts';
 import { groundAt } from './vehicle/Bikes.ts';
@@ -374,6 +374,7 @@ async function start() {
         else if (m.t === 'notice') {
           // Phase 8B: the wrong lock's minutes from the card (0.1 in a test leg: never "3")
           if (m.code === 'lockWrong') toast(lockWrongText(race?.view?.card?.retryPenaltyMinutes));
+          else if (m.code === 'penalized') toast(penalizedText(m.score, m.of)); // SPEC §17.31
           else notice(m.code);
           if (m.code === 'approved' || m.code === 'penalized') reviewSound(m.code === 'approved'); // SPEC §8.9 (6)
           if (m.code === 'lockWrong' || (m.code === 'clueNew' && room?.active)) reviewSound(m.code === 'clueNew'); // Phase 8B: the lock's verdict

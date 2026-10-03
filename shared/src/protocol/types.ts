@@ -99,6 +99,9 @@ export interface AnswerView {
   /** Phase 8B: a louvre lock, how many of the picked artworks were right — ONLY for a lock made at or after the team's
    *  correctAtMinutes mark (before it the team only learns "wrong"). */
   correct?: number;
+  /** SPEC §17.31: a Phạt with the Host's count "đúng score/of" — only when made ≥ task.scoreFromMinutes into the task. */
+  score?: number;
+  of?: number;
 }
 
 // ── Phase 8B: the Louvre room (SPEC §17.19, docs/plans/phase8b.md §C) ──
@@ -313,6 +316,9 @@ export interface ReviewItem {
   note: string;
   /** Minutes the "Phạt" button locks (task.retryLockMinutes ?? penalties.retryLockMinutes). */
   lockMinutes: number;
+  /** SPEC §17.31: task.scoreOf (the Host enters "đúng ?/n" with its Phạt) + the server ms from which the team is told the number. */
+  scoreOf?: number;
+  scoreFrom?: number;
 }
 
 /** Phase 8 (SPEC §8.9 (2), docs/plans/phase8.md §12 q16): the code a team pastes with its photo on Messenger and the Host
@@ -385,6 +391,8 @@ export interface HostReview {
   id?: number;
   /** ≤ NET.noteMax; stored with the decision (never sent to the team). */
   note?: string;
+  /** SPEC §17.31: penalize on a task with scoreOf — how many were right (0..scoreOf; else ignored). */
+  score?: number;
 }
 
 /** Phase 10 (V3): why a team wears the red flag (SPEC §13.9: a mark only, no penalty). */
@@ -474,7 +482,7 @@ export type ServerMessage =
   /** reason 'finished': the team checked in or the race is over (a spectator, SPEC §8.6 / §8.10). */
   | { t: 'bike'; op: 'claim'; id: string; ok: boolean; reason?: 'taken' | 'far' | 'walkOnly' | 'finished' | 'gone' | 'broken' }
   | { t: 'gesture'; slot: number; g: GestureKind }
-  | { t: 'notice'; code: ServerNotice }
+  | { t: 'notice'; code: ServerNotice; /** SPEC §17.31: `penalized` with the Host's count, once past scoreFromMinutes. */ score?: number; of?: number }
   /** Per-team channel (SPEC §17.10): the current box's position when the team comes within boxReveal.radius, taken
    *  away again beyond radius + hysteresis. Opened boxes are never hidden. */
   | { t: 'box'; op: 'reveal'; box: BoxInfo }

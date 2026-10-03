@@ -276,7 +276,7 @@ export function answerLines(card: ClueCard): AnswerLine[] {
     .reverse()
     .map((a) => {
       const base = a.status === 'penalized' && pen ? `Bị phạt ${fmtMin(pen)} phút` : lv && a.status === 'wrong' && pen ? `Chưa đúng · phạt ${fmtMin(pen)} phút` : ANSWER_LABEL[a.status];
-      return { time: formatTimeOfDay(a.at), text: a.text === '' ? 'đã gửi bài' : lv ? a.text : `«${a.text}»`, status: a.status, label: lv && a.correct != null ? `${base} · đúng ${a.correct}/${louvreOf(lv)}` : base };
+      return { time: formatTimeOfDay(a.at), text: a.text === '' ? 'đã gửi bài' : lv ? a.text : `«${a.text}»`, status: a.status, label: lv && a.correct != null ? `${base} · đúng ${a.correct}/${louvreOf(lv)}` : a.score != null && a.of ? `${base} · đúng ${a.score}/${a.of}` : base }; // SPEC §17.31: the Host's count of a Phạt (only when the server sent it)
     });
 }
 

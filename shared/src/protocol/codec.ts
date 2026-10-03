@@ -128,7 +128,7 @@ export function isClientMessage(m: unknown, role: 'team' | 'host'): boolean {
     case 'host.review':
       // Phase 10 (V2): undo names the answer (`id` required); the rest as before
       return role === 'host' && str(o.team) && str(o.step, 16) && (o.op === 'approve' || o.op === 'penalize' || o.op === 'note' || o.op === 'undo') &&
-        (o.id === undefined ? o.op !== 'undo' : isInt(o.id, 1, 10_000)) && (o.note === undefined || text(o.note, NET.noteMax));
+        (o.id === undefined ? o.op !== 'undo' : isInt(o.id, 1, 10_000)) && (o.note === undefined || text(o.note, NET.noteMax)) && (o.score === undefined || isInt(o.score, 0, 1000));
     case 'host.flag':
       return role === 'host' && o.op === 'clear' && str(o.team);
     case 'host.race':

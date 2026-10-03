@@ -111,6 +111,10 @@ export const taskSchema = z.strictObject({
   /** Phase 8 (gap 3): minutes a team waits after the Host's "Phạt" before answering again; null = penalties.retryLockMinutes,
    *  0 = no wait. */
   retryLockMinutes: z.number().min(0).nullable().default(null),
+  /** T1 (SPEC §17.31): the Host enters how many of `scoreOf` parts were right when it clicks "Phạt"; the team learns
+   *  "đúng x/n" only for a Phạt made ≥ scoreFromMinutes after the task started (earlier ones never show a number). */
+  scoreOf: z.number().int().min(1).optional(),
+  scoreFromMinutes: z.number().min(0).default(30),
   proofInstruction: text().default(''),
   timeLimitMinutes: z.number().positive().nullable().default(null),
   /** Mini-game parameters of kinds other than answer / free (object positions, target photo + heading, gates…: SPEC

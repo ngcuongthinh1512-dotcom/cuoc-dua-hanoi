@@ -179,6 +179,7 @@ Xong (báo cáo `docs/reports/phase11.md`): `sim --full` (Host bot Hoàn tác / 
 - Sau lần deploy đầu: đo số request / dòng ghi SQLite thực tế trên Cloudflare (Dashboard Metrics + mục "Hạn mức Cloudflare (ước tính)" trên trang Host) so với ngân sách ở SPEC §3 (Phase 11 đã đo bằng bot trong máy: `docs/reports/phase11.md`); ghi vào đây.
 
 ## Khác
+- T1 "đúng x/4" (SPEC §17.31): dòng "đội chưa thấy số: còn n phút" cạnh ô nhập chỉ vẽ lại khi hàng chờ đổi (không tự đếm từng phút); nút Phạt trong ô ma trận step_progress không có ô nhập số (chỉ hàng chờ duyệt có).
 - npm 11 cảnh báo `allowScripts` cho script cài đặt của `esbuild`, `workerd`, `fsevents`. Hiện vẫn chạy được vì binary lấy từ optional dependency; nếu bản npm sau chặn hẳn thì duyệt bằng `npm install-scripts approve`.
 
 ## Hoãn (người dùng, 2026-10-03; SPEC §17.18)

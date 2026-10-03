@@ -97,6 +97,9 @@ export interface AnswerRec {
   n?: string;
   /** Phase 8B: a louvre lock, right ones among the picks (the card shows it only for locks past correctAtMinutes). */
   c?: number;
+  /** SPEC §17.31: a Phạt's "đúng sc/scoreOf" as the Host entered it; sv = told to the team (Phạt ≥ scoreFromMinutes into the task). */
+  sc?: number;
+  sv?: true;
 }
 
 /** step_progress.picks → artwork ids ([] for '' / a broken value). */

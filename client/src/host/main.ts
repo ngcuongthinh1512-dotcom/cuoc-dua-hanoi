@@ -431,9 +431,16 @@ function drawQueue(s: State, now: number): number {
       const wait = el('b', {}, r.waiting);
       queueWaits.set(r.key, wait);
       const group: HTMLButtonElement[] = [];
+      // SPEC §17.31: "Đúng ?/n" typed before Phạt (blank = no number); the team is told it only from scoreFromMinutes on
+      const score = r.score ? el('input', { type: 'number', min: 0, max: r.score.scoreOf, step: 1, className: 'score', placeholder: '?', title: `Số phần đội làm đúng (0–${r.score.scoreOf}), gửi kèm Phạt; để trống = không báo số` }) : undefined;
+      const scoreOf = (): number | undefined => {
+        const v = score?.value.trim() ?? '';
+        const n = Number(v);
+        return v !== '' && Number.isInteger(n) && n >= 0 && n <= (r.score?.scoreOf ?? 0) ? n : undefined;
+      };
       const btn = (label: string, className: string, op: 'approve' | 'penalize' | 'note') => {
         const b = el('button', { className, onclick: () => {
-          fire(reviewMessage(r.team, r.step, op, op === 'note' ? undefined : r.id, note.value), group);
+          fire(reviewMessage(r.team, r.step, op, op === 'note' ? undefined : r.id, note.value, op === 'penalize' ? scoreOf() : undefined), group);
           if (op !== 'note') noteDrafts.delete(r.key); // the answer leaves the queue; the note went with the decision
         } }, label);
         group.push(b);
@@ -445,7 +452,9 @@ function drawQueue(s: State, now: number): number {
           el('code', { className: 'code' }, r.code), el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(r.code) }, 'Sao chép'), ' · chờ ', wait),
         el('div', { className: 'answer' }, r.text ? `«${r.text}»` : 'Đội báo đã gửi bài qua Messenger (đối chiếu ảnh với mã trên).'),
         r.reference.length ? el('div', { className: 'ref' }, el('b', {}, 'Đáp án tham khảo: '), r.reference.join(' | ')) : '',
-        el('div', { className: 'row' }, note, btn('Duyệt', 'ok', 'approve'), btn(`Phạt ${String(r.lockMinutes).replace('.', ',')} phút`, 'danger', 'penalize'), btn('Lưu ghi chú', 'small', 'note')),
+        el('div', { className: 'row' }, note, btn('Duyệt', 'ok', 'approve'), btn(`Phạt ${String(r.lockMinutes).replace('.', ',')} phút`, 'danger', 'penalize'),
+          ...(score && r.score ? [el('label', { className: 'score-box', title: r.score.scoreHint }, 'Đúng ', score, `/${r.score.scoreOf}`), el('small', { className: 'score-hint' }, r.score.scoreHint)] : []),
+          btn('Lưu ghi chú', 'small', 'note')),
       );
     }));
   });

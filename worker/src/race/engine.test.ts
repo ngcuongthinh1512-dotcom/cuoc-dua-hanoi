@@ -153,7 +153,7 @@ describe('RaceEngine', () => {
     f.sent.length = 0;
     f.txs.length = 0;
     const host: ServerMessage[] = [];
-    const review = (team: string, step: string, op: HostReview['op'], now: number, more: { id?: number; note?: string } = {}) => e.onHost({ t: 'host.review', team, step, op, ...more }, (m) => host.push(m), now);
+    const review = (team: string, step: string, op: HostReview['op'], now: number, more: { id?: number; note?: string; score?: number } = {}) => e.onHost({ t: 'host.review', team, step, op, ...more }, (m) => host.push(m), now);
     const op = (team: string, m: RaceOp, now: number, pose: PoseSample | null = null) => e.onOp(team, m, pose, now);
     const to = (team: string) => f.sent.filter(([t]) => t === team).map(([, m]) => m);
     const card = (team: string) => (to(team).filter((m) => (m as { t: string }).t === 'race').at(-1) as { view: RaceView } | undefined)?.view.card;
@@ -497,6 +497,24 @@ describe('RaceEngine', () => {
     return r;
   };
   const undoLog = (f: ReturnType<typeof fake>) => f.log.filter((l) => !l.startsWith('send'));
+
+  it('SPEC §17.31 scoreOf: the Phạt notice + card carry "đúng x/4" only from scoreFromMinutes on; an undo removes it', () => {
+    const scored = JSON.parse(JSON.stringify(mini)) as { steps: { task: object }[] };
+    Object.assign(scored.steps[1]!.task, { scoreOf: 4, scoreFromMinutes: 30 });
+    const MIN = 60_000;
+    const { review, op, to, card, e } = pendingT1(scored); // task started at 5, answer 1 at 10
+    review('t0', 'T1', 'penalize', 10 * MIN, { id: 1, score: 2 }); // minute 10: no number for the team
+    expect(to('t0').at(-2)).toEqual({ t: 'notice', code: 'penalized' });
+    expect(card('t0')!.answers).toEqual([{ id: 1, text: '42', at: 10, status: 'pending' }].map((a) => ({ ...a, status: 'penalized' })));
+    op('t0', { t: 'race', op: 'answer', step: 'T1', text: '43' }, 14 * MIN); // the 3-minute lock is over
+    expect(e.hostView(14 * MIN).queue[0]).toMatchObject({ id: 2, scoreOf: 4, scoreFrom: 5 + 30 * MIN });
+    review('t0', 'T1', 'penalize', 31 * MIN, { id: 2, score: 3 }); // past minute 30: the number goes out
+    expect(to('t0').at(-2)).toEqual({ t: 'notice', code: 'penalized', score: 3, of: 4 });
+    expect(card('t0')!.answers.at(-1)).toMatchObject({ id: 2, status: 'penalized', score: 3, of: 4 });
+    review('t0', 'T1', 'undo', 31 * MIN + 5000, { id: 2 });
+    expect(card('t0')!.answers.at(-1)).toEqual({ id: 2, text: '43', at: 14 * MIN, status: 'pending' });
+    expect(JSON.stringify(to('t0'))).not.toContain('"score":2'); // the early count never reaches the team
+  });
 
   it('undo (V2): a Duyệt undone in NET.undoMs — rows back (the next step\'s deleted), race fields, host.undo + meta in ONE transaction, then the team hears; queue again', () => {
     const { f, e, host, review, to, card } = pendingT1();

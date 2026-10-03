@@ -81,7 +81,7 @@ Các nhiệm vụ gõ chữ hoặc gửi ảnh do **Host xem bài của đội b
 1. Gõ câu trả lời vào ô trên thẻ rồi bấm `Enter`.
 2. Màn hình hiện **"Đang chờ Host duyệt"** kèm đồng hồ đếm lên.
 3. Host bấm **Duyệt**: có âm báo, thông báo *"Host đã duyệt! Mật thư mới đã vào Sổ mật thư."* và bạn nhận **ngay** mật thư tiếp theo.
-4. Host bấm **Phạt**: có âm báo, và giữa màn hình hiện **đồng hồ đếm ngược** *"Phạt: còn mm:ss trước khi trả lời lại"* (mặc định **3 phút**, đếm ngược chạy cả khi Host tạm dừng). Hết đếm ngược thì gõ lại được, **không giới hạn số lần**. Bạn chỉ thấy đếm ngược, không thấy lý do.
+4. Host bấm **Phạt**: có âm báo, và giữa màn hình hiện **đồng hồ đếm ngược** *"Phạt: còn mm:ss trước khi trả lời lại"* (mặc định **3 phút**, đếm ngược chạy cả khi Host tạm dừng). Hết đếm ngược thì gõ lại được, **không giới hạn số lần**. Bạn chỉ thấy đếm ngược, không thấy lý do — trừ một số thử thách gồm nhiều phần (ví dụ 4 địa điểm): **từ phút 30 của thử thách**, khi bị Phạt bạn được báo *"đúng x/n"* (trước phút 30 chỉ báo bị phạt).
 5. Thời gian **vẫn trôi** trong lúc chờ duyệt và đếm ngược.
 6. Host bấm nhầm thì rút lại được trong 10 giây; khi đó thẻ mật thư trở lại như trước và bạn nhận thông báo.
 

@@ -31,7 +31,7 @@ const TIMES = [['arrivedAt', 'arrived_at', 'Tới điểm'], ['openedAt', 'clue_
 export const STEP_COLS: Col[] = [
   ['team', 'Đội (id)'], ['teamName', 'Tên đội'], ['step', 'Mã bước'], ['label', 'Tên bước'], ['type', 'Loại bước'], ['branch', 'Nhánh'],
   ...TIMES.flatMap(([k, , h]) => at(k, h, true)),
-  ['wrongAnswers', 'Số lần sai'], ['rejections', 'Số lần bị phạt'], ['lockedSeconds', 'Số giây bị khóa'], ['branchSwitches', 'Số lần đổi nhánh'], ['approvalWaitSeconds', 'Giây chờ Host duyệt'],
+  ['wrongAnswers', 'Số lần sai'], ['rejections', 'Số lần bị phạt'], ['lockedSeconds', 'Số giây bị khóa'], ['branchSwitches', 'Số lần đổi nhánh'], ['approvalWaitSeconds', 'Giây chờ Host duyệt'], ['penaltyScores', 'Số đúng mỗi lần phạt'],
 ];
 export const TEAM_COLS: Col[] = [['team', 'Đội (id)'], ['name', 'Tên đội'], ['startOrder', 'Thứ tự vào game'], ...at('joinedAt', 'Vào game lần đầu'), ['rank', 'Hạng về đích'], ...at('finishAt', 'Về đích'), ['out', 'Bị loại'], ['finalRank', 'Hạng cuối (kể cả bị loại)']];
 export const EVENT_COLS: Col[] = [['id', 'STT'], ...at('t', 'Thời điểm'), ['type', 'Loại'], ['team', 'Đội (id)'], ['teamName', 'Tên đội'], ['step', 'Bước'], ['data', 'Dữ liệu (JSON)']];
@@ -73,6 +73,8 @@ export function exportRace(leg: Leg, teams: ExportTeam[], rows: StepProgressRow[
         ...Object.assign({}, ...TIMES.map(([k, c]) => stamp(k, row[c], prev))),
         wrongAnswers: row.wrong_answers, rejections: row.rejections, lockedSeconds: locked(t.id, i, row), branchSwitches: row.branch_switches,
         approvalWaitSeconds: Math.round(row.approval_wait_seconds),
+        // SPEC §17.31: the Host's "đúng x/n" of each Phạt in order ("2/4;3/4"), '' = none; (*) = the team was not told
+        penaltyScores: parseAnswers(row).flatMap((a) => (a.s === 'penalized' && a.sc !== undefined ? [`${a.sc}/${taskOf(s, a.b)?.scoreOf ?? '?'}${a.sv ? '' : '*'}`] : [])).join(';'),
       }];
     });
   });

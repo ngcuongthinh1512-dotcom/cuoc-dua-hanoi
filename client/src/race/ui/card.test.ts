@@ -90,6 +90,8 @@ describe('answer history', () => {
     expect(one(10)).toBe('Bị phạt 10 phút');
     expect(one(0)).toBe('Bị phạt'); // task.retryLockMinutes: 0 = no countdown
     expect(one(undefined)).toBe('Bị phạt');
+    // SPEC §17.31: the Host's count rides on the server's answer (only when it chose to send it)
+    expect(answerLines(challenge({ answers: [{ ...ans(1, 'penalized'), score: 2, of: 4 }] }))[0]!.label).toBe('Bị phạt 3 phút · đúng 2/4');
   });
   it('at most NET.answerHistory lines; "đã gửi bài" for a photo answer', () => {
     const many = Array.from({ length: NET.answerHistory + 5 }, (_, i) => ans(i + 1, 'wrong'));

@@ -10,7 +10,7 @@ import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { ranking } from './ranking.ts';
-import { advance, boxesOf, cardOf, creditsOf, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
+import { advance, boxesOf, cardOf, creditsOf, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
 
 /** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
  *  `auto` answers a minute for hours would grow one row and every host.state); raise it if a Host needs the whole log. */
@@ -402,6 +402,7 @@ export class RaceEngine {
         queue.push({
           team: id, step: row.step, label: leg.steps[i]!.label, branch: a.b, id: a.id, text: a.text, at: a.at,
           reference: t.referenceAnswers.length ? t.referenceAnswers : t.answers, note: row.host_note, lockMinutes: retryLockMinutes(leg, t),
+          ...(t.scoreOf ? { scoreOf: t.scoreOf, scoreFrom: scoreFrom(t, row) ?? a.at } : {}), // SPEC §17.31
         });
       }
     queue.sort((a, b) => a.at - b.at);
@@ -563,7 +564,13 @@ export class RaceEngine {
       } else if (e.kind === 'review') {
         Object.assign(edit(e.step), e.row);
         events.push(['review', { step: sid(e.step), op: e.op, id: e.id, by: 'host' }]);
-        if (e.op !== 'note') notice(e.op === 'approve' ? 'approved' : 'penalized');
+        if (e.op === 'approve') notice('approved');
+        else if (e.op === 'penalize') {
+          // SPEC §17.31: the Phạt's "đúng x/n" rides on the notice (the toast) when the team may see it
+          const s = steps[e.step]!;
+          const a = parseAnswers(e.row).find((x) => x.id === e.id);
+          out.push({ t: 'notice', code: 'penalized', ...(a ? scoreOf(a, taskOf(s, e.row.branch)?.scoreOf) : {}) });
+        }
       } else if (e.kind === 'branch') {
         edit(e.step).branch = e.branch;
         events.push(['branch', { step: sid(e.step), branch: e.branch }]);

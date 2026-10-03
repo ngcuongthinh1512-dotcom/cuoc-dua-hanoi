@@ -361,8 +361,15 @@ export const retryLockMinutes = (leg: Leg, t: Task) => t.retryLockMinutes ?? leg
 
 /** The team's own answers on its card: this branch only (null = a challenge), newest NET.answerHistory, never a note.
  *  Phase 8B: a louvre lock's right count (`c`) only for a lock at or after `correctFrom` (hintAt[1]). */
-const answerViews = (row: StepProgressRow | undefined, branch: string | null, correctFrom = Infinity): AnswerView[] =>
-  parseAnswers(row).filter((a) => a.b === branch).slice(-NET.answerHistory).map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, ...(a.c !== undefined && a.at >= correctFrom ? { correct: a.c } : {}) }));
+const answerViews = (row: StepProgressRow | undefined, branch: string | null, correctFrom = Infinity, of?: number): AnswerView[] =>
+  parseAnswers(row).filter((a) => a.b === branch).slice(-NET.answerHistory).map((a) => ({
+    id: a.id, text: a.text, at: a.at, status: a.s, ...(a.c !== undefined && a.at >= correctFrom ? { correct: a.c } : {}), ...(scoreOf(a, of) ?? {}),
+  }));
+
+/** SPEC §17.31: the "đúng x/n" of a Phạt the team may see (review() set `sv`), undefined = none. */
+export const scoreOf = (a: AnswerRec, of: number | undefined): { score: number; of: number } | undefined => (a.sv && a.sc !== undefined && of ? { score: a.sc, of } : undefined);
+/** SPEC §17.31: server ms from which a Phạt on this task tells the team its count (null = the task has no scoreOf). */
+export const scoreFrom = (t: Task, row: StepProgressRow | undefined): number | null => (t.scoreOf && row?.task_started_at != null ? row.task_started_at + t.scoreFromMinutes * 60_000 : null);
 
 /** Server ms of the 40 / 70-minute marks of a louvre room started at t0. */
 const marks = (lv: LouvreTask, t0: number): [number, number] => [t0 + lv.hints.countAtMinutes * 60_000, t0 + lv.hints.correctAtMinutes * 60_000];
@@ -424,13 +431,13 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
         ...base, text: s.clue, media: s.media.map(mediaView),
         branches: s.branches.map((x) => ({ id: x.id, name: x.name, summary: x.summary, ...(opened && x === b ? { task: taskView(x.task) } : {}) })),
         branch, branchOpened: opened, switches: row?.branch_switches ?? 0, switchPenaltyMinutes: leg.penalties.branchSwitchLockMinutes,
-        ...(b ? { retryPenaltyMinutes: retryLockMinutes(leg, b.task), answers: answerViews(row, branch) } : {}),
+        ...(b ? { retryPenaltyMinutes: retryLockMinutes(leg, b.task), answers: answerViews(row, branch, Infinity, b.task.scoreOf) } : {}),
       };
     }
     case 'challenge': {
       const lv = s.task.kind === 'louvre' ? louvreView(leg, index, row, (zones ?? stepZones(leg))[index]!, now) : undefined;
       return {
-        ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null, lv?.hintAt[1]),
+        ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null, lv?.hintAt[1], s.task.scoreOf),
         ...(status === 'teaser' ? {} : { task: { ...taskView(s.task), ...(lv ? { louvre: lv } : {}) } }),
       };
     }
@@ -477,7 +484,11 @@ export function review(leg: Leg, i: number, row: StepProgressRow, m: HostReview,
   // N4: "Duyệt" on the answer just penalized (the Host clicked "Phạt" by mistake) while nothing newer was sent
   const fix = m.op === 'approve' && a.s === 'penalized' && a === last && a.b === b && (state === 'locked' || state === 'active');
   if (a.s !== 'pending' && !fix) return { refuse: HANDLED };
-  const rec: AnswerRec = { ...a, s: m.op === 'approve' ? 'approved' : 'penalized', d: now, ...n };
+  // SPEC §17.31: the Host's "đúng x/n" goes with a Phạt (out of range = not entered); told to the team only from scoreFromMinutes on
+  const { sc: _sc, sv: _sv, ...bare } = a; // a Duyệt over a Phạt (N4) drops the count
+  const from = scoreFrom(t, row);
+  const score = m.op === 'penalize' && t.scoreOf && m.score !== undefined && m.score <= t.scoreOf ? { sc: m.score, ...(from !== null && now >= from ? { sv: true as const } : {}) } : {};
+  const rec: AnswerRec = { ...bare, s: m.op === 'approve' ? 'approved' : 'penalized', d: now, ...n, ...score };
   const next = {
     ...row, ...decided, answers: JSON.stringify(answers.map((x) => (x === a ? rec : x))),
     approval_wait_seconds: row.approval_wait_seconds + (a.s === 'pending' ? Math.max(0, now - a.at) / 1000 : 0),
