@@ -2,7 +2,7 @@
 // the race message" harness check, which the DO output gate makes unable to fail): rows first, messages after; a failing
 // write sends nothing and leaves the cache as it was.
 import { branchZone, stepZones, type Leg } from '@race/shared/leg';
-import type { FeedMessage, PoseSample, RaceOp, RaceView, ServerMessage } from '@race/shared/protocol';
+import { NET, type FeedMessage, type HostReview, type PoseSample, type RaceOp, type RaceView, type ServerMessage } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
 import { QuotaCounters } from '../counters.ts';
 import { bundledLeg } from './leg.ts';
@@ -63,7 +63,7 @@ function fake() {
     feed: (m: FeedMessage) => (log.push('feed'), feeds.push(m)),
     touchSnapshot: () => log.push('touchSnapshot'),
   };
-  return { io, log, txs, sent, teams, events, feeds, setFail: (v: boolean) => (fail = v) };
+  return { io, log, txs, sent, teams, events, feeds, poses, setFail: (v: boolean) => (fail = v) };
 }
 
 const at = (i: number, mode: PoseSample['mode'] = 'walk'): PoseSample => ({ x: Z[i]!.x, y: 0, z: Z[i]!.z, yaw: 0, mode, action: 'none' });
@@ -153,7 +153,7 @@ describe('RaceEngine', () => {
     f.sent.length = 0;
     f.txs.length = 0;
     const host: ServerMessage[] = [];
-    const review = (team: string, step: string, op: 'approve' | 'penalize' | 'note', now: number, more: { id?: number; note?: string } = {}) => e.onHost({ t: 'host.review', team, step, op, ...more }, (m) => host.push(m), now);
+    const review = (team: string, step: string, op: HostReview['op'], now: number, more: { id?: number; note?: string } = {}) => e.onHost({ t: 'host.review', team, step, op, ...more }, (m) => host.push(m), now);
     const op = (team: string, m: RaceOp, now: number, pose: PoseSample | null = null) => e.onOp(team, m, pose, now);
     const to = (team: string) => f.sent.filter(([t]) => t === team).map(([, m]) => m);
     const card = (team: string) => (to(team).filter((m) => (m as { t: string }).t === 'race').at(-1) as { view: RaceView } | undefined)?.view.card;
@@ -192,7 +192,7 @@ describe('RaceEngine', () => {
     f.log.length = 0;
     f.txs.length = 0;
     review('t0', 'T1', 'penalize', 30_010, { id: 1, note: 'sai' });
-    expect(f.log).toEqual(['sql INSERT INTO step_progress', 'event review', 'send notice', 'send race']);
+    expect(f.log).toEqual(['sql INSERT INTO step_progress', 'event review', 'sql INSERT INTO meta', 'send notice', 'send race']); // meta: its undo record (Phase 10)
     writesFirst(f);
     expect(to('t0').slice(-2)).toEqual([{ t: 'notice', code: 'penalized' }, { t: 'race', view: expect.objectContaining({ card: expect.objectContaining({ status: 'locked', lockKind: 'retry', lockedUntil: 30_010 + 3 * 60_000, retryPenaltyMinutes: 3 }) }) }]);
     expect(JSON.stringify(to('t0'))).not.toContain('sai'); // the Host note never reaches the team
@@ -206,11 +206,12 @@ describe('RaceEngine', () => {
     expect(f.log).toEqual([]);
     // N4: the Host clicked "Phạt" by mistake: "Duyệt" on that answer completes the step, one toast (M8: no clueNew)
     review('t0', 'T1', 'approve', 50_000, { id: 1 });
-    expect(f.log.filter((l) => !l.startsWith('send'))).toEqual(['sql INSERT INTO step_progress', 'sql INSERT INTO step_progress', 'event review', 'event complete', 'saveTeam']);
+    expect(f.log.filter((l) => !l.startsWith('send'))).toEqual(['sql INSERT INTO step_progress', 'sql INSERT INTO step_progress', 'event review', 'event complete', 'sql INSERT INTO meta', 'saveTeam']);
     expect(to('t0').slice(-2)).toEqual([{ t: 'notice', code: 'approved' }, { t: 'race', view: expect.objectContaining({ card: expect.objectContaining({ step: 'L2', receivedAt: 50_000 }) }) }]);
     expect(f.teams.get('t0')!.step).toBe(2);
-    // review R-11: the Host who clicked "Duyệt" hears it overruled a "Phạt" (a second Host's screen a second old)
+    // review R-11: the Host who clicked "Duyệt" hears it overruled a "Phạt" (a page a second old); one Host (§17.24): the way back is «Hoàn tác»
     expect(host.slice(1)).toEqual([{ t: 'host.notice', level: 'warning', message: expect.stringContaining('vừa bị Phạt, nay đã được Duyệt') }]);
+    expect((host[1] as { message: string }).message).not.toContain('Host còn lại');
     f.log.length = 0;
     review('t0', 'T1', 'approve', 50_001, { id: 1 });
     expect(host.at(-1)).toMatchObject({ message: 'Bài này đã được xử lý.' });
@@ -485,6 +486,174 @@ describe('RaceEngine', () => {
     const zones = (team: string) => f.sent.filter(([t, m]) => t === team && (m as { t: string }).t === 'zone').map(([, m]) => m);
     expect(zones('t1')).toEqual([{ t: 'zone', teams: [] }]);
     expect(zones('t0').at(-1)).toEqual({ t: 'zone', teams: [{ slot: 1, label: 'Thử thách 1', type: 'challenge', branch: null, since: 11 }] });
+  });
+
+  // ── Phase 10 (docs/plans/phase10.md §3.2, §5.2, §7) ──
+  /** T1 accepted at 5 and answered "42" at 10 (pending), t0 on step 1. */
+  const pendingT1 = (leg: unknown = 'mini') => {
+    const r = racing({ t0: 1 }, leg);
+    r.op('t0', { t: 'race', op: 'accept', step: 'T1' }, 5);
+    r.op('t0', { t: 'race', op: 'answer', step: 'T1', text: '42' }, 10);
+    return r;
+  };
+  const undoLog = (f: ReturnType<typeof fake>) => f.log.filter((l) => !l.startsWith('send'));
+
+  it('undo (V2): a Duyệt undone in NET.undoMs — rows back (the next step\'s deleted), race fields, host.undo + meta in ONE transaction, then the team hears; queue again', () => {
+    const { f, e, host, review, to, card } = pendingT1();
+    const before = e.hostView(15);
+    review('t0', 'T1', 'approve', 20_000, { id: 1 });
+    expect(f.teams.get('t0')!.step).toBe(2);
+    expect(e.hostView(20_001).undo).toEqual([{ team: 't0', step: 'T1', id: 1, op: 'approve', at: 20_000, until: 20_000 + NET.undoMs }]);
+    f.log.length = f.txs.length = 0;
+    const rows = f.io.counters.rows;
+    review('t0', 'T1', 'undo', 25_000, { id: 1 });
+    // T1 written back, L2 (created by the Duyệt) deleted; L2's box (route) hidden BEFORE the card
+    expect(f.log).toEqual(['sql INSERT INTO step_progress', 'sql DELETE FROM step_progress', 'event host.undo', 'sql INSERT INTO meta', 'saveTeam', 'hideBox t0 L2 undefined', 'send notice', 'send race']);
+    writesFirst(f);
+    expect(f.txs).toHaveLength(1);
+    expect(f.io.counters.rows - rows).toBe(3); // + the event (2) and teams.state (1) RaceRoom counts: 6 ≤ 7
+    expect(f.events.at(-1)).toEqual(['host.undo', { step: 'T1', op: 'approve', id: 1 }]);
+    expect(f.teams.get('t0')).toEqual({ ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, step: 1 });
+    expect(to('t0').slice(-2)).toEqual([{ t: 'notice', code: 'reviewUndone' }, { t: 'race', view: expect.objectContaining({ card: expect.objectContaining({ step: 'T1', status: 'pending' }) }) }]);
+    expect(card('t0')!.answers).toEqual([{ id: 1, text: '42', at: 10, status: 'pending' }]);
+    const after = e.hostView(25_001);
+    expect([after.queue, after.progress, after.undo]).toEqual([before.queue, before.progress, []]);
+    review('t0', 'T1', 'undo', 25_002, { id: 1 });
+    expect(host.at(-1)).toEqual({ t: 'host.notice', level: 'warning', message: 'Không còn gì để hoàn tác cho bài này.' });
+  });
+
+  it('undo (V2): a Phạt undone — the lock gone, the answer pending, back in the queue; no team field / box touched', () => {
+    const { f, e, review, card } = pendingT1();
+    review('t0', 'T1', 'penalize', 20_000, { id: 1, note: 'sai' });
+    expect(card('t0')).toMatchObject({ status: 'locked' });
+    expect(e.hostView(20_001)).toMatchObject({ queue: [], undo: [{ op: 'penalize', id: 1 }] });
+    f.log.length = 0;
+    review('t0', 'T1', 'undo', 21_000, { id: 1 });
+    expect(undoLog(f)).toEqual(['sql INSERT INTO step_progress', 'event host.undo', 'sql INSERT INTO meta']);
+    expect(card('t0')).toMatchObject({ status: 'pending', lockedUntil: null });
+    const h = e.hostView(21_001);
+    expect(h.queue).toMatchObject([{ team: 't0', step: 'T1', id: 1, text: '42' }]);
+    expect(h.progress.find((p) => p.step === 'T1')).toMatchObject({ rejections: 0, lockedUntil: null, decidedAt: null, note: '', approvalWaitSeconds: 0, answers: [{ id: 1, status: 'pending' }] });
+  });
+
+  it('undo (M3): refused past NET.undoMs, a finished team, a team that moved on / got a newer decision, a race over; nothing written, hostView hides them', () => {
+    const late = pendingT1();
+    late.review('t0', 'T1', 'approve', 20_000, { id: 1 });
+    late.f.log.length = 0;
+    expect(late.e.hostView(20_000 + NET.undoMs + 1).undo).toEqual([]);
+    late.review('t0', 'T1', 'undo', 20_000 + NET.undoMs + 1, { id: 1 });
+    expect(late.host.at(-1)).toMatchObject({ level: 'warning', message: expect.stringContaining('Quá 10 giây') });
+    expect(late.f.log).toEqual([]);
+
+    const done = pendingT1();
+    done.review('t0', 'T1', 'approve', 20_000, { id: 1 });
+    done.f.teams.get('t0')!.finishAt = 20_100; // as if the Duyệt had settled it on the mat
+    expect(done.e.hostView(20_200).undo).toEqual([]);
+    done.review('t0', 'T1', 'undo', 20_200, { id: 1 });
+    expect(done.host.at(-1)).toMatchObject({ message: expect.stringContaining('Đội đã về đích') });
+
+    const moved = pendingT1();
+    moved.review('t0', 'T1', 'approve', 20_000, { id: 1 });
+    moved.op('t0', { t: 'race', op: 'open', step: 'L2' }, 20_100, at(2)); // L2's box opened at once: on to D1
+    expect(moved.f.teams.get('t0')!.step).toBe(3);
+    moved.f.log.length = 0;
+    moved.review('t0', 'T1', 'undo', 20_200, { id: 1 });
+    expect(moved.host.at(-1)).toMatchObject({ message: 'Đội đã đi tiếp / có quyết định mới hơn, không hoàn tác được.' });
+    expect(moved.f.log).toEqual([]);
+
+    // a newer decision of the team (no "Phạt" lock in this leg: answered again at once, then approved)
+    const leg = structuredClone(mini) as Leg;
+    (leg.steps[1] as { task: { retryLockMinutes?: number } }).task.retryLockMinutes = 0;
+    const newer = pendingT1(leg);
+    newer.review('t0', 'T1', 'penalize', 20_000, { id: 1 });
+    newer.op('t0', { t: 'race', op: 'answer', step: 'T1', text: '43' }, 20_100);
+    newer.review('t0', 'T1', 'approve', 20_200, { id: 2 });
+    expect(newer.e.hostView(20_300).undo.map((u) => u.id)).toEqual([2]);
+    newer.review('t0', 'T1', 'undo', 20_300, { id: 1 });
+    expect(newer.host.at(-1)).toMatchObject({ message: 'Đội đã đi tiếp / có quyết định mới hơn, không hoàn tác được.' });
+
+    const over = pendingT1();
+    over.review('t0', 'T1', 'penalize', 20_000, { id: 1 });
+    over.e.onHost({ t: 'host.race', op: 'finish' }, () => {}, 20_100);
+    expect(over.e.hostView(20_200).undo).toEqual([]);
+    over.review('t0', 'T1', 'undo', 20_200, { id: 1 });
+    expect(over.host.at(-1)).toEqual({ t: 'host.notice', level: 'error', message: 'Cuộc đua đã kết thúc.' });
+  });
+
+  it('undo after "Phạt" then N4 "Duyệt" of the same answer: the Duyệt first (newest), then the Phạt; a Cho qua (V5) is undone by the answer it created', () => {
+    const { f, e, review, card } = pendingT1();
+    review('t0', 'T1', 'penalize', 20_000, { id: 1 });
+    review('t0', 'T1', 'approve', 21_000, { id: 1 }); // N4
+    review('t0', 'T1', 'undo', 22_000, { id: 1 });
+    expect(card('t0')).toMatchObject({ step: 'T1', status: 'locked' }); // back to the Phạt
+    review('t0', 'T1', 'undo', 23_000, { id: 1 });
+    expect(card('t0')).toMatchObject({ step: 'T1', status: 'pending' });
+    expect(f.teams.get('t0')!.step).toBe(1);
+    // Cho qua: the typed task with nothing pending (the Phạt's lock waited out)
+    review('t0', 'T1', 'penalize', 24_000, { id: 1 });
+    review('t0', 'T1', 'approve', 24_000 + 3 * 60_000 + 1);
+    expect(e.hostView(24_000 + 3 * 60_000 + 2).undo).toMatchObject([{ id: 2, op: 'approve' }]);
+    review('t0', 'T1', 'undo', 24_000 + 3 * 60_000 + 3, { id: 2 });
+    expect(card('t0')).toMatchObject({ step: 'T1', status: 'active', answers: [{ id: 1, status: 'penalized' }] });
+  });
+
+  it('undo drops what the team did meanwhile on those steps (M2), never parks again (M4), and works on a woken engine (meta "undo")', () => {
+    const { f, e, review } = pendingT1();
+    f.poses.set('t0', at(1)); // standing in T1's place on foot: the Duyệt racks its bike (L2 is walk-only, S3)
+    review('t0', 'T1', 'approve', 20_000, { id: 1 });
+    expect(f.log).toContain('park');
+    e.onPose('t0', at(2), 20_500); // arrives at L2's place
+    expect(e.hostView(20_600).progress.find((p) => p.step === 'L2')).toMatchObject({ arrivedAt: 20_500 });
+    const woken = new RaceEngine(f.io); // the Durable Object evicted: meta 'undo' read back (step_progress too, in a real one)
+    expect(woken.hostView(21_000).undo).toEqual([{ team: 't0', step: 'T1', id: 1, op: 'approve', at: 20_000, until: 20_000 + NET.undoMs }]);
+    f.log.length = 0;
+    woken.onHost({ t: 'host.review', team: 't0', step: 'T1', op: 'undo', id: 1 }, () => {}, 21_000);
+    expect(f.log).not.toContain('park');
+    expect(f.log).toContain('sql DELETE FROM step_progress'); // L2 and its arrival gone
+    expect(woken.hostView(21_001).progress.map((p) => [p.step, p.pending])).toEqual([['L1', false], ['T1', true]]);
+  });
+
+  it('undo of a detour photo Duyệt: the mat box it moved on to hidden, the opened branch box revealed again', () => {
+    const { f, review, op, to } = racing({ t0: 3 });
+    const zb = branchZone(mini, Z, 3, 'B')!;
+    const foot: PoseSample = { x: zb.x, y: 0, z: zb.z, yaw: 0, mode: 'walk', action: 'none' };
+    op('t0', { t: 'race', op: 'branch', step: 'D1', branch: 'B' }, 5);
+    op('t0', { t: 'race', op: 'open', step: 'D1', branch: 'B' }, 6, foot);
+    op('t0', { t: 'race', op: 'answer', step: 'D1', text: '' }, 7, foot);
+    review('t0', 'D1', 'approve', 20_000);
+    expect(f.teams.get('t0')!.step).toBe(4);
+    f.log.length = 0;
+    review('t0', 'D1', 'undo', 21_000, { id: 1 });
+    expect(f.log.slice(-4)).toEqual(['hideBox t0 PS undefined', 'send notice', 'send race', 'send box']);
+    expect(to('t0').at(-1)).toEqual({ t: 'box', op: 'reveal', box: expect.objectContaining({ step: 'D1', branch: 'B', opened: true }) });
+  });
+
+  it('"vừa rời đi" (V4): a team that walks out / disconnects stays in the others\' list with `left` for NET.zoneLeftMs, gone when back; 0 rows', () => {
+    const { f, e, to } = racing({ t0: 1, t1: 1, t2: 2 });
+    const zones = (team: string) => to(team).filter((m) => (m as { t: string }).t === 'zone');
+    const last = (team: string) => (zones(team).at(-1) as { teams: unknown[] } | undefined)?.teams;
+    const far: PoseSample = { ...at(1), x: 1e5, z: 1e5 };
+    e.onPose('t0', at(1), 10); // both arrive at T1's place (rows: their arrivals)
+    e.onPose('t1', at(1), 11);
+    e.onPose('t2', at(1), 12); // t2 (on L2, T1 done) back at T1's place: never in t1's list (a later step)
+    f.log.length = 0;
+    e.onPose('t0', far, 100);
+    expect(last('t1')).toEqual([{ slot: 0, label: 'Thử thách 1', type: 'challenge', branch: null, since: 10, left: 100 }]);
+    e.onPose('t0', at(1), 200); // back: no longer "left"
+    expect(last('t1')).toEqual([{ slot: 0, label: 'Thử thách 1', type: 'challenge', branch: null, since: 200 }]);
+    e.left('t0', 300); // its socket went
+    expect(last('t1')).toEqual([{ slot: 0, label: 'Thử thách 1', type: 'challenge', branch: null, since: 200, left: 300 }]);
+    e.onPose('t2', far, 310); // t2 left too, on a later step: still not shown to t1
+    expect(last('t1')).toEqual([{ slot: 0, label: 'Thử thách 1', type: 'challenge', branch: null, since: 200, left: 300 }]);
+    expect(last('t2')).toEqual([]); // t2 itself left (its own list cleared)
+    // t1 walks out and back: within NET.zoneLeftMs t0 is still listed, past it no more
+    e.onPose('t1', far, 400);
+    e.onPose('t1', at(1), 300 + NET.zoneLeftMs);
+    expect(last('t1')).toEqual([expect.objectContaining({ slot: 0, left: 300 })]);
+    e.onPose('t1', far, 300 + NET.zoneLeftMs + 1);
+    e.onPose('t1', at(1), 300 + NET.zoneLeftMs + 1);
+    expect(last('t1')).toEqual([]);
+    expect(f.log.filter((l) => !l.startsWith('send'))).toEqual([]); // memory only
   });
 });
 

@@ -5,7 +5,7 @@
 // host.state parts.
 import { branchZone, jsonProblem, LOUVRE, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
 import { latLonToWorld } from '@race/shared';
-import { finishTexts, type BoxInfo, type FeedMessage, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
+import { finishTexts, NET, type BoxInfo, type FeedMessage, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
@@ -61,8 +61,9 @@ export interface RaceIO {
   /** A new leg was loaded (lobby, no team entered): the bikes start again from its `vehicles` block. */
   legLoaded(now: number): void;
   /** Phase 8 (D6, critic S1): the team switched away from `branch` of detour `step` (id): every socket of the team forgets
-   *  its revealed box (attachment), then gets {t:'box', op:'remove', step, branch} (dropped even if opened). */
-  hideBox(team: string, step: string, branch: string): void;
+   *  its revealed box (attachment), then gets {t:'box', op:'remove', step, branch} (dropped even if opened). Phase 10
+   *  (undo): no `branch` → {t:'box', op:'hide', step} (an unopened box of that step). */
+  hideBox(team: string, step: string, branch?: string): void;
   /** Phase 8B: a public feed line to every socket (teams + Hosts), kept for the welcome (the event is written already). */
   feed(m: FeedMessage): void;
   /** Phase 8B: a louvre pick changed live picks (memory only): the snapshot row goes out within NET.snapshotMs. */
@@ -98,8 +99,38 @@ const MOVES: Record<'start' | 'pause' | 'resume' | 'finish', [RaceStatus[], Race
   resume: [['paused'], 'running', 'Cuộc đua không ở trạng thái tạm dừng.'],
   finish: [['running', 'paused'], 'finished', 'Chỉ kết thúc được cuộc đua đang chạy hoặc đang tạm dừng.'],
 };
-const OVERRULED = 'Lưu ý: bài này vừa bị Phạt, nay đã được Duyệt (khóa phạt đã gỡ, đội nhận mật thư kế). Nếu không định sửa quyết định Phạt, hãy trao đổi với Host còn lại.';
+const OVERRULED = `Lưu ý: bài này vừa bị Phạt, nay đã được Duyệt (khóa phạt đã gỡ, đội nhận mật thư kế). Nếu bấm nhầm, bấm «Hoàn tác» trong ${NET.undoMs / 1000} giây.`;
 const LEG_LOCKED = 'Đã có đội vào game trong cuộc đua này. Muốn đổi chặng, hãy tạo cuộc đua mới (race id mới): nạp chặng → tạo đội → phát mã → mở.';
+/** Phase 10 (plan §3.2 / M3): why an undo is refused. */
+const UNDO = {
+  none: 'Không còn gì để hoàn tác cho bài này.',
+  late: `Quá ${NET.undoMs / 1000} giây, không hoàn tác được nữa. Dùng «Duyệt câu vừa phạt» hoặc Phạt / Duyệt lại.`,
+  finished: 'Đội đã về đích, không hoàn tác được (thứ hạng đã báo cho các đội).',
+  moved: 'Đội đã đi tiếp / có quyết định mới hơn, không hoàn tác được.',
+  over: 'Cuộc đua đã kết thúc.',
+};
+
+/** Phase 10 (V2, plan §3.2): a Host Duyệt / Phạt / Cho qua that may still be undone (memory + meta 'undo', rebuilt on
+ *  wake): the team's race fields and every step_progress row the decision changed, as they were BEFORE it. */
+interface UndoRec {
+  team: string;
+  step: string;
+  /** The answer the decision was on (UndoItem.id; a Cho qua created it). */
+  id: number;
+  op: 'approve' | 'penalize';
+  at: number;
+  race: TeamRace;
+  /** step id → its row before the decision; null = it had none (deleted on undo). */
+  rows: Record<string, StepProgressRow | null>;
+  /** The team's step right after the decision: another one now = it moved on. */
+  stepAfter: number;
+}
+
+/** The TeamRace fields of a teams.state (RaceRoom's has presence fields next to them: an undo never restores those). */
+const raceOf = (r: TeamRace): TeamRace => Object.fromEntries(Object.keys(NEW_TEAM_RACE).map((k) => [k, r[k as keyof TeamRace]])) as unknown as TeamRace;
+
+/** Phase 10 (V4, plan §5.2): a team that left a place, as the others' "Tại điểm này" list shows it (its step then). */
+type Gone = Omit<ZoneMember, 'left'> & { left: number; stepIdx: number };
 
 export class RaceEngine {
   private legV!: Leg;
@@ -114,10 +145,12 @@ export class RaceEngine {
   private readonly rows = new Map<string, Map<string, StepProgressRow>>();
   /** D21: the place (Zone.rack) each team stands in now + since when; the zone list last sent to it. Memory only. */
   private readonly where = new Map<string, { key: string; since: number }>();
-  // TODO(phase10 track S, plan §5.2): `gone` = rack key → teams that left it {team, slot, label, type, branch, since, left,
-  // stepIdx}; filled by moveZone (key changed) and left() (disconnect), cleared when the team re-enters; refreshZones
-  // appends those within NET.zoneLeftMs with stepIdx ≤ the viewer's step as ZoneMember {…, left}. Memory only, 0 rows.
+  /** Phase 10 (V4, M6): rack key → team → it left that place (walked out / disconnected); shown NET.zoneLeftMs, dropped
+   *  when it comes back. ponytail: memory only (0 rows), lost on an eviction like `where`; persist it if that matters. */
+  private readonly gone = new Map<string, Map<string, Gone>>();
   private readonly sentZone = new Map<string, string>();
+  /** Phase 10 (V2): decisions still undoable, oldest first (≤ NET.undoKept), mirrored in meta 'undo'. */
+  private undoV: UndoRec[];
 
   constructor(readonly io: RaceIO) {
     const saved = getMeta(io.sql, 'leg');
@@ -129,6 +162,7 @@ export class RaceEngine {
     } else this.setLeg(bundledLeg(DEFAULT_LEG_ID)!, []);
     this.statusV = (getMeta(io.sql, 'status') as RaceStatus | undefined) ?? 'lobby';
     for (const r of readProgress(io.sql)) this.teamRows(r.team).set(r.step, r);
+    this.undoV = JSON.parse(getMeta(io.sql, 'undo') ?? '[]') as UndoRec[]; // only ever written by JSON.stringify below
   }
 
   /** The loaded leg (meta 'leg'; the bundled default until the Host loads another). */
@@ -240,12 +274,9 @@ export class RaceEngine {
     }
     if (m.t === 'host.review') {
       // Phase 8 (D5, D10, D24): any status but finished (paused too); idempotent (a second decision is refused, nothing written)
-      if (this.statusV === 'finished') return notice('error', 'Cuộc đua đã kết thúc.');
-      // TODO(phase10 track S, plan §3.2): this.undo(m.team, m.step, m.id!, now): find the UndoRec (memory + meta 'undo'),
-      // refuse past NET.undoMs / finished team / moved on / not the newest decision (M3), else one transaction restoring
-      // the saved rows (write back or DELETE) + teams.state + event host.undo; then race view + notice reviewUndone + box
-      // hide of the next step + refreshZones. review() below must never see 'undo' (it would read it as a Phạt).
-      if (m.op === 'undo') return notice('warning', 'Hoàn tác chưa được hỗ trợ (Phase 10 đang làm).');
+      if (this.statusV === 'finished') return notice('error', UNDO.over);
+      // review() below must never see 'undo' (it would read it as a Phạt)
+      if (m.op === 'undo') return this.undo(m.team, m.step, m.id!, now, notice);
       const r = this.io.team(m.team);
       if (!r) return notice('error', 'Không có đội này.');
       const i = this.legV.steps.findIndex((s) => s.id === m.step);
@@ -259,10 +290,8 @@ export class RaceEngine {
       const { p, effects } = res.approve
         ? advance(this.legV, this.zones, this.progress(m.team, r), { kind: 'approve', step: m.step, pose: stand(this.io.pose(m.team)) }, now, this.statusV === 'running')
         : { p: this.progress(m.team, r), effects: [] };
-      this.apply(m.team, r, p, [decision, ...effects], now);
-      // TODO(phase10 track S, plan §3.2): snapshot TeamRace + the team's rows BEFORE apply(), diff after → UndoRec pushed
-      // to this.undoV (≤ NET.undoKept, within NET.undoMs) + meta('undo') (1 row); not for op 'note'.
-      // N4 "Duyệt" over a "Phạt": the Host's own fix, or a second Host whose screen was a second old (review R-11)
+      this.apply(m.team, r, p, [decision, ...effects], now, m.op === 'note' ? undefined : { team: m.team, step: m.step, id: res.id!, op: m.op, at: now, race: raceOf(r) });
+      // N4 "Duyệt" over a "Phạt": the Host's own fix (or a click on a page a second old, review R-11)
       if (m.op === 'approve' && parseAnswers(row).find((a) => a.id === res.id)?.s === 'penalized') notice('warning', OVERRULED);
       return;
     }
@@ -325,12 +354,14 @@ export class RaceEngine {
     return s?.type === 'route_info' && 'mandatory' in s.transport ? 'walkOnly' : false;
   }
 
-  /** A team's socket went: it leaves the "Tại điểm này" lists of the others. */
+  /** A team's socket went: in the "Tại điểm này" lists of the others it becomes "vừa rời đi" (Phase 10, V4). */
   left(team: string, now: number) {
     const w = this.where.get(team);
     this.where.delete(team);
     this.sentZone.delete(team);
-    if (w) this.refreshZones(new Set([w.key]), now);
+    if (!w) return;
+    this.recordLeft(team, w, now);
+    this.refreshZones(new Set([w.key]), now);
   }
 
   /** host.state parts: leg summary, step_progress, ranking, review queue, undoable decisions. */
@@ -388,8 +419,8 @@ export class RaceEngine {
       progress,
       ranking: ranking(ranks),
       queue,
-      // TODO(phase10 track S, plan §3.2): this.undoV.filter((u) => now - u.at <= NET.undoMs).map(({team, step, id, op, at}) => ({…, until: at + NET.undoMs}))
-      undo: [],
+      // only what an undo would pass now (the page draws a button per item and hides it at `until` by itself)
+      undo: this.undoV.filter((u) => !this.undoBlock(u, now)).map(({ team, step, id, op, at }) => ({ team, step, id, op, at, until: at + NET.undoMs })),
     };
   }
 
@@ -487,7 +518,8 @@ export class RaceEngine {
     if (effects.length) this.apply(team, r, p, effects, now);
   }
 
-  private apply(team: string, r: TeamRace, p: Progress, effects: RaceEffect[], now: number) {
+  /** `undo` (a Host Duyệt / Phạt / Cho qua): its undo record is written in the same transaction (meta 'undo', 1 row). */
+  private apply(team: string, r: TeamRace, p: Progress, effects: RaceEffect[], now: number, undo?: Omit<UndoRec, 'rows' | 'stepAfter'>) {
     const steps = this.legV.steps;
     const dirty = new Map<string, StepProgressRow>();
     const edit = (i: number) => {
@@ -578,13 +610,21 @@ export class RaceEngine {
     }
     const next: TeamRace = { ...r, step: p.step, finishAt: p.finishAt, ...placed };
     const teamChanged = next.step !== r.step || next.finishAt !== r.finishAt || next.rank !== r.rank;
+    let undos: UndoRec[] | undefined;
     if (dirty.size || events.length || teamChanged) {
       this.io.transaction(() => {
         for (const row of dirty.values()) this.io.counters.rows += writeProgress(this.io.sql, row);
         for (const [type, data] of events) this.io.event(now, team, type, data);
+        // Phase 10 (V2): the rows it changed as they were (the cache is patched only after the commit)
+        if (undo) {
+          const rows = Object.fromEntries([...dirty.keys()].map((id) => [id, this.teamRows(team).get(id) ?? null]));
+          undos = [...this.undoV.filter((x) => now - x.at <= NET.undoMs), { ...undo, rows, stepAfter: next.step }].slice(-NET.undoKept);
+          this.meta('undo', JSON.stringify(undos));
+        }
         if (teamChanged) this.io.saveTeam(team, next); // last: RaceRoom patches its cache only after this write
       });
       for (const row of dirty.values()) this.teamRows(team).set(row.step, row); // committed: patch the cache
+      if (undos) this.undoV = undos;
       if (!quiet) out.push({ t: 'race', view: this.view(team, now) });
     } else if (picked) {
       // nothing written: the team's new card (its lights, the live x/5) goes out all the same; the Host's soon
@@ -604,6 +644,55 @@ export class RaceEngine {
     }
   }
 
+  // ── Phase 10 (V2, plan §3.2): undo a Host decision within NET.undoMs (records: apply()) ──
+  /** Why record `u` may not be undone now (plan M3), null = it may. */
+  private undoBlock(u: UndoRec, now: number): string | null {
+    const r = this.io.team(u.team);
+    if (this.statusV === 'finished') return UNDO.over;
+    if (now - u.at > NET.undoMs) return UNDO.late;
+    if (!r) return UNDO.none;
+    if (r.finishAt !== null) return UNDO.finished; // its rank is out already (SPEC §17.22)
+    return r.step !== u.stepAfter || this.undoV.filter((x) => x.team === u.team).at(-1) !== u ? UNDO.moved : null;
+  }
+
+  /** host.review undo (M2–M4): the rows of the decision back as they were (written back, or deleted when it created them)
+   *  + the team's race fields, the host.undo event and meta 'undo' in ONE transaction; then the team hears it. What the
+   *  team did on those steps meanwhile is dropped (M2); the bike a Duyệt racked stays at the rack (M4). The newest record
+   *  of that answer wins (a Phạt then a Duyệt of the same answer: the Duyệt first). */
+  private undo(team: string, step: string, id: number, now: number, notice: (level: 'error' | 'warning', message: string) => void) {
+    const u = this.undoV.filter((x) => x.team === team && x.step === step && x.id === id).at(-1);
+    const why = u ? this.undoBlock(u, now) : UNDO.none;
+    if (!u || why) return notice('warning', why ?? UNDO.none);
+    const was = this.currentBox(team, now);
+    const rest = this.undoV.filter((x) => x !== u);
+    const r = this.io.team(team)!;
+    this.io.transaction(() => {
+      for (const [sid, row] of Object.entries(u.rows)) {
+        if (row) this.io.counters.rows += writeProgress(this.io.sql, row);
+        else {
+          const c = this.io.sql.exec('DELETE FROM step_progress WHERE team = ? AND step = ?', team, sid);
+          c.toArray();
+          this.io.counters.rows += c.rowsWritten;
+        }
+      }
+      this.io.event(now, team, 'host.undo', { step, op: u.op, id });
+      this.meta('undo', JSON.stringify(rest));
+      if (JSON.stringify(raceOf(r)) !== JSON.stringify(u.race)) this.io.saveTeam(team, u.race); // last: RaceRoom patches its cache after it
+    });
+    for (const [sid, row] of Object.entries(u.rows)) (row ? this.teamRows(team).set(sid, row) : this.teamRows(team).delete(sid)); // committed
+    this.undoV = rest;
+    // the box channel (SPEC §17.10): the box of the step it had moved on to goes (a branch box even if opened); an opened
+    // box of the step it is back on returns (a branch switch in the meantime removed it)
+    const cur = this.currentBox(team, now);
+    const same = !!was && !!cur && was.step === cur.step && was.branch === cur.branch;
+    if (was && !same) this.io.hideBox(team, was.step, was.branch);
+    this.io.send(team, { t: 'notice', code: 'reviewUndone' });
+    this.io.send(team, { t: 'race', view: this.view(team, now) });
+    if (cur?.opened && !same) this.io.send(team, { t: 'box', op: 'reveal', box: cur });
+    this.io.changed(now);
+    this.refreshZones(new Set([this.where.get(team)?.key ?? '']), now);
+  }
+
   // ── D21 "Tại điểm này" ──
   /** The place (rack key) a trusted pose stands in, null = none. */
   private placeAt(x: number, z: number): string | null {
@@ -614,9 +703,22 @@ export class RaceEngine {
     const key = this.placeAt(pose.x, pose.z);
     const was = this.where.get(team);
     if ((was?.key ?? null) === key) return;
-    if (key) this.where.set(team, { key, since: now });
-    else this.where.delete(team);
+    if (was) this.recordLeft(team, was, now);
+    if (key) {
+      this.where.set(team, { key, since: now });
+      this.gone.get(key)?.delete(team); // back here: no longer "vừa rời đi"
+    } else this.where.delete(team);
     this.refreshZones(new Set([was?.key ?? '', key ?? '']), now);
+  }
+
+  /** Phase 10 (V4): `team` left place `w` now, on the step it holds now (memory only). */
+  private recordLeft(team: string, w: { key: string; since: number }, now: number) {
+    const r = this.io.team(team);
+    const s = r && this.legV.steps[r.step];
+    if (!s) return;
+    let m = this.gone.get(w.key);
+    if (!m) this.gone.set(w.key, (m = new Map()));
+    m.set(team, { slot: this.io.slot(team), label: s.label, type: s.type, branch: this.progress(team, r).branch, since: w.since, left: now, stepIdx: r.step });
   }
 
   /** Racks of the places a team may get a zone list for: steps it did, + the current one once arrived (never a later
@@ -637,7 +739,7 @@ export class RaceEngine {
   }
 
   /** Sends `{t:'zone'}` to every online team whose list for `keys` may have changed (only when it did). */
-  private refreshZones(keys: Set<string>, _now: number) {
+  private refreshZones(keys: Set<string>, now: number) {
     const online = this.io.online();
     for (const t of online) {
       const w = this.where.get(t);
@@ -656,6 +758,12 @@ export class RaceEngine {
           const s = this.legV.steps[ru.step]!;
           return [{ slot: this.io.slot(u), label: s.label, type: s.type, branch: this.progress(u, ru).branch, since: wu.since }];
         });
+        // Phase 10 (V4): + the teams that left within NET.zoneLeftMs, by the same rule on the step they were on then
+        const gone = this.gone.get(w.key);
+        for (const [u, g] of gone ?? []) {
+          if (now - g.left > NET.zoneLeftMs) gone!.delete(u);
+          else if (u !== t && g.stepIdx <= mine) members.push({ slot: g.slot, label: g.label, type: g.type, branch: g.branch, since: g.since, left: g.left });
+        }
         list = JSON.stringify(members);
         msg = `${w.key}|${list}`;
       } else {

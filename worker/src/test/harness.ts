@@ -173,3 +173,10 @@ export const viewAgain = (s: { send(m: unknown): void }) => s.send({ t: 'race', 
 /** Phase 8: a Host decision on a team's answer (`id` absent: the pending one / a photo task already received). */
 export const review = (host: { send(m: unknown): void }, team: string, step: string, op: 'approve' | 'penalize' | 'note', id?: number, note?: string) =>
   host.send({ t: 'host.review', team, step, op, ...(id !== undefined ? { id } : {}), ...(note !== undefined ? { note } : {}) });
+
+/** Phase 10: the Host undoes its decision on answer `id` (HostState.undo). */
+export const undo = (host: { send(m: unknown): void }, team: string, step: string, id: number) => host.send({ t: 'host.review', team, step, op: 'undo', id });
+
+/** SPEC §17.25: GET the race's raw timing export (`token` in Authorization: Bearer; none = no header). */
+export const exportData = (server: Harness, race: string, token?: string, format?: string) =>
+  server.fetch(`/api/race/${race}/export${format ? `?format=${format}` : ''}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });

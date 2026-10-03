@@ -444,17 +444,15 @@ const NOTHING = 'Đội chưa gửi câu trả lời.';
 
 /** Phase 8 (D5, D10, critic N4 / N11): a Host decision on step i of a team (its row, the engine checked i ≤ its step).
  *  Only checks + edits the row: approve (the pending answer `id`, or the newest "Phạt" one when the Host clicked wrong;
- *  no `id` = a photo task the Host already has, while active / locked) → `approve: true` and the engine runs
+ *  no `id` = the pending one, else "Cho qua", while active / locked) → `approve: true` and the engine runs
  *  advance({kind:'approve'}) (complete + settle, S3); penalize → locked_until = now + retryLockMinutes (0 = none); note
  *  → host_note ('' clears it). A note sent with a decision goes on the answer (n) AND becomes host_note. A decision
  *  waits approval_wait_seconds (sent → decided, SPEC §8.9). A second decision on the same answer is refused: nothing
- *  written (two Hosts, a double click). */
+ *  written (a double click, a Host page a second old). */
 export function review(leg: Leg, i: number, row: StepProgressRow, m: HostReview, now: number): { row: StepProgressRow; approve: boolean; id: number | null } | { refuse: string } {
   const s = leg.steps[i]!;
   if (m.op === 'note') return { row: { ...row, host_note: m.note ?? '' }, approve: false, id: null };
   if (m.op === 'undo') return { refuse: 'Hoàn tác không đi qua review().' }; // Phase 10: the engine handles undo before calling here
-  // TODO(phase10 track S, V5 / plan M8): "Cho qua" = approve without id for EVERY t.kind while active / locked (drop the
-  // `t.kind !== 'free' && t.kind !== 'louvre'` condition below); still refused while an answer is pending.
   if (s.type !== 'challenge' && s.type !== 'detour') return { refuse: 'Bước này không có thử thách để duyệt.' };
   if (row.completed_at != null) return { refuse: HANDLED };
   const t = taskOf(s, row.branch);
@@ -467,9 +465,9 @@ export function review(leg: Leg, i: number, row: StepProgressRow, m: HostReview,
   const decided = { decided_at: now, decided_by: 'host', ...(m.note ? { host_note: m.note } : {}) };
   const id = m.id ?? (last?.s === 'pending' ? last.id : undefined);
   if (id === undefined) {
-    // approve without id (critic M2): a photo task the Host got on Messenger before the team pressed "Tôi đã gửi bài";
-    // Phase 8B: the Host's way out for a team stuck in the louvre room (a client fault, verify-foundation #9)
-    if (m.op !== 'approve' || (t.kind !== 'free' && t.kind !== 'louvre') || (state !== 'active' && state !== 'locked')) return { refuse: NOTHING };
+    // approve without id, nothing pending (critic M2: a photo task the Host got on Messenger before "Tôi đã gửi bài";
+    // Phase 8B: a team stuck in the louvre room; Phase 10 V5 "Cho qua": any task, SPEC §13.9 "push a team on past a bug")
+    if (m.op !== 'approve' || (state !== 'active' && state !== 'locked')) return { refuse: NOTHING };
     const rec: AnswerRec = { id: (last?.id ?? 0) + 1, b, text: '', at: now, s: 'approved', d: now, ...n };
     return { row: { ...row, ...decided, answers: JSON.stringify([...answers, rec]), locked_until: null }, approve: true, id: rec.id };
   }

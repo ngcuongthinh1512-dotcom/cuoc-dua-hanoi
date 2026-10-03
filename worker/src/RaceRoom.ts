@@ -9,10 +9,11 @@ import { startSpot } from '@race/shared/leg';
 import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FeedMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
 import { HOST, newClaims, signToken, verifyToken } from './auth.ts';
 import { QuotaCounters } from './counters.ts';
-import { addEvent, getMeta, migrate, setMeta, type TeamRow } from './db.ts';
+import { addEvent, getMeta, migrate, readProgress, setMeta, type EventRow, type TeamRow } from './db.ts';
 import type { Env } from './index.ts';
 import { BikeService } from './race/BikeService.ts';
 import { feedLine, NEW_TEAM_RACE, RaceEngine, type LockEvent, type TeamRace } from './race/engine.ts';
+import { exportCsv, exportRace } from './race/export.ts';
 import { needsTick, tickEntries, tickKey, type Peer } from './race/presence.ts';
 import type { PlayerSpot } from './race/VehicleSpawner.ts';
 
@@ -31,7 +32,7 @@ interface Attachment {
 interface TeamState extends TeamRace {
   reconnects: number;
   lastSeen: number | null;
-  /** Over the speed limit or a suspicious respawn (SPEC §13.9): red on the Host, never cleared automatically. */
+  /** Over the speed limit or a suspicious respawn (SPEC §13.9): red on the Host, cleared only by the Host (host.flag). */
   flagged: boolean;
   /** Phase 10 (V3): why / since when (HostState.teams[].flagWhy / flagAt); [] / null while not flagged. */
   flagWhy: FlagWhy[];
@@ -147,7 +148,7 @@ export class RaceRoom extends DurableObject<Env> {
         // S1: forget the revealed box first, so the box of the branch switched back to is revealed again
         for (const ws of this.sockets(team)) {
           ws.serializeAttachment({ ...att(ws), box: null } satisfies Attachment);
-          this.send(ws, { t: 'box', op: 'remove', step, branch });
+          this.send(ws, branch === undefined ? { t: 'box', op: 'hide', step } : { t: 'box', op: 'remove', step, branch });
         }
       },
       feed: (m) => {
@@ -193,7 +194,23 @@ export class RaceRoom extends DurableObject<Env> {
     if (request.method === 'GET' && url.pathname === '/ws') return this.upgrade(request, url.searchParams.get('token'));
     // Phase 8 (D13): the Worker asks whether team `team` may load image `name` (it streams R2 itself): 204 yes / 404 no
     if (request.method === 'GET' && url.pathname === '/media') return new Response(null, { status: this.engine.mediaAllowed(url.searchParams.get('team') ?? '', url.searchParams.get('name') ?? '') ? 204 : 404 });
+    // SPEC §17.25: the Worker checked the Host token
+    if (request.method === 'GET' && url.pathname === '/export') return this.export(url.searchParams.get('format') === 'json' ? 'json' : 'csv');
     return json({ ok: false, error: 'not_found' }, 404);
+  }
+
+  /** SPEC §17.25: the raw timing data (race/export.ts), read from SQLite only (0 rows written), as a download. */
+  private export(format: 'csv' | 'json'): Response {
+    const events = this.sql.exec<EventRow>('SELECT id, t, team, type, data FROM events ORDER BY id').toArray();
+    const teams = this.teams().map((t) => ({ ...this.teamState(t), id: t.id, name: t.name }));
+    const data = { race: this.race, ...exportRace(this.engine.leg, teams, readProgress(this.sql), events, Date.now()) };
+    return new Response(format === 'json' ? JSON.stringify(data) : exportCsv(data), {
+      headers: {
+        'Content-Type': format === 'json' ? 'application/json; charset=utf-8' : 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="race-${this.race}-thoi-gian.${format}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
   }
 
   /** SPEC §7 / §8.10: team code → token + a summary for the "Chào mừng trở lại" screen. */
@@ -315,7 +332,7 @@ export class RaceRoom extends DurableObject<Env> {
       over = overSpeed(l.win, footSpeed * (now - l.bikeAt <= NET.speedWindowMs ? bikeSpeedMultiplier : 1));
       if (over && !l.over) {
         if (this.count(t.id, 'speed', now) <= NET.maxRespawns) this.event(now, t.id, 'speed', { v: Math.round(l.win.speed * 10) / 10, x: Math.round(pose.x), z: Math.round(pose.z) });
-        this.flag(t);
+        this.flag(t, 'speed', now);
       }
     } else {
       // New window (first pose, (re)connect, wake), SPEC §8.10: the way from the trusted point may take the time the team
@@ -366,13 +383,13 @@ export class RaceRoom extends DurableObject<Env> {
 
   /** A respawn or an unexplained jump: logged, and counted per NET.respawnWindowMs — more than NET.maxRespawns or more
    *  than NET.maxRespawnJump m in all → suspicious + flagged; events stop at the cap (SQLite row budget). */
-  private teleport(t: TeamRow, l: Live, d: number, now: number, type: string, data: object): boolean {
+  private teleport(t: TeamRow, l: Live, d: number, now: number, type: 'jump' | 'respawn', data: object): boolean {
     const r = l.tp && now - l.tp.start < NET.respawnWindowMs ? l.tp : (l.tp = { start: now, n: 0, d: 0, g: 0 });
     r.n++;
     r.d += d;
     const suspicious = r.n > NET.maxRespawns || r.d > NET.maxRespawnJump;
     if (r.n <= NET.maxRespawns) this.event(now, t.id, type, { ...data, ...(suspicious ? { suspicious } : {}) });
-    if (suspicious) this.flag(t);
+    if (suspicious) this.flag(t, type, now);
     return suspicious;
   }
 
@@ -442,10 +459,19 @@ export class RaceRoom extends DurableObject<Env> {
       case 'host.review': // isClientMessage: Host sockets only
         this.engine.onHost(m, (r) => this.send(ws, r), now);
         return this.soon(now);
-      case 'host.flag':
-        // TODO(phase10 track S, plan §4.2): no team → error; not flagged → warning "Đội này không có cờ."; else one
-        // transaction: event host.unflag {why, since} + saveTeamState {flagged: false, flagWhy: [], flagAt: null} (3 rows), then soon(now)
-        return this.send(ws, { t: 'host.notice', level: 'warning', message: 'Xóa cờ chưa được hỗ trợ (Phase 10 đang làm).' });
+      case 'host.flag': {
+        // Phase 10 (V3, plan §4.2 / M5): a mark only; the history stays in `events`; new evidence flags the team again
+        // (Live.over / tp untouched). 3 rows: the event + teams.state, written before the Host hears.
+        const t = this.team(m.team);
+        if (!t) return this.send(ws, { t: 'host.notice', level: 'error', message: 'Không có đội này.' });
+        const s = this.teamState(t);
+        if (!s.flagged) return this.send(ws, { t: 'host.notice', level: 'warning', message: 'Đội này không có cờ.' });
+        this.ctx.storage.transactionSync(() => {
+          this.event(now, t.id, 'host.unflag', { why: s.flagWhy, since: s.flagAt });
+          this.saveTeamState(t, { ...s, flagged: false, flagWhy: [], flagAt: null });
+        });
+        return this.pushHostState(now);
+      }
     }
   }
 
@@ -646,11 +672,12 @@ export class RaceRoom extends DurableObject<Env> {
     this.counters.rows += 1;
   }
 
-  // TODO(phase10 track S, plan §4.2): flag(t, why: FlagWhy, now): first flag → {flagged, flagWhy: [why], flagAt: now} (1 row);
-  // a new `why` on a flagged team → appended (1 row); known → 0 rows. Callers: onPose → 'speed', teleport → its `type`.
-  private flag(t: TeamRow) {
+  /** Phase 10 (V3): red flag + why (SPEC §13.9, a mark only): the first raise → flagAt = now (1 row); a new reason on a
+   *  flagged team → appended (1 row, ≤ 3 per flag); a known one → 0 rows. */
+  private flag(t: TeamRow, why: FlagWhy, now: number) {
     const s = this.teamState(t);
-    if (!s.flagged) this.saveTeamState(t, { ...s, flagged: true });
+    if (s.flagged && s.flagWhy.includes(why)) return;
+    this.saveTeamState(t, s.flagged ? { ...s, flagWhy: [...s.flagWhy, why] } : { ...s, flagged: true, flagWhy: [why], flagAt: now });
   }
 
   /** Race event, written at once (2 rows: table + index). */

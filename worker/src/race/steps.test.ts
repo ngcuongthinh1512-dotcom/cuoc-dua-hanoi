@@ -216,11 +216,12 @@ describe('review (D5, D10)', () => {
     expect([z.locked_until, taskState(zero, 1, z, 2000)]).toEqual([null, 'active']);
   });
 
-  it('refusals in Vietnamese: a decided answer, a wrong id, nothing sent, a done step (idempotent: two Hosts, a double click)', () => {
+  it('refusals in Vietnamese: a decided answer, a wrong id, nothing sent, a done step (idempotent: a double click)', () => {
     const decided = recs({ ...pend(1), s: 'approved', d: 5 });
     expect(review(mini, 1, T1({ answers: decided }), m('approve', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
     expect(review(mini, 1, T1({ answers: recs(pend(1)) }), m('approve', 2), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' });
-    expect(review(mini, 1, T1(), m('approve'), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // a typed task: no id, nothing pending
+    expect(review(mini, 1, T1(), m('penalize'), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // nothing pending to penalize
+    expect(review(mini, 1, T1({ task_started_at: null }), m('approve'), 9)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // teaser: no "Cho qua"
     expect(review(mini, 1, T1({ answers: recs(pend(1)), completed_at: 8 }), m('approve', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
     expect(review(mini, 1, T1({ answers: recs({ ...pend(1), s: 'penalized' }) }), m('penalize', 1), 9)).toEqual({ refuse: 'Bài này đã được xử lý.' });
     expect(review(mini, 0, T1(), m('approve', 1), 9)).toMatchObject({ refuse: expect.stringContaining('không có thử thách') });
@@ -235,7 +236,7 @@ describe('review (D5, D10)', () => {
     expect(review(mini, 1, T1({ answers: recs(pen, pend(2)) }), m('approve', 1), 5000)).toEqual({ refuse: 'Bài này đã được xử lý.' });
   });
 
-  it('approve without id (M2): a photo task active / locked (Host got it on Messenger) → a new approved answer; a typed task → refused', () => {
+  it('approve without id (M2): a photo task active / locked (Host got it on Messenger) → a new approved answer; a box not opened → refused', () => {
     const d1 = (more: Partial<StepProgressRow>) => ({ ...emptyProgress('t', 'D1'), clue_opened_at: 1, branch: 'B', branch_opened_at: 2, task_started_at: 2, ...more });
     const approve = m('approve', undefined, undefined, 'D1');
     const r = ok(review(mini, 3, d1({ answers: recs({ id: 1, b: 'A', text: '8', at: 1, s: 'wrong' }) }), approve, 50));
@@ -243,7 +244,25 @@ describe('review (D5, D10)', () => {
     expect(r.answers[1]).toEqual({ id: 2, b: 'B', text: '', at: 50, s: 'approved', d: 50 });
     expect(ok(review(mini, 3, d1({ locked_until: 99 }), approve, 50)).approve).toBe(true);
     expect(review(mini, 3, d1({ branch_opened_at: null }), approve, 50)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // box not opened
-    expect(review(mini, 3, d1({ branch: 'A' }), approve, 50)).toEqual({ refuse: 'Đội chưa gửi câu trả lời.' }); // typed
+  });
+
+  it('V5 "Cho qua" (Phase 10, plan M8): approve without id passes ANY task while active / locked; a pending answer is approved itself', () => {
+    const approve = (step = 'T1') => m('approve', undefined, undefined, step);
+    // a typed host_approval challenge, active with a penalized answer, and locked by it
+    const pen = { ...pend(1, 1000), s: 'penalized', d: 2000 };
+    for (const locked_until of [null, 10 * MIN]) {
+      const r = ok(review(mini, 1, T1({ answers: recs(pen), locked_until, rejections: 1 }), approve(), 5000));
+      expect(r).toMatchObject({ approve: true, id: 2, row: { locked_until: null, rejections: 1, decided_at: 5000 } });
+      expect(r.answers).toEqual([pen, { id: 2, b: null, text: '', at: 5000, s: 'approved', d: 5000 }]);
+    }
+    // a typed auto branch (D1 A), opened
+    const a = ok(review(mini, 3, { ...emptyProgress('t', 'D1'), clue_opened_at: 1, branch: 'A', branch_opened_at: 2, task_started_at: 2 }, approve('D1'), 50));
+    expect(a).toMatchObject({ approve: true, id: 1 });
+    expect(a.answers).toEqual([{ id: 1, b: 'A', text: '', at: 50, s: 'approved', d: 50 }]);
+    // pending: no new "Cho qua" answer, the pending one is approved (the Host page shows Duyệt / Phạt there)
+    const p = ok(review(mini, 1, T1({ answers: recs(pend(1, 1000)) }), approve(), 3000));
+    expect(p).toMatchObject({ approve: true, id: 1, row: { approval_wait_seconds: 2 } });
+    expect(p.answers).toHaveLength(1);
   });
 
   it('note: the step\'s Host note only ("" clears it), any step the team holds', () => {
