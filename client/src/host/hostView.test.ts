@@ -104,7 +104,7 @@ describe('Host view', () => {
     const blue = rows[0]!;
     expect(blue.cells.every((c) => c.state === 'done')).toBe(true);
     expect(Object.keys(blue).sort()).toEqual(['cells', 'colour', 'finish', 'flagged', 'name', 'out', 'penalty', 'rank', 'team']);
-    expect(blue.cells[0]!.text).toMatch(/^\d\d:\d\d:\d\d · 15:00$/); // when · how long the step took
+    expect(blue.cells[0]!.text).toMatch(/^\d\d:\d\d:\d\d$/); // only when it was done (no duration)
     expect(blue.cells[3]!.text).toContain(' · Tính (A) ↺1'); // branch A after one switch
     const red = rows[2]!;
     expect(red.cells.map((c) => c.state)).toEqual(['done', 'done', 'done', 'active', 'todo', 'todo']);

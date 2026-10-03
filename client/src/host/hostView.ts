@@ -213,8 +213,7 @@ const ANSWER_LABEL: Record<AnswerStatus, string> = { pending: 'chờ duyệt', a
 const fmtNum = (n: number) => String(n).replace('.', ',');
 
 /** SPEC §13.6 minimal matrix: rows = teams (ranked first: real finish order, SPEC §17.22), columns = steps. grey = not yet,
- *  yellow = at the step (elapsed there), green = done ("HH:mm:ss · mm:ss": when · how long the step took; SPEC §17.23: wall
- *  clock only, no T+ per team).
+ *  yellow = at the step (elapsed there), green = done ("HH:mm:ss": the wall-clock time it was done in the leg's time zone, Vietnam time; no duration, SPEC §17.23: no T+ per team).
  *  Phase 8 (D16): orange = an answer waits for the Host ("chờ duyệt mm:ss", Duyệt / Phạt in the cell), purple = a countdown
  *  ("⏳ mm:ss": the Host's penalty or a branch switch), "(A ↺1)" = branch A after one switch, "✗2" = two penalties; a photo
  *  task the team has started offers "Duyệt (đã nhận ảnh)"; the title lists every answer with the Host's notes.
@@ -246,7 +245,7 @@ export function progressTable(state: HostState, now: number): { head: { label: s
       ].filter(Boolean).join('\n');
       const branch = p?.branch ? ` · ${branchTag(state, s.id, p.branch)}${p.branchSwitches ? ` ↺${p.branchSwitches}` : ''}` : ''; // the team's name for it (visual#3)
       const tags = `${branch}${p?.rejections ? ` ✗${p.rejections}` : ''}`;
-      if (doneAt !== null) return { state: 'done', text: `${when(doneAt)} · ${fmtMinSec(doneAt - (p?.openedAt ?? doneAt))}${tags}`, title, buttons: [] };
+      if (doneAt !== null) return { state: 'done', text: `${when(doneAt)}${tags}`, title, buttons: [] };
       if (i !== t.step || t.finishAt !== null) return { state: 'todo', text: '', title, buttons: [] };
       // the team is at this step. A photo task it has started (a detour: its branch box opened) may be approved at once.
       const proof = s.type === 'detour' ? p?.branchOpenedAt != null && !!s.branches?.find((b) => b.id === p.branch)?.proof : !!s.proof && p?.startedAt != null;
