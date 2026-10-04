@@ -17,6 +17,12 @@ describe('presence', () => {
     expect(tickEntries({ team: 'a', pose: null }, peers, 500)).toEqual([]);
   });
 
+  it('SPEC §17.40: a finished team in the watch mode (`all`) gets every peer but itself, even without a pose', () => {
+    expect(tickEntries({ team: 'a', pose: at(0), all: true }, peers, 500).map((e) => e.slot)).toEqual([1, 2]);
+    expect(tickEntries({ team: 'a', pose: null, all: true }, peers, 500).map((e) => e.slot)).toEqual([1, 2]);
+    expect(tickEntries({ team: 'a', pose: at(0), all: false }, peers, 500).map((e) => e.slot)).toEqual([1]);
+  });
+
   it('ticks only when a peer in it moved or the set changed', () => {
     const e = tickEntries(null, peers, 500);
     expect(needsTick(e, new Set(), tickKey(e))).toBe(false); // nobody moved

@@ -10,7 +10,9 @@
 //     RankRow.out (ranking = real finish order).
 // 6 = Phase 10 Host tools (docs/plans/phase10.md §3.1 / §4.1 / §5.1): host.review op 'undo' + HostState.undo, host.flag
 //     clear + teams[].flagWhy / flagAt, ZoneMember.left, notice reviewUndone.
-export const PROTOCOL_VERSION = 6;
+// 7 = SPEC §17.40 watch mode: Role 'spectator' (spectator code "K" + 5, same login box), TeamInfo.racing + `team` racing,
+//     client `watch on/off`, host.spectator rotate + HostState.spectatorCode / spectators, CLOSE.full / kick 'full'.
+export const PROTOCOL_VERSION = 7;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */
@@ -95,6 +97,10 @@ export const NET = {
   /** Team codes: 6 chars, no 0 / O / 1 / I (SPEC §7). */
   codeLength: 6,
   codeAlphabet: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+  /** SPEC §17.40: the spectator code = this prefix + codeLength − 1 chars of the alphabet (typed into the same box; the
+   *  server tells codes apart by value, never by prefix), at most this many spectator sockets per race ("Phòng xem đã đầy"). */
+  spectatorPrefix: 'K',
+  maxSpectators: 50,
 } as const;
 
 /** Phase 8 (D12): clue images on R2 (private bucket MEDIA). A leg says "r2:<name>"; the object key is `<race>/<name>`
@@ -117,4 +123,6 @@ export const CLOSE = {
   raceClosed: 4410,
   /** No message / ping for NET.deadSocketMs. */
   silent: 4408,
+  /** SPEC §17.40: NET.maxSpectators spectator sockets already open. */
+  full: 4503,
 } as const;

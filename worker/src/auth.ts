@@ -4,11 +4,13 @@
 import { NET } from '@race/shared/protocol';
 
 export const HOST = 'host';
+/** SPEC §17.40: a spectator token's `t` = this prefix + the spectator code it was issued for (a rotated code kills it). */
+const SPECTATOR_T = 's:';
 
 export interface Claims {
   /** Race id. */
   r: string;
-  /** Team id, or HOST. */
+  /** Team id, HOST, or "s:<spectator code>". */
   t: string;
   /** Expiry, ms since the epoch. */
   e: number;
@@ -40,6 +42,10 @@ export async function verifyToken(secret: string, token: string | null | undefin
 }
 
 export const newClaims = (race: string, team: string, now = Date.now()): Claims => ({ r: race, t: team, e: now + NET.tokenTtlMs });
+/** SPEC §17.40: claims of a spectator token for `code`. */
+export const spectatorClaims = (race: string, code: string, now = Date.now()): Claims => newClaims(race, SPECTATOR_T + code, now);
+/** The spectator code a token was issued for; null for a team / Host token. */
+export const spectatorCodeOf = (c: Claims | null | undefined): string | null => (c?.t.startsWith(SPECTATOR_T) ? c.t.slice(SPECTATOR_T.length) : null);
 
 /** Host password check without an early exit on the first differing character. */
 export function constantTimeEqual(a: string, b: string): boolean {

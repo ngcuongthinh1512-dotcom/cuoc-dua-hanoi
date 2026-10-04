@@ -35,7 +35,9 @@ export interface TickEntry {
   pose: PoseSample;
 }
 
-export type Role = 'team' | 'host';
+/** SPEC §17.40: 'spectator' = the watch-only role (spectator code "K" + 5): sends nothing but pings, gets a compact welcome,
+ *  the ticks of every online team and `team` changes — never clues, boxes, progress, cards, feed. */
+export type Role = 'team' | 'host' | 'spectator';
 export type RaceStatus = 'lobby' | 'running' | 'paused' | 'finished';
 
 /** Public team facts every client may know (names and colours are on the shirts anyway). */
@@ -45,6 +47,9 @@ export interface TeamInfo {
   name: string;
   colour: string;
   online: boolean;
+  /** SPEC §17.40: still racing (not checked in, not out). The server always sends it; absent (demo / old data) = racing.
+   *  The watch bar lists only online + racing teams. */
+  racing?: boolean;
 }
 
 /** One shared bike (SPEC §6.2–6.4) as clients see it. parked = standing at a rack next to a checkpoint. */
@@ -353,6 +358,10 @@ export type ClientMessage =
   | { t: 'gesture'; g: GestureKind }
   /** claim = F on a free / own bike (server decides, SPEC §6.3); dismount carries where the bike now stands. */
   | { t: 'bike'; op: BikeOp; id: string; x?: number; y?: number; z?: number; yaw?: number }
+  /** SPEC §17.40: a finished team's client entered (`on`) / left the watch mode: while on, its ticks carry EVERY online
+   *  team (like the Host's), not only those within the interest radius. The server honours it only once the team is over
+   *  (checked in / out / race ended); a racing team's `watch` changes nothing. */
+  | { t: 'watch'; on: boolean }
   | RaceOp
   | HostMessage;
 
@@ -426,7 +435,9 @@ export type HostMessage =
   | { t: 'host.leg'; id?: string; json?: string }
   | HostReview
   /** Phase 10 (V3): clear a team's red flag (event host.unflag; the server flags again on new evidence, plan M5). */
-  | { t: 'host.flag'; op: 'clear'; team: string };
+  | { t: 'host.flag'; op: 'clear'; team: string }
+  /** SPEC §17.40: a new spectator code (the old one's tokens die, its open spectator sockets are closed 4401). */
+  | { t: 'host.spectator'; op: 'rotate' };
 
 // ── server → client ──
 export type ServerNotice =
@@ -441,7 +452,8 @@ export type ServerNotice =
   | 'lockWrong' | 'pickLimit' | 'creditsLocked'
   // Phase 10 (V2): the Host undid its last decision on this team; the `race` view before it restores the card
   | 'reviewUndone';
-export type KickReason = 'badToken' | 'otherDevice' | 'raceClosed' | 'protocol';
+/** 'full' (SPEC §17.40): NET.maxSpectators spectator sockets are already open (CLOSE.full). */
+export type KickReason = 'badToken' | 'otherDevice' | 'raceClosed' | 'protocol' | 'full';
 
 export interface Welcome {
   t: 'welcome';
@@ -449,8 +461,10 @@ export interface Welcome {
   race: string;
   serverMs: number;
   status: RaceStatus;
+  /** SPEC §17.40: a spectator's welcome is this shape with teams (incl. `racing`), movement, presence and empty / null race
+   *  fields (no pose, bikes, boxes, view, feed). */
   role: Role;
-  /** The logged-in team (absent for the Host). */
+  /** The logged-in team (absent for the Host and spectators). */
   team?: TeamInfo & { player: string };
   teams: TeamInfo[];
   /** SPEC §6.1: from the leg file, also the server's speed-check limits. */
@@ -477,7 +491,8 @@ export type ServerMessage =
   | TickArray
   | Welcome
   | { t: 'kick'; reason: KickReason }
-  | { t: 'team'; slot: number; online: boolean }
+  /** A team went online / offline; SPEC §17.40: `racing` when that changed instead (checked in / out: the watch bar drops it). */
+  | { t: 'team'; slot: number; online: boolean; racing?: boolean }
   /** Changed bikes (full = the whole list); `gone` = ids that vanished (abandoned, replaced, removed by the Host). */
   | { t: 'bikes'; list: BikeInfo[]; gone?: string[]; full?: boolean }
   /** reason 'finished': the team checked in or the race is over (a spectator, SPEC §8.6 / §8.10). */
@@ -564,6 +579,10 @@ export interface HostState {
   queue: ReviewItem[];
   /** Phase 10 (V2): decisions still undoable (within NET.undoMs, newest last), gone from the list once past `until`. */
   undo: UndoItem[];
+  /** SPEC §17.40: the spectator code ("K" + 5, typed into the same login box) and how many spectator sockets are open.
+   *  Always sent by the server; absent only in the Host page's `?demo=1` state. */
+  spectatorCode?: string;
+  spectators?: number;
 }
 
 /** Estimated Cloudflare usage (SPEC §3: the Host debug view shows these). */

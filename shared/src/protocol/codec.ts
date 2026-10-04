@@ -79,13 +79,18 @@ const text = (v: unknown, max: number): v is string => typeof v === 'string' && 
 const point = (m: Record<string, unknown>) =>
   num(m.x) && num(m.y) && num(m.z) && num(m.yaw) && Math.abs(m.x) <= MAX_XZ / CM && Math.abs(m.z) <= MAX_XZ / CM && m.y >= MIN_Y / CM && m.y <= MAX_Y / CM;
 
-/** Shape check of a parsed player / Host JSON message (the server's trust boundary). Poses go through decodePose. */
-export function isClientMessage(m: unknown, role: 'team' | 'host'): boolean {
+/** Shape check of a parsed player / Host JSON message (the server's trust boundary). Poses go through decodePose.
+ *  A spectator (SPEC §17.40) never gets here: RaceRoom drops everything it sends. */
+export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator'): boolean {
   if (typeof m !== 'object' || m === null || Array.isArray(m)) return false;
   const o = m as Record<string, unknown>;
   switch (o.t) {
     case 'respawn':
       return point(o) && (o.how === 'safe' || o.how === 'stairs' || o.how === 'fell');
+    case 'watch':
+      return role === 'team' && typeof o.on === 'boolean';
+    case 'host.spectator':
+      return role === 'host' && o.op === 'rotate';
     case 'gesture':
       return o.g === 'wave' || o.g === 'bell';
     case 'bike':

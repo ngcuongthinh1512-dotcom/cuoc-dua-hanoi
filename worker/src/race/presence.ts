@@ -8,12 +8,13 @@ export interface Peer {
   pose: PoseSample;
 }
 
-/** A team viewer gets the online peers within `radius` (never itself; nothing until it has a pose); the Host (null) gets all. */
-export function tickEntries(viewer: { team: string; pose: PoseSample | null } | null, peers: readonly Peer[], radius: number): TickEntry[] {
+/** A team viewer gets the online peers within `radius` (never itself; nothing until it has a pose); the Host / a spectator
+ *  (null) gets all. SPEC §17.40: `all` (a finished team in the watch mode) = every peer but itself, no pose needed. */
+export function tickEntries(viewer: { team: string; pose: PoseSample | null; all?: boolean } | null, peers: readonly Peer[], radius: number): TickEntry[] {
   const at = viewer?.pose;
-  if (viewer && !at) return [];
+  if (viewer && !at && !viewer.all) return [];
   return peers
-    .filter((p) => !viewer || (p.team !== viewer.team && Math.hypot(p.pose.x - at!.x, p.pose.z - at!.z) <= radius))
+    .filter((p) => !viewer || (p.team !== viewer.team && (viewer.all || Math.hypot(p.pose.x - at!.x, p.pose.z - at!.z) <= radius)))
     .map((p) => ({ slot: p.slot, pose: p.pose }));
 }
 

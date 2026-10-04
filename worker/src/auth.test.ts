@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { constantTimeEqual, HOST, newClaims, signToken, verifyToken } from './auth.ts';
+import { constantTimeEqual, HOST, newClaims, signToken, spectatorClaims, spectatorCodeOf, verifyToken } from './auth.ts';
 
 const SECRET = 'doi-mat-khau-nay';
 
@@ -22,6 +22,14 @@ describe('tokens', () => {
     expect(await verifyToken(SECRET, `${body}.${sig.slice(0, -2)}AA`, 'paris', 2000)).toBeNull();
     expect(await verifyToken(SECRET, token, 'paris', 1000 + 25 * 3_600_000)).toBeNull();
     for (const bad of [null, undefined, '', 'abc', 'a.b', '%%%.%%%', `${body}.`]) expect(await verifyToken(SECRET, bad, 'paris', 2000)).toBeNull();
+  });
+
+  it('SPEC §17.40: a spectator token names its code; team / Host tokens have none', async () => {
+    const token = await signToken(SECRET, spectatorClaims('paris', 'KABCDE', 1000));
+    expect(spectatorCodeOf(await verifyToken(SECRET, token, 'paris', 2000))).toBe('KABCDE');
+    expect(spectatorCodeOf(newClaims('paris', 'team-1'))).toBeNull();
+    expect(spectatorCodeOf(newClaims('paris', HOST))).toBeNull();
+    expect(spectatorCodeOf(null)).toBeNull();
   });
 
   it('compares passwords without short-circuiting on length', () => {

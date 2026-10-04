@@ -8,7 +8,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { SPRINT_MULTIPLIER } from '@race/shared';
 import { startSpot } from '@race/shared/leg';
 import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FeedMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
-import { HOST, newClaims, signToken, verifyToken } from './auth.ts';
+import { HOST, newClaims, signToken, spectatorClaims, spectatorCodeOf, verifyToken } from './auth.ts';
 import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, readProgress, setMeta, type EventRow, type TeamRow } from './db.ts';
 import type { Env } from './index.ts';
@@ -26,6 +26,8 @@ interface Attachment {
   since: number;
   /** Key (boxKey: step|branch) of the clue box this socket was last told is revealed (SPEC §17.10), null = none. */
   box: string | null;
+  /** SPEC §17.40: a team socket in the watch mode (`watch on`): its ticks carry every online team once the team is over. */
+  watch?: boolean;
 }
 
 /** Per-team state kept in teams.state (JSON): presence fields + the Phase 7 race fields (race/engine.ts TeamRace, `step`
@@ -69,12 +71,17 @@ type RaceWelcome = ReturnType<RaceEngine['welcome']>;
 const boxKey = (b: { step: string; branch?: string }) => `${b.step}|${b.branch ?? ''}`;
 
 const TEAM = 'team';
+/** SPEC §17.40: the watch-only role (spectator code): a socket tag like TEAM / HOST. */
+const SPECTATOR = 'spectator';
+const SPECTATOR_CODE = 'spectatorCode'; // meta key
 type Op = 'bike' | 'speed' | 'connect' | 'login' | 'race';
 /** m: a lag of the trusted point that grows by less than this is not logged as a teleport (the client's spawn settling
  *  next to its start spot, rounding); faster drifts are the speed window's flag, and the trusted point stays honest. */
 const JUMP_NOISE_M = 5;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const att = (ws: WebSocket) => ws.deserializeAttachment() as Attachment;
+/** SPEC §17.40 TeamInfo.racing: not checked in, not out (the Host's "Kết thúc" marks every unfinished team out). */
+const racing = (s: Pick<TeamRace, 'finishAt' | 'out'>) => s.finishAt === null && !s.out;
 
 export class RaceRoom extends DurableObject<Env> {
   private readonly sql: SqlStorage;
@@ -109,6 +116,8 @@ export class RaceRoom extends DurableObject<Env> {
   private readonly gone = new WeakSet<WebSocket>();
   /** Phase 8B: the newest NET.feedKept public feed lines, oldest first; null = not read from `events` since the wake. */
   private feedV: FeedMessage[] | null = null;
+  /** SPEC §17.40: `team` racing changes found while the engine wrote (inside its transaction), sent at its `changed`. */
+  private teamNews: ServerMessage[] = [];
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -128,7 +137,11 @@ export class RaceRoom extends DurableObject<Env> {
       counters: this.counters,
       transaction: (fn) => this.ctx.storage.transactionSync(fn),
       send: (team, m) => this.sockets(team).forEach((ws) => this.send(ws, m)),
-      changed: (now) => this.soon(now),
+      changed: (now) => {
+        // SPEC §17.40: after the transaction committed, everyone (spectators too) learns who stopped racing
+        for (const m of this.teamNews.splice(0)) this.broadcast(m);
+        this.soon(now);
+      },
       event: (t, team, type, data) => this.event(t, team, type, data),
       team: (id) => {
         const r = this.team(id);
@@ -136,7 +149,10 @@ export class RaceRoom extends DurableObject<Env> {
       },
       saveTeam: (id, r) => {
         const row = this.team(id);
-        if (row) this.saveTeamState(row, { ...this.teamState(row), ...r });
+        if (!row) return;
+        const s = this.teamState(row);
+        this.saveTeamState(row, { ...s, ...r });
+        if (racing(s) !== racing(r)) this.teamNews.push({ t: 'team', slot: row.slot, online: this.online().has(id), racing: racing(r) });
       },
       teamIds: () => this.teams().map((t) => t.id),
       slot: (id) => this.team(id)?.slot ?? -1,
@@ -162,9 +178,11 @@ export class RaceRoom extends DurableObject<Env> {
           this.feedV.push(m);
           this.feedV.splice(0, this.feedV.length - NET.feedKept);
         }
-        // SPEC §17.35: the count only to a Host or a team in the room past its mark (40, own lock 60; decided now, per socket)
+        // SPEC §17.35: the count only to a Host or a team in the room past its mark (40, own lock 60; decided now, per socket);
+        // §17.40: never to a spectator
         for (const ws of this.sockets()) {
           const a = att(ws);
+          if (a.role === SPECTATOR) continue;
           this.send(ws, feedFor(m, a.role !== TEAM || this.engine.seesFeedCount(a.team, m, now)));
         }
       },
@@ -230,6 +248,11 @@ export class RaceRoom extends DurableObject<Env> {
     if (fails && fails.until > now) return json({ ok: false, error: 'locked', retryMs: fails.until - now }, 429);
     const code = typeof body?.code === 'string' ? body.code.trim().toUpperCase() : '';
     const team = code ? this.teams().find((t) => t.code === code) : undefined;
+    // SPEC §17.40: the spectator code goes through the same box and the same guess limit; its token names the code
+    if (!team && code && code === this.spectatorCode()) {
+      this.loginFails.delete(ip);
+      return json({ ok: true, token: await signToken(this.env.HOST_PASSWORD, spectatorClaims(this.race, code, now)), role: SPECTATOR });
+    }
     if (!team) {
       const n = fails && !fails.until ? fails.n + 1 : 1; // a served lock starts the count again
       this.loginFails.set(ip, { n, until: n >= NET.loginAttempts ? now + NET.loginLockMs : 0 });
@@ -248,15 +271,21 @@ export class RaceRoom extends DurableObject<Env> {
     const claims = await verifyToken(this.env.HOST_PASSWORD, token, this.race);
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
-    const role: Role = claims?.t === HOST ? HOST : TEAM;
+    const specCode = spectatorCodeOf(claims);
+    const role: Role = claims?.t === HOST ? HOST : specCode !== null ? SPECTATOR : TEAM;
     const team = role === TEAM && claims ? this.team(claims.t) : undefined;
     const now = Date.now();
-    // A reconnect loop past NET.maxConnects: closed before any row (the older socket keeps the team).
-    const refused = !claims || (role === TEAM && !team) ? CLOSE.badToken : team && this.count(team.id, 'connect', now) > NET.maxConnects ? CLOSE.tooFast : 0;
+    // A reconnect loop past NET.maxConnects: closed before any row (the older socket keeps the team). SPEC §17.40: a
+    // spectator token of a rotated code is a bad token; past NET.maxSpectators open spectator sockets the room is full.
+    const refused =
+      !claims || (role === TEAM && !team) || (specCode !== null && specCode !== this.spectatorCode()) ? CLOSE.badToken
+      : team && this.count(team.id, 'connect', now) > NET.maxConnects ? CLOSE.tooFast
+      : role === SPECTATOR && this.sockets(SPECTATOR).length >= NET.maxSpectators ? CLOSE.full
+      : 0;
     if (refused) {
       // Accept, then close with the reason: the browser sees the code (a 401 response gives it only "failed").
       server.accept();
-      server.close(refused, refused === CLOSE.badToken ? 'bad token' : 'too many reconnects');
+      server.close(refused, refused === CLOSE.badToken ? 'bad token' : refused === CLOSE.full ? 'full' : 'too many reconnects');
       return new Response(null, { status: 101, webSocket: client });
     }
     this.ctx.acceptWebSocket(server, [role, ...(team ? [team.id] : [])]);
@@ -280,11 +309,11 @@ export class RaceRoom extends DurableObject<Env> {
       if (l) Object.assign(l, { win: undefined, over: false }); // the client spawns at welcome.pose: new window
       this.event(now, team.id, 'connect');
     } else {
-      server.serializeAttachment({ role, team: HOST, since: now, box: null } satisfies Attachment);
+      server.serializeAttachment({ role, team: role, since: now, box: null } satisfies Attachment);
     }
     this.send(server, this.welcome(role, team, race, now));
     if (team) this.broadcast({ t: 'team', slot: team.slot, online: true }, server);
-    else this.send(server, this.hostState(now));
+    else if (role === HOST) this.send(server, this.hostState(now));
     this.soon(now); // ticks for the new set of peers + host.state
     // Bike spawning alarm (SPEC §3: only while a team is online; track C's alarm() re-arms while players remain).
     if (team && (await this.ctx.storage.getAlarm()) === null) this.setAlarm(now + this.engine.rules().vehicles.spawnIntervalMinutes * 60_000);
@@ -300,6 +329,7 @@ export class RaceRoom extends DurableObject<Env> {
     const a = att(ws);
     const max = a.role === HOST ? NET.maxHostBytes : NET.maxPlayerBytes;
     if (typeof message === 'string' && message.length > max) return this.close(ws, CLOSE.tooBig, 'too big');
+    if (a.role === SPECTATOR) return; // SPEC §17.40: a spectator only pings (auto-answered above); the rest is dropped
     const m = parseFrame(message, max);
     const pose = decodePose(m);
     if (pose) return this.onPose(ws, a, pose, now);
@@ -432,6 +462,17 @@ export class RaceRoom extends DurableObject<Env> {
         if (team) this.broadcast({ t: 'gesture', slot: team.slot, g: m.g }, ws);
         return;
       }
+      case 'watch': {
+        // SPEC §17.40: remembered on the socket (hibernation); sendTicks honours it only while the team is over
+        if (a.role !== TEAM) return;
+        ws.serializeAttachment({ ...a, watch: m.on } satisfies Attachment);
+        return this.soon(now); // the next tick goes out even if nobody moved: the set of peers this socket gets changed (needsTick)
+      }
+      case 'host.spectator': {
+        this.rotateSpectatorCode(now);
+        for (const s of this.sockets(SPECTATOR)) this.close(s, CLOSE.badToken, 'code changed');
+        return this.pushHostState(now);
+      }
       case 'respawn': {
         const t = a.role === TEAM ? this.team(a.team) : undefined;
         if (!t) return;
@@ -543,13 +584,14 @@ export class RaceRoom extends DurableObject<Env> {
     if (busy) this.timer = setTimeout(() => this.loop(), 1000 / NET.tickHz);
   }
 
-  /** SPEC §7: each socket gets the online teams within NET.interestRadius (Host: all), only when one of them moved or
-   *  the set changed. */
+  /** SPEC §7: each socket gets the online teams within NET.interestRadius (Host / spectator: all; §17.40: a finished team
+   *  in the watch mode: all but itself), only when one of them moved or the set changed. */
   private sendTicks(now: number) {
     const peers = this.peers();
     for (const ws of this.sockets()) {
       const a = att(ws);
-      const viewer = a.role === HOST ? null : { team: a.team, pose: this.live.get(a.team)?.valid ?? null }; // D4: no remote scan
+      // D4: no remote scan (the radius is measured from the trusted point); `watch` is trusted only once the team is over
+      const viewer = a.role !== TEAM ? null : { team: a.team, pose: this.live.get(a.team)?.valid ?? null, all: !!a.watch && this.engine.over(a.team) };
       const entries = tickEntries(viewer, peers, NET.interestRadius);
       if (!needsTick(entries, this.dirty, this.sentKey.get(ws))) continue;
       this.sentKey.set(ws, tickKey(entries));
@@ -639,12 +681,26 @@ export class RaceRoom extends DurableObject<Env> {
     this.pushHostState(now);
   }
 
-  private newCode(): string {
-    const bytes = new Uint8Array(NET.codeLength);
+  private newCode(prefix = ''): string {
+    const bytes = new Uint8Array(NET.codeLength - prefix.length);
     for (;;) {
-      const code = Array.from(crypto.getRandomValues(bytes), (b) => NET.codeAlphabet[b % NET.codeAlphabet.length]).join('');
-      if (!this.teams().some((t) => t.code === code)) return code;
+      const code = prefix + Array.from(crypto.getRandomValues(bytes), (b) => NET.codeAlphabet[b % NET.codeAlphabet.length]).join('');
+      // never a team's code, never the spectator code (both ways: a team code may start with the prefix too)
+      if (!this.teams().some((t) => t.code === code) && code !== getMeta(this.sql, SPECTATOR_CODE)) return code;
     }
+  }
+
+  /** SPEC §17.40: the race's spectator code ("K" + 5), made on first use and kept in meta (1 row, before any reply). */
+  private spectatorCode(): string {
+    return getMeta(this.sql, SPECTATOR_CODE) ?? this.rotateSpectatorCode(Date.now());
+  }
+
+  /** A new spectator code (first one, or the Host's "Đổi mã"): written before anyone hears it. */
+  private rotateSpectatorCode(now: number): string {
+    const code = this.newCode(NET.spectatorPrefix);
+    this.setMeta(SPECTATOR_CODE, code);
+    this.event(now, null, 'host.spectator', { n: this.sockets(SPECTATOR).length });
+    return code;
   }
 
   private hostState(now: number): HostState {
@@ -657,7 +713,10 @@ export class RaceRoom extends DurableObject<Env> {
     const race = this.engine.hostView(now);
     // ponytail: `steps` (Phase 6 corridor points: start + route / Pit Stop zones) stays until the Host page reads `leg`
     const steps = race.leg && [{ id: 'start', ...race.leg.start }, ...race.leg.steps.filter((s) => s.type === 'route_info' || s.type === 'pit_stop').map(({ id, x, z }) => ({ id, x, z }))];
-    return { t: 'host.state', serverMs: now, status: this.engine.status, teams, counters: this.counters.toJSON(), bikes: this.bikes.list(), spawning: this.bikes.spawning, ...(steps ? { steps } : {}), ...race };
+    return {
+      t: 'host.state', serverMs: now, status: this.engine.status, teams, counters: this.counters.toJSON(), bikes: this.bikes.list(), spawning: this.bikes.spawning,
+      spectatorCode: this.spectatorCode(), spectators: this.sockets(SPECTATOR).length, ...(steps ? { steps } : {}), ...race,
+    };
   }
 
   // ── helpers ──
@@ -728,15 +787,15 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   private info(t: TeamRow, online: Set<string>): TeamInfo {
-    return { slot: t.slot, id: t.id, name: t.name, colour: t.colour, online: online.has(t.id) };
+    return { slot: t.slot, id: t.id, name: t.name, colour: t.colour, online: online.has(t.id), racing: racing(this.teamState(t)) };
   }
 
   private welcome(role: Role, team: TeamRow | undefined, race: RaceWelcome | null, now: number): Welcome {
     const { movement, presence } = this.engine.rules();
     const online = this.online();
     const l = team && this.live.get(team.id);
-    // Track C: a team sees only its own bikes + free / standing ones near it (forTeam); the Host sees all.
-    const myBikes = team ? this.bikes.forTeam(team.id, l ? { team: team.id, x: l.valid.x, z: l.valid.z } : null) : this.bikes.list();
+    // Track C: a team sees only its own bikes + free / standing ones near it (forTeam); the Host sees all; a spectator none.
+    const myBikes = team ? this.bikes.forTeam(team.id, l ? { team: team.id, x: l.valid.x, z: l.valid.z } : null) : role === HOST ? this.bikes.list() : [];
     return {
       t: 'welcome', v: PROTOCOL_VERSION, race: this.race, serverMs: now, status: this.engine.status, role,
       teams: this.teams().map((t) => this.info(t, online)), movement,
@@ -746,7 +805,8 @@ export class RaceRoom extends DurableObject<Env> {
       pose: team && l ? { ...l.valid, bikeId: myBikes.find((b) => b.owner === team.id)?.id ?? null } : null,
       bikes: myBikes,
       ...(race ?? { boxes: [], view: null, startOrder: null, showStartOrder: false, start: null }),
-      feed: team ? this.feed().map((m) => feedFor(m, this.engine.seesFeedCount(team.id, m, now))) : this.feed(), // §17.35, judged now
+      // §17.35, judged now; §17.40: a spectator gets no feed
+      feed: team ? this.feed().map((m) => feedFor(m, this.engine.seesFeedCount(team.id, m, now))) : role === HOST ? this.feed() : [],
     };
   }
 

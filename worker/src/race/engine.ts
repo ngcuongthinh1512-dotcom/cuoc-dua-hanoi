@@ -362,10 +362,14 @@ export class RaceEngine {
   /** Why the team may not take a bike now (BikeService.onTeam), false = it may: checked in or the race is over (a
    *  spectator, SPEC §8.6 / §8.10), or the current step is a walk-only route (SPEC §6.5). */
   bikeBlock(team: string): false | 'walkOnly' | 'finished' {
-    const r = this.io.team(team);
-    if (r?.finishAt != null || this.statusV === 'finished') return 'finished';
-    const s = this.legV.steps[r?.step ?? -1];
+    if (this.over(team)) return 'finished';
+    const s = this.legV.steps[this.io.team(team)?.step ?? -1];
     return s?.type === 'route_info' && 'mandatory' in s.transport ? 'walkOnly' : false;
+  }
+
+  /** The race is over for this team (checked in / out, or the Host ended it): SPEC §17.39 it walks on, §17.40 it may watch. */
+  over(team: string): boolean {
+    return this.io.team(team)?.finishAt != null || this.statusV === 'finished';
   }
 
   /** A team's socket went: in the "Tại điểm này" lists of the others it becomes "vừa rời đi" (Phase 10, V4). */
