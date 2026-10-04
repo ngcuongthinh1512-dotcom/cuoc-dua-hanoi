@@ -442,7 +442,9 @@ function soundNewQueue(s: State) {
   for (const r of fresh) notify(`${r.name}: chờ duyệt`, `${r.label}${r.branchName ? ` (nhánh ${r.branchName})` : ''} · ${r.text ? `«${r.text}»` : 'đã gửi bài qua Messenger'}`, r.key);
 }
 
-/** Returns how many answers wait. */
+/** Returns how many answers wait. SPEC §17.42: one card per answer in three framed parts — the head (team, step, wait clock,
+ *  submit code), "ĐỘI TRẢ LỜI" (blue, the team's text big, earlier tries small, the KHỚP / Chưa khớp badge) and "ĐÁP ÁN ĐÚNG –
+ *  chỉ Host thấy" (green, smaller, one chip per reference answer) — then the actions row (Duyệt far from Phạt). */
 function drawQueue(s: State, now: number): number {
   const rows = queueRows(s, now);
   queueHead.textContent = `Chờ duyệt (${rows.length})`;
@@ -451,8 +453,9 @@ function drawQueue(s: State, now: number): number {
     queueBox.replaceChildren(...rows.map((r) => {
       const note = el('textarea', { rows: 1, maxLength: NET.noteMax, placeholder: 'Ghi chú của Host (đội không thấy)', value: noteDrafts.get(r.key) ?? r.note });
       note.addEventListener('input', () => noteDrafts.set(r.key, note.value));
-      const wait = el('b', {}, r.waiting);
+      const wait = el('b', { className: 'rv-wait', title: 'Đội đã chờ Host duyệt bao lâu' }, r.waiting);
       queueWaits.set(r.key, wait);
+      const copy = () => el('button', { className: 'small', title: 'Sao chép mã bài nộp', onclick: () => void navigator.clipboard?.writeText(r.code) }, 'Sao chép');
       const group: HTMLButtonElement[] = [];
       // SPEC §17.31: "Đúng ?/n" typed before Phạt (blank = no number); the team is told it only from scoreFromMinutes on
       const score = r.score ? el('input', { type: 'number', min: 0, max: r.score.scoreOf, step: 1, className: 'score', placeholder: '?', title: `Số phần đội làm đúng (0–${r.score.scoreOf}), gửi kèm Phạt; để trống = không báo số` }) : undefined;
@@ -469,21 +472,35 @@ function drawQueue(s: State, now: number): number {
         group.push(b);
         return b;
       };
-      return el('div', { className: 'review' },
-        el('div', { className: 'row' },
-          el('span', { className: 'dot', style: `background:${r.colour}` }), el('b', {}, r.name), ` · ${r.label}${r.branchName ? ` · nhánh ${r.branchName}` : ''} · mã `,
-          el('code', { className: 'code' }, r.code), el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(r.code) }, 'Sao chép'), ' · chờ ', wait),
-        el('div', { className: 'answer' }, r.text ? `«${r.text}»` : 'Đội báo đã gửi bài qua Messenger (đối chiếu ảnh với mã trên).'),
-        r.reference.length ? el('div', { className: 'ref' }, el('b', {}, 'Đáp án tham khảo: '), r.reference.join(' | ')) : '',
-        el('div', { className: 'row' }, note, btn('Duyệt', 'ok', 'approve'), btn(`Phạt ${String(r.lockMinutes).replace('.', ',')} phút`, 'danger', 'penalize'),
-          ...(score && r.score ? [el('label', { className: 'score-box', title: r.score.scoreHint }, 'Đúng ', score, `/${r.score.scoreOf}`), el('small', { className: 'score-hint' }, r.score.scoreHint)] : []),
-          btn('Lưu ghi chú', 'small', 'note')),
+      const chip = (cls: string, text: string, title = '') => el('span', { className: `chip ${cls}`, title }, text);
+      const previous = r.previous.map((p) => el('div', { className: 'rv-prev' }, p));
+      const badge = r.match ? el('span', { className: `rv-badge ${r.match}`, title: 'So khớp tự động (bỏ dấu, hoa / thường, khoảng trắng) với đáp án đúng – chỉ để tham khảo, Host vẫn quyết định' }, r.match === 'yes' ? 'KHỚP đáp án' : 'Chưa khớp') : '';
+      const answer = r.text
+        ? el('div', { className: 'rv-answer' },
+          el('div', { className: 'rv-label' }, chip('team', 'ĐỘI TRẢ LỜI'), r.attempt > 1 ? el('span', { className: 'rv-nth' }, `Lần gửi thứ ${r.attempt}`) : '', badge),
+          el('div', { className: 'rv-text' }, r.text), ...previous)
+        : el('div', { className: 'rv-answer' },
+          el('div', { className: 'rv-label' }, chip('team', 'ĐỘI BÁO ĐÃ GỬI BÀI QUA MESSENGER'), r.attempt > 1 ? el('span', { className: 'rv-nth' }, `Lần gửi thứ ${r.attempt}`) : ''),
+          el('div', { className: 'rv-text' }, 'Mã bài nộp: ', el('code', { className: 'rv-bigcode' }, r.code), copy()),
+          el('div', { className: 'rv-prev' }, 'Tìm ảnh gửi kèm đúng mã này trên Messenger rồi Duyệt / Phạt.'), ...previous);
+      return el('div', { className: 'review', style: `--team:${r.colour}` },
+        el('div', { className: 'rv-head' },
+          el('span', { className: 'dot', style: `background:${r.colour}` }), el('b', { className: 'rv-team' }, r.name),
+          el('span', { className: 'rv-step' }, `${r.label}${r.stepName ? ` · ${r.stepName}` : ''}${r.branchName ? ` · nhánh ${r.branchName}` : ''}`),
+          wait, r.text ? el('span', { className: 'rv-code' }, 'mã bài nộp ', el('code', { className: 'code' }, r.code), copy()) : ''),
+        answer,
+        r.reference.length ? el('div', { className: 'rv-ref' }, chip('ref', '🔒 ĐÁP ÁN ĐÚNG – chỉ Host thấy', 'Đáp án tham khảo của chặng: đội không bao giờ thấy phần này'), ...r.reference.map((x) => el('span', { className: 'rv-refchip' }, x))) : '',
+        el('div', { className: 'rv-actions' }, note, btn('Duyệt', 'ok big', 'approve'),
+          ...(score && r.score ? [el('label', { className: 'score-box', title: 'Gửi kèm Phạt (SPEC §17.31); để trống = không báo số' }, 'Đúng ', score, `/${r.score.scoreOf}`), el('small', { className: 'score-hint' }, `gửi kèm Phạt · ${r.score.scoreHint}`)] : []),
+          btn(`Phạt ${String(r.lockMinutes).replace('.', ',')} phút`, 'danger big', 'penalize'), btn('Lưu ghi chú', 'small', 'note')),
       );
     }));
   });
   for (const r of rows) {
     const w = queueWaits.get(r.key);
-    if (w && w.textContent !== r.waiting) w.textContent = r.waiting;
+    if (!w) continue;
+    if (w.textContent !== r.waiting) w.textContent = r.waiting;
+    w.classList.toggle('slow', r.waitMs >= hostPage.queueSlowSeconds * 1000);
   }
   return rows.length;
 }

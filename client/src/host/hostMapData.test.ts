@@ -16,16 +16,16 @@ describe('Host minimap (SPEC §17.41)', () => {
       ['challenge', false, ['T1']],
       ['detour', false, ['L2', 'D1', 'D1|A']],
       ['detour', false, ['D1|B']],
-      ['pit_stop', true, ['L3', 'PS']],
+      ['pit_stop', true, ['L3', 'T2', 'PS']],
     ]);
     expect(placeLabel(places[3]!, 0)).toBe('Lộ trình 2 · Lựa chọn kép +1');
-    expect(placeLabel(places[5]!, 2)).toBe('Lộ trình 3 · Về đích · 2 đội');
+    expect(placeLabel(places[5]!, 2)).toBe('Lộ trình 3 · Thử thách 2 +1 · 2 đội');
   });
 
   it('heading: the current step, a detour its chosen branch; never entered / finished / race over: none', () => {
     const s = demoState(NOW);
     const head = heading(s);
-    expect([...head]).toEqual([['t1', 'D1|B'], ['t2', 'D1|B'], ['t4', 'T1'], ['t5', 'D1|A']]);
+    expect([...head]).toEqual([['t1', 'D1|B'], ['t2', 'D1|B'], ['t4', 'T1'], ['t5', 'D1|A'], ['t6', 'T2']]);
     expect(placeTip(legPlaces(s.leg!)[4]!, byEntry(s, head))).toBe('Lựa chọn kép B – Ảnh · Champ de Mars\n   đội ở bước này: Đội Đỏ, Đội Vàng');
     expect(heading({ ...s, status: 'finished' }).size).toBe(0);
   });
@@ -43,9 +43,9 @@ describe('Host minimap (SPEC §17.41)', () => {
 
   it('demo: two more online teams; ticks decode, the finished team stands on the mat, the others move', () => {
     const s = withMapDemo(demoState(NOW));
-    expect(s.teams.filter((t) => t.online).map((t) => t.name)).toEqual(['Đội Xanh', 'Đội Đỏ', 'Đội Ngọc', 'Đội Hồng']);
+    expect(s.teams.filter((t) => t.online).map((t) => t.name)).toEqual(['Đội Xanh', 'Đội Đỏ', 'Đội Nâu', 'Đội Ngọc', 'Đội Hồng']);
     const [a, b] = [decodeTick(demoTick(s, NOW))!, decodeTick(demoTick(s, NOW + 2000))!];
-    expect(a.entries.map((e) => e.slot)).toEqual([0, 1, 6, 7]);
+    expect(a.entries.map((e) => e.slot)).toEqual([0, 1, 6, 7, 8]);
     const mat = legPlaces(s.leg!).find((p) => p.mat)!;
     expect(onPitMat(a.entries[0]!.pose.x, a.entries[0]!.pose.z, mat, 0)).toBe(true);
     expect(b.entries.slice(1).every((e, i) => e.pose.x !== a.entries[i + 1]!.pose.x)).toBe(true);

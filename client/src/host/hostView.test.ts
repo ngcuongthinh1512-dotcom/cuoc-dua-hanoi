@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isClientMessage, MEDIA, NET, type HostState } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, withLouvreDemo, louvreLines } from './hostView.ts';
+import { ago, answerMatch, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, withLouvreDemo, louvreLines } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -11,7 +11,7 @@ describe('Host view', () => {
 
   it('builds table rows from host.state', () => {
     const rows = teamRows(demoState());
-    expect(rows.map((r) => [r.name, r.status, r.reconnects])).toEqual([['Đội Xanh', 'online', 1], ['Đội Đỏ', 'online', 0], ['Đội Vàng', 'offline', 3], ['Đội Lục', 'offline', 0], ['Đội Tím', 'offline', 1], ['Đội Cam', 'offline', 0]]);
+    expect(rows.map((r) => [r.name, r.status, r.reconnects])).toEqual([['Đội Xanh', 'online', 1], ['Đội Đỏ', 'online', 0], ['Đội Vàng', 'offline', 3], ['Đội Lục', 'offline', 0], ['Đội Tím', 'offline', 1], ['Đội Cam', 'offline', 0], ['Đội Nâu', 'online', 0]]);
     expect(rows[0]!.code).toBe('K7M3QX');
     expect(rows[0]!.position).toMatch(/^48\.\d+, 2\.\d+$/);
     expect(rows[2]!.lastSeen).toBe('1 phút trước');
@@ -76,13 +76,13 @@ describe('Host view', () => {
     expect(statusButtons({ ...s, status: 'lobby' })[0]!.confirm).not.toContain('giờ xuất phát');
     // SPEC §17.23 (Chốt): "Kết thúc" names the teams still racing, which will read "BỊ LOẠI"
     const end = statusButtons(s).find((b) => b.op === 'finish')!.confirm!;
-    expect(end).toContain('5 đội chưa về đích sẽ nhận thông báo BỊ LOẠI: Đội Đỏ, Đội Vàng, Đội Lục, Đội Tím, Đội Cam.');
+    expect(end).toContain('6 đội chưa về đích sẽ nhận thông báo BỊ LOẠI: Đội Đỏ, Đội Vàng, Đội Lục, Đội Tím, Đội Cam, Đội Nâu.');
     expect(statusButtons(s).find((b) => b.op === 'pause')!.confirm).not.toMatch(/[Đđ]ồng hồ/);
   });
 
   it('red banner: lobby with teams online; SPEC §17.23: nothing about start times any more', () => {
     const s = demoState();
-    expect(warnings({ ...s, status: 'lobby' })).toEqual(['Cuộc đua chưa mở nhưng đã có 2 đội trong game (các đội xem được mật thư 1 nhưng chưa mở được hòm).']);
+    expect(warnings({ ...s, status: 'lobby' })).toEqual(['Cuộc đua chưa mở nhưng đã có 3 đội trong game (các đội xem được mật thư 1 nhưng chưa mở được hòm).']);
     expect(warnings(s)).toEqual([]);
     expect(openBlanks({ ...s, leg: null })).toContain('Chưa nạp chặng.');
     expect(openBlanks(s).join('\n')).not.toContain('giờ xuất phát');
@@ -99,18 +99,18 @@ describe('Host view', () => {
     const now = 3_000_000_000;
     const s = demoState(now);
     const { head, rows } = progressTable(s, now);
-    expect(head.map((h) => h.label)).toEqual(['Lộ trình 1', 'Thử thách 1', 'Lộ trình 2', 'Lựa chọn kép', 'Lộ trình 3', 'Về đích']);
-    expect(rows.map((r) => [r.name, r.rank])).toEqual([['Đội Xanh', '1'], ['Đội Vàng', '2'], ['Đội Đỏ', '3'], ['Đội Lục', '—'], ['Đội Tím', '—'], ['Đội Cam', '—']]);
+    expect(head.map((h) => h.label)).toEqual(['Lộ trình 1', 'Thử thách 1', 'Lộ trình 2', 'Lựa chọn kép', 'Lộ trình 3', 'Thử thách 2', 'Về đích']);
+    expect(rows.map((r) => [r.name, r.rank])).toEqual([['Đội Xanh', '1'], ['Đội Vàng', '2'], ['Đội Đỏ', '3'], ['Đội Lục', '—'], ['Đội Tím', '—'], ['Đội Cam', '—'], ['Đội Nâu', '—']]);
     const blue = rows[0]!;
     expect(blue.cells.every((c) => c.state === 'done')).toBe(true);
     expect(Object.keys(blue).sort()).toEqual(['cells', 'colour', 'finish', 'flagged', 'name', 'out', 'penalty', 'rank', 'team']);
     expect(blue.cells[0]!.text).toMatch(/^\d\d:\d\d:\d\d$/); // only when it was done (no duration)
     expect(blue.cells[3]!.text).toContain(' · Tính (A) ↺1'); // branch A after one switch
     const red = rows[2]!;
-    expect(red.cells.map((c) => c.state)).toEqual(['done', 'done', 'done', 'active', 'todo', 'todo']);
+    expect(red.cells.map((c) => c.state)).toEqual(['done', 'done', 'done', 'active', 'todo', 'todo', 'todo']);
     expect(red.cells[3]!.text).toBe('08:00 · Ảnh (B)'); // 50 − 8 − 42 = 8 min since the clue of D1 reached it; took branch B
     expect(red.penalty).toBe('+2 phút');
-    expect(rows[3]!.cells.map((c) => c.state)).toEqual(['active', 'todo', 'todo', 'todo', 'todo', 'todo']); // holds clue 1 (D3), no times yet
+    expect(rows[3]!.cells.map((c) => c.state)).toEqual(['active', 'todo', 'todo', 'todo', 'todo', 'todo', 'todo']); // holds clue 1 (D3), no times yet
     expect(rows[0]!.cells[0]!.title).toContain('Tới điểm');
     const out = progressTable({ ...s, ranking: s.ranking.map((r) => (r.team === 't1' ? { ...r, out: true } : r)) }, now).rows[2]!;
     expect([out.name, out.rank, out.out]).toEqual(['Đội Đỏ', '3 · BỊ LOẠI', true]);
@@ -143,18 +143,18 @@ describe('review queue (D16 (1))', () => {
 
   it('lists every pending answer oldest first, with the submit code, the waiting time and the reference answers', () => {
     const rows = queueRows(s, NOW);
-    expect(rows.map((r) => [r.name, r.step, r.branch, r.id, r.waiting])).toEqual([['Đội Vàng', 'D1', 'B', 1, '01:12'], ['Đội Cam', 'D1', 'A', 1, '00:45']]);
+    expect(rows.map((r) => [r.name, r.step, r.branch, r.id, r.waiting])).toEqual([['Đội Vàng', 'D1', 'B', 1, '02:30'], ['Đội Cam', 'D1', 'A', 1, '00:45'], ['Đội Nâu', 'T2', null, 2, '00:20']]);
     expect(rows[0]).toMatchObject({ code: 'Đội Vàng-D1-B', text: '', reference: ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'], lockMinutes: 3, key: 't2|D1|1', label: 'Lựa chọn kép' });
-    expect(rows[1]).toMatchObject({ code: 'Đội Cam-D1-A', text: 'bảy', reference: ['7', 'bảy'], branchName: 'Tính (A)' }); // the team's name for it, visual#3
+    expect(rows[1]).toMatchObject({ code: 'Đội Cam-D1-A', text: 'sáu', reference: ['7', 'bảy'], branchName: 'Tính (A)' }); // the team's name for it, visual#3
     expect(rows[0]!.branchName).toBe('Ảnh (B)');
     // the order is by `at`, whatever order the server sent
-    expect(queueRows({ ...s, queue: [...s.queue].reverse() }, NOW).map((r) => r.name)).toEqual(['Đội Vàng', 'Đội Cam']);
+    expect(queueRows({ ...s, queue: [...s.queue].reverse() }, NOW).map((r) => r.name)).toEqual(['Đội Vàng', 'Đội Cam', 'Đội Nâu']);
     // a team the page does not know (should not happen) still shows by its id
     expect(queueRows({ ...s, teams: [] }, NOW)[0]).toMatchObject({ name: 't2', code: 't2-D1-B' });
   });
 
   it('the waiting time runs with the clock the page estimates', () => {
-    expect(queueRows(s, NOW + 8 * MIN)[0]!.waiting).toBe('09:12');
+    expect(queueRows(s, NOW + 8 * MIN)[0]!.waiting).toBe('10:30');
   });
 
   it('the page rebuilds only when who / which step / which answer / when changes (a typed note must survive the 1 s refresh)', () => {
@@ -187,13 +187,44 @@ describe('review queue (D16 (1))', () => {
   });
 });
 
+describe('review cards (SPEC §17.42): the match badge and the earlier tries', () => {
+  const s = demoState(NOW);
+
+  it('answerMatch ignores diacritics / case / đ / extra spaces; no badge without text (a photo) or without reference answers', () => {
+    expect(answerMatch('cau iena', ['Cầu Iéna', 'Pont d’Iéna'])).toBe('yes');
+    expect(answerMatch('  THAP   đồng  Hồ ', ['Tháp Đồng Hồ'])).toBe('yes');
+    expect(answerMatch('Bảy', ['7', 'bảy'])).toBe('yes');
+    expect(answerMatch('sáu', ['7', 'bảy'])).toBe('no');
+    expect(answerMatch('cầu iéna 2', ['Cầu Iéna'])).toBe('no'); // whole answer, not a prefix
+    expect(answerMatch('', ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'])).toBeNull();
+    expect(answerMatch('   ', ['x'])).toBeNull();
+    expect(answerMatch('x', [])).toBeNull();
+  });
+
+  it('queue rows: the badge, the place name, the wait in ms, "Lần gửi thứ n" with the earlier tries of the same task (same branch, Host notes kept)', () => {
+    const rows = queueRows(s, NOW);
+    const nau = rows.find((r) => r.name === 'Đội Nâu')!;
+    expect(nau).toMatchObject({ match: 'yes', attempt: 2, stepName: 'Giữa cầu Iéna', waitMs: 20_000, label: 'Thử thách 2', text: 'cau iena', code: 'Đội Nâu-T2' });
+    expect(nau.previous).toEqual([`Lần 1: «Cầu Alma» · bị phạt · ${fmtTime(NOW - 4 * MIN)} · ghi chú: Sai cầu`]);
+    expect(rows.find((r) => r.name === 'Đội Cam')).toMatchObject({ match: 'no', attempt: 1, previous: [], stepName: 'Chân tháp Eiffel' });
+    expect(rows.find((r) => r.name === 'Đội Vàng')).toMatchObject({ match: null, attempt: 1, previous: [] }); // a photo: no badge
+    // a photo task's earlier submission reads "(đã gửi bài)"; answers of the other branch are another task and do not count
+    const twice = withRow(s, 't2', 'D1', { answers: [{ id: 0, text: 'ba', at: NOW - 10 * MIN, status: 'penalized', branch: 'A' }, { id: 1, text: '', at: NOW - 150_000, status: 'pending', branch: 'B' }, { id: 2, text: '', at: NOW - 5 * MIN, status: 'penalized', branch: 'B' }] });
+    const vang = queueRows(twice, NOW).find((r) => r.name === 'Đội Vàng')!;
+    expect(vang.attempt).toBe(2);
+    expect(vang.previous).toEqual([`Lần 1: (đã gửi bài) · bị phạt · ${fmtTime(NOW - 5 * MIN)}`]);
+    // no progress row for the item (should not happen): still a card, first try
+    expect(queueRows({ ...s, progress: [] }, NOW).find((r) => r.name === 'Đội Nâu')).toMatchObject({ attempt: 1, previous: [], match: 'yes' });
+  });
+});
+
 describe('step_progress matrix, Phase 8 cells (D16 (3))', () => {
   const s = demoState(NOW);
 
   it('an answer waiting for the Host: orange cell with the wait, Duyệt / Phạt in the cell (the penalty minutes in its title)', () => {
     const c = rowOf(s, 'Đội Vàng').cells[3]!;
     expect(c.state).toBe('pending');
-    expect(c.text).toBe('chờ duyệt 01:12 · Ảnh (B)');
+    expect(c.text).toBe('chờ duyệt 02:30 · Ảnh (B)');
     expect(c.buttons.map((b) => [b.op, b.id, b.label, b.team, b.step])).toEqual([['approve', 1, 'Duyệt', 't2', 'D1'], ['penalize', 1, 'Phạt', 't2', 'D1']]);
     expect(c.buttons[1]!.title).toContain('Phạt 3 phút');
     expect(c.title).toContain('(đã gửi bài) · '); // the title lists the answers
@@ -345,8 +376,9 @@ describe('R2 images and the leg line (D14, D16 (4) (5))', () => {
   });
 
   it('the demo (p8-host) shows what the plan asks: a queue of 2 with reference answers, a stuck team, an orange / purple / ↺ cell', () => {
-    expect(s.queue).toHaveLength(2);
+    expect(s.queue).toHaveLength(3); // SPEC §17.42: a Messenger submission, a typed answer that does not match, one that does
     expect(s.queue.every((q) => q.reference.length > 0)).toBe(true);
+    expect(queueRows(s, NOW).map((r) => r.match)).toEqual([null, 'no', 'yes']);
     expect(stuckAlerts(s, NOW)).toHaveLength(1);
     const states = progressTable(s, NOW).rows.flatMap((r) => r.cells.map((c) => c.state));
     expect(states).toContain('pending');
@@ -357,7 +389,7 @@ describe('R2 images and the leg line (D14, D16 (4) (5))', () => {
 // ── Phase 8B track D: louvre cell ──
 describe('louvre cell (phase8b §H)', () => {
   const s = withLouvreDemo(demoState(NOW));
-  const cellOf = (state: HostState, name: string, now = NOW) => rowOf(state, name, now).cells[5]!;
+  const cellOf = (state: HostState, name: string, now = NOW) => rowOf(state, name, now).cells[6]!; // T3 sits after Thử thách 2, before Về đích
 
   it('shows picks / misses / the 60 min hint with the live x, a countdown while locked, and the exit button', () => {
     const c = cellOf(s, 'Đội Lục');
@@ -500,8 +532,8 @@ describe('"Cho qua" for every kind of challenge (V5, plan M8)', () => {
     expect(rowOf(s, 'Đội Đỏ').cells[3]!.buttons[1]!.confirm).toBe('Cho Đội Đỏ qua Lựa chọn kép (nhánh Ảnh (B)) mà không cần câu trả lời?');
     expect(labels(withRow(s, 't1', 'D1', { branch: 'A' }), 'Đội Đỏ', 3)).toEqual(['Cho qua']); // typed branch A
     const lv = withLouvreDemo(s);
-    expect(rowOf(lv, 'Đội Lục').cells[5]!.buttons.map((b) => [b.op, b.id, b.label])).toEqual([['approve', undefined, 'Cho qua']]);
-    expect(rowOf(lv, 'Đội Lục').cells[5]!.buttons[0]!.confirm).toBe('Cho Đội Lục qua phòng Louvre mà không cần chọn đúng?');
+    expect(rowOf(lv, 'Đội Lục').cells[6]!.buttons.map((b) => [b.op, b.id, b.label])).toEqual([['approve', undefined, 'Cho qua']]);
+    expect(rowOf(lv, 'Đội Lục').cells[6]!.buttons[0]!.confirm).toBe('Cho Đội Lục qua phòng Louvre mà không cần chọn đúng?');
   });
 
   it('not where the server has nothing to approve: an answer waits (Duyệt / Phạt instead), the branch box is not open, a route, the Pit Stop, a done or later cell', () => {
@@ -509,7 +541,7 @@ describe('"Cho qua" for every kind of challenge (V5, plan M8)', () => {
     expect(labels(s, 'Đội Cam', 3)).toEqual(['Duyệt', 'Phạt']); // pending typed answer
     expect(labels(withRow(s, 't1', 'D1', { branchOpenedAt: null }), 'Đội Đỏ', 3)).toEqual([]); // branch chosen, box not opened
     expect(labels(s, 'Đội Lục', 0)).toEqual([]); // Lộ trình 1: route_info
-    expect(labels(withTeam(s, 't3', { step: 5 }), 'Đội Lục', 5)).toEqual([]); // Về đích: pit_stop
+    expect(labels(withTeam(s, 't3', { step: 6 }), 'Đội Lục', 6)).toEqual([]); // Về đích: pit_stop
     expect(rowOf(s, 'Đội Xanh').cells.flatMap((c) => c.buttons)).toEqual([]); // finished team
     expect(rowOf(s, 'Đội Đỏ').cells.filter((c) => c.state !== 'active').flatMap((c) => c.buttons)).toEqual([]);
   });
@@ -598,7 +630,7 @@ describe('"Xuất dữ liệu thời gian" (SPEC §17.25)', () => {
     const lines = csv.trimEnd().split('\r\n');
     expect(lines).toHaveLength(1 + s.progress.length);
     expect(lines[1]).toMatch(/^Đội Xanh,L1,Lộ trình 1,,\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z,/);
-    expect(csv).not.toContain('bảy'); // an answer of the leg never leaves the server
+    for (const w of ['sáu', 'cau iena', 'Cầu Iéna']) expect(csv).not.toContain(w); // an answer of the leg never leaves the server
     const json = JSON.parse(demoExportText(s, 'json')) as Record<string, unknown>[];
     expect(json).toHaveLength(s.progress.length);
     expect(json[0]).toMatchObject({ 'Đội': 'Đội Xanh', 'Mã bước': 'L1', 'Tên bước': 'Lộ trình 1' });

@@ -100,8 +100,8 @@ export function withMapDemo(state: HostState): HostState {
   const team = (slot: number, name: string, colour: string, code: string, step: number): Team => ({ ...state.teams[1]!, slot, id: `t${slot}`, name, colour, code, player: '', online: true, lastSeen: now, reconnects: 0, pose: null, flagged: false, flagWhy: [], flagAt: null, startOrder: slot + 1, step, finishAt: null, penaltyMinutes: 0, joinedAt: now - 25 * min });
   const s: HostState = {
     ...state,
-    teams: [...state.teams, team(6, 'Đội Ngọc', '#20a8b8', 'N6QK2W', 0), team(7, 'Đội Hồng', '#c0408a', 'P3HZ9R', 2)],
-    progress: [...state.progress, { ...done('t6', 0, now - 9 * min), arrivedAt: null, startedAt: null, completedAt: null }, done('t7', 0, now - 25 * min), done('t7', 1, now - 17 * min), { ...done('t7', 2, now - 9 * min), arrivedAt: null, startedAt: null, completedAt: null }],
+    teams: [...state.teams, team(7, 'Đội Ngọc', '#20a8b8', 'N6QK2W', 0), team(8, 'Đội Hồng', '#c0408a', 'P3HZ9R', 2)], // slots after demoState's t0…t6
+    progress: [...state.progress, { ...done('t7', 0, now - 9 * min), arrivedAt: null, startedAt: null, completedAt: null }, done('t8', 0, now - 25 * min), done('t8', 1, now - 17 * min), { ...done('t8', 2, now - 9 * min), arrivedAt: null, startedAt: null, completedAt: null }],
   };
   const places = legPlaces(leg);
   const head = heading(s);

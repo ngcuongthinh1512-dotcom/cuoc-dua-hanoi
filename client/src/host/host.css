@@ -56,15 +56,38 @@ button.ok { background: #2c9a4a; }
 .queue-wrap.has summary { color: #ffb45c; }
 .queue-wrap > button { position: absolute; top: 12px; right: 0; z-index: 1; }
 .queue-wrap.has { position: sticky; top: 0; z-index: 5; background: #0b0f16; padding-bottom: 6px; box-shadow: 0 6px 8px -6px #000; }
-.queue-wrap.has section { max-height: 40vh; overflow-y: auto; border: 1px solid #b86a1c; }
-.review { padding: 6px 0 8px; border-bottom: 1px solid #222b3d; }
+.queue-wrap.has section { max-height: 50vh; overflow-y: auto; border: 1px solid #b86a1c; }
+/* SPEC §17.42: one card per waiting answer. Head / "ĐỘI TRẢ LỜI" (blue frame, the team's colour on its left edge, big white text)
+   / "ĐÁP ÁN ĐÚNG – chỉ Host thấy" (dark green, dashed, smaller) / actions. Labels are words, never colour alone; text ≥ 4.5:1. */
+.review { padding: 10px 0 12px; border-bottom: 1px solid #222b3d; --team: #8d99b0; }
 .review:last-child { border-bottom: 0; }
-.review .answer { margin: 4px 0; font-size: 16px; }
-.review .ref { color: #ffd9a0; margin-bottom: 4px; }
-.review textarea { flex: 1 1 16em; min-height: 0; width: auto; height: 2.2em; resize: vertical; }
-.review button { padding: 6px 12px; }
-.review input.score { width: 3.2em; padding: 4px; text-align: center; }
-.review .score-hint { color: #9aa6bd; }
+.rv-head { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.rv-team { font-size: 17px; }
+.rv-step { color: #c3cde0; }
+.rv-wait { font-variant-numeric: tabular-nums; font-size: 16px; padding: 0 8px; border-radius: 6px; background: #1b2230; }
+.rv-wait::before { content: 'chờ '; font-weight: 400; font-size: 13px; color: #8d99b0; }
+.rv-wait.slow { background: #5a3a10; color: #ffb45c; }
+.rv-code { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13px; color: #8d99b0; }
+.rv-answer { margin-top: 8px; padding: 8px 12px 9px; border-radius: 8px; background: #163260; border-left: 6px solid var(--team); }
+.rv-label { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.chip { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 4px; color: #fff; white-space: nowrap; }
+.chip.team { background: #2c6bd8; }
+.chip.ref { background: #1f7a3a; }
+.rv-nth { font-size: 13px; color: #b7c6e6; }
+.rv-badge { font-size: 12px; font-weight: 700; padding: 1px 9px; border-radius: 10px; }
+.rv-badge.yes { background: #8fe3a8; color: #0b0f16; }
+.rv-badge.no { background: #34405a; color: #e8ecf2; }
+.rv-text { font-size: 20px; font-weight: 700; line-height: 1.3; color: #fff; overflow-wrap: anywhere; }
+.rv-text .rv-bigcode { font-size: 20px; letter-spacing: 0.06em; margin-right: 8px; }
+.rv-prev { margin-top: 3px; font-size: 13px; font-weight: 400; color: #b7c6e6; }
+.rv-ref { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin-top: 10px; padding: 6px 12px; border-radius: 8px; background: #0f2a1a; border: 1px dashed #2c9a4a; font-size: 13px; color: #c9f0d4; }
+.rv-refchip { padding: 1px 8px; border-radius: 4px; background: #173d26; border: 1px solid #2c9a4a; font-size: 14px; color: #d6f5df; }
+.rv-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.rv-actions textarea { flex: 1 1 14em; min-height: 0; width: auto; height: 2.2em; resize: vertical; }
+.rv-actions button.big { padding: 8px 20px; font-size: 15px; font-weight: 600; }
+.rv-actions button.danger.big { margin-left: 24px; }
+.rv-actions input.score { width: 3.2em; padding: 4px; text-align: center; }
+.rv-actions .score-hint { color: #9aa6bd; }
 code.code { font-size: 14px; letter-spacing: 0.02em; }
 td.pending { background: #6b3c0c; color: #ffd9a0; }
 td.locked { background: #3e2a6b; color: #d6c4ff; }

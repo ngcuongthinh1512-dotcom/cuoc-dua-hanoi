@@ -2,7 +2,7 @@
 // testable in Node. Phase 10 replaces the page with SPEC §13; keep the page thin.
 import { LOUVRE } from '@race/shared';
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import { MEDIA, NET, submitCode, type AnswerStatus, type FlagWhy, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type ReviewItem, type StepProgressView, type UndoItem } from '@race/shared/protocol';
+import { MEDIA, NET, normalizeAnswer, submitCode, type AnswerStatus, type FlagWhy, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type ReviewItem, type StepProgressView, type UndoItem } from '@race/shared/protocol';
 
 /** Durable Object requests as Cloudflare bills them (same formula as worker/src/counters.ts, docs/plans/phase6.md §3.7). */
 export const billableRequests = (c: QuotaCounters) => c.http + c.alarms + Math.ceil(c.wsIn / 20);
@@ -311,6 +311,15 @@ export function scoreBox(q: Pick<ReviewItem, 'scoreOf' | 'scoreFrom'>, now: numb
   return { scoreOf: q.scoreOf, scoreHint: left <= 0 ? 'đội sẽ thấy số' : `đội chưa thấy số: còn ${Math.ceil(left / 60_000)} phút` };
 }
 
+/** SPEC §17.42: the badge on the "ĐỘI TRẢ LỜI" frame. 'yes' = the typed answer equals one of the reference answers after
+ *  normalizeAnswer (diacritics / case / đ / extra spaces ignored), 'no' = none; null = no badge (a photo / Messenger submission
+ *  has no text; a task without reference answers). A hint for the Host's eye only: the Host still decides. */
+export function answerMatch(text: string, reference: readonly string[]): 'yes' | 'no' | null {
+  if (!text.trim() || !reference.length) return null;
+  const t = normalizeAnswer(text);
+  return reference.some((r) => normalizeAnswer(r) === t) ? 'yes' : 'no';
+}
+
 export interface QueueRow {
   /** team|step|id: new-item detection and the draft note. */
   key: string;
@@ -319,6 +328,8 @@ export interface QueueRow {
   colour: string;
   step: string;
   label: string;
+  /** The step's place name ("Vườn Trocadéro"); '' when the leg does not say. */
+  stepName: string;
   branch: string | null;
   /** "Tính (A)": the branch as the team names it (visual#3), '' without a branch. */
   branchName: string;
@@ -328,7 +339,15 @@ export interface QueueRow {
   /** '' = "đã gửi bài qua Messenger". */
   text: string;
   waiting: string;
+  /** ms the team has waited (main.ts colours the clock past hostPage.queueSlowSeconds). */
+  waitMs: number;
   reference: string[];
+  /** SPEC §17.42: answerMatch of `text` against `reference`. */
+  match: 'yes' | 'no' | null;
+  /** 1-based: which submission of this team on this task (same branch) the waiting answer is; `previous` = the earlier ones
+   *  as lines ("Lần 1: «41» · bị phạt · 14:02:10 · ghi chú: …"), oldest first. */
+  attempt: number;
+  previous: string[];
   note: string;
   lockMinutes: number;
   /** SPEC §17.31: task.scoreOf → the "Đúng ?/n" box next to Phạt. */
@@ -337,10 +356,21 @@ export interface QueueRow {
 /** The review queue ("Chờ duyệt"), oldest answer first. `now` = the server's clock estimated at drawing. */
 export function queueRows(state: HostState, now: number): QueueRow[] {
   const teams = new Map(state.teams.map((t) => [t.id, t]));
+  const tz = legZone(state);
   return [...state.queue].sort((a, b) => a.at - b.at).map((q) => {
     const t = teams.get(q.team);
     const name = t?.name ?? q.team;
-    return { key: `${q.team}|${q.step}|${q.id}`, team: q.team, name, colour: t?.colour ?? '#8d99b0', step: q.step, label: q.label, branch: q.branch, branchName: q.branch ? branchTag(state, q.step, q.branch) : '', id: q.id, code: submitCode(name, q.step, q.branch), text: q.text, waiting: fmtMinSec(now - q.at), reference: q.reference, note: q.note, lockMinutes: q.lockMinutes, ...(q.scoreOf ? { score: scoreBox(q, now) } : {}) };
+    // the team's earlier tries on this task: the step's answers of the same branch, before this one
+    const same = (state.progress.find((p) => p.team === q.team && p.step === q.step)?.answers ?? []).filter((a) => a.branch === q.branch).sort((a, b) => a.at - b.at);
+    const before = same.filter((a) => a.id !== q.id && a.at <= q.at);
+    const previous = before.map((a, i) => `Lần ${i + 1}: ${a.text ? `«${a.text}»` : '(đã gửi bài)'} · ${ANSWER_LABEL[a.status]} · ${fmtTimeOfDay(a.at, tz)}${a.note ? ` · ghi chú: ${a.note}` : ''}`);
+    return {
+      key: `${q.team}|${q.step}|${q.id}`, team: q.team, name, colour: t?.colour ?? '#8d99b0', step: q.step, label: q.label,
+      stepName: state.leg?.steps.find((s) => s.id === q.step)?.name ?? '',
+      branch: q.branch, branchName: q.branch ? branchTag(state, q.step, q.branch) : '', id: q.id, code: submitCode(name, q.step, q.branch), text: q.text,
+      waiting: fmtMinSec(now - q.at), waitMs: now - q.at, reference: q.reference, match: answerMatch(q.text, q.reference), attempt: before.length + 1, previous,
+      note: q.note, lockMinutes: q.lockMinutes, ...(q.scoreOf ? { score: scoreBox(q, now) } : {}),
+    };
   });
 }
 /** The queue only rebuilds (so a note box keeps its focus) when this changes: who, which step, which answer, when. */
@@ -509,7 +539,8 @@ export function corridorPoints(leg: Leg): { points: XZ[]; checkpoints: XZ[] } {
   return { points, checkpoints };
 }
 
-/** `/host.html?demo=1`: fake state for screenshots, no server (a running race with 6 teams, 6 steps, progress + ranking, a review queue, a stuck team). */
+/** `/host.html?demo=1`: fake state for screenshots, no server (a running race with 7 teams, 7 steps, progress + ranking, a review queue of
+ *  three (SPEC §17.42: a typed answer that matches, one that does not, a Messenger submission), a stuck team). */
 export function demoState(now = 1_000_000): HostState {
   const pose = (x: number, z: number) => ({ x, y: 0, z, yaw: 0, mode: 'walk' as const, action: 'none' as const });
   const min = 60_000;
@@ -531,15 +562,17 @@ export function demoState(now = 1_000_000): HostState {
     serverMs: now,
     status: 'running',
     teams: [
-      team(0, 'Đội Xanh', '#2c6bd8', 'K7M3QX', 'An', true, 0, 1, pose(120, -310), { startOrder: 1, joinedAt: t0 + 2 * min, step: 5, finishAt: now - 4 * min }),
+      team(0, 'Đội Xanh', '#2c6bd8', 'K7M3QX', 'An', true, 0, 1, pose(120, -310), { startOrder: 1, joinedAt: t0 + 2 * min, step: 6, finishAt: now - 4 * min }),
       team(1, 'Đội Đỏ', '#d8342c', 'W9HT4B', 'Bình', true, 0, 0, pose(-80, 40), { startOrder: 2, joinedAt: t0 + 9 * min, step: 3, penaltyMinutes: 2 }, true),
       // Đội Vàng: two reasons for its flag (Phase 10 V3, the p10 picture)
       team(2, 'Đội Vàng', '#e0b020', 'R2NZ8P', 'Chi', false, 95_000, 3, pose(400, -520), { startOrder: 3, joinedAt: t0 + 6 * min, step: 3, flagged: true, flagWhy: ['jump', 'respawn'], flagAt: now - 2 * min }),
       team(3, 'Đội Lục', '#2c9a4a', 'D5FY6E', '', false, null, 0, null),
       // Đội Tím: on Thử thách 1 for 46 min (the stuck warning), penalized twice, waiting out the countdown
       team(4, 'Đội Tím', '#8a3fc4', 'M4PC7S', 'Dũng', false, 20 * min, 1, pose(60, -150), { startOrder: 4, joinedAt: now - 58 * min, step: 1 }),
-      // Đội Cam: switched branch once, now waits for the Host on Lựa chọn kép (nhánh A, a typed answer)
+      // Đội Cam: switched branch once, now waits for the Host on Lựa chọn kép (nhánh A, a typed answer that does not match)
       team(5, 'Đội Cam', '#e07a20', 'H8LV2T', 'Em', false, 30_000, 0, pose(-200, -260), { startOrder: 5, joinedAt: t0 + 11 * min, step: 3 }),
+      // Đội Nâu (SPEC §17.42 picture): second try on Thử thách 2, typed without diacritics, matches the reference answer
+      team(6, 'Đội Nâu', '#a0522d', 'B6XQ4N', 'Giang', true, 0, 0, pose(-240, -140), { startOrder: 6, joinedAt: t0 + 13 * min, step: 5 }),
     ],
     counters: { wsIn: 18_420, wsOut: 41_200, http: 12, alarms: 3, rows: 1_262 },
     bikes: [],
@@ -552,6 +585,7 @@ export function demoState(now = 1_000_000): HostState {
         s('L2', 'route_info', 'Lộ trình 2', pt(48.8583, 2.2945, 40, 'Chân tháp Eiffel')),
         s('D1', 'detour', 'Lựa chọn kép', pt(48.8583, 2.2945, 40, 'Chân tháp Eiffel'), [pt(48.8583, 2.2945, 40, 'Chân tháp Eiffel'), pt(48.8562, 2.2978, 30, 'Champ de Mars')]),
         s('L3', 'route_info', 'Lộ trình 3', pt(48.8596, 2.29243, 25, 'Giữa cầu Iéna')),
+        s('T2', 'challenge', 'Thử thách 2', pt(48.8596, 2.29243, 25, 'Giữa cầu Iéna')), // a typed place name (SPEC §17.42)
         s('PS', 'pit_stop', 'Về đích', pt(48.8596, 2.29243, 25, 'Giữa cầu Iéna')),
       ],
       vehicles: { corridorMeters: 150, minDistanceFromCheckpoint: 100, initialPerSegment: [0, 1], spawnIntervalMinutes: 3, spawnChance: 0.3, maxAvailablePerSegment: 1, decoyRatio: 0.4, noSpawnNearPlayerMeters: 120, abandonMeters: 200, abandonSeconds: 60, bikeParking: { offsetMeters: 20, maxBikes: 6 } },
@@ -566,17 +600,21 @@ export function demoState(now = 1_000_000): HostState {
       }),
       row('t0', 'L2', t0 + 23 * min, t0 + 31 * min, t0 + 32 * min),
       row('t0', 'D1', t0 + 32 * min, t0 + 33 * min, t0 + 40 * min, 'A', { branchSwitches: 1, branchOpenedAt: t0 + 36 * min }),
-      row('t0', 'L3', t0 + 40 * min, t0 + 44 * min, t0 + 45 * min), row('t0', 'PS', t0 + 45 * min, t0 + 46 * min, t0 + 46 * min),
+      row('t0', 'L3', t0 + 40 * min, t0 + 44 * min, t0 + 45 * min), row('t0', 'T2', t0 + 45 * min, t0 + 45 * min, t0 + 46 * min), row('t0', 'PS', t0 + 46 * min, t0 + 46 * min, t0 + 46 * min),
       row('t1', 'L1', t0 + 8 * min, t0 + 22 * min, t0 + 24 * min), row('t1', 'T1', t0 + 24 * min, t0 + 29 * min, t0 + 35 * min), row('t1', 'L2', t0 + 35 * min, t0 + 41 * min, t0 + 42 * min),
       // Đội Đỏ: took the photo branch B and opened its box: the Host may approve it before the team presses "Tôi đã gửi bài"
       { ...row('t1', 'D1', t0 + 42 * min, t0 + 43 * min, null, 'B', { branchOpenedAt: t0 + 44 * min }), completedAt: null },
       row('t2', 'L1', t0 + 4 * min, t0 + 19 * min, t0 + 21 * min), row('t2', 'T1', t0 + 21 * min, t0 + 25 * min, t0 + 31 * min), row('t2', 'L2', t0 + 31 * min, t0 + 38 * min, t0 + 40 * min),
-      // Đội Vàng: photo branch B sent ("đã gửi bài"), waiting for the Host
-      { ...row('t2', 'D1', t0 + 40 * min, t0 + 41 * min, null, 'B', { branchOpenedAt: t0 + 42 * min, pending: true, submittedAt: now - 72_000, answers: [ans(1, '', now - 72_000, 'pending', 'B')] }), completedAt: null },
+      // Đội Vàng: photo branch B sent ("đã gửi bài"), waiting for the Host for 2:30 (past hostPage.queueSlowSeconds: the orange clock)
+      { ...row('t2', 'D1', t0 + 40 * min, t0 + 41 * min, null, 'B', { branchOpenedAt: t0 + 42 * min, pending: true, submittedAt: now - 150_000, answers: [ans(1, '', now - 150_000, 'pending', 'B')] }), completedAt: null },
       row('t4', 'L1', now - 60 * min, now - 48 * min, now - 47 * min),
       { ...row('t4', 'T1', now - 47 * min, now - 46 * min - 30_000, now - 46 * min, null, { rejections: 2, lockedUntil: now + 110_000, approvalWaitSeconds: 130, answers: [ans(1, '41', now - 12 * min, 'penalized'), ans(2, '43', now - 5 * min, 'penalized', null, 'Gần đúng, đọc lại đề')] }), completedAt: null },
       row('t5', 'L1', t0 + 10 * min, t0 + 22 * min, t0 + 24 * min), row('t5', 'T1', t0 + 24 * min, t0 + 28 * min, t0 + 33 * min), row('t5', 'L2', t0 + 33 * min, t0 + 37 * min, t0 + 38 * min),
-      { ...row('t5', 'D1', t0 + 38 * min, t0 + 45 * min, null, 'A', { branchSwitches: 1, branchOpenedAt: t0 + 46 * min, pending: true, submittedAt: now - 45_000, answers: [ans(1, 'bảy', now - 45_000, 'pending', 'A')] }), completedAt: null },
+      { ...row('t5', 'D1', t0 + 38 * min, t0 + 45 * min, null, 'A', { branchSwitches: 1, branchOpenedAt: t0 + 46 * min, pending: true, submittedAt: now - 45_000, answers: [ans(1, 'sáu', now - 45_000, 'pending', 'A')] }), completedAt: null },
+      row('t6', 'L1', t0 + 13 * min, t0 + 24 * min, t0 + 25 * min), row('t6', 'T1', t0 + 25 * min, t0 + 28 * min, t0 + 30 * min), row('t6', 'L2', t0 + 30 * min, t0 + 35 * min, t0 + 36 * min),
+      row('t6', 'D1', t0 + 36 * min, t0 + 36 * min, t0 + 42 * min, 'A', { branchOpenedAt: t0 + 37 * min }), row('t6', 'L3', t0 + 42 * min, t0 + 46 * min, t0 + 47 * min),
+      // Đội Nâu: first try penalized 4 min ago, second one waiting (typed without diacritics: the KHỚP badge)
+      { ...row('t6', 'T2', t0 + 47 * min, t0 + 48 * min, t0 + 48 * min, null, { rejections: 1, pending: true, submittedAt: now - 20_000, answers: [ans(1, 'Cầu Alma', now - 4 * min, 'penalized', null, 'Sai cầu'), ans(2, 'cau iena', now - 20_000, 'pending')] }), completedAt: null },
     ],
     ranking: [
       { team: 't0', rank: 1, stepIndex: 5, finishAt: now - 4 * min, out: false },
@@ -584,8 +622,9 @@ export function demoState(now = 1_000_000): HostState {
       { team: 't1', rank: 3, stepIndex: 3, finishAt: null, out: false },
     ],
     queue: [
-      { team: 't2', step: 'D1', label: 'Lựa chọn kép', branch: 'B', id: 1, text: '', at: now - 72_000, reference: ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'], note: '', lockMinutes: 3 },
-      { team: 't5', step: 'D1', label: 'Lựa chọn kép', branch: 'A', id: 1, text: 'bảy', at: now - 45_000, reference: ['7', 'bảy'], note: '', lockMinutes: 3 },
+      { team: 't2', step: 'D1', label: 'Lựa chọn kép', branch: 'B', id: 1, text: '', at: now - 150_000, reference: ['(MẪU) Hình chụp rõ biển tên đường ở góc phố'], note: '', lockMinutes: 3 },
+      { team: 't5', step: 'D1', label: 'Lựa chọn kép', branch: 'A', id: 1, text: 'sáu', at: now - 45_000, reference: ['7', 'bảy'], note: '', lockMinutes: 3 },
+      { team: 't6', step: 'T2', label: 'Thử thách 2', branch: null, id: 2, text: 'cau iena', at: now - 20_000, reference: ['Cầu Iéna', 'Pont d’Iéna'], note: '', lockMinutes: 3 },
     ],
     // Phase 10 (V2): Đội Xanh's «42» on Thử thách 1 was approved 3 s ago: the undo button has 7 s left (`?undoLeft=<s>` on the page
     // keeps it that much longer, for screenshots)
@@ -603,19 +642,19 @@ export function withLouvreDemo(state: HostState): HostState {
   const lv = { id: 'T3', type: 'challenge' as const, label: 'Thử thách 3', name: 'Phòng Louvre (demo)', x: 1200, z: -400, r: 25, proof: false, louvre: { hints: [40, 60] as [number, number] } };
   const done = state.progress.find((p) => p.team === 't0' && p.step === 'L3')!;
   const base = { ...done, branch: null, answers: [], picks: [], hintCorrect: null, rejections: 0, lockedUntil: null };
-  const t0 = now - 120 * min; // T3 opened at t0 + 40 = 80 min ago: past both marks
+  const t0 = now - 120 * min; // T3 opened at t0 + 48 = 72 min ago: past both marks
   const step = (team: string, o: number, more: Partial<StepProgressView> = {}): StepProgressView => ({ ...base, team, step: 'T3', openedAt: o, arrivedAt: o, startedAt: o, completedAt: null, ...more });
   const answers = [{ id: 1, text: '6 tác phẩm', at: now - 20 * min, status: 'wrong' as const, branch: null, correct: 2 }, { id: 2, text: '5 tác phẩm', at: now - 5 * min, status: 'wrong' as const, branch: null, correct: 3 }];
   return {
     ...state,
-    teams: state.teams.map((t) => (t.id === 't0' ? { ...t, step: 6 } : t.id === 't3' ? { ...t, step: at, startOrder: 6, joinedAt: t0 + min } : t)),
+    teams: state.teams.map((t) => (t.id === 't0' ? { ...t, step: at + 1 } : t.id === 't3' ? { ...t, step: at, startOrder: 7, joinedAt: t0 + min } : t)),
     leg: { ...leg, steps: [...leg.steps.slice(0, at), lv, ...leg.steps.slice(at)] },
     progress: [
       ...state.progress,
       step('t0', now - 30 * min, { completedAt: now - 8 * min }),
-      ...['L1', 'T1', 'L2', 'D1', 'L3'].map((id, i) => ({ ...base, team: 't3', step: id, branch: id === 'D1' ? 'A' : null, openedAt: t0 + i * 8 * min, arrivedAt: t0 + i * 8 * min, startedAt: t0 + (i + 1) * 8 * min - 1, completedAt: t0 + (i + 1) * 8 * min })),
-      step('t3', t0 + 40 * min, { rejections: 2, lockedUntil: now + 130_000, picks: ['art-04', 'art-09', 'art-11', 'art-15', 'art-20'], hintCorrect: 3, answers }),
+      ...['L1', 'T1', 'L2', 'D1', 'L3', 'T2'].map((id, i) => ({ ...base, team: 't3', step: id, branch: id === 'D1' ? 'A' : null, openedAt: t0 + i * 8 * min, arrivedAt: t0 + i * 8 * min, startedAt: t0 + (i + 1) * 8 * min - 1, completedAt: t0 + (i + 1) * 8 * min })),
+      step('t3', t0 + 48 * min, { rejections: 2, lockedUntil: now + 130_000, picks: ['art-04', 'art-09', 'art-11', 'art-15', 'art-20'], hintCorrect: 3, answers }),
     ],
-    ranking: state.ranking.map((r) => (r.team === 't0' ? { ...r, stepIndex: 6 } : r)),
+    ranking: state.ranking.map((r) => (r.team === 't0' ? { ...r, stepIndex: at + 1 } : r)),
   };
 }

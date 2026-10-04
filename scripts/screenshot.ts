@@ -443,6 +443,13 @@ Object.assign(PRESETS, {
   'p10-host-1024': '/host.html?demo=1&louvre=1&undoLeft=600&matrixScroll=max,40&collapsed=1',
 });
 Object.assign(VIEWPORT, { 'p10-host-1024': { width: 1024, height: 720 } });
+// SPEC §17.42 review cards (`npm run screenshot -- p10-review`): the queue open (three cards: a typed answer that matches, one that
+// does not, a Messenger submission); a tall viewport so the frame's 50vh box shows all three; 1024 px = no sideways overflow check.
+Object.assign(PRESETS, {
+  'p10-review': '/host.html?demo=1&undoLeft=600',
+  'p10-review-1024': '/host.html?demo=1&undoLeft=600',
+});
+Object.assign(VIEWPORT, { 'p10-review': { width: 1280, height: 1600 }, 'p10-review-1024': { width: 1024, height: 1400 } }); // 1280: the map column narrows the cards
 // SPEC §17.40 watch mode (`npm run screenshot -- p9`; not in the default run): DEV ?spectate=1 = a viewer without a body (like the
 // Host / a spectator) over the offline world, the ?peers= stand-ins as the racing teams: the bar at the top (◀ ● Đội Xanh ▶ ·
 // Bay tự do) and the chase camera behind the first peer walking across the Concorde; 2 s of simulated ticks first.

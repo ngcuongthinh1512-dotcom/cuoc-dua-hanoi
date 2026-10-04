@@ -4,6 +4,7 @@
 // the previous point) is injected by the CLI through `LegGeo`; the Durable Object never has those files.
 import { RACE_BBOX } from '../constants.ts';
 import { latLonToWorld } from '../projection.ts';
+import { normalizeAnswer } from '../protocol/answers.ts';
 import { MEDIA } from '../protocol/constants.ts';
 import { FINISH_HOLDERS } from '../protocol/finish.ts';
 import { LEG_LIMITS, type Leg, legSchema, LOUVRE, type MediaItem, STEP_TYPES, type Task } from './schema.ts';
@@ -119,10 +120,8 @@ function zodMessage(i: ZodIssue, root: unknown): string {
 }
 
 /** Vietnamese diacritics / case / extra spaces do not matter (SPEC §11 "Quy tắc chung khi nhập đáp án"); Phase 8 compares
- *  answers with it too. */
-export function normalizeAnswer(s: string): string {
-  return s.normalize('NFD').replace(/\p{M}/gu, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
-}
+ *  answers with it too. Lives in protocol/answers.ts (zod-free) so the Host page can use it; re-exported here for the Worker. */
+export { normalizeAnswer };
 
 /** JSON.parse error of a leg file → Vietnamese "lỗi cú pháp (dòng X, cột Y)" + the usual mistakes of non-programmers
  *  (docs/LEG_FORMAT.md §10); never the engine's English text. */

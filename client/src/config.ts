@@ -1218,6 +1218,7 @@ export const hostPage = {
   mediaHeadRetryMs: 15_000, // HEAD again, this often, only the R2 images still missing (never the whole list)
   reviewLockMs: 1500, // after Duyệt / Phạt the item's buttons stay off this long (a double click is idempotent on the server anyway)
   beepVolume: 0.2, // 0…1, WebAudio gain of the queue / stuck beeps
+  queueSlowSeconds: 120, // SPEC §17.42: a review card's wait clock turns orange once the team has waited this long
 };
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════
