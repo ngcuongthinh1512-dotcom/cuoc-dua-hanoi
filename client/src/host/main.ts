@@ -7,6 +7,8 @@ import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueVie
 import { hostPage, net } from '../config.ts';
 import './host.css';
 import { checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, legPenaltyLine, louvreLines, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, withLouvreDemo, type ExportFormat, type ExportResult } from './hostView.ts';
+import type { HostMap } from './hostMap.ts';
+import { demoTick, withMapDemo } from './hostMapData.ts';
 
 type State = HostState;
 /** Lazy: the corridor code + road graph load only when candidates are computed (docs/plans/phase6.md §2.4). */
@@ -66,13 +68,14 @@ function connect(token: string) {
   ws.onmessage = (e) => {
     if (e.data === NET.pong) return;
     const m = JSON.parse(String(e.data)) as ServerMessage;
-    if (Array.isArray(m)) return;
+    if (Array.isArray(m)) return void hostMap?.tick(m); // SPEC §17.41: a tick of every online team (5 Hz while one moves)
     if (m.t === 'host.notice') return void addNotice(m.level, m.message);
     if (m.t === 'host.legResult') return void ((legResult = m), (sigs.leg = ''), state && render(state));
     if (m.t !== 'host.state') return;
     receivedAt = Date.now();
     soundNewQueue((state = m));
     render(m);
+    hostMap?.update(m);
     if (pending && m.teams.length >= pending) (create.value = ''), (pending = 0);
     void autoCandidates();
   };
@@ -145,7 +148,9 @@ function mainView() {
     el('h2', {}, 'Các đội'), teamsBox,
     el('h2', {}, 'Hạn mức Cloudflare (ước tính)'), counters,
     el('h2', {}, 'Xe chung'), bikes,
+    mapPanel,
   );
+  if (mapPanel.open) void openMap();
   drawNotices();
   if (state) render(state);
   else teamsBox.textContent = 'Đang chờ dữ liệu từ máy chủ…';
@@ -172,6 +177,20 @@ function loadGraph() {
     return RoadGraph.decode(file);
   })().catch((e) => ((graph = undefined), Promise.reject(e))));
 }
+
+// ── SPEC §17.41: "Bản đồ trực tiếp", a floating panel (fixed bottom right, the title bar drags / folds it). hostMap.ts + the
+// in-game map code load with the road graph when it first opens; the ticks / host.state reach it from connect(). ──
+const mapPanel = el('details', { className: 'map-panel', open: matchMedia('(min-width: 1180px)').matches }, el('summary', { title: 'Kéo để di chuyển · nhấp để thu gọn / mở' }, 'Bản đồ trực tiếp')); // open at load where host.css keeps a column free for it
+const mapErr = el('p', { className: 'bad' });
+let hostMap: HostMap | undefined;
+let mapLoad: Promise<void> | undefined;
+function openMap(): Promise<void> {
+  return (mapLoad ??= import('./hostMap.ts').then(({ HostMap }) => HostMap.load(mapPanel, loadGraph())).then(
+    (m) => void ((hostMap = m), mapErr.remove(), state && m.update(state)),
+    (e) => void ((mapLoad = undefined), (mapErr.textContent = `Không tải được bản đồ: ${e instanceof Error ? e.message : String(e)}`), mapPanel.append(mapErr)),
+  ));
+}
+mapPanel.addEventListener('toggle', () => void (mapPanel.open && openMap()));
 
 /** SPEC §3 / §6.2: corridors + candidate points are computed HERE (no A* in the Durable Object), which only picks among them.
  *  Route = start → every step's zone (both places of a detour) from `host.state.leg` (D11); checkpoints = every zone. */
@@ -623,7 +642,7 @@ function render(s: State) {
 setInterval(() => state && teamsBox.isConnected && render(state), hostPage.refreshMs);
 
 if (q.has('demo')) {
-  state = q.has('louvre') ? withLouvreDemo(demoState(Date.now())) : demoState(Date.now());
+  state = withMapDemo(q.has('louvre') ? withLouvreDemo(demoState(Date.now())) : demoState(Date.now())); // + 2 teams on the move (§17.41)
   receivedAt = Date.now();
   soundNewQueue(state); // the baseline: the demo queue is not "new"
   mediaStat.set('test-gia.jpg', { s: 'ok', size: 245_760 }); // canned (no server): one image uploaded, one missing
@@ -640,6 +659,9 @@ if (q.has('demo')) {
     wrap.scrollLeft = sx === 'max' ? wrap.scrollWidth : Number(sx) || 0;
     wrap.scrollTop = Number(sy) || 0;
   }
+  // SPEC §17.41: the online teams circle their places as server ticks would move them; ?mapBig=1 = the enlarged map (p11 picture)
+  setInterval(() => state && hostMap?.tick(demoTick(state, Date.now())), 1000 / NET.tickHz);
+  if (q.has('mapBig')) mapPanel.classList.add('big');
 } else loginView();
-// DEV / tests: the page can be read back without a server.
-(globalThis as { __READY__?: boolean }).__READY__ = true;
+// DEV / tests: the page can be read back without a server (demo: once the map panel drew, or failed to load).
+void (mapLoad ?? Promise.resolve()).then(() => requestAnimationFrame(() => ((globalThis as { __READY__?: boolean }).__READY__ = true)));

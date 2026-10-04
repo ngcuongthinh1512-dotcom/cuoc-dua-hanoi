@@ -89,3 +89,18 @@ td.flag { white-space: normal; min-width: 13em; }
 .undo-bar .undo.penalize { background: #331614; border-color: #b83a30; }
 .undo-bar button { font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) { .queue-wrap > button { position: static; margin: 0 0 6px; } }
+/* SPEC §17.41 "Bản đồ trực tiếp": floating panel, bottom right, above the sticky review queue (z-index 5); the title bar drags it
+   (hostMap.ts sets left / top) and folds it; .big = "Phóng to". A wide screen keeps a column free for it while it is open
+   (open at load only there, main.ts), so it never covers the review buttons. */
+@media (min-width: 1180px) { body:has(.map-panel[open]) main { margin-right: 436px; } }
+.map-panel { position: fixed; right: 16px; bottom: 16px; z-index: 6; background: #141a26; border: 1px solid #34405a; border-radius: 10px; padding: 0 10px 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6); }
+.map-panel:not([open]) { padding-bottom: 0; }
+.map-panel > summary { cursor: move; user-select: none; touch-action: none; font-weight: 600; color: #9cc7ff; padding: 6px 0; }
+.map-tools { display: flex; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 6px; }
+.map-tools label { display: inline-flex; gap: 4px; align-items: center; margin: 0; }
+.map-wrap { position: relative; width: min(380px, calc(100vw - 56px)); height: min(380px, calc(100vh - 150px)); }
+.map-panel.big .map-wrap { width: min(820px, calc(100vw - 56px)); height: min(640px, calc(100vh - 150px)); }
+.map-wrap canvas { display: block; width: 100%; height: 100%; border-radius: 6px; cursor: grab; touch-action: none; }
+.map-tip { position: absolute; z-index: 1; max-width: 300px; max-height: 90%; overflow: hidden; pointer-events: none; white-space: pre-line; font-size: 12px; line-height: 1.4; background: rgba(11, 15, 22, 0.94); border: 1px solid #34405a; border-radius: 6px; padding: 4px 8px; }
+.map-legend { font-size: 11px; color: #8d99b0; margin-top: 4px; max-width: min(380px, calc(100vw - 56px)); }
+.map-panel.big .map-legend { max-width: none; }

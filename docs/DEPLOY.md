@@ -93,7 +93,7 @@ Mỗi lần sửa mã / cập nhật bản mới → chạy lại `npm run deplo
 5. **Tạo đội**: ô "Tạo đội", mỗi dòng một đội `Tên đội; Tên người chơi` → **Tạo đội & sinh mã**. Bảng "Các đội" / "Thứ tự vào game" hiện **mã đội 6 ký tự** mỗi đội kèm nút **Sao chép**. Chép từng mã vào bảng tính / giấy để phát cho các đội (in / tin nhắn). Mã không hiện lại trong game, nên lưu bảng này.
 6. **Link cho người chơi**: trang Host hiện sẵn `https://cuoc-dua-paris.<tên>.workers.dev/?race=<mã cuộc đua>` + nút Sao chép. Đội mở link, gõ mã đội → vào game tại điểm xuất phát.
 7. **Hành lang xe đạp**: trang Host tự tính và gửi các chỗ đặt xe (mục "Xe chung", nút "Tính hành lang & gửi ứng viên" nếu cần tính lại). Máy chủ chỉ chọn ngẫu nhiên từ danh sách này.
-8. Khi các đội đã sẵn: mục "Cuộc đua" → **Mở cuộc đua** (có hỏi xác nhận, nhắc các ô còn trống; Tạm dừng / Tiếp tục khi cần). Trong lúc đua: cột "Chờ duyệt" (Duyệt / Phạt, Hoàn tác 10 giây), ma trận tiến độ (Cho qua), cờ đỏ vượt tốc + Xóa cờ, cảnh báo kẹt. Cuối: **Kết thúc** (đội chưa về đích → BỊ LOẠI), rồi **Xuất dữ liệu thời gian** (CSV mở bằng Excel + JSON).
+8. Khi các đội đã sẵn: mục "Cuộc đua" → **Mở cuộc đua** (có hỏi xác nhận, nhắc các ô còn trống; Tạm dừng / Tiếp tục khi cần). Trong lúc đua: cột "Chờ duyệt" (Duyệt / Phạt, Hoàn tác 10 giây), ma trận tiến độ (Cho qua), cờ đỏ vượt tốc + Xóa cờ, cảnh báo kẹt, khung **Bản đồ trực tiếp** (góc phải dưới, chỉ trang Host có: vị trí các đội theo thời gian thực + các điểm của chặng, điểm có đội đang tới viền trắng). Cuối: **Kết thúc** (đội chưa về đích → BỊ LOẠI), rồi **Xuất dữ liệu thời gian** (CSV mở bằng Excel + JSON).
 
 Luật chơi cho đội: `docs/RACE_RULES.md` (cũng mở được trong game).
 

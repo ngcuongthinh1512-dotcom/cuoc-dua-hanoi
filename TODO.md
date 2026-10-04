@@ -182,6 +182,11 @@ Xong (báo cáo `docs/reports/phase11.md`): `sim --full` (Host bot Hoàn tác / 
 - Chuẩn bị XONG (2026-10-03, `docs/reports/phase12-prep.md`): `docs/DEPLOY.md` (hướng dẫn cho người không chuyên: tài khoản, bucket R2, secret, `npm run deploy`, trang Host sau deploy, checklist trước ngày đua, hạn mức Free + bộ đếm, sự cố, xóa dữ liệu cũ) + lệnh `npm run deploy` (root → `wrangler deploy` trong worker); dry-run qua, file tĩnh lớn nhất 6,1 MB (`sky_2k.hdr`) ≤ 25 MB, không có nội dung chặng thật / đáp án / `chang-that` trong `client/dist` hay bundle Worker. **Chờ người dùng**: tạo tài khoản Cloudflare + `wrangler login`, rồi làm theo DEPLOY.md §2–3 (chưa deploy thật, chưa tạo bucket / secret).
 - Sau lần deploy đầu: đo số request / dòng ghi SQLite thực tế trên Cloudflare (Dashboard Metrics + mục "Hạn mức Cloudflare (ước tính)" trên trang Host) so với ngân sách ở SPEC §3 (Phase 11 đã đo bằng bot trong máy: `docs/reports/phase11.md`); ghi vào đây.
 
+## Bản đồ trực tiếp trên trang Host (SPEC §17.41)
+Xong (báo cáo `docs/reports/host-minimap.md`, ảnh `screenshots/p11-host-map.png`, `p11-host-map-big.png`): khung nổi "Bản đồ trực tiếp" (kéo / thu gọn / Phóng to), nền = bản đồ lớn trong game, chấm các đội từ tick 5 Hz + host.state, các điểm của chặng (chỉ từ host.state) có viền trắng khi có đội đang tới, rê chuột xem bước + đội, ô "Địa điểm".
+- Ponytail / tồn: mở khung lần đầu tải thêm ≈ 1,75 MB gzip (FullMap chung chunk với three + rapier vì `roadWidth` / `roadClass` / `bboxCorners` nằm cạnh mã 3D) — tách các hàm đó + bộ vẽ của FullMap ra module không có three nếu cần trang Host nhẹ; host.state không có hướng (yaw) của thảm về đích nên thảm vẽ trục dài bắc–nam (cần thêm `yaw` vào `HostState.leg.steps` ở máy chủ nếu muốn đúng hướng).
+- Kiểm tay chưa làm: trang Host thật với 2–3 trình duyệt đội đang chạy (chấm di chuyển mượt, đội offline mờ, đội về đích thành ô vuông).
+
 ## Khác
 - T1 "đúng x/4" (SPEC §17.31): dòng "đội chưa thấy số: còn n phút" cạnh ô nhập chỉ vẽ lại khi hàng chờ đổi (không tự đếm từng phút); nút Phạt trong ô ma trận step_progress không có ô nhập số (chỉ hàng chờ duyệt có).
 - Xe để lại cạnh hòm mật thư (SPEC §17.34): máy chủ không kiểm vùng đi được (DO không có bản đồ); hòm đặt sát tường / sông thì xe có thể đứng chỗ khó lấy — khi cần: Host tính sẵn ô đặt xe cạnh mỗi hòm (như ứng viên xe) rồi gửi lên.
