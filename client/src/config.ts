@@ -808,7 +808,7 @@ const npcVehicles = {
 export const npc = {
   enabled: true, // URL ?npc=0 turns NPCs off (ride-check, physics presets); the spectator ?cam= has them too (§17.11)
   seed: 1, // each sim xors its own constant into it; URL ?npcSeed= overrides
-  density: 1, // × traffic.perKm / crowd.perKm, then × the automatic factor (npcRender.autoDensity); URL ?npcDensity=
+  density: 2, // × traffic.perKm / crowd.perKm, then × the automatic factor (npcRender.autoDensity); URL ?npcDensity=; 2 since 2026-10-04 (SPEC §17.43)
   zoneMargin: 3, // m added to every ExclusionZone radius
   vehicles: npcVehicles as Readonly<Record<keyof typeof npcVehicles, NpcVehicle>>,
   paints: ['#f2f2ef', '#1d1f22', '#8d9296', '#c3c7ca', '#1f3350', '#7a1f22', '#35503a'], // sRGB body paints
@@ -833,7 +833,7 @@ export const traffic = {
   // connected part of them, so no car ever gets stuck in a dead end
   kinds: ['primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'primary_link', 'secondary_link', 'tertiary_link'] as string[],
   perKm: 10, // cars per km of NPC road within radius (× density); placed by length × lanes^laneWeight (traffic.ts refreshNear)
-  max: 60,
+  max: 120, // ≈ 2 × the density-1 count at the Concorde (29 cars), so the cap doesn't eat the ×2
   laneWeight: 0.5, // spawn spot by edge length × lanes^laneWeight (0 = length only; 1 put so many cars on the Concorde avenues that queues at the lights failed the "cars keep moving" test)
   radius: 250, // m around the anchor
   despawnMargin: 50, // m beyond radius
@@ -867,7 +867,7 @@ export const traffic = {
 // ── C · pedestrian sim (npc/crowd.ts) ──
 export const crowd = {
   perKm: 12, // pedestrians per km of walking band within radius (× density)
-  max: 40,
+  max: 80, // 2 × the old cap (density 2 reached it)
   radius: 120, // m around the anchor
   despawnMargin: 30, // m beyond radius
   bodyRadius: 0.3, // m

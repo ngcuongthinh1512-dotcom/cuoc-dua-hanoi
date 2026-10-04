@@ -313,15 +313,17 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
   }, 120_000);
 
   // pooled over 4 seeds: one seed's 25 cars swing ±4 with a red light's queue (review M7 put more cars on the avenues)
-  it('10 min at density 1, seeds 1–4: ≥ 75 % of the cars drive ≥ 50 m in the last minute, ≤ 10 % stand > 30 s (no gridlock)', () => {
+  // NPC_DENSITY=2 runs it at the game's default density (npc.density; SPEC §17.43 ×2)
+  const DENS = Number(process.env.NPC_DENSITY ?? 1);
+  it(`10 min at density ${DENS}, seeds 1–4: ≥ 75 % of the cars drive ≥ 50 m in the last minute, ≤ 10 % stand > 30 s (no gridlock)`, () => {
     let moved = 0, tracked = 0, still30 = 0, cars = 0;
     const res: string[] = [];
     for (const seed of [1, 2, 3, 4]) {
       const tr = new Traffic(roads, seed);
-      tr.step(DT, concorde, 1, NOPEDS, true);
+      tr.step(DT, concorde, DENS, NOPEDS, true);
       const track = new Map<number, { x: number; z: number; len: number; dist: number }>();
       for (let k = 0; k < HZ * 600; k++) {
-        tr.step(DT, concorde, 1, NOPEDS);
+        tr.step(DT, concorde, DENS, NOPEDS);
         if (k === HZ * 540) for (const c of tr.cars) track.set(c.id, { x: c.x, z: c.z, len: 0, dist: 0 });
         if (k > HZ * 540)
           for (const c of tr.cars) {
