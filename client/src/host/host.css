@@ -81,7 +81,7 @@ button.ok { background: #2c9a4a; }
 .rv-text .rv-bigcode { font-size: 20px; letter-spacing: 0.06em; margin-right: 8px; }
 .rv-prev { margin-top: 3px; font-size: 13px; font-weight: 400; color: #b7c6e6; }
 .rv-ref { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin-top: 10px; padding: 6px 12px; border-radius: 8px; background: #0f2a1a; border: 1px dashed #2c9a4a; font-size: 13px; color: #c9f0d4; }
-.rv-refchip { padding: 1px 8px; border-radius: 4px; background: #173d26; border: 1px solid #2c9a4a; font-size: 14px; color: #d6f5df; }
+.rv-refchip { padding: 1px 8px; border-radius: 4px; background: #173d26; border: 1px solid #2c9a4a; font-size: 14px; font-style: italic; color: #d6f5df; }
 .rv-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .rv-actions textarea { flex: 1 1 14em; min-height: 0; width: auto; height: 2.2em; resize: vertical; }
 .rv-actions button.big { padding: 8px 20px; font-size: 15px; font-weight: 600; }
