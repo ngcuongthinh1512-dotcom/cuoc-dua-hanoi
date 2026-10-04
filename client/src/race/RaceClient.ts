@@ -1,6 +1,6 @@
 // Phase 7 track B (docs/plans/phase7.md §5.3, §6 B): the team's race state on the client, ONLY from the server
 // (welcome.view, `race`, `book`, `zone`): drives the race HUD (track C's RaceHud), F on the current box (D23), the periodic
-// Pit Stop check-in (D19), the finish (SPEC §17.22 / §17.23 announcement, celebrate, then spectator: main.ts).
+// Pit Stop check-in (D19), the finish (SPEC §17.22 / §17.23 announcement, celebrate; the team keeps walking, §17.39: main.ts).
 import { onPitMat } from '@race/shared';
 import type { BoxInfo, ClientMessage, RaceOp, RaceView, ServerMessage, TeamInfo, TickArray, Welcome } from '@race/shared/protocol';
 import { louvreRoom, raceClient as C } from '../config.ts';

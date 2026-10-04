@@ -1219,7 +1219,6 @@ export const raceClient = {
   railSlack: 1.5, // m: rail strip half width margin; and in a rail column every hit within railLayerStep − this below the top is skipped
   hintAbove: 1.5, // m: a re-entry spawn ray starts this far above welcome.pose.y (the deck / promenade it stood on, D17)
   opMinGapMs: 800, // F / check-in: at most one `race` op this often (each is preceded by a pose: the server's 15 msg/s limit)
-  spectateAfterS: 4.5, // s after the check-in (celebrate ≈ 4 s) the finished team becomes a spectator (free-fly, D19)
   // Phase 8 (D9): this long after a card countdown ends (server clock estimate) the card flips to active / goToBranch
   // (race/ui/format.ts liveStatus) and the pose is re-sent once, so the server's tick loop wakes and reveals the branch box
   // to a team standing still (a client clock 1–2 s early would send `answer` into answerLocked: critic N8)

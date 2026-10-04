@@ -2,7 +2,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { clickSound, popSound, reviewSound, unlockAudio } from './audio/sfx.ts';
 import { type CardStatus, type LouvreView, NET, type PoseSample } from '@race/shared/protocol';
-import { bounds, chunks as chunkCfg, flyCamera, keys, louvreRoom as roomCfg, movement, npc as npcCfg, physics, playerSetup, netClient, raceClient, remote as remoteCfg, render as R, ui } from './config.ts';
+import { bounds, chunks as chunkCfg, flyCamera, keys, louvreRoom as roomCfg, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
@@ -221,10 +221,10 @@ async function start() {
     spawnAt(at.x, at.z, at.yaw);
   }
   let flying = !player;
-  let spectating = false; // D19: the team checked in (or the Host ended the race) → free-fly spectator for good
-  let spectateAt = Infinity; // player.simTime then
-  // V (F3 open): offline tests only. Never in a race: a finished team must not get its body back and take a shared bike
-  // (review2 F9); the Host has no body.
+  // SPEC §17.39: a team that finished (checked in, BỊ LOẠI, the Host's "Kết thúc") keeps its body: it walks, swims, sends
+  // its poses like everyone else; the server refuses its race ops / bike claims (raceOver). No free-fly for good (old D19).
+  let over = false;
+  // V (F3 open): offline tests only. Never in a race (a finished team walks on with its body; the Host has no body).
   const canFly = () => !session;
   // Remote players: online, or DEV ?peers=slot,x,z,yawDeg,mode[,action];… stand-ins (p6-peers) offline.
   const peers = import.meta.env.DEV && !session ? parsePeers(query.get('peers')) : [];
@@ -283,9 +283,9 @@ async function start() {
           pose: () => net?.flushPose(poseOf()), // D9: a countdown ended (the branch box may be due)
           serverNow: () => (net ? net.serverNow() : Date.now()),
           finished: (fresh) => {
-            if (spectating || spectateAt < Infinity) return;
+            if (over) return;
+            over = true;
             if (fresh) player.controller.startAction('celebrate'), pitHost?.cheer();
-            spectateAt = fresh ? player.simTime + raceClient.spectateAfterS : 0;
           },
         })
       : undefined;
@@ -584,18 +584,7 @@ async function start() {
     update: (dt) => {
       input.poll();
       if (input.wasPressed('debug')) debug.toggle();
-      // V: player ⇄ free-fly (debug only, SPEC §17.2 "camera bay tự do"); the body stays frozen where it was. Offline only
-      // (canFly): a team in a race flies only as the D19 spectator, and stays one.
-      if (player && !spectating && player.simTime >= spectateAt) {
-        spectating = true; // D19: after the celebration (or at once on re-entry after the finish), the camera flies
-        if (!flying) {
-          flying = true;
-          euler.setFromQuaternion(camera.quaternion, 'YXZ');
-          fly.setPose(camera.position.x, camera.position.y, camera.position.z, euler.y / (Math.PI / 180), euler.x / (Math.PI / 180));
-          $('help-player').hidden = true;
-          $('help-fly').hidden = false;
-        }
-      }
+      // V: player ⇄ free-fly (debug only, SPEC §17.2 "camera bay tự do"); the body stays frozen where it was. Offline only (canFly).
       if (player && canFly() && debug.visible && input.wasPressed('flyToggle')) {
         flying = !flying;
         euler.setFromQuaternion(camera.quaternion, 'YXZ');
@@ -631,7 +620,7 @@ async function start() {
       player?.update(dt, flying ? null : input, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
       if (room?.active && !flying) camera.position.y = Math.min(camera.position.y, room.floorY + roomCfg.size.height - 0.3); // no ceiling collider (C2): the camera stays under it
       if (player?.active) bikeLink?.frame(dt, player.controller);
-      if (net && player?.active && !flying) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); none while spectating
+      if (net && player?.active && !flying) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); a finished team too (§17.39)
       if (peers.length && player?.active && player.simTime * 1000 >= nextFakeTick) {
         remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
         nextFakeTick += 1000 / NET.tickHz;
@@ -651,8 +640,7 @@ async function start() {
             if (lockSent) raceHud?.announce(ROOM_TEXT.correct); // our lock was right (a Host "Cho qua" says nothing)
             lockSent = false;
           }
-          const over = !!race?.view?.result || race?.view?.status === 'finished'; // finished / BỊ LOẠI / the Host ended the race
-          const left = over ? 0 : autoExitLeft(roomDoneAt, performance.now());
+          const left = over ? 0 : autoExitLeft(roomDoneAt, performance.now()); // finished / BỊ LOẠI / the Host ended the race → out at once
           if (left === 0) leaveRoom();
           else if (!modal()) prompt = left != null ? ROOM_TEXT.autoExit(left) : roomPrompt(roomTarget(), rc?.lv ?? null, { done, locked: rc?.status === 'locked' });
         } else if (rc) {
