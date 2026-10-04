@@ -29,6 +29,7 @@ const FINAL: Record<number, KickReason> = {
   [CLOSE.badToken]: 'badToken',
   [CLOSE.otherDevice]: 'otherDevice',
   [CLOSE.raceClosed]: 'raceClosed',
+  [CLOSE.full]: 'full', // SPEC §17.40: NET.maxSpectators watching already
 };
 
 /** SPEC §3: a pose goes out when its rounded array differs from the last one sent, at most NET.sendHz a second. */

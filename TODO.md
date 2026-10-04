@@ -188,6 +188,7 @@ Xong (báo cáo `docs/reports/host-minimap.md`, ảnh `screenshots/p11-host-map.
 - Kiểm tay chưa làm: trang Host thật với 2–3 trình duyệt đội đang chạy (chấm di chuyển mượt, đội offline mờ, đội về đích thành ô vuông).
 
 ## Khác
+- Chế độ xem (SPEC §17.39–17.40, `docs/reports/watch-mode.md`): đội đã về đích đi lại vẫn hiện trong bảng "Tại điểm này" của đội khác (nhãn bước = Chặng dừng) — chấp nhận; "Tại điểm này" / tin công khai không gửi cho khán giả. Danh sách khán giả không có tên (chỉ đếm). Mã khán giả lưu trong localStorage như mã đội (ô "Vào lại"). Người xem thấy đội trong phòng Louvre từ mặt phố (không dựng phòng); chưa có ảnh stand-in cho trường hợp đó. Kiểm tay chưa làm: khán giả thật + Host thật trên bản deploy (thanh đổi đội, Đổi mã ngắt khán giả, 50 socket).
 - T1 "đúng x/4" (SPEC §17.31): dòng "đội chưa thấy số: còn n phút" cạnh ô nhập chỉ vẽ lại khi hàng chờ đổi (không tự đếm từng phút); nút Phạt trong ô ma trận step_progress không có ô nhập số (chỉ hàng chờ duyệt có).
 - Xe để lại cạnh hòm mật thư (SPEC §17.34): máy chủ không kiểm vùng đi được (DO không có bản đồ); hòm đặt sát tường / sông thì xe có thể đứng chỗ khó lấy — khi cần: Host tính sẵn ô đặt xe cạnh mỗi hòm (như ứng viên xe) rồi gửi lên.
 - npm 11 cảnh báo `allowScripts` cho script cài đặt của `esbuild`, `workerd`, `fsevents`. Hiện vẫn chạy được vì binary lấy từ optional dependency; nếu bản npm sau chặn hẳn thì duyệt bằng `npm install-scripts approve`.

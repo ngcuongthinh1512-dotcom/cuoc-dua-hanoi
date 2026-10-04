@@ -36,6 +36,8 @@ export class Input {
   imeSuspected = false;
   onPointerLockChange: (locked: boolean) => void = () => {};
   onImeSuspected: () => void = () => {};
+  /** A canvas click locks the pointer only while this says so (SPEC §17.40: not while the watch bar follows a team). */
+  canLock: () => boolean = () => true;
   /** First standard-mapping gamepad: left stick move, right stick look, rise = RT/RB − LT/LB. */
   readonly pad = { moveX: 0, moveY: 0, lookX: 0, lookY: 0, rise: 0 };
   private readonly held = new Set<string>();
@@ -50,7 +52,7 @@ export class Input {
     addEventListener('keyup', (e) => (e.key === 'Meta' ? this.held.clear() : this.held.delete(e.code)));
     addEventListener('blur', () => this.held.clear());
     document.addEventListener('visibilitychange', () => document.hidden && this.held.clear());
-    canvas.addEventListener('click', () => this.lock());
+    canvas.addEventListener('click', () => this.canLock() && this.lock());
     // The browser eats Esc while locked, so losing the lock is the "menu" signal (SPEC §17.2).
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;

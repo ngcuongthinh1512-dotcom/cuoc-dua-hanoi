@@ -443,6 +443,12 @@ Object.assign(PRESETS, {
   'p10-host-1024': '/host.html?demo=1&louvre=1&undoLeft=600&matrixScroll=max,40&collapsed=1',
 });
 Object.assign(VIEWPORT, { 'p10-host-1024': { width: 1024, height: 720 } });
+// SPEC §17.40 watch mode (`npm run screenshot -- p9`; not in the default run): DEV ?spectate=1 = a viewer without a body (like the
+// Host / a spectator) over the offline world, the ?peers= stand-ins as the racing teams: the bar at the top (◀ ● Đội Xanh ▶ ·
+// Bay tự do) and the chase camera behind the first peer walking across the Concorde; 2 s of simulated ticks first.
+Object.assign(PRESETS, {
+  'p9-watch': `/?spectate=1&npc=0&wait=2&peers=${PEERS}`,
+});
 const BENCH_MS = 15_000;
 /** In the page: frame intervals over `ms` of requestAnimationFrame → { avg, p5 } FPS (p5 = the slowest 5 % of frames). A
  *  string, not a function: tsx's keepNames would put an undefined `__name` helper into the page. */
@@ -476,7 +482,7 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c|p10)-/.test(k))); // landmark / player / online / Phase 8 / 8C / 10 views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c|p9|p10)-/.test(k))); // landmark / player / online / Phase 8 / 8C / 9 / 10 views by name
 
 const outDir = join(root, 'screenshots', opt.out ?? '');
 const errors: string[] = [];

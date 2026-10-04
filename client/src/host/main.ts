@@ -113,6 +113,9 @@ const teamsBox = el('section');
 const counters = el('section');
 const bikes = el('section');
 const candStatus = el('span', { className: 'note' }); // outlives render(): the status of the last "Tính hành lang" click
+/** SPEC §17.40: one line under the player link: the spectator code + Sao chép + Đổi mã + how many are watching (drawSpectators). */
+const specBox = el('p');
+let specSig = '';
 let computing = false;
 let lastAttempt = 0; // throttles automatic retries (D11: recomputed by itself whenever the server holds no candidates)
 let legResult: { ok: boolean; issues: LegIssueView[] } | null = null;
@@ -137,6 +140,7 @@ function mainView() {
   app.replaceChildren(
     el('h1', {}, `Cuộc đua Paris – Host · ${race}`),
     el('p', {}, 'Link cho người chơi: ', el('code', {}, link), ' ', el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(link) }, 'Sao chép')),
+    specBox,
     banner, noticeBox, err, queueWrap,
     el('h2', {}, 'Cuộc đua'), statusBox,
     el('h2', {}, 'Chặng'), legBox,
@@ -594,11 +598,30 @@ setInterval(() => {
 let pressedAt = 0;
 for (const [ev, down] of [['pointerdown', true], ['pointerup', false], ['pointercancel', false]] as const) addEventListener(ev, () => (pressedAt = down ? Date.now() : 0), true);
 
+/** SPEC §17.40: the spectator code line (rebuilt only when the code / count changes: its buttons must not lose a click). */
+function drawSpectators(s: State) {
+  const sig = `${s.spectatorCode ?? ''}|${s.spectators ?? 0}`;
+  if (sig === specSig && specBox.childNodes.length) return;
+  specSig = sig;
+  if (!s.spectatorCode) return void specBox.replaceChildren(); // the ?demo=1 state has none
+  const code = s.spectatorCode;
+  const rotate = () => {
+    if (confirm('Đổi mã khán giả? Mã cũ hết hiệu lực ngay và khán giả đang xem bị ngắt.') && !send({ t: 'host.spectator', op: 'rotate' })) addNotice('error', 'Đang mất kết nối, chưa gửi được.');
+  };
+  specBox.replaceChildren(
+    'Mã khán giả (nhập ở cùng ô mã đội để xem camera các đội, không chơi): ', el('code', {}, code), ' ',
+    el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(code) }, 'Sao chép'), ' ',
+    el('button', { className: 'small', title: 'Mã cũ hết hiệu lực ngay, khán giả đang xem bị ngắt', onclick: rotate }, 'Đổi mã'),
+    ` · ${s.spectators ?? 0} khán giả đang xem`,
+  );
+}
+
 function render(s: State) {
   const th = (...h: string[]) => el('tr', {}, ...h.map((t) => el('th', {}, t)));
   const now = s.serverMs + (Date.now() - receivedAt);
   banner.replaceChildren(...[...warnings(s), ...stuckLines(s, now)].map((w) => el('div', {}, w)));
   queueWrap.classList.toggle('has', drawQueue(s, now) + drawUndo(s, now) > 0);
+  drawSpectators(s);
   drawStatus(s);
   drawLeg(s);
   drawMedia(s);

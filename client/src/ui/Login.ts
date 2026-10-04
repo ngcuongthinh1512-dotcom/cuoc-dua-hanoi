@@ -1,6 +1,7 @@
 // Phase 6 track B (docs/plans/phase6.md §3.3, §3.11): the login screen over the loading world (SPEC §7, §8.10). A team types
 // its 6-char code (remembered in localStorage, still needs a click on "Vào lại"); the Host switches to its password and
-// flies as a spectator. A team that played before sees "Chào mừng trở lại, <đội>!" + a summary, then "Tiếp tục".
+// watches (SPEC §17.40; so does a spectator code typed into the same box). A team that played before sees "Chào mừng trở
+// lại, <đội>!" + a summary, then "Tiếp tục".
 import { NET } from '@race/shared/protocol';
 import { net, netClient } from '../config.ts';
 import type { NetDown } from '../net/NetClient.ts';
@@ -56,6 +57,7 @@ export const NET_DOWN: Readonly<Record<NetDown, string>> = {
   raceClosed: 'Cuộc đua đã đóng.',
   protocol: 'Máy chủ đã ngắt kết nối. Tải lại trang để vào lại.',
   version: 'Phiên bản game đã đổi. Hãy tải lại trang.',
+  full: `Phòng xem đã đầy (tối đa ${NET.maxSpectators} khán giả). Hãy thử lại sau.`,
 };
 export const netDownText = (reason: NetDown) => NET_DOWN[reason];
 
@@ -92,7 +94,7 @@ function screen(html: string) {
   return { root, k };
 }
 
-type Attempt = { ok: true; token: string; role?: 'host'; team?: Session['team']; summary?: Summary } | { ok: false; error?: unknown; retryMs?: number };
+type Attempt = { ok: true; token: string; role?: 'host' | 'spectator'; team?: Session['team']; summary?: Summary } | { ok: false; error?: unknown; retryMs?: number };
 
 async function post(body: object): Promise<Attempt> {
   try {
@@ -111,7 +113,7 @@ function form(race: string, remembered: string, submit: (host: boolean, value: s
   let lockedUntil = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
   const mode = () => {
-    k('note').textContent = host ? 'Đăng nhập Host để theo dõi cả cuộc đua (camera bay).' : `Nhập mã đội (${NET.codeLength} ký tự) mà Host đã gửi cho đội bạn.`;
+    k('note').textContent = host ? 'Đăng nhập Host để theo dõi cả cuộc đua (xem camera các đội).' : `Nhập mã đội (${NET.codeLength} ký tự) mà Host đã gửi cho đội bạn, hoặc mã khán giả để xem.`;
     k('label').textContent = host ? 'Mật khẩu Host' : 'Mã đội';
     Object.assign(input, { type: host ? 'password' : 'text', value: host ? '' : remembered, maxLength: host ? 200 : NET.codeLength + 3 });
     input.classList.toggle('login-code', !host);
@@ -169,6 +171,8 @@ export function login(race: string): Promise<Session> {
       if (!r.ok) return error(errorText(r.error, r.retryMs), r.error === 'locked' ? r.retryMs : 0);
       if (host) return close(), resolve({ race, token: r.token, role: 'host' });
       storeCode(value);
+      // SPEC §17.40: the spectator code goes through the same box; the server's answer decides the role
+      if (r.role === 'spectator') return close(), resolve({ race, token: r.token, role: 'spectator' });
       const session: Session = { race, token: r.token, role: 'team', ...(r.team && { team: r.team }), ...(r.summary && { summary: r.summary }) };
       if (r.summary && r.summary.reconnects > 0) await welcomeBack(r.team?.name ?? value, r.summary);
       close();

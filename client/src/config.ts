@@ -83,8 +83,12 @@ const keyTable = {
   flyUp: ['Space', 'KeyE'],
   flyDown: ['KeyQ'],
   flyFast: ['ShiftLeft', 'ShiftRight'],
-  flyToggle: ['KeyV'], // player ⇄ free-fly camera, only while the F3 debug panel is open (docs/plans/phase3.md)
+  flyToggle: ['KeyV'], // player ⇄ free-fly camera, only while the F3 debug panel is open (docs/plans/phase3.md); SPEC §17.40: in the watch mode = "Bay tự do" ⇄ follow
   graphToggle: ['KeyN'], // road graph overlay (roadgraph.json), only while the F3 debug panel is open
+  // SPEC §17.40 watch mode: a finished team toggles it (X); [ / ] = the previous / next racing team (spectate/Spectate.ts)
+  watch: ['KeyX'],
+  spectatePrev: ['BracketLeft'],
+  spectateNext: ['BracketRight'],
 };
 
 export type Action = keyof typeof keyTable;
@@ -1153,6 +1157,15 @@ export const netClient = {
   storageKey: 'cuoc-dua-paris.team-code', // localStorage: the team code is remembered (SPEC §8.10), try/catch
   remountSeconds: 3, // after an F5 the team that was riding gets back on its bike if it stands on its feet within this (SPEC §8.10)
   gestureGapMs: 500, // a bell / wave is sent at most this often (the server closes > NET.maxMessagesPerSec)
+};
+// SPEC §17.40 watch mode (spectate/watch.ts followPose): the camera behind the followed body, m / rad; the keys are in keyTable
+export const spectate = {
+  back: 5.5, // m behind the feet along the body's heading
+  up: 2.3, // m above the feet
+  lookUp: 1.4, // m above the feet the camera looks at (the head)
+  sharpness: 5, // exponential smoothing (ThirdPersonCamera.follow): higher = tighter
+  snapDistance: 10, // m: a jump of the goal longer than this (respawn, a new team) is not smoothed
+  roomEye: 1.7, // m above the street the camera stands when the team is in the Louvre room (y ≤ LOUVRE.roomY): the room is not built for a watcher
 };
 export const remote = {
   interpolationMs: 200, // render this far behind the server clock (SPEC §7: buffer ~200 ms; ticks every 200 ms)

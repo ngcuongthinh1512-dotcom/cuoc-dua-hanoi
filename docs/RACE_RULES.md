@@ -65,7 +65,7 @@ Cho biết nơi bạn cần tới tiếp theo (chỉ dẫn rõ ràng hoặc **m�
 - Cuối chặng là **thảm dừng chân** cùng **người dẫn chương trình**: thảm đỏ lớn (16 × 32 m), người dẫn chương trình đứng cạnh, một **cột sáng đỏ** cao để nhận ra từ xa (hiện cùng lúc với hòm mật thư của Lộ trình dẫn tới đó). Đi bộ (không ngồi trên xe) **bước lên thảm** để check-in, không cần bấm phím: **ngay lúc đó** bạn được báo **"Về đích thứ n"**. **Đứng ngoài thảm không tính về đích**, dù chỉ cách mép một bước. Hạng **cố định**, không đổi sau đó.
 - **Đội về cuối cùng bị loại**: khi mọi đội khác đã về đích, đội chạm thảm sau cùng nhận thông báo **"BỊ LOẠI"** kèm hạng cuối. Host bấm **"Kết thúc"** khi đội bạn chưa về đích thì đội bạn cũng "BỊ LOẠI", xếp sau mọi đội đã về.
 - Nếu đội có **phút phạt** (mục 8), bạn phải **đứng chờ cho hết** (trên thảm hay cạnh thảm đều được) rồi **đứng trên thảm** mới check-in được; trong lúc đó đội tới sau có thể check-in trước!
-- Sau khi check-in bạn trở thành **khán giả**: nhân vật đứng yên, bay camera tự do để xem các đội còn lại (`W` `A` `S` `D` bay, `Space` / `E` lên, `Q` xuống, giữ `Shift` bay nhanh).
+- Sau khi check-in (hoặc khi "BỊ LOẠI") bạn **vẫn đi lại được** bằng nhân vật của mình như lúc đua (các đội khác vẫn thấy bạn), nhưng không mở hòm, làm nhiệm vụ hay lấy xe được nữa. Muốn **xem các đội còn lại**: bấm `X` → camera bám sau lưng đội đang đua; thanh trên cùng (hoặc `[` `]`) để đổi đội, nút **Bay tự do** (hoặc `V`) để tự bay (`W` `A` `S` `D` bay, `Space` / `E` lên, `Q` xuống, giữ `Shift` bay nhanh); bấm `X` lần nữa để điều khiển lại nhân vật.
 
 ## 6. Nhập đáp án
 
@@ -116,7 +116,8 @@ Lỡ tải lại trang (`F5` / `Cmd`+`R`), tắt tab, mất mạng hay phải đ
 - **Thời gian vẫn trôi trong lúc bạn offline** và không được bù. Nhân vật bị ẩn khỏi thế giới của các đội khác. Đăng nhập trên máy mới thì máy cũ bị ngắt.
 - Thử thách gõ câu trả lời giữ nguyên lịch sử câu đã gửi, câu đang chờ duyệt và **đồng hồ đếm ngược phạt**. Lựa chọn kép giữ nguyên nhánh đã chọn, hòm đã mở và đếm ngược đổi nhánh. Host duyệt trong lúc bạn vắng mặt thì vào lại **mật thư mới tự mở** và đã nằm trong Sổ.
 - **Nhập sai mã đội 5 lần liên tiếp** thì bị khóa 1 phút.
-- Sau khi về đích hoặc Host kết thúc chặng, vào lại vẫn thấy kết quả và chế độ khán giả, xem lại được Sổ mật thư. **Bảng "Ghi nguồn"** (menu `Esc`) mở được từ lúc đội bạn về đích hoặc cuộc đua kết thúc.
+- Sau khi về đích hoặc Host kết thúc chặng, vào lại vẫn thấy kết quả, vẫn đi lại được và bấm `X` để xem các đội khác, xem lại được Sổ mật thư. **Bảng "Ghi nguồn"** (menu `Esc`) mở được từ lúc đội bạn về đích hoặc cuộc đua kết thúc.
+- **Khán giả** (người không chơi): Host có thể đưa **mã khán giả** (bắt đầu bằng `K`); nhập vào cùng ô mã đội để xem camera các đội đang đua (không có nhân vật, không thấy mật thư của đội nào).
 
 ## 11. Chơi đẹp
 

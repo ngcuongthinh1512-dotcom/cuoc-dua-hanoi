@@ -2,12 +2,12 @@
 
 Ngày 2026-10-03. Yêu cầu: KHÔNG phòng khán giả riêng; một CHẾ ĐỘ XEM dùng chung cho khán giả (mã khán giả) và đội đã về đích / sau khi Host Kết thúc: camera bám theo đội đang đua, nút / phím chuyển đội.
 
-## Trạng thái
-- [ ] Máy chủ: mã khán giả (`meta.spectatorCode`, "K" + 5 ký tự), vai trò `spectator` (token `s:<mã>`), welcome thu gọn, tick toàn bộ đội cho khán giả và đội đã xong, 50 khán giả, `host.spectator rotate`, `TeamInfo.racing`
-- [ ] Client: `spectate/` (thanh chuyển đội + camera bám), phím `[` `]` `V`, Login nhận mã khán giả, Host hiển thị mã
-- [ ] Test ngắn + `npm run build`
-- [ ] Ảnh `screenshots/p9-spectate.png`
-- [ ] Docs: DEPLOY §4, RACE_RULES Chặng dừng, README, CLAUDE.md, TODO, SPEC §17.37
+## Trạng thái (làm xong 2026-10-04, báo cáo `docs/reports/watch-mode.md`, SPEC §17.39–17.40)
+- [x] Máy chủ: mã khán giả (`meta.spectatorCode`, "K" + 5 ký tự), vai trò `spectator` (token `s:<mã>`), welcome thu gọn, tick toàn bộ đội cho khán giả và đội đã xong (`watch on`, chỉ khi đã xong), 50 khán giả, `host.spectator rotate`, `TeamInfo.racing`
+- [x] Client: `spectate/` (thanh chuyển đội + camera bám), phím `[` `]` `V` (+ `X` cho đội đã về đích), Login nhận mã khán giả, Host hiển thị mã
+- [x] Test ngắn + `npm run build`
+- [x] Ảnh `screenshots/p9-watch.png`
+- [x] Docs: DEPLOY §4, RACE_RULES Chặng dừng, README, CLAUDE.md, TODO, SPEC §17.39–17.40
 
 ## Quyết định (mặc định tối giản)
 - Mã khán giả = `K` + 5 ký tự cùng bảng chữ mã đội (6 ký tự, cùng ô đăng nhập); kiểm không trùng mã đội hai chiều.

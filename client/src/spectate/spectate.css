@@ -1,0 +1,74 @@
+/* SPEC §17.40 watch mode: the small bar at the top centre (◀ ● Đội ▶ · Bay tự do), the note under it ("đang trong phòng
+   bảo tàng"), the finished team's hint ("Phím X: xem các đội khác"). Not .hud-box: it stays while the HUD is off. */
+.sp-bar {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  pointer-events: auto;
+  z-index: 1;
+  white-space: nowrap;
+}
+.sp-bar[hidden],
+.sp-note[hidden] {
+  display: none;
+}
+.sp-bar button,
+.sp-bar select {
+  font: inherit;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border: 0;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-shadow: none;
+}
+.sp-bar select {
+  max-width: 14em;
+  font-weight: 600;
+}
+.sp-bar select option {
+  color: #000;
+}
+.sp-bar button.on {
+  background: #2c6bd8;
+}
+.sp-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+.sp-keys {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  margin-left: 4px;
+}
+.sp-note {
+  position: fixed;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  pointer-events: none;
+  z-index: 1;
+}
+/* the "Nhấp chuột để chơi" panel (index.html #help) moves under the bar while it shows */
+body.sp-on #help {
+  top: 60px;
+}

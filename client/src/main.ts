@@ -20,6 +20,7 @@ import { autoExitLeft, demoLouvre, LouvreRoom, pickChange, preloadArt, ROOM_TEXT
 import { PitHost } from './race/PitStop.ts';
 import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
+import { Spectate, TEXT as SP } from './spectate/Spectate.ts';
 import { Npc } from './npc/Npc.ts';
 import type { NpcAnchor } from './npc/types.ts';
 import { loadCharacterAsset } from './player/CharacterModel.ts';
@@ -175,7 +176,10 @@ async function start() {
   // autoTurn, ?cam=) are ignored. Offline (dev server without ?race=, ?offline=1): the test world as before.
   const session = await sessionP;
   const host = session?.role === 'host';
-  // ?cam=x,y,z,yawDeg,pitchDeg = spectator (free-fly only, no body; landmark / topdown screenshots; online: Host only).
+  // SPEC §17.40: the Host and a spectator (spectator code) have no body: the watch mode (Spectate) from the start. DEV
+  // offline ?spectate=1 (+ ?peers= stand-ins): the same without a server (p9-watch).
+  const viewer = (!!session && session.role !== 'team') || (import.meta.env.DEV && !session && query.has('spectate'));
+  // ?cam=x,y,z,yawDeg,pitchDeg = free camera only (no body; landmark / topdown screenshots; online: Host only).
   // Otherwise the player walks from the spawn (?player[=x,z,yawDeg] overrides it offline, Player.parseOverrides).
   const cam = query.get('cam')?.split(',').filter(Boolean).map(Number); // empty fields → not 5 numbers → spawn
   const camOk = cam?.length === 5 && cam.every(Number.isFinite) && (!session || host);
@@ -186,7 +190,7 @@ async function start() {
   const overrides = parseOverrides(query, !!session);
   // Phase 8B (docs/plans/phase8b.md §F): the Louvre room under the box. Critic C2: only the Player gets its OWN env (the
   // room floor, no Seine while inside); `env` stays the grid for the NPCs, the boxes, the overlays.
-  const room = camOk || host ? undefined : new LouvreRoom(scene, world, env.heightAt);
+  const room = camOk || viewer ? undefined : new LouvreRoom(scene, world, env.heightAt);
   const playerEnv = {
     ...env,
     heightAt: (x: number, z: number) => (room?.active ? room.floorY : env.heightAt(x, z)),
@@ -194,7 +198,7 @@ async function start() {
       return room?.active ? null : env.waterLevel;
     },
   };
-  const player = camOk || host ? undefined : await Player.create(scene, world, camera, playerEnv, overrides, session?.team);
+  const player = camOk || viewer ? undefined : await Player.create(scene, world, camera, playerEnv, overrides, session?.team);
   // D17: no spawn / clue box on top of a rail viaduct (the Bir-Hakeim metro deck over the leg start)
   const rails = new RailDecks(new Set(hasIndex ? index.keys : []), new URL('data/', location.href).href);
   /** (Re)spawn at the leg start / where the team stood (welcome), DEV ?start=x,z,yawDeg: the same path (p7-start). */
@@ -228,10 +232,19 @@ async function start() {
   const canFly = () => !session;
   // Remote players: online, or DEV ?peers=slot,x,z,yawDeg,mode[,action];… stand-ins (p6-peers) offline.
   const peers = import.meta.env.DEV && !session ? parsePeers(query.get('peers')) : [];
-  const assets = player?.assets ?? (host ? { character: await loadCharacterAsset(), bike: await loadBikeAsset() } : undefined);
+  const assets = player?.assets ?? (viewer ? { character: await loadCharacterAsset(), bike: await loadBikeAsset() } : undefined);
   const remote = assets && (session || peers.length) ? new RemotePlayers(scene, assets.character, assets.bike, remoteCfg.renderRadius) : undefined;
   if (peers.length) remote?.setTeams(fakeTeams(peers));
-  let nextFakeTick = 0; // ms of player.simTime
+  let nextFakeTick = 0; // ms of the local clock below
+  let demoClock = 0; // s since the world was ready, a viewer's clock (no Player.simTime): DEV fake ticks, ?wait=
+  const localMs = () => (player ? player.simTime : demoClock) * 1000;
+  // SPEC §17.40: the watch mode (spectate/Spectate.ts) for the Host / a spectator from the start, for a team once it finished
+  // (X toggles it). `watching` = the camera is the Spectate's (a followed body, or free fly); the body then stands still,
+  // sends no pose, and the server is told (`watch`) so the ticks carry every team.
+  const spectate = remote && (viewer || session) ? new Spectate({ fly, poseOf: (slot) => remote.poseOf(slot), heightAt: env.heightAt, onFree: () => input.lock(), team: !!player }) : undefined;
+  let watching = !!viewer;
+  spectate?.show(watching);
+  if (peers.length) spectate?.setTeams(fakeTeams(peers));
   const groundY = (x: number, z: number) => groundAt(world, x, z, env.heightAt(x, z) + 19); // 20 m ray: decks over the Seine bed too
   // Boxes / mat: the same 20 m ray, but never on a rail viaduct top (D17; null while that is not known → retried)
   const boxGround = (x: number, z: number) => {
@@ -286,6 +299,7 @@ async function start() {
             if (over) return;
             over = true;
             if (fresh) player.controller.startAction('celebrate'), pitHost?.cheer();
+            spectate?.hint(SP.hintX); // SPEC §17.40: "Phím X: xem các đội khác"
           },
         })
       : undefined;
@@ -357,7 +371,9 @@ async function start() {
       welcome: (w) => {
         Object.assign(movement, w.movement); // SPEC §6.1: the leg file's speeds, also the server's speed-check limits
         remote?.setTeams(w.teams);
+        spectate?.setTeams(w.teams);
         if (remote) remote.renderRadius = w.presence.renderRadius;
+        if (watching && player) net?.send({ t: 'watch', on: true }); // a reconnect: the socket's flag starts over
         boxes.reset(w.boxes);
         // SPEC §8.10: back where the team last stood, onto the surface it stood on (pose.y); first entry: its spot at the
         // leg start (D17). The first welcome only: after a reconnect the body stays put.
@@ -382,7 +398,7 @@ async function start() {
           if (lit !== null) clickSound(lit); // fix F2 (7): only a pick the server took clicks
           return;
         } // race / book / zone (Phase 7); feed / credits (Phase 8B) → RaceHud
-        if (m.t === 'team') remote?.setOnline(m.slot, m.online);
+        if (m.t === 'team') remote?.setOnline(m.slot, m.online), spectate?.team(m.slot, m.online, m.racing);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') {
           // Phase 8B: the wrong lock's minutes from the card (0.1 in a test leg: never "3")
@@ -468,7 +484,7 @@ async function start() {
   const npcAnchor = () => {
     camera.getWorldDirection(view);
     const viewYaw = Math.atan2(-view.x, -view.z);
-    if (player) return player.npcAnchor(anchor, viewYaw);
+    if (player && !watching) return player.npcAnchor(anchor, viewYaw);
     return Object.assign(anchor, { x: camera.position.x, z: camera.position.z, viewYaw, body: false, vx: 0, vz: 0, nose: null, waving: false });
   };
   // Phase 5 HUD (docs/plans/phase5.md §5): player mode only (the spectator has no body). The full map, the GPS and the
@@ -493,7 +509,10 @@ async function start() {
     resume: () => input.lock(),
     ...(player && { respawn: () => notice(player.controller.respawn() === 'stairs' ? 'respawnStairs' : 'respawn') }),
   });
-  const modal = () => menu.isOpen || !!fullMap?.isOpen || !!raceHud?.open; // the body stops, keys go to the menu / map / Sổ mật thư
+  const uiOpen = () => menu.isOpen || !!fullMap?.isOpen || !!raceHud?.open; // the body stops, keys go to the menu / map / Sổ mật thư
+  // SPEC §17.40: while the watch camera follows a team the pointer stays free (the bar is clickable): no lock, no "Nhấp chuột"
+  const modal = () => uiOpen() || !!spectate?.following;
+  input.canLock = () => !spectate?.following;
   // URL hooks (screenshots, tests; docs/plans/phase5.md §7), applied once the world is ready: ?gps=x,z waypoint,
   // ?map[=metersPerPx] full map open, ?menu menu open, ?respawn=s "Kẹt? Về chỗ an toàn" after s simulated seconds.
   const gpsArg = query.get('gps')?.split(',').map(Number);
@@ -523,7 +542,7 @@ async function start() {
     if (locked) menu.close();
     else {
       unlockedAt = performance.now();
-      if (!fullMap?.isOpen && !raceHud?.open) menu.open();
+      if (!fullMap?.isOpen && !raceHud?.open && !spectate?.following) menu.open(); // following: the bar took the pointer, no menu
     }
     help.hidden = locked || modal();
   };
@@ -577,8 +596,8 @@ async function start() {
   const loop = new GameLoop({
     fixedUpdate: (dt) => {
       // Before the player (docs/plans/phase4b.md §5.2): cars → pedestrians → car colliders → shove / crash the body.
-      if (npcs?.started) npcs.fixedUpdate(dt, npcAnchor(), player?.active && !flying ? player.controller : undefined);
-      player?.fixedUpdate(dt, flying);
+      if (npcs?.started) npcs.fixedUpdate(dt, npcAnchor(), player?.active && !flying && !watching ? player.controller : undefined);
+      player?.fixedUpdate(dt, flying || watching); // the body stands frozen while its team watches the others (§17.40)
       world.step();
     },
     update: (dt) => {
@@ -598,8 +617,8 @@ async function start() {
       // it): ignored.
       if (fullMap && input.wasPressed('map')) {
         if (fullMap.isOpen) fullMap.close(), relock(); // a card on top keeps the pointer
-        else if (!flying && !raceHud?.open) {
-          // not from the free-fly camera (V, debug): the map is the body's (review m14); not under the Sổ mật thư / card
+        else if (!flying && !watching && !raceHud?.open) {
+          // not from the free-fly / watch camera: the map is the body's (review m14); not under the Sổ mật thư / card
           menu.close();
           fullMap.open(frame);
           if (fullMap.isOpen) document.exitPointerLock();
@@ -607,31 +626,44 @@ async function start() {
       }
       if (raceHud && input.wasPressed('clueBook') && !menu.isOpen && !fullMap?.isOpen && !cardClosed) raceHud.toggleBook(); // Tab: Sổ mật thư (SPEC §8.11); the Tab that closed a card (RaceHud) opens nothing
       // Phase 8 (§17.14): Enter with nothing open → the current card again (answer history, input box)
-      if (raceHud && input.wasPressed('clueCard') && !modal() && !flying && !cardClosed) raceHud.openCurrent();
+      if (raceHud && input.wasPressed('clueCard') && !uiOpen() && !flying && !cardClosed) raceHud.openCurrent(); // while watching too: the finish card (§17.39)
       if (input.wasPressed('menu') && performance.now() - unlockedAt > 300 && !cardClosed) {
         if (fullMap?.isOpen) fullMap.close(), input.lock();
-        else if (menu.isOpen) menu.close(), input.lock();
+        else if (menu.isOpen) menu.close(), relock(); // not while the watch camera follows a team (the bar keeps the pointer)
         else if (!input.locked) menu.open();
         help.hidden = input.locked || modal();
       }
-      if (flying) fly.update(dt, input);
+      // SPEC §17.40: X (a finished team) = watch the other teams ⇄ control the body again
+      if (player && spectate && net && over && input.wasPressed('watch') && !uiOpen()) {
+        watching = !watching;
+        spectate.show(watching);
+        spectate.hint(watching ? null : SP.hintX);
+        net.send({ t: 'watch', on: watching });
+        if (!watching) relock();
+      }
+      if (watching) help.hidden = input.locked || modal(); // following: no "Nhấp chuột để chơi" (the bar has the pointer)
+      if (worldReady) demoClock += dt;
+      const bodyCam = !!player && !flying && !watching; // the camera is the body's (else the Spectate's / free fly)
+      if (watching && spectate?.update(dt, input)) {
+        /* the camera follows a team */
+      } else if (flying || watching) fly.update(dt, input);
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
       if (player) player.camera.override = room?.active ? roomCfg.camera : null; // fix F2 (5): over the shoulder, higher, in the room
-      player?.update(dt, flying ? null : input, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
-      if (room?.active && !flying) camera.position.y = Math.min(camera.position.y, room.floorY + roomCfg.size.height - 0.3); // no ceiling collider (C2): the camera stays under it
+      player?.update(dt, bodyCam ? input : null, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
+      if (room?.active && bodyCam) camera.position.y = Math.min(camera.position.y, room.floorY + roomCfg.size.height - 0.3); // no ceiling collider (C2): the camera stays under it
       if (player?.active) bikeLink?.frame(dt, player.controller);
-      if (net && player?.active && !flying) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); a finished team too (§17.39)
-      if (peers.length && player?.active && player.simTime * 1000 >= nextFakeTick) {
+      if (net && player?.active && bodyCam) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); a finished team too (§17.39), not while watching
+      if (peers.length && (player ? player.active : worldReady) && localMs() >= nextFakeTick) {
         remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
         nextFakeTick += 1000 / NET.tickHz;
       }
-      remote?.update(dt, net ? net.serverNow() : player ? player.simTime * 1000 : 0, camera.position, player && !flying ? underground(player.position, env.heightAt) : undefined, env.heightAt);
+      remote?.update(dt, net ? net.serverNow() : localMs(), camera.position, bodyCam ? underground(player.position, env.heightAt) : undefined, env.heightAt);
       // Phase 8B: the room's lights from THIS team's card only, its prompt, the pictures preloaded once a louvre card is there
       const rc = room && roomCard();
       if (rc && preloaded !== rc.step) (preloaded = rc.step), preloadArt(rc.lv.artworks);
       let prompt: string | null = null;
       let near = false; // within enterReach of the box: the card's "Vào phòng" button is live (SPEC §17.33)
-      if (room && player?.active && !flying && !player.controller.riding) {
+      if (room && player?.active && bodyCam && !player.controller.riding) {
         const done = rc?.step !== room.step;
         if (room.active) {
           room.setPicks(done ? null : rc!.lv.picks);
@@ -651,8 +683,8 @@ async function start() {
       raceHud?.setRoom(!!room?.active, near); // the louvre card says "Đang trong phòng" / its "Vào phòng" button
       boxes.update(camera.position);
       if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
-      // No HUD while loading or flying (V): hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
-      document.body.classList.toggle('hud-off', !worldReady || flying);
+      // No HUD while loading, flying (V) or watching the other teams: hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
+      document.body.classList.toggle('hud-off', !worldReady || flying || watching);
       if (player && hud && minimap) {
         const s = player.controller.state;
         camera.getWorldDirection(view);
@@ -666,7 +698,7 @@ async function start() {
         const riding = !!player.controller.riding;
         // (race.frame runs in the Louvre room too: the hint marks' `view`; no box prompt from under the ground)
         const inZone = !player.active ? false : (race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone : !riding && !!boxInReach(boxes.boxes, x, z)) && !room?.active;
-        const bike = player.active && !flying && !room?.active && !modal() && !race?.view?.result ? player.bikes.prompt(player.controller) : null;
+        const bike = player.active && bodyCam && !room?.active && !modal() && !race?.view?.result ? player.bikes.prompt(player.controller) : null;
         raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone, prompt, bike });
         gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
         hud.update(frame, dt);
@@ -680,7 +712,7 @@ async function start() {
       }
       input.endFrame();
       cardClosed = false;
-      const p = player && !flying ? player.position : camera.position; // streaming + colliders follow the body
+      const p = bodyCam ? player.position : camera.position; // streaming + colliders follow the body (watching / flying: the camera)
       sky.update();
       waterObj?.update(dt);
       chunks.update(p.x, p.y, p.z, worldReady ? chunkCfg.attachBudgetMs : Infinity); // the first view loads unbudgeted
@@ -750,8 +782,8 @@ async function start() {
         npcs.start(npcAnchor()); // fill + warm-up (npcRender.warmUp s)
         npcReady = true;
       }
-      // NPCs: ≥ 2 frames through npcs.update (drawn, and in __STATS__ above) — the spectator has no `wait` to cover it.
-      if (!ready && worldReady && npcReady && (!npcs || npcFrames >= 2) && (!player || player.simTime >= wait)) {
+      // NPCs: ≥ 2 frames through npcs.update (drawn, and in __STATS__ above) — a viewer waits only for an explicit ?wait= (p9-watch).
+      if (!ready && worldReady && npcReady && (!npcs || npcFrames >= 2) && (player ? player.simTime >= wait : demoClock >= (Number.isFinite(waitArg) ? waitArg : 0))) {
         ready = true;
         Object.assign(window, { __READY__: true });
       }

@@ -202,6 +202,14 @@ export class RemotePlayers {
     return this.drawn;
   }
 
+  /** SPEC §17.40: the body of `slot` at the time update() last rendered (the watch camera follows it); null = no sample. */
+  poseOf(slot: number): RemotePose | null {
+    const r = this.slots.get(slot);
+    if (!r?.live || Number.isNaN(this.lastT)) return null;
+    const out = newRemotePose();
+    return r.track.sample(this.lastT, out) ? out : null;
+  }
+
   dispose() {
     for (const r of this.slots.values()) r.model.dispose(), r.bike?.model.dispose();
     this.slots.clear();
