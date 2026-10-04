@@ -36,7 +36,7 @@ describe('leg schema', () => {
   it('parses a short leg, filling every block from the defaults (the demo values)', () => {
     const r = parseLeg(mini());
     expect(r.issues.map((i) => `${i.where}: ${i.message}`)).toEqual([NO_PLACE_A]);
-    expect(r.ok && r.leg.movement).toEqual({ footSpeed: 4, bikeSpeedMultiplier: 1.5 });
+    expect(r.ok && r.leg.movement).toEqual({ footSpeed: 6, bikeSpeedMultiplier: 1.5 });
     expect(r.ok && r.leg.boxReveal).toEqual({ radius: 150, hysteresis: 20 });
     expect(r.ok && r.leg.steps[0]).toMatchObject({ transport: { allowed: 'any' } });
     expect(r.ok && r.leg.steps[1]).toMatchObject({ teaser: '', task: { kind: 'answer', verification: 'auto', media: [], location: null, timeLimitMinutes: null } });

@@ -1,7 +1,7 @@
 import type { PoseSample } from '@race/shared/protocol';
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { bike, remote } from '../config.ts';
+import { bike, movement, remote } from '../config.ts';
 import type { PlayerState } from '../player/types.ts';
 import { fakeTick, inView, underground, leanFor, newRemotePose, parsePeers, Track, updateState } from './RemotePlayers.ts';
 
@@ -122,7 +122,7 @@ describe('DEV ?peers stand-ins', () => {
   it('fakeTick: a walker heads along its yaw at footSpeed, on the given ground', () => {
     const [e] = fakeTick(parsePeers('4,0,0,0,walk'), 1000, () => 2);
     expect(e!.slot).toBe(4);
-    expect(e!.pose.z).toBeCloseTo(-4); // yaw 0 = north = −Z, 4 m/s
+    expect(e!.pose.z).toBeCloseTo(-movement.footSpeed); // yaw 0 = north = −Z, footSpeed for 1 s
     expect(e!.pose.y).toBe(2);
   });
 });

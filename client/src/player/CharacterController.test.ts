@@ -115,9 +115,10 @@ describe('CharacterController on a real Rapier world', () => {
     run(world, c, 1, walk(), (s) => void (max = Math.max(max, Math.hypot(s.velocity.x, s.velocity.z))));
     expect(max).toBeLessThanOrEqual(movement.footSpeed * 1.001);
     expect(speedOf(world, c, walk()) / movement.footSpeed).toBeCloseTo(1, 1);
-    expect(Math.abs(speedOf(world, c, walk()) - movement.footSpeed)).toBeLessThan(0.02 * movement.footSpeed);
+    // ≤ 4 %: Rapier's KCC drops the motion of ~1–3 steps per second on flat ground at any speed (measured 4 / 6 / 12 m/s)
+    expect(Math.abs(speedOf(world, c, walk()) - movement.footSpeed)).toBeLessThan(0.04 * movement.footSpeed);
     const sprint = speedOf(world, c, walk(1, true));
-    expect(Math.abs(sprint - movement.footSpeed * movement.sprintMultiplier)).toBeLessThan(0.02 * movement.footSpeed * movement.sprintMultiplier);
+    expect(Math.abs(sprint - movement.footSpeed * movement.sprintMultiplier)).toBeLessThan(0.04 * movement.footSpeed * movement.sprintMultiplier);
     expect(c.state.moveMode).toBe('walk');
     run(world, c, 1, walk()); // released: back to footSpeed
     expect(speedOf(world, c, walk()) / movement.footSpeed).toBeCloseTo(1, 1);
@@ -130,7 +131,7 @@ describe('CharacterController on a real Rapier world', () => {
 
   it('climbs a 0.35 m step, a 0.5 m one blocks', () => {
     for (const [h, up] of [[0.35, true], [0.5, false]] as const) {
-      const { world, c } = setup((w) => (ground(w), cuboid(w, 0, h / 2, -8, 5, h / 2, 3))); // step face at z = −5
+      const { world, c } = setup((w) => (ground(w), cuboid(w, 0, h / 2, -20, 5, h / 2, 15))); // step face at z = −5, 30 m deep (3 s at footSpeed stays on it)
       spawned(world, c, 0, 0);
       run(world, c, 3, walk());
       if (up) expect(c.state.position.y).toBeCloseTo(h, 1);
@@ -686,7 +687,7 @@ describe('CharacterController riding a bike (Phase 4 track B)', () => {
     const { world, c } = mounted((w) => {
       ground(w);
       const L = 1 / Math.tan((8 * Math.PI) / 180);
-      const v = new Float32Array([-2, 0, -8, 2, 0, -8, 2, 1, -8 - L, -2, 1, -8 - L, -2, 1, -30, 2, 1, -30]);
+      const v = new Float32Array([-2, 0, -8, 2, 0, -8, 2, 1, -8 - L, -2, 1, -8 - L, -2, 1, -60, 2, 1, -60]); // plateau to −60: 5 s at 9 m/s stays on it
       w.createCollider(RAPIER.ColliderDesc.trimesh(v, new Uint32Array([0, 1, 2, 0, 2, 3, 3, 2, 5, 3, 5, 4])));
     });
     let toasts = 0;

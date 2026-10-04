@@ -40,7 +40,7 @@ describe('RaceRoom', () => {
     const s = await openSocket(server, RACE, hostToken);
     const w = await s.next<Welcome>();
     expect(w).toMatchObject({ t: 'welcome', v: PROTOCOL_VERSION, race: RACE, role: 'host', status: 'lobby', teams: [] });
-    expect(w.movement).toEqual({ footSpeed: 4, bikeSpeedMultiplier: 1.3 });
+    expect(w.movement).toEqual({ footSpeed: 6, bikeSpeedMultiplier: 1.5 });
     const first = await s.next<HostState>(); // pushed on connect
     expect(first).toMatchObject({ t: 'host.state', teams: [] });
     expect(first.steps?.map((p) => p.id)).toEqual(['start', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'PS']);

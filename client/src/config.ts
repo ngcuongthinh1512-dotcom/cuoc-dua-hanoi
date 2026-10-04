@@ -559,7 +559,7 @@ export const preview = {
 // ── Foundation · movement + test session (player/Player.ts, main.ts) ──
 // SPEC §6.1: the leg file's `movement` block overrides footSpeed / bikeSpeedMultiplier (server-sent, Phase 6).
 export const movement = {
-  footSpeed: 4, // m/s: standard on-foot speed (the "jog" clip)
+  footSpeed: 6, // m/s: standard on-foot speed (the "jog" clip; ×1,5 since 2026-10-04, SPEC §17.43)
   sprintMultiplier: SPRINT_MULTIPLIER, // SPEC §17.29: × the top speed (foot, swim, bike) while sprint (Shift / LB) is held; the server's limits use the same constant
   bikeSpeedMultiplier: 1.5, // Phase 4: bike speed = footSpeed × this
 };
@@ -725,7 +725,7 @@ export const bikeModel = {
 // ── B · bike physics + interaction (vehicle/BikeController.ts, vehicle/Bikes.ts, audio/sfx.ts, player/*) ──
 export const bike = {
   accelTime: 1, // s from 0 to bikeTopSpeed() (SPEC §6.1)
-  brakeDecel: 7, // m/s² while braking (S)
+  brakeDecel: 10, // m/s² while braking (S): 9 m/s → 0 in 0.9 s / 4 m, 18 m/s (Shift) in 1.8 s (was 7 at the 6 m/s top, same stopping time)
   coastDecel: 0.6, // m/s² rolling without input
   reverseSpeed: 1, // m/s backwards (S held once stopped): get the nose out of a wall
   turnRate: { slow: 2.4, top: 1.3 }, // rad/s at ~0 and at top speed (linear in between)
@@ -733,7 +733,7 @@ export const bike = {
   steerMaxDeg: 25, // front wheel angle at full A / D when slow (half of it at top speed), visual only
   // Turning faster than `rate` rad/s caps the speed at top − loss × excess (m/s per rad/s); above the cap it bleeds at
   // brakeDecel (SPEC §6.1: sharp turns slow down). Full A / D at top speed settles ≈ 87 % of top.
-  sharpTurn: { rate: 1.1, loss: 2 },
+  sharpTurn: { rate: 1.1, loss: 3 }, // loss ×1.5 with the 9 m/s top (SPEC §17.43): the same share of `top` lost as before
   leanMaxDeg: 25, // roll at full turn rate and top speed
   leanSharpness: 6, // 1/s
   paveGrip: 0.65, // × turn rate, acceleration and brake on cobbles (SPEC §6.6: less friction on pavé); top speed unchanged

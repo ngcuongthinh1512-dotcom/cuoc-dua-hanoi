@@ -225,7 +225,7 @@ try {
       check(!crashed, 'crashed on the route');
       check(pave > 0.05, 'no cobbles on the route');
       check(walkMax <= movement.footSpeed * 1.01, 'walk too fast');
-      check(bikeMax <= bikeTopSpeed() * 1.01 && Math.abs(bikeMax / movement.footSpeed / 1.3 - 1) < 0.02, 'bike speed ratio');
+      check(bikeMax <= bikeTopSpeed() * 1.01 && bikeMax >= 0.85 * bikeTopSpeed(), 'bike speed ratio'); // ≥ 85 %: the route's turns cap it (bike.sharpTurn ≈ 87 %)
       check(stopped && !off.riding && lowest > -0.5 && lean > 5, 'brake / dismount / fall-through / lean');
       check(parseFloat(heap1) - parseFloat(heap0) < 25, 'heap grew');
       check(calls <= 12, 'rider + bike draw calls');

@@ -28,7 +28,7 @@ export const NET = {
   /** No pose message from anyone for this long → the tick loop stops so the Durable Object can hibernate. */
   idleStopMs: 10_000,
   /** Server speed check (SPEC §13.9): path length over this window vs the allowed speed × tolerance (TODO.md: single
-   *  KCC steps reach 4.8 m/s at footSpeed 4; judge a window, not a step). */
+   *  KCC steps reach 1.2 × footSpeed sliding along an edge; judge a window, not a step). */
   speedWindowMs: 3_000,
   speedTolerance: 1.25,
   /** Speed-window stamps (server ms) may run this far ahead of the server clock: a burst of poses after a network stall
