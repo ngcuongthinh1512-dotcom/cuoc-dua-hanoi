@@ -386,6 +386,35 @@
   border-color: rgba(255, 140, 120, 0.7);
 }
 
+/* SPEC §17.44: multi-box task */
+.rc-parts {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.rc-part {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.rc-part-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hud-dim);
+}
+.rc-part .rc-input:disabled { opacity: 0.55; }
+.rc-parts-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rc-parts-hint { font-size: 13px; color: var(--hud-dim); }
+.rc-parts-foot .rc-task-btn { margin-top: 0; }
+.rc-parts-foot .rc-task-btn:disabled { opacity: 0.5; cursor: default; }
+
 /* Photo task */
 .rc-proof {
   margin-top: 10px;

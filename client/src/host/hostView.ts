@@ -311,6 +311,12 @@ export function scoreBox(q: Pick<ReviewItem, 'scoreOf' | 'scoreFrom'>, now: numb
   return { scoreOf: q.scoreOf, scoreHint: left <= 0 ? 'đội sẽ thấy số' : `đội chưa thấy số: còn ${Math.ceil(left / 60_000)} phút` };
 }
 
+/** SPEC §17.44: "a | b | c | d" → one line per box with its label ("Ô n" when the leg gives none); a missing string stays ''. */
+export const partsOf = (text: string, labels: readonly string[]): { label: string; text: string }[] => {
+  const parts = text.split(' | ');
+  return labels.map((l, i) => ({ label: l || `Ô ${i + 1}`, text: parts[i] ?? '' }));
+};
+
 /** SPEC §17.42: the badge on the "ĐỘI TRẢ LỜI" frame. 'yes' = the typed answer equals one of the reference answers after
  *  normalizeAnswer (diacritics / case / đ / extra spaces ignored), 'no' = none; null = no badge (a photo / Messenger submission
  *  has no text; a task without reference answers). A hint for the Host's eye only: the Host still decides. */
@@ -342,8 +348,10 @@ export interface QueueRow {
   /** ms the team has waited (main.ts colours the clock past hostPage.queueSlowSeconds). */
   waitMs: number;
   reference: string[];
-  /** SPEC §17.42: answerMatch of `text` against `reference`. */
+  /** SPEC §17.42: answerMatch of `text` against `reference` (null on a multi-box task: nothing to match). */
   match: 'yes' | 'no' | null;
+  /** SPEC §17.44: a multi-box task: `text` split into its N strings, with the box labels ("Ô n" when the leg gives none). */
+  parts: { label: string; text: string }[] | null;
   /** 1-based: which submission of this team on this task (same branch) the waiting answer is; `previous` = the earlier ones
    *  as lines ("Lần 1: «41» · bị phạt · 14:02:10 · ghi chú: …"), oldest first. */
   attempt: number;
@@ -368,7 +376,8 @@ export function queueRows(state: HostState, now: number): QueueRow[] {
       key: `${q.team}|${q.step}|${q.id}`, team: q.team, name, colour: t?.colour ?? '#8d99b0', step: q.step, label: q.label,
       stepName: state.leg?.steps.find((s) => s.id === q.step)?.name ?? '',
       branch: q.branch, branchName: q.branch ? branchTag(state, q.step, q.branch) : '', id: q.id, code: submitCode(name, q.step, q.branch), text: q.text,
-      waiting: fmtMinSec(now - q.at), waitMs: now - q.at, reference: q.reference, match: answerMatch(q.text, q.reference), attempt: before.length + 1, previous,
+      waiting: fmtMinSec(now - q.at), waitMs: now - q.at, reference: q.reference, match: q.partLabels ? null : answerMatch(q.text, q.reference), attempt: before.length + 1, previous,
+      parts: q.partLabels ? partsOf(q.text, q.partLabels) : null,
       note: q.note, lockMinutes: q.lockMinutes, ...(q.scoreOf ? { score: scoreBox(q, now) } : {}),
     };
   });

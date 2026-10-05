@@ -478,7 +478,7 @@ function drawQueue(s: State, now: number): number {
       const answer = r.text
         ? el('div', { className: 'rv-answer' },
           el('div', { className: 'rv-label' }, chip('team', 'ĐỘI TRẢ LỜI'), r.attempt > 1 ? el('span', { className: 'rv-nth' }, `Lần gửi thứ ${r.attempt}`) : '', badge),
-          el('div', { className: 'rv-text' }, r.text), ...previous)
+          r.parts ? el('ol', { className: 'rv-parts' }, ...r.parts.map((p) => el('li', {}, el('span', { className: 'rv-part-label' }, p.label), el('span', { className: 'rv-text' }, p.text)))) : el('div', { className: 'rv-text' }, r.text), ...previous) // SPEC §17.44: the N strings numbered
         : el('div', { className: 'rv-answer' },
           el('div', { className: 'rv-label' }, chip('team', 'ĐỘI BÁO ĐÃ GỬI BÀI QUA MESSENGER'), r.attempt > 1 ? el('span', { className: 'rv-nth' }, `Lần gửi thứ ${r.attempt}`) : ''),
           el('div', { className: 'rv-text' }, 'Mã bài nộp: ', el('code', { className: 'rv-bigcode' }, r.code), copy()),

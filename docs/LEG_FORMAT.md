@@ -209,6 +209,7 @@ Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 
 | `retryLockMinutes` | không | `null` | Số phút đội phải chờ sau khi Host bấm **Phạt** nhiệm vụ này; `null` = theo `penalties.retryLockMinutes` (3); `0` = không khóa |
 | `scoreOf` | không | (không có) | **Thử thách Host báo "đúng x/n"** (vd. T1 gõ 4 địa điểm → `4`): trên hàng chờ duyệt, cạnh nút **Phạt** có ô "Đúng ?/n"; Host gõ số câu đúng (0…n, để trống = không báo số) rồi bấm Phạt. Đội chỉ được báo số (toast + lịch sử trên thẻ "· đúng 2/4") khi Phạt xảy ra **từ phút `scoreFromMinutes` của thử thách** trở đi (tính từ "Nhận thử thách"); Phạt sớm hơn thì đội chỉ thấy bị phạt như cũ, không bao giờ hiện số (kể cả sau này). Duyệt = không báo số. Không có trường này = không có ô nhập |
 | `scoreFromMinutes` | không | `30` | Phút (từ lúc bắt đầu thử thách) từ đó Phạt kèm số được báo cho đội; chỉ có nghĩa khi có `scoreOf`. `0` = báo ngay |
+| `parts` | không | (không có) | **Thử thách nhiều ô, Host duyệt** (mục 7.6; Thử thách 1: 4 địa điểm trong MV): mảng 2–8 phần `{ "label": "Địa điểm 1" }` = **chỉ nhãn ô**, không có đáp án trong chặng. Bắt buộc `verification: "host_approval"` và `kind: "answer"` (LỖI nếu khác). Đội thấy N ô, gửi N chuỗi thành **một** bài vào hàng chờ duyệt; "đúng x/n" lấy n = số ô (không cần `scoreOf`) |
 | `proofInstruction` | khi `kind: "free"` + `host_approval` | `""` | Hướng dẫn đội gửi bài (vd. "Chụp màn hình và gửi Messenger cho Host kèm mã bài nộp"). Nhiệm vụ gõ đáp án trong game (`kind: "answer"`) không cần |
 | `timeLimitMinutes` | không | `null` | Giới hạn thời gian làm (phút), số dương; `null` = không giới hạn. Hiện tại chỉ hiện chữ "giới hạn N phút" trên thẻ, chưa tính giờ |
 | `louvre` | khi `kind: "louvre"` | (không có) | Phòng Louvre: 23 tác phẩm + mốc gợi ý (mục 7.5). Kiểu khác mà có khối này: CẢNH BÁO (bị bỏ qua) |
@@ -298,6 +299,27 @@ Ví dụ (NỘI DUNG GIẢ, rút gọn; file đầy đủ: `worker/legs/test/lou
 }
 ```
 (`artworks` thật phải có đủ 23 mục.)
+
+### 7.6 Thử thách nhiều ô (`task.parts`, Thử thách 1) — đội điền N ô, Host duyệt
+
+Đội thấy **N ô nhập** (N = số phần, nhãn = `label`, trống thì "Ô n") và nút **Gửi đáp án** chỉ bật khi đã điền đủ mọi ô (`Tab` chuyển ô, `Enter` ở ô cuối gửi). N chuỗi thành **một bài** trong hàng "Chờ duyệt" của trang Host, liệt kê 1–N theo nhãn (không có huy hiệu KHỚP: chặng không chứa đáp án). Host bấm **Duyệt** (= đúng hết, đội nhận mật thư kế) hoặc **Phạt** kèm ô "Đúng ?/N" (SPEC §17.31, N = số ô): đội bị khóa `retryLockMinutes` (mặc định 3 phút), các ô giữ nguyên chữ để sửa; số x/N chỉ hiện cho đội (toast + lịch sử "Bị phạt 3 phút · đúng 2/4") khi Phạt xảy ra **từ phút `scoreFromMinutes`** (mặc định 30, tính từ "Nhận thử thách" hoặc lúc nhận mật thư nếu không có `teaser`); Phạt sớm hơn không bao giờ hiện số. Hoàn tác / Cho qua / ghi chú như mọi bài Host duyệt. Câu trả lời lưu N chuỗi nối bằng ` | ` (xuất CSV giữ nguyên).
+
+```json
+"task": {
+  "title": "Bốn địa điểm trong MV",
+  "description": "Kể tên 4 địa điểm nổi tiếng xuất hiện trong đoạn phim. Mỗi nơi một ô, thứ tự tùy ý.",
+  "verification": "host_approval",
+  "parts": [
+    { "label": "Địa điểm 1" },
+    { "label": "Địa điểm 2" },
+    { "label": "Địa điểm 3" },
+    { "label": "Địa điểm 4" }
+  ],
+  "scoreFromMinutes": 30
+}
+```
+
+Muốn Host có đáp án tham khảo cạnh bài: thêm `referenceAnswers` như mọi nhiệm vụ Host duyệt (chỉ Host thấy; `leg:check` quét rò rỉ như cũ). `scoreOf` không cần (CẢNH BÁO nếu đặt khác số ô).
 
 ## 8. Cách lấy tọa độ và xem điểm đã đặt đúng chỗ chưa
 

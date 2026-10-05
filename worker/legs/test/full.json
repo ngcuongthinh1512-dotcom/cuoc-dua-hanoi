@@ -66,6 +66,30 @@
       "teaser": "(GIẢ) Đi xuống vườn, tìm chỗ có tiếng nước."
     },
     {
+      "id": "T1P",
+      "type": "challenge",
+      "label": "Thử thách 1 bis (nhiều ô)",
+      "task": {
+        "title": "(GIẢ) Bốn nơi trong đoạn phim",
+        "description": "(GIẢ) Kể tên 4 nơi xuất hiện trong đoạn phim. Mỗi nơi một ô, thứ tự tùy ý.",
+        "verification": "host_approval",
+        "parts": [
+          {
+            "label": "Địa điểm 1"
+          },
+          {
+            "label": "Địa điểm 2"
+          },
+          {
+            "label": "Địa điểm 3"
+          },
+          {
+            "label": "Địa điểm 4"
+          }
+        ]
+      }
+    },
+    {
       "id": "L2",
       "type": "route_info",
       "label": "Lộ trình 2",

@@ -123,6 +123,34 @@ describe('advance: a challenge (D5, D8, D21, D22)', () => {
     expect(Z[1]!.rack).not.toBe(Z[2]!.rack);
   });
 
+  // SPEC §17.44: a multi-box task (labels only, Host-reviewed)
+  const PARTS = [{ label: 'Địa điểm 1' }, { label: 'Địa điểm 2' }, { label: '' }, { label: '' }];
+  const partsLeg = () => variant((s) => Object.assign(s[1], { teaser: '' }, { task: { ...s[1].task, verification: 'host_approval', parts: PARTS } }));
+  const partsAnswer = (parts: string[], p: StandAt = null): RaceInput => ({ kind: 'answer', step: 'T1', text: '', pose: p, parts });
+
+  it('parts: N filled boxes → ONE pending answer "a | b | c | d" for the Host; a text answer, a wrong box count or an empty box is silent', () => {
+    const leg = partsLeg();
+    const p = P(1, { startedAt: 1000 });
+    const r = run(p, partsAnswer([' nơi một', 'nơi hai', 'nơi ba', 'nơi bốn ']), 2000, leg);
+    expect(r.effects).toEqual([{ kind: 'answer', step: 1, rec: { id: 1, b: null, text: 'nơi một | nơi hai | nơi ba | nơi bốn', at: 2000, s: 'pending' }, verdict: 'pending' }]);
+    expect(r.p).toEqual(P(1, { startedAt: 1000, pendingId: 1, lastAnswerId: 1 }));
+    for (const input of [{ kind: 'answer', step: 'T1', text: 'x', pose: null } as RaceInput, partsAnswer(['a', 'b', 'c']), partsAnswer(['a', 'b', 'c', ' '])]) expect(run(p, input, 2000, leg).effects).toEqual([]);
+    // the card: input 'parts' + the labels; "đúng x/4" (n = the box count) only once the Host's Phạt was made past scoreFromMinutes (review: sv)
+    const row: StepProgressRow = { ...emptyProgress('t', 'T1'), task_started_at: 1000, answers: JSON.stringify([r.effects[0]!.kind === 'answer' && r.effects[0].rec]) };
+    const early = review(leg, 1, row, { t: 'host.review', team: 't', step: 'T1', op: 'penalize', id: 1, score: 2 }, 1000 + 30 * MIN - 1);
+    const late = review(leg, 1, row, { t: 'host.review', team: 't', step: 'T1', op: 'penalize', id: 1, score: 2 }, 1000 + 30 * MIN);
+    if ('refuse' in early || 'refuse' in late) throw new Error('refused');
+    expect(parseAnswers(early.row)[0]).toMatchObject({ s: 'penalized', sc: 2 });
+    expect(parseAnswers(early.row)[0]).not.toHaveProperty('sv');
+    expect(parseAnswers(late.row)[0]).toMatchObject({ s: 'penalized', sc: 2, sv: true });
+    expect(early.row.locked_until).toBe(1000 + 30 * MIN - 1 + 3 * MIN);
+    const c = cardOf(leg, 1, late.row, 1000 + 31 * MIN);
+    expect(c.task).toMatchObject({ input: 'parts', partLabels: ['Địa điểm 1', 'Địa điểm 2', '', ''] });
+    expect(c.answers).toEqual([expect.objectContaining({ id: 1, status: 'penalized', score: 2, of: 4 })]);
+    expect(cardOf(leg, 1, early.row, 1000 + 31 * MIN).answers[0]).not.toHaveProperty('score');
+    expect(JSON.stringify(c)).not.toMatch(/scoreOf/);
+  });
+
   it('verifyAuto (D21): one of the answers, ignoring case / diacritics / đ / spaces', () => {
     const t = mini.steps[3]!.type === 'detour' ? mini.steps[3].branches[0]!.task : null;
     expect(['7', ' BẢY ', 'bay'].map((x) => verifyAuto(t!, x))).toEqual(['correct', 'correct', 'correct']);

@@ -101,8 +101,8 @@ export class RaceClient {
 
   // Phase 8 (docs/plans/phase8.md D8): from anywhere, so no pose first (only open / checkin are judged at the pose).
   /** A typed answer ('' = "Tôi đã gửi bài – chờ Host duyệt" of a photo task). */
-  answer(step: string, text: string) {
-    this.deps.send({ t: 'race', op: 'answer', step, text });
+  answer(step: string, text: string, parts?: string[]) {
+    this.deps.send({ t: 'race', op: 'answer', step, text, ...(parts ? { parts } : {}) }); // SPEC §17.44: N boxes
   }
   /** Choose a detour branch, or switch (the HUD already confirmed the penalty). */
   branch(step: string, branch: string) {

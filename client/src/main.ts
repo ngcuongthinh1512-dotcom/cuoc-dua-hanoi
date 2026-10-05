@@ -268,7 +268,7 @@ async function start() {
     ? new RaceHud(
         {
           book: () => void (net ? net.send({ t: 'race', op: 'book' }) : raceHud?.showBook([])),
-          answer: (step, text) => race?.answer(step, text),
+          answer: (step, text, parts) => race?.answer(step, text, parts),
           branch: (step, id) => race?.branch(step, id),
           accept: (step) => race?.accept(step),
           credits: () => race?.credits(), // Phase 8B: "Ghi nguồn" after the finish (Credits.ts asks through RaceHud)

@@ -119,7 +119,8 @@ export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator')
         case 'accept':
           return true;
         case 'answer':
-          return text(o.text, NET.answerMax);
+          // SPEC §17.44: a multi-box answer = 2–8 strings of ≤ answerMax each (the server checks the count against the task)
+          return text(o.text, NET.answerMax) && (o.parts === undefined || (Array.isArray(o.parts) && o.parts.length >= 2 && o.parts.length <= 8 && o.parts.every((p: unknown) => text(p, NET.answerMax))));
         case 'branch':
           return str(o.branch, 16);
         // Phase 8B: art = an artwork id (leg LOUVRE.artId: ≤ 16 of A–Z a–z 0–9 _ -)

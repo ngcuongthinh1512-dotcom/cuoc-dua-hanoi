@@ -270,13 +270,16 @@ export interface AnswerLine {
  *  the card's (a test leg may say 0,1): never hard-coded. */
 export function answerLines(card: ClueCard): AnswerLine[] {
   const pen = card.retryPenaltyMinutes;
-  const lv = (card.task ?? card.branches?.find((b) => b.id === card.branch)?.task)?.louvre; // Phase 8B: a lock "5 tác phẩm", "· đúng c/5" only from the 60-minute mark (AnswerView.correct)
+  const task = card.task ?? card.branches?.find((b) => b.id === card.branch)?.task;
+  const lv = task?.louvre; // Phase 8B: a lock "5 tác phẩm", "· đúng c/5" only from the 60-minute mark (AnswerView.correct)
+  const parts = task?.input === 'parts'; // SPEC §17.44: N boxes stored "a | b | c | d" (the Host's Phạt may carry "đúng c/N")
   return card.answers
     .slice(-NET.answerHistory)
     .reverse()
     .map((a) => {
       const base = a.status === 'penalized' && pen ? `Bị phạt ${fmtMin(pen)} phút` : lv && a.status === 'wrong' && pen ? `Chưa đúng · phạt ${fmtMin(pen)} phút` : ANSWER_LABEL[a.status];
-      return { time: formatTimeOfDay(a.at), text: a.text === '' ? 'đã gửi bài' : lv ? a.text : `«${a.text}»`, status: a.status, label: lv && a.correct != null ? `${base} · đúng ${a.correct}/${louvreOf(lv)}` : a.score != null && a.of ? `${base} · đúng ${a.score}/${a.of}` : base }; // SPEC §17.31: the Host's count of a Phạt (only when the server sent it)
+      const text = a.text === '' ? 'đã gửi bài' : lv ? a.text : parts ? `«${a.text.split(' | ').join(' · ')}»` : `«${a.text}»`;
+      return { time: formatTimeOfDay(a.at), text, status: a.status, label: lv && a.correct != null ? `${base} · đúng ${a.correct}/${louvreOf(lv)}` : a.score != null && a.of ? `${base} · đúng ${a.score}/${a.of}` : base }; // SPEC §17.31 / §17.44: the count only when the server sent it
     });
 }
 
@@ -363,6 +366,9 @@ export interface CardPanel {
   choose: string[];
   /** The typed-answer box + "Gửi câu trả lời". */
   answerBox: boolean;
+  /** SPEC §17.44: a multi-box task: one input per label ("Ô n" when the leg gives none); `enabled` false while the Host reviews or
+   *  the Phạt countdown runs (the boxes keep their text, the button is off). Null on every other card and in the Sổ. */
+  parts: { labels: string[]; enabled: boolean } | null;
   /** Photo task: instruction + submission code (also pending / locked and in the Sổ) + "Tôi đã gửi bài" when `actions`. No
    *  Messenger button: teams open Messenger outside the game (SPEC §17.17). */
   proof: { instruction: string; code: string; actions: boolean } | null;
@@ -395,6 +401,7 @@ export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mo
     accept: act && status === 'teaser',
     choose: act && status === 'choose' ? (card.branches ?? []).map((b) => b.id) : [],
     answerBox: act && status === 'active' && task?.input === 'text',
+    parts: act && task?.input === 'parts' && (status === 'active' || status === 'pending' || status === 'locked') ? { labels: (task.partLabels ?? []).map((l, i) => l || `Ô ${i + 1}`), enabled: status === 'active' } : null,
     proof: proofTask && {
       instruction: proofTask.proofInstruction,
       code: submitCode(o.teamName, card.step, card.branch),

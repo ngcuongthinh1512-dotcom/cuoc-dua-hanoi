@@ -10,7 +10,7 @@ import { onPitMat } from '@race/shared';
 import { branchZone, LOUVRE, stepZones, type Leg, type LouvreTask, type MediaItem, type Step, type Task, type Zone } from '@race/shared/leg';
 import { MEDIA, NET, type AnswerView, type BoxInfo, type CardStatus, type ClueCard, type CreditItem, type HostReview, type LouvreView, type MediaView, type ServerNotice, type TaskView } from '@race/shared/protocol';
 import { parseAnswers, parsePicks, type AnswerRec, type StepProgressRow } from '../db.ts';
-import { verifyAuto } from './tasks.ts';
+import { PARTS_SEP, partsOf, verifyAuto } from './tasks.ts';
 
 /** What the machine needs about one team (teams.state + the current step's step_progress row). */
 export interface Progress {
@@ -50,7 +50,7 @@ export type RaceInput =
   | { kind: 'accept'; step: string }
   /** A typed answer ('' = "Tôi đã gửi bài" of a photo task): host_approval → pending; auto → verifyAuto (right = done;
    *  `pose` = where the team stands: its bike is racked only there). */
-  | { kind: 'answer'; step: string; text: string; pose: StandAt }
+  | { kind: 'answer'; step: string; text: string; pose: StandAt; /** SPEC §17.44: a multi-box task's N strings (text ''). */ parts?: string[] }
   /** Choose a detour branch (no lock), or switch to the other one (branchSwitchLockMinutes lock; refused while pending). */
   | { kind: 'branch'; step: string; branch: string }
   /** The Host approved step's answer: complete + settle like `open` (critic S3); `pose` = the team's trusted pose now: its
@@ -315,8 +315,13 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   if (state === 'locked') return refuse('answerLocked');
   const t = taskOf(s, p.branch);
   if (state !== 'active' || !t) return silent; // a detour before its branch box is opened: no input on the card
-  if (t.kind !== 'free' && input.text.trim() === '') return silent; // the client never sends an empty typed answer
-  const rec: AnswerRec = { id: p.lastAnswerId + 1, b: s.type === 'detour' ? p.branch : null, text: input.text, at: now, s: 'pending' };
+  // SPEC §17.44: a multi-box task's N filled boxes become ONE answer "a | b | c | d" (the Host's queue lists them); anything
+  // else on such a task is silent (the client never sends it)
+  const texts = t.parts ? input.parts?.map((x) => x.trim()) : undefined;
+  if (t.parts && (!texts || texts.length !== t.parts.length || texts.some((x) => x === ''))) return silent;
+  const text = texts ? texts.join(PARTS_SEP) : input.text;
+  if (t.kind !== 'free' && text.trim() === '') return silent; // the client never sends an empty typed answer
+  const rec: AnswerRec = { id: p.lastAnswerId + 1, b: s.type === 'detour' ? p.branch : null, text, at: now, s: 'pending' };
   p.lastAnswerId = rec.id;
   if (t.verification === 'host_approval') {
     p.pendingId = rec.id;
@@ -358,8 +363,9 @@ const mediaView = (m: MediaItem): MediaView => ({ url: m.url, label: m.label, ki
 /** SPEC §10.1 task minus `answers` / `referenceAnswers` / `params`; its location only by name. */
 const taskView = (t: Task): TaskView => ({
   title: t.title, description: t.description, media: t.media.map(mediaView), kind: t.kind, verification: t.verification,
-  input: t.kind === 'free' ? 'proof' : t.kind === 'louvre' ? 'room' : 'text', proofInstruction: t.proofInstruction,
+  input: t.kind === 'free' ? 'proof' : t.kind === 'louvre' ? 'room' : t.parts ? 'parts' : 'text', proofInstruction: t.proofInstruction,
   timeLimitMinutes: t.timeLimitMinutes, ...(t.location ? { place: t.location.name } : {}),
+  ...(t.parts ? { partLabels: t.parts.map((p) => p.label) } : {}), // SPEC §17.44
 });
 
 /** Minutes of the Host's "Phạt" on this task. */
@@ -375,7 +381,7 @@ const answerViews = (row: StepProgressRow | undefined, branch: string | null, co
 /** SPEC §17.31: the "đúng x/n" of a Phạt the team may see (review() set `sv`), undefined = none. */
 export const scoreOf = (a: AnswerRec, of: number | undefined): { score: number; of: number } | undefined => (a.sv && a.sc !== undefined && of ? { score: a.sc, of } : undefined);
 /** SPEC §17.31: server ms from which a Phạt on this task tells the team its count (null = the task has no scoreOf). */
-export const scoreFrom = (t: Task, row: StepProgressRow | undefined): number | null => (t.scoreOf && row?.task_started_at != null ? row.task_started_at + t.scoreFromMinutes * 60_000 : null);
+export const scoreFrom = (t: Task, row: StepProgressRow | undefined): number | null => (partsOf(t) && row?.task_started_at != null ? row.task_started_at + t.scoreFromMinutes * 60_000 : null);
 
 /** Server ms of the 40 / 60-minute marks of a louvre room started at t0. */
 const marks = (lv: LouvreTask, t0: number): [number, number] => [t0 + lv.hints.countAtMinutes * 60_000, t0 + lv.hints.correctAtMinutes * 60_000];
@@ -437,13 +443,13 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
         ...base, text: s.clue, media: s.media.map(mediaView),
         branches: s.branches.map((x) => ({ id: x.id, name: x.name, summary: x.summary, ...(opened && x === b ? { task: taskView(x.task) } : {}) })),
         branch, branchOpened: opened, switches: row?.branch_switches ?? 0, switchPenaltyMinutes: leg.penalties.branchSwitchLockMinutes,
-        ...(b ? { retryPenaltyMinutes: retryLockMinutes(leg, b.task), answers: answerViews(row, branch, Infinity, b.task.scoreOf) } : {}),
+        ...(b ? { retryPenaltyMinutes: retryLockMinutes(leg, b.task), answers: answerViews(row, branch, Infinity, partsOf(b.task)) } : {}),
       };
     }
     case 'challenge': {
       const lv = s.task.kind === 'louvre' ? louvreView(leg, index, row, (zones ?? stepZones(leg))[index]!, now) : undefined;
       return {
-        ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null, lv?.hintAt[1], s.task.scoreOf),
+        ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null, lv?.hintAt[1], partsOf(s.task)),
         ...(status === 'teaser' ? {} : { task: { ...taskView(s.task), ...(lv ? { louvre: lv } : {}) } }),
       };
     }
@@ -493,7 +499,8 @@ export function review(leg: Leg, i: number, row: StepProgressRow, m: HostReview,
   // SPEC §17.31: the Host's "đúng x/n" goes with a Phạt (out of range = not entered); told to the team only from scoreFromMinutes on
   const { sc: _sc, sv: _sv, ...bare } = a; // a Duyệt over a Phạt (N4) drops the count
   const from = scoreFrom(t, row);
-  const score = m.op === 'penalize' && t.scoreOf && m.score !== undefined && m.score <= t.scoreOf ? { sc: m.score, ...(from !== null && now >= from ? { sv: true as const } : {}) } : {};
+  const of = partsOf(t); // SPEC §17.44: a multi-box task's n = its box count
+  const score = m.op === 'penalize' && of && m.score !== undefined && m.score <= of ? { sc: m.score, ...(from !== null && now >= from ? { sv: true as const } : {}) } : {};
   const rec: AnswerRec = { ...bare, s: m.op === 'approve' ? 'approved' : 'penalized', d: now, ...n, ...score };
   const next = {
     ...row, ...decided, answers: JSON.stringify(answers.map((x) => (x === a ? rec : x))),

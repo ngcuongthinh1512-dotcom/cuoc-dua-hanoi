@@ -93,6 +93,20 @@ describe('answer history', () => {
     // SPEC §17.31: the Host's count rides on the server's answer (only when it chose to send it)
     expect(answerLines(challenge({ answers: [{ ...ans(1, 'penalized'), score: 2, of: 4 }] }))[0]!.label).toBe('Bị phạt 3 phút · đúng 2/4');
   });
+  it('SPEC §17.44: a multi-box answer shows its boxes " · ", the Host\'s Phạt with the count only when the server sent it', () => {
+    const partsTask: TaskView = { ...textTask, input: 'parts', partLabels: ['Địa điểm 1', '', 'Địa điểm 3', ''] };
+    const c = challenge({ task: partsTask, answers: [ans(1, 'penalized', 1000, 'a | b | c | d'), { ...ans(2, 'penalized', 2000, 'a | b | e | f'), score: 2, of: 4 }] });
+    expect(answerLines(c).map((l) => [l.text, l.label])).toEqual([['«a · b · e · f»', 'Bị phạt 3 phút · đúng 2/4'], ['«a · b · c · d»', 'Bị phạt 3 phút']]);
+    expect(P(c).parts).toEqual({ labels: ['Địa điểm 1', 'Ô 2', 'Địa điểm 3', 'Ô 4'], enabled: true });
+    expect(P(c).answerBox).toBe(false);
+    expect(P(challenge({ task: partsTask, status: 'pending', answers: [ans(1, 'pending', 0, 'a | b | c | d')] })).parts).toEqual({ labels: ['Địa điểm 1', 'Ô 2', 'Địa điểm 3', 'Ô 4'], enabled: false }); // waiting for the Host: boxes kept, off
+    const locked = challenge({ task: partsTask, status: 'locked', lockedUntil: 160_000, lockKind: 'retry' });
+    expect(P(locked).parts).toEqual({ labels: ['Địa điểm 1', 'Ô 2', 'Địa điểm 3', 'Ô 4'], enabled: false }); // the boxes stay, disabled
+    expect(P(locked, 160_000 + C.lockEndSlackMs).parts?.enabled).toBe(true);
+    expect(P(challenge({ task: partsTask, status: 'done' })).parts).toBeNull();
+    expect(cardPanel(c, { now: 0, teamName: 'x', mode: 'book' }).parts).toBeNull();
+    expect(P(challenge()).parts).toBeNull();
+  });
   it('at most NET.answerHistory lines; "đã gửi bài" for a photo answer', () => {
     const many = Array.from({ length: NET.answerHistory + 5 }, (_, i) => ans(i + 1, 'wrong'));
     const lines = answerLines(challenge({ answers: many }));

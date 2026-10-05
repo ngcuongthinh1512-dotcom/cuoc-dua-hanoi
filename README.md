@@ -9,7 +9,7 @@ Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự g
 2. Kiểm tra: `npm run leg:check -- <đường-dẫn-file.json>` → sửa tới khi dòng cuối là "Hợp lệ"; bảng cuối có link bản đồ / ảnh vệ tinh / ảnh 3D / link đứng thử trong game cho từng điểm.
 3. Chơi thử tự động: `npm run sim -- --leg <đường-dẫn-file.json> --bots 2 --speedup 2` (`--help` để xem tùy chọn).
 4. Nạp vào cuộc đua: `npm run dev:worker`, mở http://localhost:8787/host.html, nhập mã cuộc đua + mật khẩu Host (`HOST_PASSWORD` trong `worker/.dev.vars`), phần "Chặng" → **Nạp chặng từ file**. Đội vào bằng link `/?race=<mã>` mà trang Host in ra.
-5. Thử thách 3 (phòng Louvre, `kind: "louvre"`): ảnh 23 tác phẩm đã có sẵn trong game (`art-NN`), không tải lên Host; trong chặng chỉ cần `artworks` (mã, loại, tệp, ghi nguồn) + 5 mã đúng trong `answers` (`docs/LEG_FORMAT.md` mục 7.5).
+5. Thử thách 1 (4 địa điểm trong MV): `task.parts` = 4 nhãn ô (`{ "label": "Địa điểm 1" }`…), `verification: "host_approval"`; đội điền 4 ô, Host duyệt / phạt kèm "đúng x/4" (báo cho đội từ phút 30), không có đáp án trong chặng (`docs/LEG_FORMAT.md` mục 7.6). Thử thách 3 (phòng Louvre, `kind: "louvre"`): ảnh 23 tác phẩm đã có sẵn trong game (`art-NN`), không tải lên Host; trong chặng chỉ cần `artworks` (mã, loại, tệp, ghi nguồn) + 5 mã đúng trong `answers` (`docs/LEG_FORMAT.md` mục 7.5).
 6. Tải hình mật thư lên (chỉ khi chặng có `"r2:<tên>"`; `leg:check` in danh sách "Hình cần tải lên trang Host"): sau khi nạp chặng, mục **Hình mật thư (R2)** trên trang Host liệt kê từng tên → "Chọn file" (jpg / png / webp ≤ 5 MB) → ✓ "đã có"; nút **Xem** để kiểm. Hình lưu theo mã cuộc đua: diễn tập ở mã khác thì tải lại. Đội chỉ tải được hình của mật thư đã mở.
 
 ## Host duyệt bài trong lúc đua

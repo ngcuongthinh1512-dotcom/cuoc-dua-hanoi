@@ -106,6 +106,29 @@ describe('leg schema', () => {
     expect(errors({ ...mini(), timezone: 'Europe/Paris' })).toEqual([]);
   });
 
+  it('SPEC §17.44: a multi-box task (parts: labels only) must be host_approval + answer; a label defaults to \'\'', () => {
+    const j = mini() as Mini;
+    const parts = [{ label: 'Địa điểm 1' }, {}];
+    Object.assign(j.steps[1]!, { task: { title: '(GIẢ) t', description: '(GIẢ) d', verification: 'host_approval', parts } });
+    const r = parseLeg(j);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.leg.steps[1]!.type === 'challenge' && r.leg.steps[1].task.parts).toEqual([{ label: 'Địa điểm 1' }, { label: '' }]);
+    expect(r.issues.filter((i) => i.level === 'error')).toEqual([]);
+    Object.assign(j.steps[1]!, { task: { title: '(GIẢ) t', description: '(GIẢ) d', verification: 'auto', kind: 'free', scoreOf: 3, parts } });
+    const bad = parseLeg(j);
+    expect(bad.ok).toBe(false);
+    expect(bad.issues.map((i) => `${i.level} ${i.where}: ${i.message}`)).toEqual(expect.arrayContaining([
+      'error Bước 2 (T1) › nhiệm vụ › cách xác nhận: thử thách nhiều ô (parts) do Host duyệt: phải dùng cách xác nhận "host_approval" (máy chủ không có đáp án để tự chấm)',
+      'error Bước 2 (T1) › nhiệm vụ › kiểu nhiệm vụ: thử thách nhiều ô (parts) chỉ dùng với kiểu "answer" (đang là "free")',
+      'warning Bước 2 (T1) › nhiệm vụ › số phần để báo đúng x/n: scoreOf (3) khác số ô (2): bỏ scoreOf đi, "đúng x/n" lấy n = số ô',
+    ]));
+    Object.assign(j.steps[1]!, { task: { title: '(GIẢ) t', description: '(GIẢ) d', verification: 'host_approval', parts: [parts[0]] } }); // 1 part: not a multi-box task
+    expect(parseLeg(j).ok).toBe(false);
+    Object.assign(j.steps[1]!, { task: { title: '(GIẢ) t', description: '(GIẢ) d', verification: 'host_approval', parts: [{ label: 'a', answers: ['x'] }, {}] } }); // no answers in the leg for such a task
+    expect(parseLeg(j).ok).toBe(false);
+  });
+
   it('lists blanks the Host must still fill (a draft loads) and answers leaking into texts', () => {
     const j = mini() as Mini;
     Object.assign(j.steps[1]!, { task: { title: '', description: '', answers: [] } });

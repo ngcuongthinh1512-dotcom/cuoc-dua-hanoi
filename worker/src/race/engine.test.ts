@@ -703,6 +703,39 @@ describe('RaceEngine', () => {
     woken.onPose('t1', at(1), 200);
     expect(last('t0')).toEqual([{ slot: 1, label: 'Thử thách 1', type: 'challenge', branch: null, since: 200 }]);
   });
+  // SPEC §17.44: multi-box task
+  const PARTS = [{ label: 'Địa điểm 1' }, { label: 'Địa điểm 2' }, { label: 'Địa điểm 3' }, { label: 'Địa điểm 4' }];
+  const partsLeg = () => {
+    const raw = structuredClone(bundledLeg('mini')!) as any;
+    Object.assign(raw.steps[1], { teaser: '', task: { ...raw.steps[1].task, verification: 'host_approval', answers: [], referenceAnswers: [], parts: PARTS } });
+    return raw;
+  };
+  it('parts: the N strings reach the Host\'s queue as one answer with partLabels + scoreOf = 4; Phạt "đúng 2/4" hidden before minute 30, told from it; Duyệt = done', () => {
+    const { e, f, op, to, card, review } = racing({ t0: 0 }, partsLeg());
+    op('t0', { t: 'race', op: 'open', step: 'L1' }, 10, at(0)); // T1 has no teaser: its task starts with its clue (task_started_at = 10)
+    f.log.length = 0;
+    f.sent.length = 0;
+    op('t0', { t: 'race', op: 'answer', step: 'T1', text: '', parts: ['nơi một', 'nơi hai', 'x', 'y'] }, 1000);
+    writesFirst(f);
+    expect(to('t0').find((m) => (m as { t: string }).t === 'notice')).toEqual({ t: 'notice', code: 'answerSent' });
+    expect(card('t0')).toMatchObject({ status: 'pending', task: { input: 'parts', partLabels: ['Địa điểm 1', 'Địa điểm 2', 'Địa điểm 3', 'Địa điểm 4'] }, answers: [{ id: 1, text: 'nơi một | nơi hai | x | y', status: 'pending' }] });
+    expect(e.hostView(1001).queue).toEqual([expect.objectContaining({ team: 't0', step: 'T1', id: 1, text: 'nơi một | nơi hai | x | y', reference: [], scoreOf: 4, scoreFrom: 10 + 30 * 60_000, partLabels: ['Địa điểm 1', 'Địa điểm 2', 'Địa điểm 3', 'Địa điểm 4'] })]);
+    // Phạt with "đúng 2/4" before minute 30: locked 3 min, the team sees no number (ever, for this one)
+    review('t0', 'T1', 'penalize', 2000, { id: 1, score: 2 });
+    expect(to('t0').filter((m) => (m as { t: string }).t === 'notice').at(-1)).toEqual({ t: 'notice', code: 'penalized' });
+    expect(card('t0')).toMatchObject({ status: 'locked', lockedUntil: 2000 + 3 * 60_000, answers: [{ id: 1, status: 'penalized' }] });
+    expect(card('t0')!.answers[0]).not.toHaveProperty('score');
+    expect(e.hostView(2001).progress.find((p) => p.step === 'T1')).toMatchObject({ rejections: 1, lockedUntil: 2000 + 3 * 60_000 });
+    // past minute 30: the count rides on the toast and the card
+    const t30 = 10 + 30 * 60_000;
+    op('t0', { t: 'race', op: 'answer', step: 'T1', text: '', parts: ['nơi một', 'nơi hai', 'nơi ba', 'z'] }, t30);
+    review('t0', 'T1', 'penalize', t30 + 5, { id: 2, score: 3 });
+    expect(to('t0').filter((m) => (m as { t: string }).t === 'notice').at(-1)).toEqual({ t: 'notice', code: 'penalized', score: 3, of: 4 });
+    expect(card('t0')!.answers.at(-1)).toMatchObject({ id: 2, status: 'penalized', score: 3, of: 4 });
+    op('t0', { t: 'race', op: 'answer', step: 'T1', text: '', parts: ['nơi một', 'nơi hai', 'nơi ba', 'nơi bốn'] }, t30 + 4 * 60_000);
+    review('t0', 'T1', 'approve', t30 + 4 * 60_000 + 5, { id: 3 });
+    expect(card('t0')).toMatchObject({ step: 'L2' });
+  });
 });
 
 describe('RaceEngine: louvre room (docs/plans/phase8b.md §D, §E)', () => {

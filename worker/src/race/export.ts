@@ -5,6 +5,7 @@ import type { Leg } from '@race/shared/leg';
 import { emptyProgress, parseAnswers, type EventRow, type StepProgressRow } from '../db.ts';
 import type { TeamRace } from './engine.ts';
 import { retryLockMinutes, taskOf } from './steps.ts';
+import { partsOf } from './tasks.ts';
 
 export interface ExportTeam extends TeamRace {
   id: string;
@@ -74,7 +75,7 @@ export function exportRace(leg: Leg, teams: ExportTeam[], rows: StepProgressRow[
         wrongAnswers: row.wrong_answers, rejections: row.rejections, lockedSeconds: locked(t.id, i, row), branchSwitches: row.branch_switches,
         approvalWaitSeconds: Math.round(row.approval_wait_seconds),
         // SPEC §17.31: the Host's "đúng x/n" of each Phạt in order ("2/4;3/4"), '' = none; (*) = the team was not told
-        penaltyScores: parseAnswers(row).flatMap((a) => (a.s === 'penalized' && a.sc !== undefined ? [`${a.sc}/${taskOf(s, a.b)?.scoreOf ?? '?'}${a.sv ? '' : '*'}`] : [])).join(';'),
+        penaltyScores: parseAnswers(row).flatMap((a) => (a.s === 'penalized' && a.sc !== undefined ? [`${a.sc}/${partsOf(taskOf(s, a.b)!) ?? '?'}${a.sv ? '' : '*'}`] : [])).join(';'),
       }];
     });
   });

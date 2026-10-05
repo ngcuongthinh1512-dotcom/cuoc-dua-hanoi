@@ -136,6 +136,7 @@ describe('frames and JSON messages', () => {
       { t: 'race', op: 'answer', step: 'T1', text: 'Tháp Eiffel' },
       { t: 'race', op: 'answer', step: 'D1', text: '' }, // "Tôi đã gửi bài" of a photo task
       { t: 'race', op: 'answer', step: 'T2', text: longest },
+      { t: 'race', op: 'answer', step: 'T1', text: '', parts: ['a', 'b', 'c', longest] }, // SPEC §17.44: a multi-box answer
       { t: 'race', op: 'accept', step: 'T1' },
       { t: 'race', op: 'branch', step: 'D1', branch: 'A' },
       { t: 'race', op: 'open', step: 'D1', branch: 'B' },
@@ -158,6 +159,9 @@ describe('frames and JSON messages', () => {
   it('Phase 8: refuses malformed answers, branches and reviews', () => {
     const bad: [unknown, 'team' | 'host'][] = [
       [{ t: 'race', op: 'answer', step: 'T1' }, 'team'], // no text
+      [{ t: 'race', op: 'answer', step: 'T1', text: '', parts: ['a'] }, 'team'], // SPEC §17.44: 2–8 boxes
+      [{ t: 'race', op: 'answer', step: 'T1', text: '', parts: ['a', 'b', 3] }, 'team'],
+      [{ t: 'race', op: 'answer', step: 'T1', text: '', parts: ['a', 'b'.repeat(NET.answerMax + 1)] }, 'team'],
       [{ t: 'race', op: 'answer', step: 'T1', text: 'a'.repeat(NET.answerMax + 1) }, 'team'],
       [{ t: 'race', op: 'answer', step: 'T1', text: 42 }, 'team'],
       [{ t: 'race', op: 'branch', step: 'D1' }, 'team'], // which branch?

@@ -12,7 +12,8 @@
 //     clear + teams[].flagWhy / flagAt, ZoneMember.left, notice reviewUndone.
 // 7 = SPEC §17.40 watch mode: Role 'spectator' (spectator code "K" + 5, same login box), TeamInfo.racing + `team` racing,
 //     client `watch on/off`, host.spectator rotate + HostState.spectatorCode / spectators, CLOSE.full / kick 'full'.
-export const PROTOCOL_VERSION = 7;
+// 8 = SPEC §17.44 multi-box tasks: TaskView.input 'parts' + partLabels, race answer {parts}, ReviewItem.partLabels.
+export const PROTOCOL_VERSION = 8;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */

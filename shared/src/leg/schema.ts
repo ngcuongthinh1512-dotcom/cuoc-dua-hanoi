@@ -115,6 +115,11 @@ export const taskSchema = z.strictObject({
    *  "đúng x/n" only for a Phạt made ≥ scoreFromMinutes after the task started (earlier ones never show a number). */
   scoreOf: z.number().int().min(1).optional(),
   scoreFromMinutes: z.number().min(0).default(30),
+  /** SPEC §17.44: a task with N boxes (T1: 4 places of a video) that the HOST reviews: `parts[k].label` = the box's label ('' =
+   *  the client numbers it). The team sends N strings (stored "a | b | c | d", one answer in the Host's queue); Duyệt = all right,
+   *  Phạt + "đúng x/N" = §17.31 (scoreOf defaults to parts.length, told from scoreFromMinutes on). Requires verification
+   *  'host_approval' + kind 'answer' (checkLeg); no answers in the leg at all for such a task. */
+  parts: z.array(z.strictObject({ label: text().default('') })).min(2).max(8).optional(),
   proofInstruction: text().default(''),
   timeLimitMinutes: z.number().positive().nullable().default(null),
   /** Mini-game parameters of kinds other than answer / free (object positions, target photo + heading, gates…: SPEC
@@ -228,6 +233,8 @@ export type ChallengeStep = Extract<Step, { type: 'challenge' }>;
 export type PitStopStep = Extract<Step, { type: 'pit_stop' }>;
 export type Destination = z.output<typeof destinationSchema>;
 export type Task = z.output<typeof taskSchema>;
+/** SPEC §17.44: one box of a `parts` task. */
+export type TaskPart = NonNullable<Task['parts']>[number];
 export type Branch = DetourStep['branches'][number];
 export type Transport = z.output<typeof transportSchema>;
 /** A parsed media item: {url: "https://…" | "r2:<name>", label}. */

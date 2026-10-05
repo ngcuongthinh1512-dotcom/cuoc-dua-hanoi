@@ -27,8 +27,8 @@ export interface RaceHudActions {
   /** The Sổ mật thư opened: ask the server for the cards (`race book`). */
   book(): void;
   // Phase 8 (docs/plans/phase8.md §5.3; RaceClient sends them)
-  /** A typed answer ('' = "Tôi đã gửi bài – chờ Host duyệt" of a photo task). */
-  answer(step: string, text: string): void;
+  /** A typed answer ('' = "Tôi đã gửi bài – chờ Host duyệt" of a photo task); SPEC §17.44: `parts` = the N boxes (text ''). */
+  answer(step: string, text: string, parts?: string[]): void;
   /** Choose / switch a detour branch (after the confirm that names the penalty). */
   branch(step: string, branch: string): void;
   /** "Nhận thử thách". */
@@ -129,8 +129,10 @@ export class RaceHud {
   private hot: { primary?: HTMLButtonElement; choose: HTMLButtonElement[] } = { choose: [] };
   private actionBtns: HTMLButtonElement[] = [];
   private answerInput: HTMLInputElement | null = null;
+  private partInputs: HTMLInputElement[] = []; // SPEC §17.44: the N boxes of a multi-box task
   private timerEl: HTMLElement | null = null;
   private draft = ''; // the unsent answer text; kept over redraws, closing and reopening the same step
+  private drafts: string[] = []; // the N boxes' unsent texts (same rule)
   private draftStep = '';
   // The answer box takes the focus on a (re)draw: the team opened the card (Enter) or went into the box. A card that popped up
   // by itself never takes it (review R-10: a held W / the Space that closes cards would type into it); Esc leaves the box
@@ -187,15 +189,16 @@ export class RaceHud {
     // here inside the key handler: onOpenChange → pointer lock is granted there (Firefox). Opening is main.ts ('clueBook').
     addEventListener('keydown', (e) => {
       if (!this.open) return;
-      const typing = this.answerInput != null && e.target === this.answerInput; // the answer box keeps Space / digits / arrows
-      if (e.code === 'Tab') return void (e.preventDefault(), !e.repeat && this.close());
+      const inPart = this.partInputs.includes(e.target as HTMLInputElement);
+      const typing = (this.answerInput != null && e.target === this.answerInput) || inPart; // the answer box keeps Space / digits / arrows
+      if (e.code === 'Tab') return inPart ? undefined : void (e.preventDefault(), !e.repeat && this.close()); // SPEC §17.44: Tab moves between the boxes (Esc leaves them, then Tab closes)
       if (!this.zoomEl.hidden) return void (!e.repeat && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') && this.zoom(null)); // the big picture takes these keys
       if (e.target instanceof HTMLElement && e.target.matches('button, a[href]') && /^(Space|Enter|NumpadEnter)$/.test(e.code)) return; // a button / link still focused (mouse held down: a click blurs it) presses itself
       if (!typing && this.bookOpen && e.code in SCROLL) return this.scrollBook(SCROLL[e.code]!); // pointer lock sends wheel + mouse to the canvas: keys scroll the book
       if (e.repeat) return;
       const key = hudKey(e, typing, this.bookOpen);
       if (key === 'submit') this.submit();
-      else if (key === 'blur') (this.focusBox = false), this.answerInput?.blur();
+      else if (key === 'blur') (this.focusBox = false), this.answerInput?.blur(), this.partInputs.forEach((i) => i.blur());
       else if (key === 'close') this.close();
       else if (key === 'primary') this.hot.primary ? this.hot.primary.click() : this.focusInput();
       else if (key) this.hot.choose[Number(key.slice(-1)) - 1]?.click();
@@ -434,6 +437,7 @@ export class RaceHud {
     this.hot = { choose: [] };
     this.actionBtns = [];
     this.answerInput = null;
+    this.partInputs = [];
     this.timerEl = null;
     this.shown = null;
   }
@@ -463,7 +467,7 @@ export class RaceHud {
   /** `focus`: the team asked for it (Enter): the answer box takes the keys at once; a popup leaves them to the game. */
   private openFull(card: ClueCard, animate = true, focus = false) {
     this.resultOpen = false;
-    if (this.draftStep !== card.step) (this.draft = ''), (this.draftStep = card.step);
+    if (this.draftStep !== card.step) (this.draft = ''), (this.drafts = []), (this.draftStep = card.step);
     this.focusBox = focus;
     this.failed.clear();
     this.fullCard = card;
@@ -495,7 +499,7 @@ export class RaceHud {
 
   private focusInput() {
     this.focusBox = true;
-    this.answerInput?.focus({ preventScroll: true });
+    (this.answerInput ?? this.partInputs.find((i) => !i.value) ?? this.partInputs[0])?.focus({ preventScroll: true });
   }
 
   private renderBook(entries: BookEntry[] | null) {
@@ -565,6 +569,7 @@ export class RaceHud {
     }
     if (p.accept) root.append((this.hot.primary = this.act('Nhận thử thách [Enter]', () => ((this.focusBox = true), this.actions.accept(card.step))))); // asked for the task: its answer box takes the keys
     if (p.answerBox) root.append(this.answerRow(card));
+    if (p.parts) root.append(this.partsRows(card, p.parts));
     if (p.proof) root.append(this.proofBox(card, p.proof));
     if (p.history.length) {
       root.append(el('div', 'rc-history', undefined, el('div', 'rc-hist-title', 'Câu trả lời của đội'), ...p.history.map((l) => el('div', `rc-ans ${l.status}`, undefined, el('span', 'rc-ans-time', l.time), el('span', 'rc-ans-text', l.text), el('span', 'rc-ans-state', l.label)))));
@@ -608,10 +613,44 @@ export class RaceHud {
 
   /** false = nothing to send. */
   private submit(card = this.fullCard): false | void {
+    if (!card) return false;
+    if (this.partInputs.length) return this.submitParts(card);
     const text = this.answerInput?.value.trim();
-    if (!card || !text) return false;
+    if (!text) return false;
     this.actions.answer(card.step, text);
     this.draft = this.answerInput!.value = '';
+  }
+
+  /** SPEC §17.44: the N boxes, one per label, "Gửi đáp án" on only when every box is filled (no slip sent to the Host); while the
+   *  Host reviews or the Phạt countdown runs everything is disabled but the texts stay (the team fixes them after). Enter in a
+   *  box → the next empty one, in the last → send. */
+  private partsRows(card: ClueCard, p: NonNullable<ReturnType<typeof cardPanel>['parts']>): HTMLElement {
+    const box = el('div', 'rc-parts');
+    const send = this.act('Gửi đáp án [Enter]', () => this.submitParts(card));
+    const check = () => void (send.disabled = !p.enabled || this.partInputs.some((i) => !i.value.trim()));
+    this.partInputs = p.labels.map((label, k) => {
+      const input = Object.assign(document.createElement('input'), { type: 'text', className: 'rc-input', maxLength: NET.answerMax, placeholder: 'Nhập…', autocomplete: 'off', spellcheck: false, enterKeyHint: k === p.labels.length - 1 ? 'send' : 'next', value: this.drafts[k] ?? '', disabled: !p.enabled });
+      input.setAttribute('aria-label', label);
+      input.addEventListener('input', () => ((this.drafts[k] = input.value), check()));
+      input.addEventListener('focus', () => (this.focusBox = true));
+      box.append(el('label', 'rc-part', undefined, el('span', 'rc-part-label', label), input));
+      return input;
+    });
+    box.append(el('div', 'rc-parts-foot', undefined, el('span', 'rc-parts-hint', p.enabled ? 'Điền đủ các ô rồi gửi Host duyệt · thứ tự không quan trọng' : card.status === 'pending' ? 'Đang chờ Host duyệt' : 'Đang bị phạt: sửa lại khi hết đếm ngược'), send));
+    check();
+    return box;
+  }
+
+  /** false = nothing sent: a box still empty takes the focus (another one than the box the Enter came from); Enter in a middle
+   *  box with everything filled moves to the next box. */
+  private submitParts(card: ClueCard): false | void {
+    if (!this.partInputs.length || this.partInputs.some((i) => i.disabled)) return false;
+    const values = this.partInputs.map((i) => i.value.trim());
+    const active = this.partInputs.indexOf(document.activeElement as HTMLInputElement);
+    const empty = this.partInputs.findIndex((_, k) => !values[k] && k !== active);
+    if (empty >= 0 || !values[active]) return (this.partInputs[empty >= 0 ? empty : active]?.focus(), false);
+    if (active >= 0 && active < this.partInputs.length - 1) return (this.partInputs[active + 1]!.focus(), false);
+    this.actions.answer(card.step, '', values); // the texts stay in the boxes: a Phạt means "fix them"
   }
 
   /** Photo task (kind free): instruction, the submission code to paste next to the photo, "Tôi đã gửi bài" (only when `actions`).
@@ -706,6 +745,8 @@ const DEMO_CARDS: Record<string, ClueCard> = {
   answer: { ...NEW, step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý minh họa: hãy quan sát kỹ xung quanh.', status: 'active', retryPenaltyMinutes: 3, task: { ...textTask, place: 'Sân minh họa' }, answers: [A(1, 'đáp án thử một', 'penalized', 540), A(2, 'đáp án thử hai', 'penalized', 200)], receivedAt: T0, completedAt: null },
   'answer-pending': { ...NEW, step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý minh họa: hãy quan sát kỹ xung quanh.', status: 'pending', retryPenaltyMinutes: 3, task: { ...textTask, place: 'Sân minh họa' }, answers: [A(1, 'đáp án thử một', 'penalized', 540), A(2, 'đáp án thử hai', 'pending', 72)], receivedAt: T0, completedAt: null },
   'answer-locked': { ...NEW, step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý minh họa: hãy quan sát kỹ xung quanh.', status: 'locked', retryPenaltyMinutes: 3, task: { ...textTask, place: 'Sân minh họa' }, answers: [A(1, 'đáp án thử một', 'penalized', 20)], lockedUntil: DEMO_NOW + 160_000, lockKind: 'retry', receivedAt: T0, completedAt: null },
+  // SPEC §17.44: a multi-box task (4 fake places, Host-reviewed): a Phạt before minute 30 (no count) and one after ("đúng 2/4")
+  parts: { ...NEW, step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý minh họa: xem kỹ đoạn phim rồi kể tên các nơi xuất hiện.', status: 'active', retryPenaltyMinutes: 3, task: { ...textTask, title: 'Bốn địa điểm minh họa', description: 'Kể tên 4 địa điểm xuất hiện trong đoạn phim minh họa. Điền mỗi nơi một ô, thứ tự tùy ý.', input: 'parts', partLabels: ['Địa điểm 1', 'Địa điểm 2', 'Địa điểm 3', 'Địa điểm 4'] }, answers: [{ ...A(1, 'nơi một | nơi hai | nơi ba | nơi bốn', 'penalized', 1500) }, { ...A(2, 'nơi một | nơi hai | nơi năm | nơi sáu', 'penalized', 300), score: 2, of: 4 }], receivedAt: T0, completedAt: null },
   'detour-choose': { ...detour, status: 'choose', branch: null, branches: branches(), switches: 0 },
   'detour-chosen': { ...detour, status: 'goToBranch', branch: 'A', branchOpened: false, branches: branches(), switches: 1 },
   'detour-locked': { ...detour, status: 'switchLocked', branch: 'B', branchOpened: false, branches: branches(), switches: 1, lockedUntil: DEMO_NOW + 540_000, lockKind: 'switch' },
@@ -738,6 +779,7 @@ const DEMO_LOUVRE: LouvreView = {
   maxPicks: 5,
 };
 const louvreTask: TaskView = { ...task, title: 'Phòng tác phẩm', description: 'Chọn các tác phẩm theo gợi ý rồi bấm nút chốt trong phòng.', kind: 'louvre', verification: 'auto', input: 'room', place: 'Sân minh họa', louvre: DEMO_LOUVRE };
+DEMO_CARDS['parts-locked'] = { ...DEMO_CARDS.parts!, status: 'locked', lockedUntil: DEMO_NOW + 160_000, lockKind: 'retry' };
 DEMO_CARDS.louvre = { ...NEW, step: 'T3', type: 'challenge', label: 'Thử thách 3', text: 'Gợi ý minh họa: hãy vào phòng và chọn các tác phẩm.', status: 'active', retryPenaltyMinutes: 3, task: louvreTask, answers: [A(1, '4 tác phẩm', 'penalized', 420), A(2, '5 tác phẩm', 'penalized', 130)].map((a, i) => ({ ...a, correct: i === 0 ? 1 : 2 })), receivedAt: T0, completedAt: null };
 // p8b-card-hint1: minute 40 only ("Đáp án bao gồm 5 tác phẩm"), no "Đúng x/5" yet (that is hint 2, minute 60); p8b-card-hint2 = the `louvre` card above
 DEMO_CARDS['louvre-hint1'] = { ...DEMO_CARDS.louvre, task: { ...louvreTask, louvre: { ...DEMO_LOUVRE, hintAt: [DEMO_NOW - 60_000, DEMO_NOW + 1_200_000], hintCorrect: null, picks: ['art-03', 'art-08', 'art-12', 'art-05'] } }, answers: [A(1, '4 tác phẩm', 'penalized', 420), A(2, '5 tác phẩm', 'penalized', 130)] };

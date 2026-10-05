@@ -364,6 +364,8 @@ Object.assign(PRESETS, {
       'p8-card-branch-task': 'card=branch-task&full', // branch box opened: its task, answer box, "Đổi lựa chọn kép"
       'p8-card-proof': 'card=proof&full', // photo branch: instruction + submission code + Copy + "Tôi đã gửi bài" (no Messenger button, SPEC §17.17)
       'p8-card-teaser': 'card=teaser&full', // "Nhận thử thách"
+      'p8-card-parts': 'card=parts&full', // SPEC §17.44: 4 boxes + "Gửi đáp án" (off until every box is filled), history with "đúng 2/4"
+      'p8-card-parts-locked': 'card=parts-locked&lock=160&full', // the boxes disabled during the countdown
       'p8-card-media': 'card=media&full', // R2 image (stand-in data: URI) + https links
       'p8-book-media': 'book=media', // Sổ mật thư: images / links, submission code, no answer history
       'p8-card-answer-small': 'card=answer&full', // 1024 × 640

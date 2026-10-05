@@ -79,6 +79,10 @@ button.ok { background: #2c9a4a; }
 .rv-badge.no { background: #34405a; color: #e8ecf2; }
 .rv-text { font-size: 20px; font-weight: 700; line-height: 1.3; color: #fff; overflow-wrap: anywhere; }
 .rv-text .rv-bigcode { font-size: 20px; letter-spacing: 0.06em; margin-right: 8px; }
+/* SPEC §17.44: a multi-box answer, one numbered line per box */
+.rv-parts { margin: 4px 0 0; padding-left: 24px; display: grid; gap: 4px; }
+.rv-parts li { font-size: 20px; }
+.rv-parts .rv-part-label { display: inline-block; min-width: 110px; margin-right: 8px; font-size: 13px; font-weight: 600; color: #9fb0c8; }
 .rv-prev { margin-top: 3px; font-size: 13px; font-weight: 400; color: #b7c6e6; }
 .rv-ref { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin-top: 10px; padding: 6px 12px; border-radius: 8px; background: #0f2a1a; border: 1px dashed #2c9a4a; font-size: 13px; color: #c9f0d4; }
 .rv-refchip { padding: 1px 8px; border-radius: 4px; background: #173d26; border: 1px solid #2c9a4a; font-size: 14px; font-style: italic; color: #d6f5df; }

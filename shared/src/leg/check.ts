@@ -43,7 +43,7 @@ const FIELD: Record<string, string> = {
   spreadMeters: 'khoảng rải đội (m)',
   // Phase 8 (docs/plans/phase8.md D2)
   referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
-  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
+  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
   walkOnlyViolationMinutes: 'phút phạt đi xe ở lộ trình đi bộ', quitTaskMinutes: 'phút phạt bỏ thử thách',
   // Phase 8B (docs/plans/phase8b.md §B)
   louvre: 'phòng Louvre', artworks: 'tác phẩm', image: 'hình tác phẩm', note: 'ghi chú (chỉ Host)', credit: 'ghi nguồn',
@@ -206,6 +206,12 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
     for (const [t, p] of tasks) {
       blank(t.title, [...p, 'title'], 'tiêu đề nhiệm vụ');
       blank(t.description, [...p, 'description'], 'mô tả nhiệm vụ');
+      if (t.parts) {
+        // SPEC §17.44: a multi-box task is reviewed by the Host (no answers in the leg: nothing to grade with)
+        if (t.verification !== 'host_approval') add('error', [...p, 'verification'], 'thử thách nhiều ô (parts) do Host duyệt: phải dùng cách xác nhận "host_approval" (máy chủ không có đáp án để tự chấm)');
+        if (t.kind !== 'answer') add('error', [...p, 'kind'], `thử thách nhiều ô (parts) chỉ dùng với kiểu "answer" (đang là "${t.kind}")`);
+        if (t.scoreOf !== undefined && t.scoreOf !== t.parts.length) add('warning', [...p, 'scoreOf'], `scoreOf (${t.scoreOf}) khác số ô (${t.parts.length}): bỏ scoreOf đi, "đúng x/n" lấy n = số ô`);
+      }
       if (t.verification === 'auto' && t.kind !== 'free') blank(t.answers, [...p, 'answers'], 'đáp án (cách xác nhận "auto")');
       if (t.verification === 'auto' && t.kind === 'free') add('warning', [...p, 'kind'], 'nhiệm vụ "free" không tự chấm được: nên dùng cách xác nhận "host_approval"');
       // Phase 8 (gap 1): an answer typed in game + Host approval needs no proof instruction; a photo task (free) does. No

@@ -11,6 +11,7 @@ import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { ranking } from './ranking.ts';
 import type { BoxSpot } from './BikeService.ts';
+import { partsOf } from './tasks.ts';
 import { advance, boxesOf, cardOf, creditsOf, hintAt, inside, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
 
 /** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
@@ -247,7 +248,7 @@ export class RaceEngine {
     }
     // Phase 8 (D8, critic N2): answer / accept / branch from anywhere, no trusted pose needed (a team typing right after a reload)
     if (m.op === 'accept') return this.step(team, { kind: 'accept', step: m.step }, now);
-    if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text, pose: stand(at) }, now);
+    if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text, pose: stand(at), ...(m.parts ? { parts: m.parts } : {}) }, now);
     if (m.op === 'branch') return this.step(team, { kind: 'branch', step: m.step, branch: m.branch }, now);
     // Phase 8B: a pick from anywhere; a lock judged at the trusted pose inside the step's zone (steps.ts advance; engine.apply writes the lock)
     if (m.op === 'pick') return this.step(team, { kind: 'pick', step: m.step, art: m.art, on: m.on }, now);
@@ -417,7 +418,8 @@ export class RaceEngine {
         queue.push({
           team: id, step: row.step, label: leg.steps[i]!.label, branch: a.b, id: a.id, text: a.text, at: a.at,
           reference: t.referenceAnswers.length ? t.referenceAnswers : t.answers, note: row.host_note, lockMinutes: retryLockMinutes(leg, t),
-          ...(t.scoreOf ? { scoreOf: t.scoreOf, scoreFrom: scoreFrom(t, row) ?? a.at } : {}), // SPEC §17.31
+          ...(partsOf(t) ? { scoreOf: partsOf(t), scoreFrom: scoreFrom(t, row) ?? a.at } : {}), // SPEC §17.31 (§17.44: n = the box count)
+          ...(t.parts ? { partLabels: t.parts.map((p) => p.label) } : {}), // SPEC §17.44: the page lists the N strings of `text`
         });
       }
     queue.sort((a, b) => a.at - b.at);
@@ -603,7 +605,8 @@ export class RaceEngine {
           // SPEC §17.31: the Phạt's "đúng x/n" rides on the notice (the toast) when the team may see it
           const s = steps[e.step]!;
           const a = parseAnswers(e.row).find((x) => x.id === e.id);
-          out.push({ t: 'notice', code: 'penalized', ...(a ? scoreOf(a, taskOf(s, e.row.branch)?.scoreOf) : {}) });
+          const t = taskOf(s, e.row.branch);
+          out.push({ t: 'notice', code: 'penalized', ...(a && t ? scoreOf(a, partsOf(t)) : {}) });
         }
       } else if (e.kind === 'branch') {
         edit(e.step).branch = e.branch;

@@ -104,7 +104,8 @@ export interface AnswerView {
   /** Phase 8B: a louvre lock, how many of the picked artworks were right — ONLY for a lock made at or after the team's
    *  correctAtMinutes mark (before it the team only learns "wrong"). */
   correct?: number;
-  /** SPEC §17.31: a Phạt with the Host's count "đúng score/of" — only when made ≥ task.scoreFromMinutes into the task. */
+  /** SPEC §17.31: a Phạt with the Host's count "đúng score/of" — only when made ≥ task.scoreFromMinutes into the task (§17.44: a
+   *  multi-box task's of = its box count). */
   score?: number;
   of?: number;
 }
@@ -173,7 +174,9 @@ export interface TaskView {
   /** Phase 8: 'text' = an input box (answer typed in game); 'proof' = a photo the team sends on Messenger, opened outside the
    *  game (kind free, SPEC §17.17: no contact button): the card shows proofInstruction, the submission code and
    *  "Tôi đã gửi bài – chờ Host duyệt" (answer ''). Phase 8B: 'room' = kind louvre (no input box: buttons in the room). */
-  input: 'text' | 'proof' | 'room';
+  input: 'text' | 'proof' | 'room' | 'parts';
+  /** SPEC §17.44: input 'parts' — one box per part, in leg order ('' = the client numbers it); the N strings go to the Host. */
+  partLabels?: string[];
   proofInstruction: string;
   timeLimitMinutes: number | null;
   /** Task somewhere else (leg task.location.name); absent = at the point just reached. */
@@ -325,6 +328,8 @@ export interface ReviewItem {
   /** SPEC §17.31: task.scoreOf (the Host enters "đúng ?/n" with its Phạt) + the server ms from which the team is told the number. */
   scoreOf?: number;
   scoreFrom?: number;
+  /** SPEC §17.44: a multi-box task: its box labels ('' = numbered); `text` holds the N strings joined " | " (the page lists them). */
+  partLabels?: string[];
 }
 
 /** Phase 8 (SPEC §8.9 (2), docs/plans/phase8.md §12 q16): the code a team pastes with its photo on Messenger and the Host
@@ -373,7 +378,7 @@ export type ClientMessage =
 export type RaceOp =
   | { t: 'race'; op: 'open'; step: string; branch?: string }
   | { t: 'race'; op: 'accept'; step: string }
-  | { t: 'race'; op: 'answer'; step: string; text: string }
+  | { t: 'race'; op: 'answer'; step: string; text: string; /** SPEC §17.44: a multi-box task: one string per box (text ''; stored "a | b | c"). */ parts?: string[] }
   | { t: 'race'; op: 'branch'; step: string; branch: string }
   | { t: 'race'; op: 'checkin' }
   | { t: 'race'; op: 'book' }

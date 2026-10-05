@@ -73,6 +73,7 @@ Cho biết nơi bạn cần tới tiếp theo (chỉ dẫn rõ ràng hoặc **m�
 - **Gõ được ở bất kỳ đâu** sau khi đã nhận thử thách: không cần đứng ở điểm, không cần xuống xe, đang đạp xe cũng gõ được.
 - **Mọi câu trả lời đều được lưu** trên thẻ (nội dung, giờ gửi, trạng thái: *Chờ Host duyệt*, *Đã duyệt*, *Bị phạt 3 phút*), giúp đội xem lại lần trước đã gõ gì. Chỉ có lịch sử của **chính đội bạn**, và chỉ ở thẻ thử thách, không ở Sổ.
 - Mỗi lúc chỉ có **một câu chờ duyệt**: câu trước chưa có quyết định thì chưa gửi thêm được. Đang bị phạt đếm ngược thì cũng chưa gửi được. Số lần gửi không giới hạn.
+- **Thử thách nhiều ô**: một số thử thách có nhiều ô (vd. 4 địa điểm). Điền **đủ các ô** rồi bấm **Gửi đáp án** (`Tab` chuyển ô, `Enter` ở ô cuối gửi; nút chỉ bật khi đủ ô, thứ tự không quan trọng). Cả N ô thành **một bài** gửi **Host duyệt**: Duyệt = đúng hết, mật thư kế vào Sổ; Phạt = **3 phút** đếm ngược, các ô giữ nguyên chữ để sửa rồi gửi lại. Từ **phút 30** của thử thách, mỗi lần Phạt đội được báo **đúng x/N** (trước đó chỉ biết là bị phạt).
 
 ## 7. Nhiệm vụ Host duyệt
 

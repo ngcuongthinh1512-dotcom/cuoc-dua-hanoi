@@ -187,6 +187,18 @@ describe('review queue (D16 (1))', () => {
   });
 });
 
+describe('SPEC §17.44: a multi-box answer in the queue', () => {
+  it('lists the N strings with their labels ("Ô n" when none), no match badge; scoreOf comes from the server', () => {
+    const s = demoState(NOW);
+    const q = { ...s.queue[0]!, team: 't5', step: 'T1', branch: null, id: 1, text: 'nơi một | nơi hai | x | y', reference: [], scoreOf: 4, scoreFrom: NOW + 60_000, partLabels: ['Địa điểm 1', '', 'Địa điểm 3', ''] };
+    const r = queueRows({ ...s, queue: [q] }, NOW)[0]!;
+    expect(r.parts).toEqual([{ label: 'Địa điểm 1', text: 'nơi một' }, { label: 'Ô 2', text: 'nơi hai' }, { label: 'Địa điểm 3', text: 'x' }, { label: 'Ô 4', text: 'y' }]);
+    expect(r.match).toBeNull();
+    expect(r.score).toEqual({ scoreOf: 4, scoreHint: 'đội chưa thấy số: còn 1 phút' });
+    expect(queueRows({ ...s, queue: [{ ...q, partLabels: undefined }] }, NOW)[0]!.parts).toBeNull();
+  });
+});
+
 describe('review cards (SPEC §17.42): the match badge and the earlier tries', () => {
   const s = demoState(NOW);
 

@@ -256,6 +256,7 @@ export function botMove(card: ClueCard, now: number, bot: BotRole, answers: Map<
       const task = card.task ?? card.branches?.find((b) => b.id === card.branch)?.task;
       if (task?.louvre) return louvreMove(step, task.louvre, bot.i, rooms.get(step) ?? [], rightOnly);
       const text = task?.input === 'proof' ? '' : (answers.get(card.branch ? `${step}/${card.branch}` : step) ?? '(bot) trả lời');
+      if (task?.input === 'parts') return { op: { t: 'race', op: 'answer', step, text: '', parts: (task.partLabels ?? []).map((_, k) => `(bot) ô ${k + 1}`) } }; // SPEC §17.44: the Host bot approves
       return { op: { t: 'race', op: 'answer', step, text } };
     }
     default: return null;
