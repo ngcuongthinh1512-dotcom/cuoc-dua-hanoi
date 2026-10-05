@@ -1,6 +1,6 @@
 // Group g5 on the real chunk data (skipped when it is missing): each landmark's DetailFn runs without falling back to
 // the generic renderer, its top matches the published height (± 5 %), no NaN, triangle budget, simplified colliders.
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { type BuildingRec, chunkBounds, type ChunkData, type ChunkIndex, type LandmarkId, type SkylineData, type WaterData } from '../../geo/chunkData.ts';
@@ -13,7 +13,6 @@ import { helpers } from './index.ts';
 import { recordGround } from './parts.ts';
 
 const data = join(import.meta.dirname, '../../../public/data');
-const has = ['chunks/index.json', 'water.json', 'elevation.json', 'elevation.bin', 'skyline.json'].every((f) => existsSync(join(data, f)));
 const read = <T>(f: string) => JSON.parse(readFileSync(join(data, f), 'utf8')) as T;
 
 // Published top (m above ground) and triangle budget per landmark.
@@ -31,7 +30,8 @@ const EXPECT: Partial<Record<LandmarkId, { top: number; budget: number }>> = {
 
 const ys = (b: MeshBucket) => [...b.position].filter((_, i) => i % 3 === 1);
 
-describe.skipIf(!has)('g5 landmarks on the real chunks', () => {
+// Leg 2: Paris landmark, no Macao data (Notre-Dame, Sainte-Chapelle… + the Paris skyline)
+describe.skip('g5 landmarks on the real chunks', () => {
   const grid = parseHeightGrid(read('elevation.json'), readFileSync(join(data, 'elevation.bin')));
   carveRiver(grid, read<WaterData>('water.json'));
   const height = (x: number, z: number) => heightAt(grid, x, z);

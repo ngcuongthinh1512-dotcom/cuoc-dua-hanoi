@@ -85,8 +85,8 @@ describe('buildRoads', () => {
     expect(marks.every((p) => Math.abs(p[0]! - 125) > C.centreLine.junctionCut)).toBe(true);
   });
 
-  it('a real dense chunk builds without NaN', () => {
-    const data = JSON.parse(readFileSync(new URL('../../public/data/chunks/-8_-4.json', import.meta.url), 'utf8')) as ChunkData;
+  it('a real dense chunk (Macao 1_1: 129 roads, 5 bridges; Paris: -8_-4, the Étoile) builds without NaN', () => {
+    const data = JSON.parse(readFileSync(new URL('../../public/data/chunks/1_1.json', import.meta.url), 'utf8')) as ChunkData;
     const out = buildRoads(data, ctx((x, z) => 0.01 * x + 0.02 * z, data.key));
     expectSane(out);
     expect(out.meshes.length).toBeLessThanOrEqual(4);
@@ -103,7 +103,9 @@ describe('buildBridges', () => {
     const out = buildBridges(bridge(1), ctx((x) => carved(x)));
     expectSane(out);
     const deck = pts(get(out, 'asphalt')!);
-    expect(deck.every((p) => Math.abs(p[1]! - C.surfaceLift.asphalt!) < 1e-6)).toBe(true);
+    expect(deck.filter((p) => Math.abs(p[0]!) < 40).every((p) => Math.abs(p[1]! - C.surfaceLift.asphalt!) < 1e-6)).toBe(true); // over the channel
+    // the 15 m ramp tongues at the ends sit 3 cm over the street's own surface (BridgeBuilder, commit 23d4ae4; the test was stale since)
+    expect(deck.every((p) => p[1]! > C.surfaceLift.asphalt! - 1e-6 && p[1]! < C.surfaceLift.asphalt! + 0.03 + 1e-6)).toBe(true);
     const slab = pts(get(out, 'bridge')!);
     expect(Math.min(...slab.map((p) => p[1]!))).toBeCloseTo(-C.bridge.deckThickness);
     const rail = pts(get(out, 'railing')!);

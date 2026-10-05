@@ -125,13 +125,14 @@ export class NpcRoads {
     return Math.min(traffic.maxLanes, oneway ? Math.max(1, total) : Math.max(1, Math.floor(total / 2)));
   }
 
-  /** Lane centre from the way's centre line, m, + = right of travel (right normal of direction (dx, dz) = (−dz, dx));
-   *  lane 0 = kerb side, a lane past the last is clamped to it (onto a way with fewer lanes). */
+  /** Lane centre from the way's centre line, m, + = right of travel (right normal of direction (dx, dz) = (−dz, dx)),
+   *  − with `traffic.driveLeft`; lane 0 = kerb side, a lane past the last is clamped to it (onto a way with fewer lanes). */
   laneOffset(k: number, forward: boolean, lane: number): number {
     const n = Math.max(1, this.lanes(k, forward));
     const h = this.half[k]!;
     const span = this.graph.file.ways[k]![1]! & WayFlag.oneway ? 2 * h : h; // two-way: each direction has its half
-    return h - (Math.min(Math.max(lane, 0), n - 1) + 0.5) * (span / n);
+    const off = h - (Math.min(Math.max(lane, 0), n - 1) + 0.5) * (span / n);
+    return traffic.driveLeft ? -off : off;
   }
 
   /** Ground y at s m along edge e from edgeA: the carved terrain, or the bridge deck on a bridge edge. */

@@ -132,7 +132,7 @@ describe('louvre task (schema + checkLeg rules 1–8)', () => {
 
   it('rules 6–8: no location, a route before, teaser warns, verification auto, hints order, two rooms at one box', () => {
     const a = fresh();
-    task(a).location = { name: 'x', lat: 48.8609, lon: 2.3349, radius: 20 };
+    task(a).location = { name: 'x', lat: 22.1936, lon: 113.5394, radius: 20 };
     has(a, 'error', /phòng Louvre nằm ngay dưới hòm vừa mở; bỏ "location"/);
     const b = fresh();
     b.steps.splice(1, 0, { id: 'T2', type: 'challenge', label: 'Thử thách 2', task: { title: 'x', description: 'y', answers: ['z'] } } as any);

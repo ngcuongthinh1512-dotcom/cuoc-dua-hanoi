@@ -35,8 +35,9 @@ describe('sim bots (docs/plans/phase6.md §6 D)', () => {
 });
 
 // Phase 7 (docs/plans/phase7.md track E): bots play a whole leg. `mini` is ~2.4 km (≈ 6 min real time at the trusted-point speed), so the
-// test squeezes the same steps, branches, answers and Pit Stop onto the Bir-Hakeim bridge from the leg's own start (35 m apart, FAKE
-// content as in mini).
+// test squeezes the same steps, branches, answers and Pit Stop onto a straight line NW of the leg's own start (35 m apart, FAKE
+// content as in mini). Leg 2: in Paris that line was the Bir-Hakeim bridge; from Largo do Pagode da Barra it runs over the harbour
+// (the test server has no terrain: the bots walk the A* route to the nearest node, then straight to the zone), kept for fidelity.
 const mini = readFileSync(join(import.meta.dirname, '../worker/legs/test/mini.json'), 'utf8');
 function compactMini(): string {
   const spots = new Map<string, number>();
@@ -345,9 +346,9 @@ describe('sim --leg (Phase 7 / 8)', () => {
 
   it('--leg <id> finds the test leg file; unknown id says so', () => {
     expect(legArg('mini')).toMatchObject({ id: 'mini' });
-    // the id the Host page lists → its file test/paris-demo.filled.json (organiser review: "Không tìm thấy chặng")
-    expect(legArg('paris-demo-filled')).toMatchObject({ id: 'paris-demo-filled', file: expect.stringMatching(/worker\/legs\/test\/paris-demo\.filled\.json$/) });
-    expect(legArg('paris-demo').file).toMatch(/worker\/legs\/paris-demo\.json$/);
+    // the id the Host page lists → its file test/macao-demo.filled.json (organiser review: "Không tìm thấy chặng")
+    expect(legArg('macao-demo-filled')).toMatchObject({ id: 'macao-demo-filled', file: expect.stringMatching(/worker\/legs\/test\/macao-demo\.filled\.json$/) });
+    expect(legArg('macao-demo').file).toMatch(/worker\/legs\/macao-demo\.json$/);
     expect(() => legArg('khong-co')).toThrow('khong-co');
     expect(() => legArg('/khong/co/chang.json')).toThrow('Không tìm thấy file chặng "/khong/co/chang.json"');
   });
@@ -383,8 +384,8 @@ describe('sim --leg (Phase 7 / 8)', () => {
     expect(legFailed(r)).toBe(false);
   });
 
-  // Phase 11: the Host-bot scenarios on the compacted leg (6 bots: undo bot 4's Duyệt, Cho qua bot 5, clear a red flag (speedup 2 flags
-  // everybody), bot 6 never checks in → the Host ends the race → BỊ LOẠI) and the organiser's export; budget for 8 teams within SPEC §3.
+  // Phase 11: the Host-bot scenarios on the compacted leg (6 bots: undo bot 4's Duyệt, Cho qua bot 5, clear a red flag (bot 1 walks above
+  // the speed limit on purpose: since SPEC §17.29 speedup 2 alone no longer flags anybody), bot 6 never checks in → the Host ends the race → BỊ LOẠI) and the organiser's export; budget for 8 teams within SPEC §3.
   it('--full with 6 bots: Hoàn tác, Cho qua, Xóa cờ, Kết thúc → out, export ok; 8-team budget under the pro-rata limits', { timeout: 300_000 }, async () => {
     const r = await runSim({ bots: 6, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-full', password: 'test-secret', log: () => {}, leg: { json: compactMini() }, full: true, teams: 8 });
     expect(r.leg).toMatchObject({ id: 'mini', finished: 5, ranked: 6 });
@@ -465,11 +466,12 @@ describe('louvre bot (phase8b §I, pure)', () => {
 });
 
 // Integration: the in-process server + the louvre test leg, 3 bots (wrong lock → countdown → right lock). The start moves from
-// Bir-Hakeim (≈ 3.5 km, longer than the test's 600 s) to the Jardin du Carrousel, ≈ 250 m from the room.
+// Largo do Pagode da Barra (≈ 1.3 km, the leg's own start) to the Avenida Doutor Mário Soares, ≈ 230 m (294 m on foot) from the box
+// the room sits under (Praça de Ferreira do Amaral).
 describe('sim --leg louvre', () => {
   const nearLouvre = () => {
     const leg = JSON.parse(readFileSync(join(import.meta.dirname, '../worker/legs/test/louvre.json'), 'utf8'));
-    Object.assign(leg.start, { lat: 48.8617, lon: 2.3314 });
+    Object.assign(leg.start, { lat: 22.19, lon: 113.54217 });
     return JSON.stringify(leg);
   };
   it('3 bots finish: ≥ 3 wrong locks, every bot sees ≥ 3 public feed messages, ≤ 16 × steps rows per team', { timeout: 300_000 }, async () => {

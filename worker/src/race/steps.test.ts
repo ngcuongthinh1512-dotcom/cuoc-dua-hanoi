@@ -405,7 +405,7 @@ describe('boxesOf / cardOf', () => {
   });
 
   it('cards never carry an answer, a reference answer, a Host note, a destination name, params or coordinates (every card state)', () => {
-    for (const leg of [mini, bundledLeg('paris-demo-filled')!]) {
+    for (const leg of [mini, bundledLeg('macao-demo-filled')!]) {
       const tasks = leg.steps.flatMap((s) => (s.type === 'challenge' ? [s.task] : s.type === 'detour' ? s.branches.map((b) => b.task) : []));
       const answers = tasks.flatMap((t) => [...t.answers, ...t.referenceAnswers]);
       const names = leg.steps.flatMap((s) => (s.type === 'route_info' || s.type === 'pit_stop' ? [s.destination.name] : []));
@@ -446,7 +446,7 @@ describe('boxesOf / cardOf', () => {
     expect(c).toMatchObject({ status: 'locked', lockKind: 'retry', retryPenaltyMinutes: 3, branchOpened: true, branches: [{ id: 'A', task: { title: '(GIẢ) Phép tính', input: 'text' } }, { id: 'B' }] });
     expect(c.branches![1]!.task).toBeUndefined();
     expect(c.answers.map((a) => a.text)).toEqual(recs.slice(-NET.answerHistory).map((r) => r.text));
-    expect(cardOf(mini, 3, row({ branch: 'B', branch_opened_at: 200 }), 1000).branches![1]!.task).toMatchObject({ input: 'proof', place: 'Bãi cỏ Champ de Mars' });
+    expect(cardOf(mini, 3, row({ branch: 'B', branch_opened_at: 200 }), 1000).branches![1]!.task).toMatchObject({ input: 'proof', place: 'Khoảng sân rộng ở Tap Seac' });
     expect(cardOf(mini, 3, row({ branch: 'A', branch_opened_at: 200, locked_until: 900 }), 1000)).toMatchObject({ status: 'active', lockedUntil: null, lockKind: null });
   });
 
@@ -462,7 +462,7 @@ describe('boxesOf / cardOf', () => {
   it('card fields: route transport, challenge teaser + task place, detour branches, status from the row', () => {
     const row = (i: number, more = {}) => ({ ...emptyProgress('t', mini.steps[i]!.id), clue_opened_at: 100, ...more });
     expect(cardOf(mini, 2, row(2), 0)).toMatchObject({ step: 'L2', type: 'route_info', transport: { mandatory: 'walk' }, status: 'active', receivedAt: 100, completedAt: null });
-    expect(cardOf(mini, 1, row(1, { completed_at: 300 }), 0)).toMatchObject({ text: expect.stringContaining('vườn'), task: { place: 'Vườn Trocadéro (phía dưới)', timeLimitMinutes: 10 }, status: 'done', completedAt: 300 });
+    expect(cardOf(mini, 1, row(1, { completed_at: 300 }), 0)).toMatchObject({ text: expect.stringContaining('vườn'), task: { place: 'Công viên Vasco da Gama (lối phụ)', timeLimitMinutes: 10 }, status: 'done', completedAt: 300 });
     expect(cardOf(mini, 1, row(1), 0)).toMatchObject({ status: 'teaser', text: expect.stringContaining('vườn') }); // D22: the task behind "Nhận thử thách"
     expect(cardOf(mini, 1, row(1), 0).task).toBeUndefined();
     expect(cardOf(mini, 1, row(1, { task_started_at: 150 }), 0)).toMatchObject({ status: 'active', task: { input: 'text', media: [{ kind: 'link' }, { url: 'r2:test-gia-2.jpg', label: '', kind: 'image' }] } });

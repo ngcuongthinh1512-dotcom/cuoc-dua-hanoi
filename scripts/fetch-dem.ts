@@ -13,8 +13,9 @@ import { bilinear, gridSpec, lonLatToPixel, terrarium, worldRect } from './geo.t
 // fetch 4× the tiles for no extra detail. Output nodes every 5 m keep the file ≈ 1.6 MB.
 const ZOOM = 14;
 const CELL = 5; // m
+const SEA_FLOOR_DM = -150; // decimetres: −15 m
 const TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
-const USER_AGENT = 'cuoc-dua-paris/0.1 (game dev; one-time fetch)';
+const USER_AGENT = 'cuoc-dua-macao/0.1 (game dev; one-time fetch)';
 
 const root = join(import.meta.dirname, '..');
 const { values: args } = parseArgs({
@@ -83,7 +84,7 @@ for (let j = 0; j < grid.height; j++) {
   for (let i = 0; i < grid.width; i++) {
     const p = nodeLatLon(i, j);
     const { px, py } = lonLatToPixel(p.lon, p.lat, ZOOM);
-    const dm = Math.round(bilinear(pixelHeight, px, py) * 10);
+    const dm = Math.max(Math.round(bilinear(pixelHeight, px, py) * 10), SEA_FLOOR_DM); // Macao: the Terrain Tiles hold bathymetry (down to −1.4 km at the Inner Harbour); the sea is carved flat anyway
     bin.setInt16((j * grid.width + i) * 2, dm, true);
     min = Math.min(min, dm);
     max = Math.max(max, dm);

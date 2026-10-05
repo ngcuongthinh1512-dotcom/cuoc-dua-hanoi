@@ -10,7 +10,7 @@ import { spawnCandidates } from './spawnCandidates.ts';
 
 const root = join(import.meta.dirname, '../../..');
 const graphFile = join(root, 'shared/data/roadgraph.json');
-const legFile = join(root, 'worker/legs/paris-demo.json'); // server-only content: read by this test, never bundled
+const legFile = join(root, 'worker/legs/macao-demo.json'); // server-only content: read by this test, never bundled
 
 describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates (roadgraph.json, demo leg)', () => {
   const file = JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile;
@@ -50,14 +50,34 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates
     });
   });
 
-  it('bicycle parking first: L3 → L4 (16 racks) is all racks; L2 → L3 (none) falls back to sampled pavement points', () => {
-    expect(pairs(c.segments[3]!).every(([x, z]) => parking.has(`${x},${z}`))).toBe(true);
-    expect(pairs(c.segments[2]!).some(([x, z]) => parking.has(`${x},${z}`))).toBe(false);
+  // Leg 2: the Macao roadgraph has no bicycle_parking node (Paris: 16 racks on L3 → L4, none on L2 → L3), so the rack rules run
+  // on a copy of the graph that gets racks put on the demo leg: 16 on the corridor of segment R, chosen so that segment N's
+  // corridor (the demo legs are short: corridors overlap) holds none of them, and 25 decoy racks off the route.
+  const dm10 = (a: number[]) => a.map((v) => Math.round(v * 10));
+  const half = leg.vehicles.corridorMeters / 2;
+  const plan = c.segments
+    .map((seg, R) => ({ R, racks: pairs(seg).slice(0, 16) }))
+    .map((o) => ({ ...o, N: polys.findIndex((poly, j) => j !== o.R && o.racks.every(([x, z]) => toPath(poly, x, z) > half)) }))
+    .find((o) => o.N >= 0)!;
+  const bike = [...plan.racks.flat(), ...c.decoys.slice(0, 50)];
+  const racked = spawnCandidates(RoadGraph.decode({ ...file, bikeParking: dm10(bike) }), points, [], leg.vehicles);
+  const rackSet = new Set(pairs(dm10(bike)).map(([x, z]) => `${x / 10},${z / 10}`));
+
+  it('no bicycle_parking in the Macao graph: every segment is sampled pavement points, ≥ minCandidates each', () => {
+    expect(file.bikeParking).toEqual([]);
+    expect(parking.size).toBe(0);
+    c.segments.forEach((seg) => expect(seg.length / 2).toBeGreaterThanOrEqual(serverBikes.minCandidates));
   });
 
-  it('decoys lie outside every corridor and away from the route points, racks among them; same input → same output', () => {
+  it('bicycle parking first: segment R (16 racks) is all racks; segment N (none) falls back to sampled pavement points', () => {
+    expect(plan).toBeDefined();
+    expect(pairs(racked.segments[plan.R]!).every(([x, z]) => rackSet.has(`${x},${z}`))).toBe(true);
+    expect(pairs(racked.segments[plan.N]!).some(([x, z]) => rackSet.has(`${x},${z}`))).toBe(false);
+  });
+
+  it('decoys lie outside every corridor and away from the route points; racks among them (a rack ≠ the route); same input → same output', () => {
     expect(c.decoys.length / 2).toBeGreaterThan(20);
-    expect(pairs(c.decoys).filter(([x, z]) => parking.has(`${x},${z}`)).length).toBeGreaterThan(20); // a rack ≠ the route
+    expect(pairs(racked.decoys).filter(([x, z]) => rackSet.has(`${x},${z}`)).length).toBeGreaterThan(20); // a rack ≠ the route
     for (const [x, z] of pairs(c.decoys)) {
       for (const poly of polys) expect(toPath(poly, x, z)).toBeGreaterThan(leg.vehicles.corridorMeters / 2);
       for (const p of points) expect(Math.hypot(p.x - x, p.z - z)).toBeGreaterThanOrEqual(leg.vehicles.minDistanceFromCheckpoint);

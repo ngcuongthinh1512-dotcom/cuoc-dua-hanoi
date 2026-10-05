@@ -587,18 +587,18 @@ export function demoState(now = 1_000_000): HostState {
     bikes: [],
     spawning: { paused: false, candidates: 120, nextAt: null },
     leg: {
-      id: 'mini', title: 'Chặng ngắn để test (NỘI DUNG GIẢ)', timezone: 'Asia/Ho_Chi_Minh', start: (({ x, z }) => ({ x, z }))(latLonToWorld(48.85585, 2.28744)),
+      id: 'mini', title: 'Chặng ngắn để test (NỘI DUNG GIẢ)', timezone: 'Asia/Ho_Chi_Minh', start: (({ x, z }) => ({ x, z }))(latLonToWorld(22.18647, 113.53097)),
       steps: [
-        s('L1', 'route_info', 'Lộ trình 1', pt(48.86215, 2.28843, 35, 'Sân trước Palais de Chaillot')),
-        s('T1', 'challenge', 'Thử thách 1', pt(48.8605, 2.2903, 30, 'Vườn Trocadéro')),
-        s('L2', 'route_info', 'Lộ trình 2', pt(48.8583, 2.2945, 40, 'Chân tháp Eiffel')),
-        s('D1', 'detour', 'Lựa chọn kép', pt(48.8583, 2.2945, 40, 'Chân tháp Eiffel'), [pt(48.8583, 2.2945, 40, 'Chân tháp Eiffel'), pt(48.8562, 2.2978, 30, 'Champ de Mars')]),
-        s('L3', 'route_info', 'Lộ trình 3', pt(48.8596, 2.29243, 25, 'Giữa cầu Iéna')),
-        s('T2', 'challenge', 'Thử thách 2', pt(48.8596, 2.29243, 25, 'Giữa cầu Iéna')), // a typed place name (SPEC §17.42)
-        s('PS', 'pit_stop', 'Về đích', pt(48.8596, 2.29243, 25, 'Giữa cầu Iéna')),
+        s('L1', 'route_info', 'Lộ trình 1', pt(22.193455, 113.539297, 35, 'Largo do Senado')),
+        s('T1', 'challenge', 'Thử thách 1', pt(22.197172, 113.544817, 30, 'Công viên Vasco da Gama')),
+        s('L2', 'route_info', 'Lộ trình 2', pt(22.19823, 113.547, 40, 'Praça do Tap Seac')),
+        s('D1', 'detour', 'Lựa chọn kép', pt(22.19823, 113.547, 40, 'Praça do Tap Seac'), [pt(22.19823, 113.547, 40, 'Praça do Tap Seac'), pt(22.19613, 113.549345, 30, 'Khoảng sân rộng ở Tap Seac')]),
+        s('L3', 'route_info', 'Lộ trình 3', pt(22.1962, 113.54633, 25, 'Jardim Vasco da Gama')),
+        s('T2', 'challenge', 'Thử thách 2', pt(22.1962, 113.54633, 25, 'Jardim Vasco da Gama')), // a typed place name (SPEC §17.42)
+        s('PS', 'pit_stop', 'Về đích', pt(22.1962, 113.54633, 25, 'Jardim Vasco da Gama')),
       ],
       vehicles: { corridorMeters: 150, minDistanceFromCheckpoint: 100, initialPerSegment: [0, 1], spawnIntervalMinutes: 3, spawnChance: 0.3, maxAvailablePerSegment: 1, decoyRatio: 0.4, noSpawnNearPlayerMeters: 120, abandonMeters: 200, abandonSeconds: 60, bikeParking: { offsetMeters: 20, maxBikes: 6 } },
-      bundled: ['paris-demo', 'mini'],
+      bundled: ['macao-demo', 'mini'],
       issues: [{ level: 'blank', where: 'Lộ trình 1', message: 'chưa có mật thư (ô trống)' }],
       media: ['test-gia.jpg', 'test-gia-2.jpg'], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45,
     },

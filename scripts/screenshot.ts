@@ -220,7 +220,7 @@ Object.assign(PRESETS, {
 
 // [B] demo leg start spots (startSpot, as the server sends welcome.start); mat / box views mid Pont d'Iéna (a deck over the
 // Seine: the placement ray must pick the deck; the demo Pit Stop's centre is ON the Louvre glass pyramid)
-const DEMO_LEG = JSON.parse(readFileSync(join(root, 'worker/legs/paris-demo.json'), 'utf8')) as Leg;
+const DEMO_LEG = JSON.parse(readFileSync(join(root, 'worker/legs/macao-demo.json'), 'utf8')) as Leg;
 const startAt = (n: number) => {
   const s = startSpot(DEMO_LEG, n);
   return [s.x, s.z, (s.yaw * 180) / Math.PI].map((v) => +v.toFixed(2)).join(',');
@@ -330,7 +330,7 @@ if (existsSync(join(dataDir, 'index.json'))) {
     }
   }
   // Street level at the demo leg destinations (eye 1.7 m), facing the landmark of that step.
-  const leg = JSON.parse(readFileSync(join(root, 'worker/legs/paris-demo.json'), 'utf8')) as { steps: { id: string; destination?: { lat: number; lon: number } }[] };
+  const leg = JSON.parse(readFileSync(join(root, 'worker/legs/macao-demo.json'), 'utf8')) as { steps: { id: string; destination?: { lat: number; lon: number } }[] };
   const FACING: Record<string, [string, number]> = {
     L1: ['arc', 8], L2: ['eiffel', 6], L3: ['eiffel', 35], L4: ['invalides', 4], L5: ['orsay', 8], L6: ['pyramid', 6],
   };

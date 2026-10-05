@@ -90,7 +90,8 @@ const maxY = (a: ArrayLike<number>) => ys(a).reduce((m, y) => Math.max(m, y), -I
 const minY = (a: ArrayLike<number>) => ys(a).reduce((m, y) => Math.min(m, y), Infinity);
 
 describe('g1 models (public/models)', () => {
-  it('each model file ≤ 8 MB (limit 25 MB) and its outline lies in the chunk MODELS names', () => {
+  // Leg 2: Paris landmark, no Macao data (the Eiffel / Arc outlines in their Paris chunks)
+  it.skip('each model file ≤ 8 MB (limit 25 MB) and its outline lies in the chunk MODELS names', () => {
     for (const m of MODELS) {
       expect(statSync(new URL(m.url, PUBLIC)).size).toBeLessThan(8 * 2 ** 20);
       expect(load(m.id).rec).toBeDefined();
@@ -125,7 +126,8 @@ describe('g1 models (public/models)', () => {
 });
 
 describe('g1 colliders on the OSM outlines', () => {
-  it('Eiffel: 4 legs to the 1st floor only, open and walkable under the tower', () => {
+  // Leg 2: Paris landmark, no Macao data
+  it.skip('Eiffel: 4 legs to the 1st floor only, open and walkable under the tower', () => {
     const { out, pose } = load('eiffel');
     const [x, y, z, s] = [pose.x, pose.y + G.sink, pose.z, pose.scale];
     expect(finite(out)).toBe(true);
@@ -142,7 +144,8 @@ describe('g1 colliders on the OSM outlines', () => {
     expect(hits(out, [x, y + 3, z], [x + diag[0]!, y + 3, z + diag[1]!])).toBe(true); // a leg on the diagonal
   });
 
-  it('Arc: 49.54 m, main passage along the Champs-Élysées axis and transverse passage open, tomb near LOD', () => {
+  // Leg 2: Paris landmark, no Macao data
+  it.skip('Arc: 49.54 m, main passage along the Champs-Élysées axis and transverse passage open, tomb near LOD', () => {
     const { out, pose } = load('arc');
     const [x, y, z] = [pose.x, pose.y + G.sink, pose.z];
     const { ux, uz } = pose.frame;
@@ -165,7 +168,8 @@ describe('g1 colliders on the OSM outlines', () => {
   });
 
   // Phase 8C fix A: the scan's round steps are solid (no sinking half a body into them), the pedestal box hugs the scan
-  it('Flamme: round granite steps as colliders, pedestal box ±pedestalSize / 2, nothing beyond the steps', () => {
+  // Leg 2: Paris landmark, no Macao data
+  it.skip('Flamme: round granite steps as colliders, pedestal box ±pedestalSize / 2, nothing beyond the steps', () => {
     if (!G8.flamme.enabled) return;
     const { out, pose } = load('flamme');
     const F = L.g2.flamme;
@@ -188,7 +192,8 @@ describe('g1 colliders on the OSM outlines', () => {
 });
 
 describe('Flamme scan (models/lm-flamme.glb)', () => {
-  it('≤ 41k triangles, pedestal + flame without debris, as tall as g2 far model (≈ 3.5 m, en.wikipedia)', async () => {
+  // Leg 2: Paris landmark, no Macao data
+  it.skip('≤ 41k triangles, pedestal + flame without debris, as tall as g2 far model (≈ 3.5 m, en.wikipedia)', async () => {
     if (!G8.flamme.enabled) return;
     const t = await glbTriangles('models/lm-flamme.glb');
     const { rec, pose } = load('flamme');

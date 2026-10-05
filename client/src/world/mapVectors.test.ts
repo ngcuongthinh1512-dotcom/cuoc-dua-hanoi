@@ -19,7 +19,8 @@ describe('roadClass', () => {
   });
 });
 
-// 0_0 = Concorde (spawn), 10_0 = densest chunk (188 buildings), -1_0 = Pont de la Concorde (0_0 has no bridge).
+// Leg 1 (Paris): 0_0 = Concorde (spawn), 10_0 = densest chunk (188 buildings), -1_0 = Pont de la Concorde. Leg 2: the same keys are
+// just three real chunks (0_0 Largo do Senado's, 10_0 on the east coast, -1_0 the Porto Interior); bridge chunks below.
 describe.skipIf(!existsSync(join(dir, '10_0.json')))('mapVectors (real chunks)', () => {
   for (const key of ['0_0', '10_0', '-1_0']) {
     it(`${key}: every building ring, positive widths, own buffers, ≤ 1 ms`, () => {
@@ -46,12 +47,12 @@ describe.skipIf(!existsSync(join(dir, '10_0.json')))('mapVectors (real chunks)',
     });
   }
 
-  it('keeps road bridge decks, drops the metro viaducts', () => {
-    const m = mapVectors(load('-1_0'), ctx('-1_0'));
+  it('keeps road bridge decks, drops the rail viaducts', () => {
+    const m = mapVectors(load('2_1'), ctx('2_1'));
     const decks = [...m.roads.kind].filter((k) => k & BRIDGE);
-    expect(decks.length).toBe(5); // Pont de la Concorde: carriageway + cycleways + footways
+    expect(decks.length).toBe(5); // the Viaduto de S. Francisco: three primary decks + two footways (Leg 1: Pont de la Concorde, -1_0)
     expect(decks.some((k) => (k & 7) === RoadClass.major)).toBe(true);
-    // -11_4: two metro viaduct pieces (line 6 towards Bir-Hakeim) and nothing else on a deck
-    expect([...mapVectors(load('-11_4'), ctx('-11_4')).roads.kind].filter((k) => k & BRIDGE)).toEqual([]);
+    // -1_-11: six rail viaduct pieces (the Zhuhai line, north of the peninsula) and nothing else on a deck (Leg 1: -11_4, Line 6)
+    expect([...mapVectors(load('-1_-11'), ctx('-1_-11')).roads.kind].filter((k) => k & BRIDGE)).toEqual([]);
   });
 });

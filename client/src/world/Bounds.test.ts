@@ -8,12 +8,12 @@ beforeAll(() => RAPIER.init());
 
 describe('edgeDistance', () => {
   it('is the distance to the nearest edge, negative outside', () => {
-    const w = latLonToWorld(48.86, B.west);
+    const w = latLonToWorld(22.19, B.west);
     expect(edgeDistance(w.x + 25, w.z)).toBeCloseTo(25, 6);
     expect(edgeDistance(w.x - 10, w.z)).toBeCloseTo(-10, 6);
-    const n = latLonToWorld(B.north, 2.32);
+    const n = latLonToWorld(B.north, 113.54);
     expect(edgeDistance(n.x, n.z + 7)).toBeCloseTo(7, 6);
-    expect(edgeDistance(0, 0)).toBeGreaterThan(1000); // Concorde is well inside
+    expect(edgeDistance(0, 0)).toBeGreaterThan(1000); // the origin (Largo do Senado) is well inside
   });
 });
 

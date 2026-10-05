@@ -459,8 +459,8 @@ export class Traffic {
       const k = 1 + T.rankFactor * (traffic.rank[this.roads.kind(this.way(d))] ?? 0);
       if (ring && this.isRing(d)) return T.ring * k;
       if (th < T.straightRad) return T.straight * k;
-      // a side turn only from the kerb lane (right) / the inner lane (left); ring exits from any lane (ponytail, header)
-      if (nl > 1 && !ring && (a.dx * b.dz - a.dz * b.dx > 0 ? lane !== 0 : lane !== nl - 1)) return 0;
+      // a side turn only from the kerb lane (right, or left with driveLeft) / the inner lane (the other turn); ring exits from any lane (ponytail, header)
+      if (nl > 1 && !ring && ((a.dx * b.dz - a.dz * b.dx > 0) !== traffic.driveLeft ? lane !== 0 : lane !== nl - 1)) return 0;
       return (th < T.backRad ? T.side : T.back) * k;
     };
     let w = cand.map(weight);

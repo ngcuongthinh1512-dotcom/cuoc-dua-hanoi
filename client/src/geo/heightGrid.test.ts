@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { latLonToWorld } from '@race/shared';
+import { latLonToWorld, RACE_BBOX } from '@race/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { terrain } from '../config.ts';
 import { flatHeightGrid, type HeightGrid, heightAt, loadHeightGrid, parseHeightGrid } from './heightGrid.ts';
 
-// Synthetic DEM: the plane 30 m + 0.01·x − 0.02·z on a coarse 50 m grid covering the whole bbox.
+// Synthetic DEM: the plane 30 m + 0.01·x − 0.02·z on a coarse 50 m grid covering the whole bbox (Macao: x −1.3…2.7 km, z −2.7…2.0 km).
 function planeDem() {
-  const header = { minX: -3000, minZ: -2000, width: 131, height: 101, cellSize: 50 };
+  const header = { minX: -3000, minZ: -4000, width: 131, height: 161, cellSize: 50 };
   const view = new DataView(new ArrayBuffer(header.width * header.height * 2));
   for (let j = 0; j < header.height; j++) {
     for (let i = 0; i < header.width; i++) {
@@ -39,8 +39,8 @@ describe('heightGrid', () => {
     expect(g.cell).toBe(terrain.cell);
     expect(Math.abs(g.minX % g.cell)).toBe(0);
     expect(Math.abs(g.minZ % g.cell)).toBe(0);
-    const sw = latLonToWorld(48.845, 2.285);
-    const ne = latLonToWorld(48.878, 2.36);
+    const sw = latLonToWorld(RACE_BBOX.south, RACE_BBOX.west);
+    const ne = latLonToWorld(RACE_BBOX.north, RACE_BBOX.east);
     expect(g.minX).toBeLessThanOrEqual(sw.x - terrain.margin);
     expect(g.minZ).toBeLessThanOrEqual(ne.z - terrain.margin);
     expect(g.minX + (g.cols - 1) * g.cell).toBeGreaterThanOrEqual(ne.x + terrain.margin);
@@ -54,7 +54,7 @@ describe('heightGrid', () => {
     const g = parseHeightGrid(header, bin);
     expect(g.cell).toBe(terrain.cell);
     expect(heightAt(g, 0, 0)).toBe(0);
-    for (const [x, z] of [[1234, -567], [-2000, 1500], [2.5, 7.5]] as const) {
+    for (const [x, z] of [[1234, -567], [-1000, 1500], [2.5, 7.5]] as const) {
       expect(heightAt(g, x, z)).toBeCloseTo(0.01 * x - 0.02 * z, 1); // dm quantisation
     }
   });
@@ -74,15 +74,15 @@ describe('heightGrid', () => {
   });
 
   const dir = join(import.meta.dirname, '../../public/data');
-  it.skipIf(!existsSync(join(dir, 'elevation.bin')))('real DEM: obelisk y = 0, the Seine lies below Concorde', () => {
+  it.skipIf(!existsSync(join(dir, 'elevation.bin')))('real DEM: Largo do Senado (origin) y = 0, the sea lies below it, Fortaleza do Monte is up the hill', () => {
     const g = parseHeightGrid(JSON.parse(readFileSync(join(dir, 'elevation.json'), 'utf8')), readFileSync(join(dir, 'elevation.bin')));
     const at = (lat: number, lon: number) => {
       const p = latLonToWorld(lat, lon);
       return heightAt(g, p.x, p.z);
     };
-    expect(at(48.86548, 2.32115)).toBeCloseTo(0, 5);
-    expect(at(48.86365, 2.31354)).toBeLessThan(-3); // Pont Alexandre III, over the river
-    expect(at(48.8738, 2.295)).toBeGreaterThan(20); // Étoile is up the hill
+    expect(at(22.19355, 113.5394)).toBeCloseTo(0, 5);
+    expect(at(22.19, 113.5625)).toBeLessThan(-3); // the Outer Harbour, east of the peninsula
+    expect(at(22.1963, 113.5423)).toBeGreaterThan(15); // Fortaleza do Monte is up the hill
     expect(g.h.every(Number.isFinite)).toBe(true);
   });
 });

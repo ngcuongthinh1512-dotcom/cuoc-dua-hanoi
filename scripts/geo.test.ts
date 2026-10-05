@@ -37,12 +37,12 @@ describe('tileGrid', () => {
   });
 
   it('puts each point in the tile its world coordinates fall in', () => {
-    const p = latLonToWorld(48.8584, 2.2945); // Eiffel
+    const p = latLonToWorld(22.19758, 113.54086); // Ruínas de São Paulo (Leg 2: was the Eiffel Tower)
     const t = tiles.find((t) => t.ix === Math.floor(p.x / 500) && t.iz === Math.floor(p.z / 500))!;
-    expect(48.8584).toBeGreaterThan(t.latLon.south);
-    expect(48.8584).toBeLessThan(t.latLon.north);
-    expect(2.2945).toBeGreaterThan(t.latLon.west);
-    expect(2.2945).toBeLessThan(t.latLon.east);
+    expect(22.19758).toBeGreaterThan(t.latLon.south);
+    expect(22.19758).toBeLessThan(t.latLon.north);
+    expect(113.54086).toBeGreaterThan(t.latLon.west);
+    expect(113.54086).toBeLessThan(t.latLon.east);
   });
 });
 
@@ -57,11 +57,11 @@ describe('DEM helpers', () => {
     expect(lonLatToPixel(0, 0, 0)).toEqual({ px: 128, py: 128 });
     expect(lonLatToPixel(-180, 85.0511287798, 1).py).toBeCloseTo(0, 3);
     // OSM wiki slippy-map formula: y = (1 − ln(tan φ + sec φ) / π) / 2 · 2^z
-    const phi = (48.86548 * Math.PI) / 180;
+    const phi = (22.19355 * Math.PI) / 180;
     const y = ((1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2) * 2 ** 14;
-    const concorde = lonLatToPixel(2.32115, 48.86548, 14);
-    expect(concorde.py / 256).toBeCloseTo(y, 9);
-    expect([Math.floor(concorde.px / 256), Math.floor(concorde.py / 256)]).toEqual([8297, 5635]);
+    const senado = lonLatToPixel(113.5394, 22.19355, 14); // Leg 2: the origin, Largo do Senado (was the Concorde obelisk)
+    expect(senado.py / 256).toBeCloseTo(y, 9);
+    expect([Math.floor(senado.px / 256), Math.floor(senado.py / 256)]).toEqual([13359, 7155]);
   });
 
   it('interpolates between pixel centres', () => {

@@ -160,7 +160,7 @@ describe.concurrent('Phase 8 (workerd)', () => {
     for (const s of [a2, host, h2]) s.close();
   }, 120_000);
 
-  it('S3: approved while riding 300 m away, the bike stays the team\'s; host.review from a team socket closes it (4400)', async () => {
+  it('S3 (SPEC §17.32 / §17.34): approved while riding 300 m away, the walk-only L2 leaves the bike where the team stands, free; host.review from a team socket closes it (4400)', async () => {
     const race = 'p8-bike';
     const { host, teams, socks: [a] } = await newRace(race, 1);
     const id = teams[0]!.id;
@@ -169,13 +169,14 @@ describe.concurrent('Phase 8 (workerd)', () => {
     const bike = ((await host.until((m) => m.t === 'bikes' && m.list.length)) as { list: { id: string }[] }).list[0]!;
     a!.send({ t: 'bike', op: 'claim', id: bike.id });
     expect(await a!.until((m) => m.t === 'bike')).toMatchObject({ ok: true });
-    p = await walkTo(a!, p, off(p, 0, -300), 25, 'bike'); // north, away from T1's place
+    const far = off(p, 0, -300); // north, away from T1's place
+    p = await walkTo(a!, p, far, 25, 'bike');
     answer(a!, 'T1', '42');
     await card(a!, (c) => c.status === 'pending');
     review(host, id, 'T1', 'approve');
-    await step(a!, 'L2'); // a walk-only route: standing in T1's place on foot would have racked the bike
+    await step(a!, 'L2'); // a walk-only route received = off the bike wherever the team is (§17.32): racked at the team's trusted pose, 300 m from T1's place
     const st = (await host.until((m) => m.t === 'host.state' && m.teams[0].step === 2)) as unknown as HostState;
-    expect(st.bikes.find((b) => b.id === bike.id)).toMatchObject({ owner: id, rider: true, parked: false });
+    expect(st.bikes.find((b) => b.id === bike.id)).toMatchObject({ owner: null, rider: false, parked: true, x: expect.closeTo(far.x, 0), z: expect.closeTo(far.z, 0) });
     a!.send({ t: 'host.review', team: id, step: 'L2', op: 'note', note: 'x' });
     expect(await a!.until(() => false, 3000)).toEqual({ closed: 4400 });
     host.close();

@@ -9,8 +9,25 @@ const ctx: BuildCtx = { key: '0_0', bounds: chunkBounds('0_0'), height: (x) => x
 const build = (c: ChunkData = fixture) => buildBuildings(c, ctx);
 const bucket = (out: ReturnType<typeof build>, m: string) => out.meshes.find((b) => b.material === m) as MeshBucket;
 
+// Leg 2 (Macao): config buildings.haussmannHeight = [0, 0] switches the Haussmann style off (windowed boxes, flat roofs: only the
+// wall + roof buckets). The style code stays for Leg 1, so this file builds the fixture with the Paris range [12, 35] and has one
+// test for the Macao setting.
+const MACAO_STYLE = [...B.haussmannHeight];
+B.haussmannHeight = [12, 35];
+
 describe('BuildingBuilder', () => {
   const out = build();
+
+  it('Leg 2 setting (haussmannHeight [0, 0]): no Haussmann style: only the wall and roof buckets, no balcony / shopfront', () => {
+    B.haussmannHeight = MACAO_STYLE;
+    try {
+      const macao = build();
+      expect(macao.meshes.map((b) => b.material).sort()).toEqual(['roof', 'wall']);
+      expect(macao.colliders).toHaveLength(1);
+    } finally {
+      B.haussmannHeight = [12, 35];
+    }
+  });
 
   it('emits the 4 buckets with the vertex-colour rule, and one collider', () => {
     expect(out.meshes.map((b) => b.material).sort()).toEqual(['balcony', 'roof', 'shopfront', 'wall']);

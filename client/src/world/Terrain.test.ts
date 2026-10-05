@@ -111,11 +111,13 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
     }
   });
 
-  it('carved grid has no NaN and a Seine below its quays', () => {
+  it('carved grid has no NaN and a sea (a river: true polygon) below its quays', () => {
     expect(grid.h.every(Number.isFinite)).toBe(true);
     const level = riverLevel(grid, water);
-    expect(level).toBeLessThan(-3); // the Seine sits several metres below the Concorde (y = 0)
-    expect(grid.h.reduce((a, b) => Math.min(a, b))).toBeCloseTo(level - T.riverDepth, 4);
+    expect(level).toBeLessThan(-3); // the sea sits many metres below Largo do Senado (y = 0): −21 (the Seine: −5.5 below the Concorde)
+    expect(heightAt(grid, 2382, 393)).toBeCloseTo(level - T.riverDepth, 4); // the carved bed, mid Outer Harbour
+    // Leg 2: the DEM's own sea floor beyond the carved polygons goes deeper (−36), Paris had nothing below the carved bed
+    expect(grid.h.reduce((a, b) => Math.min(a, b))).toBeLessThanOrEqual(level - T.riverDepth + 1e-4);
   });
 
   it('Rapier heightfield matches heightAt within 2 cm', async () => {

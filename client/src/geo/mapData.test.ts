@@ -43,42 +43,44 @@ describe.skipIf(!hasData)('real map data', () => {
     expect(polys.filter((p) => !(ringArea(p.outer) >= 2) || (p.holes ?? []).some((h) => !(ringArea(h) < 0)))).toEqual([]);
   });
 
-  it('12 distinct avenues touch the Place Charles de Gaulle roundabout', () => {
+  it('4 distinct streets touch the Praça de Ferreira do Amaral roundabout', () => {
     const roads = all('roads');
-    const ring = roads.filter((r) => r.name === 'Place Charles de Gaulle');
+    const NAME = '亞馬喇前地 Praça de Ferreira do Amaral';
+    const ring = roads.filter((r) => r.name === NAME && r.roundabout);
+    expect(ring.length).toBeGreaterThan(0);
     expect(ring.every((r) => r.roundabout)).toBe(true);
     const v = new Set(ring.flatMap((r) => r.pts.flatMap((_, i) => (i % 2 ? [] : [`${r.pts[i]},${r.pts[i + 1]}`]))));
     const names = new Set(
-      roads.filter((r) => r.name?.startsWith('Avenue ') && r.pts.some((_, i) => i % 2 === 0 && v.has(`${r.pts[i]},${r.pts[i + 1]}`))).map((r) => r.name),
+      roads.filter((r) => r.name && r.name !== NAME && r.pts.some((_, i) => i % 2 === 0 && v.has(`${r.pts[i]},${r.pts[i + 1]}`))).map((r) => r.name),
     );
-    expect(names.size).toBe(12);
+    expect([...names].sort()).toEqual(['仙德麗街 Rua Cidade de Sintra', '友誼大馬路 Avenida da Amizade', '嘉樂庇總督大橋 Ponte Governador Nobre de Carvalho', '蘇亞利斯博士大馬路 Avenida Doutor Mário Soares']);
   });
 
-  it('the Champs-Élysées carriageways lie within 30 m of the Étoile → Concorde line', () => {
-    const [a, b] = [W(48.8738, 2.295), W(48.86548, 2.32115)];
+  it('the Avenida de Horta e Costa carriageways lie within 30 m of the straight line between their ends', () => {
+    const [a, b] = [W(22.2053, 113.54422), W(22.20034, 113.54999)];
     const [dx, dz] = [b.x - a.x, b.z - a.z];
     const len = Math.hypot(dx, dz);
-    // The cycleway looping around the Rond-Point shares the name and swings up to ~30 m off the axis.
     const notCar = new Set(['cycleway', 'footway', 'path', 'pedestrian', 'steps']);
-    const pts = all('roads').filter((r) => r.name === 'Avenue des Champs-Élysées' && !notCar.has(r.kind)).flatMap((r) => r.pts);
+    const pts = all('roads').filter((r) => r.name === '高士德大馬路 Avenida de Horta e Costa' && !notCar.has(r.kind)).flatMap((r) => r.pts);
     expect(pts.length).toBeGreaterThan(20);
     let maxDev = 0;
     for (let i = 0; i < pts.length; i += 2) maxDev = Math.max(maxDev, Math.abs((pts[i]! - a.x) * dz - (pts[i + 1]! - a.z) * dx) / len);
     expect(maxDev).toBeLessThan(30);
   });
 
-  it('Pont Alexandre III spans the Seine', () => {
-    const bridge = all('bridges').find((b) => b.name === 'Pont Alexandre III');
-    expect(bridge).toBeDefined();
-    expect(overRiver(...midpoint(bridge!.pts))).toBe(true);
+  it('the Ponte Governador Nobre de Carvalho spans the sea (a river: true polygon)', () => {
+    const pieces = all('bridges').filter((b) => b.name === '嘉樂庇總督大橋 Ponte Governador Nobre de Carvalho');
+    expect(pieces.length).toBeGreaterThan(0);
+    expect(pieces.some((b) => overRiver(...midpoint(b.pts)))).toBe(true);
   });
 
-  it('the Eiffel Tower → Trocadéro segment crosses the river', () => {
-    const [a, b] = [W(48.8584, 2.2945), W(48.862, 2.288)];
+  it('the Wanzai shore → Macao peninsula segment crosses the Porto Interior', () => {
+    const [a, b] = [W(22.20468, 113.52797), W(22.20468, 113.53379)];
     const hits = Array.from({ length: 101 }, (_, k) => overRiver(a.x + ((b.x - a.x) * k) / 100, a.z + ((b.z - a.z) * k) / 100));
     expect(hits.some(Boolean)).toBe(true);
     expect(hits[0] || hits[100]).toBe(false);
-    expect(overRiver(W(48.853, 2.3499).x, W(48.853, 2.3499).z)).toBe(false); // Notre-Dame: Île de la Cité is a hole
+    expect(overRiver(W(22.17954, 113.53171).x, W(22.17954, 113.53171).z)).toBe(false); // an islet is a hole of the sea polygon
+    expect(overRiver(0, 0)).toBe(false); // Largo do Senado
   });
 
   it('chunk format v2', () => {
@@ -86,12 +88,20 @@ describe.skipIf(!hasData)('real map data', () => {
     expect(load().chunks.every((c) => c.v === 2)).toBe(true);
   });
 
-  it('every registry landmark resolves in the data; the Arc de Triomphe centroid is within 30 m of the SPEC point', () => {
+  it('every registry landmark resolves in the data (Leg 2: the registry is empty, so none is tagged); the skyline towers are there', () => {
     const marks = all('buildings').filter((b) => b.landmark);
     const found = new Set(marks.map((b) => b.landmark));
     expect(LANDMARKS.filter((d) => (d.osm.length || d.zone) && !found.has(d.id)).map((d) => d.id)).toEqual([]);
     expect(LANDMARKS.filter((d) => !d.osm.length && !d.zone && !(d.at && d.height)).map((d) => d.id)).toEqual([]); // skyline
     expect([...found].filter((id) => !LANDMARKS.some((d) => d.id === id))).toEqual([]);
+    const sky = read<SkylineData>('skyline.json');
+    expect(sky.towers.length).toBeGreaterThan(20);
+    expect(sky.towers.every((t) => t.height >= 60 && ringArea(t.outer) > 0)).toBe(true);
+  });
+
+  // Leg 2: Paris landmark, no Macao data (the Arc centroid, Notre-Dame's 81+ parts)
+  it.skip('the Arc de Triomphe centroid is within 30 m of the SPEC point; Notre-Dame is its 81+ parts', () => {
+    const marks = all('buildings').filter((b) => b.landmark);
     const [x, z] = ringCentroid(marks.find((b) => b.landmark === 'arc')!.outer);
     const p = W(48.8738, 2.295);
     expect(Math.hypot(x - p.x, z - p.z)).toBeLessThan(30);
@@ -99,24 +109,25 @@ describe.skipIf(!hasData)('real map data', () => {
     const nd = marks.find((b) => b.landmark === 'notre-dame')!;
     expect(nd.parts!.length).toBeGreaterThan(75);
     expect(Math.max(...nd.parts!.map((q) => q.height ?? 0))).toBeCloseTo(96, 0);
-    const sky = read<SkylineData>('skyline.json');
-    expect(sky.towers.length).toBeGreaterThan(20);
-    expect(sky.towers.every((t) => t.height >= 60 && ringArea(t.outer) > 0)).toBe(true);
   });
 
-  it('parts are kept only inside their landmark outline; zone points sit near their landmark', () => {
+  it('parts are kept only inside their landmark outline', () => {
     const bad: string[] = [];
     for (const b of all('buildings')) {
       if (!b.landmark && (b.parts || b.points)) bad.push(`non-landmark with parts/points`);
       for (const q of b.parts ?? []) if (!inPoly(b, ...ringCentroid(q.outer))) bad.push(`${b.landmark} part outside`);
     }
     expect(bad).toEqual([]);
+  });
+
+  // Leg 2: Paris landmark, no Macao data (the Concorde obelisk's zone points)
+  it.skip('zone points sit near their landmark (obelisk: rostral columns, city statues)', () => {
     const ob = all('buildings').find((b) => b.landmark === 'obelisk')!;
     expect(ob.points!.filter((q) => q.sub?.startsWith('rostral')).length).toBeGreaterThanOrEqual(8); // Concorde rostral columns
     expect(ob.points!.filter((q) => q.kind === 'artwork' && q.r).length).toBeGreaterThanOrEqual(8); // 8 city statues
   });
 
-  it('long bridge chains are split per chunk into continuous pieces (Line 6 viaduct shows along its length)', () => {
+  it('long bridge chains are split per chunk into continuous pieces (the rail viaduct shows along its length)', () => {
     const pieces = load().chunks.flatMap((c) => c.bridges.filter((b) => b.chain).map((b) => ({ ...b, key: c.key })));
     const chains = new Map<string, typeof pieces>();
     for (const q of pieces) chains.set(q.chain!.ends.join(','), [...(chains.get(q.chain!.ends.join(',')) ?? []), q]);
@@ -132,16 +143,16 @@ describe.skipIf(!hasData)('real map data', () => {
         if (k + 1 < list.length && Math.abs(list[k + 1]!.chain!.s0 - end) < 0.2) expect(q.pts.slice(-2)).toEqual(list[k + 1]!.pts.slice(0, 2));
       }
     }
-    const metro = [...chains.values()].filter((l) => l[0]!.kind === 'subway' && l[0]!.layer === 2);
-    expect(Math.max(...metro.map((l) => new Set(l.map((q) => q.key)).size))).toBeGreaterThan(5);
+    const viaduct = [...chains.values()].filter((l) => l[0]!.kind === 'rail' && l[0]!.layer === 2); // Leg 1: the Line 6 metro viaduct (kind subway)
+    expect(Math.max(...viaduct.map((l) => new Set(l.map((q) => q.key)).size))).toBeGreaterThan(5);
   });
 
-  it('leg destinations L1–L6 are not inside a building (the Eiffel Tower footprint is walkable, SPEC §17.4)', () => {
-    const leg = read<{ steps: { id: string; destination?: { lat: number; lon: number } }[] }>('../../../worker/legs/paris-demo.json', import.meta.url);
+  it('leg destinations L1–L6 are not inside a building', () => {
+    const leg = read<{ steps: { id: string; destination?: { lat: number; lon: number } }[] }>('../../../worker/legs/macao-demo.json', import.meta.url);
     const dests = leg.steps.filter((s) => /^L[1-6]$/.test(s.id) && s.destination);
     expect(dests.length).toBe(6);
     const walkable = new Set(['bridge', 'fountain', 'artwork']); // landmark outlines that are not buildings
-    const blocking = all('buildings').filter((b) => b.landmark !== 'eiffel' && !walkable.has(b.kind));
+    const blocking = all('buildings').filter((b) => !walkable.has(b.kind));
     for (const s of dests) {
       const { x, z } = W(s.destination!.lat, s.destination!.lon);
       expect(blocking.filter((b) => inPoly(b, x, z)).map((b) => b.kind), s.id).toEqual([]);

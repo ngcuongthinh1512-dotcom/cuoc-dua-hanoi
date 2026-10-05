@@ -2,9 +2,9 @@
   "id": "louvre",
   "title": "Chặng phòng Louvre để test (NỘI DUNG GIẢ)",
   "start": {
-    "name": "Cầu Bir-Hakeim – lối đi bộ dưới cầu cạn metro, phía Passy",
-    "lat": 48.85585,
-    "lon": 2.28744,
+    "name": "Largo do Pagode da Barra – trước đền A-Ma",
+    "lat": 22.18647,
+    "lon": 113.53097,
     "yawDeg": 33,
     "spreadMeters": 5
   },
@@ -18,9 +18,9 @@
       "label": "Lộ trình Louvre",
       "clue": "(GIẢ) Tới sân lớn có kim tự tháp kính.",
       "destination": {
-        "name": "Cour Napoléon, phía tây kim tự tháp",
-        "lat": 48.86085,
-        "lon": 2.3348,
+        "name": "Praça de Ferreira do Amaral – phía bắc",
+        "lat": 22.18816,
+        "lon": 113.543014,
         "radius": 20,
         "yawDeg": 90
       }
@@ -220,9 +220,9 @@
       "label": "Lộ trình 4",
       "clue": "(GIẢ) Về đích dưới khải hoàn môn nhỏ.",
       "destination": {
-        "name": "Cạnh Arc du Carrousel",
-        "lat": 48.86155,
-        "lon": 2.3334,
+        "name": "Praça de Ferreira do Amaral – cạnh vòng xoay",
+        "lat": 22.18886,
+        "lon": 113.542019,
         "radius": 20
       }
     },
@@ -231,17 +231,24 @@
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Cạnh Arc du Carrousel",
-        "lat": 48.86155,
-        "lon": 2.3334,
+        "name": "Praça de Ferreira do Amaral – cạnh vòng xoay",
+        "lat": 22.18886,
+        "lon": 113.542019,
         "radius": 20
       },
       "announce": {
         "npc": "(GIẢ) {tên đội} về đích thứ {n} tại Arc du Carrousel!",
         "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
         "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại Arc du Carrousel.",
-        "first": { "npc": "(GIẢ) {tên đội} về nhất tại Arc du Carrousel!", "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội." },
-        "out": { "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.", "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}", "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}." }
+        "first": {
+          "npc": "(GIẢ) {tên đội} về nhất tại Arc du Carrousel!",
+          "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
+        },
+        "out": {
+          "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.",
+          "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}",
+          "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}."
+        }
       }
     }
   ]

@@ -1,4 +1,4 @@
-name = "cuoc-dua-paris"
+name = "cuoc-dua-macao"
 main = "src/index.ts"
 compatibility_date = "2026-09-25"
 
@@ -17,4 +17,4 @@ new_sqlite_classes = ["RaceRoom"]
 
 [[r2_buckets]]
 binding = "MEDIA"
-bucket_name = "cuoc-dua-paris-media"
+bucket_name = "cuoc-dua-macao-media"

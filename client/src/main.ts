@@ -45,7 +45,6 @@ import { bboxCorners, createBoundsWalls, edgeDistance } from './world/Bounds.ts'
 import { createBuildingMaterials } from './world/BuildingBuilder.ts';
 import type { ToWorker } from './world/buildTypes.ts';
 import { ChunkManager } from './world/ChunkManager.ts';
-import { createSkyline } from './world/landmarks/g5.ts';
 import { createLandmarkMaterials } from './world/landmarks/index.ts';
 import { createLandmarkModels } from './world/landmarks/models.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
@@ -150,7 +149,8 @@ async function start() {
   // 3. Sky, lights, fog · 4. water · 5. streamed chunks.
   const sky = createSky(scene, camera, (x, z) => heightAt(grid, x, z));
   const waterObj = water && attempt('createWater', () => createWater(scene, water, grid));
-  attempt('createSkyline', () => scene.add(createSkyline(skyline, (x, z) => heightAt(grid, x, z)))); // Sacré-Cœur, Montparnasse, La Défense
+  // Leg 2: the Paris skyline (Sacré-Cœur, Montparnasse, La Défense) is gone; Taipa / Cotai towers from skyline.json come in a later step
+  void skyline;
   const materials = withFallbacks(
     Object.assign(
       {},

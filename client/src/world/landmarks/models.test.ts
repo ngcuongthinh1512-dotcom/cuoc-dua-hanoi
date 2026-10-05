@@ -11,7 +11,8 @@ const PUBLIC = new URL('../../../public/', import.meta.url);
 afterEach(() => vi.unstubAllGlobals());
 
 describe('createLandmarkModels', () => {
-  it('missing GLB → console.warn and an LOD holding only the procedural stand-in', async () => {
+  // Leg 2: Paris landmark, no Macao data (reads the Arc's Paris chunk)
+  it.skip('missing GLB → console.warn and an LOD holding only the procedural stand-in', async () => {
     const arc = MODELS.find((m) => m.id === 'arc')!;
     const chunk = readFileSync(new URL(`data/chunks/${arc.key}.json`, PUBLIC), 'utf8');
     vi.stubGlobal('fetch', async (url: string | URL | Request) =>

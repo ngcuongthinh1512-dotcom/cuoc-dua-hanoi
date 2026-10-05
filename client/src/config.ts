@@ -34,10 +34,11 @@ export const physics = {
   gravity: { x: 0, y: -9.81, z: 0 },
 };
 
-// Default view: ~60 m above Concorde, a little behind the obelisk, looking toward the Arc de Triomphe.
-const ARC = latLonToWorld(48.8738, 2.295);
+// Default view (Leg 2): ~60 m above Largo do Senado (the world origin), a little behind it, looking toward the Ruínas de São Paulo.
+// (name kept from Leg 1, where this was the Arc de Triomphe)
+const ARC = latLonToWorld(22.19753, 113.5408);
 const toArc = Math.hypot(ARC.x, ARC.z);
-const SPAWN_BACK = 120; // m east of the obelisk, so the obelisk is in view
+const SPAWN_BACK = 120; // m behind the origin, so Largo do Senado is in view
 
 export const flyCamera = {
   baseSpeed: 20, // m/s
@@ -140,7 +141,7 @@ export const buildings = {
   baseSink: 0.5, // m: walls start this far below the lowest ring vertex, so slopes show no gap
   groundSpan: 3, // m: the ground a building's height counts from is at most this far below its highest ring vertex
   haussmannKinds: ['yes', 'apartments', 'residential', 'commercial', 'retail', 'office', 'hotel'],
-  haussmannHeight: [12, 35], // m, min/max height for the Haussmann style
+  haussmannHeight: [0, 0], // m, min/max height for the Haussmann style; Leg 2 (Macao): [0, 0] = never (windowed boxes, flat roofs); Leg 1 Paris: [12, 35]
   shopfrontHeight: 4.5, // m, ground floor
   mansardHeight: 4, // m, zinc roof band at the top
   mansardInset: 1.2, // m, clamped per vertex to half the shortest edge
@@ -564,7 +565,7 @@ export const movement = {
   bikeSpeedMultiplier: 1.5, // Phase 4: bike speed = footSpeed × this
 };
 
-const SPAWN_OUT = 14; // m from the obelisk toward the Arc: outside its fence (SPEC §17.4: ≥ 8–10 m)
+const SPAWN_OUT = 14; // m from the origin toward the Ruínas de São Paulo
 export const playerSetup = {
   spawn: { x: (ARC.x / toArc) * SPAWN_OUT, z: (ARC.z / toArc) * SPAWN_OUT, yawDeg: (Math.atan2(-ARC.x, -ARC.z) * 180) / Math.PI },
   teamColour: '#d8342c', // test team until login (Phase 6): shirt colour
@@ -829,6 +830,7 @@ export const npcAssets = {
 
 // ── B · traffic sim (npc/traffic.ts, npc/lights.ts, npc/roads.ts bridges) ──
 export const traffic = {
+  driveLeft: true, // Macao drives on the left (Leg 1 Paris: false). npc/roads.ts laneOffset flips the lane side; side-turn lanes + light poles follow
   // highway=* kinds cars drive on (no service: parking entrances, courtyards); npc/roads.ts keeps the largest strongly
   // connected part of them, so no car ever gets stuck in a dead end
   kinds: ['primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'primary_link', 'secondary_link', 'tertiary_link'] as string[],
@@ -949,7 +951,7 @@ export const graphics8c = {
   // [T0] ?quality=low|high > localStorage[storageKey] ('low' | 'high', T1's settings item writes it; reload applies) >
   // auto: 'low' when the WebGL renderer string matches weakGpu (software / integrated GPUs, SPEC §14: ≥ 30 FPS there)
   quality: {
-    storageKey: 'cuoc-dua-paris.quality',
+    storageKey: 'cuoc-dua-macao.quality',
     weakGpu: /swiftshader|llvmpipe|softpipe|basic render|intel(?!.*\barc\b)|mali|adreno|powervr/i,
     lowTexture: 1024, // px: the *_1k.webp variant of a texture (scripts/assets/pipeline.ts) on low quality
     anisotropy: 8, // PBR texture sets (world/textures.ts), clamped to the GPU's maximum
@@ -1109,7 +1111,7 @@ export const locate = {
 //        player/FreeFlyCamera.ts look scaling) ──
 export const menu = {
   sensitivity: { min: 0.25, max: 3, step: 0.05 }, // × the camera's mouseSensitivity (settings slider)
-  storageKey: 'cuoc-dua-paris.settings', // localStorage (per browser; try/catch, defaults when blocked)
+  storageKey: 'cuoc-dua-macao.settings', // localStorage (per browser; try/catch, defaults when blocked)
 };
 export const toasts = {
   seconds: 4, // on screen
@@ -1154,7 +1156,7 @@ export const net = {
 // ── B · client net + remote players + login (net/NetClient.ts, net/RemotePlayers.ts, ui/Login.ts, main.ts) ──
 export const netClient = {
   reconnectMs: [1000, 2000, 4000, 8000, 15000], // backoff per attempt, the last one repeats (SPEC §3: auto reconnect)
-  storageKey: 'cuoc-dua-paris.team-code', // localStorage: the team code is remembered (SPEC §8.10), try/catch
+  storageKey: 'cuoc-dua-macao.team-code', // localStorage: the team code is remembered (SPEC §8.10), try/catch
   remountSeconds: 3, // after an F5 the team that was riding gets back on its bike if it stands on its feet within this (SPEC §8.10)
   gestureGapMs: 500, // a bell / wave is sent at most this often (the server closes > NET.maxMessagesPerSec)
 };

@@ -60,7 +60,8 @@ const CASES: [LandmarkId, number, number | undefined][] = [
   ['opera', 60_000, undefined],
 ];
 
-describe.skipIf(!has)('g3 landmarks (real records)', () => {
+// Leg 2: Paris landmark, no Macao data (Louvre, Concorde, Madeleine, Opéra… OSM records)
+describe.skip('g3 landmarks (real records)', () => {
   for (const [id, budget, top] of CASES) {
     it(`${id}: finite, ≤ ${budget} triangles, has colliders${top ? `, top ${top} m ± 5 %` : ''}`, () => {
       const warn = vi.spyOn(console, 'warn');

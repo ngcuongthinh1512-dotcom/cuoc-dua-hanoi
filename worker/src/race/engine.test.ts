@@ -126,7 +126,7 @@ describe('RaceEngine', () => {
     expect(f.log.filter((l) => !l.startsWith('send'))).toEqual(['sql INSERT INTO step_progress', 'event arrive']);
     const r: ServerMessage[] = [];
     e.onHost({ t: 'host.race', op: 'resume' }, (m) => r.push(m), 30);
-    e.onHost({ t: 'host.leg', id: 'paris-demo' }, (m) => r.push(m), 30);
+    e.onHost({ t: 'host.leg', id: 'macao-demo' }, (m) => r.push(m), 30);
     expect(r).toEqual([{ t: 'host.notice', level: 'error', message: expect.stringContaining('tạm dừng') }, { t: 'host.legResult', ok: false, issues: [expect.objectContaining({ message: expect.stringContaining('race id mới') })] }]);
     f.log.length = 0;
     e.onOp('t0', { t: 'race', op: 'open', step: 'L1' }, at(0, 'bike'), 40);

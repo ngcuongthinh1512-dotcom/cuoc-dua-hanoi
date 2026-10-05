@@ -15,6 +15,10 @@ const MAX_TRIANGLES = 60_000; // mesh triangles per chunk (instanced props not c
 // Chunks holding a landmark (phase2b-assets.md §5): its materials (masonry, metal, gold, glass…) and LOD 'near' buckets.
 const MAX_BUCKETS_LANDMARK = 28;
 const MAX_TRIANGLES_LANDMARK = 250_000;
+// Leg 2 (Macao): the long sea bridges (Sai Van, Ponte da Amizade, the Zhuhai viaducts) put 60–111k triangles into 7 of 323 chunks
+// (slab + railing + deck of a 1–2 km span, 4–14 bridge pieces each, same bucket count): their own budget (docs/reports/leg2-tests-workspaces.md).
+const BRIDGE_PIECES = 4;
+const MAX_TRIANGLES_BRIDGES = 120_000;
 
 describe.skipIf(!has)('all real chunks', () => {
   it('build without errors, NaN or budget overruns', () => {
@@ -31,7 +35,8 @@ describe.skipIf(!has)('all real chunks', () => {
       const triangles = out.meshes.reduce((s, b) => s + b.index.length / 3, 0);
       const lm = chunk.buildings.some((b) => b.landmark);
       if (buckets > (lm ? MAX_BUCKETS_LANDMARK : MAX_BUCKETS)) problems.push(`${key}: ${buckets} draw buckets`);
-      if (triangles > (lm ? MAX_TRIANGLES_LANDMARK : MAX_TRIANGLES)) problems.push(`${key}: ${triangles} triangles`);
+      const cap = lm ? MAX_TRIANGLES_LANDMARK : chunk.bridges.length >= BRIDGE_PIECES ? MAX_TRIANGLES_BRIDGES : MAX_TRIANGLES;
+      if (triangles > cap) problems.push(`${key}: ${triangles} triangles`);
       for (const b of out.meshes) {
         if (![b.position, b.normal, b.uv, b.color].every(finite)) problems.push(`${key} ${b.material}: NaN/Infinity`);
         if (b.index.some((i) => i >= b.position.length / 3)) problems.push(`${key} ${b.material}: index out of range`);

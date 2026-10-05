@@ -1,12 +1,12 @@
 import { latLonToWorld, RACE_BBOX } from '@race/shared';
 import { parseLeg } from '@race/shared/leg';
 import { describe, expect, it } from 'vitest';
-import leg from '../legs/paris-demo.json';
+import leg from '../legs/macao-demo.json';
 import { BUNDLED_LEGS, bundledLeg } from './race/leg.ts';
 
 describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
   it('every bundled leg parses with no error', () => {
-    expect(BUNDLED_LEGS).toEqual(['paris-demo', 'paris-demo-filled', 'mini', 'louvre']);
+    expect(BUNDLED_LEGS).toEqual(['macao-demo', 'macao-demo-filled', 'mini', 'louvre']);
     for (const id of BUNDLED_LEGS) expect(bundledLeg(id)?.id).toBe(id);
   });
 
@@ -16,22 +16,22 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
     expect(new Set(r.issues.map((i) => i.level))).toEqual(new Set(['blank']));
     expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 3 (D1)', 'Bước 5 (T1)', 'Bước 8 (T2)']));
     expect(r.issues.filter((i) => i.where.startsWith('Host duyệt'))).toEqual([]); // SPEC §17.17: no Host Facebook link to fill
-    for (const id of ['paris-demo-filled', 'mini']) expect(parseLeg(bundledLeg(id)).issues).toEqual([]);
+    for (const id of ['macao-demo-filled', 'mini']) expect(parseLeg(bundledLeg(id)).issues).toEqual([]);
   });
 
-  it('starts at the Pont de Bir-Hakeim (SPEC §17.12), not at the obelisk: every bundled leg, within 25 m of its OSM centre', () => {
-    // the walkway under the metro viaduct, Passy side (phase7-fix3-host-tools.md: the OSM centre is the mouth of the island vault)
-    const bh = latLonToWorld(48.85569, 2.28758);
+  it('starts at the Largo do Pagode da Barra in front of the A-Ma Temple (Leg 2 start; SPEC §17.12 = one agreed start): every bundled leg, within 25 m', () => {
+    // Leg 1 (Paris) was the Pont de Bir-Hakeim; Leg 2 (Macao): the square in front of the A-Ma Temple, south tip of the peninsula
+    const start = latLonToWorld(22.18647, 113.53097);
     for (const id of BUNDLED_LEGS) {
       const s = bundledLeg(id)!.start;
       const p = latLonToWorld(s.lat, s.lon);
-      expect(Math.hypot(p.x - bh.x, p.z - bh.z)).toBeLessThan(25);
+      expect(Math.hypot(p.x - start.x, p.z - start.z)).toBeLessThan(25);
     }
   });
 });
 
 // Pure data checks of the demo leg against SPEC §10.1.
-describe('legs/paris-demo.json', () => {
+describe('legs/macao-demo.json', () => {
   const steps = leg.steps;
   const count = (type: string) => steps.filter((s) => s.type === type).length;
 

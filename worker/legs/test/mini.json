@@ -2,9 +2,9 @@
   "id": "mini",
   "title": "Chặng ngắn để test (NỘI DUNG GIẢ)",
   "start": {
-    "name": "Cầu Bir-Hakeim – lối đi bộ dưới cầu cạn metro, phía Passy",
-    "lat": 48.85585,
-    "lon": 2.28744,
+    "name": "Largo do Pagode da Barra – trước đền A-Ma",
+    "lat": 22.18647,
+    "lon": 113.53097,
     "yawDeg": 33,
     "spreadMeters": 5
   },
@@ -15,13 +15,13 @@
       "label": "Lộ trình 1",
       "clue": "(GIẢ) Lên quảng trường có tầm nhìn đẹp nhất ra 'bà đầm sắt'.",
       "destination": {
-        "name": "Sân trước Palais de Chaillot",
-        "lat": 48.86215,
-        "lon": 2.28843,
+        "name": "Largo do Senado",
+        "lat": 22.193455,
+        "lon": 113.539297,
         "radius": 35,
         "bikeParking": {
-          "lat": 48.8625,
-          "lon": 2.2878
+          "lat": 22.1939,
+          "lon": 113.538952
         },
         "yawDeg": 150
       },
@@ -45,13 +45,13 @@
           "r2:test-gia-2.jpg"
         ],
         "location": {
-          "name": "Vườn Trocadéro (phía dưới)",
-          "lat": 48.8605,
-          "lon": 2.2903,
+          "name": "Công viên Vasco da Gama (lối phụ)",
+          "lat": 22.197172,
+          "lon": 113.544817,
           "radius": 30,
           "bikeParking": {
-            "lat": 48.8601,
-            "lon": 2.2899
+            "lat": 22.196628,
+            "lon": 113.544532
           }
         },
         "verification": "host_approval",
@@ -74,9 +74,9 @@
         "mandatory": "walk"
       },
       "destination": {
-        "name": "Chân tháp Eiffel",
-        "lat": 48.8583,
-        "lon": 2.2945,
+        "name": "Praça do Tap Seac",
+        "lat": 22.19823,
+        "lon": 113.547,
         "radius": 40
       }
     },
@@ -98,14 +98,14 @@
               "bảy"
             ],
             "location": {
-              "name": "Phía bắc chân tháp, lối ra sông",
-              "lat": 48.85878,
-              "lon": 2.29469,
+              "name": "Phía bắc quảng trường Tap Seac, cạnh thư viện",
+              "lat": 22.19871,
+              "lon": 113.547135,
               "radius": 15,
               "yawDeg": 135,
               "bikeParking": {
-                "lat": 48.85899,
-                "lon": 2.29478
+                "lat": 22.198992,
+                "lon": 113.547199
               }
             }
           }
@@ -121,13 +121,13 @@
             "verification": "host_approval",
             "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook.",
             "location": {
-              "name": "Bãi cỏ Champ de Mars",
-              "lat": 48.8562,
-              "lon": 2.2978,
+              "name": "Khoảng sân rộng ở Tap Seac",
+              "lat": 22.19613,
+              "lon": 113.549345,
               "radius": 30,
               "bikeParking": {
-                "lat": 48.8558,
-                "lon": 2.2972
+                "lat": 22.19573,
+                "lon": 113.548918
               }
             },
             "referenceAnswers": [
@@ -143,9 +143,9 @@
       "label": "Lộ trình 3",
       "clue": "(GIẢ) Chặng dừng ở giữa cây cầu nối tháp với quảng trường.",
       "destination": {
-        "name": "Giữa cầu Iéna",
-        "lat": 48.8596,
-        "lon": 2.29243,
+        "name": "Jardim Vasco da Gama",
+        "lat": 22.1962,
+        "lon": 113.54633,
         "radius": 25
       }
     },
@@ -154,17 +154,24 @@
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Giữa cầu Iéna",
-        "lat": 48.8596,
-        "lon": 2.29243,
+        "name": "Jardim Vasco da Gama",
+        "lat": 22.1962,
+        "lon": 113.54633,
         "radius": 25
       },
       "announce": {
         "npc": "(GIẢ) {tên đội} về đích thứ {n} tại cầu Iéna!",
         "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
         "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại cầu Iéna.",
-        "first": { "npc": "(GIẢ) {tên đội} về nhất tại cầu Iéna!", "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội." },
-        "out": { "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.", "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}", "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}." }
+        "first": {
+          "npc": "(GIẢ) {tên đội} về nhất tại cầu Iéna!",
+          "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
+        },
+        "out": {
+          "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.",
+          "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}",
+          "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}."
+        }
       }
     }
   ]

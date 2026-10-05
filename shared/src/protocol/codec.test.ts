@@ -124,10 +124,10 @@ describe('frames and JSON messages', () => {
     // SPEC §17.23: no per-team start time any more (v5)
     for (const at of [1_790_000_000_000, null, 'now']) expect(isClientMessage({ t: 'host.team', op: 'startAt', team: 't0', at }, 'host')).toBe(false);
     expect(isClientMessage({ t: 'race', op: 'book' }, 'host')).toBe(false); // the Host socket has no team
-    expect(isClientMessage({ t: 'host.leg', id: 'paris-demo' }, 'host')).toBe(true);
+    expect(isClientMessage({ t: 'host.leg', id: 'macao-demo' }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.leg', json: '{}' }, 'host')).toBe(true);
     expect(isClientMessage({ t: 'host.leg', id: 'a', json: '{}' }, 'host')).toBe(false); // one or the other
-    expect(isClientMessage({ t: 'host.leg', id: 'paris-demo' }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'host.leg', id: 'macao-demo' }, 'team')).toBe(false);
   });
 
   it('Phase 8: answer / accept / branch / open{branch} from a team, host.review from the Host, through a JSON frame', () => {

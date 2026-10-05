@@ -25,6 +25,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import { SPRINT_MULTIPLIER } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, pathPolyline, shortestPath } from '@race/shared/graph';
 import { encodePose, NET, type CardStatus, type ClientMessage, type ClueCard, type HostReview, type HostState, type LouvreView, type PoseSample, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
 
@@ -346,7 +347,7 @@ export function legStats(progress: StepProgressView[], louvreSteps: ReadonlySet<
   return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), correct: n('correct'), louvre: progress.some((p) => louvreSteps.has(p.step)), louvreWrong: n('wrong', lv), louvreCorrect: n('correct', lv), switches: progress.reduce((t, p) => t + p.branchSwitches, 0) };
 }
 
-/** `--leg mini` → the bundled id and its file (for the answers; `paris-demo-filled` = test/paris-demo.filled.json, the id the Host
+/** `--leg mini` → the bundled id and its file (for the answers; `macao-demo-filled` = test/macao-demo.filled.json, the id the Host
  *  page lists); `--leg path/to/leg.json` → the file's text (host.leg {json}). */
 export function legArg(arg: string): { id?: string; json?: string; file: string } {
   if (arg.endsWith('.json')) {
@@ -377,6 +378,10 @@ export interface PlayOptions {
   passAt?: string;
   /** Phase 11 `--full`: this bot stands on the Pit Stop mat but never checks in; it is done when the Host ends the race (BỊ LOẠI). */
   straggler?: boolean;
+  /** Phase 11 `--full`: this bot walks 10 % above the server's speed limit (foot × SPRINT_MULTIPLIER × tolerance, still under the
+   *  trusted-point rate) so a red flag is raised for the Host bot to clear. Since SPEC §17.29 (Shift sprint ×2) a plain bot at
+   *  --speedup 2 stays under that limit and nobody is flagged by accident any more. */
+  speeder?: boolean;
 }
 
 /** One bot plays the whole leg (docs/plans/phase8.md D18): A* walk to each step's zone at 5 Hz × speedup; then, until the
@@ -391,7 +396,9 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
   let [x, z, yaw] = [start.x, start.z, start.yaw];
   const { footSpeed, bikeSpeedMultiplier } = bot.welcome.movement;
   // sim m/s per tick-second; ×speedup = what the server sees, kept under its trusted-point rate (D4) so the bot is never held back
-  const v = Math.min(footSpeed * 0.9, (0.95 * footSpeed * bikeSpeedMultiplier * NET.speedTolerance) / o.speedup);
+  const v = o.speeder
+    ? (1.1 * footSpeed * SPRINT_MULTIPLIER * NET.speedTolerance) / o.speedup
+    : Math.min(footSpeed * 0.9, (0.95 * footSpeed * bikeSpeedMultiplier * NET.speedTolerance) / o.speedup);
   const stepMs = 1000 / NET.sendHz;
   const sendPose = () => sock.send(encodePose({ x, y: 0, z, yaw, mode: 'walk', action: 'none' }));
   const settleGapMs = 400;
@@ -610,7 +617,8 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       const firstChallenge = leg.steps.find((s) => s.type === 'challenge')?.id;
       const penalizeKey = firstChallenge ? `${penalized}|${firstChallenge}|1` : null;
       // Phase 11 `--full` roles (≥ 6 bots): bot 4's first Duyệt at the first challenge is undone (then approved again), bot 5 is let
-      // through there ("Cho qua"), the last bot never checks in (out at the Host's "Kết thúc"); one red flag is cleared when raised.
+      // through there ("Cho qua"), the last bot never checks in (out at the Host's "Kết thúc"); bot 1 speeds on purpose (a red flag)
+      // and the Host bot clears it.
       if (opts.full && (opts.bots < 6 || !firstChallenge)) throw new Error('--full cần ≥ 6 bot và một chặng có thử thách');
       const teamOf = (i: number) => created.teams[existing + i]!.id;
       const straggler = opts.full ? opts.bots - 1 : -1;
@@ -619,7 +627,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       let hostBotOn = true;
       const hostDone = runHostBot(hs, penalizeKey, () => hostBotOn, 150, sc);
       const t0 = Date.now();
-      const play = (b: Bot) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused, louvre, switches: b.i === switcher, louvreRightOnly: opts.louvreRightOnly, passAt: b.i === passBot ? firstChallenge : undefined, straggler: b.i === straggler });
+      const play = (b: Bot) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused, louvre, switches: b.i === switcher, louvreRightOnly: opts.louvreRightOnly, passAt: b.i === passBot ? firstChallenge : undefined, straggler: b.i === straggler, speeder: opts.full && b.i === 0 });
       try {
         // everybody else finished → the Host ends the race → the straggler (standing on the mat) is out and its playLeg returns
         await Promise.all([Promise.all(bots.filter((b) => b.i !== straggler).map(play)).then(() => sc && hs.send({ t: 'host.race', op: 'finish' })), ...bots.filter((b) => b.i === straggler).map(play)]);
@@ -764,7 +772,7 @@ function print(r: SimReport) {
 }
 
 export const USAGE = `Cách dùng: npm run sim -- [tùy chọn]   (bot chơi thử qua WebSocket thật; hướng dẫn: docs/LEG_FORMAT.md mục "Chơi thử tự động")
-  --leg <mã | file.json>  chơi HẾT một chặng: mã chặng có sẵn (mini, paris-demo-filled, paris-demo) hoặc đường dẫn file chặng
+  --leg <mã | file.json>  chơi HẾT một chặng: mã chặng có sẵn (mini, macao-demo-filled, macao-demo) hoặc đường dẫn file chặng
                           (vd. --leg ~/Documents/chang-that/paris-1.json). Không có --leg: bot đi bộ ngẫu nhiên (đo lưu lượng).
                           Bot nhận thử thách, gõ đáp án (đáp án hoặc đáp án tham khảo trong file; nhánh ảnh: "đã gửi bài"), chọn nhánh,
                           một bot đổi nhánh một lần; một Host bot tự duyệt mọi bài chờ và phạt một lần (bài đầu của bot thứ 2 ở thử

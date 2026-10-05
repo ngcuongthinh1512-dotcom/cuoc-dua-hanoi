@@ -2,6 +2,7 @@
 // boxes per step, SQLite before the answer, start times, check-in, ranking, Host leg loading, "Tại điểm này", walk-only
 // bikes, the row budget; then the trusted point (D4: a teleport / respawn into a zone opens nothing) and a restart
 // mid-leg. Teams move only by walking (5 Hz poses) on the fake `nearLeg` (points 60 m apart, fast foot speed).
+import { SPRINT_MULTIPLIER } from '@race/shared';
 import { stepZones } from '@race/shared/leg';
 import { NET, type ClueCard, type HostState, type RaceView, type Welcome } from '@race/shared/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -103,7 +104,7 @@ describe.concurrent('race engine (workerd)', () => {
     expect(await hostSays(host, 'host.legResult')).toEqual({ t: 'host.legResult', ok: true, issues: [] });
     host.send({ t: 'host.leg', json: JSON.stringify(nearLeg()) });
     expect(await hostSays(host, 'host.legResult')).toMatchObject({ ok: true });
-    expect(((await hostSays(host, 'host.state')) as unknown as HostState).leg).toMatchObject({ id: 'near', start: { x: expect.closeTo(LEG_START.x, 1) }, bundled: ['paris-demo', 'paris-demo-filled', 'mini', 'louvre'] });
+    expect(((await hostSays(host, 'host.state')) as unknown as HostState).leg).toMatchObject({ id: 'near', start: { x: expect.closeTo(LEG_START.x, 1) }, bundled: ['macao-demo', 'macao-demo-filled', 'mini', 'louvre'] });
 
     // two teams open their sockets at the same time: start orders 1 and 2, the banner only on that first welcome
     const [a, b0] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
@@ -256,13 +257,15 @@ describe.concurrent('race engine (workerd)', () => {
   it('D4: a jump after standing still, a long respawn or a reconnect far away opens no box and enters no zone', async () => {
     const race = 'race-trust';
     const { host, teams } = await setupRace(server, race, 5);
-    host.send({ t: 'host.leg', id: 'mini' }); // real foot speed (4 m/s): trust rate 6.5 m/s, cap 13 m; L1 915 m away
+    host.send({ t: 'host.leg', id: 'mini' }); // real leg speeds: trust rate = foot × bike × SPRINT × tolerance (22.5 m/s), cap = rate × NET.speedLeadMs; L1 ≈ 1.2 km away
+    const mv = bundledLeg('mini')!.movement;
+    const CAP = (mv.footSpeed * mv.bikeSpeedMultiplier * SPRINT_MULTIPLIER * NET.speedTolerance * NET.speedLeadMs) / 1000 + 1; // was hard-coded 13 + 1 for the pre-§17.29 / pre-×1.5 speeds
     expect(await hostSays(host, 'host.legResult')).toMatchObject({ ok: true });
     const [a, b, c, d, e] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
     host.send({ t: 'host.race', op: 'start' });
     await view(a!, (v) => v.status === 'running');
     const l1 = stepZones(bundledLeg('mini')!)[0]!;
-    // A walks at 4 m/s, stands 3.5 s, then one pose on the L1 box: flagged, the trusted point moves ≤ 13 m
+    // A walks at 4 m/s, stands 3.5 s, then one pose on the L1 box: flagged, the trusted point moves ≤ CAP m
     const sa = W(a!).start!;
     const pa = await walkTo(a!, sa, { x: sa.x + 4, z: sa.z }, 4);
     await sleep(3500);
@@ -296,10 +299,10 @@ describe.concurrent('race engine (workerd)', () => {
     // where the server believes they stand: their welcome after a reconnect
     const [a2, b2, c2, e2] = await Promise.all([0, 1, 2, 4].map((i) => joinTeam(server, race, teams[i]!.code)));
     const dist = (p: { x: number; z: number } | null, q: { x: number; z: number }) => Math.hypot(p!.x - q.x, p!.z - q.z);
-    expect(dist(W(a2!).pose, pa)).toBeLessThanOrEqual(14);
-    expect(dist(W(b2!).pose, sb)).toBeLessThanOrEqual(14);
+    expect(dist(W(a2!).pose, pa)).toBeLessThanOrEqual(CAP);
+    expect(dist(W(b2!).pose, sb)).toBeLessThanOrEqual(CAP);
     expect(dist(W(c2!).pose, { x: sc.x + 20, z: sc.z })).toBeLessThan(0.1);
-    expect(dist(W(e2!).pose, se)).toBeLessThanOrEqual(29 + 14); // one hop + the trust lead, not 174 m
+    expect(dist(W(e2!).pose, se)).toBeLessThanOrEqual(29 + CAP); // one hop + the trust lead, not 174 m
     for (const s of [a2!, b2!, c2!, e2!, c, e, d2, host]) s!.close();
   }, 60_000);
 });

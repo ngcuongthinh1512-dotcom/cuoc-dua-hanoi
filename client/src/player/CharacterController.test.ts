@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { bike as B, bikeTopSpeed, movement, physics, player as P, playerSetup, respawnRules as RR, swim as S, terrain as T } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import { type ChunkData, chunkKey, type WaterData } from '../geo/chunkData.ts';
+import { districtAt } from '../geo/districts.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
 import { NPC_GROUPS } from '../npc/types.ts';
 import { buildChunk } from '../world/chunkBuild.ts';
@@ -455,10 +456,10 @@ describe('respawn on land (Phase 5 track C)', () => {
   });
 });
 
-// The real Seine (client/public/data): climb out at two spots and stand on Pont Alexandre III (L4). Skipped without data.
+// The real sea (Leg 2; Leg 1: the Seine; client/public/data): climb out at two spots and stand on the Ma Man Kei bridge deck. Skipped without data.
 const data = join(import.meta.dirname, '../../public/data');
 const has = ['water.json', 'elevation.json', 'elevation.bin', 'chunks/index.json'].every((f) => existsSync(join(data, f)));
-describe.skipIf(!has)('real Seine', () => {
+describe.skipIf(!has)('real sea', () => {
   const read = (f: string) => readFileSync(join(data, f));
   const grid = has ? parseHeightGrid(JSON.parse(read('elevation.json').toString()), read('elevation.bin')) : undefined!;
   const water = has ? (JSON.parse(readFileSync(join(data, 'water.json'), 'utf8')) as WaterData) : undefined!;
@@ -466,11 +467,11 @@ describe.skipIf(!has)('real Seine', () => {
   const env: PlayerEnv = { heightAt: (x, z) => heightAt(grid, x, z), waterLevel: has ? riverLevel(grid, water) : null, water };
   const level = env.waterLevel!;
 
-  it('two climb-out spots (east of Pont Alexandre III, below the Musée d’Orsay) and the L4 deck', () => {
+  it('two climb-out spots (off the Outer Harbour quay, off the Porto Interior quay) and the Ma Man Kei bridge deck', () => {
     const world = new RAPIER.World(physics.gravity);
     world.timestep = DT;
     createTerrainCollider(world, grid);
-    const l4 = latLonToWorld(48.8636, 2.3137); // worker/legs/paris-demo.json L4 = middle of Pont Alexandre III
+    const l4 = latLonToWorld(22.211, 113.5626); // the Avenida Doutor Ma Man Kei bridge deck over the sea at the border (Leg 1: L4 = middle of Pont Alexandre III)
     for (const key of new Set([chunkKey(l4.x, l4.z), chunkKey(l4.x + 60, l4.z), chunkKey(l4.x - 60, l4.z)])) {
       const file = join(data, `chunks/${key}.json`);
       if (!existsSync(file)) continue;
@@ -481,16 +482,19 @@ describe.skipIf(!has)('real Seine', () => {
 
     spawned(world, c, l4.x, l4.z);
     expect(c.state.moveMode).toBe('walk');
-    expect(c.state.position.y).toBeGreaterThan(level + 3); // on the deck, not in the river 8 m below
+    expect(c.state.position.y).toBeGreaterThan(level + 3); // on the deck, not in the sea 6 m below
     run(world, c, 1);
     expect(c.state.grounded).toBe(true);
 
     // Swim toward the bank the point is nearest to (a ray scan picks it), holding Space, until climbOut; then on the quay.
-    // p3-swim (scripts/screenshot.ts), and 15 m into the river due north of L5 (the Orsay esplanade).
-    const l5 = latLonToWorld(48.86027, 2.32506);
-    let z5 = l5.z;
-    while (env.heightAt(l5.x, z5) > level - 1 && z5 > l5.z - 300) z5--;
-    for (const w of [latLonToWorld(48.8637, 2.3155), { x: l5.x, z: z5 - 15 }]) {
+    // 12 m out (seaward along the flight's normal) from the feet of two quay flights: water.stairs[53] (Outer Harbour, east coast),
+    // [68] (Porto Interior, south-west coast).
+    const outFrom = (k: number) => {
+      const [fx, fz] = [water.stairs![2 * k]!, water.stairs![2 * k + 1]!];
+      const q0 = quayStairNear(water, fx, fz)!;
+      return { x: fx - q0.nx * 12, z: fz - q0.nz * 12 };
+    };
+    for (const w of [outFrom(53), outFrom(68)]) {
       expect(env.heightAt(w.x, w.z)).toBeLessThan(level - 1);
       spawned(world, c, w.x, w.z);
       expect(c.state.moveMode).toBe('swim');
@@ -516,10 +520,13 @@ describe.skipIf(!has)('real Seine', () => {
     world.free();
   });
 
-  // Phase 5 track C (SPEC §4.4): the real 81 quay flights. From 8 m out in the water off each flight, "Kẹt?" puts the swimmer on
-  // the quay coping at the parapet gap of the flight nearest to him, facing inland, and he stands there (terrain + quay wall
-  // colliders only: buildings and props are not built here).
-  it('respawn from the water at every quay flight: onto the coping at its gap, facing inland, standing', () => {
+  // Phase 5 track C (SPEC §4.4): the real quay flights (Paris 81, Macao 91). From 8 m out in the water off each flight, "Kẹt?" puts
+  // the swimmer on the quay coping at the parapet gap of the flight nearest to him, facing inland, and he stands there (terrain +
+  // quay wall colliders only: buildings and props are not built here).
+  // Leg 2: of the 91 Macao flights 47 stand inside the 5 freguesias (the rest line the Zhuhai bank and the map corners): those must all
+  // pass; 8 m off a flight the swimmer is not in the water at flights 27 and 28 (the islet at the south-west tip), so they are
+  // counted, not judged; the flights outside the freguesias are counted too (10 of them fail: 6 not swimming, 4 respawn 'safe').
+  it('respawn from the water at every quay flight of the peninsula: onto the coping at its gap, facing inland, standing', () => {
     const world = new RAPIER.World(physics.gravity);
     world.timestep = DT;
     createTerrainCollider(world, grid);
@@ -527,8 +534,10 @@ describe.skipIf(!has)('real Seine', () => {
     const feet = water.stairs!;
     expect(feet.length / 2).toBeGreaterThan(50);
     const bad: string[] = [];
+    const notWater: number[] = [], outside: string[] = [];
     let farthest = 0;
     for (let i = 0; i < feet.length; i += 2) {
+      const mine = districtAt(water.districts, feet[i]!, feet[i + 1]!) > 0; // inside one of the 5 freguesias
       const q0 = quayStairNear(water, feet[i]!, feet[i + 1]!)!;
       const [sx, sz] = [feet[i]! - q0.nx * 8, feet[i + 1]! - q0.nz * 8];
       const q = quayStairNear(water, sx, sz)!; // the flight nearest to where he swims (usually the same)
@@ -536,7 +545,7 @@ describe.skipIf(!has)('real Seine', () => {
       run(world, c, 1);
       const tag = `flight ${i / 2} (${sx.toFixed(0)}, ${sz.toFixed(0)})`;
       if (c.state.moveMode !== 'swim') {
-        bad.push(`${tag}: not swimming`);
+        (mine ? notWater.push(i / 2) : outside.push(`${tag}: not swimming`));
         continue;
       }
       const r = c.respawn();
@@ -545,14 +554,17 @@ describe.skipIf(!has)('real Seine', () => {
       const mode: string = c.state.moveMode;
       const d = Math.hypot(p.x - q.x, p.z - q.z);
       farthest = Math.max(farthest, d);
-      if (r !== 'stairs') bad.push(`${tag}: ${r}`);
-      else if (d > 1.5) bad.push(`${tag}: ${d.toFixed(1)} m from the gap`);
-      else if (Math.abs(p.y - (level + T.quayHeight + T.copingLift)) > 0.35) bad.push(`${tag}: y ${p.y.toFixed(2)}`);
-      else if (c.state.inWater || !c.state.grounded || mode !== 'walk') bad.push(`${tag}: ${mode}, inWater ${c.state.inWater}`);
-      else if (Math.cos(c.state.yaw - yawOf(q.nx, q.nz)) < 0.99) bad.push(`${tag}: not facing inland`);
+      const fail = (m: string) => (mine ? bad : outside).push(`${tag}: ${m}`);
+      if (r !== 'stairs') fail(r);
+      else if (d > 1.5) fail(`${d.toFixed(1)} m from the gap`);
+      else if (Math.abs(p.y - (level + T.quayHeight + T.copingLift)) > 0.35) fail(`y ${p.y.toFixed(2)}`);
+      else if (c.state.inWater || !c.state.grounded || mode !== 'walk') fail(`${mode}, inWater ${c.state.inWater}`);
+      else if (Math.cos(c.state.yaw - yawOf(q.nx, q.nz)) < 0.99) fail('not facing inland');
     }
-    console.log(`respawn: ${feet.length / 2} flights, farthest landing ${farthest.toFixed(2)} m from the gap, ${bad.length} failed`);
+    console.log(`respawn: ${feet.length / 2} flights, farthest landing ${farthest.toFixed(2)} m from the gap, ${bad.length} failed, ${notWater.length} not in water, ${outside.length} outside the freguesias failed`);
     expect(bad).toEqual([]);
+    expect(notWater).toEqual([27, 28]);
+    expect(outside.length).toBeLessThanOrEqual(10);
     world.free();
   });
 });

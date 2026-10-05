@@ -25,9 +25,9 @@ const put = (name: string, j: unknown) => {
 const runT = (name: string, j: unknown) => checkFile(put(name, j), { root: tmp, map, scanDirs: [] });
 const errors = (r: { issues: { level: string; where: string; message: string }[] }) => r.issues.filter((i) => i.level === 'error').map((i) => `${i.where}: ${i.message}`);
 
-/** A point inside a real solid building near the Louvre, found in the chunk data. */
+/** A point inside a real solid building near Largo do Senado (Leg 2: was near the Louvre), found in the chunk data. */
 function insideBuilding() {
-  const c = latLonToWorld(48.8625, 2.33);
+  const c = latLonToWorld(22.1935, 113.5393);
   const [ci, cj] = chunkKey(c.x, c.z).split('_').map(Number) as [number, number];
   const chunk = { buildings: [] as ChunkData['buildings'] };
   for (const [i, j] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) chunk.buildings.push(...(JSON.parse(readFileSync(join(root, 'client/public/data/chunks', `${ci + i!}_${cj + j!}.json`), 'utf8')) as ChunkData).buildings);
@@ -41,16 +41,16 @@ function insideBuilding() {
 }
 
 describe('leg:check (docs/LEG_FORMAT.md)', () => {
-  it('paris-demo: valid, only blanks (and no error)', () => {
-    const r = run(legs('paris-demo.json'));
+  it('macao-demo: valid, only blanks (and no error)', () => {
+    const r = run(legs('macao-demo.json'));
     expect(r.ok).toBe(true);
     expect(r.issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(r.issues.some((i) => i.level === 'blank')).toBe(true);
-    // only L6 (the SPEC §17.4 point): the start moved off the island vault (walkway under the metro, Passy side), docs/LEG_FORMAT.md §10
-    expect(r.issues.filter((i) => i.level === 'warning').map((i) => i.where)).toEqual(['Bước 9 (L6) › điểm đến']);
+    // Leg 2: no warning at all (Paris had one for L6, the SPEC §17.4 point on the Bir-Hakeim walkway: a bridge over land)
+    expect(r.issues.filter((i) => i.level === 'warning').map((i) => i.where)).toEqual([]);
   });
 
-  it.each(['test/mini.json', 'test/paris-demo.filled.json', 'test/near.json'])('%s: 0 errors on the real map data', (f) => {
+  it.each(['test/mini.json', 'test/macao-demo.filled.json', 'test/near.json'])('%s: 0 errors on the real map data', (f) => {
     const r = run(legs(f));
     expect(errors(r)).toEqual([]);
     expect(r.ok).toBe(true);
@@ -62,16 +62,18 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('summary lists every point with street, district, OSM link and screenshot command', () => {
     const { report } = run(legs('test/mini.json'));
-    expect(report).toContain('Place du Trocadéro, Quận 16');
-    expect(report).toContain('https://www.openstreetmap.org/?mlat=48.86215&mlon=2.28843#map=19/48.86215/2.28843');
-    expect(report).toContain('Vệ tinh: https://www.google.com/maps?q=48.86215,2.28843&t=k&z=19');
+    const l1 = miniJson().steps[0].destination; // L1 = Largo do Senado (Leg 2: was Place du Trocadéro)
+    const [lat, lon] = [l1.lat.toFixed(5), l1.lon.toFixed(5)];
+    expect(report).toContain('Rua do Dr. Soares, Quận 5'); // the street + the district (a freguesia in Macao) of L1
+    expect(report).toContain(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=19/${lat}/${lon}`);
+    expect(report).toContain(`Vệ tinh: https://www.google.com/maps?q=${lat},${lon}&t=k&z=19`);
     // the game's spectator camera 65 m south-up of the point, a mat on it (organiser review: the old preview showed no point)
-    const p = latLonToWorld(48.86215, 2.28843);
+    const p = latLonToWorld(l1.lat, l1.lon);
     const xz = `${+p.x.toFixed(1)},${+p.z.toFixed(1)}`;
-    expect(report).toMatch(new RegExp(`Xem: npm run screenshot -- --path "/\\?cam=${p.x.toFixed(1)},[\\d.]+,${(p.z + 32.5).toFixed(1)},0,-60&boxes=L1,${xz}&mat&npc=0" --name leg-L1\n`));
+    expect(report).toMatch(new RegExp(`Xem: npm run screenshot -- --path "/\\?cam=${+p.x.toFixed(1)},[\\d.]+,${+(p.z + 32.5).toFixed(1)},0,-60&boxes=L1,${xz}&mat&npc=0" --name leg-L1\n`));
     // in game: the clue box, the player 12 m back on the walking route from the start, facing it (verify3 m6: not inside the box)
     // (L1's box faces yawDeg 150: the 5th field of boxes=, docs/plans/phase8.md D17)
-    const g = new RegExp(`Trong game: http://localhost:5173/\\?start=([-\\d.]+),([-\\d.]+),(-?\\d+)&boxes=L1,${xz},,150\n`).exec(report)!;
+    const g = new RegExp(`Trong game: http://localhost:5173/\\?start=([-\\d.]+),([-\\d.]+),(-?\\d+)&boxes=L1,${xz},,${l1.yawDeg}\n`).exec(report)!;
     const [sx, sz, yaw] = [Number(g[1]), Number(g[2]), (Number(g[3]) * Math.PI) / 180];
     const d = Math.hypot(p.x - sx, p.z - sz);
     expect(d).toBeGreaterThan(8);
@@ -80,13 +82,19 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(report).toMatch(/Trong game: [^\n]+&boxes=PS,[-\d.,]+&mat\n/); // the Pit Stop: its mat
     expect(report).toMatch(/Xem: [^\n]+&boxes=start,[-\d.,]+&mat&npc=0" --name leg-start\n/);
     expect(report).toContain('Hướng nhìn lúc vào: la bàn 327° (tây bắc) — "yawDeg": 33');
-    expect(report).toContain('Bãi xe: 48.86250, 2.28780 (cách tâm 60 m)'); // a rack in the file is printed (review 2 F5)
+    const w = latLonToWorld(l1.bikeParking.lat, l1.bikeParking.lon);
+    expect(report).toContain(`Bãi xe: ${l1.bikeParking.lat.toFixed(5)}, ${l1.bikeParking.lon.toFixed(5)} (cách tâm ${Math.round(Math.hypot(w.x - p.x, w.z - p.z))} m)`); // a rack in the file is printed (review 2 F5)
     expect(report).toMatch(/Bước 4 \(D1\/B, detour\)/);
     expect(report).toMatch(/đi bộ ≈ \d+ m/);
   });
 
   it('suggests a bike rack that exists in OSM near a point without one', () => {
-    expect(run(legs('test/paris-demo.filled.json')).report).toMatch(/Gợi ý bãi xe .*"bikeParking": \{ "lat": 48\.\d+, "lon": 2\.\d+ \}/);
+    // Leg 2: Macao OSM has no amenity=bicycle_parking (roadgraph.bikeParking is empty), so the rack is synthetic: 90 m east of
+    // L2 (Praça do Tap Seac, no rack in mini.json), outside its 40 m zone and within the 120 m the suggestion looks
+    const l2 = latLonToWorld(22.19823, 113.547);
+    const graph = Object.assign(Object.create(map.graph), { file: { ...map.graph.file, bikeParking: [Math.round((l2.x + 90) * 10), Math.round(l2.z * 10)] } });
+    const r = checkFile(legs('test/mini.json'), { root, map: { ...map, graph }, scanDirs: [] });
+    expect(r.report).toMatch(/Gợi ý bãi xe \(có sẵn trong OSM, cách 90 m\): "bikeParking": \{ "lat": 22\.\d+, "lon": 113\.\d+ \}/);
   });
 
   it('a detour branch with its own place inside a building is an error', () => {
@@ -105,7 +113,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('bãi xe cách tâm') && i.message.includes('trong vùng'))).toBe(true);
   });
 
-  it('broken file: roadblock, radius 50, point in a Haussmann building, point off the map → the right lines, not ok', () => {
+  it('broken file: roadblock, radius 50, point in a building, point off the map → the right lines, not ok', () => {
     const b = insideBuilding();
     const j = miniJson();
     j.steps[2].destination.radius = 50;
@@ -134,12 +142,12 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(errors(r4).some((x) => x.includes('ngoài bản đồ đua'))).toBe(true);
   });
 
-  it('a point in the middle of the river is a warning; a bad timezone is an error (the server refuses the leg)', () => {
+  it('a point in the middle of the river (Leg 2: the sea, a `river: true` polygon) is a warning; a bad timezone is an error (the server refuses the leg)', () => {
     const j = miniJson();
-    let w = { x: 0, z: 0 };
-    for (let x = -400; x < 400; x += 10) for (let z = 150; z < 500; z += 10) if (map.waterAt(x, z) === 'river' && !map.onBridge(x, z)) w = { x, z };
-    expect(w.z).toBeGreaterThan(0);
-    Object.assign(j.steps[2].destination, worldToLatLon(w.x, w.z)); // somewhere in the Seine
+    const w = latLonToWorld(22.19, 113.5295); // the Inner Harbour
+    expect(map.waterAt(w.x, w.z)).toBe('river');
+    expect(map.onBridge(w.x, w.z)).toBe(false);
+    Object.assign(j.steps[2].destination, { lat: 22.19, lon: 113.5295 }); // somewhere in the sea
     const r = runT('w1.json', j);
     expect(r.ok).toBe(true);
     expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('giữa sông') && i.message.includes('lên mặt cầu'))).toBe(true);
@@ -169,29 +177,32 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('leak scan: an answer equal to a street / landmark name already shipped in the map data is only a warning', () => {
     const j = miniJson();
-    j.steps.find((s: { id: string }) => s.id === 'T1').task.answers = ['Avenue des Champs-Élysées'];
+    const street = '亞婆井斜巷 Calçada do Lilau'; // Leg 2: a road name of the map (bilingual in OSM Macao), shipped in the chunks
+    j.steps.find((s: { id: string }) => s.id === 'T1').task.answers = [street];
     const f = put('leak-street.json', j);
     const r = checkFile(f, { root: tmp, map, scanDirs: [join(root, 'client/public')] });
     expect(r.ok).toBe(true);
     expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('trùng một đáp án'))).toBe(true);
     // ...but a file holding 2+ secrets (a copy of the leg) stays an error
     const dir = mkdtempSync(join(tmpdir(), 'legleak2-'));
-    writeFileSync(join(dir, 'copy.json'), JSON.stringify({ a: 'Avenue des Champs-Élysées', b: 'Khải Hoàn Môn là đáp án khác' }));
-    j.steps.find((s: { id: string }) => s.id === 'T1').task.answers = ['Avenue des Champs-Élysées', 'Khải Hoàn Môn là đáp án khác'];
+    writeFileSync(join(dir, 'copy.json'), JSON.stringify({ a: street, b: 'Đại Tam Ba là đáp án khác' }));
+    j.steps.find((s: { id: string }) => s.id === 'T1').task.answers = [street, 'Đại Tam Ba là đáp án khác'];
     expect(checkFile(put('leak-copy.json', j), { root: tmp, map, scanDirs: [dir] }).ok).toBe(false);
   });
 
-  it('a start on the Bir-Hakeim viaduct over land (chunk bridge polygon) is a warning', () => {
+  it('a start on a pedestrian overpass over land (Av. de Lisboa; the graph\'s bridge edges) is a warning', () => {
+    // Leg 2: Paris had the Bir-Hakeim viaduct over the Île aux Cygnes (a chunk bridge polygon); Macao's chunks hold no bridge
+    // polygon, so the bridge is the footway overpass of the road graph (edge flagged bridge, no water under it)
     const j = miniJson();
-    Object.assign(j.start, { lat: 48.85569, lon: 2.28758 });
-    const p = latLonToWorld(48.85569, 2.28758);
+    Object.assign(j.start, { lat: 22.19051, lon: 113.54417 });
+    const p = latLonToWorld(22.19051, 113.54417);
     expect(map.onBridge(p.x, p.z)).toBe(true);
     expect(map.waterAt(p.x, p.z)).toBe(null);
     const r = runT('bh.json', j);
     // not "does not cross the river" (it does): this part of the deck stands over the island
     expect(r.issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`)).toEqual([expect.stringMatching(/^điểm xuất phát: nằm trên đoạn cầu bắc qua đất \(bờ \/ đảo\)/)]);
-    // step 1 = the start (first clue handed out of game, Bir-Hakeim): the same warning once, and a note that the box opens at once
-    Object.assign(j.steps[0].destination, { lat: 48.85569, lon: 2.28758, radius: 20 });
+    // step 1 = the start (first clue handed out of game): the same warning once, and a note that the box opens at once
+    Object.assign(j.steps[0].destination, { lat: 22.19051, lon: 113.54417, radius: 20 });
     delete j.steps[0].destination.bikeParking;
     const r2 = runT('bh2.json', j);
     expect(r2.issues.filter((i) => i.level === 'warning')).toHaveLength(1);
@@ -200,8 +211,8 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('a point beside a disconnected footpath: the distance is measured to the main walk network', () => {
     const j = miniJson();
-    Object.assign(j.steps[0].destination, { lat: 48.86231, lon: 2.28528, radius: 20 });
-    const w = latLonToWorld(48.86231, 2.28528);
+    Object.assign(j.steps[0].destination, { lat: 22.19699, lon: 113.54838, radius: 20 }); // Leg 2: a path of a separate walk component, ≈ 35 m from the main network
+    const w = latLonToWorld(22.19699, 113.54838);
     expect(map.geo.walk({ x: w.x, z: w.z }, { x: w.x, z: w.z })!.snapB).toBeGreaterThan(20);
     const r = runT('snap.json', j);
     expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('đường đi bộ gần nhất'))).toBe(true);
@@ -223,14 +234,14 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(errors(shipped)).toEqual([expect.stringContaining('nằm trong thư mục client/')]);
   });
 
-  it('a fountain basin is not called a river; a box on a carriageway is a warning', () => {
+  it('a pond / garden basin is not called a river; a box on a carriageway is a warning', () => {
     const j = miniJson();
-    Object.assign(j.steps[0].destination, { lat: 48.8641, lon: 2.29715 }); // Fontaine du palais de Tokyo (water=basin)
-    Object.assign(j.steps[2].destination, { lat: 48.86484, lon: 2.29695 }); // Avenue du Président Wilson, centre line
+    Object.assign(j.steps[0].destination, { lat: 22.20086, lon: 113.5485 }); // Leg 2: the pond of the garden at Ponte das Nove Curvas (a non-river water polygon)
+    Object.assign(j.steps[2].destination, { lat: 22.19417, lon: 113.53889 }); // Avenida de Almeida Ribeiro, centre line
     const w = runT('pond.json', j).issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`);
     expect(w).toContain('Bước 1 (L1) › điểm đến: nằm giữa mặt nước (hồ / bể nước / đài phun nước), đội không đứng được; dời ra chỗ đất cạnh đó');
     expect(w.join('\n')).not.toMatch(/sông|lên mặt cầu/);
-    expect(w).toContain('Bước 3 (L2) › điểm đến: tâm nằm giữa lòng đường xe chạy (Avenue du Président Wilson): hộp mật thư sẽ nằm giữa dòng xe; dời lên vỉa hè / quảng trường cạnh đó');
+    expect(w).toContain('Bước 3 (L2) › điểm đến: tâm nằm giữa lòng đường xe chạy (亞美打利庇盧大馬路 (新馬路) Avenida de Almeida Ribeiro): hộp mật thư sẽ nằm giữa dòng xe; dời lên vỉa hè / quảng trường cạnh đó');
   });
 
   it('inside a building: a name and the nearest outdoor point, never the raw OSM value "(yes)"', () => {
@@ -238,45 +249,42 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const j = miniJson();
     Object.assign(j.steps[2].destination, { lat: b.lat, lon: b.lon });
     const e = errors(runT('in.json', j)).find((m) => m.startsWith('Bước 3 (L2)'))!;
-    expect(e).toMatch(/^Bước 3 \(L2\) › điểm đến: tâm vùng nằm trong một tòa nhà \(điểm ngoài nhà gần nhất: 48\.\d{5}, 2\.\d{5}, cách \d+ m/);
+    expect(e).toMatch(/^Bước 3 \(L2\) › điểm đến: tâm vùng nằm trong một tòa nhà \(điểm ngoài nhà gần nhất: 22\.\d{5}, 113\.\d{5}, cách \d+ m/);
     expect(e).not.toContain('(yes)');
     const m = /gần nhất: ([\d.]+), ([\d.]+)/.exec(e)!;
     Object.assign(j.steps[2].destination, { lat: Number(m[1]), lon: Number(m[2]) }); // the suggestion passes
     expect(errors(runT('in2.json', j))).toEqual([]);
-    const t = miniJson();
-    Object.assign(t.steps[2].destination, { lat: 48.86427, lon: 2.29676 }); // Palais de Tokyo (a landmark): its name
-    expect(errors(runT('in3.json', t))).toEqual([expect.stringMatching(/tòa nhà \(Palais de Tokyo; điểm ngoài nhà gần nhất: /)]);
   });
 
-  it('under the Arc de Triomphe (both passages open in the game) is not inside a building; in a pier it is', () => {
-    const j = miniJson();
-    Object.assign(j.steps[2].destination, { lat: 48.873817, lon: 2.294916 }); // main passage, west mouth
-    expect(errors(runT('arc1.json', j))).toEqual([]);
-    Object.assign(j.steps[2].destination, { lat: 48.873876, lon: 2.295109 }); // transverse passage
-    expect(errors(runT('arc3.json', j))).toEqual([]);
-    Object.assign(j.steps[2].destination, { lat: 48.87387, lon: 2.295225 }); // a pier
-    expect(errors(runT('arc2.json', j))).toEqual([expect.stringMatching(/^Bước 3 \(L2\) › điểm đến: tâm vùng nằm trong một tòa nhà \(Khải Hoàn Môn; điểm ngoài nhà gần nhất: /)]);
+  // Leg 2: LANDMARKS (client/src/geo/landmarks.ts) is empty until the Macao landmarks are registered, so no building carries a
+  // landmark id and the message can only show the outdoor hint. Re-enable with a registered landmark's building.
+  it.skip('inside a landmark building: its name comes first (Palais de Tokyo in Paris)', () => {
+    const t = miniJson();
+    Object.assign(t.steps[2].destination, { lat: 22.19713, lon: 113.54086 }); // TODO Leg 2: a registered landmark (Ruínas de São Paulo?)
+    expect(errors(runT('in3.json', t))).toEqual([expect.stringMatching(/tòa nhà \([^;]+; điểm ngoài nhà gần nhất: /)]);
   });
+
 
   it('a bike rack of a task place / detour branch off the map is an error (review 2 F5: 111 km off passed)', () => {
     const j = miniJson();
-    j.steps[1].task.location.bikeParking.lat = 47.8601;
-    j.steps[3].branches[1].task.location.bikeParking.lon = 3.2972;
+    const [r1, r2] = [j.steps[1].task.location.bikeParking, j.steps[3].branches[1].task.location.bikeParking];
+    r1.lat = 21.8601;
+    r2.lon = 114.2972;
     const r = runT('rack.json', j);
     expect(r.ok).toBe(false);
     expect(errors(r)).toEqual([
-      expect.stringMatching(/^Bước 2 \(T1\) › nhiệm vụ › nơi làm nhiệm vụ › bãi xe: \(47\.8601, 2\.2899\) nằm ngoài bản đồ đua/),
-      expect.stringMatching(/^Bước 4 \(D1\) › nhánh B › nhiệm vụ › nơi làm nhiệm vụ › bãi xe: \(48\.8558, 3\.2972\) nằm ngoài bản đồ đua/),
+      expect.stringMatching(new RegExp(`^Bước 2 \\(T1\\) › nhiệm vụ › nơi làm nhiệm vụ › bãi xe: \\(${r1.lat}, ${r1.lon}\\) nằm ngoài bản đồ đua`)),
+      expect.stringMatching(new RegExp(`^Bước 4 \\(D1\\) › nhánh B › nhiệm vụ › nơi làm nhiệm vụ › bãi xe: \\(${r2.lat}, ${r2.lon}\\) nằm ngoài bản đồ đua`)),
     ]);
     // a destination rack off the map: reported once (shared/src/leg/check.ts says it too)
     const k = miniJson();
-    k.steps[0].destination.bikeParking.lat = 47.8;
+    k.steps[0].destination.bikeParking.lat = 21.8;
     expect(errors(runT('rack2.json', k))).toHaveLength(1);
   });
 
   it('a bike rack inside the map but far from its point (a typo) is a warning with the distance', () => {
     const j = miniJson();
-    Object.assign(j.steps[1].task.location.bikeParking, { lat: 48.8606, lon: 2.29954 }); // ≈ 680 m east of T1, on Rue de l'Université
+    Object.assign(j.steps[1].task.location.bikeParking, { lat: 22.1972, lon: 113.5514 }); // ≈ 680 m east of T1, on Estrada do Engenheiro Trigo
     const r = runT('rack-far.json', j);
     expect(r.ok).toBe(true);
     expect(r.issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`)).toEqual([
@@ -320,12 +328,12 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
   const step = (j: { steps: Step[] }, id: string) => j.steps.find((s) => s.id === id)!;
   const branch = (j: { steps: Step[] }, id: string) => step(j, 'D1').branches.find((b: { id: string }) => b.id === id);
 
-  it('the bundled legs: mini (0 warning) / filled / near have no error; paris-demo only blanks (+ the known L6 warning)', () => {
-    for (const f of ['test/mini.json', 'test/paris-demo.filled.json', 'test/near.json']) expect(lvl(run(legs(f)), 'error')).toEqual([]);
+  it('the bundled legs: mini (0 warning) / filled / near have no error; macao-demo only blanks (Leg 2: no warning, Paris had the L6 one)', () => {
+    for (const f of ['test/mini.json', 'test/macao-demo.filled.json', 'test/near.json']) expect(lvl(run(legs(f)), 'error')).toEqual([]);
     expect(run(legs('test/mini.json')).issues).toEqual([]);
-    const demo = run(legs('paris-demo.json'));
+    const demo = run(legs('macao-demo.json'));
     expect(lvl(demo, 'error')).toEqual([]);
-    expect(lvl(demo, 'warning')).toHaveLength(1);
+    expect(lvl(demo, 'warning')).toEqual([]);
     expect(lvl(demo, 'blank').length).toBeGreaterThan(10);
   });
 
@@ -417,8 +425,10 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
 
   it('the table: branch boxes, the way each box faces, the images to upload, the reference-answer hint', () => {
     const { report } = run(legs('test/mini.json'));
-    expect(report).toMatch(/• Bước 4 \(D1\/A, detour\): Phía bắc chân tháp, lối ra sông — hòm nhánh A — vùng 15 m/);
-    expect(report).toMatch(/• Bước 4 \(D1\/B, detour\): Bãi cỏ Champ de Mars — hòm nhánh B — vùng 30 m/);
+    // the branch places' names come from the leg (mini.json is edited for Macao content: no hard-coded copy of its text)
+    const bp = (id: string) => branch(miniJson(), id).task.location as { name: string; radius: number };
+    expect(report).toContain(`• Bước 4 (D1/A, detour): ${bp('A').name} — hòm nhánh A — vùng ${bp('A').radius} m`);
+    expect(report).toContain(`• Bước 4 (D1/B, detour): ${bp('B').name} — hòm nhánh B — vùng ${bp('B').radius} m`);
     expect(report).not.toMatch(/• Bước 2 \(T1, challenge\)[^\n]*hòm/); // no box at a challenge place
     expect(report).toContain('Hướng hòm: mặt trước quay về la bàn 210° (tây nam), đội đứng phía đó mới đọc được — "yawDeg": 150'); // L1
     expect(report).toContain('Hướng hòm: mặt trước quay về la bàn 225° (tây nam), đội đứng phía đó mới đọc được — "yawDeg": 135'); // D1/A
@@ -463,9 +473,10 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     expect(errors(r1)).toEqual([expect.stringContaining('chứa nguyên văn "42 (bốn mươi hai)')]);
     // a reference answer equal to a landmark name (other case / accents) shipped in a static file: a warning only
     const j = miniJson();
-    j.steps.find((s: { id: string }) => s.id === 'T1').task.referenceAnswers = ['cau alexandre iii'];
+    const placeAnswer = '亞婆井斜巷 calcada do lilau'; // Leg 2: "亞婆井斜巷 Calçada do Lilau" without the cedilla, in lower case (Paris: 'cau alexandre iii')
+    j.steps.find((s: { id: string }) => s.id === 'T1').task.referenceAnswers = [placeAnswer];
     const place = mkdtempSync(join(tmpdir(), 'legref3-'));
-    writeFileSync(join(place, 'x.json'), JSON.stringify({ a: 'cau alexandre iii' }));
+    writeFileSync(join(place, 'x.json'), JSON.stringify({ a: placeAnswer }));
     const r3 = checkFile(put('ref-place.json', j), { root: tmp, map, scanDirs: [place] });
     expect(r3.ok).toBe(true);
     expect(r3.issues.filter((i) => i.where.endsWith('x.json')).map((i) => [i.level, i.message.includes('trùng địa danh có sẵn trong bản đồ (không sao)')])).toEqual([['warning', true]]);
@@ -477,7 +488,7 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
   });
   it('the Host page demo (demoState, shipped in client/dist) copies no text or answer of a bundled leg (R-6: leg:check mini = 0 warnings)', () => {
     const demo = JSON.stringify(demoState());
-    for (const f of ['test/mini.json', 'test/near.json', 'paris-demo.json']) {
+    for (const f of ['test/mini.json', 'test/near.json', 'macao-demo.json']) {
       const parsed = parseLeg(JSON.parse(readFileSync(legs(f), 'utf8')));
       if (!parsed.ok) throw new Error(`${f} invalid`);
       for (const x of [...secretStrings(parsed.leg, 8)]) expect(demo, `${f}: ${x}`).not.toContain(JSON.stringify(x).slice(1, -1));

@@ -13,7 +13,7 @@ describe('Host view', () => {
     const rows = teamRows(demoState());
     expect(rows.map((r) => [r.name, r.status, r.reconnects])).toEqual([['Đội Xanh', 'online', 1], ['Đội Đỏ', 'online', 0], ['Đội Vàng', 'offline', 3], ['Đội Lục', 'offline', 0], ['Đội Tím', 'offline', 1], ['Đội Cam', 'offline', 0], ['Đội Nâu', 'online', 0]]);
     expect(rows[0]!.code).toBe('K7M3QX');
-    expect(rows[0]!.position).toMatch(/^48\.\d+, 2\.\d+$/);
+    expect(rows[0]!.position).toMatch(/^22\.\d+, 113\.\d+$/);
     expect(rows[2]!.lastSeen).toBe('1 phút trước');
     expect(rows[3]).toMatchObject({ lastSeen: '—', position: '—' });
     expect(rows[1]!.flagged).toBe(true);
@@ -122,7 +122,7 @@ describe('Host view', () => {
     const at = (x: number, z: number) => ({ x: expect.closeTo(x, 3), z: expect.closeTo(z, 3) });
     const st = leg.steps;
     expect(points[0]).toEqual(leg.start);
-    // L1, T1 (own location), L2 = D1 branch A (same place), Champ de Mars (branch B), L3 = PS
+    // L1, T1 (own location), L2 = D1 branch A (same place), Khoảng sân rộng ở Tap Seac (branch B), L3 = PS
     expect(points.slice(1)).toEqual([at(st[0]!.x, st[0]!.z), at(st[1]!.x, st[1]!.z), at(st[2]!.x, st[2]!.z), at(st[3]!.branches![1]!.x, st[3]!.branches![1]!.z), at(st[4]!.x, st[4]!.z)]);
     expect(checkpoints).toHaveLength(5);
     expect(checkpoints).toContainEqual(at(st[1]!.x, st[1]!.z)); // a challenge's own location is a checkpoint
@@ -216,9 +216,9 @@ describe('review cards (SPEC §17.42): the match badge and the earlier tries', (
   it('queue rows: the badge, the place name, the wait in ms, "Lần gửi thứ n" with the earlier tries of the same task (same branch, Host notes kept)', () => {
     const rows = queueRows(s, NOW);
     const nau = rows.find((r) => r.name === 'Đội Nâu')!;
-    expect(nau).toMatchObject({ match: 'yes', attempt: 2, stepName: 'Giữa cầu Iéna', waitMs: 20_000, label: 'Thử thách 2', text: 'cau iena', code: 'Đội Nâu-T2' });
+    expect(nau).toMatchObject({ match: 'yes', attempt: 2, stepName: 'Jardim Vasco da Gama', waitMs: 20_000, label: 'Thử thách 2', text: 'cau iena', code: 'Đội Nâu-T2' });
     expect(nau.previous).toEqual([`Lần 1: «Cầu Alma» · bị phạt · ${fmtTime(NOW - 4 * MIN)} · ghi chú: Sai cầu`]);
-    expect(rows.find((r) => r.name === 'Đội Cam')).toMatchObject({ match: 'no', attempt: 1, previous: [], stepName: 'Chân tháp Eiffel' });
+    expect(rows.find((r) => r.name === 'Đội Cam')).toMatchObject({ match: 'no', attempt: 1, previous: [], stepName: 'Praça do Tap Seac' });
     expect(rows.find((r) => r.name === 'Đội Vàng')).toMatchObject({ match: null, attempt: 1, previous: [] }); // a photo: no badge
     // a photo task's earlier submission reads "(đã gửi bài)"; answers of the other branch are another task and do not count
     const twice = withRow(s, 't2', 'D1', { answers: [{ id: 0, text: 'ba', at: NOW - 10 * MIN, status: 'penalized', branch: 'A' }, { id: 1, text: '', at: NOW - 150_000, status: 'pending', branch: 'B' }, { id: 2, text: '', at: NOW - 5 * MIN, status: 'penalized', branch: 'B' }] });

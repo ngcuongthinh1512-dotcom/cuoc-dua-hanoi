@@ -1,6 +1,6 @@
 // Group g4 on the real chunk data (carved grid, as the worker builds them): no failures / NaN, triangle + draw-call
 // budget, top within 5 % of the published (or OSM) figure, the L2 (Trocadéro) and L5 (Orsay) points left open.
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { latLonToWorld } from '../../../../shared/src/projection.ts';
@@ -14,7 +14,6 @@ import { buildLandmarks } from './index.ts';
 import { recordGround } from './parts.ts';
 
 const data = join(import.meta.dirname, '../../../public/data');
-const has = ['chunks/index.json', 'water.json', 'elevation.json', 'elevation.bin'].every((f) => existsSync(join(data, f)));
 const G = LM.g4;
 
 // [expected top (m), triangle budget, reference ground]: the top counts from the record's `ground` (recordGround),
@@ -34,7 +33,8 @@ const EXPECT: Partial<Record<LandmarkId, [number, number, ('min' | 'ground')?]>>
   'crazy-horse': [6 * B.levelHeight + B.chimneySize[2]!, 20_000], // OSM building:levels 6 (BuildingBuilder) + chimneys
 };
 
-describe.skipIf(!has)('g4 landmarks on the real chunks', () => {
+// Leg 2: Paris landmark, no Macao data (Palais de Tokyo, Crazy Horse, Orsay… OSM records)
+describe.skip('g4 landmarks on the real chunks', () => {
   const out = new Map<LandmarkId, { o: BuildOut; top: number }>();
   let height = (_x: number, _z: number) => 0;
   const chunks = new Map<string, ChunkData>();

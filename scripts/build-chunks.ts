@@ -25,6 +25,8 @@ import {
 } from '../client/src/geo/osm.ts';
 import { offsetPolyline } from '../client/src/world/geom.ts';
 import { roadWidth, sidewalkWidth } from '../client/src/world/RoadBuilder.ts';
+import { seaPolygons } from './coast.ts';
+import { PARISHES } from '../client/src/geo/districts.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const { values: args } = parseArgs({
@@ -49,9 +51,9 @@ const WATER_FAIL_BYTES = 1024 * 1024;
 // Phase 5 (docs/plans/phase5.md §3): big-map park overview in water.json (whole map, not per chunk)
 const PARK_TOL = 2; // m, Douglas–Peucker tolerance
 const PARK_MIN_AREA = 400; // m²: smaller park / grass areas (verge strips) are left out of the overview
-/** Arrondissement (SPEC §4.3: boundary=administrative + admin_level=9) → its number 1…20 (ref:INSEE 751xx), else 0. */
+/** Parish (Macao freguesia: boundary=administrative + admin_level=6 + name:pt in PARISHES) → its number 1…5, else 0. */
 const districtNo = (t: Tags | undefined) =>
-  t?.boundary === 'administrative' && t.admin_level === '9' ? Number(t['ref:INSEE'] ?? 0) % 100 : 0;
+  t?.boundary === 'administrative' && t.admin_level === '6' ? PARISHES.indexOf((t['name:pt'] ?? '') as (typeof PARISHES)[number]) + 1 : 0;
 
 const t0 = performance.now();
 const stats: Record<string, number> = {};
@@ -206,6 +208,7 @@ const roadWays: RoadWay[] = [];
 const stairWays: StairRec[] = [];
 const bridgeWays: BridgeWay[] = [];
 const water: WaterData['polygons'] = [];
+const coastLines: XZ[] = []; // natural=coastline ways (Leg 2: the sea, see coast.ts)
 const districts: NonNullable<WaterData['districts']> = [];
 const parkOverview: XZ[] = [];
 const quayLines: XZ[] = [];
@@ -224,6 +227,10 @@ for (const { geometry: g, p } of features) {
   const tags = p.tags ?? {};
   const shape = g.type === 'Point' ? 'point' : g.type === 'LineString' ? 'line' : g.type === 'Polygon' || g.type === 'MultiPolygon' ? 'area' : undefined;
   if (!shape) continue; // MultiLineString / GeometryCollection: routes, not used
+  if (tags.natural === 'coastline' && g.type === 'LineString') {
+    coastLines.push(line(g.coordinates));
+    continue;
+  }
   const district = districtNo(tags);
   if (district) {
     if (g.type === 'Polygon' || g.type === 'MultiPolygon') for (const poly of polygons(g)) {
@@ -339,6 +346,11 @@ for (const { geometry: g, p } of features) {
       if (clipped) water.push({ river, ...clipped });
     }
   }
+}
+// Leg 2: the sea is filed as a river (carveRiver, quays, quay stairs, bridge gaps all key on `river`).
+for (const sea of seaPolygons(coastLines, waterRect)) {
+  water.push({ river: true, outer: sea.outer, ...(sea.holes.length && { holes: sea.holes }) });
+  bump('water.sea');
 }
 for (const d of LANDMARKS) if ((d.osm.length || d.zone) && !seenLandmarks.has(d.id)) console.warn(`[build-chunks] landmark ${d.id} not found in the OSM cache`);
 

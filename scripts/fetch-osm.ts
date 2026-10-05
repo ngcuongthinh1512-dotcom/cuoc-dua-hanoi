@@ -13,12 +13,12 @@ import { type Bbox, tileGrid } from './geo.ts';
 
 const TILE_SIZE = 500; // m
 const DELAY_MS = 2500; // between requests (≥ 2 s, Overpass etiquette)
-const MAX_ATTEMPTS = 6;
+const MAX_ATTEMPTS = 10; // Macao is dense: the main server rate-limits (429) often
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter', // fallback mirror (VK Maps)
 ];
-const USER_AGENT = 'cuoc-dua-paris/0.1 (game dev; one-time fetch)';
+const USER_AGENT = 'cuoc-dua-macao/0.1 (game dev; one-time fetch)';
 
 const root = join(import.meta.dirname, '..');
 const { values: args } = parseArgs({ options: { out: { type: 'string', default: join(root, '.cache/osm') } } });
@@ -50,12 +50,15 @@ out geom;`;
 // the ~30 m DEM cannot resolve. rel[historic][type!=route] drops e.g. the ~70 km Roman road Paris–Dreux.
 const globalQuery = (b: Bbox) => {
   const B = bb(b);
+  // coastline ways with a node anywhere in the chunk grid (RACE_BBOX + up to 250 m) so the sea polygon has no gap at its edge
+  const PAD = 0.005; // deg ≈ 550 m
+  const C = bb({ south: b.south - PAD, west: b.west - PAD, north: b.north + PAD, east: b.east + PAD });
   return `[out:json][timeout:180][maxsize:268435456];
 (
-  wr[natural=water]${B}; way[waterway~"^(river|riverbank)$"]${B};
+  wr[natural=water]${B}; way[waterway~"^(river|riverbank)$"]${B}; way[natural=coastline]${C};
   way[barrier=retaining_wall]${B}; way[man_made~"^(embankment|quay)$"]${B};
   wr[leisure~"^(park|garden)$"]${B}; wr[landuse=grass]${B};
-  rel[boundary=administrative][admin_level=9]${B};
+  rel[boundary=administrative][admin_level=6]${B};
   rel[building]${B}; rel["building:part"]${B}; rel[highway]${B};
   rel[man_made=bridge]${B}; rel[bridge]${B}; rel[tunnel]${B};
   rel[amenity~"^(fountain|bicycle_parking)$"]${B}; rel[natural=tree_row]${B};
@@ -64,8 +67,8 @@ const globalQuery = (b: Bbox) => {
 out geom;`;
 };
 
-// Skyline (SPEC §17.6, phase2b-assets.md §5.7): La Défense towers ≥ 60 m, outside RACE_BBOX; one small query.
-const SKYLINE_BBOX: Bbox = { south: 48.884, west: 2.224, north: 48.898, east: 2.256 };
+// Skyline (SPEC §17.6, phase2b-assets.md §5.7): Taipa / Cotai towers ≥ 60 m, outside RACE_BBOX; one small query.
+const SKYLINE_BBOX: Bbox = { south: 22.128, west: 113.545, north: 22.172, east: 113.600 }; // Taipa + Cotai towers, south of RACE_BBOX
 const skylineQuery = () => {
   const B = bb(SKYLINE_BBOX);
   const tall = '["height"~"^([6-9][0-9]|[1-9][0-9][0-9])([.,][0-9]+)?( ?m)?$"]';

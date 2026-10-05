@@ -181,16 +181,19 @@ describe('Traffic (fixture)', () => {
     expect(cars[3]!.speed).toBeLessThan(0.05);
   });
 
-  it('a roundabout entry waits for the ring, cars run anticlockwise', () => {
+  it('a roundabout entry waits for the ring, cars run anticlockwise (clockwise with traffic.driveLeft)', () => {
     const R = 40, ring = Array.from({ length: 6 }, (_, i) => [R * Math.cos((i * Math.PI) / 3), -R * Math.sin((i * Math.PI) / 3)]);
     const pts = [...ring, [R + 100, 0]]; // node 6: the arm, joining ring node 0
-    const { g, roads } = fixture(pts, [[0, ONE | WayFlag.roundabout, 0, 0, 1, 2, 3, 4, 5, 0], [0, CAR, 0, 6, 0]]);
+    // ring node order = the oneway direction: anticlockwise from above (1, 2, … 5) with right-hand traffic, clockwise (5, 4, … 1) with left-hand
+    const [prev, next] = traffic.driveLeft ? [1, 5] : [5, 1]; // the ring node before / after node 0 along the circulation
+    const order = traffic.driveLeft ? [0, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 0];
+    const { g, roads } = fixture(pts, [[0, ONE | WayFlag.roundabout, 0, ...order], [0, CAR, 0, 6, 0]]);
     const tr = new Traffic(roads, 5);
-    const ringIn = edgeBetween(g, 5, 0), arm = edgeBetween(g, 6, 0);
-    const deIn = 2 * ringIn + (g.edgeA[ringIn] === 5 ? 0 : 1), deArm = 2 * arm + (g.edgeA[arm] === 6 ? 0 : 1);
-    const ringCar = tr.addCar('sedan', ringIn, g.edgeA[ringIn] === 5, g.edgeLength[ringIn]! - 12, 0, 9, []);
-    const enter = tr.addCar('city', arm, g.edgeA[arm] === 6, 70, 0, 5, [2 * edgeBetween(g, 0, 1) + (g.edgeA[edgeBetween(g, 0, 1)] === 0 ? 0 : 1)]);
-    expect(g.edgeA[ringIn]).toBe(5);
+    const ringIn = edgeBetween(g, prev, 0), arm = edgeBetween(g, 6, 0);
+    const deIn = 2 * ringIn + (g.edgeA[ringIn] === prev ? 0 : 1), deArm = 2 * arm + (g.edgeA[arm] === 6 ? 0 : 1);
+    const ringCar = tr.addCar('sedan', ringIn, g.edgeA[ringIn] === prev, g.edgeLength[ringIn]! - 12, 0, 9, []);
+    const enter = tr.addCar('city', arm, g.edgeA[arm] === 6, 70, 0, 5, [2 * edgeBetween(g, 0, next) + (g.edgeA[edgeBetween(g, 0, next)] === 0 ? 0 : 1)]);
+    expect(g.edgeA[ringIn]).toBe(prev);
     expect(ringCar.route[0]).toBe(deIn);
     let crossed = false, waited = false;
     for (let k = 0; k < HZ * 30 && !crossed; k++) {
@@ -204,7 +207,7 @@ describe('Traffic (fixture)', () => {
     }
     expect(crossed).toBe(true);
     expect(waited).toBe(true);
-    // everything stays on edges cars may use: ring edges are oneway anticlockwise
+    // everything stays on edges cars may use: ring edges are oneway in the circulation direction
     for (const c of tr.cars) expect(g.allows(c.route[0]! >> 1, 'car', (c.route[0]! & 1) === 0)).toBe(true);
   });
 
@@ -343,11 +346,12 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(still30 / cars).toBeLessThanOrEqual(0.1);
   }, 240_000);
 
-  it('Étoile: entries wait for gaps, ring cars go anticlockwise, cars leave the ring within 90 s', () => {
-    const name = g.file.names.indexOf('Place Charles de Gaulle');
-    const isRing = (de: number) => g.file.ways[g.edgeWay[de >> 1]!]![3] === name;
+  it('Praça de Jorge Álvares: entries wait for gaps, ring cars go with the ring (clockwise: left-hand traffic), cars leave the ring within 90 s', () => {
+    const name = g.file.names.indexOf('區華利前地 Praça de Jorge Álvares');
+    const isRing = (de: number) => g.file.ways[g.edgeWay[de >> 1]!]![3] === name && !!(g.flags(de >> 1) & WayFlag.roundabout);
     const tr = new Traffic(roads, 2);
-    const a = anchor(-1916.4, -921.7);
+    const nodes = [...g.edgeA.keys()].filter((e) => isRing(2 * e)).flatMap((e) => [g.edgeA[e]!, g.edgeB[e]!]);
+    const a = anchor(nodes.reduce((s, n) => s + g.x[n]!, 0) / nodes.length, nodes.reduce((s, n) => s + g.z[n]!, 0) / nodes.length); // the ring's centre
     tr.step(DT, a, 2, NOPEDS, true);
     const enteredAt = new Map<number, number>();
     const prevRing = new Map<number, boolean>();
@@ -361,7 +365,7 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
         if (was === true && !on) (exits++, enteredAt.delete(c.id));
         prevRing.set(c.id, on);
         if (on) {
-          // anticlockwise seen from above = (x, −z) turning left: the edge must be travelled in its oneway direction
+          // clockwise seen from above (left-hand traffic; anticlockwise on Leg 1): the edge must be travelled in its oneway direction
           if ((c.route[0]! & 1) !== 0) wrong++;
           const t0 = enteredAt.get(c.id);
           if (t0 !== undefined && tr.time - t0 > 90) late++;
@@ -372,7 +376,7 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
         }
       }
     }
-    console.log(`Étoile: ${entries} entries, ${exits} exits, worst ring gap ${worst.toFixed(2)} m`);
+    console.log(`Jorge Álvares: ${entries} entries, ${exits} exits, worst ring gap ${worst.toFixed(2)} m`);
     expect(entries).toBeGreaterThan(3);
     expect(exits).toBeGreaterThan(3);
     expect(wrong).toBe(0);
@@ -380,32 +384,32 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(worst).toBeGreaterThanOrEqual(0);
   }, 120_000);
 
-  it('lights: ≈ 1,100 lit junctions, none on a roundabout, every head faces its arm', () => {
+  it('lights: ≈ 250 lit junctions (Macao; Paris ≈ 1,100), none on a roundabout, every head faces its arm', () => {
     const t0 = performance.now();
     const lights = new TrafficLights(roads);
     const heads = lights.headsNear(0, 0, 1e5);
     const nodes = new Set(heads.map((h) => h.junction));
     console.log(`TrafficLights: ${nodes.size} lit nodes, ${heads.length} heads, ${(performance.now() - t0).toFixed(0)} ms`);
-    expect(nodes.size).toBeGreaterThan(800);
-    expect(nodes.size).toBeLessThan(1500);
+    expect(nodes.size).toBeGreaterThan(200);
+    expect(nodes.size).toBeLessThan(350);
     for (const n of nodes) expect(g.edgesOf(n).some((e) => g.flags(e) & WayFlag.roundabout)).toBe(false);
     for (const h of heads.slice(0, 200)) expect(lights.stop(h.junction, h.edge)).toBeGreaterThan(0);
   });
 
-  it('SignalHead contract: every head around Concorde, Opéra and Rue Royale stands off the carriageway on the right kerb and looks at the oncoming cars', () => {
+  it('SignalHead contract: every head around Largo do Senado, the Praia Grande and the Horta e Costa avenue stands off the carriageway on the driving-side kerb and looks at the oncoming cars', () => {
     const lights = new TrafficLights(roads);
-    const opera = latLonToWorld(48.8706, 2.332), royale = latLonToWorld(48.8676, 2.3236);
-    const heads = [[0, 0], [opera.x, opera.z], [royale.x, royale.z]].flatMap(([x, z]) => lights.headsNear(x!, z!, 300));
+    const praia = latLonToWorld(22.1905, 113.5425), horta = latLonToWorld(22.201, 113.546);
+    const heads = [[0, 0], [praia.x, praia.z], [horta.x, horta.z]].flatMap(([x, z]) => lights.headsNear(x!, z!, 300));
     expect(heads.length).toBeGreaterThan(30);
-    let offRoad = 0, rightSide = 0, facing = 0;
+    let offRoad = 0, rightSide = 0, facing = 0; // rightSide = on the driving-side kerb
     for (const h of heads) {
       const e = h.edge, a = g.edgeA[e]!, b = g.edgeB[e]!, far = g.edgeA[e] === h.junction ? b : a, n = h.junction;
       const [, dist] = segPoint(h.x, h.z, g.x[a]!, g.z[a]!, g.x[b]!, g.z[b]!);
       if (dist >= roads.halfWidth(g.edgeWay[e]!) - 1e-6) offRoad++;
-      // travel direction u = far → junction; right of it = (−uz, ux); the lamps look along (−sin yaw, −cos yaw) = −u
+      // travel direction u = far → junction; right of it = (−uz, ux) (the left kerb with traffic.driveLeft); the lamps look along (−sin yaw, −cos yaw) = −u
       const l = Math.hypot(g.x[n]! - g.x[far]!, g.z[n]! - g.z[far]!), ux = (g.x[n]! - g.x[far]!) / l, uz = (g.z[n]! - g.z[far]!) / l;
       const rx = h.x - g.x[n]!, rz = h.z - g.z[n]!;
-      if (-rx * uz + rz * ux > 0) rightSide++;
+      if ((-rx * uz + rz * ux > 0) !== traffic.driveLeft) rightSide++; // on the driving-side kerb
       if (-Math.sin(h.yaw) * -ux + -Math.cos(h.yaw) * -uz > 0.99) facing++;
     }
     expect([offRoad, rightSide, facing]).toEqual([heads.length, heads.length, heads.length]);
@@ -448,8 +452,10 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
 
   // review2-complete F2: a box zone on the Rue de Rivoli × Castiglione lights (oneway: no way round once on Rivoli) made
   // cars queue inside it (151 → 480 samples, 77 → 252 standing). Sampled every 0.5 s, cars within 20 m of the centre.
-  it('box zone on Rue de Rivoli: after 15 s no car stands in it and almost none drive through (seeds 1, 5)', () => {
-    const p = latLonToWorld(48.8648, 2.3262), zone = { x: 454.2, z: 16.9, r: 20 }; // player 100 m away, zone on the lit junction
+  // Leg 2: the lit junction 2014 of the Macao graph at (421.5, 96.4) (≈ 22.1927, 113.5435; found by scanning the 63 lit junctions
+  // within 900 m of Largo do Senado for one where the spot queues without a zone (seeds 1, 5) and stays clear with one).
+  it('box zone on a busy lit junction (Macao junction 2014): after 15 s no car stands in it and almost none drive through (seeds 1, 5)', () => {
+    const p = { x: 324, z: 74.1 }, zone = { x: 421.5, z: 96.4, r: 20 }; // player 100 m away, zone on the lit junction
     const a = anchor(p.x, p.z);
     for (const seed of [1, 5]) {
       const tr = new Traffic(roads, seed), cr = new Crowd(roads, seed);

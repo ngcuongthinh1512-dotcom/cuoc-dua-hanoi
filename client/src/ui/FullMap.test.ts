@@ -2,7 +2,6 @@
 // FullMap's constructor touches no DOM; open() / update() (canvas) are checked by the p5-fullmap screenshots.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { latLonToWorld } from '@race/shared';
 import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
 import { describe, expect, it, vi } from 'vitest';
 import { fullMap } from '../config.ts';
@@ -71,20 +70,20 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(waterFile))('FullMap (road
   const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
   const water = JSON.parse(readFileSync(waterFile, 'utf8')) as WaterData;
 
-  it('covers the whole map, labels streets around the Concorde without overlaps, click near the waypoint removes it', () => {
+  it('covers the whole map, labels streets around Largo do Senado without overlaps, click near the waypoint removes it', () => {
     const t0 = performance.now();
     const onWaypoint = vi.fn();
     const m = new FullMap(g, water, onWaypoint);
     console.log(`FullMap constructor: ${(performance.now() - t0).toFixed(1)} ms, extent ${m.extent.map(Math.round).join(', ')}`);
-    expect(m.extent[0]).toBeLessThan(-2700);
-    expect(m.extent[2]).toBeGreaterThan(2950);
+    expect(m.extent[0]).toBeLessThan(-1300); // Macao: x −1379 … 2792 (Paris: ±3000)
+    expect(m.extent[2]).toBeGreaterThan(2700);
     const v: MapView = { cx: 0, cz: 0, mpp: 1, w: 1280, h: 720 };
     const t1 = performance.now();
     const ls = m.labels(v, measure);
     console.log(`labels at 1 m/px: ${ls.length} in ${(performance.now() - t1).toFixed(1)} ms: ${ls.slice(0, 8).map((l) => l.text).join(' · ')}`);
     expect(ls.length).toBeGreaterThan(10);
     expect(noOverlaps(ls)).toBe(true);
-    expect(ls.map((l) => l.text)).toContain('Rue Royale');
+    expect(ls.map((l) => l.text)).toContain('亞美打利庇盧大馬路 (新馬路) Avenida de Almeida Ribeiro');
     expect(ls.every((l) => g.file.names.includes(l.text))).toBe(true); // street names only (SPEC §4.6)
 
     Object.assign(m.view, v);
@@ -103,12 +102,11 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(waterFile))('FullMap (road
 
   // Avenues are cut into short OSM ways at every junction: the names must still show (phase5-review2 M1).
   it.each([
-    ['Avenue des Champs-Élysées', 48.8738, 2.295, 1],
-    ['Avenue des Champs-Élysées', 48.8738, 2.295, 2],
-    ['Boulevard Haussmann', 48.8718, 2.3318, 1],
-  ] as const)('names %s around (%f, %f) at %f m/px, no overlaps', (name, lat, lon, mpp) => {
+    ['高士德大馬路 Avenida de Horta e Costa', 681, -825, 1],
+    ['友誼大馬路 Avenida da Amizade', 320, 338, 2],
+    ['亞美打利庇盧大馬路 (新馬路) Avenida de Almeida Ribeiro', 62, -161, 1],
+  ] as const)('names %s around (%d, %d) at %f m/px, no overlaps', (name, x, z, mpp) => {
     const m = new FullMap(g, water, () => {});
-    const { x, z } = latLonToWorld(lat, lon);
     const t0 = performance.now();
     const ls = m.labels({ cx: x, cz: z, mpp, w: 1280, h: 720 }, measure);
     console.log(`${mpp} m/px @ ${name}: ${ls.length} labels in ${(performance.now() - t0).toFixed(1)} ms`);

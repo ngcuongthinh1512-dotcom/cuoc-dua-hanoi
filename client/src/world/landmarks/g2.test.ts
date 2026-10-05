@@ -17,7 +17,8 @@ const data = join(import.meta.dirname, '../../../public/data');
 const has = ['chunks/index.json', 'water.json', 'elevation.json', 'elevation.bin'].every((f) => existsSync(join(data, f)));
 const C = LM.g2;
 
-describe.skipIf(!has)('g2 Seine bridges', () => {
+// Leg 2: Paris landmark, no Macao data (needs the real Paris chunks of Neuf / Arts / Bir-Hakeim)
+describe.skip('g2 Seine bridges', () => {
   const grid = has ? parseHeightGrid(JSON.parse(readFileSync(join(data, 'elevation.json'), 'utf8')), readFileSync(join(data, 'elevation.bin'))) : undefined!;
   if (has) carveRiver(grid, JSON.parse(readFileSync(join(data, 'water.json'), 'utf8')) as WaterData);
   const recs = new Map<LandmarkId, { rec: BuildingRec; ctx: LandmarkCtx }[]>();
