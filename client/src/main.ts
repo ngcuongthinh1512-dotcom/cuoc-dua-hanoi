@@ -15,7 +15,7 @@ import { BikeLink } from './net/bikeLink.ts';
 import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
 import { fakeTeams, fakeTick, parsePeers, RemotePlayers, underground } from './net/RemotePlayers.ts';
-import { fetchMedia, startSession } from './net/session.ts';
+import { fetchMedia, isOnline, startSession } from './net/session.ts';
 import { autoExitLeft, demoLouvre, LouvreRoom, pickChange, preloadArt, ROOM_TEXT, roomCardOf, roomPrompt } from './race/LouvreRoom.ts';
 import { PitHost } from './race/PitStop.ts';
 import { boxInReach, RaceClient } from './race/RaceClient.ts';
@@ -53,6 +53,7 @@ import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
 import { carveRiver, createTerrainCollider, createTerrainMaterials, flattenPads, riverLevel } from './world/Terrain.ts';
 import { createWater } from './world/Water.ts';
 import { createPost } from './world/post.ts';
+import { initTimeOfDay } from './world/night.ts';
 import { FpsWatch, graphics } from './world/graphics.ts';
 import { hideWorld, showWorld } from './world/hideWorld.ts';
 
@@ -107,6 +108,7 @@ async function start() {
   // Phase 6: online (?race= link, PROD) → the login screen comes up now, over the loading world; offline → null at once.
   const query = new URLSearchParams(location.search);
   const sessionP = startSession(query);
+  initTimeOfDay(query, isOnline(query)); // Leg 2 night: before the sky, the post passes and every material
   await RAPIER.init();
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });

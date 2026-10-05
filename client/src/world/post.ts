@@ -10,8 +10,9 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { graphics8c } from '../config.ts';
+import { graphics8c, lighting } from '../config.ts';
 import { graphics } from './graphics.ts';
+import { isNight } from './night.ts';
 
 const P = graphics8c.post;
 
@@ -27,7 +28,8 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Camera
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   // resolution: composer.setSize sets the real one
-  if (P.bloom.strength > 0) composer.addPass(new UnrealBloomPass(new Vector2(256, 256), P.bloom.strength, P.bloom.radius, P.bloom.threshold));
+  const b = isNight() ? lighting.bloom : P.bloom; // night: lamps and windows bloom
+  if (b.strength > 0) composer.addPass(new UnrealBloomPass(new Vector2(256, 256), b.strength, b.radius, b.threshold));
   composer.addPass(new OutputPass());
   if (P.smaa) composer.addPass(new SMAAPass());
   renderer.info.autoReset = false;

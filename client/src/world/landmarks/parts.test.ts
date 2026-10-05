@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildings as B } from '../../config.ts';
 import { type BuildingRec, chunkBounds, type PartRec, type XZ } from '../../geo/chunkData.ts';
-import { LANDMARK_BY_ID, type LandmarkDef } from '../../geo/landmarks.ts';
+import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { buildLandmarks, coverage, generic, type LandmarkCtx } from './index.ts';
 import { type PartLike, pickMaterial, renderPart, roofShape, Sink } from './parts.ts';
@@ -103,12 +103,8 @@ describe('S3DB part renderer', () => {
 });
 
 describe('landmark dispatch', () => {
-  // Leg 2 (Macao): the registry is empty (geo/landmarks.ts), so the dispatch is tested with a stand-in entry, removed afterwards.
-  const STAND_IN: LandmarkDef = { id: 'notre-dame', name: 'Stand-in', group: 'g5', osm: [], view: [250, 300] };
-  beforeAll(() => void LANDMARK_BY_ID.set(STAND_IN.id, STAND_IN));
-  afterAll(() => void LANDMARK_BY_ID.delete(STAND_IN.id));
-  const ctx = (): LandmarkCtx => ({ key: '0_0', bounds: chunkBounds('0_0'), height: flat, def: LANDMARK_BY_ID.get('notre-dame')!, ground: 0, minGround: 0 });
-  const outline: BuildingRec = { outer: rect(0, 0, 40, 20), kind: 'cathedral', height: 10.5, landmark: 'notre-dame' };
+  const ctx = (): LandmarkCtx => ({ key: '0_0', bounds: chunkBounds('0_0'), height: flat, def: LANDMARK_BY_ID.get('leal-senado')!, ground: 0, minGround: 0 });
+  const outline: BuildingRec = { outer: rect(0, 0, 40, 20), kind: 'cathedral', height: 10.5, landmark: 'leal-senado' };
   const tall: PartRec = { outer: rect(0, 0, 40, 20), kind: 'yes', height: 33, roofShape: 'gabled', roofHeight: 10 };
   const maxY = (o: BuildOut) => Math.max(...o.meshes.flatMap((m) => [...m.position].filter((_, i) => i % 3 === 1)));
 
@@ -133,6 +129,6 @@ describe('landmark dispatch', () => {
     const chunk = { v: 2 as const, key: '0_0', roads: [], bridges: [], areas: [], points: [] };
     const out = buildLandmarks({ ...chunk, buildings: [{ ...outline, parts: [tall] }] }, ctx());
     expect(maxY(out)).toBeCloseTo(33, 4);
-    expect(buildLandmarks({ ...chunk, buildings: [{ ...outline, landmark: 'nope' as 'arc' }] }, ctx()).meshes).toEqual([]);
+    expect(buildLandmarks({ ...chunk, buildings: [{ ...outline, landmark: 'nope' as 'leal-senado' }] }, ctx()).meshes).toEqual([]);
   });
 });

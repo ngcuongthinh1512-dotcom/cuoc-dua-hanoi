@@ -13,6 +13,8 @@ import type { MapVectors } from './mapVectors.ts';
 export type MaterialId =
   | 'terrain'
   | 'wall'
+  | 'tenement'
+  | 'curtain'
   | 'shopfront'
   | 'roof'
   | 'balcony'
@@ -35,7 +37,7 @@ export type MaterialId =
 
 /** Buckets of these materials MUST carry a `color` attribute (linear RGB: per-building tint, park green) and their
  *  materials use vertexColors; buckets of every other material MUST NOT. geom.MeshBuffer applies this rule itself. */
-export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'wall', 'shopfront', 'roof', 'masonry', 'metal', 'neon']);
+export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'wall', 'tenement', 'curtain', 'shopfront', 'roof', 'masonry', 'metal', 'neon']);
 
 /** metro = Guimard railings + the stairwell under them, metroMask = the depth-only lid that cuts the ground open over it
  *  (StreetProps.createPropMeshes). Phase 8C (graphics8c.props): bench, cafe (table + 2 chairs), shelter (bus stop),
@@ -49,6 +51,9 @@ export interface MeshBucket {
   normal: Float32Array; // xyz
   uv: Float32Array; // uv
   color?: Float32Array; // rgb, iff VERTEX_COLOR.has(material)
+  // Window facades (BuildingBuilder: wall, tenement, curtain, shopfront): 1 float per vertex, per building: 0 = its windows stay
+  // dark at night, (0, 1] = lit, the value doubling as the building's seed for per-window variation. Shader attribute 'lit'.
+  lit?: Float32Array;
   index: Uint32Array;
   lod?: 'near'; // shown only within landmarks.detailDistance of the camera (ChunkManager); kept apart by mergeBuckets
 }

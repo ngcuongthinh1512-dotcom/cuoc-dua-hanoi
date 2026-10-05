@@ -1,5 +1,5 @@
 // Landmark builder (SPEC §17.6, docs/plans/phase2b-assets.md §5): every BuildingRec with .landmark goes to
-//   1. the group's DetailFn (g1…g5.ts, one file per group agent) if one is registered for its id,
+//   1. the group's DetailFn (m1…m4, mf1, mf2.ts, one file per group agent) if one is registered for its id,
 //   2. else the generic S3DB renderer: its building:part (parts.ts); the outline too when the parts cover less than
 //      landmarks.partCoverage of it (S3DB: an outline with parts is not extruded); no parts → the outline alone.
 // Non-building outlines (bridge decks, fountains, artworks) are drawn by details only. A DetailFn that throws is
@@ -12,11 +12,12 @@ import { buildingHeight } from '../BuildingBuilder.ts';
 import { sceneEnvironmentOn, skyEnvironment } from '../Water.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId } from '../buildTypes.ts';
 import { mergeBuckets } from '../geom.ts';
-import { details as g1 } from './g1.ts';
-import { details as g2 } from './g2.ts';
-import { details as g3 } from './g3.ts';
-import { details as g4 } from './g4.ts';
-import { details as g5 } from './g5.ts';
+import { details as m1 } from './m1.ts';
+import { details as m2 } from './m2.ts';
+import { details as m3 } from './m3.ts';
+import { details as m4 } from './m4.ts';
+import { details as mf1 } from './mf1.ts';
+import { details as mf2 } from './mf2.ts';
 import * as kit from './kit.ts';
 import { parseColour, partHeights, partRings, pickMaterial, recordGround, renderPart, roofShape, Sink } from './parts.ts';
 
@@ -80,7 +81,7 @@ export const helpers = {
 } as const;
 export type Helpers = typeof helpers;
 
-const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...g1, ...g2, ...g3, ...g4, ...g5 };
+const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...m1, ...m2, ...m3, ...m4, ...mf1, ...mf2 };
 
 export const buildLandmarks: Builder = (chunk, ctx) => {
   const outs: BuildOut[] = [];
@@ -144,39 +145,5 @@ export function createLandmarkMaterials(): Partial<Record<MaterialId, Material>>
     bronze: new MeshStandardMaterial({ color: C.bronze, roughness: 0.5, metalness: 0.8, envMap }),
     waterJet: new MeshStandardMaterial({ color: C.waterJet, roughness: 0.2, transparent: true, opacity: 0.6, depthWrite: false }),
     neon: new MeshBasicMaterial({ vertexColors: true, toneMapped: false }), // unlit: reads as light in any sun
-    neonSign: new MeshBasicMaterial({ map: signTexture(), toneMapped: false }),
   };
-}
-
-/** Crazy Horse board: self-drawn "CRAZY HORSE PARIS" in red / pink neon tubes on black (no real logo, SPEC §17.8). */
-function signTexture() {
-  const [W, H] = [1280, 176]; // aspect ≈ board w / h (config g4.crazyHorse.sign)
-  const c = document.createElement('canvas');
-  [c.width, c.height] = [W, H];
-  const g = c.getContext('2d')!;
-  const pink = L.g4.crazyHorse.colours.neon;
-  g.fillStyle = L.g4.crazyHorse.colours.board;
-  g.fillRect(0, 0, W, H);
-  g.strokeStyle = pink;
-  g.lineWidth = 5;
-  g.shadowColor = pink;
-  g.shadowBlur = 18;
-  g.strokeRect(14, 14, W - 28, H - 28); // tube frame
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.font = 'italic 900 104px "Arial Black", Impact, "Helvetica Neue", sans-serif';
-  const text = 'CRAZY HORSE PARIS'; // one line (user choice)
-  const k = Math.min(1, (W - 90) / g.measureText(text).width);
-  g.setTransform(k, 0, 0, 1, W / 2, H / 2 + 6);
-  g.shadowBlur = 28;
-  g.fillStyle = '#ff1a2e'; // red letters with a pink glow and a pale core line (the lit tube)
-  g.fillText(text, 0, 0);
-  g.shadowBlur = 0;
-  g.lineWidth = 3;
-  g.strokeStyle = '#ffc2d8';
-  g.strokeText(text, 0, 0);
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
 }

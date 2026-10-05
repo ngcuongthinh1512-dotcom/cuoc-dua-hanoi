@@ -256,11 +256,9 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(errors(runT('in2.json', j))).toEqual([]);
   });
 
-  // Leg 2: LANDMARKS (client/src/geo/landmarks.ts) is empty until the Macao landmarks are registered, so no building carries a
-  // landmark id and the message can only show the outdoor hint. Re-enable with a registered landmark's building.
-  it.skip('inside a landmark building: its name comes first (Palais de Tokyo in Paris)', () => {
+  it('inside a landmark building: its name comes first (Leal Senado)', () => {
     const t = miniJson();
-    Object.assign(t.steps[2].destination, { lat: 22.19713, lon: 113.54086 }); // TODO Leg 2: a registered landmark (Ruínas de São Paulo?)
+    Object.assign(t.steps[2].destination, { lat: 22.19333, lon: 113.53938 }); // inside the Leal Senado outline (landmark 'leal-senado')
     expect(errors(runT('in3.json', t))).toEqual([expect.stringMatching(/tòa nhà \([^;]+; điểm ngoài nhà gần nhất: /)]);
   });
 

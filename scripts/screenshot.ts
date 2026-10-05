@@ -11,7 +11,7 @@ import { latLonToWorld } from '@race/shared';
 import { type Leg, startSpot } from '@race/shared/leg';
 import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
-import { flyCamera, roads } from '../client/src/config.ts';
+import { flyCamera } from '../client/src/config.ts';
 import { type ChunkData, type ChunkIndex, ringArea } from '../client/src/geo/chunkData.ts';
 import { ringCentroid } from '../client/src/geo/clip.ts';
 import { LANDMARKS } from '../client/src/geo/landmarks.ts';
@@ -51,7 +51,6 @@ const PRESETS: Record<string, string> = {
   // Phase 2 (docs/plans/phase2.md step 0)
   etoile: cam(48.8738, 2.295, 600, 0, -90),
   champs: cam(48.8697, 2.308, 1100, 0, -90),
-  eiffel: cam(48.853, 2.301, 250, 45, -25), // NW toward Trocadéro, the tower in front
   street: cam(48.8703, 2.306, 1.7, yawTo(48.8703, 2.306, 48.8738, 2.295), 1), // Champs-Élysées centre line, facing the Arc
   seine: cam(48.86365, 2.31354, 12, -90, -5), // Pont Alexandre III, facing east (river DEM + 12 m ≈ above the deck)
   edge: cam(48.86, 2.2855, 20, 90, -10), // ~37 m inside the west bbox edge, facing out
@@ -329,10 +328,10 @@ if (existsSync(join(dataDir, 'index.json'))) {
       PRESETS[`lm-${d.id}`] = worldCam(tx + dx * dist, ty + Math.max(30, dist * 0.35), tz + dz * dist, tx, ty, tz);
     }
   }
-  // Street level at the demo leg destinations (eye 1.7 m), facing the landmark of that step.
+  // Street level at the demo leg destinations (eye 1.7 m), facing the landmark of that step (L3 / T / PS: no registered landmark, no preset).
   const leg = JSON.parse(readFileSync(join(root, 'worker/legs/macao-demo.json'), 'utf8')) as { steps: { id: string; destination?: { lat: number; lon: number } }[] };
   const FACING: Record<string, [string, number]> = {
-    L1: ['arc', 8], L2: ['eiffel', 6], L3: ['eiffel', 35], L4: ['invalides', 4], L5: ['orsay', 8], L6: ['pyramid', 6],
+    L1: ['ruinas-sao-paulo', 8], L2: ['leal-senado', 6], L4: ['fortaleza-monte', 4], L5: ['sao-domingos', 8], L6: ['leal-senado', 6],
   };
   for (const s of leg.steps) {
     const f = FACING[s.id];
@@ -340,10 +339,8 @@ if (existsSync(join(dataDir, 'index.json'))) {
     if (!s.destination || !f || !t) continue;
     const p = latLonToWorld(s.destination.lat, s.destination.lon);
     const yaw = (Math.atan2(p.x - t.x / t.w, p.z - t.z / t.w) * 180) / Math.PI;
-    const y = Math.max(ground(p.x, p.z), roads.bridge.riverDeck) + 1.7; // L4 is on a Seine bridge: DEM there < deck
+    const y = ground(p.x, p.z) + 1.7;
     PRESETS[`leg-${s.id}`] = `/?cam=${[p.x, y, p.z, yaw, f[1]].map((v) => +v.toFixed(2)).join(',')}`;
-    if (s.id === 'L4') PRESETS['p3-bridge'] = playerAt(s.destination.lat, s.destination.lon, 0, '&wait=1.5'); // [B] on the deck
-    if (s.id === 'L3') PRESETS['p3-eiffel'] = `/?player=${[p.x, p.z, yaw].map((v) => +v.toFixed(2)).join(',')}&camMode=far`; // under the tower
   }
 }
 const TIMEOUT_MS: Record<string, number> = { topdown: 90_000, 'p4-graph': 90_000, 'p4-swim-exit': 90_000 }; // big views, long simulated waits

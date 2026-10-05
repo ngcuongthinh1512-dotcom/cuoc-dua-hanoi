@@ -5,7 +5,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { flamme } from './flamme.ts';
 import { hdri } from './hdri.ts';
 import { assetPath, type Credit, credits8c, mergeCredits, readManifest8c } from './manifest.ts';
 import { type Ctx, PUBLIC, type Target } from './pipeline.ts';
@@ -18,7 +17,6 @@ export const TARGETS: Record<string, Target> = {
   textures, // [T3] facade / road / terrain PBR sets
   trees, // [T2] plane trees (bark + leaf cards, LODs)
   props, // [T2] Paris street furniture
-  flamme, // [T2] Flamme de la Liberté scan
 };
 
 const { values: opt, positionals } = parseArgs({ args: process.argv.slice(2), options: { assets: { type: 'string' } }, allowPositionals: true, strict: false });

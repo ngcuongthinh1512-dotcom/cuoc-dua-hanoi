@@ -11,13 +11,15 @@ export type V3 = readonly [number, number, number];
 export class MeshBuffer {
   readonly withColor: boolean;
   color: V3 = [1, 1, 1];
+  lit = 0; // stamped like color when withLit (MeshBucket.lit)
+  private readonly l: number[] = [];
   private readonly p: number[] = [];
   private readonly n: number[] = [];
   private readonly t: number[] = [];
   private readonly c: number[] = [];
   private readonly i: number[] = [];
 
-  constructor(readonly material: MaterialId) {
+  constructor(readonly material: MaterialId, readonly withLit = false) {
     this.withColor = VERTEX_COLOR.has(material);
   }
 
@@ -31,6 +33,7 @@ export class MeshBuffer {
     this.n.push(nx, ny, nz);
     this.t.push(u, v);
     if (this.withColor) this.c.push(...this.color);
+    if (this.withLit) this.l.push(this.lit);
     return this.p.length / 3 - 1;
   }
 
@@ -68,6 +71,7 @@ export class MeshBuffer {
       normal: new Float32Array(this.n),
       uv: new Float32Array(this.t),
       ...(this.withColor ? { color: new Float32Array(this.c) } : {}),
+      ...(this.withLit ? { lit: new Float32Array(this.l) } : {}),
       index: new Uint32Array(this.i),
     };
   }
@@ -90,7 +94,7 @@ export function mergeBuckets(buckets: MeshBucket[]): MeshBucket[] {
   const groups = new Map<string, MeshBucket[]>();
   for (const b of buckets) {
     const n = b.position.length / 3;
-    if (b.normal.length !== n * 3 || b.uv.length !== n * 2 || (b.color && b.color.length !== n * 3)) {
+    if (b.normal.length !== n * 3 || b.uv.length !== n * 2 || (b.color && b.color.length !== n * 3) || (b.lit && b.lit.length !== n)) {
       throw new Error(`mergeBuckets: '${b.material}' attribute lengths don't match ${n} vertices`);
     }
     if (!b.index.length) continue;
@@ -102,8 +106,9 @@ export function mergeBuckets(buckets: MeshBucket[]): MeshBucket[] {
   return [...groups.values()].map((list) => {
     const { material, lod } = list[0]!;
     const withColor = list[0]!.color !== undefined;
-    if (list.some((b) => (b.color !== undefined) !== withColor)) {
-      throw new Error(`mergeBuckets: '${material}' buckets mix with and without color`);
+    const withLit = list[0]!.lit !== undefined;
+    if (list.some((b) => (b.color !== undefined) !== withColor || (b.lit !== undefined) !== withLit)) {
+      throw new Error(`mergeBuckets: '${material}' buckets mix with and without color / lit`);
     }
     if (list.length === 1) return list[0]!;
     const cat = (get: (b: MeshBucket) => Float32Array) => {
@@ -125,6 +130,7 @@ export function mergeBuckets(buckets: MeshBucket[]): MeshBucket[] {
       normal: cat((b) => b.normal),
       uv: cat((b) => b.uv),
       ...(withColor ? { color: cat((b) => b.color!) } : {}),
+      ...(withLit ? { lit: cat((b) => b.lit!) } : {}),
       index,
       ...(lod && { lod }),
     };

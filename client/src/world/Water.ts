@@ -22,11 +22,12 @@ import {
   Vector2,
   Vector4,
 } from 'three';
-import { graphics8c, water as W } from '../config.ts';
+import { graphics8c, lighting, water as W } from '../config.ts';
 import type { WaterData } from '../geo/chunkData.ts';
 import { type HeightGrid, heightAt } from '../geo/heightGrid.ts';
 import { triangulate } from './geom.ts';
 import { graphics } from './graphics.ts';
+import { isNight } from './night.ts';
 import { quayMesh, riverLevel } from './Terrain.ts';
 
 const GW = graphics8c.water;
@@ -68,8 +69,9 @@ export const sceneEnvironmentOn = () => graphics().on('sky') && (graphics().qual
 /** Equirect sky gradient; three converts it to a PMREM cube-UV map for the standard material on first use.
  *  Also the reflection of the landmark metals (gold / bronze / metal), which render black without one. */
 export function skyEnvironment(w = 64, h = 32): Texture {
-  const zenith = new Color(W.sky.zenith);
-  const horizon = new Color(W.sky.horizon);
+  const sky = isNight() ? lighting.water : W.sky;
+  const zenith = new Color(sky.zenith);
+  const horizon = new Color(sky.horizon);
   const data = new Uint8Array(w * h * 4);
   const c = new Color();
   const o = { r: 0, g: 0, b: 0 };

@@ -1,11 +1,14 @@
 // Package E: lamps, Morris columns, metro entrances (InstanceSets) and street-name signs ('sign' bucket + atlas texture).
 // Module top level must not touch the DOM: the worker imports build*(); canvas textures only inside create*().
 import {
+  AdditiveBlending,
+  BackSide,
   BoxGeometry,
   BufferGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
+  DataTexture,
   Float32BufferAttribute,
   type Material,
   Mesh,
@@ -16,13 +19,14 @@ import {
   SphereGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { graphics8c as G8, props as P, roads as R, stairs as ST } from '../config.ts';
+import { graphics8c as G8, lighting as LT, props as P, roads as R, stairs as ST } from '../config.ts';
 import { type ChunkData, type ChunkKey, chunkKey } from '../geo/chunkData.ts';
 import { districtPlaque } from '../geo/districts.ts';
 import type { PropLods, PropMeshes } from './attach.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind, TriMesh } from './buildTypes.ts';
 import { hash01, MeshBuffer } from './geom.ts';
 import { graphics } from './graphics.ts';
+import { isNight } from './night.ts';
 import { quadOut } from './landmarks/kit.ts';
 import { roadWidth, sidewalkWidth } from './RoadBuilder.ts';
 import { createTreeLods } from './Vegetation.ts';
@@ -546,6 +550,8 @@ export function propColliders(sets: { kind: PropKind; matrices: Float32Array }[]
 
 /** The 'sign' material (its per-chunk atlas arrives as BuildOut.textures and is set on a clone, see attach.ts). */
 export function createPropMaterials(): Partial<Record<MaterialId, Material>> {
+  // night: unlit plaques (no light reaches them), still readable
+  if (isNight()) return { sign: new MeshBasicMaterial({ color: new Color(1, 1, 1).multiplyScalar(LT.signBrightness) }) };
   return { sign: new MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.05 }) };
 }
 
@@ -613,7 +619,7 @@ export function createPropMeshes(): PropMeshes {
   const out: PropMeshes = {
     tree: g.on('trees') ? { lods: createTreeLods(g.quality, track) } : mesh(tree, 0.9),
     // graphics8c.props: the Phase 7 lamp / Morris column until models/props.glb arrives, then its two levels
-    lamp: on ? lods(2.6, [{ parts: [oldLamp], distance: Infinity, castShadow: true }]) : oldLamp,
+    lamp: on ? lods(2.6, lampGlow([{ parts: [oldLamp], distance: Infinity, castShadow: true }], 4.7)) : oldLamp,
     morris: on ? lods(2.4, [{ parts: [oldMorris], distance: Infinity, castShadow: true }]) : oldMorris,
     metro: { ...mesh([...metro, ...metroWell()], 0.6), renderOrder: -2 },
     metroMask: { geometry: lid, material: new MeshBasicMaterial({ colorWrite: false }), renderOrder: -1, castShadow: false },
@@ -621,6 +627,38 @@ export function createPropMeshes(): PropMeshes {
   };
   if (on && typeof document !== 'undefined') void track(loadPropModels(out, g.quality));
   return out;
+}
+
+/** Night (world/night.ts, lighting.lamp): every lamp level gets an unlit HDR bulb at `bulbY` (bloom) and an additive light
+ *  pool on the pavement (shadowSide BackSide: a horizontal plane seen from the moon casts no shadow); one more level with
+ *  the bulb alone out to lamp.farDistance. Day: the levels as they are. */
+export function lampGlow(levels: PropLods['levels'], bulbY: number): PropLods['levels'] {
+  if (!isNight()) return levels;
+  const C = LT.lamp;
+  const bulb = {
+    geometry: new SphereGeometry(C.bulbRadius, 8, 6).translate(0, bulbY, 0),
+    // HDR only for the bloom; without post-processing it would tone-map to white
+    material: new MeshBasicMaterial({ color: new Color(C.colour).multiplyScalar(graphics().on('post') ? C.intensity : 1), fog: false }),
+  };
+  const n = 64;
+  const fall = new Uint8Array(n * n * 4);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const r = Math.min(1, Math.hypot(i + 0.5 - n / 2, j + 0.5 - n / 2) / (n / 2));
+    const v = 255 * (1 - r) * (1 - r);
+    fall.set([v, v, v, 255], 4 * (j * n + i));
+  }
+  const map = Object.assign(new DataTexture(fall, n, n), { needsUpdate: true });
+  const r = C.pool.radius;
+  const pool = {
+    geometry: new PlaneGeometry(2 * r, 2 * r).rotateX(-Math.PI / 2).translate(0, SIDEWALK + 0.03, 0),
+    material: new MeshBasicMaterial({
+      color: new Color(C.colour).multiplyScalar(C.pool.strength), map, blending: AdditiveBlending, transparent: true,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, shadowSide: BackSide,
+    }),
+  };
+  const out = levels.map((l) => ({ ...l, parts: [...l.parts, bulb, pool] }));
+  const last = levels.at(-1)?.distance ?? 0;
+  return last < C.farDistance ? [...out, { parts: [bulb], distance: C.farDistance, castShadow: false }] : out;
 }
 
 let pending = 0;
@@ -678,6 +716,14 @@ async function loadPropModels(out: PropMeshes, quality: 'low' | 'high') {
       return { parts, distance: D[kind][i]! * k, castShadow: i === 0 };
     });
     const prop = out[kind];
+    if (kind === 'lamp' && levels[0]) {
+      // the bulb in the lantern glass (the GLB's only transparent part), else 0.4 m under the model's top
+      const glass = levels[0].parts.find((p) => p.material.transparent)?.geometry;
+      const g = glass ?? levels[0].parts[0]!.geometry;
+      g.computeBoundingBox();
+      const { min, max } = g.boundingBox!;
+      if (levels.every(Boolean)) levels.splice(0, levels.length, ...(lampGlow(levels as PropLods['levels'], glass ? (min.y + max.y) / 2 : max.y - 0.4) as typeof levels));
+    }
     if (levels.every((l) => l?.parts.length) && 'lods' in prop) prop.lods.levels = levels as PropLods['levels'];
     else console.warn(`models/props.glb: no ${kind} / ${kind}_lod1`);
   }

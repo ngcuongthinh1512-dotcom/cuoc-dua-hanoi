@@ -92,6 +92,8 @@ export function lodInstances(matrices: Float32Array, lods: PropLods) {
 const FALLBACK_COLOUR: Record<MaterialId, number> = {
   terrain: 0xffffff, // × vertex colour
   wall: 0xe8d9b5,
+  tenement: 0xb8b6b0, // × vertex colour
+  curtain: 0x8aa8c0, // × vertex colour
   shopfront: 0x9a5b3c,
   roof: 0x7d8fa0,
   balcony: 0x303438,
@@ -156,6 +158,7 @@ export function attachBuildOut(out: BuildOut, materials: Materials, propMeshes: 
     g.setAttribute('normal', new THREE.BufferAttribute(b.normal, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(b.uv, 2));
     if (b.color) g.setAttribute('color', new THREE.BufferAttribute(b.color, 3));
+    if (b.lit) g.setAttribute('lit', new THREE.BufferAttribute(b.lit, 1));
     g.setIndex(new THREE.BufferAttribute(b.index, 1));
     const mesh = new THREE.Mesh(g, mats[b.material]);
     mesh.castShadow = !GROUND.has(b.material);

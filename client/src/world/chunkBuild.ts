@@ -99,7 +99,7 @@ export function buildChunk(chunk: ChunkData, grid: HeightGrid, onError: BuildErr
 /** Every buffer and image in `out`, once each (a builder may return views sharing one buffer). */
 export function transferables(out: BuildOut): Transferable[] {
   const set = new Set<Transferable>();
-  for (const b of out.meshes) for (const a of [b.position, b.normal, b.uv, b.color, b.index]) if (a) set.add(a.buffer as ArrayBuffer);
+  for (const b of out.meshes) for (const a of [b.position, b.normal, b.uv, b.color, b.lit, b.index]) if (a) set.add(a.buffer as ArrayBuffer);
   for (const s of out.instances) set.add(s.matrices.buffer as ArrayBuffer);
   for (const c of out.colliders) set.add(c.vertices.buffer as ArrayBuffer), set.add(c.indices.buffer as ArrayBuffer);
   for (const t of out.textures ?? []) set.add(t.image);

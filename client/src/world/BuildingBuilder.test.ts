@@ -18,12 +18,35 @@ B.haussmannHeight = [12, 35];
 describe('BuildingBuilder', () => {
   const out = build();
 
-  it('Leg 2 setting (haussmannHeight [0, 0]): no Haussmann style: only the wall and roof buckets, no balcony / shopfront', () => {
+  it('Leg 2 setting (haussmannHeight [0, 0]): Macao styles, no balconies, a per-building lit flag on window buckets only', () => {
     B.haussmannHeight = MACAO_STYLE;
     try {
       const macao = build();
-      expect(macao.meshes.map((b) => b.material).sort()).toEqual(['roof', 'wall']);
+      const mats = macao.meshes.map((b) => b.material);
+      expect(mats).not.toContain('balcony');
+      expect(mats).toContain('roof');
       expect(macao.colliders).toHaveLength(1);
+      for (const b of macao.meshes) {
+        expect(b.lit !== undefined).toBe(['wall', 'tenement', 'curtain', 'shopfront'].includes(b.material));
+        if (b.lit) expect(b.lit.length).toBe(b.position.length / 3);
+      }
+      // style by height: a 60 m block is a tower (curtain or tenement grid), a 6 m block colonial (wall), each one facade bucket
+      const sq = (x: number, h: number) => ({ outer: [x, 20, x + 20, 20, x + 20, 0, x, 0], kind: 'yes', height: h });
+      const faceOf = (h: number) => build({ ...fixture, buildings: [sq(0, h)] }).meshes.map((b) => b.material).filter((m) => m !== 'roof' && m !== 'shopfront');
+      expect(faceOf(6)).toEqual(['wall']);
+      expect(['tenement', 'curtain']).toContain(faceOf(60)[0]);
+      // lit: constant per building, ≈ litShare of many buildings lit
+      const many = build({ ...fixture, buildings: Array.from({ length: 400 }, (_, i) => sq(i * 30, 6)) });
+      const lit = bucket(many, 'wall').lit!;
+      const perBuilding = new Map<number, Set<number>>();
+      const pos = bucket(many, 'wall').position;
+      for (let i = 0; i < lit.length; i++) {
+        const k = Math.floor((pos[3 * i]! + 5) / 30);
+        perBuilding.set(k, (perBuilding.get(k) ?? new Set()).add(lit[i]!));
+      }
+      expect([...perBuilding.values()].every((s) => s.size === 1)).toBe(true);
+      const share = [...perBuilding.values()].filter((s) => [...s][0]! > 0).length / perBuilding.size;
+      expect(Math.abs(share - B.macao.litShare)).toBeLessThan(0.08);
     } finally {
       B.haussmannHeight = [12, 35];
     }

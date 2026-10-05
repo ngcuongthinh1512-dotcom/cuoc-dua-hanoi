@@ -9,27 +9,43 @@
 import * as THREE from 'three';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { Sky as SkyMesh } from 'three/examples/jsm/objects/Sky.js';
-import { graphics8c, render as R } from '../config.ts';
+import { graphics8c, lighting as L, render as R } from '../config.ts';
 import { hash01 } from './geom.ts';
 import { graphics } from './graphics.ts';
+import { isNight } from './night.ts';
 import { sceneEnvironmentOn, skyEnvironment } from './Water.ts';
 
 const G = graphics8c.sky;
 
-function skyTexture(): THREE.Texture {
+function skyTexture(night: boolean): THREE.Texture {
+  const S = night ? L.sky : R.sky;
   const c = document.createElement('canvas');
-  c.width = 1024;
-  c.height = 512; // equirect: y = 0 zenith, 256 horizon
+  const k = night ? 2 : 1; // night: 2× texels so the stars stay small dots
+  c.width = 1024 * k;
+  c.height = 512 * k; // equirect: y = 0 zenith, 256 k horizon
   const g = c.getContext('2d')!;
+  g.scale(k, k);
   const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, R.sky.zenith);
-  grad.addColorStop(1, R.sky.horizon);
+  grad.addColorStop(0, S.zenith);
+  grad.addColorStop(1, S.horizon);
   g.fillStyle = grad;
   g.fillRect(0, 0, 1024, 256);
-  g.fillStyle = R.sky.horizon;
+  g.fillStyle = S.horizon;
   g.fillRect(0, 256, 1024, 256);
+  if (night) {
+    // Stars: 1–2 texel dots, fainter toward the horizon (city glow). ponytail: 2K canvas (≈ 8 MB VRAM), still soft
+    // dots on screen; a Points cloud on the sky dome if they must be crisp.
+    const [a0, a1] = L.sky.starAlpha;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    for (let i = 0; i < L.sky.stars; i++) {
+      const y = Math.pow(hash01(i, 5), 1.5) * 256 * L.sky.starBand;
+      g.fillStyle = `rgba(235,240,255,${(a0 + (a1 - a0) * hash01(i, 6)) * (1 - y / 256)})`;
+      const r = hash01(i, 7) < 0.1 ? 2 : 1;
+      g.fillRect(hash01(i, 4) * 1024 * k, y * k, r, r);
+    }
+  }
   // Thin clouds: soft flattened blobs between ~8° and ~40° elevation; x wraps around.
-  for (let i = 0; i < R.sky.clouds; i++) {
+  for (let i = 0; i < (night ? 0 : R.sky.clouds); i++) {
     const x = hash01(i, 1) * 1024;
     const y = 140 + hash01(i, 2) * 95;
     const r = 30 + hash01(i, 3) * 70;
@@ -104,17 +120,21 @@ export function acesFilmic([r, g, b]: RGB, exposure: number): RGB {
 const fogColour = (horizon: RGB, toneMappedLater: boolean): RGB => (toneMappedLater ? horizon : acesFilmic(horizon, R.exposure));
 
 export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, groundAt: (x: number, z: number) => number) {
-  const canvasSky = skyTexture(); // until the HDRI (or Sky.js) replaces it, then disposed (review 1 #6: ~2 MB VRAM)
+  // Night (world/night.ts): the canvas sky stays (no HDRI), moon instead of the sun, it is also the image-based light.
+  const night = isNight();
+  const canvasSky = skyTexture(night); // by day until the HDRI (or Sky.js) replaces it, then disposed (review 1 #6: ~2 MB VRAM)
   scene.background = canvasSky;
-  const fog = new THREE.Fog(R.sky.horizon, R.fog.near, R.fog.far);
+  const fog = new THREE.Fog(night ? L.sky.horizon : R.sky.horizon, R.fog.near, R.fog.far);
   scene.fog = fog;
 
-  const on = graphics().on('sky');
-  const { hemiLight: h } = R;
+  const on = graphics().on('sky') && !night;
+  const h = night ? L.hemi : R.hemiLight;
   let envOn = sceneEnvironmentOn(); // low quality: HDRI background + fog only, graphics8c.sky.low light levels
   /** Sun / hemisphere intensities with and without the image-based light (graphics8c.sky off: Phase 7). */
-  const levels = (env: boolean) => (env ? { sun: G.sunIntensity, hemi: G.hemiIntensity } : on ? { sun: G.low.sunIntensity, hemi: G.low.hemiIntensity } : { sun: R.sun.intensity, hemi: h.intensity });
-  const s = on ? { ...R.sun, intensity: levels(envOn).sun, position: G.sunPosition } : R.sun;
+  const levels = (env: boolean) =>
+    night ? (env ? { sun: L.moon.intensity, hemi: L.hemi.intensity } : { sun: L.low.moonIntensity, hemi: L.low.hemiIntensity })
+    : env ? { sun: G.sunIntensity, hemi: G.hemiIntensity } : on ? { sun: G.low.sunIntensity, hemi: G.low.hemiIntensity } : { sun: R.sun.intensity, hemi: h.intensity };
+  const s = night ? { ...R.sun, color: L.moon.color, intensity: levels(envOn).sun, position: L.moon.position } : on ? { ...R.sun, intensity: levels(envOn).sun, position: G.sunPosition } : R.sun;
   const hemi = new THREE.HemisphereLight(h.sky, h.ground, levels(envOn).hemi);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(s.color, s.intensity);
@@ -131,8 +151,15 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
 
   let skyMesh: SkyMesh | undefined;
   let toneMappedLater = false;
-  let horizon: RGB | undefined; // the HDRI's, once loaded
+  let horizon: RGB | undefined; // the HDRI's, once loaded (night: the canvas horizon)
   const sunDir = new THREE.Vector3(s.position.x, s.position.y, s.position.z).normalize();
+  if (night) {
+    toneMappedLater = graphics().on('post');
+    const c = new THREE.Color(L.sky.horizon);
+    horizon = [c.r, c.g, c.b];
+    fog.color.setRGB(...fogColour(horizon, toneMappedLater), THREE.LinearSRGBColorSpace);
+    if (envOn) (scene.environment = canvasSky), (scene.environmentIntensity = L.environmentIntensity);
+  }
   if (on) {
     toneMappedLater = graphics().on('post');
     scene.environmentIntensity = G.environmentIntensity * (G.mode === 'shader' ? G.shaderEnvironmentScale : 1);
@@ -216,7 +243,7 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
       const p = camera.position;
       const ground = groundAt(p.x, p.z);
       const t = sun.target.position.set(p.x, ground, p.z);
-      if (on) {
+      if (on || night) {
         snapped.copy(t).applyMatrix4(fromLight);
         t.copy(snapped.set(Math.round(snapped.x / texel) * texel, Math.round(snapped.y / texel) * texel, snapped.z).applyMatrix4(toLight));
       }

@@ -1,8 +1,7 @@
 // Fix A (phase8c-review-speccode #1 / #4, review-visual #3): scan textures keep only what the kept triangles sample;
-// loose scan bits dropped; the Flamme's steps are closed drums.
+// loose scan bits dropped.
 import sharp from 'sharp';
 import { expect, test } from 'vitest';
-import { dropSmallParts, steps } from './flamme.ts';
 import { keepUsed, type Soup } from './props.ts';
 
 const red = async (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 255, g: 0, b: 0 } } }).png().toBuffer();
@@ -19,26 +18,4 @@ test('keepUsed: image cut to the used uv box, unused pixels grey, uv remapped', 
   expect(px(info.width - 1, info.height - 1)).toEqual([128, 128, 128]); // beyond its hypotenuse
   expect(s!.uv[2]! * info.width).toBeCloseTo(32, 0); // u 0.5 of the source = pixel 32
   await expect(keepUsed([soup([0, 0, 2, 0, 0, 1], await red(8, 8))], 8)).rejects.toThrow(/tiled/);
-});
-
-test('dropSmallParts keeps the connected parts with enough triangles', () => {
-  const tri = (o: number) => [o, 0, 0, o + 1, 0, 0, o, 1, 0];
-  const big = [...tri(0), 1, 0, 0, 1, 1, 0, 0, 1, 0]; // two triangles sharing an edge
-  const s: Soup = { mat: { color: [1, 1, 1, 1], metal: 0, rough: 1, blend: false }, pos: [...big, ...tri(10)], nrm: Array(27).fill(0), uv: Array(18).fill(0) };
-  const [out] = dropSmallParts([s], 2);
-  expect(out!.pos).toEqual(big);
-});
-
-test('steps: one drum per tier, normals out / up, tops at their height', () => {
-  const s = steps([[2, 0.3], [1, 0.6]], -0.3, [0.5, 0.5, 0.5]);
-  expect(s.pos.length / 9).toBe(2 * 48 * 3);
-  const ys = s.pos.filter((_, i) => i % 3 === 1);
-  expect(Math.max(...ys)).toBeCloseTo(0.6);
-  for (let i = 0; i < s.pos.length; i += 9) {
-    const [a, b, c] = [0, 3, 6].map((k) => s.pos.slice(i + k, i + k + 3));
-    const [e1, e2] = [b!.map((v, k) => v - a![k]!), c!.map((v, k) => v - a![k]!)];
-    const n = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
-    const centre = [0, 1, 2].map((k) => (a![k]! + b![k]! + c![k]!) / 3);
-    expect(n[0]! * centre[0]! + n[1]! + n[2]! * centre[2]!).toBeGreaterThan(0); // facing out (sides) or up (tops)
-  }
 });

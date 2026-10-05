@@ -320,8 +320,8 @@ for (const { geometry: g, p } of features) {
       const lm = def ?? zones.find((zn) => zn.polys.some((zp) => inPoly(cx, cz, zp)))?.def;
       const rec: BuildingRec = { ...poly, ...buildingFacts(tags), ...(lm && { landmark: lm.id }) };
       // Landmark outlines that are not buildings (bridge decks, fountains, artworks) keep what they are.
-      if (lm && !tags.building) rec.kind = tags.man_made === 'bridge' ? 'bridge' : tags.amenity === 'fountain' ? 'fountain' : 'artwork';
-      if (lm?.id === 'obelisk') rec.kind = 'obelisk'; // OSM: building=yes + man_made=obelisk
+      // historic=ruins|fort without building=* (Ruínas de São Paulo, Fortaleza da Guia) are solid → kind 'ruins'.
+      if (lm && !tags.building) rec.kind = tags.man_made === 'bridge' ? 'bridge' : tags.amenity === 'fountain' ? 'fountain' : /^(ruins|fort)$/.test(tags.historic ?? '') ? 'ruins' : 'artwork';
       if (lm) {
         seenLandmarks.add(lm.id);
         lmRecs.push({ rec, def: lm, area: ringArea(poly.outer), box: box(poly.outer) });

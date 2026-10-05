@@ -18,7 +18,7 @@ export const fixture: ChunkData = {
     { outer: rect(10, 10, 50, 50), holes: [rect(25, 25, 35, 35, true)], kind: 'apartments', height: 24, roofShape: 'mansard' },
     { outer: [60, 50, 110, 50, 110, 35, 75, 35, 75, 10, 60, 10], kind: 'yes', levels: 6 }, // L-shape
     { outer: rect(140, 20, 165, 45), kind: 'residential' }, // no height, no levels → default
-    { outer: rect(180, 15, 235, 70), kind: 'tower', height: 330, landmark: 'eiffel' },
+    { outer: rect(180, 15, 235, 70), kind: 'tower', height: 330, landmark: 'macau-tower' },
   ],
   roads: [
     {

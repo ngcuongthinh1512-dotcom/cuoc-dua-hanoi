@@ -1,19 +1,27 @@
-// Package B: Haussmann buildings from BuildingRecs (skips recs with .landmark, see world/landmarks/index.ts).
+// Package B: buildings from BuildingRecs (skips recs with .landmark, see world/landmarks/index.ts).
 // Module top level must not touch the DOM: the worker imports build*(); canvas textures only inside create*().
 //
 // Per building: ground g = min terrain over the outer ring, but at most groundSpan below its max (a footprint reaching
 // into the carved Seine or over a DEM bump, e.g. the Louvre, is not buried); walls from min − baseSink to top = g + height.
-// Haussmann (SPEC §4.4): shopfront band 0–4.5 m, window-grid walls, zinc mansard (top 4 m, inset ≈ 1.2 m) with dormers
-// painted on the slope + chimneys, iron balconies on floors 2 and 5. Other kinds: plain stone walls, flat roof.
-// Party walls (an edge shared with another building of the chunk): no shopfront, balcony or mansard slope, and only
-// the part above the neighbour is built. UVs: u in bays (bayWidth), v in floors (wall), 0–1 over the band (shopfront),
-// [0.25, 1] over the slope (roof; [0, 0.25) is plain zinc for caps), metres (balcony railing).
+// Leg 2 Macao (config buildings.macao, picked per building by hash01): colonial pastel low-rise ('wall': white trim, arched /
+// corniced windows, optional low terracotta hip roof), Chinese tenements and concrete-grid towers ('tenement': small
+// windows, steel cages, AC units), glass towers ('curtain', flat roof + plant box); a shop band 0–4.5 m ('shopfront') on
+// street faces. Haussmann (Leg 1, buildings.haussmannHeight; off in Macao): same band, zinc mansard (top 4 m, inset ≈ 1.2 m)
+// + chimneys, iron balconies on floors 2 and 5.
+// Night windows: every vertex of the wall / tenement / curtain / shopfront buckets carries `lit` (MeshBucket.lit, shader
+// attribute 'lit'): 0 = dark building, else lit with that value as its seed (≈ buildings.macao.litShare of them); window
+// glass = facade map alpha ≤ 0.5 (see A_TRIM); shopfront: always a seed (night.ts facadeNightGlsl: shops open / closed).
+// By day nothing reads it.
+// Party walls (an edge shared with another building of the chunk): no shopfront, balcony or roof slope, and only
+// the part above the neighbour is built. UVs: u in bays (bayWidth), v in floors (facades), 0–1 over the band (shopfront),
+// [0.25, 1] over the slope (canvas roof; [0, 0.25) is plain zinc for caps; world metres with graphics8c.roofs), metres (balcony).
 // ponytail: party walls are found only between buildings of the same chunk and by exact shared edges (not T-joints);
 // a neighbour in another chunk gets a facade + mansard slope there. Upgrade: build-chunks marks shared edges globally.
 import * as THREE from 'three';
 import { type BuildingRec, ringArea, type XZ } from '../geo/chunkData.ts';
 import { buildings as B, graphics8c } from '../config.ts';
 import { pbrMaps } from './textures.ts';
+import { facadeNightGlsl } from './night.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
 import { hash01, MeshBuffer, mergeBuckets, triangulate, type V3 } from './geom.ts';
 
@@ -89,15 +97,22 @@ export function insetRing(r: XZ, d: number[]): XZ {
   return out;
 }
 
+type Face = 'wall' | 'tenement' | 'curtain';
+
 interface Prep {
   rings: XZ[]; // [outer (CCW), ...holes (CW)]
   g: number; // ground
   bottom: number;
   top: number;
   haussmann: boolean;
-  windows: boolean; // Haussmann kind outside the height range: window-grid walls, flat roof
+  face: Face; // facade bucket: wall = colonial (or Haussmann), tenement = tenement / concrete-grid tower, curtain = glass tower
+  windows: boolean; // window-grid walls (else plain wall everywhere)
+  shop: boolean; // ground-floor shop band on street faces
+  slope?: readonly [number, number]; // roof slope: rise above the wall top, inset (Haussmann mansard, colonial hip roof)
+  plant: boolean; // tower: a plant box on the flat roof
   tint: V3;
   roofTint: V3;
+  lit: number; // MeshBucket.lit
 }
 
 const edgeKey = (ax: number, az: number, bx: number, bz: number) => {
@@ -105,6 +120,15 @@ const edgeKey = (ax: number, az: number, bx: number, bz: number) => {
   const b = `${Math.round(bx * 10)},${Math.round(bz * 10)}`;
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 };
+
+/** '#rrggbb' (sRGB) → linear RGB × k. */
+function linear(hex: string, k = 1): V3 {
+  const c = (i: number) => {
+    const v = parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16) / 255;
+    return k * (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  };
+  return [c(0), c(1), c(2)];
+}
 
 function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep | undefined {
   let outer = clean(b.outer);
@@ -128,27 +152,47 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
   const bottom = minH > 0 ? g + minH : gMin - B.baseSink;
   if (!(top > bottom + 0.1)) return undefined;
   const [x0, z0] = [outer[0]!, outer[1]!];
-  const k = hash01(x0, z0, 1);
-  const bright = 0.84 + 0.16 * hash01(x0, z0, 2);
-  // warm cream ↔ neutral grey-white limestone
-  const tint: V3 = [bright, bright * (0.97 - 0.05 * k), bright * (0.93 - 0.1 * k)];
-  const rb = 0.8 + 0.25 * hash01(x0, z0, 3);
+  const r = (salt: number) => hash01(x0, z0, salt);
+  const pick = (list: string[], k = 1) => linear(list[Math.floor(r(9) * list.length)]!, k * (0.9 + 0.1 * r(2)));
+  const rb = 0.8 + 0.25 * r(3);
+  const M = B.macao;
+  const lit = r(10) < M.litShare ? 0.01 + 0.99 * r(11) : 0;
   const housing = B.haussmannKinds.includes(b.kind);
+  if (minH === 0 && housing && h >= B.haussmannHeight[0]! && h <= B.haussmannHeight[1]!) {
+    const k = r(1);
+    const bright = 0.84 + 0.16 * r(2);
+    return {
+      rings: [outer, ...holes], g, bottom, top, lit, haussmann: true, face: 'wall', windows: true, shop: true, plant: false,
+      slope: [B.mansardHeight, B.mansardInset],
+      tint: [bright, bright * (0.97 - 0.05 * k), bright * (0.93 - 0.1 * k)], // warm cream ↔ neutral grey-white limestone
+      roofTint: ROOF_PBR ? [rb * 1.35, rb * 1.5, rb * 1.8] : [rb, rb, rb * 1.03], // slate diffuse is dark and warm: lift + cool it
+    };
+  }
+  // Macao: colonial pastel low-rise, Chinese tenements, towers (config buildings.macao)
+  const [t0, t1] = M.towerHeight as [number, number];
+  const tower = h >= t1 || (h > t0 && r(5) < (h - t0) / (t1 - t0));
+  const tenement = !tower && (h > t0 || (M.tenementKinds.includes(b.kind) && h >= M.tenementMin && r(6) < M.tenementShare));
+  const curtain = tower && r(7) < M.curtainShare;
+  const area = Math.abs(ringArea(outer));
+  const hip = !tower && !tenement && minH === 0 && h <= M.hip.maxHeight && area <= M.hip.maxArea && r(8) < M.hip.chance;
+  const lift = (ROOF_PBR ? M.roofLift : 1) * rb;
+  const windows = h > 5 && !M.blankKinds.includes(b.kind);
   return {
-    rings: [outer, ...holes],
-    g,
-    bottom,
-    top,
-    haussmann: minH === 0 && housing && h >= B.haussmannHeight[0]! && h <= B.haussmannHeight[1]!,
-    windows: housing && h > 5,
-    tint,
-    roofTint: ROOF_PBR ? [rb * 1.35, rb * 1.5, rb * 1.8] : [rb, rb, rb * 1.03], // slate diffuse is dark and warm: lift + cool it
+    rings: [outer, ...holes], g, bottom, top, lit, haussmann: false,
+    face: curtain ? 'curtain' : tower || tenement ? 'tenement' : 'wall',
+    windows,
+    shop: windows && minH === 0 && h >= M.shopMinHeight,
+    ...(hip && { slope: [M.hip.rise, M.hip.inset] as const }),
+    plant: tower && minH === 0,
+    tint: pick(curtain ? M.glass : tower ? M.concrete : tenement ? M.tenement : M.colonial),
+    roofTint: linear(hip ? M.tileRoof : M.flatRoof, lift),
   };
 }
 
 export const buildBuildings: Builder = (chunk, ctx) => {
-  const wall = new MeshBuffer('wall');
-  const shop = new MeshBuffer('shopfront');
+  const faces: Record<Face, MeshBuffer> = { wall: new MeshBuffer('wall', true), tenement: new MeshBuffer('tenement', true), curtain: new MeshBuffer('curtain', true) };
+  const wall = faces.wall;
+  const shop = new MeshBuffer('shopfront', true);
   const roof = new MeshBuffer('roof');
   const balc = new MeshBuffer('balcony');
   const cv: number[] = [];
@@ -191,10 +235,15 @@ export const buildBuildings: Builder = (chunk, ctx) => {
   if (bad) console.warn(`BuildingBuilder ${ctx.key}: skipped ${bad} degenerate building(s)`);
 
   function emit(p: Prep, id: number) {
-    const { g, bottom, top, haussmann } = p;
-    const wallTop = haussmann ? top - B.mansardHeight : top;
+    const { g, bottom, top, haussmann, slope } = p;
+    const face = faces[p.face];
+    const wallTop = slope ? top - slope[0] : top;
     const shopTop = g + B.shopfrontHeight;
-    wall.color = shop.color = p.tint;
+    const shopOn = p.shop && wallTop > shopTop + 1; // the band needs at least a strip of facade above it
+    const base = shopOn ? shopTop : g; // facade v = floors above this
+    face.color = shop.color = p.tint;
+    face.lit = p.lit;
+    shop.lit = p.lit || 0.01 + 0.99 * hash01(p.rings[0]![0]!, p.rings[0]![1]!, 5); // shops: always a seed (night open / closed)
     roof.color = p.roofTint;
     const insets: XZ[] = [];
     const shopShift = Math.floor(hash01(p.rings[0]![0]!, p.rings[0]![1]!, 4) * 4);
@@ -207,9 +256,9 @@ export const buildBuildings: Builder = (chunk, ctx) => {
         const j = (i + 1) % n;
         const list = owners.get(edgeKey(r[2 * i]!, r[2 * i + 1]!, r[2 * j]!, r[2 * j + 1]!)) ?? [];
         hidden.push(list.reduce((m, o) => (o.id === id ? m : Math.max(m, o.top)), -Infinity));
-        d.push(haussmann && hidden[i] === -Infinity ? B.mansardInset : 0);
+        d.push(slope && hidden[i] === -Infinity ? slope[1] : 0);
       }
-      const q = haussmann ? insetRing(r, d) : r;
+      const q = slope ? insetRing(r, d) : r;
       insets.push(q);
 
       for (let i = 0; i < n; i++) {
@@ -225,23 +274,23 @@ export const buildBuildings: Builder = (chunk, ctx) => {
         const wallQuad = (buf: MeshBuffer, y0: number, y1: number, u0: number, v0: number, u1: number, v1: number) =>
           buf.quad([ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], u0, v0, u1, v1);
 
-        const floorsV = (y: number) => (y - shopTop) / B.levelHeight;
-        if (hidden[i] !== -Infinity || !haussmann) {
-          // party wall above the neighbour or a plain building: blank stone; other housing: windows, no mansard
+        if (hidden[i] !== -Infinity || !p.windows) {
+          // party wall above the neighbour or a windowless building: blank wall up to the top (no roof slope on this edge)
           const y0 = Math.max(bottom, hidden[i]!);
           if (top <= y0 + 0.05) continue;
-          if (p.windows && hidden[i] === -Infinity) wallQuad(wall, y0, top, 0, (y0 - g) / B.levelHeight, bays, (top - g) / B.levelHeight);
-          else wallQuad(wall, y0, top, PLAIN_WALL_UV[0], PLAIN_WALL_UV[1], PLAIN_WALL_UV[0], PLAIN_WALL_UV[1]);
+          wallQuad(face, y0, top, PLAIN_WALL_UV[0], PLAIN_WALL_UV[1], PLAIN_WALL_UV[0], PLAIN_WALL_UV[1]);
           continue;
         }
-        if (ri === 0) {
+        const floorsV = (y: number) => (y - base) / B.levelHeight;
+        if (shopOn && ri === 0 && bottom < shopTop) {
           wallQuad(shop, bottom, shopTop, shopShift, (bottom - g) / B.shopfrontHeight, shopShift + bays, 1);
-          wallQuad(wall, shopTop, wallTop, 0, 0, bays, floorsV(wallTop));
-        } else wallQuad(wall, bottom, wallTop, 0, floorsV(bottom), bays, floorsV(wallTop));
-        // mansard slope
-        roof.quad([ax, wallTop, az], [bx, wallTop, bz], [q[2 * j]!, top, q[2 * j + 1]!], [q[2 * i]!, top, q[2 * i + 1]!], 0, ROOF_PBR ? 0 : 0.25, ROOF_PBR ? len : bays, ROOF_PBR ? Math.hypot(top - wallTop, B.mansardInset) : 1);
+          wallQuad(face, shopTop, wallTop, 0, 0, bays, floorsV(wallTop));
+        } else wallQuad(face, bottom, wallTop, 0, floorsV(bottom), bays, floorsV(wallTop));
+        if (slope) {
+          roof.quad([ax, wallTop, az], [bx, wallTop, bz], [q[2 * j]!, top, q[2 * j + 1]!], [q[2 * i]!, top, q[2 * i + 1]!], 0, ROOF_PBR ? 0 : 0.25, ROOF_PBR ? len : bays, ROOF_PBR ? Math.hypot(top - wallTop, slope[1]) : 1);
+        }
 
-        if (ri === 0 && len >= B.balconyMinEdge) {
+        if (haussmann && ri === 0 && len >= B.balconyMinEdge) {
           const ox = ((bz - az) / len) * -B.balconyDepth; // right of travel = outside
           const oz = ((ax - bx) / len) * -B.balconyDepth;
           // the upper balcony drops to the last floor whose railing fits under the mansard (20 m default: floor 4)
@@ -260,9 +309,9 @@ export const buildBuildings: Builder = (chunk, ctx) => {
       if (haussmann && ri === 0) chimneys(r, q, top);
     });
 
-    // cap (inset ring for the mansard, footprint otherwise) + underside for raised structures
+    // cap (inset ring under a roof slope, footprint otherwise) + underside for raised structures
     const ringIdx = triangulate(p.rings[0]!, p.rings.slice(1));
-    const insetIdx = haussmann ? triangulate(insets[0]!, insets.slice(1)) : [];
+    const insetIdx = slope ? triangulate(insets[0]!, insets.slice(1)) : [];
     const [capRings, capIdx] = insetIdx.length ? [insets, insetIdx] : [p.rings, ringIdx];
     const flatFace = (rings: XZ[], idx: number[], y: number, ny: number) => {
       const pts = rings.flat();
@@ -275,11 +324,40 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     };
     flatFace(capRings, capIdx, top, 1);
     if (bottom > g) flatFace(p.rings, ringIdx, bottom, -1);
+    if (p.plant) plantBox(p.rings.flat(), ringIdx, top);
     // collider cap
     const flat = p.rings.flat();
     const c0 = cv.length / 3;
     for (let i = 0; i < flat.length; i += 2) cv.push(flat[i]!, top, flat[i + 1]!);
     for (const k of ringIdx) ci.push(c0 + k);
+  }
+
+  /** Box (roof bucket, darker) centred on the largest roof triangle's centroid; skipped when it would not fit that triangle. */
+  function plantBox(pts: number[], idx: number[], top: number) {
+    let best = 0;
+    let at = -1;
+    for (let i = 0; i < idx.length; i += 3) {
+      const [a, b, c] = [idx[i]! * 2, idx[i + 1]! * 2, idx[i + 2]! * 2];
+      const area = Math.abs((pts[b]! - pts[a]!) * (pts[c + 1]! - pts[a + 1]!) - (pts[c]! - pts[a]!) * (pts[b + 1]! - pts[a + 1]!)) / 2;
+      if (area > best) [best, at] = [area, i];
+    }
+    const [min, up, share, max] = B.macao.plantBox as [number, number, number, number];
+    const s = Math.min(max, Math.max(min, share * Math.sqrt(best)));
+    if (at < 0 || s > 0.45 * Math.sqrt(best)) return;
+    const [a, b, c] = [idx[at]! * 2, idx[at + 1]! * 2, idx[at + 2]! * 2];
+    const cx = (pts[a]! + pts[b]! + pts[c]!) / 3;
+    const cz = (pts[a + 1]! + pts[b + 1]! + pts[c + 1]!) / 3;
+    const saved = roof.color;
+    roof.color = [saved[0] * 0.75, saved[1] * 0.75, saved[2] * 0.75];
+    const h = s / 2;
+    const P = (sx: number, sz: number, y: number): V3 => [cx + sx * h, y, cz + sz * h];
+    const ring: [number, number][] = [[-1, 1], [1, 1], [1, -1], [-1, -1]]; // counter-clockwise seen from above
+    for (let k = 0; k < 4; k++) {
+      const [e, f] = [ring[k]!, ring[(k + 1) % 4]!];
+      roof.quad(P(e[0], e[1], top), P(f[0], f[1], top), P(f[0], f[1], top + up), P(e[0], e[1], top + up), 0, 0, s, up);
+    }
+    roof.quad(P(-1, 1, top + up), P(1, 1, top + up), P(1, -1, top + up), P(-1, -1, top + up), 0, 0, s, s);
+    roof.color = saved;
   }
 
   function chimneys(r: XZ, q: XZ, top: number) {
@@ -322,7 +400,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
   }
 
   return {
-    meshes: mergeBuckets([wall.bucket(), shop.bucket(), roof.bucket(), balc.bucket()]),
+    meshes: mergeBuckets([wall.bucket(), faces.tenement.bucket(), faces.curtain.bucket(), shop.bucket(), roof.bucket(), balc.bucket()]),
     instances: [],
     colliders: ci.length ? [{ vertices: new Float32Array(cv), indices: new Uint32Array(ci) }] : [],
   };
@@ -359,118 +437,213 @@ function speckle(ctx: CanvasRenderingContext2D, w: number, h: number, n: number,
   }
 }
 
-function glass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rand: () => number) {
+// Facade alpha convention (wall, tenement, curtain, shopfront canvases): a ≥ 0.9 = wall (× the vertex tint on masked
+// materials), 0.5–0.9 = trim / frames / signs / AC units (never tinted), ≤ 0.5 = window glass (the night-lighting window mask).
+// The shaders force the output alpha to 1. `paint` replaces the pixels of a shape (colour AND alpha), so layers don't add up.
+const A_TRIM = 0.65;
+const A_GLASS = 0.4;
+
+function paint(ctx: CanvasRenderingContext2D, style: string | CanvasGradient, alpha: number, shape: (c: CanvasRenderingContext2D) => void) {
+  ctx.beginPath();
+  shape(ctx);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = style;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+const rect = (x: number, y: number, w: number, h: number) => (c: CanvasRenderingContext2D) => c.rect(x, y, w, h);
+
+/** Window glass (alpha A_GLASS): sky reflection at the top fading to a dark interior; `hue` = [r, g, b] offsets. */
+function glass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rand: () => number, hue: V3 = [0, 10, 22], shape = rect(x, y, w, h)) {
   const gr = ctx.createLinearGradient(x, y, x + w * 0.6, y + h);
   const l = 40 + rand() * 30;
-  gr.addColorStop(0, `rgb(${l + 60},${l + 75},${l + 90})`);
-  gr.addColorStop(0.45, `rgb(${l},${l + 10},${l + 22})`);
+  gr.addColorStop(0, `rgb(${l + 60 + hue[0]},${l + 65 + hue[1]},${l + 68 + hue[2]})`);
+  gr.addColorStop(0.45, `rgb(${l + hue[0]},${l + hue[1]},${l + hue[2]})`);
   gr.addColorStop(1, `rgb(${l * 0.6},${l * 0.65},${l * 0.75})`);
-  ctx.fillStyle = gr;
-  ctx.fillRect(x, y, w, h);
+  paint(ctx, gr, A_GLASS, shape);
 }
 
-/** 2 bays × 2 floors, 256 px per cell; floor level at the bottom of each cell. */
-function wallCanvas(stone: string) {
+/** Colonial (Portuguese) plaster, 2 bays × 2 floors, 256 px per cell, floor level at the bottom of each cell: white cornice
+ *  band per floor, tall windows in white surrounds without shutters; lower floor of the tile with a flat cornice head, upper
+ *  floor round-arched with a keystone. Wall pixels white (the pastel comes from the masked vertex tint). */
+function colonialCanvas() {
   const S = 256;
   const [c, ctx] = canvas(2 * S, 2 * S);
   const rand = rng(11);
-  ctx.fillStyle = stone;
+  ctx.fillStyle = '#f2efe9';
   ctx.fillRect(0, 0, 2 * S, 2 * S);
   speckle(ctx, 2 * S, 2 * S, 900, rand);
+  const trim = '#f7f5ef';
   for (let row = 0; row < 2; row++) {
     const y0 = row * S;
-    // stone joints (kept off v = 0.55, the plain-wall sample) and the floor band with its shadow line
-    ctx.fillStyle = 'rgba(90,70,40,0.10)';
-    for (const f of [0.18, 0.36, 0.72, 0.9]) ctx.fillRect(0, y0 + S * (1 - f), 2 * S, 1.5);
-    ctx.fillStyle = 'rgba(255,250,235,0.35)';
-    ctx.fillRect(0, y0, 2 * S, S * 0.05);
-    ctx.fillStyle = 'rgba(60,45,25,0.28)';
-    ctx.fillRect(0, y0 + S * 0.05, 2 * S, 3);
+    const arched = row === 0;
+    // floor cornice (bottom of the cell = floor level of the next floor up) + its shadow on the wall above
+    paint(ctx, trim, A_TRIM, rect(0, y0 + S * 0.9, 2 * S, S * 0.1));
+    ctx.fillStyle = 'rgba(70,55,40,0.22)';
+    ctx.fillRect(0, y0 + S * 0.9 - 4, 2 * S, 4);
     for (let col = 0; col < 2; col++) {
       const x0 = col * S;
-      const [wx, ww] = [x0 + S * 0.27, S * 0.46];
-      const [wy, wh] = [y0 + S * 0.2, S * 0.7]; // window: v 0.1–0.8
-      // surround + keystone
-      ctx.fillStyle = 'rgba(255,248,230,0.45)';
-      ctx.fillRect(wx - 9, wy - 9, ww + 18, wh + 12);
-      ctx.fillRect(wx + ww / 2 - 10, wy - 22, 20, 14);
-      ctx.fillStyle = 'rgba(70,55,35,0.35)';
-      ctx.fillRect(wx - 9, wy + wh + 3, ww + 18, 3);
-      // folding shutters (persiennes) on some windows
-      if (rand() < 0.4) {
-        ctx.fillStyle = '#b9b7ad';
-        ctx.fillRect(wx - 26, wy, 17, wh);
-        ctx.fillRect(wx + ww + 9, wy, 17, wh);
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        for (let k = wy; k < wy + wh; k += 5) {
-          ctx.fillRect(wx - 26, k, 17, 1);
-          ctx.fillRect(wx + ww + 9, k, 17, 1);
-        }
-      }
-      glass(ctx, wx, wy, ww, wh, rand);
-      if (rand() < 0.5) {
-        ctx.fillStyle = 'rgba(235,225,200,0.55)'; // net curtain
-        ctx.fillRect(wx + 3, wy + 3, ww - 6, wh * (0.3 + rand() * 0.4));
-      }
-      // frame: mullion + transoms
-      ctx.fillStyle = '#f1ede4';
-      ctx.fillRect(wx, wy, ww, 4);
-      ctx.fillRect(wx, wy, 4, wh);
-      ctx.fillRect(wx + ww - 4, wy, 4, wh);
-      ctx.fillRect(wx + ww / 2 - 2, wy, 4, wh);
-      ctx.fillRect(wx, wy + wh * 0.28, ww, 3);
-      ctx.fillRect(wx, wy + wh * 0.62, ww, 3);
-      // wrought-iron guard rail across the lower window
-      ctx.fillStyle = '#26292c';
-      const ry = wy + wh * 0.66;
-      ctx.fillRect(wx - 4, ry, ww + 8, 4);
-      for (let k = wx; k < wx + ww; k += 7) ctx.fillRect(k, ry, 2, wh * 0.34);
-      ctx.fillRect(wx - 4, wy + wh - 4, ww + 8, 4);
+      const [wx, ww] = [x0 + S * 0.32, S * 0.36];
+      const [wy, wh] = [y0 + S * 0.16, S * 0.62]; // window: v 0.22–0.84 of the cell
+      const r = ww / 2;
+      const arch = (x: number, y: number, w: number, h: number) => (k: CanvasRenderingContext2D) => {
+        k.moveTo(x, y + h);
+        k.lineTo(x, y + w / 2);
+        k.arc(x + w / 2, y + w / 2, w / 2, Math.PI, 0);
+        k.lineTo(x + w, y + h);
+        k.closePath();
+      };
+      const shape = (x: number, y: number, w: number, h: number) => (arched ? arch(x, y, w, h) : rect(x, y, w, h));
+      // surround, sill, head
+      paint(ctx, trim, A_TRIM, shape(wx - 12, wy - 12, ww + 24, wh + 12));
+      paint(ctx, trim, A_TRIM, rect(wx - 18, wy + wh, ww + 36, 9)); // sill
+      if (arched) paint(ctx, trim, A_TRIM, rect(wx + r - 9, wy - 22, 18, 20)); // keystone
+      else paint(ctx, trim, A_TRIM, rect(wx - 22, wy - 26, ww + 44, 12)); // flat cornice head
+      ctx.fillStyle = 'rgba(70,55,40,0.3)';
+      ctx.fillRect(wx - 18, wy + wh + 9, ww + 36, 3);
+      glass(ctx, wx, wy, ww, wh, rand, [-6, 8, 4], shape(wx, wy, ww, wh));
+      // frame: casement mullion + transom (green-grey paint, a Macao favourite)
+      const frame = rand() < 0.5 ? '#f4f2ea' : '#5f7d6a';
+      paint(ctx, frame, A_TRIM, rect(wx + r - 2, wy + (arched ? r : 0), 4, wh - (arched ? r : 0)));
+      paint(ctx, frame, A_TRIM, rect(wx, wy + (arched ? r : wh * 0.3), ww, 4));
     }
   }
   return c;
 }
 
-/** 4 bays of shopfront, full band height (4.5 m); ground at the bottom. */
-function shopCanvas(stone: string) {
+/** Chinese tenement / concrete grid, 2 bays × 2 floors (256 px cells): tiled concrete with rain streaks, slab line per floor,
+ *  wide aluminium windows, some behind a protruding steel cage (gaiola), AC units under others. */
+function tenementCanvas() {
+  const S = 256;
+  const [c, ctx] = canvas(2 * S, 2 * S);
+  const rand = rng(31);
+  ctx.fillStyle = '#dcd9d2';
+  ctx.fillRect(0, 0, 2 * S, 2 * S);
+  speckle(ctx, 2 * S, 2 * S, 1400, rand);
+  ctx.fillStyle = 'rgba(0,0,0,0.035)'; // tile grid
+  for (let k = 0; k < 2 * S; k += 16) ctx.fillRect(0, k, 2 * S, 1), ctx.fillRect(k, 0, 1, 2 * S);
+  const kinds = [
+    ['cage', 'ac'],
+    ['ac', 'plain'],
+  ];
+  for (let row = 0; row < 2; row++) {
+    const y0 = row * S;
+    ctx.fillStyle = 'rgba(60,55,50,0.16)'; // floor slab
+    ctx.fillRect(0, y0 + S * 0.9, 2 * S, S * 0.1);
+    for (let col = 0; col < 2; col++) {
+      const x0 = col * S;
+      const kind = kinds[row]![col]!;
+      const [wx, ww] = [x0 + S * 0.18, S * 0.64];
+      const [wy, wh] = [y0 + S * 0.26, S * 0.46];
+      // rain streaks under the window (tinted wall)
+      for (let k = 0; k < 6; k++) {
+        ctx.fillStyle = `rgba(50,45,40,${0.04 + rand() * 0.06})`;
+        ctx.fillRect(wx + rand() * ww, wy + wh, 2 + rand() * 6, S * (0.1 + rand() * 0.25));
+      }
+      paint(ctx, '#c9ccd0', A_TRIM, rect(wx - 6, wy - 6, ww + 12, wh + 12)); // aluminium frame
+      glass(ctx, wx, wy, ww, wh, rand, [0, 8, 16]);
+      paint(ctx, '#c9ccd0', A_TRIM, rect(wx + ww / 2 - 3, wy, 6, wh)); // sliding sashes
+      if (rand() < 0.6) paint(ctx, rand() < 0.5 ? '#d9d2c0' : '#b9c7cf', A_GLASS, rect(wx + 6, wy + 6, ww * 0.3, wh - 12)); // curtain (still glass)
+      if (kind === 'cage') {
+        const iron = '#7d8487';
+        paint(ctx, iron, A_TRIM, rect(wx - 14, wy - 16, ww + 28, 6));
+        paint(ctx, iron, A_TRIM, rect(wx - 14, wy + wh + 6, ww + 28, 8));
+        for (let x = wx - 14; x <= wx + ww + 14; x += 13) paint(ctx, iron, A_TRIM, rect(x, wy - 16, 3, wh + 30));
+        paint(ctx, iron, A_TRIM, rect(wx - 14, wy + wh * 0.45, ww + 28, 3));
+      }
+      if (kind === 'ac') {
+        const [ax, ay, aw, ah] = [wx + ww * 0.55, wy + wh + 16, S * 0.26, S * 0.15];
+        paint(ctx, '#e8e8e4', A_TRIM, rect(ax, ay, aw, ah));
+        for (let y = ay + 6; y < ay + ah - 4; y += 6) paint(ctx, '#a9aba8', A_TRIM, rect(ax + 6, y, aw * 0.55, 2));
+        paint(ctx, '#8d8f8c', A_TRIM, (k) => k.arc(ax + aw * 0.8, ay + ah / 2, ah * 0.32, 0, Math.PI * 2));
+        ctx.fillStyle = 'rgba(40,35,30,0.2)';
+        ctx.fillRect(ax + 4, ay + ah, aw, 5);
+      }
+    }
+  }
+  return c;
+}
+
+/** Glass curtain wall, 2 bays × 2 floors (256 px cells): spandrel band at each floor, two vision panes per bay, light mullions.
+ *  Everything × the vertex tint (unmasked material); the panes keep A_GLASS for the window mask. */
+function curtainCanvas() {
+  const S = 256;
+  const [c, ctx] = canvas(2 * S, 2 * S);
+  const rand = rng(41);
+  ctx.fillStyle = '#d6dadd'; // mullions / transoms
+  ctx.fillRect(0, 0, 2 * S, 2 * S);
+  for (let row = 0; row < 2; row++) {
+    const y0 = row * S;
+    ctx.fillStyle = '#7d8790'; // spandrel (opaque glass in front of the slab)
+    ctx.fillRect(0, y0 + S * 0.78, 2 * S, S * 0.2);
+    for (let col = 0; col < 2; col++) {
+      for (let k = 0; k < 2; k++) {
+        const x = col * S + k * S * 0.5 + 5;
+        const gr = ctx.createLinearGradient(x, y0, x + S * 0.3, y0 + S * 0.78);
+        const l = 150 + rand() * 50;
+        gr.addColorStop(0, `rgb(${l + 45},${l + 50},${l + 55})`);
+        gr.addColorStop(0.5, `rgb(${l * 0.8},${l * 0.86},${l * 0.92})`);
+        gr.addColorStop(1, `rgb(${l * 0.55},${l * 0.6},${l * 0.68})`);
+        paint(ctx, gr, A_GLASS, rect(x, y0 + 4, S * 0.5 - 10, S * 0.74 - 6));
+      }
+    }
+  }
+  return c;
+}
+
+/** 4 Macao shops, full band height (4.5 m), ground at the bottom: plaster piers (masked tint), Chinese signboards with
+ *  character blocks, lit glass fronts with goods, one rolled-down steel shutter. */
+function shopCanvas() {
   const W = 256;
   const H = 384;
   const [c, ctx] = canvas(4 * W, H);
   const rand = rng(23);
-  ctx.fillStyle = stone;
+  ctx.fillStyle = '#efece6';
   ctx.fillRect(0, 0, 4 * W, H);
   speckle(ctx, 4 * W, H, 500, rand);
-  // rusticated joints (bossage) on the ground floor
-  ctx.fillStyle = 'rgba(80,60,35,0.22)';
-  for (let y = 20; y < H; y += 32) ctx.fillRect(0, y, 4 * W, 2);
-  const paint = ['#1f4a38', '#6e1c22', '#1c2a48', '#262626'];
-  const awning = ['#7a1f24', '#1f4a38', null, '#8a6a2a'];
+  const boards = ['#b3201c', '#1d4f8c', '#d8a21c', '#1f6b45'];
+  const letters = ['#f6d36a', '#ffffff', '#8a1a12', '#ffffff'];
   for (let k = 0; k < 4; k++) {
     const x0 = k * W;
-    const [fx, fw] = [x0 + W * 0.1, W * 0.8];
-    const top = H * 0.16; // fascia top (v ≈ 0.84)
-    ctx.fillStyle = paint[k]!;
-    ctx.fillRect(fx, top, fw, H * 0.8 - top);
-    ctx.fillStyle = 'rgba(240,225,180,0.85)'; // sign lettering blocks
-    for (let x = fx + 16; x < fx + fw - 24; x += 22) ctx.fillRect(x, top + 12, 14, 18);
-    glass(ctx, fx + 10, H * 0.3, fw - 20, H * 0.48, rand);
-    ctx.fillStyle = paint[k]!;
-    ctx.fillRect(fx + fw * 0.62, H * 0.3, 5, H * 0.48); // door post
-    ctx.fillStyle = 'rgba(255,230,170,0.25)'; // warm interior
-    ctx.fillRect(fx + 14, H * 0.55, fw - 28, H * 0.2);
-    const a = awning[k];
-    if (a) {
-      for (let x = fx - 6; x < fx + fw + 6; x += 16) {
-        ctx.fillStyle = (x - fx) % 32 < 16 ? a : '#e9e2d0';
-        ctx.fillRect(x, H * 0.24, 16, H * 0.1);
+    const [fx, fw] = [x0 + W * 0.06, W * 0.88];
+    // signboard with character blocks (3–4 "characters")
+    const [sy, sh] = [H * 0.05, H * 0.2];
+    paint(ctx, boards[k]!, A_TRIM, rect(fx, sy, fw, sh));
+    const n = 3 + (k % 2);
+    const cw = sh * 0.62;
+    const gap = (fw - n * cw) / (n + 1);
+    for (let i = 0; i < n; i++) {
+      const cx = fx + gap + i * (cw + gap);
+      for (let s = 0; s < 5; s++) {
+        const horizontal = rand() < 0.55;
+        const a = rand() * 0.7;
+        paint(ctx, letters[k]!, A_TRIM, horizontal ? rect(cx, sy + sh * 0.18 + a * sh * 0.6, cw * (0.5 + rand() * 0.5), 5) : rect(cx + a * cw * 0.9, sy + sh * 0.18, 5, sh * (0.3 + rand() * 0.34)));
       }
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(fx - 6, H * 0.34, fw + 12, 6);
     }
-    ctx.fillStyle = 'rgba(60,45,25,0.45)'; // plinth
-    ctx.fillRect(x0, H * 0.94, W, H * 0.06);
+    const [oy, oh] = [H * 0.3, H * 0.64];
+    if (k === 2) {
+      paint(ctx, '#9da2a4', A_TRIM, rect(fx + 6, oy, fw - 12, oh)); // rolled-down shutter
+      for (let y = oy; y < oy + oh; y += 7) paint(ctx, '#7f8486', A_TRIM, rect(fx + 6, y, fw - 12, 2));
+      continue;
+    }
+    paint(ctx, '#3a3c3e', A_TRIM, rect(fx + 2, oy - 4, fw - 4, oh + 4)); // frame
+    const gr = ctx.createLinearGradient(0, oy, 0, oy + oh);
+    gr.addColorStop(0, '#d9c49a');
+    gr.addColorStop(1, '#8a6c45');
+    paint(ctx, gr, A_GLASS, rect(fx + 8, oy + 2, fw - 16, oh - 4)); // warm lit interior
+    for (let i = 0; i < 14; i++) {
+      const col = `hsl(${Math.floor(rand() * 360)},55%,${40 + rand() * 25}%)`; // goods on shelves
+      paint(ctx, col, A_GLASS, rect(fx + 14 + rand() * (fw - 50), oy + oh * (0.25 + rand() * 0.6), 10 + rand() * 24, 8 + rand() * 18));
+    }
+    paint(ctx, '#3a3c3e', A_TRIM, rect(fx + fw * 0.62, oy, 5, oh)); // door post
   }
-  ctx.fillStyle = 'rgba(60,45,25,0.4)'; // cornice shadow over the band
+  ctx.fillStyle = 'rgba(60,50,40,0.45)'; // plinth
+  ctx.fillRect(0, H * 0.95, 4 * W, H * 0.05);
+  ctx.fillStyle = 'rgba(60,50,40,0.35)'; // slab shadow over the band
   ctx.fillRect(0, 0, 4 * W, 6);
   return c;
 }
@@ -529,11 +702,30 @@ function roofMaterial(zinc: string, limestone: string) {
   return m;
 }
 
+/** Facade material: map + vertex tint, × tint only where the map alpha says wall (`masked`), output alpha 1 (see A_TRIM).
+ *  Night lighting: the geometry carries the `lit` attribute (MeshBucket.lit); glass = map alpha ≤ 0.5. */
+function facadeMaterial(map: THREE.Texture, masked: boolean, roughness: number, shop = false) {
+  const m = new THREE.MeshStandardMaterial({ map, vertexColors: true, roughness });
+  const tint = masked ? 'diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, smoothstep(0.8, 0.95, diffuseColor.a));' : 'diffuseColor.rgb *= vColor.rgb;';
+  const night = facadeNightGlsl(shop, map.repeat.x, map.repeat.y); // lit windows / shop signs (null by day)
+  m.onBeforeCompile = (s) => {
+    s.fragmentShader = s.fragmentShader.replace('#include <color_fragment>', `${night?.glow ?? ''}\n\t${tint}\n\tdiffuseColor.a = 1.0;`);
+    if (!night) return;
+    s.vertexShader = s.vertexShader.replace('#include <common>', `#include <common>\n${night.vertexHead}`).replace('#include <begin_vertex>', `#include <begin_vertex>\n\t${night.vertex}`);
+    s.fragmentShader = s.fragmentShader.replace('#include <common>', `#include <common>\n${night.fragmentHead}`);
+  };
+  const key = `${masked ? 'facade-masked' : 'facade'}${night ? night.glow : ''}`;
+  m.customProgramCacheKey = () => key;
+  return m;
+}
+
 export function createBuildingMaterials(): Partial<Record<MaterialId, THREE.Material>> {
   const { limestone, zinc, iron } = B.colours;
   return {
-    wall: new THREE.MeshStandardMaterial({ map: texture(wallCanvas(limestone), false, [0.5, 0.5]), vertexColors: true, roughness: 0.9 }),
-    shopfront: new THREE.MeshStandardMaterial({ map: texture(shopCanvas(limestone), true, [0.25, 1]), vertexColors: true, roughness: 0.75 }),
+    wall: facadeMaterial(texture(colonialCanvas(), false, [0.5, 0.5]), true, 0.9),
+    tenement: facadeMaterial(texture(tenementCanvas(), false, [0.5, 0.5]), true, 0.85),
+    curtain: facadeMaterial(texture(curtainCanvas(), false, [0.5, 0.5]), false, 0.25),
+    shopfront: facadeMaterial(texture(shopCanvas(), true, [0.25, 1]), true, 0.75, true),
     roof: roofMaterial(zinc, limestone),
     balcony: new THREE.MeshStandardMaterial({
       map: texture(railingCanvas(iron), true),
