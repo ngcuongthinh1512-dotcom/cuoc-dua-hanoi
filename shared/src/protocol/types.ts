@@ -101,66 +101,9 @@ export interface AnswerView {
   /** server ms sent. */
   at: number;
   status: AnswerStatus;
-  /** Phase 8B: a louvre lock, how many of the picked artworks were right — ONLY for a lock made at or after the team's
-   *  correctAtMinutes mark (before it the team only learns "wrong"). */
-  correct?: number;
   /** SPEC §17.31: a Phạt with the Host's count "đúng score/of" — only when made ≥ task.scoreFromMinutes into the task (§17.44: a
    *  multi-box task's of = its box count). */
   score?: number;
-  of?: number;
-}
-
-// ── Phase 8B: the Louvre room (SPEC §17.19, docs/plans/phase8b.md §C) ──
-/** One artwork as every team sees it: never its Host note, its credit (§17.20: only after the finish) or whether it is
- *  one of the 5. `image` = a static file /art/<image> ('' = a numbered placeholder). */
-export interface ArtworkView {
-  id: string;
-  type: 'painting' | 'sculpture';
-  image: string;
-}
-/** TaskView.louvre: the room under the box just opened + THIS team's own state (never another team's). */
-export interface LouvreView {
-  /** In leg order = order around the walls. */
-  artworks: ArtworkView[];
-  /** The zone of the step = the box of the route just before (x, z, r m; yaw rad = where its front faces). */
-  room: { x: number; z: number; r: number; yaw: number };
-  /** The team's lit buttons now (artwork ids). */
-  picks: string[];
-  /** Wrong locks so far (step_progress.rejections). */
-  attempts: number;
-  /** server ms of the two hints (task_started_at + hints.countAtMinutes / correctAtMinutes minutes). */
-  hintAt: [number, number];
-  /** 5 ("Đáp án bao gồm 5 tác phẩm") once now ≥ hintAt[0], else null. */
-  hintCount: number | null;
-  /** |picks ∩ answers| once now ≥ hintAt[1] (live, recomputed on every card), else null. */
-  hintCorrect: number | null;
-  /** SPEC §17.19 (c): 5 once now ≥ hintAt[0] (at most that many lit at once; switching off always works), else null. */
-  maxPicks: number | null;
-}
-/** §17.20 "Ghi nguồn" of one artwork picture: `{t:'credits'}`, ONLY to a team that finished / once the race is over. */
-export interface CreditItem {
-  /** "art-NN.webp" | "art-NN.glb". */
-  file: string;
-  title: string;
-  artist: string;
-  photo: string;
-  license: string;
-  source: string;
-}
-/** Public line of the bottom-corner feed (every team socket + the Host), one per lock (never per pick), only for a WRONG
- *  lock: "Đội X trả lời sai và bị phạt 3 phút", with " · đúng n/5" when the server sent `n` (SPEC §17.35: the locking
- *  team was past its 40-minute mark AND the recipient is a Host, or a team in the room past its own 40 minutes — 60 for
- *  its own lock). A right lock has no line. The client words it (team name from welcome.teams[slot]). */
-export interface FeedMessage {
-  t: 'feed';
-  /** server ms of the lock. */
-  at: number;
-  slot: number;
-  ok: boolean;
-  /** Penalty minutes of a wrong lock. */
-  minutes?: number;
-  /** Right ones of that lock out of `of` (5); present only when this recipient may see it (SPEC §17.35). */
-  n?: number;
   of?: number;
 }
 
@@ -173,16 +116,14 @@ export interface TaskView {
   verification: Verification;
   /** Phase 8: 'text' = an input box (answer typed in game); 'proof' = a photo the team sends on Messenger, opened outside the
    *  game (kind free, SPEC §17.17: no contact button): the card shows proofInstruction, the submission code and
-   *  "Tôi đã gửi bài – chờ Host duyệt" (answer ''). Phase 8B: 'room' = kind louvre (no input box: buttons in the room). */
-  input: 'text' | 'proof' | 'room' | 'parts';
+   *  "Tôi đã gửi bài – chờ Host duyệt" (answer ''). */
+  input: 'text' | 'proof' | 'parts';
   /** SPEC §17.44: input 'parts' — one box per part, in leg order ('' = the client numbers it); the N strings go to the Host. */
   partLabels?: string[];
   proofInstruction: string;
   timeLimitMinutes: number | null;
   /** Task somewhere else (leg task.location.name); absent = at the point just reached. */
   place?: string;
-  /** Phase 8B: kind louvre only (no input box: picks + a lock in the room). */
-  louvre?: LouvreView;
 }
 export interface BranchView {
   id: string;
@@ -301,11 +242,6 @@ export interface StepProgressView {
   answers: (AnswerView & { branch: string | null; note?: string })[];
   /** The Host's note on this step ("Lưu ghi chú"); never sent to the team. */
   note: string;
-  // Phase 8B (louvre steps; [] / null elsewhere)
-  /** The team's lit buttons now (memory, not only the last lock's). */
-  picks: string[];
-  /** |picks ∩ answers| once the correctAtMinutes mark passed (live), else null. */
-  hintCorrect: number | null;
 }
 /** Phase 8 (D10 / D16): one answer waiting for the Host (HostState.queue, oldest first). */
 export interface ReviewItem {
@@ -381,15 +317,7 @@ export type RaceOp =
   | { t: 'race'; op: 'answer'; step: string; text: string; /** SPEC §17.44: a multi-box task: one string per box (text ''; stored "a | b | c"). */ parts?: string[] }
   | { t: 'race'; op: 'branch'; step: string; branch: string }
   | { t: 'race'; op: 'checkin' }
-  | { t: 'race'; op: 'book' }
-  // Phase 8B (docs/plans/phase8b.md §C): a button under an artwork (from anywhere: it is only state; 0 rows), the lock
-  // button in the middle of the room (judged at the trusted pose: inside the step's zone), the card again (`view`: every
-  // status, 0 rows; the client sends it once at each hint mark), the "Ghi nguồn" panel (`credits`: every status, only
-  // answered with items after the team's finish / the race's end, else notice creditsLocked)
-  | { t: 'race'; op: 'pick'; step: string; art: string; on: boolean }
-  | { t: 'race'; op: 'lock'; step: string }
-  | { t: 'race'; op: 'view' }
-  | { t: 'race'; op: 'credits' };
+  | { t: 'race'; op: 'book' };
 
 /** Phase 8 (D5 / D10): the Host decides on a team's answer. approve / penalize name the answer (`id`); approve without
  *  `id` = a photo task approved before the team pressed "Tôi đã gửi bài" (the Host already has the photo), or Phase 10
@@ -452,9 +380,6 @@ export type ServerNotice =
   // Phase 8 (docs/plans/phase8.md D15)
   | 'answerSent' | 'answerWrong' | 'answerPending' | 'answerLocked' | 'approved' | 'penalized'
   | 'branchChosen' | 'branchSwitched' | 'branchPending' | 'taskNotStarted'
-  // Phase 8B (docs/plans/phase8b.md §C): a wrong lock (countdown on the card), a 6th pick after the 40-minute mark, the
-  // credits asked before the finish (a right lock = clueNew)
-  | 'lockWrong' | 'pickLimit' | 'creditsLocked'
   // Phase 10 (V2): the Host undid its last decision on this team; the `race` view before it restores the card
   | 'reviewUndone';
 /** 'full' (SPEC §17.40): NET.maxSpectators spectator sockets are already open (CLOSE.full). */
@@ -467,7 +392,7 @@ export interface Welcome {
   serverMs: number;
   status: RaceStatus;
   /** SPEC §17.40: a spectator's welcome is this shape with teams (incl. `racing`), movement, presence and empty / null race
-   *  fields (no pose, bikes, boxes, view, feed). */
+   *  fields (no pose, bikes, boxes, view). */
   role: Role;
   /** The logged-in team (absent for the Host and spectators). */
   team?: TeamInfo & { player: string };
@@ -488,8 +413,6 @@ export interface Welcome {
   showStartOrder: boolean;
   /** Where a team with no pose yet (first entry) appears: its spot at the leg start (startSpot), null otherwise. */
   start: { x: number; z: number; yaw: number } | null;
-  /** Phase 8B: the newest NET.feedKept public feed lines, oldest first ([] for none). */
-  feed: FeedMessage[];
 }
 
 export type ServerMessage =
@@ -516,10 +439,6 @@ export type ServerMessage =
   | { t: 'book'; cards: ClueCard[] }
   /** Phase 7 (SPEC §7 "Tại điểm này"): the other online teams in the zone the team stands in ([] = none / left it). */
   | { t: 'zone'; teams: ZoneMember[] }
-  /** Phase 8B: a public feed line (every team socket + the Host). */
-  | FeedMessage
-  /** Phase 8B (§17.20): answer to `race credits` once the team finished / the race is over (leg order; no note, no id). */
-  | { t: 'credits'; items: CreditItem[] }
   /** Phase 7: answer to `host.leg`. */
   | { t: 'host.legResult'; ok: boolean; issues: LegIssueView[] }
   /** Phase 7: a Host op refused or worth a warning (start time in the future, host.leg after teams entered, a race
@@ -564,8 +483,6 @@ export interface HostState {
       proof: boolean;
       /** `title` = the branch's own name (leg Branch.name, "Tính"): what the team calls it; `name` = its place. */
       branches?: { id: string; title: string; name: string; x: number; z: number; r: number; proof: boolean }[];
-      /** Phase 8B: a louvre step: its hint marks, minutes after startedAt ([countAtMinutes, correctAtMinutes]). */
-      louvre?: { hints: [number, number] };
     }[];
     vehicles: VehiclesConfig;
     bundled: string[];

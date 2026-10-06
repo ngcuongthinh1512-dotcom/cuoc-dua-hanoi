@@ -552,14 +552,23 @@ export const landmarks = {
   m3: {
     pixel: 0.8, // share of a sign pixel cell lit (the rest = the gap between bulbs)
     lisboa: {
-      // Hotel Lisboa (1970) + Casino Lisboa: the round 37.4 m OSM drum = the casino rotunda with the gold "birdcage" crown
-      drumTop: 23, // m: drum wall top (inside the 27.8 m podium), the cage above it reaches the OSM height (est.)
-      cage: [[0, 1], [0.3, 1.06], [0.6, 0.98], [0.82, 0.72], [0.94, 0.4], [1, 0.08]] as [number, number][], // [share of cage height, × drum r]
-      ribs: 36, cageRings: 7, segs: 36,
-      tower: { band: 3.2, lit: 0.3, sign: 'LISBOA', pixel: 1.3 }, // 76.8 m tower: lit band every `band` m, roof sign (bulbs)
+      // Hotel Lisboa (1970) + Casino Lisboa, rebuilt from photos (docs/reports/leg2-lisboa-mgm-v2.md). The round 37.4 m OSM
+      // record carries the OSM hotel node (n/13679896101) = the white round hotel tower (12 storeys); the 76.8 m record =
+      // the 1991 extension; the casino drum = the round south lobe of the 27.8 m podium outline (circle fitted to its nodes).
+      round: { floor: 3.1, lit: 0.4, fins: 56, fin: [0.5, 0.8] as [number, number], segs: 48, sign: 'LISBOA', pixel: 1.3, crown: { petals: 16, h: 3.2, parapet: 1.6 } }, // fin: [width, depth] m
+      wing: { band: 3.2, lit: 0.3 }, // 76.8 m extension: lit band every `band` m
+      casino: {
+        x: 501, z: 452, r: 22.5, // world m: fitted to the podium's south arc (OSM nodes), r capped to touch the round tower
+        base: 3.5, grid: 15, cornice: 1, // m: dark entrance storey, top of the window grid (3 storeys × 2 rows), cornice
+        cols: 72, rows: 6, segs: 72, // window grid
+        petals: 20, petalH: 6.5, petalW: 0.96, tilt: 14, // fan arches of the crown: count, height m, share of the bay, outward lean deg
+        inner: { r: 0.62, h: 3 }, dome: { r: 0.42, h: 3.5 }, // × r / m: drum behind the petals, central dome on it
+        rosette: { r: 3, h: 1.6, petals: 8, petalH: 2.4, finial: 3 },
+        podiumCut: 0.8, // the podium is cut off this × r behind the drum centre (the lobe = the casino)
+      },
       podiumBands: [7, 13.5, 20], podiumRib: 4.5, // m: bulb strips on the 27.8 m podium, gold lattice ribs between them
-      colours: { wall: '#ece4cf', drum: '#e8d9b0', shell: '#b8862e', rib: '#ffc35a', ring: '#fff1c0', band: '#ffd890', sign: '#ff3a28', podium: '#f0e2c2', bulb: '#ffcf70' },
-      bright: { rib: 1.8, ring: 2.2, band: 1.2, sign: 2.4, bulb: 1.6 },
+      colours: { wall: '#eeece6', tower: '#f3f1ea', fin: '#fbfaf6', glassBand: '#fff0d4', panel: '#c8702a', mullion: '#3e2414', base: '#5a4232', crown: '#d9a73e', ray: '#fff0b8', dome: '#ecd28a', band: '#ffd890', sign: '#ff3a28', podium: '#f0e2c2', bulb: '#ffcf70', rib: '#ffc35a' },
+      bright: { rib: 1.8, ring: 2.2, band: 1.2, sign: 2.4, bulb: 1.6, panel: 0.9, glassBand: 0.75, ray: 1.8, petal: 0.95 },
     },
     wynn: {
       // Wynn Macau (2006, OSM 94.5 m) + Encore (2010, OSM 177.5 m): curved bronze-gold glass slabs
@@ -571,11 +580,16 @@ export const landmarks = {
       kiosk: 6, // m: the untagged 10 × 15 m pavilion by the lake (OSM way/422413328)
     },
     mgm: {
-      // MGM Macau (2007): 3 wave sections in gold / silver / rose gold; OSM 120 m on the whole tower, the two lower
-      // sections are estimates (photos: the waves step down towards the west)
-      tops: [100, 111, 120], colours: ['#c09048', '#b8bcc4', '#c48a72'],
-      floor: 3, lit: 0.22, band: '#fff0d0', bandBright: 0.9,
-      sign: 'MGM', signPixel: 2, signColour: '#ffc860', signBright: 2.4,
+      // MGM Macau (2007), rebuilt from photos: 3 STACKED wave tiers, bottom → top copper / blue glass / gold; OSM 120 m =
+      // the crest of the gold roofline. Tier splits, waves, insets and trims are estimates from photos.
+      splits: [0.44, 0.72], // tier boundaries, share of the height (mean line of each wave)
+      wave: { amp: 5, length: 1.1, phase: [0.6, 2.4, 4.2] }, // m amplitude; wavelength × tower length; phase per boundary (1, 2, roof)
+      inset: [0, 1.8, 0], // m: each tier pulled back from the OSM outline (the blue one recedes, the gold one steps forward)
+      trim: [[0, 7], [9, 0], [2, 12]] as [number, number][], // m cut off each tier's west / east end (the sideways offsets)
+      colours: ['#b86d4a', '#3c6fb4', '#e2b85c'], // copper / blue glass / gold
+      bands: ['#ff9a5a', '#8cc0ff', '#ffd890'], bandBright: [0.75, 0.6, 0.7], // lit floor lines per tier (copper fins look)
+      floor: 3, lit: 0.14, densify: 5, // m: floor height, lit share, longest outline edge (smooth waves)
+      sign: 'MGM GRAND', signShare: 0.62, signPixel: 2.2, signColour: '#fff0c8', signBright: 2.6, signAt: -0.12, // across both long faces of the gold tier; signAt = centre (share of the length, − = west)
       podium: '#d8c49a', rim: '#ffcf70', rimBright: 1.6, rib: 6, ribBright: 1.1,
       // Grande Praça (OSM node 12438388701): glass barrel vault on the podium roof (est. 50 × 26 m, 9 m high)
       praca: { x: 902, z: 858, length: 50, width: 26, rise: 9 },
@@ -1369,7 +1383,6 @@ export const spectate = {
   lookUp: 1.4, // m above the feet the camera looks at (the head)
   sharpness: 5, // exponential smoothing (ThirdPersonCamera.follow): higher = tighter
   snapDistance: 10, // m: a jump of the goal longer than this (respawn, a new team) is not smoothed
-  roomEye: 1.7, // m above the street the camera stands when the team is in the Louvre room (y ≤ LOUVRE.roomY): the room is not built for a watcher
 };
 export const remote = {
   interpolationMs: 200, // render this far behind the server clock (SPEC §7: buffer ~200 ms; ticks every 200 ms)
@@ -1379,7 +1392,6 @@ export const remote = {
   clockSlewMs: 1, // ms the server-clock offset estimate sinks per tick (≈ 5 ms/s): drift and one lucky fast tick wear off
   renderRadius: 300, // m: until welcome.presence.renderRadius arrives (DEV ?peers stand-ins)
   bellRadius: 60, // m: another team's bell (R) is heard this close
-  hideDy: 10, // m: Phase 8B: feet this far under the terrain grid = underground (the Louvre room 30 m under its box); a remote player is hidden only when one side is underground and the other not (no ghost under the street; slopes hide nobody)
   leanSmoothing: 0.15, // s: a remote rider's lean (derived from the turn rate, not on the wire) follows with this lag
 };
 // SPEC §17.10: the team's clue box, drawn only once the server sent its position (within boxReveal.radius). Shaped like the
@@ -1461,45 +1473,7 @@ export const raceHud = {
   clueLines: 5, // lines of clue text kept on the compact card (the full card / book show everything)
   fullWidth: 520, // px, full card popup + Sổ mật thư
   finishSeconds: 14, // s (sim clock) the host NPC's finish line stays on screen
-  announceSeconds: 3, // s the big centre word ("CHÍNH XÁC" after a right Louvre lock, SPEC §17.33) stays on screen
   taskLockSeconds: 2, // s the card's server buttons (Nhận thử thách, Chọn / Đổi nhánh, Gửi) stay disabled after a click (the answer comes back as a new `race` view)
   // Phase 8 (docs/plans/phase8.md D9 / D15). Typed-answer / history limits are NET.answerMax / NET.answerHistory (shared: the server cuts at the same numbers).
   mediaMaxHeight: 260, // px, tallest an image on a card / in the Sổ gets (click = full-screen)
-};
-
-// ═════════════════════════════════════════════════════════════════════════════════════════════════════
-// Phase 8B (docs/plans/phase8b.md §F, §G): phòng Louvre (Thử thách 3). Leg content (artworks, hints, answers) is on the
-// server; these are client layout / presentation tunables only. Each track edits ONLY its own block.
-// ═════════════════════════════════════════════════════════════════════════════════════════════════════
-
-// ── B · the room (race/LouvreRoom.ts, main.ts F priority, Player env) ──
-export const louvreRoom = {
-  below: 30, // m: floor = heightAt(box x, z) − this (under the Louvre courts: no road / NPC / bike there, the chunk stays loaded)
-  minFloorY: player.respawnBelow + 5, // m: floor never lower (respawn would fire); codec MIN_Y is −100
-  size: { width: 26, depth: 16, height: 5 }, // m, closed box; `width` along the front wall
-  door: { width: 2, height: 2.6 }, // the entry gap in the middle of the front wall (facing room.yaw): no door is drawn (SPEC §17.33: no manual exit), `width` only keeps the wall places clear of the feet landing there; standing at the box's x, z: going in / out only changes y
-  // 9 + 5 + 5 + 2 + 2 = 23 places along the walls, leg order; cornerMargin: m kept free at each corner (and beside the entry gap)
-  slots: { back: 9, side: 5, frontEachSide: 2, minSpacing: 2.6, cornerMargin: 1.2 },
-  // m: the picture `height` tall (a wide one: maxWidth wide, shorter), centre at centreY; the gilt frame hugs it, `frame` m each side (fix F2 (6))
-  painting: { height: 1.7, maxWidth: 2.3, centreY: 2.1, frame: 0.07 },
-  plinth: { size: 0.9, height: 1.0, fromWall: 0.4, photo: [0.8, 1.0], glbBox: [0.8, 1.2, 0.8] }, // a sculpture: plinth `fromWall` m off the wall, photo standing on it, or its .glb fitted in glbBox (≤ size: no base over the edge)
-  button: { radius: 0.125, postHeight: 0.9, fromWall: 1.8, reach: 2.2, aimDot: 0.2 }, // under each artwork, in front of a plinth; F picks the nearest within reach the camera faces (dot > aimDot)
-  lockSign: { size: [2.0, 0.45], y: 3.0 }, // m, the two-faced "Chốt đáp án" sign hanging over the lock button (bottom edge y)
-  // In the room the third-person camera sits further over the right shoulder and higher (the body hid a sculpture being aimed at)
-  camera: { shoulder: 0.65, lift: 0.35 },
-  lock: { plinthRadius: 0.35, buttonRadius: 0.26, reach: 2.5 }, // the lock button in the middle of the room
-  enterReach: 3, // m from the box: F / the card's "Vào phòng" button enters (closer than the zone radius: entering moves the feet to the door, x, z ± ≤ enterReach + inset only)
-  autoExitSeconds: 5, // SPEC §17.33: the only way out: the step done (a right lock: "CHÍNH XÁC" first; a Host "Cho qua") → back on the court this many s later; race over for the team → at once
-  inset: 0.8, // m: entering, the feet land this far inside the front wall; leaving, this far in front of the box (both ≤ 2 m from it: only y changes much)
-  ceilingLights: 6,
-  pickGapMs: 150, // a pick is sent at most this often (the server's 15 msg/s limit counts poses too: verify-foundation #10)
-  colours: { wall: '#efe6d2', floor: '#8a5a35', floorLine: '#6e4527', ceiling: '#c9c2b4', frame: '#b8902f', plinth: '#e8e2d6', post: '#55504a', door: '#5a3b22', off: '#c8281e', on: '#2fbf4a', lock: '#f2c230', light: '#fff6dc', lockSign: '#7a5a10' },
-};
-
-// ── C · public feed (ui/Feed.ts): "Đội X trả lời sai và bị phạt 3 phút" (SPEC §17.19 (b): bottom corner, configurable) ──
-export const feed = {
-  corner: 'bottom-left' as 'bottom-left' | 'bottom-center' | 'bottom-right', // default: bottom-left, right of the minimap (it never covers the minimap or the toasts above it), GTA chat style (waiting for the user's confirmation)
-  bottomLift: 26, // px above the screen margin (clears the attribution line at the very bottom)
-  lines: 5, // newest lines shown
-  seconds: 90, // a line fades after this (s); a new line shows the box again
 };

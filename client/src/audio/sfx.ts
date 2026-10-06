@@ -99,26 +99,3 @@ export function rolling(speed: number, surface: RoadSurface | null) {
   roll.gain.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
   roll.filter.frequency.setTargetAtTime(surface === 'pave' ? 250 + 60 * Math.sin(ctx.currentTime * 40) : 1800, ctx.currentTime, 0.02);
 }
-
-/** Phase 8B: one short blip (tone Hz, s, peak gain). */
-function blip(f: number, seconds: number, gain: number, type: OscillatorType = 'sine') {
-  const c = ctx;
-  if (!c) return;
-  const t = c.currentTime;
-  const g = c.createGain();
-  g.gain.setValueAtTime(gain, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + seconds);
-  g.connect(c.destination);
-  const o = c.createOscillator();
-  o.type = type;
-  o.frequency.value = f;
-  o.connect(g);
-  o.start(t);
-  o.stop(t + seconds);
-}
-
-/** Phase 8B: a button in the Louvre room (on = high tick, off = low tick). */
-export const clickSound = (on: boolean) => blip(on ? 1400 : 700, 0.06, 0.15, 'square');
-
-/** Phase 8B: a new line of another team in the public feed (small pop). */
-export const popSound = () => blip(520, 0.12, 0.12);

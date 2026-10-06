@@ -7,7 +7,7 @@ import { latLonToWorld } from '../projection.ts';
 import { normalizeAnswer } from '../protocol/answers.ts';
 import { MEDIA } from '../protocol/constants.ts';
 import { FINISH_HOLDERS } from '../protocol/finish.ts';
-import { LEG_LIMITS, type Leg, legSchema, LOUVRE, type MediaItem, STEP_TYPES, type Task } from './schema.ts';
+import { LEG_LIMITS, type Leg, legSchema, type MediaItem, STEP_TYPES, type Task } from './schema.ts';
 import { stepZones } from './zones.ts';
 
 export interface LegIssue {
@@ -26,8 +26,6 @@ export interface LegGeo {
   building(x: number, z: number): string | null;
   /** Walking route a → b on the road graph (m) + how far each end is from the graph (m); null = no route. */
   walk(a: { x: number; z: number }, b: { x: number; z: number }): { meters: number; snapA: number; snapB: number } | null;
-  /** Phase 8B (CLI): bytes of the static file client/public/art/<name>, null = missing. */
-  artSize?(name: string): number | null;
 }
 
 export type ParsedLeg = { ok: true; leg: Leg; issues: LegIssue[] } | { ok: false; issues: LegIssue[] };
@@ -45,10 +43,6 @@ const FIELD: Record<string, string> = {
   referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
   scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
   walkOnlyViolationMinutes: 'phút phạt đi xe ở lộ trình đi bộ', quitTaskMinutes: 'phút phạt bỏ thử thách',
-  // Phase 8B (docs/plans/phase8b.md §B)
-  louvre: 'phòng Louvre', artworks: 'tác phẩm', image: 'hình tác phẩm', note: 'ghi chú (chỉ Host)', credit: 'ghi nguồn',
-  artist: 'tác giả', photo: 'tác giả ảnh', license: 'giấy phép', source: 'nguồn', hints: 'mốc gợi ý',
-  countAtMinutes: 'phút gợi ý số lượng', correctAtMinutes: 'phút gợi ý số đúng',
   // SPEC §17.22 / §17.23
   announce: 'thông báo về đích', npc: 'lời NPC dẫn chương trình', toast: 'thông báo nhanh', card: 'thẻ về đích', first: 'bản về nhất', out: 'bản bị loại',
 };
@@ -76,14 +70,10 @@ export function placeOf(root: unknown, path: readonly PropertyKey[]): string {
 
 type ZodIssue = { code: string; path: PropertyKey[]; [k: string]: unknown };
 
-/** Why a licence is refused / missing (SPEC §17.20). */
-const LICENSE_HINT = 'ghi một trong PD, PD-Art, CC0, CC-BY, CC-BY-SA, CC-BY-NC, CC-BY-NC-SA, MIT; cấm ND, "chỉ dùng cá nhân", không rõ giấy phép';
-
 function zodMessage(i: ZodIssue, root: unknown): string {
   const n = (v: unknown) => String(v);
   switch (i.code) {
     case 'invalid_type':
-      if (i.path.at(-1) === 'license' && at(root, i.path) === undefined) return `thiếu giấy phép (${LICENSE_HINT})`;
       return at(root, i.path) === undefined ? 'bị thiếu' : `phải là ${TYPE[n(i.expected)] ?? n(i.expected)}`;
     case 'too_small':
       if (i.origin === 'array') return i.exact ? `phải có đúng ${n(i.minimum)} mục` : `cần ít nhất ${n(i.minimum)} mục`;
@@ -94,15 +84,10 @@ function zodMessage(i: ZodIssue, root: unknown): string {
       if (i.origin === 'string') return `dài quá, tối đa ${n(i.maximum)} ký tự`;
       return `phải ${i.inclusive ? '≤' : '<'} ${n(i.maximum)}${i.path.at(-1) === 'radius' ? ` m (bán kính ${LEG_LIMITS.radiusMin}–${LEG_LIMITS.radiusMax} m)` : ''}`;
     case 'invalid_format':
-      if (i.path.at(-1) === 'source') return 'phải là một liên kết bắt đầu bằng https:// (hoặc để trống "")';
-      if (i.path.at(-1) === 'image') return 'tên hình tác phẩm phải dạng "art-NN.webp" (ảnh) hoặc "art-NN.glb" (mô hình tượng), NN = 2 chữ số, hoặc "" khi chưa có';
       return i.path.at(-1) === 'id' && i.path.length === 1
         ? 'mã chặng chỉ gồm chữ thường a–z, số, gạch ngang (tối đa 32 ký tự, không bắt đầu bằng gạch ngang)'
         : 'mã chỉ gồm chữ, số, gạch ngang / gạch dưới, tối đa 16 ký tự, không dấu cách';
     case 'invalid_value':
-      if (i.path.at(-1) === 'license' && ['', undefined, null].includes(at(root, i.path) as never)) return `thiếu giấy phép (${LICENSE_HINT})`;
-      if (i.path.at(-1) === 'license')
-        return `giấy phép không được phép (SPEC §17.20: cấm ND, "chỉ dùng cá nhân", không rõ giấy phép); chỉ dùng: ${(i.values as unknown[]).map((v) => JSON.stringify(v)).join(', ')}`;
       return `phải là một trong: ${(i.values as unknown[]).map((v) => JSON.stringify(v)).join(', ')}`;
     case 'unrecognized_keys':
       return `có trường lạ: ${(i.keys as string[]).map((k) => `"${k}"`).join(', ')} (gõ sai tên trường?)`;
@@ -217,7 +202,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
       // Phase 8 (gap 1): an answer typed in game + Host approval needs no proof instruction; a photo task (free) does. No
       // Host Facebook / Messenger link at all (SPEC §17.17: teams open Messenger outside the game)
       if (t.verification === 'host_approval' && t.kind === 'free') blank(t.proofInstruction, [...p, 'proofInstruction'], 'hướng dẫn gửi bài');
-      if (t.kind !== 'answer' && t.kind !== 'free' && t.kind !== 'louvre') add('warning', [...p, 'kind'], `kiểu "${t.kind}" chưa có trong game (hoãn): máy chủ xử lý như "answer" (đội gõ đáp án)`);
+      if (t.kind !== 'answer' && t.kind !== 'free') add('warning', [...p, 'kind'], `kiểu "${t.kind}" chưa có trong game (hoãn): máy chủ xử lý như "answer" (đội gõ đáp án)`);
     }
     // Phase 8 (§17.16): each branch has its own box at its task place; without one it stands where the previous box
     // stood (on top of it). A branch still blank is listed above: its place comes with its content.
@@ -277,27 +262,11 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
     if (!tasks.length) return;
     const texts = [...new Map(steps.slice(0, i + 1).flatMap((_, j) => textsOf(j)).map((x) => [x[1].join('/'), x] as const)).values()]; // the shared button label once
     for (const [t, branch] of tasks)
-      // Phase 8B rule 4: a louvre task's answers are neutral artwork ids (not scanned); its secrets are the 5 right
-      // artworks' title (credit) and Host note
-      for (const [list, what] of (t.kind === 'louvre'
-        ? [[louvreSecrets(t), 'tên / ghi chú tác phẩm đúng'], [louvreCodes(t), 'mã / tên tệp tác phẩm đúng']]
-        : [[t.answers, 'đáp án'], [t.referenceAnswers, 'đáp án tham khảo']]) as [readonly string[], string][])
+      for (const [list, what] of [[t.answers, 'đáp án'], [t.referenceAnswers, 'đáp án tham khảo']] as [readonly string[], string][])
         for (const a of list.filter((x) => !held(x)).map(normalizeAnswer).filter((a) => a.length >= 3))
           for (const [x, p] of texts) if (normalizeAnswer(x).includes(a)) add('warning', p, `chứa ${what} "${a}" của bước ${i + 1} (${s.id}${branch ? `, nhánh ${branch}` : ''}): đội đọc được trước khi giải`);
-    // F1 (verify-foundation #7): one telling word (≥ 6 letters) of a right artwork's title is a partial leak; a text that
-    // already holds a whole title / note has its warning above
-    const [lt] = tasks[0]!;
-    if (lt.kind !== 'louvre') return;
-    const whole = louvreSecrets(lt).map(normalizeAnswer).filter((a) => a.length >= 3);
-    const telling = new Set((lt.louvre?.artworks ?? []).filter((a) => lt.answers.includes(a.id)).flatMap((a) => words(a.credit?.title ?? '')).filter((w) => w.length >= 6 && !COMMON_ART_WORDS.has(w)));
-    for (const [x, p] of texts) {
-      if (whole.some((a) => normalizeAnswer(x).includes(a))) continue;
-      const own = new Set(words(x));
-      for (const w of telling) if (own.has(w)) add('warning', p, `chứa từ "${w}" trong tên một tác phẩm đúng của bước ${i + 1} (${s.id}): lộ một phần tên; đổi cách viết nếu từ này đủ để đoán ra tác phẩm`);
-    }
   });
 
-  louvreRules(leg, add, geo);
   announceRules(leg, add);
 
   // map data (CLI only): every point a team must reach (step zones, each detour branch's own place) is outside buildings
@@ -347,96 +316,6 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   return out;
 }
 
-/** Phase 8B rule 4: the texts that give a louvre task away (title + Host note of its 5 right artworks). */
-const louvreSecrets = (t: Task): string[] =>
-  (t.louvre?.artworks ?? []).filter((a) => t.answers.includes(a.id)).flatMap((a) => [a.credit?.title ?? '', a.note]);
-
-/** Words of ≥ 6 letters (normalized) that say nothing about which work it is: not a partial leak (rule 4). */
-const COMMON_ART_WORDS = new Set(['louvre', 'portrait', 'painting', 'sculpture', 'statue', 'museum', 'musee', 'peinture', 'tableau', 'untitled', 'unknown', 'anonymous', 'anonyme']);
-
-/** Track D (verifier): the id and file name of the 5 right artworks ("art-17", "art-17.webp") are as good as the answer. */
-const louvreCodes = (t: Task): string[] =>
-  (t.louvre?.artworks ?? []).filter((a) => t.answers.includes(a.id)).flatMap((a) => [a.id, a.image]).filter((x) => x !== '');
-
-/** Phase 8B (docs/plans/phase8b.md §B rules 1–8; rule 4's leak scan runs with the other answers above, rule 9 in the CLI). */
-function louvreRules(leg: Leg, add: (level: LegIssue['level'], path: PropertyKey[], message: string) => void, geo?: LegGeo) {
-  const zones = stepZones(leg);
-  const rooms = new Map<string, number>(); // box position → first louvre step there
-  leg.steps.forEach((s, i) => {
-    if (s.type === 'detour')
-      s.branches.forEach((b, k) => {
-        if (b.task.kind === 'louvre') add('error', ['steps', i, 'branches', k, 'task', 'kind'], 'kiểu "louvre" chỉ dùng cho một thử thách (challenge), không dùng trong nhánh Lựa chọn kép');
-        else if (b.task.louvre) add('warning', ['steps', i, 'branches', k, 'task', 'louvre'], 'khối "louvre" bị bỏ qua: kiểu nhiệm vụ không phải "louvre"');
-      });
-    if (s.type !== 'challenge') return;
-    const t = s.task;
-    const p: PropertyKey[] = ['steps', i, 'task'];
-    if (t.kind !== 'louvre') {
-      if (t.louvre) add('warning', [...p, 'louvre'], 'khối "louvre" bị bỏ qua: kiểu nhiệm vụ không phải "louvre"');
-      return;
-    }
-    // rule 1
-    const lv = t.louvre;
-    if (!lv) return add('error', [...p, 'louvre'], `kiểu louvre cần khối "louvre" với "artworks" (${LOUVRE.artworks} tác phẩm)`);
-    const arts = lv.artworks;
-    // rule 2 (23 = zod)
-    if (new Set(arts.map((a) => a.type)).size < 2) add('warning', [...p, 'louvre', 'artworks'], `toàn ${arts[0]?.type === 'sculpture' ? 'tượng' : 'tranh'}: nên ≈ 15 tranh + 8 tượng`);
-    const ids = new Map<string, number>();
-    // track D: ids are "art-NN" and the file carries the same id (the room order is the only thing that differs from the list)
-    arts.forEach((a, k) => {
-      if (!ART_ID.test(a.id)) add('error', [...p, 'louvre', 'artworks', k, 'id'], `mã "${a.id}" phải đúng dạng art-NN (NN = 2 chữ số), như tên tệp tĩnh`);
-      else if (a.image !== '' && a.image.replace(/\.(webp|glb)$/, '') !== a.id) add('error', [...p, 'louvre', 'artworks', k, 'image'], `tên tệp "${a.image}" phải trùng mã tác phẩm "${a.id}" (${a.id}.webp / ${a.id}.glb)`);
-    });
-    arts.forEach((a, k) => (ids.has(a.id) ? add('error', [...p, 'louvre', 'artworks', k, 'id'], `mã "${a.id}" trùng với tác phẩm ${ids.get(a.id)! + 1}`) : ids.set(a.id, k)));
-    if (t.answers.length !== LOUVRE.answers) add('error', [...p, 'answers'], `phải có đúng ${LOUVRE.answers} đáp án (mã tác phẩm thật ở Louvre), đang có ${t.answers.length}`);
-    if (new Set(t.answers).size !== t.answers.length) add('error', [...p, 'answers'], 'có mã tác phẩm trùng nhau');
-    for (const a of t.answers) if (!ids.has(a)) add('error', [...p, 'answers'], `đáp án "${a}" không phải mã của tác phẩm nào trong "artworks"`);
-    // rule 3
-    const files = new Map<string, number>();
-    arts.forEach((a, k) => {
-      const ap = [...p, 'louvre', 'artworks', k];
-      if (a.image === '') return add('blank', [...ap, 'image'], `hình tác phẩm ${a.id} chưa có (trong phòng hiện ô đánh số)`);
-      if (a.image.endsWith('.glb') && a.type === 'painting') add('error', [...ap, 'image'], 'mô hình .glb chỉ dùng cho tượng ("type": "sculpture"); tranh dùng ảnh .webp');
-      if (files.has(a.image)) add('warning', [...ap, 'image'], `tệp "${a.image}" đã dùng cho tác phẩm ${files.get(a.image)! + 1}: kiểm tra có nhầm không`);
-      else files.set(a.image, k);
-      const name = a.image.toLowerCase();
-      const tok = words(a.note).find((w) => name.includes(w));
-      if (tok) add('warning', [...ap, 'image'], `tên tệp chứa chữ "${tok}" của ghi chú: tên tệp tới máy người chơi, chỉ dùng tên trung tính art-NN`);
-      // rule 4: the room's picture without its credit = an empty "Ghi nguồn" after the finish
-      if (!a.credit) add('warning', [...ap, 'credit'], 'thiếu ghi nguồn (tên, giấy phép): bảng Ghi nguồn sau khi về đích sẽ trống dòng này');
-      const size = geo?.artSize?.(a.image);
-      if (geo?.artSize && size == null) add('blank', [...ap, 'image'], `chưa có tệp client/public/art/${a.image} (trong phòng hiện ô đánh số)`);
-      const max = a.image.endsWith('.glb') ? LOUVRE.maxGlbBytes : LOUVRE.maxWebpBytes;
-      if (size != null && size > max) add('warning', [...ap, 'image'], `tệp ${a.image} nặng ${Math.round(size / 1024)} KB, quá ${max / 1024} KB`);
-    });
-    // rule 5: the order around the walls must not give the answers away (one run of 5, also wrapping last → first)
-    const at = t.answers.map((a) => ids.get(a)).filter((k) => k !== undefined).sort((a, b) => a - b);
-    if (at.length === LOUVRE.answers && at.some((_, j) => at.every((_, m) => at[(j + m) % at.length] === (at[j]! + m) % arts.length)))
-      add('warning', [...p, 'louvre', 'artworks'], `${LOUVRE.answers} đáp án đứng liền nhau trong danh sách (cũng là thứ tự quanh tường): gợi ý đáp án; xáo lại "artworks"`);
-    // track D: the codes themselves must not give the answers away either (smallest / largest / consecutive by code)
-    const sorted = [...ids.keys()].sort();
-    const rank = t.answers.map((a) => sorted.indexOf(a)).sort((a, b) => a - b);
-    if (rank.length === LOUVRE.answers && !rank.includes(-1) && rank.every((r, j) => r === rank[0]! + j))
-      add('warning', [...p, 'answers'], `${LOUVRE.answers} mã đáp án liền nhau theo mã (gồm cả trường hợp nhỏ nhất / lớn nhất): đội đoán được bằng cách bấm theo mã; chọn mã rải đều`);
-    // rule 6
-    if (t.location) add('error', [...p, 'location'], 'phòng Louvre nằm ngay dưới hòm vừa mở; bỏ "location"');
-    if (leg.steps[i - 1]?.type !== 'route_info') add('error', ['steps', i, 'type'], 'trước thử thách louvre phải là một Lộ trình (route_info) có hòm: phòng nằm dưới hòm đó');
-    if (s.teaser !== '') add('warning', ['steps', i, 'teaser'], 'mốc gợi ý tính từ lúc mở hòm Lộ trình trước, không phải lúc bấm "Nhận thử thách"');
-    const z = zones[i]!;
-    const key = `${Math.round(z.x)}_${Math.round(z.z)}`;
-    if (rooms.has(key)) add('warning', ['steps', i], `cùng hòm với thử thách louvre ở bước ${rooms.get(key)! + 1}: hai phòng chồng nhau`);
-    else rooms.set(key, i);
-    // rule 7
-    if (t.verification !== 'auto') add('error', [...p, 'verification'], 'phòng Louvre do máy chủ tự chấm: dùng "verification": "auto"');
-    if (t.referenceAnswers.length) add('warning', [...p, 'referenceAnswers'], 'bị bỏ qua: phòng Louvre không có Host duyệt');
-    // rule 8
-    if (lv.hints.countAtMinutes >= lv.hints.correctAtMinutes) add('error', [...p, 'louvre', 'hints'], `phút gợi ý số lượng (${lv.hints.countAtMinutes}) phải nhỏ hơn phút gợi ý số đúng (${lv.hints.correctAtMinutes})`);
-    if (t.retryLockMinutes != null && t.retryLockMinutes < 1) add('warning', [...p, 'retryLockMinutes'], `phạt dưới 1 phút (${t.retryLockMinutes}): chỉ dùng cho chặng test`);
-  });
-}
-
-const ART_ID = /^art-\d{2}$/;
-
 /** SPEC §17.22 / §17.23: the finish texts of the Pit Stop (announce): only the known placeholders; characters a team's screen
  *  shows (no control characters: error; outside Latin / Vietnamese / common punctuation, e.g. emoji: warning, the system
  *  font may draw a box). */
@@ -454,9 +333,6 @@ function announceRules(leg: Leg, add: (level: LegIssue['level'], path: PropertyK
     });
   });
 }
-
-/** Words of ≥ 4 letters / digits, lower case, no diacritics (rule 3: a file name carrying the note). */
-export const words = (s: string): string[] => normalizeAnswer(s).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4);
 
 /** "[CHƯA NHẬP …]": a placeholder left in a draft (gap 10), whatever the case / Unicode form. */
 const held = (v: string) => v.normalize('NFC').trim().toUpperCase().startsWith('[CHƯA NHẬP');

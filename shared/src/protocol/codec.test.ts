@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodePose, decodeTick, encodePose, encodeTick, isClientMessage, parseFrame, POSE_LEN, samePose } from './codec.ts';
 import { NET, PROTOCOL_VERSION } from './constants.ts';
-import { type FeedMessage, type HostMessage, type LouvreView, MOVE_MODES, PLAYER_ACTIONS, type PoseSample, type RaceOp, type ServerMessage, submitCode, TAG, type UndoItem, type ZoneMember } from './types.ts';
+import { type HostMessage, MOVE_MODES, PLAYER_ACTIONS, type PoseSample, submitCode, TAG, type UndoItem, type ZoneMember } from './types.ts';
 
 const pose: PoseSample = { x: 123.456, y: 1.234, z: -910.117, yaw: 2.5, mode: 'bike', action: 'none' };
 
@@ -203,38 +203,15 @@ describe('frames and JSON messages', () => {
     expect(JSON.parse(JSON.stringify({ zone, undo }))).toEqual({ zone, undo });
   });
 
-  it('Phase 8B (v4): pick / lock / view / credits from a team only, through a JSON frame; view / credits carry no step', () => {
-    expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(4); // 5: SPEC §17.22 / §17.23 (no team clock, RaceView.result)
-    const ok: RaceOp[] = [
+  it('Leg 2 (v9): the Louvre room ops are gone (pick / lock / view / credits refused)', () => {
+    expect(PROTOCOL_VERSION).toBe(9);
+    const gone: unknown[] = [
       { t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: true },
-      { t: 'race', op: 'pick', step: 'T3', art: 'x'.repeat(16), on: false },
       { t: 'race', op: 'lock', step: 'T3' },
       { t: 'race', op: 'view' },
       { t: 'race', op: 'credits' },
     ];
-    for (const m of ok) {
-      const back = parseFrame(JSON.stringify(m), NET.maxPlayerBytes);
-      expect(back).toEqual(m);
-      expect(isClientMessage(back, 'team')).toBe(true);
-      expect(isClientMessage(back, 'host')).toBe(false);
-    }
-    const bad: unknown[] = [
-      { t: 'race', op: 'pick', step: 'T3', art: 'art-07' }, // on?
-      { t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: 1 },
-      { t: 'race', op: 'pick', step: 'T3', art: '', on: true },
-      { t: 'race', op: 'pick', step: 'T3', art: 'x'.repeat(17), on: true },
-      { t: 'race', op: 'pick', step: 'T3', art: 'art 07', on: true },
-      { t: 'race', op: 'pick', art: 'art-07', on: true }, // which step?
-      { t: 'race', op: 'lock' },
-    ];
-    for (const m of bad) expect(isClientMessage(m, 'team'), JSON.stringify(m)).toBe(false);
-  });
-
-  it('Phase 8B (v4): server → client louvre shapes survive a JSON round trip (welcome.feed, feed, credits, card)', () => {
-    const feed: FeedMessage = { t: 'feed', at: 1_700_000_000_000, slot: 2, ok: false, minutes: 3, n: 2, of: 5 };
-    const lv: LouvreView = { artworks: [{ id: 'art-01', type: 'sculpture', image: 'art-01.webp' }], room: { x: 1.5, z: -2, r: 20, yaw: 1.571 }, picks: ['art-01'], attempts: 1, hintAt: [10, 20], hintCount: 5, hintCorrect: null, maxPicks: 5 };
-    const msgs: ServerMessage[] = [feed, { t: 'credits', items: [{ file: 'art-01.webp', title: '(GIẢ) Tranh', artist: '', photo: '', license: 'CC-BY-SA', source: '' }] }, { t: 'notice', code: 'pickLimit' }];
-    for (const m of [...msgs, lv]) expect(JSON.parse(JSON.stringify(m))).toEqual(m);
+    for (const m of gone) expect(isClientMessage(m, 'team'), JSON.stringify(m)).toBe(false);
   });
 
   it('Phase 8: submission code "<team>-<step>[-<branch>]" (card, Sổ, Host queue: one function)', () => {

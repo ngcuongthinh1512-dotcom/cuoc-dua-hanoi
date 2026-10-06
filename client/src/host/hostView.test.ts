@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isClientMessage, MEDIA, NET, type HostState } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, answerMatch, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, withLouvreDemo, louvreLines } from './hostView.ts';
+import { ago, answerMatch, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -398,47 +398,6 @@ describe('R2 images and the leg line (D14, D16 (4) (5))', () => {
   });
 });
 
-// ── Phase 8B track D: louvre cell ──
-describe('louvre cell (phase8b §H)', () => {
-  const s = withLouvreDemo(demoState(NOW));
-  const cellOf = (state: HostState, name: string, now = NOW) => rowOf(state, name, now).cells[6]!; // T3 sits after Thử thách 2, before Về đích
-
-  it('shows picks / misses / the 60 min hint with the live x, a countdown while locked, and the exit button', () => {
-    const c = cellOf(s, 'Đội Lục');
-    expect(c.state).toBe('locked');
-    expect(c.text).toBe('⏳ 02:10 · chọn 5/23 · ✗2 · 💡60 (3/5)');
-    expect(c.buttons.map((b) => [b.op, b.id, b.step])).toEqual([['approve', undefined, 'T3']]); // approve without id = the way out
-    expect(c.buttons[0]!.confirm).toContain('Đội Lục');
-    expect(c.title).toContain('Đang chọn (5): art-04, art-09, art-11, art-15, art-20');
-    expect(c.title).toContain('đúng 2/5');
-    expect(c.title).toContain('đúng 3/5');
-  });
-
-  it('hint marks follow the clock: nothing, 40, then 60 (x only when the server sent it)', () => {
-    const at = (min: number, more: Partial<Row> = {}) => cellOf(withRow(s, 't3', 'T3', { lockedUntil: null, startedAt: NOW - min * MIN, ...more }), 'Đội Lục');
-    expect(at(10).text).toBe('chọn 5/23 · ✗2');
-    expect(at(41).text).toBe('chọn 5/23 · ✗2 · 💡40');
-    expect(at(71, { hintCorrect: 0 }).text).toBe('chọn 5/23 · ✗2 · 💡60 (0/5)');
-    expect(at(71, { hintCorrect: null }).text).toBe('chọn 5/23 · ✗2 · 💡60');
-    expect(at(10).state).toBe('active');
-  });
-
-  it('a finished louvre step is an ordinary done cell; teams before it have no button', () => {
-    expect(cellOf(s, 'Đội Xanh').state).toBe('done');
-    expect(cellOf(s, 'Đội Đỏ').buttons).toEqual([]);
-  });
-
-  it('the stuck warning still fires for a team in the room', () => {
-    const late = withRow(s, 't3', 'T3', { startedAt: NOW - 50 * MIN, lockedUntil: null });
-    expect(stuckAlerts(late, NOW).find((a) => a.team === 't3')?.step).toBe('T3');
-  });
-
-  it('the leg box line; no answers or artwork names anywhere in the demo', () => {
-    expect(louvreLines(s.leg!)).toEqual(['Thử thách 3: phòng Louvre, 23 tác phẩm (ảnh / mô hình có sẵn trong game, không cần tải lên), gợi ý phút 40 / 60.']);
-    expect(louvreLines(demoState(NOW).leg!)).toEqual([]);
-  });
-});
-
 // ── Phase 10 (docs/plans/phase10.md V1 / V2 / V3 / V5, SPEC §17.25), track H ──
 describe('undo lines (V2)', () => {
   const s = demoState(NOW); // Đội Xanh's «42» on Thử thách 1 was approved 3 s ago: 7 s left
@@ -539,13 +498,10 @@ describe('"Cho qua" for every kind of challenge (V5, plan M8)', () => {
     expect(labels(s, 'Đội Tím', 1)).toEqual(['Duyệt câu vừa phạt', 'Cho qua']);
   });
 
-  it('a detour branch whose box is open (typed or photo), the louvre room, a photo challenge: all of them', () => {
+  it('a detour branch whose box is open (typed or photo), a photo challenge: all of them', () => {
     expect(labels(s, 'Đội Đỏ', 3)).toEqual(['Duyệt (đã nhận ảnh)', 'Cho qua']); // photo branch B
     expect(rowOf(s, 'Đội Đỏ').cells[3]!.buttons[1]!.confirm).toBe('Cho Đội Đỏ qua Lựa chọn kép (nhánh Ảnh (B)) mà không cần câu trả lời?');
     expect(labels(withRow(s, 't1', 'D1', { branch: 'A' }), 'Đội Đỏ', 3)).toEqual(['Cho qua']); // typed branch A
-    const lv = withLouvreDemo(s);
-    expect(rowOf(lv, 'Đội Lục').cells[6]!.buttons.map((b) => [b.op, b.id, b.label])).toEqual([['approve', undefined, 'Cho qua']]);
-    expect(rowOf(lv, 'Đội Lục').cells[6]!.buttons[0]!.confirm).toBe('Cho Đội Lục qua phòng Louvre mà không cần chọn đúng?');
   });
 
   it('not where the server has nothing to approve: an answer waits (Duyệt / Phạt instead), the branch box is not open, a route, the Pit Stop, a done or later cell', () => {

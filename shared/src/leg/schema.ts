@@ -3,7 +3,6 @@
 // never leaves the Worker (SPEC §3). docs/plans/phase7.md §3 D11–D13; the user-facing description is docs/LEG_FORMAT.md.
 // Every block except id / title / start / steps has defaults (the demo leg's values), so a hand-written leg stays short.
 import { z } from 'zod';
-import { LOUVRE } from '../constants.ts';
 
 /** Sanity limits shared by the schema, the server and `npm run leg:check` (SPEC §17.4: geofence radius 15–40 m). */
 export const LEG_LIMITS = {
@@ -25,7 +24,7 @@ export const STEP_TYPES = ['route_info', 'detour', 'challenge', 'pit_stop'] as c
 export type StepType = (typeof STEP_TYPES)[number];
 /** SPEC §11 mini-game kinds. Phase 8 plays `answer` (typed in game) and `free` (a photo sent on Messenger); the others
  *  are a `leg:check` warning and run as `answer` (the mini-game library is deferred, docs/plans/phase8.md §11). */
-export const TASK_KINDS = ['find_objects', 'delivery', 'observe_answer', 'cipher', 'photo_match', 'binocular_scan', 'timed_drive', 'memory_ui', 'answer', 'free', 'louvre'] as const;
+export const TASK_KINDS = ['find_objects', 'delivery', 'observe_answer', 'cipher', 'photo_match', 'binocular_scan', 'timed_drive', 'memory_ui', 'answer', 'free'] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
 export const VERIFICATIONS = ['auto', 'host_approval'] as const;
 export type Verification = (typeof VERIFICATIONS)[number];
@@ -52,44 +51,6 @@ export const destinationSchema = z.strictObject({
   /** Phase 8 (gap 11): where the FRONT of the clue box faces (the side a team reads it from), like start.yawDeg: 0 = north,
    *  + = turned left / west. Also the box of a detour branch (its task.location). */
   yawDeg: z.number().default(0),
-});
-
-/** Phase 8B (SPEC §17.19, docs/plans/phase8b.md §B): the Louvre room ("Thử thách 3"). The 5 right ids are task.answers
- *  (server-only); notes and credits never reach a team before it finished (§17.20). */
-export { LOUVRE }; // Phase 8B: lives in ../constants.ts (zod-free: the client reads the counts too)
-/** SPEC §17.19 (a) / §17.20: allowed licences of an artwork's picture / scan. Never ND, "personal use only" or unknown. */
-export const ART_LICENSES = ['PD', 'PD-Art', 'CC0', 'CC-BY', 'CC-BY-SA', 'CC-BY-NC', 'CC-BY-NC-SA', 'MIT'] as const;
-export type ArtLicense = (typeof ART_LICENSES)[number];
-
-const artwork = z.strictObject({
-  id: z.string().regex(LOUVRE.artId),
-  /** painting = a frame on the wall; sculpture = a plinth near the wall (a photo standing on it, or a .glb scan). */
-  type: z.enum(['painting', 'sculpture']).default('painting'),
-  /** '' = not there yet: the room draws a numbered placeholder. */
-  image: z.union([z.string().regex(LOUVRE.artFile), z.literal('')]).default(''),
-  /** Host / author only (where the real one is…): NEVER sent to any client. */
-  note: text().default(''),
-  /** §17.20 "Ghi nguồn": server-only, sent ({t:'credits'}) only to a team that finished / once the race is over. */
-  credit: z
-    .strictObject({
-      title: text(),
-      artist: text().default(''),
-      /** Author of the photo / scan. */
-      photo: text().default(''),
-      license: z.enum(ART_LICENSES),
-      source: z.union([z.string().max(500).regex(/^https?:\/\/\S+$/), z.literal('')]).default(''),
-    })
-    .optional(),
-});
-
-/** Phase 8B: the `louvre` block of a task of kind "louvre" (layout of the room: client config `louvreRoom`; where: under
- *  the box of the route just before, facing its destination.yawDeg). */
-export const louvreSchema = z.strictObject({
-  /** Order = order around the walls (the author shuffles; leg:check warns when the 5 answers sit together). */
-  artworks: z.array(artwork).length(LOUVRE.artworks),
-  /** Minutes after task_started_at (= the previous route's box opened): "Đáp án bao gồm 5 tác phẩm" + max 5 picks, then
-   *  "Đúng x/5" (live). */
-  hints: z.strictObject({ countAtMinutes: z.number().positive().default(40), correctAtMinutes: z.number().positive().default(60) }).prefault({}),
 });
 
 /** SPEC §6.5. */
@@ -126,8 +87,6 @@ export const taskSchema = z.strictObject({
    *  §11). Phase 7 stores them unchecked so a real leg can be written now; Phase 8 validates them per kind and decides
    *  what reaches the team (never sent in Phase 7: cardOf leaves them out, like `answers`). */
   params: z.record(z.string(), z.unknown()).optional(),
-  /** Phase 8B: kind "louvre" only (answers = the 5 right artwork ids; a wrong lock = retryLockMinutes). */
-  louvre: louvreSchema.optional(),
 });
 
 const routeInfo = z.strictObject({
@@ -240,7 +199,4 @@ export type Transport = z.output<typeof transportSchema>;
 /** A parsed media item: {url: "https://…" | "r2:<name>", label}. */
 export type MediaItem = Task['media'][number];
 export type VehiclesConfig = Leg['vehicles'];
-export type LouvreTask = z.output<typeof louvreSchema>;
-export type Artwork = LouvreTask['artworks'][number];
-export type ArtCredit = NonNullable<Artwork['credit']>;
 export type Announce = z.output<typeof announceSchema>;

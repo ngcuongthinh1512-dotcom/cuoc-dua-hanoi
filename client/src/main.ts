@@ -1,8 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { clickSound, popSound, reviewSound, unlockAudio } from './audio/sfx.ts';
-import { type CardStatus, type LouvreView, NET, type PoseSample } from '@race/shared/protocol';
-import { bounds, chunks as chunkCfg, flyCamera, keys, louvreRoom as roomCfg, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, ui } from './config.ts';
+import { reviewSound, unlockAudio } from './audio/sfx.ts';
+import { NET, type PoseSample } from '@race/shared/protocol';
+import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
@@ -14,9 +14,8 @@ import { graphLines, loadRoadGraph } from './geo/roadGraph.ts';
 import { BikeLink } from './net/bikeLink.ts';
 import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
-import { fakeTeams, fakeTick, parsePeers, RemotePlayers, underground } from './net/RemotePlayers.ts';
+import { fakeTeams, fakeTick, parsePeers, RemotePlayers } from './net/RemotePlayers.ts';
 import { fetchMedia, isOnline, startSession } from './net/session.ts';
-import { autoExitLeft, demoLouvre, LouvreRoom, pickChange, preloadArt, ROOM_TEXT, roomCardOf, roomPrompt } from './race/LouvreRoom.ts';
 import { PitHost } from './race/PitStop.ts';
 import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
@@ -36,7 +35,7 @@ import { netDownText } from './ui/Login.ts';
 import { MapTiles } from './ui/MapTiles.ts';
 import { Menu } from './ui/Menu.ts';
 import { Minimap, setArrowColour } from './ui/Minimap.ts';
-import { lockWrongText, notice, penalizedText, toast } from './ui/Toasts.ts';
+import { notice, penalizedText, toast } from './ui/Toasts.ts';
 import { type HudFrame, NO_GPS } from './ui/types.ts';
 import { loadBikeAsset } from './vehicle/BikeModel.ts';
 import { groundAt } from './vehicle/Bikes.ts';
@@ -56,7 +55,6 @@ import { createWater } from './world/Water.ts';
 import { createPost } from './world/post.ts';
 import { initTimeOfDay } from './world/night.ts';
 import { FpsWatch, graphics } from './world/graphics.ts';
-import { hideWorld, showWorld } from './world/hideWorld.ts';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -191,17 +189,7 @@ async function start() {
   fly.setPose(x, y, z, yawDeg, pitchDeg);
   const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water };
   const overrides = parseOverrides(query, !!session);
-  // Phase 8B (docs/plans/phase8b.md §F): the Louvre room under the box. Critic C2: only the Player gets its OWN env (the
-  // room floor, no Seine while inside); `env` stays the grid for the NPCs, the boxes, the overlays.
-  const room = camOk || viewer ? undefined : new LouvreRoom(scene, world, env.heightAt);
-  const playerEnv = {
-    ...env,
-    heightAt: (x: number, z: number) => (room?.active ? room.floorY : env.heightAt(x, z)),
-    get waterLevel() {
-      return room?.active ? null : env.waterLevel;
-    },
-  };
-  const player = camOk || viewer ? undefined : await Player.create(scene, world, camera, playerEnv, overrides, session?.team);
+  const player = camOk || viewer ? undefined : await Player.create(scene, world, camera, env, overrides, session?.team);
   // D17: no spawn / clue box on top of a rail viaduct (the Bir-Hakeim metro deck over the leg start)
   const rails = new RailDecks(new Set(hasIndex ? index.keys : []), new URL('data/', location.href).href);
   /** (Re)spawn at the leg start / where the team stood (welcome), DEV ?start=x,z,yawDeg: the same path (p7-start). */
@@ -214,18 +202,6 @@ async function start() {
     rails.at(player.position.x, player.position.z);
     const st = query.get('start')?.split(',').map(Number);
     if (import.meta.env.DEV && !session && st?.length === 3 && st.every(Number.isFinite)) spawnAt(st[0]!, st[1]!, (st[2]! * Math.PI) / 180);
-  }
-  // DEV ?louvre=1 (offline, p8b-room*): the room at the spawn with a stand-in card (?card=louvre-locked: penalised),
-  // ?roomAt=view|button|lock; F picks / unpicks locally.
-  let demo: { step: string; status: CardStatus; lv: LouvreView } | undefined;
-  const nums = (k: string) => query.get(k)?.split(',').map(Number); // DEV ?artGlb=2,7&artPhoto=8 (p8b-real-*: the real files)
-  if (import.meta.env.DEV && !session && player && room && query.get('louvre') === '1') {
-    demo = { step: 'T3', status: query.get('card') === 'louvre-locked' ? 'locked' : 'active', lv: demoLouvre(player.position.x, player.position.z, 0, undefined, nums('artGlb') && { glb: nums('artGlb')!, photo: nums('artPhoto') ?? [] }) };
-    room.build(demo.step, demo.lv);
-    room.enter();
-    player.bikesPlaced = true; // no dev bikes in the room
-    const at = room.demoSpot(query.get('roomAt'), demo.lv.picks)!;
-    spawnAt(at.x, at.z, at.yaw);
   }
   let flying = !player;
   // SPEC §17.39: a team that finished (checked in, BỊ LOẠI, the Host's "Kết thúc") keeps its body: it walks, swims, sends
@@ -244,7 +220,7 @@ async function start() {
   // SPEC §17.40: the watch mode (spectate/Spectate.ts) for the Host / a spectator from the start, for a team once it finished
   // (X toggles it). `watching` = the camera is the Spectate's (a followed body, or free fly); the body then stands still,
   // sends no pose, and the server is told (`watch`) so the ticks carry every team.
-  const spectate = remote && (viewer || session) ? new Spectate({ fly, poseOf: (slot) => remote.poseOf(slot), heightAt: env.heightAt, onFree: () => input.lock(), team: !!player }) : undefined;
+  const spectate = remote && (viewer || session) ? new Spectate({ fly, poseOf: (slot) => remote.poseOf(slot), onFree: () => input.lock(), team: !!player }) : undefined;
   let watching = !!viewer;
   spectate?.show(watching);
   if (peers.length) spectate?.setTeams(fakeTeams(peers));
@@ -274,12 +250,6 @@ async function start() {
           answer: (step, text, parts) => race?.answer(step, text, parts),
           branch: (step, id) => race?.branch(step, id),
           accept: (step) => race?.accept(step),
-          credits: () => race?.credits(), // Phase 8B: "Ghi nguồn" after the finish (Credits.ts asks through RaceHud)
-          // SPEC §17.33: the louvre card's "Vào phòng": like F at the box (within enterReach), without reopening the card
-          enterRoom: () => {
-            const rc = roomCard();
-            if (rc && room && !room.active && nearBox(rc)) enterRoom(rc.step, rc.lv, false);
-          },
           ...(session && { resolveMedia: (name: string) => fetchMedia(session, name) }), // none offline: "Hình chỉ tải được trong cuộc đua"
         },
         session?.team?.name ?? '',
@@ -306,68 +276,15 @@ async function start() {
           },
         })
       : undefined;
-  /** Phase 8B: the current card's Louvre room (the stand-in offline), null when the card has none; its status is the live
-   *  one (a wrong lock's countdown that ran out unlocks the lock button without a new card: fix F2 (1)). */
-  const roomCard = (): { step: string; status: CardStatus; lv: LouvreView } | null => demo ?? roomCardOf(race?.view?.card, net ? net.serverNow() : Date.now());
-  const roomTarget = () => {
-    camera.getWorldDirection(view);
-    return room!.nearest(player!.position.x, player!.position.z, view.x, view.z);
-  };
-  /** The body stands within louvreRoom.enterReach of the card's box (F / the card's "Vào phòng" enter from here). */
-  const nearBox = (rc: { lv: LouvreView }) => Math.hypot(player!.position.x - rc.lv.room.x, player!.position.z - rc.lv.room.z) <= roomCfg.enterReach;
-  /** In / out only change y (critic S5): Player.moveTo sends no `respawn`. The card opens on entering (F); the card's own
-   *  "Vào phòng" button closes it instead (`openCard` false). */
-  const enterRoom = (step: string, lv: LouvreView, openCard = true) => {
-    room!.build(step, lv);
-    const e = room!.enter()!;
-    player!.moveTo(e.x, e.z, e.yaw);
-    if (openCard) raceHud?.openCurrent();
-  };
-  // SPEC §17.33: no door. The step finishing while inside (a right lock, a Host "Cho qua") starts the automatic exit
-  // autoExitSeconds later; a lock the team sent itself gets "CHÍNH XÁC" first. The race over for the team → out at once.
-  let roomDoneAt: number | null = null; // ms (performance clock) the step finished while inside
-  let lockSent = false; // our lock went out and has no verdict yet (lockWrong clears it)
-  const leaveRoom = () => {
-    roomDoneAt = null;
-    const e = room!.leave();
-    if (e) player!.moveTo(e.x, e.z, e.yaw);
-    raceHud?.openCurrent(); // the next card (held while inside) / the finish card
-  };
-  /** F (docs/plans/phase8b.md §F): outside, at the box of a louvre card → in (gesture); inside: button / lock, no
-   *  gesture ('quiet': the other teams in the room must not see what was pressed); false = not the room's F. */
-  const roomInteract = (): boolean | 'quiet' => {
-    if (!room) return false;
-    const rc = roomCard();
-    if (!room.active) {
-      if (!rc || !nearBox(rc)) return false;
-      return enterRoom(rc.step, rc.lv), true;
-    }
-    const t = roomTarget();
-    if (!t || !rc || rc.step !== room.step) return 'quiet'; // the step is over: the automatic exit is running
-    const now = performance.now();
-    if (t.kind === 'button') {
-      const on = !rc.lv.picks.includes(t.id);
-      if (on && rc.lv.maxPicks !== null && rc.lv.picks.length >= rc.lv.maxPicks) return notice('pickLimit'), 'quiet'; // §17.19 (c): not sent
-      // online the click plays when the server took it (the new card's picks, `message` below); offline at once
-      if (!race && demo) (demo.lv.picks = on ? [...demo.lv.picks, t.id] : demo.lv.picks.filter((p) => p !== t.id)), clickSound(on);
-      else race?.pick(rc.step, t.id, on, now);
-    } else if (!rc.lv.picks.length) toast('Chưa chọn tác phẩm nào'); // N4: an empty lock is stopped here
-    else if (rc.status === 'locked') notice('answerLocked');
-    else if (race?.lock(rc.step, now)) lockSent = true;
-    return 'quiet';
-  };
   if (player) {
-    // D23: F on foot asks the current box first; offline (DEV ?boxes=) it opens locally (manual tests). Phase 8B: then the room.
+    // D23: F on foot asks the current box first; offline (DEV ?boxes=) it opens locally (manual tests).
     player.onInteract = () => {
       const [x, z] = [player.position.x, player.position.z];
-      if (!room?.active && race?.interact(boxes.boxes, x, z, performance.now())) return true; // no box opened from under the ground
-      const r = roomInteract();
-      if (r !== false || race) return r;
+      if (race) return race.interact(boxes.boxes, x, z, performance.now());
       const b = !session && boxInReach(boxes.boxes, x, z);
       return !!b && (boxes.apply({ t: 'box', op: 'reveal', box: { ...b, opened: true } }), true);
     };
   }
-  let mySlot = -1; // welcome.team.slot: the feed pops only for the other teams' lines
   const net =
     session &&
     new NetClient(session, {
@@ -380,11 +297,6 @@ async function start() {
         boxes.reset(w.boxes);
         // SPEC §8.10: back where the team last stood, onto the surface it stood on (pose.y); first entry: its spot at the
         // leg start (D17). The first welcome only: after a reconnect the body stays put.
-        // Phase 8B: an F5 in the Louvre room (feet underground, the card still louvre) → the room first, then the spawn on
-        // its floor; the step already done (no louvre card) → no room: the spawn ray finds the court (RACE_RULES §12).
-        const lc = w.view?.card;
-        if (!welcomed && w.pose && room && lc?.task?.louvre && underground(w.pose, env.heightAt)) room.build(lc.step, lc.task.louvre), room.enter();
-        mySlot = w.team?.slot ?? -1;
         if (!welcomed && w.pose) spawnAt(w.pose.x, w.pose.z, w.pose.yaw, w.pose.y);
         else if (!welcomed && w.start) spawnAt(w.start.x, w.start.z, w.start.yaw);
         welcomed = true;
@@ -393,23 +305,13 @@ async function start() {
       },
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
-        if (m.t === 'feed' && m.slot !== mySlot) popSound(); // Phase 8B: another team's public line
-        const before = room?.active ? roomCard() : null;
-        if (race?.message(m)) {
-          const after = before && roomCard();
-          const lit = after?.step === before?.step ? pickChange(before?.lv.picks, after?.lv.picks) : null;
-          if (lit !== null) clickSound(lit); // fix F2 (7): only a pick the server took clicks
-          return;
-        } // race / book / zone (Phase 7); feed / credits (Phase 8B) → RaceHud
+        if (race?.message(m)) return; // race / book / zone (Phase 7) → RaceHud
         if (m.t === 'team') remote?.setOnline(m.slot, m.online), spectate?.team(m.slot, m.online, m.racing);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') {
-          // Phase 8B: the wrong lock's minutes from the card (0.1 in a test leg: never "3")
-          if (m.code === 'lockWrong') (lockSent = false), toast(lockWrongText(race?.view?.card?.retryPenaltyMinutes));
-          else if (m.code === 'penalized') toast(penalizedText(m.score, m.of)); // SPEC §17.31
+          if (m.code === 'penalized') toast(penalizedText(m.score, m.of)); // SPEC §17.31
           else notice(m.code);
           if (m.code === 'approved' || m.code === 'penalized') reviewSound(m.code === 'approved'); // SPEC §8.9 (6)
-          if (m.code === 'lockWrong' || (m.code === 'clueNew' && room?.active)) reviewSound(m.code === 'clueNew'); // Phase 8B: the lock's verdict
         }
         else if (m.t === 'box') boxes.apply(m);
         else bikeLink?.message(m); // 'bikes' / 'bike' (claim result)
@@ -531,7 +433,7 @@ async function start() {
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
-  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes, raceHud, menu, room } }); // for scratch test scripts, scripts/hud-check.ts
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes, raceHud, menu } }); // for scratch test scripts, scripts/hud-check.ts
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing. SPEC §17.2: the menu opens
@@ -578,18 +480,13 @@ async function start() {
     box.hidden = false;
     setTimeout(() => void (box.hidden = true), ui.imeNoticeMs);
   };
-  // Phase 8B (§17.20): in a race "Ghi nguồn" is gated by RaceHud.setView and asks through actions.credits; offline the
-  // static credits.json as before.
   initCredits();
-  let preloaded: string | null = null; // the louvre step whose pictures are loading
   const edge = $('edge');
   const loading = $('loading');
 
   // Runtime downgrade (graphics8c.quality.autoDowngrade): high quality chosen by the user / GPU, not by ?quality= (tests)
   let fpsWatch = graphics().quality === 'high' && !graphics().forced ? new FpsWatch() : undefined;
   let lastFrame = performance.now();
-  const hiddenForRoom = new Set<THREE.Object3D>();
-  const keepInRoom = (o: THREE.Object3D) => (o as THREE.Light).isLight === true || o === room?.root || o === player?.model.root || !!remote?.owns(o);
   const waitArg = Number(query.get('wait') ?? NaN);
   const wait = Number.isFinite(waitArg) ? waitArg : playerSetup.readyWait; // s simulated before __READY__ (player mode)
   const euler = new THREE.Euler();
@@ -651,39 +548,14 @@ async function start() {
         /* the camera follows a team */
       } else if (flying || watching) fly.update(dt, input);
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
-      if (player) player.camera.override = room?.active ? roomCfg.camera : null; // fix F2 (5): over the shoulder, higher, in the room
       player?.update(dt, bodyCam ? input : null, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
-      if (room?.active && bodyCam) camera.position.y = Math.min(camera.position.y, room.floorY + roomCfg.size.height - 0.3); // no ceiling collider (C2): the camera stays under it
       if (player?.active) bikeLink?.frame(dt, player.controller);
       if (net && player?.active && bodyCam) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); a finished team too (§17.39), not while watching
       if (peers.length && (player ? player.active : worldReady) && localMs() >= nextFakeTick) {
         remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
         nextFakeTick += 1000 / NET.tickHz;
       }
-      remote?.update(dt, net ? net.serverNow() : localMs(), camera.position, bodyCam ? underground(player.position, env.heightAt) : undefined, env.heightAt);
-      // Phase 8B: the room's lights from THIS team's card only, its prompt, the pictures preloaded once a louvre card is there
-      const rc = room && roomCard();
-      if (rc && preloaded !== rc.step) (preloaded = rc.step), preloadArt(rc.lv.artworks);
-      let prompt: string | null = null;
-      let near = false; // within enterReach of the box: the card's "Vào phòng" button is live (SPEC §17.33)
-      if (room && player?.active && bodyCam && !player.controller.riding) {
-        const done = rc?.step !== room.step;
-        if (room.active) {
-          room.setPicks(done ? null : rc!.lv.picks);
-          if (done && roomDoneAt == null) {
-            roomDoneAt = performance.now();
-            if (lockSent) raceHud?.announce(ROOM_TEXT.correct); // our lock was right (a Host "Cho qua" says nothing)
-            lockSent = false;
-          }
-          const left = over ? 0 : autoExitLeft(roomDoneAt, performance.now()); // finished / BỊ LOẠI / the Host ended the race → out at once
-          if (left === 0) leaveRoom();
-          else if (!modal()) prompt = left != null ? ROOM_TEXT.autoExit(left) : roomPrompt(roomTarget(), rc?.lv ?? null, { done, locked: rc?.status === 'locked' });
-        } else if (rc) {
-          near = nearBox(rc);
-          if (!modal()) prompt = near ? 'Bấm F để vào phòng Louvre' : Math.hypot(player.position.x - rc.lv.room.x, player.position.z - rc.lv.room.z) <= rc.lv.room.r ? 'Phòng Louvre: tới sát hòm mật thư rồi bấm F để vào' : null;
-        }
-      }
-      raceHud?.setRoom(!!room?.active, near); // the louvre card says "Đang trong phòng" / its "Vào phòng" button
+      remote?.update(dt, net ? net.serverNow() : localMs(), camera.position);
       boxes.update(camera.position);
       if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
       // No HUD while loading, flying (V) or watching the other teams: hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
@@ -695,14 +567,13 @@ async function start() {
         Object.assign(frame, {
           x, z, heading: Math.atan2(-view.x, -view.z), bodyYaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z),
           riding: !!player.controller.riding, swimming: s.moveMode === 'swim', time: Math.max(0, player.simTime),
-          street: room?.active ? 'Phòng Louvre' : streets?.at(x, z), district: room?.active ? 0 : districtAt(water?.districts, x, z), // fix F2 (7): not the court's street underground
+          street: streets?.at(x, z), district: districtAt(water?.districts, x, z),
           penaltyMinutes: race?.view?.penaltyMinutes,
         } satisfies HudFrame);
         const riding = !!player.controller.riding;
-        // (race.frame runs in the Louvre room too: the hint marks' `view`; no box prompt from under the ground)
-        const inZone = !player.active ? false : (race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone : !riding && !!boxInReach(boxes.boxes, x, z)) && !room?.active;
-        const bike = player.active && bodyCam && !room?.active && !modal() && !race?.view?.result ? player.bikes.prompt(player.controller) : null;
-        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone, prompt, bike });
+        const inZone = !player.active ? false : race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone : !riding && !!boxInReach(boxes.boxes, x, z);
+        const bike = player.active && bodyCam && !modal() && !race?.view?.result ? player.bikes.prompt(player.controller) : null;
+        raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone, bike });
         gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
         hud.update(frame, dt);
         minimap.update(frame, gps ?? NO_GPS, dt);
@@ -722,16 +593,13 @@ async function start() {
       edge.hidden = edgeDistance(p.x, p.z) >= bounds.warnDistance;
     },
     render: () => {
-      // Fix B (review 3 F3): in the Louvre room only the room, the players and the lights are drawn, without post-processing
-      if (room?.active) hideWorld(scene.children, keepInRoom, hiddenForRoom);
-      else if (hiddenForRoom.size) showWorld(hiddenForRoom);
-      if (post && !room?.active) post.render();
+      if (post) post.render();
       else {
         if (!renderer.info.autoReset) renderer.info.reset(); // post.ts counts its passes by hand
         renderer.render(scene, camera);
       }
       const now = performance.now();
-      if (fpsWatch && worldReady && !room?.active && fpsWatch.frame((now - lastFrame) / 1000)) {
+      if (fpsWatch && worldReady && fpsWatch.frame((now - lastFrame) / 1000)) {
         // a weak GPU behind a "high" choice: no post-processing / image-based light for this session (the choice stays stored)
         post?.dispose();
         post = null;

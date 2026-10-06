@@ -4,7 +4,7 @@ import { type BuildingRec, chunkBounds, ringArea, type XZ } from '../../geo/chun
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
-import { clipRing, details, ellipseAt, lisboaPiece, sections, signCols, signRuns } from './m3.ts';
+import { clipRing, details, ellipseAt, fanArch, lisboaPiece, mgmWave, signCols, signRuns } from './m3.ts';
 
 type Id = 'hotel-lisboa' | 'wynn-macau' | 'mgm-macau' | 'sands-macau' | 'fisherman-wharf';
 const ctx = (id: Id): LandmarkCtx => ({ key: '0_0', bounds: chunkBounds('0_0'), height: () => 10, def: LANDMARK_BY_ID.get(id)!, ground: 10, minGround: 10 });
@@ -31,7 +31,7 @@ function stats(o: BuildOut) {
 
 describe('m3 pure helpers', () => {
   it('signRuns: bulb font runs stay inside the sign and every letter has bulbs', () => {
-    for (const t of ['LISBOA', 'WYNN', 'MGM', 'SANDS']) {
+    for (const t of ['LISBOA', 'WYNN', 'MGM', 'SANDS', 'GRAND']) {
       const runs = signRuns(t);
       expect(runs.length).toBeGreaterThan(t.length * 4);
       for (const [c0, c1, row] of runs) {
@@ -44,13 +44,27 @@ describe('m3 pure helpers', () => {
     }
     expect(signRuns('L')).toEqual([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3], [0, 0, 4], [0, 0, 5], [0, 4, 6]]);
   });
-  it('clipRing keeps the half-plane part; sections cut a footprint into equal slices west → east', () => {
-    const r = rect(0, 0, 90, 20);
-    expect(Math.abs(ringArea(clipRing(r, 1, 0, 30)))).toBeCloseTo(600, 6);
-    const s = sections(r, 3);
-    expect(s).toHaveLength(3);
-    for (const p of s) expect(Math.abs(ringArea(p))).toBeCloseTo(600, 3);
-    expect(Math.max(...s[0]!.filter((_, i) => i % 2 === 0))).toBeCloseTo(30, 6);
+  it('clipRing keeps the half-plane part', () => {
+    expect(Math.abs(ringArea(clipRing(rect(0, 0, 90, 20), 1, 0, 30)))).toBeCloseTo(600, 6);
+  });
+  it('fanArch: from foot to foot, a sharp tip at the top centre', () => {
+    const a = fanArch(6, 8);
+    expect(a[0]).toEqual([-3, 0]);
+    expect(a.at(-1)![0]).toBeCloseTo(3, 9);
+    expect(a.at(-1)![1]).toBeCloseTo(0, 9);
+    const mid = a[a.length >> 1]!;
+    expect(mid[0]).toBeCloseTo(0, 9);
+    expect(mid[1]).toBeCloseTo(8, 9);
+    for (const [, v] of a) expect(v).toBeLessThanOrEqual(8 + 1e-9);
+  });
+  it('mgmWave: boundaries stay ordered and the roofline never passes the height', () => {
+    const G = L.m3.mgm;
+    for (let u = -60; u <= 60; u += 3) {
+      const ys = [0, 1, 2, 3].map((k) => mgmWave(k, u, 117, 120));
+      for (let k = 0; k < 3; k++) expect(ys[k + 1]! - ys[k]!).toBeGreaterThan(12);
+      expect(ys[3]!).toBeLessThanOrEqual(120);
+      expect(ys[3]!).toBeGreaterThanOrEqual(120 - 2 * G.wave.amp);
+    }
   });
   it('ellipseAt: on the ellipse, unit normal and tangent, normal ⊥ tangent', () => {
     for (const t of [0, 0.7, 2, 4]) {
@@ -61,18 +75,18 @@ describe('m3 pure helpers', () => {
     }
   });
   it('lisboaPiece tells the drum, the tower, the podium and the canopies apart', () => {
-    expect(lisboaPiece(rec(circle(0, 0, 22, 19), { height: 37.4 }))).toBe('drum');
+    expect(lisboaPiece(rec(circle(0, 0, 22, 19), { height: 37.4 }))).toBe('round');
     expect(lisboaPiece(rec(circle(0, 0, 75, 40), { height: 27.8, kind: 'hotel' }))).toBe('podium'); // roundish but 150 m
-    expect(lisboaPiece(rec(rect(0, 0, 54, 20), { height: 76.8 }))).toBe('tower');
+    expect(lisboaPiece(rec(rect(0, 0, 54, 20), { height: 76.8 }))).toBe('wing');
     expect(lisboaPiece(rec(rect(0, 0, 10, 10), { kind: 'roof' }))).toBe('generic');
   });
 });
 
 describe('m3 landmarks (stand-in outlines)', () => {
   const cases: [string, Id, BuildingRec, number][] = [
-    ['Casino Lisboa drum', 'hotel-lisboa', rec(circle(100, 100, 22, 19), { height: 37.4 }), 37.4],
-    ['Lisboa tower', 'hotel-lisboa', rec(rect(0, 0, 54, 20), { height: 76.8 }), 76.8],
-    ['Lisboa podium', 'hotel-lisboa', rec(circle(0, 0, 75, 40), { height: 27.8, kind: 'hotel' }), 27.8],
+    ['Lisboa round tower', 'hotel-lisboa', rec(circle(100, 100, 22, 19), { height: 37.4 }), 37.4],
+    ['Lisboa extension', 'hotel-lisboa', rec(rect(0, 0, 54, 20), { height: 76.8 }), 76.8],
+    ['Lisboa podium + casino', 'hotel-lisboa', rec(circle(523, 411, 75, 40), { height: 27.8, kind: 'hotel' }), 27.8],
     ['Wynn', 'wynn-macau', rec(rect(0, 0, 140, 25), { height: 94.5 }), 94.5],
     ['Encore', 'wynn-macau', rec(rect(0, 0, 90, 20), { height: 177.5 }), 177.5],
     ['Wynn podium', 'wynn-macau', rec(rect(600, 500, 900, 760), { height: 23.1 }), 23.1],
@@ -104,17 +118,39 @@ describe('m3 landmarks (stand-in outlines)', () => {
       expect(box.z1).toBeLessThan(Math.max(...zs) + 2);
     }
   });
-  it('MGM: three stepped sections up to the OSM height, the tallest at the east', () => {
+  it('MGM: three stacked tiers copper / blue / gold, a wavy roofline cresting at the OSM height', () => {
     const o = build('mgm-macau', rec(rect(0, 0, 117, 20), { height: 120 }));
     const metal = o.meshes.find((m) => m.material === 'metal')!;
-    let [westTop, eastTop] = [0, 0];
+    const tops: number[] = [];
+    let maxY = 0;
+    const tiers = new Map<string, { y: number; n: number; r: number; b: number }>(); // per colour: mean y
     for (let i = 0; i < metal.position.length; i += 3) {
-      const [x, y] = [metal.position[i]!, metal.position[i + 1]!];
-      if (x < 30) westTop = Math.max(westTop, y);
-      if (x > 87) eastTop = Math.max(eastTop, y);
+      const [y, ny] = [metal.position[i + 1]!, metal.normal[i + 1]!];
+      maxY = Math.max(maxY, y);
+      if (y > 10 + 102 && ny > 0.9) tops.push(y);
+      const [r, b] = [metal.color![i]!, metal.color![i + 2]!];
+      const t = tiers.get(`${r},${b}`) ?? { y: 0, n: 0, r, b };
+      tiers.set(`${r},${b}`, { ...t, y: t.y + y, n: t.n + 1 });
     }
-    expect(westTop).toBeCloseTo(10 + L.m3.mgm.tops[0]!, 3);
-    expect(eastTop).toBeCloseTo(10 + 120, 3);
+    expect(maxY).toBeCloseTo(10 + 120, 3);
+    expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThan(2); // the roofline waves
+    const [low, mid, high] = [...tiers.values()].sort((p, q) => p.y / p.n - q.y / q.n);
+    expect(tiers.size).toBe(3);
+    expect(low!.r).toBeGreaterThan(low!.b); // copper
+    expect(mid!.b).toBeGreaterThan(mid!.r); // blue glass
+    expect(high!.r).toBeGreaterThan(high!.b); // gold
+  });
+  it('Casino Lisboa: a drum on its configured circle, crown above the podium cut', () => {
+    const K = L.m3.lisboa.casino;
+    const o = build('hotel-lisboa', rec(circle(523, 411, 75, 40), { height: 27.8, kind: 'hotel' }));
+    const neon = o.meshes.find((m) => m.material === 'neon')!;
+    let near = 0;
+    for (let i = 0; i < neon.position.length; i += 3) {
+      const [x, y, z] = [neon.position[i]!, neon.position[i + 1]!, neon.position[i + 2]!];
+      if (y > 10 + K.base - 0.01 && y < 10 + K.grid + 0.01 && Math.abs(Math.hypot(x - K.x, z - K.z) - K.r) < 0.5) near++;
+    }
+    expect(near).toBeGreaterThan(K.segs); // the window grid wraps the drum
+    expect(stats(o).maxY).toBeGreaterThan(10 + K.grid + K.cornice + K.inner.h + K.dome.h);
   });
   it('the Colosseum stands on its configured ellipse; the lighthouse inside the site', () => {
     const C = L.m3.wharf.colosseum;

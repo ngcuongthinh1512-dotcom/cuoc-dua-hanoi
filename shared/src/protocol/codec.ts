@@ -110,8 +110,7 @@ export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator')
     // Phase 7 / 8 (docs/plans/phase8.md §5.1, D19): step / branch ids are ≤ 16 chars (LEG_LIMITS.stepId), answers ≤ NET.answerMax
     case 'race':
       if (role !== 'team') return false;
-      // Phase 8B: view / credits carry no step (like book)
-      if (o.op === 'checkin' || o.op === 'book' || o.op === 'view' || o.op === 'credits') return true;
+      if (o.op === 'checkin' || o.op === 'book') return true;
       if (!str(o.step, 16)) return false;
       switch (o.op) {
         case 'open':
@@ -123,11 +122,6 @@ export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator')
           return text(o.text, NET.answerMax) && (o.parts === undefined || (Array.isArray(o.parts) && o.parts.length >= 2 && o.parts.length <= 8 && o.parts.every((p: unknown) => text(p, NET.answerMax))));
         case 'branch':
           return str(o.branch, 16);
-        // Phase 8B: art = an artwork id (leg LOUVRE.artId: ≤ 16 of A–Z a–z 0–9 _ -)
-        case 'pick':
-          return str(o.art, 16) && /^[A-Za-z0-9_-]+$/.test(o.art) && typeof o.on === 'boolean';
-        case 'lock':
-          return true;
         default:
           return false;
       }

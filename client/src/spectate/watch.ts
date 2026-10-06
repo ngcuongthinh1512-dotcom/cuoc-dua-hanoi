@@ -1,7 +1,5 @@
 // SPEC §17.40 watch mode, the pure part (tested without DOM / WebGL): the chase camera behind a followed team's body, its
-// smoothing, the Louvre-room case (the camera stays on the street above: no room is built for a watcher), and the list of
-// teams one may watch (online and still racing) with [ / ] stepping.
-import { LOUVRE } from '@race/shared';
+// smoothing and the list of teams one may watch (online and still racing) with [ / ] stepping.
 import type { TeamInfo } from '@race/shared/protocol';
 import { spectate as C } from '../config.ts';
 import { angleDelta, follow } from '../player/ThirdPersonCamera.ts';
@@ -26,12 +24,6 @@ export interface Target {
 export function followPose(t: Target): CamPose {
   return { x: t.x + Math.sin(t.yaw) * C.back, y: t.y + C.up, z: t.z + Math.cos(t.yaw) * C.back, yaw: t.yaw, pitch: -Math.atan2(C.up - C.lookUp, C.back) };
 }
-
-/** The team stands in the Louvre room (SPEC §17.35: feet at or under LOUVRE.roomY). */
-export const inRoom = (y: number) => y <= LOUVRE.roomY;
-
-/** Over a team in the room: on the street right above it (streetY = the terrain there), eye height, looking its way. */
-export const streetPose = (t: Target, streetY: number): CamPose => ({ x: t.x, y: streetY + C.roomEye, z: t.z, yaw: t.yaw, pitch: 0 });
 
 /** Exponential smoothing toward `goal` (yaw the short way round); a goal more than C.snapDistance away snaps (respawn, another team). */
 export function smoothPose(cur: CamPose, goal: CamPose, dt: number): CamPose {

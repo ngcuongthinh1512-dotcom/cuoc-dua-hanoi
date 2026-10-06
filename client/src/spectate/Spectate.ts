@@ -1,18 +1,17 @@
 // SPEC §17.40 watch mode, shared by spectators (spectator code), the Host in the game and a finished team (X): the bar at
 // the top (◀ [● TEAM ▾] ▶ · Bay tự do), [ / ] / V keys, the chase camera behind the followed body (watch.ts followPose,
-// smoothed), the street above a team in the Louvre room. The followed team's body comes from RemotePlayers (ticks); the
+// smoothed). The followed team's body comes from RemotePlayers (ticks); the
 // bar lists only online, racing teams and drops one that finished / went offline (auto-picks the next).
 import type { TeamInfo } from '@race/shared/protocol';
 import type { Input } from '../core/Input.ts';
 import type { RemotePose } from '../net/RemotePlayers.ts';
 import type { FreeFlyCamera } from '../player/FreeFlyCamera.ts';
-import { type CamPose, followPose, inRoom, nextSlot, smoothPose, streetPose, watchable } from './watch.ts';
+import { type CamPose, followPose, nextSlot, smoothPose, watchable } from './watch.ts';
 import './spectate.css';
 
 const DEG = Math.PI / 180;
 export const TEXT = {
   free: 'Bay tự do',
-  room: 'đang trong phòng bảo tàng',
   none: 'Chưa có đội nào đang đua',
   waiting: 'đang chờ vị trí…',
   hintX: 'Phím X: xem các đội khác',
@@ -25,8 +24,6 @@ export interface SpectateDeps {
   fly: FreeFlyCamera;
   /** The followed team's body now (RemotePlayers.poseOf): null = no tick for it yet. */
   poseOf(slot: number): RemotePose | null;
-  /** Terrain height (the street over the Louvre room). */
-  heightAt(x: number, z: number): number;
   /** "Bay tự do" clicked / V: the caller locks the pointer for the mouse look. */
   onFree?(): void;
   /** A finished team's bar carries the way back ("X: điều khiển lại nhân vật"). */
@@ -111,11 +108,10 @@ export class Spectate {
     if (this.slot === null) return false;
     const p = this.d.poseOf(this.slot);
     if (!p) return this.setNote(TEXT.waiting), true; // the camera holds until its first tick
-    const room = inRoom(p.y);
-    const goal = room ? streetPose(p, this.d.heightAt(p.x, p.z)) : followPose(p);
+    const goal = followPose(p);
     const c = (this.cam = this.cam ? smoothPose(this.cam, goal, dt) : goal);
     this.d.fly.setPose(c.x, c.y, c.z, c.yaw / DEG, c.pitch / DEG);
-    this.setNote(room ? TEXT.room : '');
+    this.setNote('');
     return true;
   }
 

@@ -14,7 +14,7 @@ export interface Place { x: number; z: number; r: number; mat: boolean; kind: Pl
 /** The kind a shared place shows (its pin colour): the first of these among its entries. */
 export const PLACE_RANK: readonly PlaceKind[] = ['pit_stop', 'challenge', 'detour', 'route_info', 'start'];
 
-/** Start, every step's zone (route box, task place, Pit Stop mat; louvre: the box of the room) and every detour branch's. */
+/** Start, every step's zone (route box, task place, Pit Stop mat) and every detour branch's. */
 export function legPlaces(leg: Leg): Place[] {
   const out: Place[] = [];
   const add = (x: number, z: number, r: number, e: PlaceEntry, mat = false) => {
@@ -27,7 +27,7 @@ export function legPlaces(leg: Leg): Place[] {
   };
   add(leg.start.x, leg.start.z, 0, { key: 'start', label: 'Xuất phát', name: '', kind: 'start' });
   for (const s of leg.steps) {
-    add(s.x, s.z, s.r, { key: s.id, label: s.label, name: s.louvre ? `${s.name} (hòm vào phòng Louvre)` : s.name, kind: s.type }, s.type === 'pit_stop');
+    add(s.x, s.z, s.r, { key: s.id, label: s.label, name: s.name, kind: s.type }, s.type === 'pit_stop');
     for (const b of s.branches ?? []) add(b.x, b.z, b.r, { key: `${s.id}|${b.id}`, label: `${s.label} ${b.id}`, name: `${b.title} · ${b.name}`, kind: s.type });
   }
   return out;

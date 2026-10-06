@@ -33,7 +33,7 @@ Số liệu lúc commit R: scripts 120, shared 82, client 865, worker 187 test x
 |---|---|---|---|---|
 | 1 | G4 – Rà hình dáng địa danh | Chụp cận và so với hình thật: Santo Agostinho, Monte, Santa Casa, Dom Pedro V, Cultural Centre, tượng Kun Iam, Flor de Lótus, Portas do Cerco, Casa do Mandarim; Sands, A-Ma, Penha, Macau Tower, Science Center nghi lệch | mỗi địa danh có ảnh cận ngày + đêm, danh sách lệch, sửa các cái anh chọn | ảnh thật nếu có |
 | 2 | M – Model quét sẵn (tùy chọn) | tìm model CC0 / CC BY cho vài địa danh trọng điểm, lập bảng nguồn / giấy phép / dung lượng / tam giác | anh duyệt từng file trước khi tải; `process-assets` + ghi nguồn | duyệt tải |
-| 3 | C1 – Bỏ Phòng Louvre, phòng casino sau | **Phòng Louvre bỏ đi** (anh chốt 2026-10-06). Phòng casino do anh tự tạo, **anh chưa bắt đầu**: chưa làm gì cho tới khi anh bảo | Louvre đã gỡ, `npm run build && npm test` xanh; phòng casino: chờ anh | cách gỡ (xem ghi chú dưới), trò casino |
+| 3 | C1 – Bỏ Phòng Louvre, phòng casino sau | **XONG phần gỡ (2026-10-06, `docs/reports/leg2-louvre-removed.md`)**: Phòng Louvre đã gỡ hẳn (client / server / giao thức v9 / DB v3 / chặng test / script / tài liệu; lịch sử git trước commit `9425533`). Phòng casino do anh tự tạo, **anh chưa bắt đầu**: chưa làm gì cho tới khi anh bảo | ~~Louvre đã gỡ, `npm run build && npm test` xanh~~ (xong); phòng casino: chờ anh | trò casino |
 | 4 | C2 – Chặng thật + gắn lộ trình | nhập nội dung thật vào file chặng (ngoài repo), đặt L1–Ln, Chặng dừng ở sân trước địa danh, `leg:check`, ảnh từng điểm | `leg:check` 0 lỗi, ảnh `leg-*` đã duyệt, đội chạy thử bằng `sim` | nội dung chặng |
 | 5 | V – Cảnh xa | Macau Tower / Grand Lisboa nhìn từ xa (sương che từ ~700 m), bóng Taipa / Cotai từ `skyline.json`, mặt phẳng nền Flor de Lótus | nhìn rõ Macau Tower từ 1,5 km | |
 | 6 | Q – Chất lượng | đo FPS thật (máy thật, chất lượng cao / thấp, tự hạ cấp), kích thước asset ≤ 25 MB, `sim --full` đo hạn mức 2 giờ cho Macao | FPS đạt ngưỡng của game, hạn mức < 40.000 request / < 20.000 dòng cho 8 đội | anh thử trên máy thật |
@@ -42,7 +42,7 @@ Số liệu lúc commit R: scripts 120, shared 82, client 865, worker 187 test x
 | 9 | Cổng cuối | `npm run build && npm test`, `sim --full`, chụp lại bộ ảnh, review cuối (Opus; Fable chỉ khi cần) | xanh, báo cáo `docs/reports/leg2-gate.md` | |
 
 ## Việc nhỏ đã biết (chưa xếp phase)
-- Phòng Louvre và nội dung Paris còn trong `worker/legs/test/louvre.json`, `client/src/race/LouvreRoom.ts`, `client/public/art/` (23 tác phẩm Paris), kiểu nhiệm vụ `louvre` ở schema / server / Host / `leg-check` / `sim` – **sẽ gỡ ở C1** (anh đã chốt bỏ).
+- ~~Phòng Louvre và nội dung Paris (chặng test `louvre.json`, `LouvreRoom.ts`, `client/public/art/`, kiểu `louvre`)~~ – đã gỡ ở C1.
 - `KNOWN_MACAO` / `KNOWN_STEPS` (cầu biển ở rìa khung, bậc cầu 3–17,7 m cạnh Macau Tower) cần xử lý ở BridgeBuilder nếu muốn bỏ danh sách bỏ qua.
 - Thẩm mỹ chưa sửa: vệt trăng chói trên nước, bờ Zhuhai và mép phía đông trống, đảo đất giả ở hồ Nam Van, biển hiệu cửa hàng là ký hiệu trừu tượng (chưa phải chữ Hán thật), biển "GRAND LISBOA" chỉ là vòng sáng.
 - Biển hiệu và đèn lồng ẩn ngoài 350–450 m; phản chiếu trên nước chỉ có đèn, chưa có hình tòa nhà.

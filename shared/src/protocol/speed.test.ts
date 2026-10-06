@@ -22,7 +22,7 @@ describe('SpeedWindow', () => {
   it('passes an honest walker and a rider, flags a client-side speed hack', () => {
     const foot = 4, bike = foot * 1.3;
     const w = new SpeedWindow();
-    walk(w, 0, 0, 4.7, 5); // 4.8 m/s sliding along the Louvre basin edge (TODO.md) is within the 25 % margin
+    walk(w, 0, 0, 4.7, 5); // 4.8 m/s sliding along a basin edge (TODO.md) is within the 25 % margin
     expect(overSpeed(w, foot)).toBe(false);
     walk(w, 6000, 0, bike, 5);
     expect(overSpeed(w, bike)).toBe(false);

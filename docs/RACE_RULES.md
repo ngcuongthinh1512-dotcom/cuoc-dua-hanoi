@@ -117,7 +117,7 @@ Lỡ tải lại trang (`F5` / `Cmd`+`R`), tắt tab, mất mạng hay phải đ
 - **Thời gian vẫn trôi trong lúc bạn offline** và không được bù. Nhân vật bị ẩn khỏi thế giới của các đội khác. Đăng nhập trên máy mới thì máy cũ bị ngắt.
 - Thử thách gõ câu trả lời giữ nguyên lịch sử câu đã gửi, câu đang chờ duyệt và **đồng hồ đếm ngược phạt**. Lựa chọn kép giữ nguyên nhánh đã chọn, hòm đã mở và đếm ngược đổi nhánh. Host duyệt trong lúc bạn vắng mặt thì vào lại **mật thư mới tự mở** và đã nằm trong Sổ.
 - **Nhập sai mã đội 5 lần liên tiếp** thì bị khóa 1 phút.
-- Sau khi về đích hoặc Host kết thúc chặng, vào lại vẫn thấy kết quả, vẫn đi lại được và bấm `X` để xem các đội khác, xem lại được Sổ mật thư. **Bảng "Ghi nguồn"** (menu `Esc`) mở được từ lúc đội bạn về đích hoặc cuộc đua kết thúc.
+- Sau khi về đích hoặc Host kết thúc chặng, vào lại vẫn thấy kết quả, vẫn đi lại được và bấm `X` để xem các đội khác, xem lại được Sổ mật thư.
 - **Khán giả** (người không chơi): Host có thể đưa **mã khán giả** (bắt đầu bằng `K`); nhập vào cùng ô mã đội để xem camera các đội đang đua (không có nhân vật, không thấy mật thư của đội nào).
 
 ## 11. Chơi đẹp

@@ -15,9 +15,6 @@
 // the countdown and answers again). The leg is loaded with its penalties shortened to 6 s / 12 s (SIM_PENALTIES) so a
 // rehearsal does not wait 3 + 10 minutes. The walk is capped at the server's trusted-point rate (D4), so a full `mini` run
 // takes ~6 min at --speedup 2.
-// Phase 8B: a louvre step (card.task.louvre, input 'room') is played by louvreMove: a WRONG set of 5 (pick one by one, no live x) →
-// lock → wait out the countdown (`lockWrong`, feed to everybody) → unpick the wrong ones, pick the 5 right ids (louvreAnswersOf:
-// the leg's `answers` array) → lock. The "toggle after minute 60" scenario lives in the worker harness, not here (rowsPerTeam stays comparable).
 // --speedup k plays k× faster (5k messages/s per bot, SAME messages per simulated minute; the server's speed check
 // then flags the bots (expected, flag only), and the server closes a socket beyond 15 msg/s in a 1 s window, so k ≤ 2:
 // 10 msg/s nominal leaves room for timer jitter; 15 would sit exactly on the limit).
@@ -27,7 +24,7 @@ import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { SPRINT_MULTIPLIER } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, pathPolyline, shortestPath } from '@race/shared/graph';
-import { encodePose, NET, type CardStatus, type ClientMessage, type ClueCard, type HostReview, type HostState, type LouvreView, type PoseSample, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
+import { encodePose, NET, type CardStatus, type ClientMessage, type ClueCard, type HostReview, type HostState, type PoseSample, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
 
 export interface SimOptions {
   url?: string; // running server (wrangler dev); default: in-process createTestHarness
@@ -44,8 +41,6 @@ export interface SimOptions {
   /** Phase 11 `--full` (≥ 6 bots): Host bot also undoes one Duyệt within 10 s, clears one red flag, "Cho qua" one bot at the first
    *  challenge; the last bot never checks in and the Host ends the race → it is out. */
   full?: boolean;
-  /** Phase 11 `--louvre-right-only`: the louvre bot locks the 5 right ids at once (no wrong lock / countdown). */
-  louvreRightOnly?: boolean;
   log: (s: string) => void;
 }
 
@@ -75,7 +70,7 @@ export interface SimReport {
   /** Phase 7 `--leg` run: teams that checked in, ranking rows, the steps played; SQLite rows per team written while the race ran
    *  WITHOUT the shared snapshot / replay rows (`sharedRows`, they do not grow with the team count), vs `rowBudget`. Rows are only
    *  measured in the in-process harness (null with --url). null = random walk. */
-  leg: { id: string; steps: number; finished: number; ranked: number; /** SPEC §17.23: teams out (the last to finish). */ out: number; rowsPerTeam: number | null; sharedRows: number | null; rowBudget: number; refused: string[]; stats: LegStats; /** Phase 8B: public feed messages the bot that saw the fewest received (louvre locks of every team). */ feed?: number; scenario: Scenario | null; export: ExportCheck } | null;
+  leg: { id: string; steps: number; finished: number; ranked: number; /** SPEC §17.23: teams out (the last to finish). */ out: number; rowsPerTeam: number | null; sharedRows: number | null; rowBudget: number; refused: string[]; stats: LegStats; scenario: Scenario | null; export: ExportCheck } | null;
   flagged: number;
   speedup: number;
   budget: Budget;
@@ -93,15 +88,13 @@ export const legFailed = (r: SimReport) => !!r.leg && (r.leg.finished + (r.leg.s
 export const scenarioFailed = (s: Scenario | null) => !!s && (s.undone < 1 || s.passed < 1 || !s.ended || (s.flagged > 0 && s.cleared < 1));
 /** Notices that refuse a race op (Toasts.ts texts); the others only inform (clueNew = "Mật thư mới đã vào Sổ mật thư",
  *  approved / penalized / answerSent / answerWrong / branchChosen / branchSwitched = what the op did). */
-const REFUSALS = new Set<ServerNotice>(['raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'penaltyWait', 'taskNotStarted', 'answerPending', 'answerLocked', 'branchPending', 'pickLimit']);
+const REFUSALS = new Set<ServerNotice>(['raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'penaltyWait', 'taskNotStarted', 'answerPending', 'answerLocked', 'branchPending']);
 /** The penalties a rehearsal runs with (6 s / 12 s): the leg's own 3 / 10 minutes would make a sim wait 13 minutes (D18). */
 export const SIM_PENALTIES = { retryLockMinutes: 0.1, branchSwitchLockMinutes: 0.2 };
-/** The leg file's text with the penalties shortened to SIM_PENALTIES (sent as host.leg {json}). A task's own retryLockMinutes stays,
- *  except a louvre task's (Phase 11: a wrong lock would otherwise hold the bot 3 real minutes). */
+/** The leg file's text with the penalties shortened to SIM_PENALTIES (sent as host.leg {json}). A task's own retryLockMinutes stays. */
 export function fastPenalties(json: string): string {
-  const leg = JSON.parse(json) as { penalties?: Record<string, unknown>; steps?: { task?: { kind?: string; retryLockMinutes?: number } }[] };
+  const leg = JSON.parse(json) as { penalties?: Record<string, unknown> };
   leg.penalties = { ...leg.penalties, ...SIM_PENALTIES };
-  for (const s of leg.steps ?? []) if (s.task?.kind === 'louvre' && s.task.retryLockMinutes != null) s.task.retryLockMinutes = SIM_PENALTIES.retryLockMinutes;
   return JSON.stringify(leg);
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -200,14 +193,6 @@ export function answersOf(json: string): Map<string, string> {
   return out;
 }
 
-/** Phase 8B: ALL right ids of a louvre step ("stepId" → task.answers), for the bot's second (right) lock. */
-export function louvreAnswersOf(json: string): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  const leg = JSON.parse(json) as { steps?: { id: string; task?: { kind?: string; answers?: string[] } }[] };
-  for (const st of leg.steps ?? []) if (st.task?.kind === 'louvre') out.set(st.id, st.task.answers ?? []);
-  return out;
-}
-
 /** The card state as the game client shows it at `now`: a countdown that has run out (+ slack) is over although the server only
  *  says so on the next change (D9: the client flips the card itself 1 s after lockedUntil). */
 export function effectiveStatus(card: ClueCard, now: number, slackMs = 1000): CardStatus {
@@ -223,24 +208,10 @@ export interface BotRole { i: number; switches: boolean; switched: boolean; /** 
 /** One thing to send; `walk` = go to the chosen branch's place first; `switched` = this move is the branch switch. null = wait. */
 export type BotMove = { op: Record<string, unknown>; walk?: true; switched?: true } | null;
 
-/** Phase 8B, pure: the next op of a bot in the louvre room. First (no wrong lock yet: `attempts` 0) it wants 5 ids that are NOT
- *  right (a window of the artwork list that depends on the bot index), afterwards the 5 right ones. Always unpicks the ids it
- *  does not want first (never more than 5 lit: §17.19 (c) after minute 40), then picks the missing ones, then locks. No right
- *  ids known → null (the bot would only spam wrong locks). */
-export function louvreMove(step: string, lv: LouvreView, bot: number, right: readonly string[], rightOnly = false): BotMove {
-  if (right.length === 0) return null;
-  const decoys = lv.artworks.map((a) => a.id).filter((id) => !right.includes(id));
-  const want = lv.attempts === 0 && !rightOnly ? Array.from({ length: Math.min(right.length, decoys.length) }, (_, k) => decoys[(bot * 3 + k) % decoys.length]!) : right;
-  const extra = lv.picks.find((id) => !want.includes(id));
-  if (extra !== undefined) return { op: { t: 'race', op: 'pick', step, art: extra, on: false } };
-  const missing = want.find((id) => !lv.picks.includes(id));
-  if (missing !== undefined) return { op: { t: 'race', op: 'pick', step, art: missing, on: true } };
-  return { op: { t: 'race', op: 'lock', step } };
-}
 /** D18, pure: what a bot does about the card of a challenge / detour it holds. teaser → accept; choose → branch `i % n`;
  *  goToBranch → the one switcher switches to the other branch, else walk there and `open {branch}`; active → the answer
  *  ('' for a photo task; "(bot) trả lời" when the leg file has none); pending / locked / switchLocked / done → wait. */
-export function botMove(card: ClueCard, now: number, bot: BotRole, answers: Map<string, string>, slackMs = 1000, rooms: Map<string, string[]> = new Map(), rightOnly = false): BotMove {
+export function botMove(card: ClueCard, now: number, bot: BotRole, answers: Map<string, string>, slackMs = 1000): BotMove {
   const step = card.step;
   const ids = (card.branches ?? []).map((b) => b.id);
   if (bot.passAt === step) return null; // Phase 11: waits for the Host's "Cho qua"
@@ -255,7 +226,6 @@ export function botMove(card: ClueCard, now: number, bot: BotRole, answers: Map<
     }
     case 'active': {
       const task = card.task ?? card.branches?.find((b) => b.id === card.branch)?.task;
-      if (task?.louvre) return louvreMove(step, task.louvre, bot.i, rooms.get(step) ?? [], rightOnly);
       const text = task?.input === 'proof' ? '' : (answers.get(card.branch ? `${step}/${card.branch}` : step) ?? '(bot) trả lời');
       if (task?.input === 'parts') return { op: { t: 'race', op: 'answer', step, text: '', parts: (task.partLabels ?? []).map((_, k) => `(bot) ô ${k + 1}`) } }; // SPEC §17.44: the Host bot approves
       return { op: { t: 'race', op: 'answer', step, text } };
@@ -339,12 +309,11 @@ export function budgetFor(teams: number, bots: number, minutes: number, c: HostS
 }
 
 /** What the server says happened (host.state.progress): answers by status and branch switches, the numbers of the report. */
-export interface LegStats { answers: number; approved: number; penalized: number; wrong: number; switches: number; /** Phase 8B: right (auto-marked) answers of every step: louvre locks AND typed answers verified by the server. */ correct: number; louvre: boolean; /** Louvre steps only (one row per lock): wrong / right locks. */ louvreWrong: number; louvreCorrect: number }
-export function legStats(progress: StepProgressView[], louvreSteps: ReadonlySet<string> = new Set()): LegStats {
+export interface LegStats { answers: number; approved: number; penalized: number; wrong: number; switches: number; /** Right answers the server marked itself (verification auto). */ correct: number }
+export function legStats(progress: StepProgressView[]): LegStats {
   const all = progress.flatMap((p) => p.answers);
-  const lv = progress.filter((p) => louvreSteps.has(p.step)).flatMap((p) => p.answers);
-  const n = (s: string, xs = all) => xs.filter((a) => a.status === s).length;
-  return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), correct: n('correct'), louvre: progress.some((p) => louvreSteps.has(p.step)), louvreWrong: n('wrong', lv), louvreCorrect: n('correct', lv), switches: progress.reduce((t, p) => t + p.branchSwitches, 0) };
+  const n = (s: string) => all.filter((a) => a.status === s).length;
+  return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), correct: n('correct'), switches: progress.reduce((t, p) => t + p.branchSwitches, 0) };
 }
 
 /** `--leg mini` → the bundled id and its file (for the answers; `macao-demo-filled` = test/macao-demo.filled.json, the id the Host
@@ -368,12 +337,8 @@ export interface PlayOptions {
   switches?: boolean;
   /** ms after `lockedUntil` the bot treats a countdown as over (the client's lockEndSlackMs, D9). */
   lockSlackMs?: number;
-  /** Phase 8B: right ids per louvre step (louvreAnswersOf). */
-  louvre?: Map<string, string[]>;
   /** A step whose card did not change for this long (a countdown running does not count) fails the bot: the Host bot is dead / a refusal repeats. */
   stallMs?: number;
-  /** Phase 11: the louvre bot locks the right 5 at once. */
-  louvreRightOnly?: boolean;
   /** Phase 11 `--full`: this bot never answers at this challenge (the Host's "Cho qua" moves it on). */
   passAt?: string;
   /** Phase 11 `--full`: this bot stands on the Pit Stop mat but never checks in; it is done when the Host ends the race (BỊ LOẠI). */
@@ -473,7 +438,7 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
         await act(st.type === 'pit_stop' && !o.straggler ? { t: 'race', op: 'checkin' } : st.type === 'route_info' && next?.type !== 'pit_stop' ? { t: 'race', op: 'open', step: st.id } : null, true);
         continue;
       }
-      const move = botMove(card, Date.now(), role, answers, slack, o.louvre, o.louvreRightOnly);
+      const move = botMove(card, Date.now(), role, answers, slack);
       if (!move) {
         if (role.passAt === card.step) changedAt = Date.now(); // waits for the Host's "Cho qua", not stuck
         await sleep(settleGapMs / o.speedup); // the Host decides / a countdown runs: nothing to send
@@ -484,7 +449,7 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
         if (b) await goto(b.x, b.z);
       }
       if (move.switched) role.switched = true;
-      await act(move.op, move.op.op === 'open' || move.op.op === 'lock'); // judged on the position: the lock must stand in the room
+      await act(move.op, move.op.op === 'open'); // judged on the position
     }
   }
   return latest()!.finishAt ?? -1; // −1: out at the Host's "Kết thúc" (straggler)
@@ -520,11 +485,9 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
     sockets.push(hs);
     const existing = (await hs.until(isWelcome)).teams.length; // a pushed host.state may precede the reply: wait for the new teams
     let answers = new Map<string, string>();
-    let louvre = new Map<string, string[]>();
     if (opts.leg) {
       const json = opts.leg.json ?? readFileSync(legArg(opts.leg.id!).file, 'utf8');
       answers = answersOf(json);
-      louvre = louvreAnswersOf(json);
       const mark = hs.log.length;
       hs.send({ t: 'host.leg', json: fastPenalties(json) }); // the same leg, penalties 6 s / 12 s (a bundled one too: host.leg {id} cannot change them)
       const res = await hs.until((m): m is Extract<Msg, { t: 'host.legResult' }> => m.t === 'host.legResult', 10_000, mark);
@@ -627,7 +590,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       let hostBotOn = true;
       const hostDone = runHostBot(hs, penalizeKey, () => hostBotOn, 150, sc);
       const t0 = Date.now();
-      const play = (b: Bot) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused, louvre, switches: b.i === switcher, louvreRightOnly: opts.louvreRightOnly, passAt: b.i === passBot ? firstChallenge : undefined, straggler: b.i === straggler, speeder: opts.full && b.i === 0 });
+      const play = (b: Bot) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused, switches: b.i === switcher, passAt: b.i === passBot ? firstChallenge : undefined, straggler: b.i === straggler, speeder: opts.full && b.i === 0 });
       try {
         // everybody else finished → the Host ends the race → the straggler (standing on the mat) is out and its playLeg returns
         await Promise.all([Promise.all(bots.filter((b) => b.i !== straggler).map(play)).then(() => sc && hs.send({ t: 'host.race', op: 'finish' })), ...bots.filter((b) => b.i === straggler).map(play)]);
@@ -730,7 +693,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       rejoin,
       leg: opts.leg ? {
         id: legId, steps: legSteps, finished: final.teams.filter((t) => t.finishAt !== null).length, ranked: final.ranking.length, out: final.ranking.filter((r) => r.out).length,
-        rowsPerTeam: atStart && (c.rows - atStart.rows - shared!) / opts.bots, sharedRows: shared, rowBudget: legRowBudget(legSteps), refused, stats: legStats(final.progress, new Set(final.leg?.steps.filter((x) => x.louvre).map((x) => x.id))), feed: sockets.length > 1 ? Math.min(...sockets.slice(1).map((k) => k.log.filter((m) => m.t === 'feed').length)) : 0,
+        rowsPerTeam: atStart && (c.rows - atStart.rows - shared!) / opts.bots, sharedRows: shared, rowBudget: legRowBudget(legSteps), refused, stats: legStats(final.progress),
         scenario, export: exp!,
       } : null,
       flagged: final.teams.filter((t) => t.flagged).length,
@@ -759,7 +722,6 @@ function print(r: SimReport) {
     console.log(`  Chặng ${r.leg.id} (${r.leg.steps} bước): ${r.leg.finished} / ${r.bots} đội về đích (bị loại: ${r.leg.out}) · xếp hạng ${r.leg.ranked} dòng · ${rows}${legFailed(r) ? ' ← LỖI' : ''}`);
     const s = r.leg.stats;
     console.log(`  Thử thách: ${s.answers} câu trả lời · Host duyệt ${s.approved}, phạt ${s.penalized}${s.wrong ? `, sai (tự chấm) ${s.wrong}` : ''} · đổi nhánh ${s.switches} lần (phạt rút còn ${SIM_PENALTIES.retryLockMinutes * 60} s / ${SIM_PENALTIES.branchSwitchLockMinutes * 60} s)`);
-    if (s.louvre) console.log(`  Phòng Louvre: chốt sai ${s.louvreWrong}, chốt đúng ${s.louvreCorrect}${s.correct > s.louvreCorrect ? ` (+ ${s.correct - s.louvreCorrect} đáp án gõ tay tự chấm đúng ở bước khác)` : ''} · tin feed công khai mỗi bot nhận ≥ ${r.leg.feed ?? 0}`);
     if (r.leg.refused.length) console.log(`  Thao tác bị từ chối (thử lại): ${r.leg.refused.length}, ví dụ ${r.leg.refused.slice(0, 3).join('; ')}`);
     const sc = r.leg.scenario;
     if (sc) console.log(`  Kịch bản Host (--full): Hoàn tác ${sc.undone} · Cho qua ${sc.passed} · cờ đỏ ${sc.flagged} lần, Xóa cờ ${sc.cleared} · Kết thúc → đội dang dở BỊ LOẠI: ${sc.ended ? 'đúng' : 'KHÔNG'}${scenarioFailed(sc) ? ' ← LỖI' : ''}`);
@@ -779,7 +741,6 @@ export const USAGE = `Cách dùng: npm run sim -- [tùy chọn]   (bot chơi th�
                           thách đầu). Phạt được rút còn 6 giây / 12 giây để chạy nhanh (chặng thật vẫn giữ 3 / 10 phút khi đua).
   --full                  (cần ≥ 6 bot) thêm kịch bản Host: Hoàn tác một Duyệt trong 10 giây, Xóa cờ đỏ, "Cho qua" một đội ở thử thách
                           đầu, đội cuối không check-in → Host "Kết thúc" → BỊ LOẠI; sau đó kiểm tệp "Xuất dữ liệu thời gian" (CSV + JSON)
-  --louvre-right-only     bot phòng Louvre chốt đúng ngay (không chốt sai, không chờ phạt) – chạy nhanh
   --teams <n>             số đội của cuộc đua thật để nội suy ngân sách 2 giờ (mặc định 8; ngưỡng SPEC §3 tính theo tỉ lệ từ 20 đội)
   --bots <n>              số đội bot (mặc định 3)
   --speedup <1…2>         tua nhanh (mặc định 1; 2 = nhanh gấp đôi, tối đa vì máy chủ ngắt quá 15 tin/giây)
@@ -793,7 +754,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   let v: Record<string, string | boolean | undefined>;
   try {
     v = parseArgs({
-      options: { bots: { type: 'string', default: '3' }, minutes: { type: 'string' }, speedup: { type: 'string', default: '1' }, url: { type: 'string' }, leg: { type: 'string' }, race: { type: 'string' }, password: { type: 'string' }, teams: { type: 'string', default: '8' }, full: { type: 'boolean' }, 'louvre-right-only': { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+      options: { bots: { type: 'string', default: '3' }, minutes: { type: 'string' }, speedup: { type: 'string', default: '1' }, url: { type: 'string' }, leg: { type: 'string' }, race: { type: 'string' }, password: { type: 'string' }, teams: { type: 'string', default: '8' }, full: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
     }).values;
   } catch (e) {
     console.error(`Tùy chọn không hợp lệ (${e instanceof Error ? e.message.split('.')[0] : String(e)})\n\n${USAGE}`);
@@ -822,7 +783,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     rejoinGapMs: 10_000,
     teams: Number(str('teams')),
     full: v.full === true,
-    louvreRightOnly: v['louvre-right-only'] === true,
     log: console.log,
   });
   print(report);

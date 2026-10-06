@@ -370,39 +370,6 @@ Object.assign(PRESETS, {
   ),
 });
 Object.assign(VIEWPORT, { 'p8-card-answer-small': { width: 1024, height: 640 } });
-// Phase 8B (docs/plans/phase8b.md §I): p8b-* presets, offline stand-ins only (`npm run screenshot -- p8b` runs the group). The
-// foundation fixed the NAMES; each track only changes the values on its own lines (the params below are placeholders until
-// the track reads them: unknown URL params are ignored, so each preset is the plain player view for now).
-Object.assign(PRESETS, {
-  ...Object.fromEntries(
-    Object.entries({
-      // [B] the room (?louvre=1: the room at the spawn point, 23 placeholders, stand-in card ?card=louvre)
-      'p8b-room': 'louvre=1&card=louvre&roomAt=view', // from the door looking in: 23 numbered placeholders (15 frames + 8 plinths), lock button in the middle; SPEC §17.36: the small "Gợi ý" panel top-left instead of the compact card (both hints in)
-      'p8b-room-hint': 'louvre=1&card=louvre-hint1&roomAt=view', // SPEC §17.36: the panel with hint 1 in, hint 2 counting down ("② sau 20:00"), "Đang chọn 4/5"
-      'p8b-room-button': 'louvre=1&card=louvre&roomAt=button', // next to a green (picked) button: "Bấm F: bỏ chọn"
-      'p8b-room-lock': 'louvre=1&card=louvre-locked&roomAt=lock&lock=120', // at the lock button: the wrong-lock countdown in the middle of the screen
-      // [C] HUD (RaceHud.demo stand-ins)
-      'p8b-card-louvre': 'card=louvre&full', // louvre card: "Đang chọn k/5", "Chốt sai: n lần", hint lines, lock history "· đúng c/5", no input box
-      'p8b-card-hint1': 'card=louvre-hint1&full', // minute 40: "Đáp án bao gồm 5 tác phẩm", no x/5 yet
-      'p8b-card-hint2': 'card=louvre&full', // minute 60: "Đúng x/5" for the current picks
-      'p8b-feed': 'feed=3', // 3 feed lines bottom-left above the minimap (feed.corner)
-      'p8b-credits': 'credits=louvre', // "Ghi nguồn" after the finish: credits.json + "Phòng Louvre" lines (stand-in items)
-    }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
-  ),
-  // [C] the same on a small window (visual review: the card and the feed against the minimap / clock)
-  'p8b-card-louvre-small': '/?player&npc=0&wait=1&card=louvre&full',
-  'p8b-feed-small': '/?player&npc=0&wait=1&feed=5',
-  // fix F2: the room with the 23 real files of public/art (6 scans, 4 sculpture photos), framed pictures, scans on plinths
-  ...Object.fromEntries(
-    Object.entries({ 'p8b-real-view': 'view', 'p8b-real-view-small': 'view', 'p8b-real-art-02': 'art-02', 'p8b-real-art-16': 'art-16', 'p8b-real-art-01': 'art-01', 'p8b-real-lock': 'lock' }).map(([k, at]) => [
-      k,
-      `/?player&npc=0&wait=1&louvre=1&card=louvre&artGlb=2,7,11,13,15,16&artPhoto=8,12,18,21&roomAt=${at}`,
-    ]),
-  ),
-  // [D] Host page: a louvre cell "chọn k/23 · ✗n · 💡40 / 💡60 (x/5)" + its title history (demoState)
-  'p8b-host': '/host.html?demo=1&louvre=1',
-});
-Object.assign(VIEWPORT, { 'p8b-card-louvre-small': { width: 1024, height: 640 }, 'p8b-feed-small': { width: 1024, height: 640 }, 'p8b-real-view-small': { width: 1024, height: 640 } });
 // Phase 8C (docs/plans/phase8c-graphics.md §6–7): p8c-* presets (`npm run screenshot -- p8c`; not in the default run). The
 // foundation fixed the NAMES with stand-in views; each track only changes the values on its own lines. ?quality=low|high
 // (world/graphics.ts) is read by every track; the -low twins check the weak-GPU path. *-bench presets: after __READY__
@@ -435,11 +402,11 @@ Object.assign(PRESETS, {
   'p8c-road': '/?player=30,203,90&wait=2&npc=0', // Quai des Tuileries carriageway (asphalt_02; Rue Royale is paving)
 });
 // Phase 10 (docs/plans/phase10.md §6, track H): p10-* presets (`npm run screenshot -- p10`; not in the default run). The Host page on
-// demo data: ?louvre=1 adds Thử thách 3 (a wide matrix); ?undoLeft=<s> keeps the undo line alive until the picture is taken;
+// demo data: ?undoLeft=<s> keeps the undo line alive until the picture is taken;
 // ?matrixScroll=<x|max>,<y> scrolls the matrix box (px); ?collapsed=1 folds the review queue. 1280 px: queue open; 1024 px: folded.
 Object.assign(PRESETS, {
-  'p10-host': '/host.html?demo=1&louvre=1&undoLeft=600&matrixScroll=max,40',
-  'p10-host-1024': '/host.html?demo=1&louvre=1&undoLeft=600&matrixScroll=max,40&collapsed=1',
+  'p10-host': '/host.html?demo=1&undoLeft=600&matrixScroll=max,40',
+  'p10-host-1024': '/host.html?demo=1&undoLeft=600&matrixScroll=max,40&collapsed=1',
 });
 Object.assign(VIEWPORT, { 'p10-host-1024': { width: 1024, height: 720 } });
 // SPEC §17.42 review cards (`npm run screenshot -- p10-review`): the queue open (three cards: a typed answer that matches, one that

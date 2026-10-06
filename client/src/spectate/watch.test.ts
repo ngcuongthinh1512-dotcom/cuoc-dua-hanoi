@@ -1,8 +1,7 @@
 import type { TeamInfo } from '@race/shared/protocol';
-import { LOUVRE } from '@race/shared';
 import { describe, expect, it } from 'vitest';
 import { spectate as C } from '../config.ts';
-import { followPose, inRoom, nextSlot, smoothPose, streetPose, watchable } from './watch.ts';
+import { followPose, nextSlot, smoothPose, watchable } from './watch.ts';
 
 const team = (slot: number, online = true, racing?: boolean): TeamInfo => ({ slot, id: `t${slot}`, name: `Đội ${slot}`, colour: '#fff', online, ...(racing === undefined ? {} : { racing }) });
 
@@ -28,12 +27,6 @@ describe('watch camera (SPEC §17.40)', () => {
     for (let i = 0; i < 600; i++) p = smoothPose(p, goal, 1 / 60);
     expect(p.x).toBeCloseTo(4, 3);
     expect(smoothPose(cur, { ...goal, x: C.snapDistance + 1 }, 1 / 60)).toEqual({ ...goal, x: C.snapDistance + 1 });
-  });
-
-  it('a team in the Louvre room is watched from the street above it', () => {
-    expect(inRoom(LOUVRE.roomY)).toBe(true);
-    expect(inRoom(LOUVRE.roomY + 1)).toBe(false);
-    expect(streetPose({ x: 1, y: -30, z: 2, yaw: 1 }, 12)).toEqual({ x: 1, y: 12 + C.roomEye, z: 2, yaw: 1, pitch: 0 });
   });
 
   it('lists only online, racing teams by slot; [ / ] wrap; nothing in an empty list', () => {

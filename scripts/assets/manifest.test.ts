@@ -76,10 +76,10 @@ describe('credits8c', () => {
     expect(c[1]!.text).toBe('Texture: Asphalt 02, Roof Slates 03 – Rob Tuytel, Poly Haven, CC0 1.0 Universal, qua Poly Haven');
   });
   it('an unlabelled file is an error', () => expect(() => credits8c([a('sketchfab/new.glb', 'CC0')])).toThrow(/no credits label/));
-  it('merge: before the Louvre line, idempotent', () => {
-    const base = [{ title: 'Bản đồ', text: '', licence: 'ODbL', url: '' }, { title: 'Phòng Louvre', text: '', licence: '', url: '' }];
+  it('merge: at the end, idempotent', () => {
+    const base = [{ title: 'Bản đồ', text: '', licence: 'ODbL', url: '' }];
     const once = mergeCredits(base, credits8c(list));
-    expect(once.map((c) => c.title)).toEqual(['Bản đồ', 'Cột Morris: French Colonne Morris', 'Texture (Poly Haven)', 'Phòng Louvre']);
+    expect(once.map((c) => c.title)).toEqual(['Bản đồ', 'Cột Morris: French Colonne Morris', 'Texture (Poly Haven)']);
     expect(mergeCredits(once, credits8c(list))).toEqual(once);
   });
   it('the real downloads (when present) all have a label and an allowed licence', () => {

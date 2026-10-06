@@ -46,7 +46,7 @@ export function exportRace(leg: Leg, teams: ExportTeam[], rows: StepProgressRow[
   const start = evs.find((e) => e.type === 'host.race' && e.d.op === 'start')?.t ?? null;
   const names = new Map(teams.map((t) => [t.id, t.name]));
   const stamp = (k: string, t: number | null, prev?: number | null): Row => ({ [k]: t, [`${k}Utc`]: iso(t), [`${k}Vn`]: vn(t), [`${k}FromStart`]: secs(t, start), ...(prev !== undefined ? { [`${k}FromPrev`]: secs(t, prev) } : {}) });
-  /** s locked on step i: each "Phạt" (from its decision), wrong louvre lock and branch switch for its lock minutes,
+  /** s locked on step i: each "Phạt" (from its decision) and branch switch for its lock minutes,
    *  cut by the next lock (a switch replaces a "Phạt" countdown) and by the step's completion.
    *  ponytail: a branch switch an undo dropped still counts (its `switch` event stays); filter by branch_switches if it matters. */
   const locked = (team: string, i: number, row: StepProgressRow) => {
@@ -55,7 +55,6 @@ export function exportRace(leg: Leg, teams: ExportTeam[], rows: StepProgressRow[
     for (const a of parseAnswers(row)) {
       const task = taskOf(s, a.b);
       if (task && a.s === 'penalized' && a.d !== undefined) ep.push([a.d, retryLockMinutes(leg, task)]);
-      else if (task && a.s === 'wrong' && a.c !== undefined) ep.push([a.at, retryLockMinutes(leg, task)]);
     }
     for (const e of evs) if (e.type === 'switch' && e.team === team && e.d.step === s.id) ep.push([e.t, leg.penalties.branchSwitchLockMinutes]);
     ep.sort((a, b) => a[0] - b[0]);

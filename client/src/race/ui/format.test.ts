@@ -1,25 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { type AnswerStatus, type ClueCard, type FinishResult, type LouvreView, NET, type RaceView, type TaskView, type TeamInfo, type ZoneMember } from '@race/shared/protocol';
+import { type AnswerStatus, type ClueCard, type FinishResult, NET, type RaceView, type TaskView, type TeamInfo, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
 import { fmtMinSec } from '../../host/hostView.ts';
-import { bookEntries, cardPanel, COPY_OK, copyBlocked, formatDuration, hintPanel, lockLine, penaltyLine, resultView, StartOrderBanner, statusLine, summarize, transportLabel, ZoneList, zoneLines } from './format.ts';
+import { bookEntries, cardPanel, COPY_OK, copyBlocked, formatDuration, lockLine, penaltyLine, resultView, StartOrderBanner, statusLine, summarize, transportLabel, ZoneList, zoneLines } from './format.ts';
 
 const task: TaskView = { title: 'Nhiệm vụ', description: 'Mô tả', media: [], kind: 'answer', verification: 'auto', input: 'text', proofInstruction: '', timeLimitMinutes: 20 };
 const card = (o: Partial<ClueCard>): ClueCard => ({ step: 's', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư', media: [], status: 'done', lockedUntil: null, lockKind: null, answers: [], receivedAt: 1000, completedAt: null, ...o });
-
-describe('hintPanel (SPEC §17.36)', () => {
-  const lv = (o: Partial<LouvreView> = {}): LouvreView => ({ artworks: [], room: { x: 0, z: 0, r: 25, yaw: 0 }, picks: ['a', 'b'], attempts: 0, hintAt: [2_400_000, 3_600_000], hintCount: null, hintCorrect: null, maxPicks: null, ...o });
-  const lc = (l: LouvreView, o: Partial<ClueCard> = {}) => card({ type: 'challenge', status: 'active', task: { ...task, kind: 'louvre', input: 'room', louvre: l }, ...o });
-  it("before hint 1: both count down to the server's hintAt, the picks without /5", () => expect(hintPanel(lc(lv()), 1_500_000)).toEqual(['① sau 15:00', '② sau 35:00', 'Đang chọn 2']));
-  it('after hint 1: the count, hint 2 still counting down, picks k/5', () => expect(hintPanel(lc(lv({ hintCount: 5, maxPicks: 5 })), 3_000_000)).toEqual(['① Đáp án gồm 5 tác phẩm', '② sau 10:00', 'Đang chọn 2/5']));
-  it('after hint 2: the live x/5', () => expect(hintPanel(lc(lv({ hintCount: 5, maxPicks: 5, hintCorrect: 1 })), 4_000_000)).toEqual(['① Đáp án gồm 5 tác phẩm', '② Đúng 1/5', 'Đang chọn 2/5']));
-  it('a countdown rounds up and never goes negative; no panel once done or on another card', () => {
-    expect(hintPanel(lc(lv()), 2_399_001)![0]).toBe('① sau 00:01');
-    expect(hintPanel(lc(lv()), 2_400_500)![0]).toBe('① sau 00:00');
-    expect(hintPanel(lc(lv(), { status: 'done' }), 0)).toBeNull();
-    expect(hintPanel(card({ type: 'challenge', status: 'active', task }), 0)).toBeNull();
-  });
-});
 
 describe('card summary', () => {
   it('route: clue + vehicle rule', () => {

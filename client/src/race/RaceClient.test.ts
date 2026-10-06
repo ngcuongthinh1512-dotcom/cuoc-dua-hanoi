@@ -1,6 +1,6 @@
-import type { BoxInfo, ClientMessage, FeedMessage, FinishResult, LouvreView, RaceView, Welcome } from '@race/shared/protocol';
+import type { BoxInfo, ClientMessage, FinishResult, RaceView, Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { louvreRoom, raceClient } from '../config.ts';
+import { raceClient } from '../config.ts';
 import { boxInReach, matAt, RaceClient } from './RaceClient.ts';
 import type { RaceHud } from './ui/RaceHud.ts';
 
@@ -72,7 +72,7 @@ describe('F and the Pit Stop (D23, D19)', () => {
 
   it('SPEC §17.22 / §17.23: the result goes to the HUD once when it appears (fresh), and from a welcome as a replay', () => {
     const results: [unknown, boolean][] = [];
-    const hud = { result: (r: unknown, fresh: boolean) => results.push([r, fresh]), setView: () => {}, feed: () => {} } as unknown as RaceHud;
+    const hud = { result: (r: unknown, fresh: boolean) => results.push([r, fresh]), setView: () => {} } as unknown as RaceHud;
     const c = new RaceClient({ hud, send: () => {}, serverNow: () => 0 });
     c.welcome({ teams: [], view: pit(), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
     expect(results).toEqual([]);
@@ -141,63 +141,5 @@ describe('Phase 8 ops (D7, D8, D9)', () => {
     c.accept('T2');
     expect(sent).toEqual([{ t: 'race', op: 'answer', step: 'T1', text: 'bảy' }, { t: 'race', op: 'answer', step: 'D1', text: '' }, { t: 'race', op: 'branch', step: 'D1', branch: 'A' }, { t: 'race', op: 'accept', step: 'T2' }]);
     expect(ops).toEqual([]);
-  });
-});
-
-describe('Phase 8B: Louvre room ops + feed / credits routing (docs/plans/phase8b.md §G)', () => {
-  it('pick / view / credits go out at once; lock goes through op (pose first)', () => {
-    const sent: ClientMessage[] = [];
-    const ops: ClientMessage[] = [];
-    const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), op: (m) => ops.push(m), serverNow: () => 0 });
-    expect(c.pick('T3', 'art-07', true, 0)).toBe(true);
-    expect(c.pick('T3', 'art-07', false, louvreRoom.pickGapMs - 1)).toBe(false); // F mashing: dropped
-    expect(c.pick('T3', 'art-07', false, louvreRoom.pickGapMs)).toBe(true);
-    c.refresh();
-    c.credits();
-    c.lock('T3');
-    expect(sent).toEqual([{ t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: true }, { t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: false }, { t: 'race', op: 'view' }, { t: 'race', op: 'credits' }]);
-    expect(ops).toEqual([{ t: 'race', op: 'lock', step: 'T3' }]);
-    expect(c.lock('T3', 5000)).toBe(true);
-    expect(c.lock('T3', 5000 + raceClient.opMinGapMs - 1)).toBe(false); // F mashing at the lock: one op (maxRaceOps)
-    expect(ops).toHaveLength(2);
-  });
-
-  it('welcome.feed, a feed line and the credits reach the HUD (team names from welcome.teams)', () => {
-    const got: unknown[] = [];
-    const hud = { setView() {}, feed: (ms: unknown, teams: unknown, replace?: boolean) => got.push(['feed', ms, teams, !!replace]), credits: (items: unknown) => got.push(['credits', items]) } as unknown as RaceHud;
-    const c = new RaceClient({ hud, send: () => {}, serverNow: () => 0 });
-    const teams = [{ slot: 1, id: 't1', name: 'Đội Đỏ', colour: '#f00', online: true }];
-    const line: FeedMessage = { t: 'feed', at: 5, slot: 1, ok: false, minutes: 3 };
-    c.welcome({ teams, view: null, feed: [line], showStartOrder: false, startOrder: null } as unknown as Welcome, 0);
-    expect(c.message(line)).toBe(true);
-    expect(c.message({ t: 'credits', items: [] })).toBe(true);
-    expect(got).toEqual([['feed', [line], teams, true], ['feed', [line], teams, false], ['credits', []]]); // welcome replaces (fix F2 (3)), a line appends
-  });
-
-  it('frame(): `view` once per hint mark (hintAt[i] + lockEndSlackMs), none when the card has that hint already', () => {
-    let now = 0;
-    const sent: ClientMessage[] = [];
-    const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), serverNow: () => now });
-    const lv = (o: Partial<LouvreView> = {}): LouvreView => ({ artworks: [], room: { x: 0, z: 0, r: 20, yaw: 0 }, picks: [], attempts: 0, hintAt: [10_000, 20_000], hintCount: null, hintCorrect: null, maxPicks: null, ...o });
-    const card = (l: LouvreView) => view({ card: { step: 'T3', type: 'challenge', label: 'Thử thách 3', text: '', media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: 0, completedAt: null, task: { title: '', description: '', media: [], kind: 'louvre', verification: 'auto', input: 'room', proofInstruction: '', timeLimitMinutes: null, louvre: l } } });
-    const views = () => sent.filter((m) => !Array.isArray(m) && m.t === 'race' && m.op === 'view').length;
-    c.message({ t: 'race', view: card(lv()) });
-    c.frame([], 0, 0, false, 0);
-    now = 10_000 + raceClient.lockEndSlackMs - 1;
-    c.frame([], 0, 0, false, 0);
-    expect(views()).toBe(0);
-    now += 1;
-    c.frame([], 0, 0, false, 0);
-    c.frame([], 0, 0, false, 0);
-    expect(views()).toBe(1); // once, even before the answer
-    c.message({ t: 'race', view: card(lv({ hintCount: 5, maxPicks: 5 })) });
-    now = 20_000 + raceClient.lockEndSlackMs;
-    c.frame([], 0, 0, false, 0);
-    c.frame([], 0, 0, false, 0);
-    expect(views()).toBe(2); // the 60-minute mark, once
-    const d = new RaceClient({ hud: undefined, send: (m) => sent.push(m), serverNow: () => now });
-    d.message({ t: 'race', view: card(lv({ hintCount: 5, hintCorrect: 2, maxPicks: 5 })) }); // F5 after both marks: welcome had them
-    d.frame([], 0, 0, false, 0);
-    expect(views()).toBe(2);
   });
 });

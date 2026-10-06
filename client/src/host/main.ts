@@ -6,7 +6,7 @@ import graphUrl from '@race/shared/data/roadgraph.json?url';
 import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, legPenaltyLine, louvreLines, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, withLouvreDemo, type ExportFormat, type ExportResult } from './hostView.ts';
+import { checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, type ExportFormat, type ExportResult } from './hostView.ts';
 import type { HostMap } from './hostMap.ts';
 import { demoTick, withMapDemo } from './hostMapData.ts';
 
@@ -310,7 +310,6 @@ function drawLeg(s: State) {
     legBox.replaceChildren(
       el('div', {}, leg ? el('b', {}, leg.title) : 'Chưa có chặng.', leg ? ` (mã ${leg.id}, múi giờ ${leg.timezone}, ${leg.steps.length} bước)` : ''),
       leg ? el('div', { className: 'note' }, legPenaltyLine(leg)) : '',
-      ...(leg ? louvreLines(leg).map((l) => el('div', { className: 'note' }, l)) : []),
       el('div', { className: 'row' }, 'Chặng có sẵn: ', sel, el('button', { disabled: locked, onclick: () => loadLeg({ id: sel.value }) }, 'Nạp'), ' · Nạp chặng từ file: ', file),
       locked ? el('p', { className: 'note' }, 'Chỉ nạp được khi cuộc đua chưa mở và chưa có đội nào vào game. Muốn đổi chặng: tạo cuộc đua mới (mã mới) → nạp chặng → tạo đội → phát mã → mở.') : '',
       legResult ? el('div', { className: legResult.ok ? 'on' : 'bad' }, legResult.ok ? 'Đã nạp chặng.' : 'Không nạp được chặng:') : '',
@@ -682,7 +681,7 @@ function render(s: State) {
 setInterval(() => state && teamsBox.isConnected && render(state), hostPage.refreshMs);
 
 if (q.has('demo')) {
-  state = withMapDemo(q.has('louvre') ? withLouvreDemo(demoState(Date.now())) : demoState(Date.now())); // + 2 teams on the move (§17.41)
+  state = withMapDemo(demoState(Date.now())); // + 2 teams on the move (§17.41)
   receivedAt = Date.now();
   soundNewQueue(state); // the baseline: the demo queue is not "new"
   mediaStat.set('test-gia.jpg', { s: 'ok', size: 245_760 }); // canned (no server): one image uploaded, one missing

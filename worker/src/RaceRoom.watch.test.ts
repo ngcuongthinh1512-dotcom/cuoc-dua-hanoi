@@ -19,7 +19,7 @@ const isTick = (m: unknown): m is number[] => Array.isArray(m);
 const slotsOf = (m: number[]) => m.slice(2).filter((_, i) => i % 7 === 0);
 const hostState = (h: { until: (f: (m: any) => boolean) => Promise<any> }, f: (s: HostState) => boolean = () => true) => h.until((m) => m.t === 'host.state' && f(m)) as Promise<HostState>;
 /** Team-only traffic a spectator must never get (SPEC §17.40). */
-const PRIVATE = new Set(['race', 'box', 'zone', 'feed', 'book', 'credits', 'notice', 'host.state', 'host.notice', 'host.legResult', 'kick']);
+const PRIVATE = new Set(['race', 'box', 'zone', 'book', 'notice', 'host.state', 'host.notice', 'host.legResult', 'kick']);
 
 describe('watch mode (workerd)', () => {
   it('spectator code + socket, finished team keeps its poses, watch on/off, rotate, full', async () => {
@@ -45,7 +45,7 @@ describe('watch mode (workerd)', () => {
     };
     const w = await spec.next<Welcome>();
     seen.push(w);
-    expect(w).toMatchObject({ t: 'welcome', role: 'spectator', pose: null, bikes: [], boxes: [], view: null, startOrder: null, start: null, feed: [] });
+    expect(w).toMatchObject({ t: 'welcome', role: 'spectator', pose: null, bikes: [], boxes: [], view: null, startOrder: null, start: null });
     expect(w.teams.map((t) => [t.slot, t.online, t.racing])).toEqual([[0, false, true], [1, false, true]]);
     expect(w).not.toHaveProperty('team');
     expect((await hostState(host, (s) => s.spectators === 1)).spectators).toBe(1);

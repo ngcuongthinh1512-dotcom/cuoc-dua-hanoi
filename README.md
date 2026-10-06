@@ -42,9 +42,9 @@ cp worker/.dev.vars.example worker/.dev.vars   # đặt mật khẩu Host khi ch
 | `npm run dev:worker` | Build client rồi chạy `wrangler dev` tại http://localhost:8787 (trang web + API + Durable Object + SQLite + R2 giả lập). |
 | `npm run build` | Kiểm tra kiểu toàn bộ, build client, kiểm tra bundle Worker (`wrangler deploy --dry-run`). |
 | `npm test` | Chạy toàn bộ unit test (Vitest). |
-| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`; gọi theo tên: `lm-<địa danh>`, `leg-L1`…`leg-L6`, nhóm nhân vật `p3` hoặc từng cái như `p3-swim`; nhóm cuộc đua thử `p6` / `p7` / `p8` / `p8b`; đồ họa `p8c`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
+| `npm run screenshot [preset]` | Chụp ảnh trang bằng Chrome headless vào `screenshots/` (preset: `topdown`, `etoile`, `champs`, `eiffel`, `street`, `seine`, `edge`, `player`, `debug`; gọi theo tên: `lm-<địa danh>`, `leg-L1`…`leg-L6`, nhóm nhân vật `p3` hoặc từng cái như `p3-swim`; nhóm cuộc đua thử `p6` / `p7` / `p8`; đồ họa `p8c`). Đổi cổng bằng `SCREENSHOT_PORT=5180`. |
 | `npm run fetch-map` | Tải dữ liệu OSM thô (Overpass) vào `.cache/osm/` và độ cao (AWS Terrain Tiles) → `client/public/data/elevation.*`. Chỉ cần chạy một lần. |
-| `npm run process-assets` | Xử lý asset gốc đã duyệt trong `.cache/assets/` → `client/public/models/*.glb` (kể cả nhân vật `player.glb` + `player-anims.glb`) và `client/public/credits.json`. Đồ họa 8C: `-- hdri textures trees props flamme` (nguồn `.cache/assets/8c`, kiểm giấy phép) → `client/public/{textures,models}`. `-- --assets <thư mục> louvre`: 23 ảnh / bản quét phòng Louvre → `client/public/art/art-NN.*` (tên trung tính, xóa metadata; cách làm: `docs/LEG_FORMAT.md` mục 7.5). |
+| `npm run process-assets` | Xử lý asset gốc đã duyệt trong `.cache/assets/` → `client/public/models/*.glb` (kể cả nhân vật `player.glb` + `player-anims.glb`) và `client/public/credits.json`. Đồ họa 8C: `-- hdri textures trees props flamme` (nguồn `.cache/assets/8c`, kiểm giấy phép) → `client/public/{textures,models}`. |
 | `npm run build-graph` | Dựng đồ thị đường từ `.cache/osm/` → `shared/data/roadgraph.json` (đường, vỉa hè, vạch qua đường, bậc thang, một chiều, bãi xe đạp). |
 | `npm run leg:check -- <file.json>` | Kiểm tra file chặng đua (cú pháp, luật, điểm trên bản đồ, đáp án lọt ra ngoài): [`docs/LEG_FORMAT.md`](docs/LEG_FORMAT.md). |
 | `npm run sim -- --leg <mã \| file.json>` | Bot chơi thử hết một chặng qua WebSocket thật (máy chủ tạm trong máy), in số đội về đích, xếp hạng, số dòng ghi, ngân sách Cloudflare nội suy cho `--teams N` đội × 2 giờ; `--full` (≥ 6 bot) thêm kịch bản Host (Hoàn tác, Xóa cờ, Cho qua, Kết thúc → BỊ LOẠI, kiểm tệp xuất); không có `--leg`: đo lưu lượng. `--help` xem tùy chọn. |
@@ -93,7 +93,7 @@ Xe đạp (Phase 4): 3 xe thử đứng quanh điểm xuất phát, lấp lánh 
 | 6 | Server & presence (Durable Object, WebSocket, vào lại) | Xong |
 | 7 | Race engine lõi: chặng từ file (`leg:check`), mật thư, hộp, Chặng dừng, trang Host tối giản | Xong |
 | 8 | Thử thách gõ đáp án + Host duyệt / phạt, Lựa chọn kép theo hòm nhánh, hình mật thư R2 | Xong |
-| 8B | Phòng Louvre (Thử thách 3): 23 tác phẩm, chọn đúng 5, phạt 3 phút khi chốt sai, gợi ý phút 40 / 70, tin công khai, "Ghi nguồn" sau khi về đích | Xong |
+| 8B | Phòng Louvre (Thử thách 3, Leg 1 Paris) | Đã gỡ ở Leg 2 (xem lịch sử git trước commit `9425533`) |
 | 8C | Đồ họa: bầu trời HDRI, nước Seine, hậu kỳ, cây platane, đồ đường phố Paris, Ngọn lửa Tự do, ngói mái + nhựa đường; Esc → Cài đặt → "Chất lượng đồ họa" (Cao / Thấp, áp dụng sau khi tải lại; máy yếu tự chọn Thấp, Cao tự hạ cấp khi FPS thấp) | Xong |
 | 8D | Đợt việc nhỏ: không sao chép chữ mật thư, thứ hạng = thứ tự về đích, thông báo về đích / BỊ LOẠI (chữ trong file chặng `pit_stop.announce`), bỏ đồng hồ đội + giờ xuất phát | Xong |
 | 9 | Yếu tố đặc biệt, phạt giờ | Bỏ (SPEC §17.18) |

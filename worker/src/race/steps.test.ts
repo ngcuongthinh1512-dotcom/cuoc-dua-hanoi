@@ -12,7 +12,7 @@ import { verifyAuto } from './tasks.ts';
 
 const mini = bundledLeg('mini')!;
 const Z = stepZones(mini);
-const P = (step: number, more: Partial<Progress> = {}): Progress => ({ step, arrivedAt: null, startedAt: null, branch: null, finishAt: null, penaltyMinutes: 0, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, picks: [], ...more });
+const P = (step: number, more: Partial<Progress> = {}): Progress => ({ step, arrivedAt: null, startedAt: null, branch: null, finishAt: null, penaltyMinutes: 0, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, ...more });
 const ZA = branchZone(mini, Z, 3, 'A')!;
 const ZB = branchZone(mini, Z, 3, 'B')!;
 const at = (z: Zone, dx = 0) => ({ x: z.x + dx, z: z.z });

@@ -31,6 +31,7 @@ const ALLOWED: Record<string, number> = {
   'macau-tower: service (inside)': 43,
   'bank-of-china: service (inside)': 1,
   'hotel-lisboa: footway (inside)': 20,
+  'hotel-lisboa: footway (wall)': 1, // the OSM footway grazes the round casino drum's wall at (480, 449): same mapped-through-the-casino case
   'wynn-macau: service (inside)': 36,
   'wynn-macau: service (wall)': 2,
   'fisherman-wharf: service (inside)': 36,

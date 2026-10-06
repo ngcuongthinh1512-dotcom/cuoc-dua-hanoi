@@ -204,11 +204,5 @@
   "licence": "MIT",
   "url": "https://github.com/mrdoob/three.js/blob/r186/examples/textures/waternormals.jpg",
   "set": "8c"
- },
- {
-  "title": "Phòng Louvre",
-  "text": "Ảnh / mô hình tác phẩm phòng Louvre: xem bảng Ghi nguồn sau khi về đích",
-  "licence": "xem bảng Ghi nguồn sau khi về đích",
-  "url": "https://creativecommons.org/licenses/"
  }
 ]

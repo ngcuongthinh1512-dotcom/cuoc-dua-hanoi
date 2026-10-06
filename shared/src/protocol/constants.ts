@@ -13,7 +13,8 @@
 // 7 = SPEC §17.40 watch mode: Role 'spectator' (spectator code "K" + 5, same login box), TeamInfo.racing + `team` racing,
 //     client `watch on/off`, host.spectator rotate + HostState.spectatorCode / spectators, CLOSE.full / kick 'full'.
 // 8 = SPEC §17.44 multi-box tasks: TaskView.input 'parts' + partLabels, race answer {parts}, ReviewItem.partLabels.
-export const PROTOCOL_VERSION = 8;
+// 9 = Leg 2 (Macao): everything 4 added (the Louvre room) removed.
+export const PROTOCOL_VERSION = 9;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */
@@ -51,9 +52,7 @@ export const NET = {
   maxConnects: 10,
   /** Phase 8 (D20): same budget for the race ops that may write a row — answer / accept / branch (NOT checkin /
    *  book: the mat check-in runs every 2 s; NOT open: refused ones write nothing, review R-7) — past this per respawnWindowMs the socket is closed (CLOSE.tooFast). */
-  maxRaceOps: 30, // Phase 8B: `lock` counts too (each wrong one = 3 rows); `pick` / `view` / `credits` write nothing
-  /** Phase 8B: public feed lines kept (welcome.feed; rebuilt from `events` when the Durable Object wakes). */
-  feedKept: 20,
+  maxRaceOps: 30,
   /** Phase 8: longest typed answer (the input's maxlength, the server's limit; '' = "đã gửi bài" of a photo task). */
   answerMax: 200,
   /** Phase 8: a card carries at most this many of the team's own answers (newest; the HUD shows them all). */

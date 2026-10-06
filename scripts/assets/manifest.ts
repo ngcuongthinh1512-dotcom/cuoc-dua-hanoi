@@ -3,7 +3,7 @@
 // (downloaded by hand; licence / author / title / source read from the GLB's asset.extras, which Sketchfab writes).
 // Licence rule SPEC §17.20: PD / CC0 / CC-BY / CC-BY-SA / CC-BY-NC / CC-BY-NC-SA / MIT; never ND, personal-use or unknown.
 // Credits (SPEC §17.20): the 8C graphics lines go into the static client/public/credits.json, grouped per kind for the
-// CC0 / PD / MIT sets, one line per work for CC-BY* (the Louvre works never: their lines come from the server).
+// CC0 / PD / MIT sets, one line per work for CC-BY*.
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -104,10 +104,7 @@ export function credits8c(assets: readonly Asset8c[]): Credit[] {
   return out;
 }
 
-/** credits.json with its old 8C lines replaced by `lines`, put before the last ("Phòng Louvre") line. Idempotent. */
+/** credits.json with its old 8C lines replaced by `lines` (at the end). Idempotent. */
 export function mergeCredits(existing: Credit[], lines: Credit[]): Credit[] {
-  const kept = existing.filter((c) => c.set !== '8c');
-  const louvre = kept.findIndex((c) => c.title === 'Phòng Louvre');
-  const at = louvre < 0 ? kept.length : louvre;
-  return [...kept.slice(0, at), ...lines, ...kept.slice(at)];
+  return [...existing.filter((c) => c.set !== '8c'), ...lines];
 }

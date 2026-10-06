@@ -43,7 +43,6 @@ describe('notices', () => {
     const codes: NoticeCode[] = ['bikeStairs', 'bikeTooFast', 'bikeTooFar', 'bikeTaken', 'respawn', 'respawnStairs', 'bikeLost', 'bikeGone', 'bikeParked', 'walkOnly',
       'raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'clueNew', 'penaltyWait',
       'answerSent', 'answerWrong', 'answerPending', 'answerLocked', 'approved', 'penalized', 'branchChosen', 'branchSwitched', 'branchPending', 'taskNotStarted', // Phase 8
-      'lockWrong', 'pickLimit', 'creditsLocked', // Phase 8B
       'reviewUndone', // Phase 10
       'bikeBroken']; // SPEC §17.30 decoy
     expect(Object.keys(NOTICES).sort()).toEqual([...codes].sort());

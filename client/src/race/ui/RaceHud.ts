@@ -10,17 +10,13 @@
 //    (Phase 10 V4: the teams that just left stay 10 min as "vừa rời đi n phút trước", the minutes move with the clock);
 //  - SPEC §17.22 / §17.23: the finish announcement (host NPC line, toast, finish card: "Về đích thứ n" / the winner's /
 //    "BỊ LOẠI"), texts from the server (the leg), once per result (also after a reload: localStorage);
-//  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box);
-//  - SPEC §17.36: the small "Gợi ý" panel pinned top-left while a louvre card is current (format.ts hintPanel: hint 1 / 2 as
-//    received or counting down to the server's hintAt, the pick count); in the room it stands in for the compact card.
+//  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box).
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
-import { finishTexts, NET, type ClueCard, type CreditItem, type FeedMessage, type FinishResult, type LouvreView, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
-import { Feed } from '../../ui/Feed.ts';
-import { onCreditsRequest, openCredits, setCreditItems, setCreditsGate } from '../../ui/Credits.ts';
+import { finishTexts, NET, type ClueCard, type FinishResult, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
 import { toast } from '../../ui/Toasts.ts';
-import { bookEntries, type BookEntry, branchConfirmText, cardPanel, copyBlocked, hintNews, hintPanel, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultView, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
+import { bookEntries, type BookEntry, branchConfirmText, cardPanel, copyBlocked, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultView, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
 import './race.css';
 
 export interface RaceHudActions {
@@ -36,11 +32,6 @@ export interface RaceHudActions {
   /** An "r2:<name>" image → a blob URL (fetched with the team token), null = not there (not uploaded / not allowed / network).
    *  Absent = offline (no race): the placeholder says images load only in a race. */
   resolveMedia?(name: string): Promise<string | null>;
-  /** Phase 8B: "Ghi nguồn" opened after the finish: ask for the louvre credits (op `credits`; the answer is `credits()` below). */
-  credits?(): void;
-  /** SPEC §17.33: the louvre card's "Vào phòng" button (enabled only within louvreRoom.enterReach of the box: setRoom's `nearBox`);
-   *  main.ts enters the room like F at the box; the card closes itself and the pointer locks again. */
-  enterRoom?(): void;
 }
 
 export interface RaceHudFrame {
@@ -50,9 +41,7 @@ export interface RaceHudFrame {
   serverNow: number;
   /** The body stands inside the current, unopened box's zone, on foot: show "Bấm F để mở hòm mật thư". */
   inZone: boolean;
-  /** Phase 8B: the Louvre room's prompt (LouvreRoom.roomPrompt / "Bấm F để vào phòng Louvre"), shown instead of the box one. */
-  prompt?: string | null;
-  /** Lowest priority (after the room / box prompts): 'on' = a bike F can take is in reach, 'off' = riding, slow enough to get off. */
+  /** Lowest priority (after the box prompt): 'on' = a bike F can take is in reach, 'off' = riding, slow enough to get off. */
   bike?: 'on' | 'off' | null;
 }
 
@@ -148,7 +137,6 @@ export class RaceHud {
   private readonly tl = el('div', 'rc-tl');
   private readonly compact = el('div', 'rc-card hud-box');
   private readonly stateEl = el('div', 'rc-state');
-  private readonly hintEl = el('div', 'rc-hints hud-box'); // SPEC §17.36
   private readonly zonePanel = el('div', 'rc-zone hud-box');
   private readonly zoneList = new ZoneList(); // the server's last "Tại điểm này" list; the panel is redrawn only when its lines change
   private readonly bannerEl = el('div', 'rc-banner hud-hand');
@@ -157,18 +145,15 @@ export class RaceHud {
   private readonly npcEl = el('div', 'rc-npc hud-box');
   private readonly overlay = el('div', 'rc-overlay');
   private readonly zoomEl = html('div', 'rc-zoom', '<img alt="">');
-  private readonly bigEl = el('div', 'rc-big');
-  private bigTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Phase 8 (critic B1): called whenever `open` flips (track B sets it: release / re-take the pointer lock). */
   onOpenChange?: (open: boolean) => void;
 
   /** `teamName`: the submission code "<team>-<step>[-<branch>]" (submitCode) on photo task cards. */
   constructor(readonly actions: RaceHudActions, readonly teamName = '') {
-    this.compact.hidden = this.hintEl.hidden = this.zonePanel.hidden = this.penaltyEl.hidden = this.promptEl.hidden = this.npcEl.hidden = this.overlay.hidden = this.zoomEl.hidden = true;
-    this.hintEl.style.setProperty('--c', TYPE_STYLE.challenge.colour); // a louvre card is a challenge card
-    this.tl.append(this.compact, this.hintEl, this.zonePanel);
-    document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay, this.zoomEl, this.bigEl);
+    this.compact.hidden = this.zonePanel.hidden = this.penaltyEl.hidden = this.promptEl.hidden = this.npcEl.hidden = this.overlay.hidden = this.zoomEl.hidden = true;
+    this.tl.append(this.compact, this.zonePanel);
+    document.body.append(this.tl, this.bannerEl, this.penaltyEl, this.promptEl, this.npcEl, this.overlay, this.zoomEl);
     this.zoomEl.addEventListener('click', () => this.zoom(null));
     // SPEC §17.21: the compact card + the overlay (full cards, Sổ) refuse selection / copy / drag / right-click, except in the
     // submission code and the answer box; a page-wide select-all (Ctrl+A) does not take their text either
@@ -181,7 +166,6 @@ export class RaceHud {
         const sel = getSelection();
         if (sel && !sel.isCollapsed && [this.compact, this.overlay].some((n) => sel.containsNode(n, true)) && copyBlocked(sel.anchorNode)) e.preventDefault();
       });
-    onCreditsRequest(() => this.actions.credits?.());
     // A clicked button / link gives the focus back (review R-1): Space / Enter then reach the card keys below (Space closes,
     // never presses "Đổi lựa chọn kép" again after a declined confirm), and Tab is no key of the button's.
     this.overlay.addEventListener('click', (e) => (e.target as HTMLElement).closest<HTMLElement>('button, a[href]')?.blur());
@@ -210,17 +194,12 @@ export class RaceHud {
   setView(view: RaceView | null): void {
     const was = this.view?.card;
     this.view = view;
-    setCreditsGate(view != null && (view.finishAt != null || view.status === 'finished')); // §17.20: "Ghi nguồn" opens after the finish
     const card = view?.card ?? null;
-    for (const t of hintNews(was, card)) toast(t); // Phase 8B fix F2 (2): minutes 40 / 60 also when the full card is closed
     this.renderCompact(card);
     if (!card) return;
     if (this.fullCard && !this.bookOpen && card.step === this.fullCard.step) return this.refreshFull(card); // same step: the card changed state, redraw in place
     if (card.status === 'done') return;
     const key = `${card.step}@${card.receivedAt}`;
-    // SPEC §17.33: the card after a right Louvre lock waits (seen, no envelope) while the team still stands in the room;
-    // main.ts opens it (openCurrent) right after the automatic / F exit
-    if (this.inRoom && was?.task?.louvre && !card.task?.louvre) return void (this.seenKey = key);
     const boxOpened = was?.step === card.step && !was.branchOpened && !!card.branchOpened;
     if (!boxOpened && (key === this.seenKey || (this.seenKey == null && key === store.get()))) return void (this.seenKey = key);
     this.seenKey = key;
@@ -291,34 +270,6 @@ export class RaceHud {
     this.sync();
   }
 
-  // Phase 8B (docs/plans/phase8b.md §G): the louvre room flag, the public feed, the "Ghi nguồn" answer.
-  private inRoom = false;
-  private nearBox = false;
-  /** LouvreRoom.active (main.ts / track B): the louvre card says "Đang trong phòng" instead of "bấm F ở hòm để vào phòng".
-   *  `nearBox` (SPEC §17.33): the body stands within louvreRoom.enterReach of the box → the card's "Vào phòng" button is live. */
-  setRoom(inside: boolean, nearBox = false): void {
-    if (inside === this.inRoom && nearBox === this.nearBox) return;
-    this.inRoom = inside;
-    this.nearBox = nearBox;
-    if (this.fullCard && !this.bookOpen) this.renderFull(false);
-  }
-  /** SPEC §17.33: a big word in the middle of the screen ("CHÍNH XÁC") for raceHud.announceSeconds. */
-  announce(text: string): void {
-    setText(this.bigEl, text);
-    this.bigEl.classList.add('on');
-    clearTimeout(this.bigTimer);
-    this.bigTimer = setTimeout(() => this.bigEl.classList.remove('on'), C.announceSeconds * 1000);
-  }
-  private readonly feedBox = new Feed();
-  /** welcome.feed (the kept lines: `replace`, every welcome incl. a reconnect) and each `{t:'feed'}` (RaceClient). */
-  feed(ms: readonly FeedMessage[], teams: readonly TeamInfo[], replace = false): void {
-    this.feedBox.push(ms, teams, replace);
-  }
-  /** `{t:'credits'}` after the finish: the "Ghi nguồn" panel gets a "Phòng Louvre" section (ui/Credits.ts). */
-  credits(items: readonly CreditItem[]): void {
-    setCreditItems(items);
-  }
-
   /** SPEC §7 "Tại điểm này" (`zone` message): the other teams here, named from welcome.teams, then (Phase 10 V4) the ones that
    *  left within NET.zoneLeftMs: "vừa rời đi n phút trước" (dimmer); update() keeps their minutes moving. */
   zone(members: readonly ZoneMember[], teams: readonly TeamInfo[]): void {
@@ -343,21 +294,14 @@ export class RaceHud {
     const pen = lock ?? penaltyLine(this.view, this.now);
     this.penaltyEl.hidden = pen == null || (lock != null && this.timerEl != null); // the open card shows the same countdown (visual#7)
     if (pen) setTime(this.penaltyEl, pen);
-    const prompt = f.prompt || (f.inZone ? BOX_PROMPT : f.bike ? BIKE_PROMPT[f.bike] : '');
+    const prompt = f.inZone ? BOX_PROMPT : f.bike ? BIKE_PROMPT[f.bike] : '';
     this.promptEl.hidden = !prompt || this.open;
     if (prompt) setText(this.promptEl, prompt);
     this.npcEl.hidden = f.simTime - this.finishSince >= C.finishSeconds;
     const card = this.view?.card;
     if (!card) return;
-    // SPEC §17.36: the "Gợi ý" panel while a louvre card is current, not under an open card / Sổ / finish card, nor once the
-    // race is over for the team; in the room it stands in for the compact card, and its lines replace the compact card's
-    // "Chọn k/5 · Đúng x/5" (the "Phạt: còn …" line stays)
-    const v = this.view!;
-    const hints = this.open || v.result || v.finishAt != null || v.status === 'finished' ? null : hintPanel(card, this.now);
-    this.drawHints(hints);
-    this.compact.hidden = this.inRoom && hints != null;
     const st = statusLine(card, this.now);
-    this.stateEl.hidden = !st || (hints != null && st.kind === 'info');
+    this.stateEl.hidden = !st;
     this.stateEl.dataset.k = st?.kind ?? '';
     setText(this.stateEl, st?.text ?? '');
     const full = this.fullCard;
@@ -385,16 +329,6 @@ export class RaceHud {
       this.setView({ status: 'running', finishAt: null, penaltyMinutes: Number(q.get('penalty') ?? 0), card, checkinAt: Number.isFinite(wait) ? wait * 1000 + DEMO_NOW : null, result: null });
       if (q.has('book')) (this.bookWaiting = this.bookOpen = true), this.showBook(q.get('book') === 'media' ? DEMO_BOOK_MEDIA : DEMO_BOOK);
     }
-    if (q.has('feed')) {
-      const teams = DEMO_TEAMS;
-      const n = Math.min(Number(q.get('feed')) || 3, DEMO_FEED.length);
-      this.feed(DEMO_FEED.slice(0, n), teams);
-    }
-    if (q.get('credits') === 'louvre') {
-      setCreditsGate(true);
-      setCreditItems(DEMO_CREDITS);
-      openCredits();
-    }
     if (q.has('startOrder')) this.startOrder(Number(q.get('startOrder')) || 1, 0);
     if (q.has('finish')) {
       const f = q.get('finish');
@@ -416,15 +350,6 @@ export class RaceHud {
   }
 
   // ── rendering ──
-
-  /** SPEC §17.36: the panel's DOM is rebuilt only when its lines change (a countdown ticks once a second). */
-  private drawHints(lines: string[] | null) {
-    this.hintEl.hidden = !lines;
-    const key = lines?.join('\n') ?? '';
-    if (this.hintEl.dataset.t === key) return;
-    this.hintEl.dataset.t = key;
-    this.hintEl.replaceChildren(el('div', 'rc-hints-title', 'Gợi ý'), ...(lines ?? []).map((l) => el('div', 'rc-hints-line', l)));
-  }
 
   /** `open` may have flipped: tell main.ts (it frees / re-takes the pointer, critic B1). */
   private sync() {
@@ -527,7 +452,7 @@ export class RaceHud {
   private detail(card: ClueCard, entry: BookEntry | null): HTMLElement {
     const s: CardSummary = summarize(card);
     const st = TYPE_STYLE[card.type];
-    const p = cardPanel(card, { now: this.now, teamName: this.teamName || this.demoTeam, mode: entry ? 'book' : 'card', live: this.view?.status !== 'finished', inRoom: this.inRoom, nearBox: this.nearBox }); // finished: the Host ended the race, read-only (SPEC §8.10)
+    const p = cardPanel(card, { now: this.now, teamName: this.teamName || this.demoTeam, mode: entry ? 'book' : 'card', live: this.view?.status !== 'finished' }); // finished: the Host ended the race, read-only (SPEC §8.10)
     if (!entry) this.shown = p.status;
     const root = el('section', `rc-detail${entry?.pinned ? ' pinned' : ''}`);
     root.style.setProperty('--c', st.colour);
@@ -550,17 +475,6 @@ export class RaceHud {
       if (n >= 0) this.hot.choose[n] = this.act(`Chọn nhánh ${b.title} [${n + 1}]`, () => this.actions.branch(card.step, b.branch!), blk);
       if (dim) other.push(blk);
       else root.append(blk);
-    }
-    if (p.louvreInfo) {
-      const blk = el('div', `rc-louvre ${p.louvreInfo.state}`, undefined, el('div', 'rc-louvre-state', p.louvreInfo.text), ...p.louvreInfo.lines.map((l) => el('div', 'rc-louvre-line', l)));
-      const en = p.louvreInfo.enter;
-      if (en && this.actions.enterRoom) {
-        // SPEC §17.33: like F at the box; closing here (inside the click handler) locks the pointer again (onOpenChange)
-        const btn = this.act('Vào phòng', () => (this.actions.enterRoom!(), this.close()), blk);
-        btn.disabled = !en.enabled;
-        if (en.hint) blk.append(el('div', 'rc-louvre-line rc-louvre-hint', en.hint));
-      }
-      root.append(blk);
     }
     if (p.note) root.append(el('div', 'rc-timer info', p.note)); // the step's main instruction: framed like the countdown (visual#5)
     if (p.line) {
@@ -756,34 +670,8 @@ const DEMO_CARDS: Record<string, ClueCard> = {
   // p8-media-offline: the demo resolver has no demo-off.jpg (offline: "Hình chỉ tải được trong cuộc đua")
   'media-off': { ...NEW, step: 'L1', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư minh họa kèm hình: ngoài cuộc đua hình không tải được.', transport: { allowed: 'any' }, media: [{ url: 'r2:demo-off.jpg', label: 'Ảnh gợi ý', kind: 'image' }], status: 'active', receivedAt: T0, completedAt: null },
 };
-// Phase 8B stand-ins (neutral art-NN ids; no real artwork names anywhere in the repo)
 const DEMO_TEAMS: TeamInfo[] = ['Xanh', 'Đỏ', 'Vàng'].map((n, i) => ({ slot: i + 1, id: `t${i}`, name: `Đội ${n}`, colour: '#fff', online: true }));
-const DEMO_FEED: FeedMessage[] = [
-  { t: 'feed', at: T0, slot: 1, ok: false, minutes: 3 },
-  { t: 'feed', at: T0 + 60_000, slot: 2, ok: false, minutes: 3, n: 2, of: 5 },
-  { t: 'feed', at: T0 + 120_000, slot: 3, ok: true, n: 5, of: 5 },
-];
-const DEMO_CREDITS: CreditItem[] = [
-  { file: 'art-03.webp', title: 'Tác phẩm minh họa 03', artist: 'Nghệ sĩ minh họa', photo: 'Ảnh: người chụp minh họa', license: 'CC BY-SA 4.0', source: 'https://example.org/art-03' },
-  { file: 'art-17.glb', title: 'Tác phẩm minh họa 17', artist: 'Nghệ sĩ minh họa', photo: 'Bản quét: người quét minh họa', license: 'CC BY-NC-SA 4.0', source: 'https://example.org/art-17' },
-  { file: 'art-21.webp', title: 'Tác phẩm minh họa 21', artist: 'Nghệ sĩ minh họa', photo: 'Ảnh: người chụp minh họa', license: 'Public domain', source: 'https://example.org/art-21' },
-];
-const DEMO_LOUVRE: LouvreView = {
-  artworks: Array.from({ length: 23 }, (_, i) => ({ id: `art-${String(i + 1).padStart(2, '0')}`, type: i < 15 ? ('painting' as const) : ('sculpture' as const), image: '' })),
-  room: { x: 0, z: 0, r: 25, yaw: 0 },
-  picks: ['art-03', 'art-08', 'art-12'],
-  attempts: 2,
-  hintAt: [DEMO_NOW - 600_000, DEMO_NOW - 60_000],
-  hintCount: 5,
-  hintCorrect: 2,
-  maxPicks: 5,
-};
-const louvreTask: TaskView = { ...task, title: 'Phòng tác phẩm', description: 'Chọn các tác phẩm theo gợi ý rồi bấm nút chốt trong phòng.', kind: 'louvre', verification: 'auto', input: 'room', place: 'Sân minh họa', louvre: DEMO_LOUVRE };
 DEMO_CARDS['parts-locked'] = { ...DEMO_CARDS.parts!, status: 'locked', lockedUntil: DEMO_NOW + 160_000, lockKind: 'retry' };
-DEMO_CARDS.louvre = { ...NEW, step: 'T3', type: 'challenge', label: 'Thử thách 3', text: 'Gợi ý minh họa: hãy vào phòng và chọn các tác phẩm.', status: 'active', retryPenaltyMinutes: 3, task: louvreTask, answers: [A(1, '4 tác phẩm', 'penalized', 420), A(2, '5 tác phẩm', 'penalized', 130)].map((a, i) => ({ ...a, correct: i === 0 ? 1 : 2 })), receivedAt: T0, completedAt: null };
-// p8b-card-hint1: minute 40 only ("Đáp án bao gồm 5 tác phẩm"), no "Đúng x/5" yet (that is hint 2, minute 60); p8b-card-hint2 = the `louvre` card above
-DEMO_CARDS['louvre-hint1'] = { ...DEMO_CARDS.louvre, task: { ...louvreTask, louvre: { ...DEMO_LOUVRE, hintAt: [DEMO_NOW - 60_000, DEMO_NOW + 1_200_000], hintCorrect: null, picks: ['art-03', 'art-08', 'art-12', 'art-05'] } }, answers: [A(1, '4 tác phẩm', 'penalized', 420), A(2, '5 tác phẩm', 'penalized', 130)] };
-DEMO_CARDS['louvre-locked'] = { ...DEMO_CARDS.louvre, status: 'locked', lockedUntil: DEMO_NOW + 150_000, lockKind: 'retry', task: { ...louvreTask, louvre: { ...DEMO_LOUVRE, hintAt: [DEMO_NOW - 600_000, DEMO_NOW + 600_000], hintCorrect: null, attempts: 1 } }, answers: [{ ...A(1, '5 tác phẩm', 'penalized', 30) }] };
 const DEMO_BOOK: ClueCard[] = [
   { ...DEMO_CARDS.route!, label: 'Lộ trình 1', status: 'done', receivedAt: T0, completedAt: T0 + 1_240_000 },
   { ...DEMO_CARDS.challenge!, status: 'done', receivedAt: T0 + 1_240_000, completedAt: T0 + 2_100_000 },

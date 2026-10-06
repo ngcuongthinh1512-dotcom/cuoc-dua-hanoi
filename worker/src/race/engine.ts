@@ -4,15 +4,15 @@
 // in one transaction, the cache patched only once it committed, THEN the answers (SPEC §3) — and builds the welcome /
 // host.state parts.
 import { branchZone, jsonProblem, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
-import { latLonToWorld, LOUVRE } from '@race/shared';
-import { finishTexts, NET, type BoxInfo, type FeedMessage, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
+import { latLonToWorld } from '@race/shared';
+import { finishTexts, NET, type BoxInfo, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
-import { emptyProgress, getMeta, parseAnswers, parsePicks, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
+import { emptyProgress, getMeta, parseAnswers, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { ranking } from './ranking.ts';
 import type { BoxSpot } from './BikeService.ts';
 import { partsOf } from './tasks.ts';
-import { advance, boxesOf, cardOf, creditsOf, hintAt, inside, louvreView, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
+import { advance, boxesOf, cardOf, inside, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
 
 /** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
  *  `auto` answers a minute for hours would grow one row and every host.state); raise it if a Host needs the whole log. */
@@ -66,40 +66,6 @@ export interface RaceIO {
    *  its revealed box (attachment), then gets {t:'box', op:'remove', step, branch} (dropped even if opened). Phase 10
    *  (undo): no `branch` → {t:'box', op:'hide', step} (an unopened box of that step). */
   hideBox(team: string, step: string, branch?: string): void;
-  /** Phase 8B: a public feed line to every socket (teams + Hosts), kept for the welcome (the event is written already).
-   *  SPEC §17.35: sent as `feedFor(m, engine.seesFeedCount(team, m, now))` to a team, whole to a Host. */
-  feed(m: FeedMessage, now: number): void;
-  /** Phase 8B: a louvre pick changed live picks (memory only): the snapshot row goes out within NET.snapshotMs. */
-  touchSnapshot(now: number): void;
-}
-
-/** Data of a `louvre.lock` event (enough to rebuild its feed line when the Durable Object wakes). */
-export interface LockEvent {
-  step: string;
-  ok: boolean;
-  /** picks locked / right ones among them. */
-  k: number;
-  c: number;
-  /** SPEC §17.35: locked at or past the team's countAtMinutes (40) mark: the line carries n (the ≤ 5 rule was on). */
-  public: boolean;
-  slot: number;
-  minutes: number;
-}
-
-/** The public line of a lock (SPEC §17.19, §17.35): only a WRONG lock is public, as "bị phạt n phút"; no line for a right
- *  lock. `n`/`of` (right ones of that lock) only for a lock past the locking team's 40-minute mark — and the line is
- *  then cut per recipient with `feedFor` (RaceRoom): a team sees the count only in the room past its own 40 minutes
- *  (another team's lock) or 60 minutes (its own lock). */
-export function feedLine(at: number, e: LockEvent): FeedMessage | null {
-  if (e.ok) return null;
-  return { t: 'feed', at, slot: e.slot, ok: false, minutes: e.minutes, ...(e.public ? { n: e.c, of: LOUVRE.answers } : {}) };
-}
-
-/** SPEC §17.35: the line as one recipient gets it: whole (`count`: a Host, or a team allowed the count) or without n / of. */
-export function feedFor(m: FeedMessage, count: boolean): FeedMessage {
-  if (count || m.n === undefined) return m;
-  const { n: _n, of: _of, ...rest } = m;
-  return rest;
 }
 
 export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.leg' | 'host.review' }>;
@@ -237,10 +203,6 @@ export class RaceEngine {
     const r = this.io.team(team);
     if (!r) return;
     if (m.op === 'book') return this.io.send(team, { t: 'book', cards: this.cards(team, r, now) });
-    // Phase 8B (docs/plans/phase8b.md §C, critic S4): read-only, every status, 0 rows, not counted in maxRaceOps
-    if (m.op === 'view') return this.io.send(team, { t: 'race', view: this.view(team, now) });
-    if (m.op === 'credits')
-      return r.finishAt !== null || this.statusV === 'finished' ? this.io.send(team, { t: 'credits', items: creditsOf(this.legV) }) : this.io.send(team, { t: 'notice', code: 'creditsLocked' });
     if (this.statusV !== 'running') {
       // the client's periodic check-in on the mat (D19) gets no toast while the race is not running
       if (m.op !== 'checkin') this.io.send(team, { t: 'notice', code: STATUS_NOTICE[this.statusV] });
@@ -250,9 +212,6 @@ export class RaceEngine {
     if (m.op === 'accept') return this.step(team, { kind: 'accept', step: m.step }, now);
     if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text, pose: stand(at), ...(m.parts ? { parts: m.parts } : {}) }, now);
     if (m.op === 'branch') return this.step(team, { kind: 'branch', step: m.step, branch: m.branch }, now);
-    // Phase 8B: a pick from anywhere; a lock judged at the trusted pose inside the step's zone (steps.ts advance; engine.apply writes the lock)
-    if (m.op === 'pick') return this.step(team, { kind: 'pick', step: m.step, art: m.art, on: m.on }, now);
-    if (m.op === 'lock') return this.step(team, { kind: 'lock', step: m.step, pose: stand(at) }, now);
     if (!at) return this.io.send(team, { t: 'notice', code: 'boxFar' });
     const riding = at.mode === 'bike';
     const input: RaceInput =
@@ -400,9 +359,7 @@ export class RaceEngine {
           team: id, step: row.step, arrivedAt: row.arrived_at, openedAt: row.clue_opened_at, startedAt: row.task_started_at, completedAt: row.completed_at, branch: row.branch,
           submittedAt: row.submitted_at, decidedAt: row.decided_at, rejections: row.rejections, wrongAnswers: row.wrong_answers, branchSwitches: row.branch_switches,
           branchOpenedAt: row.branch_opened_at, lockedUntil: row.locked_until, pending: answers.at(-1)?.s === 'pending', approvalWaitSeconds: row.approval_wait_seconds,
-          answers: answers.map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, branch: a.b, ...(a.n ? { note: a.n } : {}), ...(a.c !== undefined ? { correct: a.c } : {}) })), note: row.host_note,
-          // Phase 8B: the Host sees the picks + the live x/5 past the 60-minute mark (louvreView: the same numbers as the team's card)
-          picks: parsePicks(row), hintCorrect: louvreView(leg, i, row, this.zones[i]!, now)?.hintCorrect ?? null,
+          answers: answers.map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, branch: a.b, ...(a.n ? { note: a.n } : {}) })), note: row.host_note,
         });
       }
       return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, finishAt: r.finishAt, rank: r.rank, out: r.out, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null }];
@@ -429,11 +386,7 @@ export class RaceEngine {
         steps: leg.steps.map((s, i) => {
           const z = this.zones[i]!;
           const branches = s.type === 'detour' ? s.branches.map((b) => ({ id: b.id, title: b.name, ...pick(branchZone(leg, this.zones, i, b.id)!), proof: b.task.kind === 'free' })) : undefined;
-          const lv = s.type === 'challenge' && s.task.kind === 'louvre' ? s.task.louvre : undefined;
-          return {
-            id: s.id, type: s.type, label: s.label, ...pick(z), proof: s.type === 'challenge' && s.task.kind === 'free', ...(branches ? { branches } : {}),
-            ...(lv ? { louvre: { hints: [lv.hints.countAtMinutes, lv.hints.correctAtMinutes] as [number, number] } } : {}),
-          };
+          return { id: s.id, type: s.type, label: s.label, ...pick(z), proof: s.type === 'challenge' && s.task.kind === 'free', ...(branches ? { branches } : {}) };
         }),
         vehicles: leg.vehicles, bundled: BUNDLED_LEGS, issues: this.issues,
         media: r2Names(leg), penalties: { retryLockMinutes: leg.penalties.retryLockMinutes, branchSwitchLockMinutes: leg.penalties.branchSwitchLockMinutes }, stuckMinutes: leg.hostAlerts.stuckMinutes,
@@ -444,29 +397,6 @@ export class RaceEngine {
       // only what an undo would pass now (the page draws a button per item and hides it at `until` by itself)
       undo: this.undoV.filter((u) => !this.undoBlock(u, now)).map(({ team, step, id, op, at }) => ({ team, step, id, op, at, until: at + NET.undoMs })),
     };
-  }
-
-  /** Phase 8B (§D): live picks of every team's current, unfinished louvre step, for the snapshot row: team → step → ids. */
-  livePicks(): Record<string, Record<string, string[]>> {
-    const out: Record<string, Record<string, string[]>> = {};
-    for (const id of this.io.teamIds()) {
-      const s = this.legV.steps[this.io.team(id)?.step ?? -1];
-      const row = s?.type === 'challenge' && s.task.kind === 'louvre' ? this.teamRows(id).get(s.id) : undefined;
-      if (row && row.completed_at == null) out[id] = { [s!.id]: parsePicks(row) };
-    }
-    return out;
-  }
-
-  /** Phase 8B (verify-foundation #2): live picks back from the snapshot row written at `snapT` — the newer one wins: a
-   *  step's row whose last lock is later than the snapshot (it wrote its picks) or that is done keeps its own. */
-  restorePicks(saved: Record<string, Record<string, string[]>> | undefined, snapT: number): void {
-    for (const [team, steps] of Object.entries(saved ?? {}))
-      for (const [step, ids] of Object.entries(steps)) {
-        const row = this.rows.get(team)?.get(step);
-        if (!row || row.completed_at != null || !Array.isArray(ids)) continue;
-        if (Math.max(0, ...parseAnswers(row).map((a) => a.at)) > snapT) continue;
-        this.teamRows(team).set(step, { ...row, picks: JSON.stringify(ids.filter((x) => typeof x === 'string')) });
-      }
   }
 
   // ── internals ──
@@ -489,18 +419,6 @@ export class RaceEngine {
   private meta(key: string, value: string) {
     setMeta(this.io.sql, key, value);
     this.io.counters.rows += 1;
-  }
-
-  /** SPEC §17.35: this team may see the "đúng x/5" of public line `m`: its trusted pose stands in the louvre step's zone
-   *  under LOUVRE.roomY (the room, 30 m below the street; RaceRoom's last tick, ≤ 1 tick late) AND it has passed its own
-   *  mark — hint 1 (40, countAtMinutes) for another team's lock, hint 2 (60, correctAtMinutes) for its own lock (a team
-   *  learns its own score only from 60, like the card). No louvre step / no pose / not there → false. */
-  seesFeedCount(team: string, m: FeedMessage, now: number): boolean {
-    const i = this.legV.steps.findIndex((s) => s.type === 'challenge' && s.task.kind === 'louvre');
-    const p = this.io.pose(team);
-    if (i < 0 || !p || p.y > LOUVRE.roomY || !inside(this.zones[i]!, p.x, p.z, NET.geofenceSlack)) return false;
-    const row = this.teamRows(team).get(this.legV.steps[i]!.id);
-    return !!row && now >= hintAt(this.legV, i, row, now)![m.slot === this.io.slot(team) ? 1 : 0];
   }
 
   private teamRows(team: string) {
@@ -538,7 +456,7 @@ export class RaceEngine {
     const pit = this.legV.steps[r.step]?.type === 'pit_stop';
     return {
       status: this.statusV, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
-      card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now, this.zones) : null,
+      card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now) : null,
       checkinAt: pit && r.finishAt === null && r.penaltyMinutes > 0 && p.arrivedAt !== null ? p.arrivedAt + r.penaltyMinutes * 60_000 : null,
       result: this.result(team, r),
     };
@@ -546,7 +464,7 @@ export class RaceEngine {
 
   private cards(team: string, r: TeamRace, now: number) {
     const out = [];
-    for (let i = 0; i <= Math.min(r.step, this.legV.steps.length - 1); i++) out.push(cardOf(this.legV, i, this.row(team, i, r), now, this.zones));
+    for (let i = 0; i <= Math.min(r.step, this.legV.steps.length - 1); i++) out.push(cardOf(this.legV, i, this.row(team, i, r), now));
     return out;
   }
 
@@ -573,8 +491,6 @@ export class RaceEngine {
     const out: ServerMessage[] = [];
     const parks: Extract<RaceEffect, { kind: 'park' }>[] = [];
     let placed: Pick<TeamRace, 'rank' | 'out'> = { rank: r.rank, out: r.out };
-    const feeds: FeedMessage[] = [];
-    let picked = false;
     const hides: Extract<RaceEffect, { kind: 'hideBox' }>[] = [];
     const notice = (code: ServerNotice) => out.push({ t: 'notice', code });
     // M8: an approval says "Host đã duyệt! Mật thư mới…" once (no clueNew next to it); a note alone changes no card
@@ -632,21 +548,6 @@ export class RaceEngine {
         const box = this.boxes[e.step]?.[0];
         if (box && !box.kind && !box.branch) out.push({ t: 'box', op: 'reveal', box: { ...box, opened: true } }); // D5: opened at once
         if (n && !approved) notice('clueNew');
-      } else if (e.kind === 'pick') {
-        // Phase 8B (§D): memory only — the row cache (cardOf / hostView read it) + the snapshot row; a lock writes them
-        const id = sid(e.step);
-        this.teamRows(team).set(id, { ...(this.teamRows(team).get(id) ?? emptyProgress(team, id)), picks: JSON.stringify(e.picks) });
-        picked = true;
-      } else if (e.kind === 'lock') {
-        const row = edit(e.step);
-        row.answers = JSON.stringify([...parseAnswers(row), e.rec].slice(-ANSWERS_KEPT));
-        row.picks = JSON.stringify(e.picks);
-        if (!e.ok) Object.assign(row, { rejections: row.rejections + 1, locked_until: e.lockedUntil });
-        const data: LockEvent = { step: sid(e.step), ok: e.ok, k: e.picks.length, c: e.correct, public: e.public, slot: this.io.slot(team), minutes: e.minutes };
-        events.push(['louvre.lock', data]);
-        const line = feedLine(now, data);
-        if (line) feeds.push(line);
-        if (!e.ok) notice('lockWrong'); // right: the `complete` after it says clueNew
       } else if (e.kind === 'finish') {
         edit(p.step).completed_at = now;
         // SPEC §17.22: the real finish order, fixed now; §17.23: the last team of the race (every other one finished) is out
@@ -674,16 +575,10 @@ export class RaceEngine {
       for (const row of dirty.values()) this.teamRows(team).set(row.step, row); // committed: patch the cache
       if (undos) this.undoV = undos;
       if (!quiet) out.push({ t: 'race', view: this.view(team, now) });
-    } else if (picked) {
-      // nothing written: the team's new card (its lights, the live x/5) goes out all the same; the Host's soon
-      out.push({ t: 'race', view: this.view(team, now) });
-      this.io.touchSnapshot(now);
-      this.io.changed(now);
     }
     for (const h of hides) this.io.hideBox(team, sid(h.step), h.branch); // before the card that says "switched"
     for (const k of parks) this.io.park(team, k.rack, now, this.boxAt(k.rack));
     for (const m of out) this.io.send(team, m);
-    for (const m of feeds) this.io.feed(m, now);
     if (dirty.size) {
       this.io.changed(now);
       // its lists change with a new step, an arrival where it already stands (moveZone sees no move), or a branch switch

@@ -2,7 +2,6 @@
 // "Không đi xe trên bậc thang", "Chậm một bước! Xe đang có người đi". The same text within toasts.repeatGap s is dropped. The DOM
 // is created on first use (importing this module touches nothing: Player.ts imports it in Node tests).
 import { hud, toasts as T } from '../config.ts';
-import { fmtMin } from '../race/ui/format.ts';
 import './menu.css';
 import type { NoticeCode } from './types.ts';
 
@@ -41,10 +40,6 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   branchSwitched: 'Đã đổi lựa chọn kép: hòm nhánh kia hiện khi hết đếm ngược',
   branchPending: 'Không đổi nhánh khi đang chờ Host duyệt',
   taskNotStarted: 'Bấm "Nhận thử thách" trước',
-  // Phase 8B: phòng Louvre (docs/plans/phase8b.md §G; lockWrong with the card's minutes: lockWrongText below)
-  lockWrong: 'Chưa đúng! Bị phạt – lựa chọn vẫn giữ, bấm / bỏ được, chốt lại khi hết đếm ngược',
-  pickLimit: 'Chỉ được chọn tối đa 5 tác phẩm – bỏ một tác phẩm trước',
-  creditsLocked: 'Bảng Ghi nguồn mở sau khi về đích',
   // Phase 10 (V2, docs/plans/phase10.md §3.1): the Host undid its Duyệt / Phạt within 10 s
   reviewUndone: 'Host đã rút lại quyết định vừa rồi. Thẻ mật thư trở lại như trước.',
 };
@@ -101,10 +96,6 @@ export function toast(text: string): void {
   }
   draw();
 }
-
-/** `lockWrong` worded with the card's penalty minutes (card.retryPenaltyMinutes; a test leg may say 0,1). 0 / unknown → the fixed text. */
-export const lockWrongText = (minutes: number | undefined): string =>
-  minutes ? `Chưa đúng! Bị phạt ${fmtMin(minutes)} phút – lựa chọn vẫn giữ, bấm / bỏ được, chốt lại khi hết đếm ngược` : NOTICES.lockWrong;
 
 /** SPEC §17.31: `penalized` with the Host's count ("đúng 2/4") when the server sent one; else the fixed text. */
 export const penalizedText = (score: number | undefined, of: number | undefined): string =>

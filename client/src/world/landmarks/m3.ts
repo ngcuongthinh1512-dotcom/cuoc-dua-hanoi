@@ -3,12 +3,15 @@
 // docs/reports/leg2-landmarks-o3.md). Night = THE moment for these: every light is a 'neon' bucket (unlit MeshBasic,
 // linear colour × bright × lighting.emissiveScale → bloom); the chunk worker cannot tell day from night, so they are on
 // by day too (casino LEDs are). No real lights. Colliders only on simplified solids (renderPart prisms, plinths, towers).
-//   hotel-lisboa (zone): round 37.4 m drum = Casino Lisboa rotunda + its gold lit "birdcage" crown; > 60 m = the hotel
-//     tower (lit floor bands, "LISBOA" bulb sign on the roof); other building = podium with bulb strips; roofs generic.
+//   hotel-lisboa (zone), rebuilt from photos: the round 37.4 m record = the white round hotel tower (white fins, pale lit
+//     floor bands, gold parapet + small fan crown, "LISBOA" bulb sign); > 60 m = the 1991 extension (white slab); the
+//     27.8 m podium is cut off behind its round south lobe = Casino Lisboa: low drum with an orange window grid and brown
+//     mullions under a crown of gold fan arches ("birdcage") around an inner drum, a dome and a rosette; roofs generic.
 //   wynn-macau: Encore (> 150 m) / Wynn (> 80 m) gold slabs, lit floor bands, roof LED rim, "WYNN" sign; the big podium
 //     (+ Performance Lake jets at the OSM fountain node); the small blocks generic.
-//   mgm-macau: the tower cut in 3 wave sections (gold / silver / rose gold, stepped tops), "MGM" sign; the podium with
-//     the Grande Praça glass vault and the golden lion on its OSM artwork point.
+//   mgm-macau, rebuilt from photos: the tower = 3 stacked tiers (copper / blue glass / gold) between wavy boundaries,
+//     each inset / trimmed a little differently, "MGM GRAND" across the gold tier; the podium with the Grande Praça
+//     glass vault and the golden lion on its OSM artwork point.
 //   sands-macau: gold glass block, lit bands, roof rim, red "SANDS" sign.
 //   fisherman-wharf: the site polygon carries the Colosseum arcade (wrapping the plain OSM amphitheatre building) and a
 //     lighthouse on the seaward tip; the convention centre gets a "Babylon" ziggurat roof and an LED rim.
@@ -16,10 +19,10 @@ import { landmarks as L, lighting as LT } from '../../config.ts';
 import { type BuildingRec, type LandmarkId, type PartRec, ringArea, type XZ } from '../../geo/chunkData.ts';
 import { ringCentroid } from '../../geo/clip.ts';
 import type { BuildOut, MaterialId } from '../buildTypes.ts';
-import { type MeshBuffer, triangulate, type V3 } from '../geom.ts';
+import { type MeshBuffer, offsetPolyline, triangulate, type V3 } from '../geom.ts';
 import type { DetailFn, LandmarkCtx } from './index.ts';
 import { arch, footprintFrame, loft, quadOut, triOut } from './kit.ts';
-import { keyed, outward } from './mf2.ts';
+import { outward } from './mf2.ts';
 import { parseColour, partRings, renderPart, Sink } from './parts.ts';
 
 const M = L.m3;
@@ -51,6 +54,7 @@ const FONT: Record<string, string[]> = {
   M: ['1...1', '11.11', '1.1.1', '1.1.1', '1...1', '1...1', '1...1'],
   N: ['1...1', '11..1', '1.1.1', '1.1.1', '1..11', '1...1', '1...1'],
   O: ['.111.', '1...1', '1...1', '1...1', '1...1', '1...1', '.111.'],
+  R: ['1111.', '1...1', '1...1', '1111.', '1.1..', '1..1.', '1...1'],
   S: ['.1111', '1....', '1....', '.111.', '....1', '....1', '1111.'],
   W: ['1...1', '1...1', '1...1', '1.1.1', '1.1.1', '11.11', '1...1'],
   Y: ['1...1', '1...1', '.1.1.', '..1..', '..1..', '..1..', '..1..'],
@@ -89,28 +93,35 @@ export function clipRing(r: XZ, nx: number, nz: number, d: number): XZ {
   return out;
 }
 
-/** A footprint cut into `n` equal slices along its long axis, ordered west → east (by centroid x). */
-export function sections(ring: XZ, n: number): XZ[] {
-  const f = footprintFrame(ring);
-  const c0 = f.cx * f.ux + f.cz * f.uz; // u of the frame centre
-  const out: XZ[] = [];
-  for (let k = 0; k < n; k++) {
-    const [u0, u1] = [c0 - f.a + (2 * f.a * k) / n, c0 - f.a + (2 * f.a * (k + 1)) / n];
-    const s = clipRing(clipRing(ring, f.ux, f.uz, u1), -f.ux, -f.uz, -u0);
-    if (s.length >= 6 && Math.abs(ringArea(s)) > 1) out.push(s);
-  }
-  return out.sort((p, q) => ringCentroid(p)[0] - ringCentroid(q)[0]);
-}
-
-export type LisboaPiece = 'drum' | 'tower' | 'podium' | 'generic';
-/** Which Hotel Lisboa record this is (foundation report: the 37.4 m round drum (r ≈ 22 m), the 76.8 m tower, the 27.8 m
- *  hotel, itself roundish but ≈ 150 m across). */
+export type LisboaPiece = 'round' | 'wing' | 'podium' | 'generic';
+/** Which Hotel Lisboa record this is: the 37.4 m round one (r ≈ 22 m, holds the OSM hotel node) = the white round hotel
+ *  tower, the 76.8 m one = the 1991 extension, the 27.8 m hotel (roundish but ≈ 150 m across) = the podium + casino. */
 export function lisboaPiece(rec: BuildingRec): LisboaPiece {
   if (rec.kind === 'roof' || !rec.height) return 'generic';
-  if (rec.height > 60) return 'tower';
+  if (rec.height > 60) return 'wing';
   const f = footprintFrame(rec.outer);
-  if (f.a < 35 && f.a / f.b < 1.2 && Math.abs(ringArea(rec.outer)) > 0.7 * Math.PI * f.a * f.b) return 'drum';
+  if (f.a < 35 && f.a / f.b < 1.2 && Math.abs(ringArea(rec.outer)) > 0.7 * Math.PI * f.a * f.b) return 'round';
   return 'podium';
+}
+
+/** Pointed fan arch outline [u, v] (u across, v up) from the left foot to the right foot: vertical-ish sides, a sharp tip. */
+export function fanArch(w: number, h: number, k = 12): [number, number][] {
+  return Array.from({ length: k + 1 }, (_, i) => {
+    const c = Math.cos((Math.PI * i) / k);
+    return [(-w / 2) * c, h * (1 - Math.abs(c)) ** 0.55];
+  });
+}
+
+/** u of a point along a frame's long axis, relative to the frame centre. */
+const along = (f: { cx: number; cz: number; ux: number; uz: number }, x: number, z: number) => (x - f.cx) * f.ux + (z - f.cz) * f.uz;
+
+/** MGM wave boundary k (0 = ground, 1..n−1 = tier splits, n = roofline) at u, in m above the ground. */
+export function mgmWave(k: number, u: number, length: number, H: number): number {
+  const G = M.mgm;
+  if (k === 0) return 0;
+  const n = G.splits.length + 1;
+  const s = Math.sin((TAU * u) / (G.wave.length * length) + G.wave.phase[k - 1]!);
+  return k < n ? H * G.splits[k - 1]! + G.wave.amp * s : H - G.wave.amp * (1 - s);
 }
 
 /** Point on the axis-aligned ellipse (centre, half-axes a along x, b along z) and its outward unit normal / tangent. */
@@ -236,69 +247,155 @@ function litSlab(s: Sink, ring: XZ, ctx: LandmarkCtx, top: number, colour: strin
 
 // ── Hotel Lisboa ──
 
-function lisboaDrum(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
-  const s = new Sink();
+/** Fan arch standing on a circle of radius r around (cx, cz) at angle a (tangent to it), leaning out by `tilt` rad:
+ *  floodlit gold body (both faces), lit rim, lit rays from the foot (the "lotus petals" of the birdcage crown). All
+ *  'neon' (body / rim share a buffer: the colour is set per group). */
+function petal(b: MeshBuffer, rays: MeshBuffer | null, cx: number, cz: number, a: number, r: number, y0: number, w: number, h: number, tilt: number) {
+  const [nx, nz, tx, tz] = [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a)];
+  const [ct, st] = [Math.cos(tilt), Math.sin(tilt)];
+  const P = (u: number, v: number, o = 0): V3 => [cx + nx * (r + v * st + o) + tx * u, y0 + v * ct, cz + nz * (r + v * st + o) + tz * u];
+  const out: V3 = [nx * ct, -st, nz * ct];
+  const back: V3 = [-out[0], -out[1], -out[2]];
+  const pts = fanArch(w, h);
   const C = M.lisboa.colours;
   const B = M.lisboa.bright;
-  const ring = partRings(rec)?.[0];
-  if (!ring) return EMPTY;
-  const [cx, cz] = ringCentroid(ring);
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [p, q] = [pts[i]!, pts[i + 1]!];
+    b.color = glow(C.crown, B.petal);
+    triOut(b, P(0, 0), P(...p), P(...q), out);
+    b.color = glow(C.crown, B.petal * 0.6);
+    triOut(b, P(0, 0, -0.02), P(...p, -0.02), P(...q, -0.02), back);
+    const [pi, qi] = [[p[0] * 0.86, p[1] * 0.9], [q[0] * 0.86, q[1] * 0.9]] as const;
+    b.color = glow(C.ray, B.ray);
+    quadOut(b, P(...p, 0.1), P(...q, 0.1), P(...qi, 0.1), P(...pi, 0.1), out);
+  }
+  if (!rays) return;
+  rays.color = glow(C.ray, B.ray * 0.7);
+  for (let i = 2; i + 2 < pts.length; i += 2) {
+    const [eu, ev] = [pts[i]![0] * 0.8, pts[i]![1] * 0.82];
+    const [du, dv] = [eu, ev - h * 0.08];
+    const l = Math.hypot(du, dv) || 1;
+    const [pu, pv] = [(-dv / l) * 0.12, (du / l) * 0.12];
+    quadOut(rays, P(-pu, h * 0.08 - pv, 0.08), P(pu, h * 0.08 + pv, 0.08), P(eu + pu, ev + pv, 0.08), P(eu - pu, ev - pv, 0.08), out);
+  }
+}
+
+/** Casino Lisboa: low round drum (dark entrance storey, orange window grid with brown mullions, gold cornice), crowned by
+ *  a ring of gold fan arches around an inner drum, a dome and a small rosette with a finial (the "birdcage"). */
+function lisboaCasino(s: Sink, ctx: LandmarkCtx) {
+  const K = M.lisboa.casino;
+  const C = M.lisboa.colours;
+  const B = M.lisboa.bright;
+  const [x, z, R, n] = [K.x, K.z, K.r, K.segs];
+  const g = ctx.height(x, z);
+  const ring = (r: number, y: number, m = n) => circle(x, z, r, y, m);
+  loft(paint(s, 'masonry', rgb(C.base)), [ring(R, g - L.sink), ring(R, g + K.base)]);
+  loft(paint(s, 'neon', glow(C.panel, B.panel)), [ring(R, g + K.base), ring(R, g + K.grid)]);
+  const mul = paint(s, 'masonry', rgb(C.mullion));
+  for (let j = 0; j < K.rows; j++) {
+    const y = g + K.base + ((K.grid - K.base) * j) / K.rows;
+    loft(mul, [ring(R + 0.2, y - (j % 2 ? 0.15 : 0.3)), ring(R + 0.2, y + (j % 2 ? 0.15 : 0.3))]); // storey lines thicker
+  }
+  for (let c = 0; c < K.cols; c++) {
+    const a = (TAU * (c + 0.5)) / K.cols;
+    const [nx, nz, tx, tz] = [Math.cos(a), Math.sin(a), -Math.sin(a) * 0.22, Math.cos(a) * 0.22];
+    const [px, pz] = [x + nx * (R + 0.15), z + nz * (R + 0.15)];
+    quadOut(mul, [px - tx, g + K.base, pz - tz], [px + tx, g + K.base, pz + tz], [px + tx, g + K.grid, pz + tz], [px - tx, g + K.grid, pz - tz], [nx, 0, nz]);
+  }
+  loft(paint(s, 'neon', glow(C.bulb, B.bulb)), [ring(R + 0.25, g + K.grid - 0.55), ring(R + 0.25, g + K.grid - 0.1)]);
+  const gold = paint(s, 'metal', rgb(C.crown));
+  const yc = g + K.grid;
+  const y1 = yc + K.cornice;
+  loft(gold, [ring(R, yc), ring(R + 0.8, yc + 0.4), ring(R + 0.8, y1)]);
+  disc(gold, ring(R + 0.8, y1), 1);
+  s.prism([circle(x, z, R, 0, 24).flatMap((p) => [p[0], p[2]])], g - L.sink, y1);
+  // crown: fan arches, inner drum, dome, rosette, finial
+  const w = ((TAU * R) / K.petals) * K.petalW;
+  const tilt = (K.tilt * Math.PI) / 180;
+  for (let p = 0; p < K.petals; p++) petal(s.buf('neon'), s.buf('neon', 'near'), x, z, (TAU * (p + 0.5)) / K.petals, R - 0.2, y1, w, K.petalH, tilt);
+  const dome = paint(s, 'metal', rgb(C.dome));
+  const [ri, rd, yb] = [R * K.inner.r, R * K.dome.r, y1 + K.inner.h];
+  loft(dome, [ring(ri, y1), ring(ri, yb)]);
+  disc(dome, ring(ri, yb), 1);
+  loft(paint(s, 'neon', glow(C.bulb, B.bulb)), [ring(ri + 0.1, yb - 1.1), ring(ri + 0.1, yb - 0.6)]);
+  revolve(dome, x, z, Array.from({ length: 7 }, (_, k): [number, number] => [yb + K.dome.h * Math.sin((Math.PI * k) / 12), rd * Math.cos((Math.PI * k) / 12)]), 32);
+  const Ro = K.rosette;
+  const yt = yb + K.dome.h - 0.3;
+  revolve(paint(s, 'metal', rgb(C.crown)), x, z, [[yt, Ro.r], [yt + Ro.h, Ro.r]], 16);
+  for (let p = 0; p < Ro.petals; p++) petal(s.buf('neon'), null, x, z, (TAU * p) / Ro.petals, Ro.r - 0.1, yt + Ro.h, ((TAU * Ro.r) / Ro.petals) * 0.95, Ro.petalH, tilt);
+  revolve(s.buf('metal'), x, z, [[yt + Ro.h, 0.7], [yt + Ro.h + Ro.finial, 0.05]], 8);
+}
+
+/** The white round hotel tower: ribbed (white fins), a pale lit band per floor, gold parapet + small fan crown, LISBOA. */
+function lisboaRound(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
+  const s = new Sink();
+  const r0 = partRings(rec)?.[0];
+  if (!r0) return EMPTY;
+  const C = M.lisboa.colours;
+  const B = M.lisboa.bright;
+  const T = M.lisboa.round;
+  const [cx, cz] = ringCentroid(r0);
   let R = 0;
-  for (let i = 0; i < ring.length; i += 2) R += Math.hypot(ring[i]! - cx, ring[i + 1]! - cz) / (ring.length / 2);
-  const g = ctx.ground;
-  const top = rec.height!;
-  const D = M.lisboa.drumTop;
-  renderPart({ ...rec, height: D, colour: C.drum }, opts(ctx, D), s);
-  // cage: dark gold shell, lit ribs (the lattice) from the street up over the crown, rings of bulbs
-  const H = top - D;
-  const rAt = (t: number) => R * keyed(M.lisboa.cage, t);
-  const n = M.lisboa.segs;
-  const ts = Array.from({ length: 13 }, (_, k) => k / 12);
-  loft(paint(s, 'metal', rgb(C.shell)), ts.map((t) => circle(cx, cz, rAt(t) - 0.25, g + D + H * t, n)));
-  disc(s.buf('metal'), circle(cx, cz, rAt(1) - 0.25, g + top, n), 1);
-  const rib = paint(s, 'neon', glow(C.rib, B.rib));
-  const prof: [number, number][] = [[g + 1.5, R + 0.15], [g + D, R + 0.15], ...ts.map((t): [number, number] => [g + D + H * t, rAt(t) + 0.05])];
-  for (let k = 0; k < M.lisboa.ribs; k++) {
-    const a = (TAU * k) / M.lisboa.ribs;
-    const [dx, dz, tx, tz] = [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a)];
-    for (let i = 0; i + 1 < prof.length; i++) {
-      const [[y0, r0], [y1, r1]] = [prof[i]!, prof[i + 1]!];
-      const w = 0.3;
-      const P = (y: number, r: number, side: number): V3 => [cx + dx * r + tx * w * side, y, cz + dz * r + tz * w * side];
-      quadOut(rib, P(y0, r0, -1), P(y0, r0, 1), P(y1, r1, 1), P(y1, r1, -1), [dx, 0, dz]);
-    }
+  for (let i = 0; i < r0.length; i += 2) R += Math.hypot(r0[i]! - cx, r0[i + 1]! - cz) / (r0.length / 2);
+  const [g, top, n] = [ctx.ground, rec.height!, T.segs];
+  const ring = (r: number, y: number, m = n) => circle(cx, cz, r, y, m);
+  const wall = paint(s, 'masonry', rgb(C.tower));
+  loft(wall, [ring(R, g - L.sink), ring(R, g + top)]);
+  disc(wall, ring(R, g + top), 1);
+  s.prism([circle(cx, cz, R, 0, 20).flatMap((p) => [p[0], p[2]])], g - L.sink, g + top);
+  const band = paint(s, 'neon', glow(C.glassBand, B.glassBand));
+  for (let y = T.floor; y + T.floor <= top; y += T.floor) loft(band, [ring(R + 0.08, g + y + ((1 - T.lit) / 2) * T.floor), ring(R + 0.08, g + y + ((1 + T.lit) / 2) * T.floor)]);
+  const fin = paint(s, 'masonry', rgb(C.fin));
+  const [fw, fd] = T.fin;
+  for (let k = 0; k < T.fins; k++) {
+    const a = (TAU * (k + 0.5)) / T.fins;
+    const [nx, nz, tx, tz] = [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a)];
+    const P = (o: number, u: number, y: number): V3 => [cx + nx * (R + o) + tx * u, y, cz + nz * (R + o) + tz * u];
+    const [y0, y1] = [g + 2.5, g + top + 0.6];
+    quadOut(fin, P(fd, -fw / 2, y0), P(fd, fw / 2, y0), P(fd, fw / 2, y1), P(fd, -fw / 2, y1), [nx, 0, nz]);
+    for (const sd of [-1, 1]) quadOut(fin, P(-0.05, (sd * fw) / 2, y0), P(fd, (sd * fw) / 2, y0), P(fd, (sd * fw) / 2, y1), P(-0.05, (sd * fw) / 2, y1), [tx * sd, 0, tz * sd]);
   }
-  const bulbs = paint(s, 'neon', glow(C.ring, B.ring));
-  for (let k = 0; k < M.lisboa.cageRings; k++) {
-    const t = (k + 0.5) / M.lisboa.cageRings;
-    loft(bulbs, [circle(cx, cz, rAt(t) + 0.1, g + D + H * t - 0.2, n), circle(cx, cz, rAt(t) + 0.1, g + D + H * t + 0.2, n)]);
-  }
-  for (const y of [D - 0.6]) loft(bulbs, [circle(cx, cz, R + 0.2, g + y, n), circle(cx, cz, R + 0.2, g + y + 0.5, n)]);
+  // crown: gold parapet with a bulb line, small fan arches, the LISBOA bulb sign
+  const Cr = T.crown;
+  const gold = paint(s, 'metal', rgb(C.crown));
+  loft(gold, [ring(R + 0.9, g + top + 0.6), ring(R + 0.9, g + top + Cr.parapet)]);
+  loft(gold, [ring(R + 0.9, g + top + Cr.parapet), ring(R, g + top + Cr.parapet)]);
+  loft(paint(s, 'neon', glow(C.bulb, B.bulb)), [ring(R + 1, g + top + 0.8), ring(R + 1, g + top + 1.2)]);
+  for (let p = 0; p < Cr.petals; p++) petal(s.buf('neon'), null, cx, cz, (TAU * (p + 0.5)) / Cr.petals, R + 0.5, g + top + Cr.parapet, ((TAU * R) / Cr.petals) * 0.9, Cr.h, 0.15);
+  roofSign(s, cx, cz, 1, 0, g + top + Cr.parapet, T.sign, T.pixel, 1.5 * R, glow(C.sign, B.sign));
   return s.out();
 }
 
-function lisboaTower(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
+/** The 1991 extension (76.8 m): white slab, lit floor bands, LED rim. */
+function lisboaWing(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const s = new Sink();
   const ring = partRings(rec)?.[0];
   if (!ring) return EMPTY;
   const C = M.lisboa.colours;
-  const T = M.lisboa.tower;
-  const top = rec.height!;
-  litSlab(s, ring, ctx, top, C.wall, T.band, T.lit, glow(C.band, M.lisboa.bright.band), glow(C.bulb, M.lisboa.bright.bulb));
-  const m = midInside(ring);
-  roofSign(s, m.x, m.z, m.f.ux, m.f.uz, ctx.ground + top, T.sign, T.pixel, 1.4 * m.f.a, glow(C.sign, M.lisboa.bright.sign));
+  litSlab(s, ring, ctx, rec.height!, C.wall, M.lisboa.wing.band, M.lisboa.wing.lit, glow(C.band, M.lisboa.bright.band), glow(C.bulb, M.lisboa.bright.bulb));
   return s.out();
 }
 
+/** The 27.8 m podium, cut off behind the casino drum (its round south lobe), + the casino. */
 function lisboaPodium(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const s = new Sink();
-  const rings = partRings(rec);
-  if (!rings) return EMPTY;
+  let ring = partRings(rec)?.[0];
+  if (!ring) return EMPTY;
   const C = M.lisboa.colours;
-  renderPart({ ...rec, colour: C.podium }, opts(ctx, rec.height!), s);
+  const K = M.lisboa.casino;
+  const xs = ring.filter((_, i) => i % 2 === 0);
+  const zs = ring.filter((_, i) => i % 2 === 1);
+  if (K.x > Math.min(...xs) && K.x < Math.max(...xs) && K.z > Math.min(...zs) && K.z < Math.max(...zs)) {
+    const [pcx, pcz] = ringCentroid(ring);
+    const l = Math.hypot(K.x - pcx, K.z - pcz) || 1;
+    const [nx, nz] = [(K.x - pcx) / l, (K.z - pcz) / l];
+    ring = clipRing(ring, nx, nz, K.x * nx + K.z * nz - K.podiumCut * K.r);
+    lisboaCasino(s, ctx);
+  }
+  renderPart({ ...rec, outer: ring, colour: C.podium }, opts(ctx, rec.height!), s);
   const b = paint(s, 'neon', glow(C.bulb, M.lisboa.bright.bulb));
-  for (const y of M.lisboa.podiumBands) if (y < rec.height!) strip(b, rings[0]!, ctx.ground + y, ctx.ground + y + 0.6);
-  ribs(paint(s, 'neon', glow(C.rib, M.lisboa.bright.rib)), rings[0]!, ctx.ground + M.lisboa.podiumBands[0]!, ctx.ground + rec.height! - 1, M.lisboa.podiumRib); // the gold lattice
+  for (const y of M.lisboa.podiumBands) if (y < rec.height!) strip(b, ring, ctx.ground + y, ctx.ground + y + 0.6);
+  ribs(paint(s, 'neon', glow(C.rib, M.lisboa.bright.rib)), ring, ctx.ground + M.lisboa.podiumBands[0]!, ctx.ground + rec.height! - 1, M.lisboa.podiumRib); // the gold lattice
   return s.out();
 }
 
@@ -343,21 +440,118 @@ function wynnPodium(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
 
 // ── MGM ──
 
+/** Ring offset inwards by d (the side with less area). */
+function inset(r: XZ, d: number): XZ {
+  const n = r.length;
+  const w = (s: number) => offsetPolyline(r, s, [r[n - 2]!, r[n - 1]!], [r[0]!, r[1]!]);
+  const [a, b] = [w(d), w(-d)];
+  return Math.abs(ringArea(a)) <= Math.abs(ringArea(b)) ? a : b;
+}
+/** Ring with every edge longer than `max` split evenly. */
+function densify(r: XZ, max: number): XZ {
+  const out: XZ = [];
+  for (let i = 0, n = r.length; i < n; i += 2) {
+    const j = (i + 2) % n;
+    const k = Math.max(1, Math.ceil(Math.hypot(r[j]! - r[i]!, r[j + 1]! - r[i + 1]!) / max));
+    for (let s = 0; s < k; s++) out.push(r[i]! + ((r[j]! - r[i]!) * s) / k, r[i + 1]! + ((r[j + 1]! - r[i + 1]!) * s) / k);
+  }
+  return out;
+}
+/** [min, max] of w (across the frame) where the line u = const (relative to the frame centre) crosses the ring. */
+function chordAt(r: XZ, f: ReturnType<typeof footprintFrame>, u: number): [number, number] | null {
+  const ws: number[] = [];
+  for (let i = 0, n = r.length; i < n; i += 2) {
+    const j = (i + 2) % n;
+    const [ua, ub] = [along(f, r[i]!, r[i + 1]!) - u, along(f, r[j]!, r[j + 1]!) - u];
+    if (ua <= 0 !== ub <= 0) {
+      const t = ua / (ua - ub);
+      const [x, z] = [r[i]! + (r[j]! - r[i]!) * t, r[i + 1]! + (r[j + 1]! - r[i + 1]!) * t];
+      ws.push(-(x - f.cx) * f.uz + (z - f.cz) * f.ux);
+    }
+  }
+  return ws.length >= 2 ? [Math.min(...ws), Math.max(...ws)] : null;
+}
+
+/** MGM tower: three stacked tiers (copper / blue glass / gold) between wavy boundaries, each inset / trimmed a little
+ *  differently (the steps), a lit floor line per floor following the waves, a lit rim per tier top, "MGM GRAND" in bulbs
+ *  across both long faces of the gold tier. */
 function mgmTower(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const s = new Sink();
-  const ring = partRings(rec)?.[0];
-  if (!ring) return EMPTY;
+  const ring0 = partRings(rec)?.[0];
+  if (!ring0) return EMPTY;
   const G = M.mgm;
-  const scale = (rec.height ?? G.tops.at(-1)!) / G.tops.at(-1)!; // OSM height on the tallest wave
-  const secs = sections(ring, G.tops.length);
-  secs.forEach((sec, k) => {
-    const top = G.tops[k]! * scale;
-    litSlab(s, sec, ctx, top, G.colours[k]!, G.floor, G.lit, glow(G.band, G.bandBright), glow(G.colours[k]!, 1.6));
+  const f = footprintFrame(ring0);
+  const H = rec.height ?? 120;
+  const len = 2 * f.a;
+  const g = ctx.ground;
+  const c0 = f.cx * f.ux + f.cz * f.uz;
+  const n = G.colours.length;
+  const tiers = G.trim.map(([tw, te], k) => {
+    let r = G.inset[k] ? inset(ring0, G.inset[k]!) : ring0;
+    r = clipRing(clipRing(r, -f.ux, -f.uz, -(c0 - f.a + tw)), f.ux, f.uz, c0 + f.a - te);
+    return densify(r, G.densify);
   });
-  const tallest = secs.at(-1);
-  if (tallest) {
-    const m = midInside(tallest);
-    roofSign(s, m.x, m.z, m.f.ux, m.f.uz, ctx.ground + G.tops.at(-1)! * scale, G.sign, G.signPixel, 1.6 * m.f.a, glow(G.signColour, G.signBright));
+  let shift = -Infinity; // the roofline's crest = the OSM height
+  for (let i = 0; i < tiers[n - 1]!.length; i += 2) shift = Math.max(shift, mgmWave(n, along(f, tiers[n - 1]![i]!, tiers[n - 1]![i + 1]!), len, H));
+  shift = H - shift;
+  const wave = (k: number, x: number, z: number) => (k === 0 ? -L.sink : mgmWave(k, along(f, x, z), len, H) + (k === n ? shift : 0));
+  tiers.forEach((r, k) => {
+    const m = r.length / 2;
+    const yb = Array.from({ length: m }, (_, i) => g + wave(k, r[2 * i]!, r[2 * i + 1]!));
+    const yt = Array.from({ length: m }, (_, i) => g + wave(k + 1, r[2 * i]!, r[2 * i + 1]!));
+    const sgn = ringArea(r) < 0 ? 1 : -1;
+    const wall = paint(s, 'metal', rgb(G.colours[k]!));
+    const idx = triangulate(r);
+    for (let t = 0; t < idx.length; t += 3) {
+      const [a, b, c] = [idx[t]!, idx[t + 1]!, idx[t + 2]!];
+      const P = (v: number, y: number[]): V3 => [r[2 * v]!, y[v]!, r[2 * v + 1]!];
+      triOut(wall, P(a, yt), P(b, yt), P(c, yt), [0, 1, 0]);
+      if (k) triOut(wall, P(a, yb), P(b, yb), P(c, yb), [0, -1, 0]);
+    }
+    const ro = outward(r, 0.12);
+    const nf = Math.max(1, Math.round((yt.reduce((a, y, i) => a + y - yb[i]!, 0) / m) / G.floor));
+    const band = glow(G.bands[k]!, G.bandBright[k]!);
+    for (let i = 0; i < m; i++) {
+      const j = (i + 1) % m;
+      const [dx, dz] = [r[2 * j]! - r[2 * i]!, r[2 * j + 1]! - r[2 * i + 1]!];
+      const out: V3 = [sgn * dz, 0, -sgn * dx];
+      quadOut(wall, [r[2 * i]!, yb[i]!, r[2 * i + 1]!], [r[2 * j]!, yb[j]!, r[2 * j + 1]!], [r[2 * j]!, yt[j]!, r[2 * j + 1]!], [r[2 * i]!, yt[i]!, r[2 * i + 1]!], out);
+      const lit = paint(s, 'neon', band);
+      const Q = (v: number, y: number): V3 => [ro[2 * v]!, y, ro[2 * v + 1]!];
+      for (let fl = 1; fl < nf; fl++) {
+        const [ya, yc] = [yb[i]! + ((yt[i]! - yb[i]!) * fl) / nf, yb[j]! + ((yt[j]! - yb[j]!) * fl) / nf];
+        const h = G.floor * G.lit;
+        quadOut(lit, Q(i, ya), Q(j, yc), Q(j, yc + h), Q(i, ya + h), out);
+      }
+      const rim = paint(s, 'neon', glow(G.bands[k]!, G.bandBright[k]! * 1.8));
+      quadOut(rim, Q(i, yt[i]! - 0.8), Q(j, yt[j]! - 0.8), Q(j, yt[j]! - 0.2), Q(i, yt[i]! - 0.2), out);
+    }
+  });
+  s.prism([ring0], g - L.sink, g + H * G.splits[0]! - G.wave.amp);
+  // MGM GRAND across both long faces of the gold tier
+  const top = tiers[n - 1]!;
+  const W = signCols(G.sign);
+  const [tw, te] = G.trim[n - 1]!;
+  const p = Math.min(G.signPixel, (G.signShare * (len - tw - te)) / W);
+  const uc = G.signAt * len;
+  const yc = g + (mgmWave(n - 1, uc, len, H) + mgmWave(n, uc, len, H) + shift) / 2;
+  const gap = ((1 - M.pixel) * p) / 2;
+  const neon = paint(s, 'neon', glow(G.signColour, G.signBright));
+  for (const side of [1, -1]) {
+    const X = (u: number): V3 | null => {
+      const c = chordAt(top, f, u);
+      if (!c) return null;
+      const w = (side > 0 ? c[1] : c[0]) + side * 0.35;
+      return [f.cx + u * f.ux - w * f.uz, 0, f.cz + u * f.uz + w * f.ux];
+    };
+    const out: V3 = [-f.uz * side, 0, f.ux * side];
+    for (const [k0, k1, row] of signRuns(G.sign)) {
+      const [a, b] = [X(uc + side * ((k0 - W / 2) * p + gap)), X(uc + side * ((k1 + 1 - W / 2) * p - gap))];
+      if (!a || !b) continue;
+      const y1 = yc + (3.5 - row) * p - gap;
+      const y0 = y1 - M.pixel * p;
+      quadOut(neon, [a[0], y0, a[2]], [b[0], y0, b[2]], [b[0], y1, b[2]], [a[0], y1, a[2]], out);
+    }
   }
   return s.out();
 }
@@ -576,7 +770,7 @@ export const details: Partial<Record<LandmarkId, DetailFn>> = {
     const piece = lisboaPiece(rec);
     // the podium outline climbs the slope to the NE (recordGround → 12 m up, over the drum): heights from the centroid
     const ctx = { ...ctx0, ground: ctx0.height(...ringCentroid(rec.outer)) };
-    return piece === 'drum' ? lisboaDrum(rec, ctx) : piece === 'tower' ? lisboaTower(rec, ctx) : piece === 'podium' ? lisboaPodium(rec, ctx) : h.generic(rec, parts, ctx);
+    return piece === 'round' ? lisboaRound(rec, ctx) : piece === 'wing' ? lisboaWing(rec, ctx) : piece === 'podium' ? lisboaPodium(rec, ctx) : h.generic(rec, parts, ctx);
   },
   'wynn-macau': (rec, parts, ctx, h) => {
     const H = rec.height ?? 0;

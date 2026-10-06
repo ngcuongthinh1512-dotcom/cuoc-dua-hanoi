@@ -82,7 +82,7 @@ describe.concurrent('Phase 10 (workerd)', () => {
     expect(st2.counters.rows - st.counters.rows).toBeLessThanOrEqual(7);
     expect([st2.undo, st2.queue.map((q) => [q.team, q.step, q.id]), st2.teams[0]!.step]).toEqual([[], [[id, 'T1', 1]], 1]);
     seen.push(...(await a!.drain(2500)));
-    a!.send({ t: 'race', op: 'view' }); // a sign of life (0 rows): the socket stays under NET.deadSocketMs of silence
+    a!.send({ t: 'race', op: 'book' }); // a sign of life (0 rows): the socket stays under NET.deadSocketMs of silence
     expect(seen.filter((m) => m.t === 'notice').map((m) => m.code)).toEqual(['reviewUndone']);
     expect(seen.filter((m) => m.t === 'box')).toEqual([{ t: 'box', op: 'hide', step: 'L2' }]); // never a later step's box
     expect(await query(race, 'SELECT step FROM step_progress WHERE team = ? ORDER BY step', id)).toEqual([{ step: 'L1' }, { step: 'T1' }]); // L2 deleted

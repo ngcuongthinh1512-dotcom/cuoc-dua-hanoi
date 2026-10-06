@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import { artLeaks, checkFile, compass, loadMap, louvreTable, scanLeaks, secretStrings } from './leg-check.ts';
+import { checkFile, compass, loadMap, scanLeaks, secretStrings } from './leg-check.ts';
 import { chunkKey, type ChunkData } from '../client/src/geo/chunkData.ts';
 import { inRing } from '../client/src/geo/districts.ts';
 import { demoState } from '../client/src/host/hostView.ts';
@@ -503,118 +503,5 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
       if (!parsed.ok) throw new Error(`${f} invalid`);
       for (const x of [...secretStrings(parsed.leg, 8)]) expect(demo, `${f}: ${x}`).not.toContain(JSON.stringify(x).slice(1, -1));
     }
-  });
-});
-
-/** A WebP file (RIFF) with these chunks. */
-function webp(...chunks: [string, string | Buffer][]) {
-  const body = Buffer.concat(chunks.map(([tag, d]) => {
-    const b = typeof d === 'string' ? Buffer.from(d, 'utf8') : d;
-    const h = Buffer.alloc(8);
-    h.write(tag, 0, 'latin1');
-    h.writeUInt32LE(b.length, 4);
-    return Buffer.concat([h, b, Buffer.alloc(b.length & 1)]);
-  }));
-  const h = Buffer.alloc(12);
-  h.write('RIFF', 0, 'latin1');
-  h.writeUInt32LE(body.length + 4, 4);
-  h.write('WEBP', 8, 'latin1');
-  return Buffer.concat([h, body]);
-}
-/** A GLB file: JSON chunk + BIN chunk. */
-function glb(json: unknown, bin: Buffer) {
-  const pad = (b: Buffer, c: number) => Buffer.concat([b, Buffer.alloc((4 - (b.length % 4)) % 4, c)]);
-  const chunk = (type: number, d: Buffer) => {
-    const h = Buffer.alloc(8);
-    h.writeUInt32LE(d.length, 0);
-    h.writeUInt32LE(type, 4);
-    return Buffer.concat([h, d]);
-  };
-  const body = Buffer.concat([chunk(0x4e4f534a, pad(Buffer.from(JSON.stringify(json)), 0x20)), chunk(0x004e4942, pad(bin, 0))]);
-  const h = Buffer.alloc(12);
-  h.write('glTF', 0, 'latin1');
-  h.writeUInt32LE(2, 4);
-  h.writeUInt32LE(12 + body.length, 8);
-  return Buffer.concat([h, body]);
-}
-
-describe('leg:check Phase 8B (louvre room: static pictures, rule 9)', () => {
-  const louvre = () => (parseLeg(JSON.parse(readFileSync(legs('test/louvre.json'), 'utf8'))) as { leg: Parameters<typeof artLeaks>[0] }).leg;
-
-  it('the bundled louvre test leg: valid, no error; the 6 pictures not shipped yet are blanks (CLI file check)', () => {
-    const r = run(legs('test/louvre.json'), [join(root, 'client/public')]);
-    expect(errors(r)).toEqual([]);
-    expect(r.ok).toBe(true);
-    expect(r.issues.filter((i) => i.message.startsWith('chưa có tệp client/public/art/art-02.webp'))).toHaveLength(1);
-  });
-
-  it('rule 9: an artwork title / note in the static credits.json or in a picture\'s bytes (metadata) is an error', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'legart-'));
-    mkdirSync(join(dir, 'client/public/art'), { recursive: true });
-    expect(artLeaks(louvre(), dir)).toEqual([]);
-    writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ title: 'Phòng Louvre', text: 'Ảnh: (GIẢ) Tranh 2 – (GIẢ) Họa sĩ 2' }]));
-    writeFileSync(join(dir, 'client/public/art/art-06.webp'), webp(['VP8 ', 'xx'], ['XMP ', 'dc:title=(GIẢ) Tác Phẩm 6']));
-    writeFileSync(join(dir, 'client/public/art/art-09.webp'), webp(['VP8 ', '\x01\x02\x03']));
-    const out = artLeaks(louvre(), dir).map((i) => `${i.where}: ${i.message}`);
-    expect(out).toHaveLength(2);
-    expect(out[0]).toMatch(/^client\/public\/credits.json: chứa tên \/ ghi chú tác phẩm phòng Louvre "\(GIẢ\) Tranh 2", "\(GIẢ\) Họa sĩ 2"/);
-    expect(out[1]).toMatch(/^client\/public\/art\/art-06.webp: chứa chữ "phẩm"/);
-  });
-
-  it('secretStrings carries the artworks\' notes / titles (the general static scan), never the neutral ids', () => {
-    const sec = secretStrings(louvre());
-    expect(sec).toEqual(expect.arrayContaining(['(GIẢ) Tác phẩm 1', '(GIẢ) Tranh 2', '(GIẢ) Họa sĩ 2']));
-    expect(sec.filter((x) => /^art-\d\d$/.test(x))).toEqual([]);
-  });
-
-  it('track D: generic words (image / mesh / node) of an English note do not flag a picture; the photographer and source link do flag credits.json', () => {
-    const leg = louvre();
-    const arts = (leg.steps.find((x) => x.type === 'challenge' && x.task.kind === 'louvre') as any).task.louvre.artworks;
-    arts[0].note = 'image mesh node scene';
-    arts[1].credit = { ...arts[1].credit, photo: 'Jane Photographer', source: 'https://example.org/wiki/File:Secret_Name.jpg', license: 'CC-BY' };
-    const dir = mkdtempSync(join(tmpdir(), 'legart2-'));
-    mkdirSync(join(dir, 'client/public/art'), { recursive: true });
-    writeFileSync(join(dir, 'client/public/art/art-06.glb'), Buffer.from('glTF {"nodes":[{"name":"art-06"}],"meshes":[],"scenes":[],"images":[],"materials":[]}', 'latin1'));
-    expect(artLeaks(leg, dir)).toEqual([]);
-    arts[2].credit = { ...arts[2].credit, source: 'Wikimedia Commons' }; // a host name, also in the 8C street-prop credits
-    writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ title: 'Áp phích (Wikimedia Commons)' }]));
-    expect(artLeaks(leg, dir)).toEqual([]);
-    writeFileSync(join(dir, 'client/public/art/art-09.webp'), webp(['VP8 ', 'x'], ['EXIF', 'Artist=Jane Photographer']));
-    writeFileSync(join(dir, 'client/public/credits.json'), JSON.stringify([{ text: 'https://example.org/wiki/File:Secret_Name.jpg' }]));
-    const out = artLeaks(leg, dir).map((i) => `${i.where}: ${i.message}`).join('\n');
-    expect(out).toMatch(/credits.json: chứa tên.*example.org/);
-    expect(out).toMatch(/art-09.webp: chứa chữ "jane"/);
-  });
-
-  it('F1 rule 9: only metadata is searched (WebP non-image chunks, GLB JSON + its embedded pictures\' metadata); never digits; unknown bytes need ≥ 6 letters', () => {
-    const leg = louvre();
-    const arts = (leg.steps.find((x) => x.type === 'challenge' && x.task.kind === 'louvre') as any).task.louvre.artworks;
-    arts[1].credit = { ...arts[1].credit, title: 'Zéphyrine 1887', artist: 'Jane Bartholomew' };
-    const dir = mkdtempSync(join(tmpdir(), 'legart3-'));
-    const art = join(dir, 'client/public/art');
-    mkdirSync(art, { recursive: true });
-    const put = (n: string, b: Buffer) => writeFileSync(join(art, n), b);
-    put('a.webp', webp(['VP8X', 'flags'], ['VP8 ', 'jane 1887 zéphyrine bartholomew'], ['ALPH', 'jane'])); // compressed data only
-    put('b.webp', webp(['VP8L', 'x'], ['XMP ', 'shot 1887'])); // a year: never a word
-    put('c.webp', webp(['VP8 ', 'x'], ['EXIF', 'Artist=Jane'])); // metadata: 4 letters are enough
-    const inner = webp(['VP8 ', 'jane'], ['XMP ', 'dc:title=Zéphyrine']);
-    put('d.glb', glb({ nodes: [{ name: 'art-02' }], images: [{ bufferView: 1, mimeType: 'image/webp' }], bufferViews: [{ byteOffset: 0, byteLength: 4 }, { byteOffset: 4, byteLength: inner.length }] }, Buffer.concat([Buffer.from('jane'), inner])));
-    put('e.glb', glb({ nodes: [{ name: 'Bartholomew' }] }, Buffer.from('jane')));
-    put('f.bin', Buffer.from('xx jane yy bartholomew zz')); // unknown format: long words only
-    const out = Object.fromEntries(artLeaks(leg, dir).map((i) => [i.where.split('/').pop(), [...i.message.matchAll(/"([^"]+)"/g)].map((m) => m[1])]));
-    expect(out).toEqual({ 'c.webp': ['jane'], 'd.glb': ['zéphyrine'], 'e.glb': ['bartholomew'], 'f.bin': ['bartholomew'] });
-  });
-
-  it('track D: the report prints the 23-file table with present / missing / size and no artwork name', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'legart3-'));
-    mkdirSync(join(dir, 'client/public/art'), { recursive: true });
-    writeFileSync(join(dir, 'client/public/art/art-02.webp'), Buffer.alloc(2048, 1));
-    const lines = louvreTable(louvre(), dir).join('\n');
-    expect(lines).toContain('23 tác phẩm = 15 tranh + 8 tượng');
-    expect(lines).toMatch(/art-02\s+tranh\s+art-02.webp\s+có\s+2 KB/);
-    expect(lines).toMatch(/art-06\s+tranh\s+art-06.webp\s+THIẾU/);
-    expect(lines).toMatch(/art-01\s+tranh\s+—\s+chưa gán/);
-    expect(lines).toContain('Có 1 / 23 tệp');
-    expect(lines).not.toMatch(/\(GIẢ\) (Tác phẩm|Tranh)/); // titles / notes never printed
   });
 });

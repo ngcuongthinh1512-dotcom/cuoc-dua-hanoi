@@ -1,7 +1,6 @@
 // Phase 7 track C: pure helpers of the race HUD (no DOM, tested in Node). Everything here works only from what the server
 // sent (ClueCard / RaceView / ZoneMember): never answers, destination names or a later step.
-import { LOUVRE } from '@race/shared';
-import { type AnswerStatus, type CardStatus, type ClueCard, finishTexts, type FinishResult, type FinishTexts, type LouvreView, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
+import { type AnswerStatus, type CardStatus, type ClueCard, finishTexts, type FinishResult, type FinishTexts, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
 import { raceClient, raceHud as C } from '../../config.ts';
 import { looksLikeIme } from '../../core/Input.ts';
 
@@ -224,35 +223,13 @@ export function timerLine(card: ClueCard, now: number): { kind: 'wait' | 'lock';
   return lock ? { kind: 'lock', text: lock } : wait ? { kind: 'wait', text: wait } : null;
 }
 
-/** One short state line of the top-left card: waiting for the Host / countdown / which branch; a louvre card adds
- *  "Chọn k/5 · Đúng x/5" (louvreShort: the numbers the team needs while it walks between the buttons). */
+/** One short state line of the top-left card: waiting for the Host / countdown / which branch. */
 export function statusLine(card: ClueCard, now: number): { kind: 'wait' | 'lock' | 'info'; text: string } | null {
-  const lv = card.status === 'done' ? null : card.task?.louvre;
-  const room = lv ? louvreShort(lv) : '';
   const left = lockLeft(card, now);
-  if (left != null) return { kind: 'lock', text: (card.lockKind === 'switch' ? `Đổi nhánh: còn ${countDown(left)}` : `Phạt: còn ${countDown(left)}`) + (room && ` · ${room}`) };
+  if (left != null) return { kind: 'lock', text: card.lockKind === 'switch' ? `Đổi nhánh: còn ${countDown(left)}` : `Phạt: còn ${countDown(left)}` };
   const wait = pendingLine(card, now);
   if (wait) return { kind: 'wait', text: wait.replace('Đang chờ', 'Chờ') };
-  if (room) return { kind: 'info', text: room };
   return liveStatus(card, now) === 'goToBranch' ? { kind: 'info', text: `Nhánh ${branchName(card, card.branch)} · tới hòm nhánh` } : null;
-}
-
-/** "Chọn 3" (before minute 40), "Chọn 3/5" (from 40), "Chọn 3/5 · Đúng 2/5" (from 60): the compact card's louvre line. */
-export function louvreShort(lv: LouvreView): string {
-  const of = louvreOf(lv);
-  const pick = `Chọn ${lv.picks.length}${lv.maxPicks != null ? `/${of}` : ''}`;
-  return lv.hintCorrect == null ? pick : `${pick} · Đúng ${lv.hintCorrect}/${of}`;
-}
-
-/** Toasts for the hints that just came (null → a value on the same louvre step), once each: SPEC §17.19 minutes 40 / 60
- *  must reach a team that keeps the full card closed. A first view (F5, new card) toasts nothing. */
-export function hintNews(was: ClueCard | null | undefined, card: ClueCard | null | undefined): string[] {
-  const [a, b] = [was?.task?.louvre, card?.task?.louvre];
-  if (!a || !b || was!.step !== card!.step) return [];
-  const out: string[] = [];
-  if (a.hintCount == null && b.hintCount != null) out.push(`Gợi ý: đáp án gồm ${b.hintCount} tác phẩm – chỉ chọn tối đa ${louvreOf(b)}`);
-  if (a.hintCorrect == null && b.hintCorrect != null) out.push(`Gợi ý: đang đúng ${b.hintCorrect}/${louvreOf(b)} – số này đổi theo mỗi lần chọn / bỏ`);
-  return out;
 }
 
 /** "Đổi lựa chọn kép" confirm: names the penalty and what is lost (SPEC §17.16). */
@@ -271,61 +248,15 @@ export interface AnswerLine {
 export function answerLines(card: ClueCard): AnswerLine[] {
   const pen = card.retryPenaltyMinutes;
   const task = card.task ?? card.branches?.find((b) => b.id === card.branch)?.task;
-  const lv = task?.louvre; // Phase 8B: a lock "5 tác phẩm", "· đúng c/5" only from the 60-minute mark (AnswerView.correct)
   const parts = task?.input === 'parts'; // SPEC §17.44: N boxes stored "a | b | c | d" (the Host's Phạt may carry "đúng c/N")
   return card.answers
     .slice(-NET.answerHistory)
     .reverse()
     .map((a) => {
-      const base = a.status === 'penalized' && pen ? `Bị phạt ${fmtMin(pen)} phút` : lv && a.status === 'wrong' && pen ? `Chưa đúng · phạt ${fmtMin(pen)} phút` : ANSWER_LABEL[a.status];
-      const text = a.text === '' ? 'đã gửi bài' : lv ? a.text : parts ? `«${a.text.split(' | ').join(' · ')}»` : `«${a.text}»`;
-      return { time: formatTimeOfDay(a.at), text, status: a.status, label: lv && a.correct != null ? `${base} · đúng ${a.correct}/${louvreOf(lv)}` : a.score != null && a.of ? `${base} · đúng ${a.score}/${a.of}` : base }; // SPEC §17.31 / §17.44: the count only when the server sent it
+      const base = a.status === 'penalized' && pen ? `Bị phạt ${fmtMin(pen)} phút` : ANSWER_LABEL[a.status];
+      const text = a.text === '' ? 'đã gửi bài' : parts ? `«${a.text.split(' | ').join(' · ')}»` : `«${a.text}»`;
+      return { time: formatTimeOfDay(a.at), text, status: a.status, label: a.score != null && a.of ? `${base} · đúng ${a.score}/${a.of}` : base }; // SPEC §17.31 / §17.44: the count only when the server sent it
     });
-}
-
-/** The "of" of x/5: 5 once the first hint is out, else the room's own limit (LOUVRE.maxPicks, SPEC §17.19). */
-const louvreOf = (lv: LouvreView) => lv.maxPicks ?? lv.hintCount ?? LOUVRE.maxPicks;
-
-/** The louvre card's lines (Phase 8B, SPEC §17.19), from the card alone: where the team is, how many lights are on, the two
- *  hints. Another team's state never reaches the card, so "Đúng x/5" is only ever the team's own live count. `inRoom` is the
- *  client's (LouvreRoom.active), not the server's. */
-export interface LouvreInfo {
-  state: 'outside' | 'inside' | 'locked' | 'done';
-  /** The state line ("Chưa vào phòng – bấm F ở hòm để vào phòng"). */
-  text: string;
-  /** Detail lines in order: picks, wrong locks, hint 40, hint 60. */
-  lines: string[];
-  /** SPEC §17.33: the "Vào phòng" button: outside, step not done; enabled within louvreRoom.enterReach of the box (`nearBox`),
-   *  else dimmed with the hint. Null = no button (inside / done). */
-  enter: { enabled: boolean; hint: string | null } | null;
-}
-export function louvreInfo(card: ClueCard, lv: LouvreView, o: { now: number; inRoom?: boolean; nearBox?: boolean }): LouvreInfo {
-  const status = liveStatus(card, o.now);
-  const state = status === 'done' ? 'done' : status === 'locked' ? 'locked' : o.inRoom ? 'inside' : 'outside';
-  const text = { done: 'Đã xong thử thách', locked: 'Chốt sai – đang bị phạt, lựa chọn vẫn giữ (bấm / bỏ được, chốt lại khi hết đếm ngược)', inside: 'Đang trong phòng – bấm F ở nút để bật / tắt tác phẩm hoặc để chốt', outside: 'Chưa vào phòng – bấm F ở hòm để vào phòng' }[state];
-  const enter = o.inRoom || status === 'done' ? null : { enabled: !!o.nearBox, hint: o.nearBox ? null : 'Tới sát hòm mật thư rồi bấm' };
-  const of = louvreOf(lv);
-  const k = lv.picks.length;
-  const lines = [`Đang chọn ${k}${lv.maxPicks != null ? `/${of}` : ''} tác phẩm`];
-  if (lv.attempts > 0) lines.push(`Chốt sai: ${lv.attempts} lần`);
-  if (lv.hintCount != null) lines.push(`Đáp án bao gồm ${lv.hintCount} tác phẩm`);
-  if (lv.hintCorrect != null) lines.push(k === 0 ? `Đúng 0/${of} (chưa chọn tác phẩm nào)` : `Đúng ${lv.hintCorrect}/${of}`);
-  return { state, text, lines, enter };
-}
-
-/** SPEC §17.36: the small "Gợi ý" panel pinned top-left while a louvre card is current (RaceHud.hintEl; in the room it stands
- *  in for the compact card): hint 1 / hint 2 as received, else "sau mm:ss" counting down to the server's hintAt (never a
- *  hard-coded 40 / 60), then the live pick count. Numbers and times only, never a name. null = no panel (done / not louvre). */
-export function hintPanel(card: ClueCard, now: number): string[] | null {
-  const lv = card.status === 'done' ? null : card.task?.louvre;
-  if (!lv) return null;
-  const of = louvreOf(lv);
-  const due = (i: 0 | 1) => `sau ${countDown(Math.max(0, lv.hintAt[i] - now))}`;
-  return [
-    lv.hintCount != null ? `① Đáp án gồm ${lv.hintCount} tác phẩm` : `① ${due(0)}`,
-    lv.hintCorrect != null ? `② Đúng ${lv.hintCorrect}/${of}` : `② ${due(1)}`,
-    `Đang chọn ${lv.picks.length}${lv.maxPicks != null ? `/${of}` : ''}`,
-  ];
 }
 
 /** A clue / task attachment: an R2 image (fetched with the team token) or an https link (new tab, never embedded). */
@@ -375,13 +306,9 @@ export interface CardPanel {
   /** "Đổi lựa chọn kép": the other branches (none while pending, in choose / switchLocked, or read-only). */
   switchTo: { id: string; name: string }[];
   history: AnswerLine[];
-  /** Phase 8B: a louvre card (no input box: TaskView.input 'room'). */
-  louvre: LouvreView | null;
-  /** The louvre card's state + lines (louvreInfo); null on any other card, and in the Sổ mật thư (no live numbers there). */
-  louvreInfo: LouvreInfo | null;
 }
 
-export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mode: 'card' | 'book'; live?: boolean; inRoom?: boolean; nearBox?: boolean }): CardPanel {
+export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mode: 'card' | 'book'; live?: boolean }): CardPanel {
   const s = summarize(card);
   const status = liveStatus(card, o.now);
   const book = o.mode === 'book';
@@ -409,8 +336,6 @@ export function cardPanel(card: ClueCard, o: { now: number; teamName: string; mo
     },
     switchTo: act && chosen && (status === 'goToBranch' || status === 'active' || status === 'locked') ? (card.branches ?? []).filter((b) => b.id !== chosen.id).map((b) => ({ id: b.id, name: b.name })) : [],
     history: book ? [] : answerLines(card),
-    louvre: task?.louvre ?? null,
-    louvreInfo: !book && task?.louvre ? louvreInfo(card, task.louvre, o) : null,
   };
 }
 

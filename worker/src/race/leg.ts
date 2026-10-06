@@ -5,14 +5,13 @@
 import { type Leg, parseLeg } from '@race/shared/leg';
 import demo from '../../legs/macao-demo.json';
 import filled from '../../legs/test/macao-demo.filled.json';
-import louvre from '../../legs/test/louvre.json';
 import mini from '../../legs/test/mini.json';
 
 export type { VehiclesConfig } from '@race/shared/leg';
 
 /** Bundled legs by id. macao-demo = SPEC §10.1 test points, tasks empty for the Host (§17.9: the real leg is not in);
  *  test/* = fake content for tests and the sim bots (SPEC §15 Phase 11). The user's real leg is uploaded by the Host. */
-const FILES: Record<string, unknown> = { 'macao-demo': demo, 'macao-demo-filled': filled, mini, louvre }; // louvre: Phase 8B room (docs/plans/phase8b.md §I)
+const FILES: Record<string, unknown> = { 'macao-demo': demo, 'macao-demo-filled': filled, mini };
 
 export const DEFAULT_LEG_ID = 'macao-demo';
 export const BUNDLED_LEGS = Object.keys(FILES);

@@ -115,14 +115,6 @@ await page.keyboard.press('Escape');
 await ev(`hud.update({ simTime: 1, serverNow: now, inZone: false })`);
 ok(await ev<boolean>(`(() => { const p = document.querySelector('.rc-penalty'); return !p.hidden && p.querySelector('b.rc-num')?.textContent === '00:10'; })()`), 'card closed: centre chip back, big digits');
 
-console.log('louvre (fix F2): the compact card says "Chọn k/5 · Đúng x/5", beside the wrong-lock countdown until it runs out');
-await setup(`main: { ...base, step: 'T3', status: 'locked', lockedUntil: now + 10000, lockKind: 'retry', task: { ...task, kind: 'louvre', verification: 'auto', input: 'room', louvre: { artworks: [], room: { x: 0, z: 0, r: 25, yaw: 0 }, picks: ['art-01', 'art-02'], attempts: 1, hintAt: [0, 0], hintCount: 5, hintCorrect: 1, maxPicks: 5 } } }`);
-await page.keyboard.press('Escape');
-await ev(`hud.update({ simTime: 1, serverNow: now, inZone: false })`);
-ok((await ev<string>(`document.querySelector('.rc-state').textContent`)) === 'Phạt: còn 00:10 · Chọn 2/5 · Đúng 1/5', 'compact card: countdown + "Chọn 2/5 · Đúng 1/5"');
-await ev(`hud.update({ simTime: 2, serverNow: now + 11000, inZone: false })`);
-ok((await ev<string>(`document.querySelector('.rc-state').textContent`)) === 'Chọn 2/5 · Đúng 1/5', 'countdown over, no new card: the line drops "Phạt"');
-
 console.log('detour choose: 1 / 2 keys, buttons lock for taskLockSeconds');
 await setup(`main: { ...det, status: 'choose' }`);
 ok(!(await ev<boolean>(`[...document.querySelectorAll('button')].some((b) => b.textContent.includes('Đổi'))`)), 'no "Đổi" button in choose');
