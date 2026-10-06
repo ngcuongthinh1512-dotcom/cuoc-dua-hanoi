@@ -736,11 +736,11 @@ export const landmarks = {
       },
       spire: [[0, 2.6], [8, 2.6], [9.5, 4], [12, 5], [15, 4.2], [17.5, 1.8], [18, 1.4], [29, 0.5]] as [number, number][], // [y over coreTop, r]: stem, sphere, mast (top = height)
       signY: [-7, -4] as [number, number], // lit sign ring around the core, y over coreTop
-      dome: { top: 54, base: 0.82, fit: 0.98, rows: 16, cells: 60, capDeg: 80, ribEvery: 4, rib: 0.45, tealEvery: 12, whiteEvery: 20 }, // squashed sphere: OSM 54 m; base = × the outline radius at the foot (max = fit × outline); diamond lattice: lat rows, cells around (multiple of the 'every's)
+      dome: { top: 54, base: 0.82, fit: 0.98, rows: 16, cells: 60, capDeg: 80, ribEvery: 4, rib: 0.6, tealEvery: 12, whiteEvery: 20 }, // squashed sphere: OSM 54 m; base = × the outline radius at the foot (max = fit × outline); diamond lattice: lat rows, cells around (multiple of the 'every's)
       flank: { half: 4.5, at: 1.0, tiers: [[1, 30], [0.78, 35], [0.56, 39], [0.34, 42]] as [number, number][] }, // two stepped towers at the dome's E / W ends: [× half, top y]
-      canopy: { azimuth: 180, apex: 16, rim: 12, rimY: 7, rimSpread: 70, fins: 4, spread: [24, 84] as [number, number], fin: [9, 15, 15, 3.2] as [number, number, number, number] }, // main entrance (S, faces the photo's view): tent + leaf fins per side over this spread (°): [foot r, tip r, tip y, half-width] (m)
+      canopy: { azimuth: 180, apex: 16, rim: 12, rimY: 7, rimSpread: 70, fins: 4, spread: [24, 84] as [number, number], fin: [6, 17, 20, 4.5] as [number, number, number, number] }, // main entrance (S, faces the photo's view): tent + leaf fins per side over this spread (°): [foot r, tip r, tip y, half-width] (m)
       colours: { gold: '#d9a441', core: '#8a6324', band: '#4a3412', petalIn: '#7a5a22', stripe: '#a87a2a', white: '#efe9da', spire: '#a8853a', line: '#ffb545', edge: '#ffcf6a', sign: '#fff0c0', rib: '#ffe6b0', teal: '#22c8c0', red: '#ff2a3a', soffit: '#ffc46a' },
-      lineIntensity: 0.8, edgeIntensity: 1.6, signIntensity: 2.2, ribIntensity: 1.1, tealIntensity: 0.7, redIntensity: 1.6, soffitIntensity: 1.2,
+      lineIntensity: 0.8, stripeIntensity: 0.6, edgeIntensity: 1.6, signIntensity: 2.2, ribIntensity: 1.5, tealIntensity: 0.7, redIntensity: 1.6, soffitIntensity: 1.2,
     },
   },
 };

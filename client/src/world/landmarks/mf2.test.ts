@@ -4,7 +4,7 @@ import { type BuildingRec, chunkBounds, type PartRec, type XZ } from '../../geo/
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
-import { details, keyed, lisboaScale, outward, towerPiece } from './mf2.ts';
+import { details, keyed, outward, petalShape, radialAt, towerPiece } from './mf2.ts';
 
 const T = L.mf2.tower;
 const G = L.mf2.lisboa;
@@ -35,10 +35,17 @@ describe('mf2 helpers', () => {
     expect(keyed([[0, 1], [10, 3]], 5)).toBeCloseTo(2, 6);
     expect(keyed([[0, 1], [10, 3]], 50)).toBe(3);
   });
-  it('lisboaScale: 1 at the foot, widest at bulgeY, a sliver at the tip', () => {
-    expect(lisboaScale(0)).toEqual([1, 1]);
-    expect(lisboaScale(G.bulgeY)).toEqual(G.bulge);
-    expect(lisboaScale(G.tipY)[0]).toBeLessThan(0.1);
+  it('petalShape: narrow foot, widest mid-way, pointed tip; flare 0 at the foot, full near the top, tucked back at the tip', () => {
+    const [foot, mid, tip] = [petalShape(0), petalShape(0.55), petalShape(1)];
+    expect(foot[0]).toBeLessThan(mid[0]);
+    expect(tip[0]).toBeLessThan(0.05);
+    expect(foot[1]).toBe(0);
+    expect(petalShape(0.78)[1]).toBeCloseTo(1, 6);
+    expect(tip[1]).toBeCloseTo(1 - G.crown.tuck, 6);
+  });
+  it('radialAt: distance to the ring along an azimuth', () => {
+    expect(radialAt(circle(5, 5, 10, 64), 5, 5, 0.3)).toBeCloseTo(10, 1);
+    expect(radialAt(rect(0, 0, 10, 4), 5, 2, Math.PI / 2)).toBeCloseTo(2, 6);
   });
   it('outward offsets a ring outwards whatever its winding', () => {
     const r = rect(0, 0, 10, 10);
@@ -91,26 +98,32 @@ describe('macau-tower', () => {
 
 describe('grand-lisboa', () => {
   const fn = details['grand-lisboa']!;
-  it('tower: lotus bud to the published height, bulging past the footprint by `bulge`, lit bands, foot collider', () => {
+  it('tower: to the published height, a waist over the dome, a lotus crown flaring past the shaft, lit edges, foot collider', () => {
     const rec: BuildingRec = { outer: rect(378, 266, 441, 299), kind: 'yes', height: 211.5, landmark: 'grand-lisboa' };
-    const s = stats(fn(rec, [], ctx('grand-lisboa'), helpers));
+    const o = fn(rec, [], ctx('grand-lisboa'), helpers);
+    const s = stats(o);
     expect(s.nan).toBe(0);
     expect(s.maxY).toBeCloseTo(10 + G.height, 3);
-    expect(s.box.x1 - s.box.x0).toBeCloseTo(63 * G.bulge[0], 0);
-    expect(s.box.z1 - s.box.z0).toBeCloseTo(33 * G.bulge[1], 0);
-    expect(s.materials).toEqual(['masonry', 'neon']);
-    expect(s.tris).toBeLessThan(16000);
-    expect(fn(rec, [], ctx('grand-lisboa'), helpers).colliders).toHaveLength(1);
+    const shaftW = 63 * G.shaft.at(-1)![1];
+    const flare = Math.max(...G.crown.rows.map((r) => r[2]));
+    expect(s.box.x1 - s.box.x0).toBeGreaterThan(63 * flare * 0.95); // crown ≈ 1.7 × the shaft
+    expect(s.box.x1 - s.box.x0).toBeGreaterThan(shaftW * 1.5);
+    expect(s.box.x1 - s.box.x0).toBeLessThan(63 * flare * 1.05);
+    expect(s.materials).toEqual(['masonry', 'metal', 'neon']);
+    expect(s.tris).toBeLessThan(20000);
+    expect(o.colliders).toHaveLength(1);
   });
-  it('podium: walls + LED egg to domeTop + a canopy; LED rows = ledRows', () => {
+  it('podium: lattice dome to its top inside the outline, flanking towers, entrance projecting past it, colliders', () => {
     const rec: BuildingRec = { outer: circle(410, 290, 55, 26), kind: 'yes', height: 54, landmark: 'grand-lisboa' };
     const o = fn(rec, [], ctx('grand-lisboa'), helpers);
     const s = stats(o);
     expect(s.nan).toBe(0);
-    expect(s.maxY).toBeCloseTo(10 + G.podium.domeTop, 1);
-    expect(s.materials).toEqual(['masonry', 'neon']);
-    expect(s.box.x1).toBeGreaterThan(410 + 55); // the canopy projects past the outline
-    expect(s.tris).toBeLessThan(4000);
+    expect(s.maxY).toBeCloseTo(10 + G.dome.top, 3);
+    expect(s.materials).toEqual(['masonry', 'metal', 'metal/near', 'neon', 'neon/near']);
+    expect(s.box.x0).toBeGreaterThan(410 - 55 - 2 * G.flank.half); // dome inside the outline, E / W towers on its edge
+    expect(s.box.x1).toBeLessThan(410 + 55 + 2 * G.flank.half);
+    expect(s.box.z1).toBeGreaterThan(290 + 55); // the entrance fins project south past the outline
+    expect(s.tris).toBeLessThan(6000);
     expect(o.colliders).toHaveLength(1);
   });
 });

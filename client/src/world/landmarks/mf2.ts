@@ -5,15 +5,17 @@
 //   macau-tower: the record carrying the mast parts (h ≥ 290) = the tower (shaft, 8 flared fins, pod with a glass
 //     observation band, Skywalk ring, mast, lit rings + beacon); the big outline = the convention centre (glass box,
 //     floor slabs, roof-edge LED); the duplicate pod ring and the chunk-border sliver = nothing.
-//   grand-lisboa: the tall record = the lotus-bud tower (elliptical loft, scale keys waist → bulge → tip, gold panels +
-//     lit floor bands); the other = the podium (concrete walls, LED egg dome with colour bands, entrance canopy).
+//   grand-lisboa (from the user's frontal photo): the tall record = the tower (gold shaft with a waist and dark floor bands,
+//     lotus crown of 5 stepped rows × 12 two-sided curved petals with lit edges, sign ring, sphere + mast); the other = the
+//     podium (squashed-sphere dome on the outline with a diamond lattice: gold / white / teal cells, lit ribs, red accents;
+//     two stepped towers at its E / W ends; tent + fin entrance, walkable).
 import { landmarks as L, lighting as LT } from '../../config.ts';
 import { type BuildingRec, type LandmarkId, type PartRec, ringArea, type XZ } from '../../geo/chunkData.ts';
 import { ringCentroid } from '../../geo/clip.ts';
 import type { BuildOut, MaterialId } from '../buildTypes.ts';
 import { type MeshBuffer, offsetPolyline, triangulate, type V3 } from '../geom.ts';
 import type { DetailFn, Helpers, LandmarkCtx } from './index.ts';
-import { footprintFrame, loft, quadOut, triOut } from './kit.ts';
+import { cross, dot, footprintFrame, loft, quadOut, square, sub, triOut } from './kit.ts';
 import { parseColour, partRings, renderPart, Sink } from './parts.ts';
 
 const T = L.mf2.tower;
@@ -196,10 +198,75 @@ function conventionCentre(rec: BuildingRec, ctx: LandmarkCtx, h: Helpers): Build
 
 // ── Grand Lisboa ──
 
-/** Tower scale (× footprint half-sizes) at y m above ground: [long axis, short axis]. */
-export function lisboaScale(y: number): [number, number] {
-  const keys = (k: 0 | 1): [number, number][] => [[0, 1], [G.waistY, G.waist[k]], [G.bulgeY, G.bulge[k]], [G.tipY, G.tip[k]]];
-  return [keyed(keys(0), y), keyed(keys(1), y)];
+const unit = (v: V3): V3 => {
+  const l = Math.hypot(v[0], v[1], v[2]);
+  return l > 1e-9 ? [v[0] / l, v[1] / l, v[2] / l] : [0, 1, 0];
+};
+const add = (p: V3, d: V3, k = 1): V3 => [p[0] + d[0] * k, p[1] + d[1] * k, p[2] + d[2] * k];
+const mod = (x: number, m: number) => ((x % m) + m) % m;
+
+/** Distance from (cx, cz) to the ring along azimuth λ (x = cos λ, z = sin λ); 0 when the ray misses. */
+export function radialAt(ring: XZ, cx: number, cz: number, lam: number): number {
+  const [dx, dz] = [Math.cos(lam), Math.sin(lam)];
+  let best = Infinity;
+  for (let i = 0, n = ring.length; i < n; i += 2) {
+    const [ax, az] = [ring[i]! - cx, ring[i + 1]! - cz];
+    const [ex, ez] = [ring[(i + 2) % n]! - cx - ax, ring[(i + 3) % n]! - cz - az];
+    const den = dx * ez - dz * ex;
+    if (Math.abs(den) < 1e-12) continue;
+    const [t, s] = [(ax * ez - az * ex) / den, (ax * dz - az * dx) / den];
+    if (t > 0 && s >= 0 && s <= 1) best = Math.min(best, t);
+  }
+  return Number.isFinite(best) ? best : 0;
+}
+
+/** Lotus petal at height share v (0 base … 1 tip): [angular half-width share (a bit narrower at the foot, full from 0.3,
+ *  ogive point from 0.72), flare share (leaves the shaft fast, full at 0.78, curls back by `tuck` at the tip)]. */
+export function petalShape(v: number): [number, number] {
+  const x = (v - 0.72) / 0.28;
+  const w = v < 0.3 ? 0.55 + 0.45 * Math.sin((Math.PI / 2) * (v / 0.3)) : v < 0.72 ? 1 : Math.max(0, 1 - x) ** 0.8;
+  const peak = 0.78;
+  const f = v <= peak ? 1 - (1 - v / peak) ** 2.2 : 1 - G.crown.tuck * ((v - peak) / (1 - peak)) ** 2;
+  return [Math.max(0.03, w), f];
+}
+
+type Paint = readonly [MeshBuffer, V3];
+/** Two-sided smooth sheet over a grid of points (rows × cols): the front (normals away from (cx, cz)) in horizontal
+ *  stripes cycling through `cf` (buffer + colour, one per grid row), the back in cb. Returns the front normals. */
+function sheet(grid: V3[][], cx: number, cz: number, cf: Paint[], cb: Paint): V3[][] {
+  const nr = grid.length;
+  const nc = grid[0]!.length;
+  const N = grid.map((row, a) =>
+    row.map((p, b) => {
+      const dv = sub(grid[Math.min(nr - 1, a + 1)]![b]!, grid[Math.max(0, a - 1)]![b]!);
+      const dt = sub(row[Math.min(nc - 1, b + 1)]!, row[Math.max(0, b - 1)]!);
+      const n = unit(cross(dt, dv));
+      const out: V3 = [p[0] - cx, 0, p[2] - cz];
+      return dot(n, out) >= 0 ? n : ([-n[0], -n[1], -n[2]] as V3);
+    }),
+  );
+  for (const sgn of [1, -1]) {
+    for (let a = 0; a + 1 < nr; a++) {
+      const [buf, col] = sgn > 0 ? cf[a % cf.length]! : cb;
+      buf.color = col;
+      const id = [a, a + 1].map((r) => grid[r]!.map((p, b) => buf.vertex(p[0], p[1], p[2], sgn * N[r]![b]![0], sgn * N[r]![b]![1], sgn * N[r]![b]![2], 0, 0)));
+      for (let b = 0; b + 1 < nc; b++) {
+        const [p, q, r] = [grid[a]![b]!, grid[a + 1]![b]!, grid[a]![b + 1]!];
+        const flip = dot(cross(sub(r, p), sub(q, p)), N[a]![b]!) * sgn < 0;
+        const [i00, i10, i01, i11] = [id[0]![b]!, id[1]![b]!, id[0]![b + 1]!, id[1]![b + 1]!];
+        if (flip) buf.face(i00, i10, i11), buf.face(i00, i11, i01);
+        else buf.face(i00, i11, i10), buf.face(i00, i01, i11);
+      }
+    }
+  }
+  return N;
+}
+
+/** Flat strip of width w along a → b, lifted along the unit normal `out`, facing it. */
+function strip(b: MeshBuffer, p: V3, q: V3, out: V3, w: number, lift: number) {
+  const side = unit(cross(out, sub(q, p)));
+  const o = (x: V3, k: number) => add(add(x, out, lift), side, k);
+  quadOut(b, o(p, -w / 2), o(q, -w / 2), o(q, w / 2), o(p, w / 2), out);
 }
 
 function lisboaTower(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
@@ -209,26 +276,67 @@ function lisboaTower(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const f = footprintFrame(rings[0]!);
   const g = ctx.ground;
   const yb = ctx.minGround - L.sink;
-  const n = G.segments;
-  const C = G.colours;
-  const at = (y: number): V3[] => {
-    const [su, sw] = lisboaScale(Math.max(0, y - g));
-    return ellipse(f.cx, f.cz, f.a * su, f.b * sw, y, n, f.ux, f.uz);
+  const [n, C, K] = [G.segments, G.colours, G.crown];
+  const sh = (y: number, k: 1 | 2) => keyed(G.shaft.map((r) => [r[0], r[k]] as const), y);
+  /** Plan point at angle θ (0 = the long axis), × half-sizes (su, sw), absolute y. */
+  const P = (th: number, su: number, sw: number, y: number): V3 => {
+    const [u, w] = [f.a * su * Math.cos(th), f.b * sw * Math.sin(th)];
+    return [f.cx + u * f.ux - w * f.uz, y, f.cz + u * f.uz + w * f.ux];
   };
-  // one 'masonry' / 'neon' buffer each (Sink): the vertex colour is set right before every use
-  const panel = () => paint(s, 'masonry', rgb(C.gold));
-  const lit = (tip: boolean) => paint(s, 'neon', glow(C.band, tip ? G.tipIntensity : G.bandIntensity));
-  const floors = Math.ceil(G.height / G.floor);
-  disc(panel(), at(yb), -1);
-  for (let k = 0; k < floors; k++) {
-    const y0 = k === 0 ? yb : g + k * G.floor;
-    const y1 = g + Math.min(G.height, (k + 1) * G.floor);
-    const yBand = y0 + G.bandShare * (y1 - y0);
-    loft(lit(y1 > g + G.height - 2 * G.floor), [at(y0), at(yBand)]);
-    loft(panel(), Array.from({ length: G.rows + 1 }, (_, r) => at(yBand + ((y1 - yBand) * r) / G.rows)));
+  const shaftRing = (y: number, grow = 0, yy = y): V3[] =>
+    ellipse(f.cx, f.cz, f.a * sh(yy - g, 1) + grow, f.b * sh(yy - g, 2) + grow, y, n, f.ux, f.uz);
+
+  // shaft + core: gold glass, a dark floor band every bandEvery floors (lit line on it below the crown); the core inside the crown is darker
+  const top = g + G.coreTop;
+  const crown0 = g + K.rows[0]![0];
+  const pitch = G.floor * G.bandEvery;
+  for (let y = g; y < top - 1e-6; y += pitch) {
+    const [y1, yB] = [Math.min(top, y + pitch), y + G.bandH];
+    loft(paint(s, 'masonry', rgb(C.band)), [shaftRing(y === g ? yb : y, 0, y), shaftRing(yB)]);
+    loft(paint(s, 'metal', rgb(y >= crown0 ? C.core : C.gold)), [shaftRing(yB), shaftRing(y1)]);
+    if (y < crown0) loft(paint(s, 'neon', glow(C.line, G.lineIntensity)), [shaftRing(yB - 0.35, 0.08), shaftRing(yB, 0.08)]);
   }
-  disc(lit(true), at(g + G.height), 1);
-  s.prism(rings, yb, g + G.podium.wallTop);
+  disc(paint(s, 'masonry', rgb(C.band)), shaftRing(top), 1);
+
+  // lotus crown: rows of petals, each row offset by half a petal and starting higher, so its foot hides behind the row below
+  const step = TAU / K.petals;
+  K.rows.forEach(([y0, y1, flare], k) => {
+    const [bu, bw] = [sh(y0, 1) * 1.01, sh(y0, 2) * 1.01];
+    for (let i = 0; i < K.petals; i++) {
+      const th = step * (i + (k % 2) / 2);
+      const tipY = y1 + K.ears * Math.cos(th) ** 2;
+      const grid = Array.from({ length: K.vSteps + 1 }, (_, a) => {
+        const v = a / K.vSteps;
+        const [hw, fl] = petalShape(v);
+        const [su, sw] = [bu + (flare - bu) * fl, bw + (flare - bw) * fl];
+        return Array.from({ length: K.tSteps + 1 }, (_, b) => {
+          const t = (2 * b) / K.tSteps - 1;
+          const c = 1 - K.cup * t * t + (i % 2) * 0.004;
+          return P(th + t * hw * K.width * step, su * c, sw * c, g + y0 + (tipY - y0) * v);
+        });
+      });
+      const N = sheet(grid, f.cx, f.cz, [[s.buf('metal'), rgb(C.gold)], [s.buf('neon'), glow(C.line, G.stripeIntensity)]], [s.buf('metal'), rgb(C.petalIn)]);
+      // lit strips along both long edges of the petal
+      const lit = paint(s, 'neon', glow(C.edge, G.edgeIntensity));
+      for (const b of [0, K.tSteps]) {
+        const inward = b === 0 ? 1 : -1;
+        for (let a = Math.ceil(K.edge.from * K.vSteps); a < K.vSteps; a++) {
+          const [p, q] = [grid[a]![b]!, grid[a + 1]![b]!];
+          const nn = N[a]![b]!;
+          const side = unit(sub(grid[a]![b + inward]!, p));
+          const o = (x: V3, k2: number) => add(add(x, nn, K.edge.lift), side, k2);
+          quadOut(lit, o(p, 0), o(q, 0), o(q, K.edge.width), o(p, K.edge.width), nn);
+        }
+      }
+    }
+  });
+
+  // sign ring at the crown top, spire = small sphere + mast, lit ring on the sphere
+  loft(paint(s, 'neon', glow(C.sign, G.signIntensity)), [shaftRing(top + G.signY[0], 0.3, top), shaftRing(top + G.signY[1], 0.3, top)]);
+  revolve(paint(s, 'metal', rgb(C.spire)), f.cx, f.cz, G.spire.map(([y, r]) => [top + y, r] as const), 12);
+  const eq = G.spire.reduce((m, p) => (p[1] > m[1] ? p : m));
+  band(paint(s, 'neon', glow(C.sign, G.signIntensity)), f.cx, f.cz, eq[1] + 0.1, top + eq[0] - 0.4, top + eq[0] + 0.4, 12);
+  s.prism([ellipse(f.cx, f.cz, f.a * sh(0, 1), f.b * sh(0, 2), 0, 12, f.ux, f.uz).flatMap((p) => [p[0], p[2]])], yb, g + G.dome.top);
   return s.out();
 }
 
@@ -236,48 +344,112 @@ function lisboaPodium(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const s = new Sink();
   const rings = partRings(rec);
   if (!rings) return EMPTY;
+  const o = rings[0]!;
+  const [cx, cz] = ringCentroid(o);
   const g = ctx.ground;
   const yb = ctx.minGround - L.sink;
-  const P = G.podium;
-  const C = G.colours;
-  renderPart({ ...rec, height: P.wallTop, material: 'concrete' }, { ground: g, height: ctx.height, fallbackTop: P.wallTop }, s);
-  // LED egg: quarter-ellipse dome over the walls on the footprint frame, colour bands at ledRows of its height
-  const f = footprintFrame(rings[0]!);
-  const n = 32;
-  const H = P.domeTop - P.wallTop;
-  const ringAt = (t: number, grow = 0): V3[] => {
-    const k = Math.cos((t * Math.PI) / 2) * 0.97 + grow;
-    return ellipse(f.cx, f.cz, f.a * k, f.b * k, g + P.wallTop + H * Math.sin((t * Math.PI) / 2), n, f.ux, f.uz);
+  const [D, C] = [G.dome, G.colours];
+  const [N, R] = [D.cells, D.rows];
+
+  // squashed sphere over the outline: radius per half-cell azimuth = fit × the outline's, foot at `base` of it on the ground
+  const rad = Array.from({ length: 2 * N }, (_, h) => Math.max(1, radialAt(o, cx, cz, (Math.PI * h) / N) * D.fit));
+  const [phi0, phiT] = [-Math.acos(D.base), (D.capDeg * Math.PI) / 180];
+  const cv = D.top / (1 + Math.sqrt(1 - D.base * D.base)); // vertical semi-axis: foot on the ground, top at D.top
+  const yc = g + cv * Math.sqrt(1 - D.base * D.base);
+  const lat = (r: number) => phi0 + ((phiT - phi0) * r) / R;
+  const V = (r: number, h: number): V3 => {
+    const [l, rr, p] = [(Math.PI * h) / N, rad[mod(h, 2 * N)]!, lat(r)];
+    return [cx + Math.cos(l) * rr * Math.cos(p), yc + cv * Math.sin(p), cz + Math.sin(l) * rr * Math.cos(p)];
   };
-  const shell = paint(s, 'masonry', rgb(C.gold));
-  loft(shell, Array.from({ length: P.domeRings + 1 }, (_, r) => ringAt(r / P.domeRings)));
-  disc(shell, ringAt(1), 1);
-  P.ledRows.forEach((t, i) => {
-    const led = paint(s, 'neon', glow(C.led[i % C.led.length]!, G.ledIntensity));
-    loft(led, [ringAt(t - 0.012, 0.006), ringAt(t + 0.012, 0.006)]);
-  });
-  // entrance canopy on the outline point farthest towards `azimuth`, projecting `depth` outwards, on columns
+  const Nrm = (r: number, h: number): V3 => {
+    const [l, rr, p] = [(Math.PI * h) / N, rad[mod(h, 2 * N)]!, lat(r)];
+    return unit([(Math.cos(l) * Math.cos(p)) / rr, Math.sin(p) / cv, (Math.sin(l) * Math.cos(p)) / rr]);
+  };
+  const gold = () => paint(s, 'metal', rgb(C.gold));
+  const rib = () => paint(s, 'neon', glow(C.rib, G.ribIntensity));
+
+  // diamond lattice: row r = diamonds centred on lat r, offset half a cell per row; p / q index the two diagonal families
+  for (let r = 1; r < R; r++) {
+    for (let j = 0; j < N; j++) {
+      const hc = 2 * j + (r % 2);
+      const [p, q] = [j - Math.floor(r / 2), j + Math.ceil(r / 2)];
+      const [B, Rt, T, Lt, out] = [V(r - 1, hc), V(r, hc + 1), V(r + 1, hc), V(r, hc - 1), Nrm(r, hc)];
+      quadOut(paint(s, 'metal', rgb(mod(q, D.whiteEvery) === 0 ? C.white : C.gold)), B, Rt, T, Lt, out);
+      if (mod(p, D.ribEvery) === 0) strip(rib(), B, Rt, out, D.rib, 0.15);
+      if (mod(q, D.ribEvery) === 0) strip(rib(), B, Lt, out, D.rib, 0.15);
+      // inset accents: chains of teal diamonds along one diagonal family, scattered red ones (near only)
+      const teal = mod(p, D.tealEvery) === 0;
+      if (teal || mod(3 * p + 5 * q, 13) === 0) {
+        const m: V3 = [(B[0] + T[0]) / 2, (B[1] + T[1]) / 2, (B[2] + T[2]) / 2];
+        const k = (x: V3) => add(add(m, sub(x, m), teal ? 0.6 : 0.4), out, 0.12);
+        const c = teal ? paint(s, 'neon', glow(C.teal, G.tealIntensity)) : paint(s, 'neon', glow(C.red, G.redIntensity), 'near');
+        quadOut(c, k(B), k(Rt), k(T), k(Lt), out);
+      }
+    }
+  }
+  // half-diamonds at the foot and under the cap, the cap cone, a skirt down to the lowest ground
+  const apex: V3 = [cx, g + D.top, cz];
+  for (let j = 0; j < N; j++) {
+    const h = 2 * j + 1;
+    triOut(gold(), V(0, h), V(0, h + 2), V(1, h + 1), Nrm(0, h + 1));
+    const t = 2 * j + ((R - 1) % 2);
+    triOut(gold(), V(R, t), V(R, t + 2), V(R - 1, t + 1), Nrm(R, t + 1));
+  }
+  for (let h = 0; h < 2 * N; h++) triOut(gold(), V(R, h), V(R, h + 1), apex, Nrm(R, h));
+  const foot = Array.from({ length: 2 * N }, (_, h) => V(0, h));
+  loft(paint(s, 'masonry', rgb(C.band)), [foot.map((p): V3 => [p[0], yb, p[2]]), foot]);
+  s.prism([foot.flatMap((p) => [p[0], p[2]])], yb, yc);
+
+  // two stepped towers at the dome's east / west ends, a lit line on each tier top
+  const F = G.flank;
+  for (const l of [0, Math.PI]) {
+    const d = radialAt(o, cx, cz, l) * F.at;
+    const [px, pz] = [cx + Math.cos(l) * d, cz + Math.sin(l) * d];
+    let y0 = yb;
+    for (const [k, h] of F.tiers) {
+      block(gold(), square(F.half * k, y0, px, pz), square(F.half * k, g + h, px, pz));
+      loft(paint(s, 'neon', glow(C.edge, G.edgeIntensity), 'near'), [square(F.half * k + 0.06, g + h - 0.5, px, pz), square(F.half * k + 0.06, g + h, px, pz)]);
+      y0 = g + h;
+    }
+    s.prism([square(F.half, 0, px, pz).flatMap((p) => [p[0], p[2]])], yb, g + F.tiers[0]![1]);
+  }
+
+  // entrance (no collider: walkable): tent from the dome's foot (gold top, lit soffit) + gold fins fanned out on both sides
   const K = G.canopy;
   const az = (K.azimuth * Math.PI) / 180;
   const [dx, dz] = [Math.sin(az), -Math.cos(az)];
-  const o = rings[0]!;
-  let best = -Infinity;
-  let [px, pz] = [f.cx, f.cz];
-  for (let i = 0; i < o.length; i += 2) {
-    const d = o[i]! * dx + o[i + 1]! * dz;
-    if (d > best) [best, px, pz] = [d, o[i]!, o[i + 1]!];
+  const re = radialAt(o, cx, cz, Math.atan2(dz, dx)) * D.fit * D.base;
+  const O: V3 = [cx + dx * re, g, cz + dz * re];
+  const dirAt = (deg: number, r: number, y: number): V3 => {
+    const a = (deg * Math.PI) / 180;
+    return [O[0] + (dx * Math.cos(a) - dz * Math.sin(a)) * r, y, O[2] + (dx * Math.sin(a) + dz * Math.cos(a)) * r];
+  };
+  const tip: V3 = [O[0] - dx * 2, g + K.apex, O[2] - dz * 2];
+  const roof = paint(s, 'metal', rgb(C.gold), 'near');
+  const soffit = paint(s, 'neon', glow(C.soffit, G.soffitIntensity), 'near');
+  for (let k = 0; k < 8; k++) {
+    const [a, b] = [-K.rimSpread + (2 * K.rimSpread * k) / 8, -K.rimSpread + (2 * K.rimSpread * (k + 1)) / 8];
+    const [pa, pb] = [dirAt(a, K.rim, g + K.rimY), dirAt(b, K.rim, g + K.rimY)];
+    triOut(roof, tip, pa, pb, [0, 1, 0]);
+    triOut(soffit, add(tip, [0, -0.1, 0]), add(pa, [0, -0.1, 0]), add(pb, [0, -0.1, 0]), [0, -1, 0]);
   }
-  const [tx, tz] = [-dz, dx];
-  const corner = (u: number, w: number, y: number): V3 => [px + dx * u + tx * w, y, pz + dz * u + tz * w];
-  const roof = paint(s, 'masonry', rgb(C.concrete));
-  const quad = (y: number) => [corner(-1, -K.width / 2, y), corner(K.depth, -K.width / 2, y), corner(K.depth, K.width / 2, y), corner(-1, K.width / 2, y)];
-  block(roof, quad(g + K.y), quad(g + K.y + K.thickness));
-  const under = paint(s, 'neon', glow(C.band, G.bandIntensity * 0.5));
-  loft(under, [quad(g + K.y + 0.2), quad(g + K.y + 0.6)].map((q) => q.map((p): V3 => [p[0] - (f.cx - p[0]) * 0.004, p[1], p[2] - (f.cz - p[2]) * 0.004])));
-  for (let c = 0; c < K.columns; c++) {
-    const w = -K.width / 2 + 1 + ((K.width - 2) * c) / (K.columns - 1);
-    block(roof, [corner(K.depth - 1.3, w - 0.3, yb), corner(K.depth - 0.7, w - 0.3, yb), corner(K.depth - 0.7, w + 0.3, yb), corner(K.depth - 1.3, w + 0.3, yb)],
-      [corner(K.depth - 1.3, w - 0.3, g + K.y), corner(K.depth - 0.7, w - 0.3, g + K.y), corner(K.depth - 0.7, w + 0.3, g + K.y), corner(K.depth - 1.3, w + 0.3, g + K.y)]);
+  // fins = gold leaves fanned round the door, facing out and leaning outwards (lit spine)
+  const [r0, rt, ht, hw] = K.fin;
+  const spine = paint(s, 'neon', glow(C.edge, G.edgeIntensity), 'near');
+  for (const sgn of [-1, 1]) {
+    for (let k = 0; k < K.fins; k++) {
+      const a = sgn * (K.spread[0] + ((K.spread[1] - K.spread[0]) * k) / (K.fins - 1));
+      const r = (a * Math.PI) / 180;
+      const rad: V3 = [dx * Math.cos(r) - dz * Math.sin(r), 0, dx * Math.sin(r) + dz * Math.cos(r)];
+      const tan: V3 = [-rad[2], 0, rad[0]];
+      const grid = Array.from({ length: 7 }, (_, i) => {
+        const v = i / 6;
+        const c = dirAt(a, r0 + (rt - r0) * v * v, i ? g + ht * v : yb);
+        return [-1, 0, 1].map((t) => add(add(c, tan, t * hw * petalShape(v)[0]), rad, 0.8 * Math.sin(Math.PI * v) * (1 - t * t)));
+      });
+      const N = sheet(grid, O[0], O[2], [[s.buf('metal', 'near'), rgb(C.gold)], [s.buf('metal', 'near'), rgb(C.stripe)]], [s.buf('metal', 'near'), rgb(C.petalIn)]);
+      for (let i = 1; i < 6; i++) strip(spine, grid[i]![1]!, grid[i + 1]![1]!, N[i]![1]!, 0.35, 0.08);
+    }
   }
   return s.out();
 }
