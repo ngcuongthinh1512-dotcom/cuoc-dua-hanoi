@@ -802,7 +802,9 @@ export const character = {
   clipsUrl: 'models/player-anims.glb', // 15 UAL clips retargeted per avatar: m_* / f_* (scripts/assets/rig.ts)
   // tank top + backpack = team colour × the atlas grey (folds kept); at night they also glow nightGlow × that colour
   // (× lighting.emissiveScale) so the team still reads under the moon
-  outfit: { nightGlow: 0.35 },
+  // nightGlow: extra emissive on the team-coloured shirt; nightFill: emissive share of the whole body's own colour so faces and
+  // skin don't go black under the moon (night only)
+  outfit: { nightGlow: 0.35, nightFill: 0.35 },
   fade: 0.2, // s crossfade between clips
   // m: fixed frustum-culling sphere per skinned mesh, centre y above the feet; bones reach 2.06 m from it lying in the
   // crash (Death01 moves the pelvis back), 1.3 m swimming / celebrating; + mesh and hair around the bones

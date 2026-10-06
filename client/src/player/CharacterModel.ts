@@ -94,6 +94,7 @@ export interface CharacterOptions {
 
 type OutfitUniforms = Record<'uShirt', { value: Color }>;
 const GLOW = (C.outfit.nightGlow * lighting.emissiveScale).toFixed(3);
+const FILL = (C.outfit.nightFill * lighting.emissiveScale).toFixed(3);
 /** One function object for every instance → one shared program (customProgramCacheKey = its source). Atlas tiles (uv):
  *  body (0, 0) | head (1, 0) / opacity (0, 1) | backpack (1, 1); alpha in the body and backpack tiles = the tint mask
  *  (1 = as is, ≤ 0.6 = × the team colour), in the opacity tile = the hair cut-out; no map (capsule) = all team colour. */
@@ -112,7 +113,7 @@ function outfitShader(this: Material, shader: WebGLProgramParametersWithUniforms
 #endif
 \tdiffuseColor.rgb *= mix(vec3(1.0), uShirt, outfitM);`,
     )
-    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>${isNight() ? `\n\ttotalEmissiveRadiance += diffuseColor.rgb * outfitM * ${GLOW};` : ''}`);
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>${isNight() ? `\n\ttotalEmissiveRadiance += diffuseColor.rgb * (outfitM * ${GLOW} + ${FILL});` : ''}`);
 }
 
 /** Canvas sprite, constant size on screen (character.nameTag), hidden beyond maxDistance by an LOD. STYLE_GUIDE:
