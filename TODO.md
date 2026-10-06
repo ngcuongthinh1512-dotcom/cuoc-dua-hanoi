@@ -203,3 +203,12 @@ Xong (báo cáo `docs/reports/host-minimap.md`, ảnh `screenshots/p11-host-map.
 
 ## Hoãn (người dùng, 2026-10-03; SPEC §17.18)
 - Quay đầu, Nhường đường, Vé vượt, Vé ưu tiên, Gờ giảm tốc: chặng này không dùng; chưa làm. Làm lại khi người dùng cần.- Lộ trình bắt buộc đi bộ + phạt đi bộ sai luật (`walkOnlyViolationMinutes`), phạt bỏ cuộc thử thách (`quitTaskMinutes`): chặng này không dùng (SPEC §17.18); mã Phase 7 giữ nguyên, chưa nối phạt.
+
+## Leg 2 – Macao (xem `docs/plans/leg2-master.md`)
+- Phòng Louvre: **bỏ** (anh chốt 2026-10-06). Phòng casino do anh tự tạo sau, chưa bắt đầu.
+- Sửa hình dáng địa danh theo ảnh thật: Grand Lisboa (đỉnh sen), Hotel Lisboa, MGM (đang làm); rà 9 địa danh chưa xem cận + Sands, A-Ma, Penha, Macau Tower, Science Center.
+- Cảnh xa: Macau Tower / Grand Lisboa bị sương che từ ~700 m; bóng Taipa / Cotai; mặt phẳng nền quảng trường Flor de Lótus.
+- `KNOWN_MACAO` / `KNOWN_STEPS` (cầu biển ở rìa khung, bậc cầu 3–17,7 m cạnh Macau Tower): xử lý ở BridgeBuilder nếu muốn bỏ danh sách bỏ qua.
+- Đo FPS thật trên máy thật (chất lượng cao / thấp); `sim --full` đo hạn mức 2 giờ cho Macao.
+- Nhập chặng thật (ngoài repo) + gắn lộ trình vào địa danh; `docs/RACE_RULES.md` cho Macao (đêm, tốc độ 4 / 5,2 m/s, luật không dùng AI).
+- Deploy riêng (`cuoc-dua-macao`, `cuoc-dua-macao-media`): anh làm theo `docs/DEPLOY.md`.
