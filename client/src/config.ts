@@ -761,7 +761,7 @@ export const preview = {
 export const movement = {
   footSpeed: 4, // m/s: standard on-foot speed (the "jog" clip). Leg 2 (Macao): back to 4 (Leg 1 Paris has ×1.5 = 6, SPEC §17.43)
   sprintMultiplier: SPRINT_MULTIPLIER, // SPEC §17.29: × the top speed (foot, swim, bike) while sprint (Shift / LB) is held; the server's limits use the same constant
-  bikeSpeedMultiplier: 1.5, // Phase 4: bike speed = footSpeed × this
+  bikeSpeedMultiplier: 1.3, // Phase 4: bike speed = footSpeed × this (Leg 2: 1.3 like the legs / schema default; Leg 1 offline had 1.5)
 };
 
 const SPAWN_OUT = 14; // m from the origin toward the Ruínas de São Paulo

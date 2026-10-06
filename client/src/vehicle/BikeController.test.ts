@@ -22,14 +22,14 @@ function timeTo(share: number, surface: RoadSurface = 'asphalt') {
 }
 
 describe('stepBike (pure bicycle dynamics, SPEC §6.1 / §6.6)', () => {
-  it('top speed = footSpeed × 1.5 (± 1 %), never above', () => {
+  it('top speed = footSpeed × bikeSpeedMultiplier (± 1 %), never above', () => {
     const b = newBike('t', 0, 0, 0, 0);
     let max = 0;
     for (let i = 0; i < 5 / DT; i++) {
       stepBike(b, go(), 'asphalt', DT);
       max = Math.max(max, b.speed);
     }
-    expect(Math.abs(b.speed / movement.footSpeed - 1.5)).toBeLessThan(0.015);
+    expect(Math.abs(b.speed / movement.footSpeed - movement.bikeSpeedMultiplier)).toBeLessThan(0.015);
     expect(max).toBeLessThanOrEqual(bikeTopSpeed() + 1e-9);
   });
   it('SPEC §17.29: sprint = top × sprintMultiplier, released → bleeds back to top; a sharp turn still slows', () => {
