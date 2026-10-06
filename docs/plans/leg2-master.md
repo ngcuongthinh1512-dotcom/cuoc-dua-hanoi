@@ -22,6 +22,7 @@ Quy tắc mô hình: dùng **Opus**; **Fable chỉ khi thật sự cần** (anh 
 | R – Review và sửa | review code (Fable) + hình ảnh (Fable, Opus), sửa chữ Paris, điểm lộ trình bị chôn, collider chắn lối đi, DEM dọc đường, viền thảm Chặng dừng | `9cda91c` |
 | S – Tốc độ | hoàn lại ×1,5, hệ số xe đạp 1,3 | `512cd9b`, `9425533` |
 | P – Nhân vật | Rocketbox nam `Sports_Male_04` / nữ `Sports_Female_02` + ba lô code, chỉ người chơi (NPC giữ nguyên), giao thức v10 `avatar`, menu "Nhân vật" | `0b189db` (merge `63fe31f`) |
+| G4 – Rà hình dáng | 14 địa danh so với ảnh Wikimedia: sửa 7 (Sands, Science Center, Penha, Kun Iam, Portas do Cerco, Monte, Cultural Centre); 7 còn lại giữ nguyên. Báo cáo `docs/reports/leg2-landmark-audit.md` | `83b8984` |
 | G1 – Grand Lisboa v2 | dựng lại theo ảnh thật (đế vòm, eo, đỉnh sen) | `e595592` |
 Số liệu lúc commit R: scripts 120, shared 82, client 865, worker 187 test xanh; `npm run build` thoát 0.
 
