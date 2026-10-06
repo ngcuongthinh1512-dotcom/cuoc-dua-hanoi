@@ -497,7 +497,7 @@ export const landmarks = {
       lightEvery: 14, // m between uplighters at the wall foot
       minFortArea: 4000, // m²: smaller records are zone members (Museu de Macau on the terrace, OSM h 62 = asl)
       museum: { above: 5, colour: '#cfc6b4' }, // m above the terrace (est.)
-      colours: { wall: '#b4a991', top: '#9c927f', terrace: '#a39b8b', cannon: '#2a2c2e', carriage: '#4b3a29' },
+      colours: { wall: '#8e877a', top: '#7d776b', terrace: '#a39b8b', cannon: '#2a2c2e', carriage: '#4b3a29' }, // G4: weathered dark grey stone (photos), was beige
     },
     guia: {
       // Fortaleza da Guia (1622–1638) on Guia hill: low walls along the hilltop (est.), gate gap 3 m
@@ -542,8 +542,9 @@ export const landmarks = {
       // OSM heights (40.5 / 39.2 / 73.3) count the hill: figures below est. from photos. towers: 0 | 1 (centre) | 2 (corners)
       'sao-lourenco': { az: 195, wallH: 12, rise: 5, towers: 2, towerW: 6, towerH: 23, cap: 'dome', facadeH: 15, pediment: 3.5, platform: 1.6, nave: 0.8, windows: 5, colours: { wall: '#e8d7a2', trim: '#f6f3ea', roof: '#8e5c40', door: '#4c3324' } },
       'santo-agostinho': { az: 200, wallH: 13, rise: 4.5, towers: 0, towerW: 0, towerH: 0, cap: 'dome', facadeH: 16, pediment: 4, platform: 0.4, nave: 0.95, windows: 5, colours: { wall: '#e7cd84', trim: '#f6f3ea', roof: '#8a5a40', door: '#4a5a3a' } },
-      'ermida-penha': { az: 45, wallH: 8, rise: 3.5, towers: 1, towerW: 4.4, towerH: 20, cap: 'pyramid', facadeH: 10.5, pediment: 0, platform: 0.3, nave: 1, windows: 4, colours: { wall: '#e8e5dd', trim: '#ffffff', roof: '#5e6166', door: '#4c3324' } },
-    } as Record<string, { az: number; wallH: number; rise: number; towers: 0 | 1 | 2; towerW: number; towerH: number; cap: 'dome' | 'pyramid'; facadeH: number; pediment: number; platform: number; nave: number; windows: number; colours: { wall: string; trim: string; roof: string; door: string } }>,
+      // G4 (photos): grey granite neo-Romanesque, the bell tower + spire at the façade's right corner (side −1 = right seen from the front), not centred
+      'ermida-penha': { az: 45, wallH: 8, rise: 3.5, towers: 1, side: -1, towerW: 4.4, towerH: 20, cap: 'pyramid', facadeH: 10.5, pediment: 0, platform: 0.3, nave: 1, windows: 4, colours: { wall: '#a9a59b', trim: '#c8c4ba', roof: '#5e6166', door: '#4c3324' } },
+    } as Record<string, { az: number; wallH: number; rise: number; towers: 0 | 1 | 2; side?: -1 | 0 | 1; towerW: number; towerH: number; cap: 'dome' | 'pyramid'; facadeH: number; pediment: number; platform: number; nave: number; windows: number; colours: { wall: string; trim: string; roof: string; door: string } }>, // side: 1 tower off-centre to the façade's left / right edge
     penhaHouse: { height: 10, colour: '#eeebe3', roof: '#9a5a3c' }, // the bishop's residence beside the chapel (2 storeys + hipped roof, est.)
   },
   // m3 (world/landmarks/m3.ts): Hotel Lisboa, Wynn, MGM, Sands, Fisherman's Wharf (docs/reports/leg2-landmarks-o3.md).
@@ -597,8 +598,12 @@ export const landmarks = {
       lion: { plinth: 2.4, scale: 1.15, facing: 110, colour: '#e0a838', bright: 0.9 }, // facing: compass deg (est.: towards Av. Dr. Sun Yat-Sen)
     },
     sands: {
-      // Sands Macao (2004, OSM 46.7 m): gold reflective glass, red sign
-      gold: '#c79c46', bands: [6, 14, 22, 30, 38], band: '#ffcf70', bandBright: 1.6, rib: 5, ribBright: 0.9, rim: '#ffd890', rimBright: 2, // ribs + bands = gold LED grid
+      // Sands Macao (2004, OSM 46.7 m): gold reflective glass drum + "hat" crown between dark glass wings, red sign (G4, photos)
+      gold: '#c79c46', dark: '#2b3448', bodyShare: 0.85, // wings: dark glass to this share of the OSM height (46.7)
+      bands: [6, 14, 22, 30, 38], band: '#ffcf70', bandBright: 1.6, rib: 5, ribBright: 0.9, rim: '#ffd890', rimBright: 2, // ribs + bands = gold LED grid
+      // drum = its own OSM record (way/1418312721, h 61.8 = drum + crown, the records below maxArea m²); z = its centre (world
+      // m): the wings' outline is cut there; crown [radius share, height m] bottom → top (est. from photos)
+      drum: { z: 97, maxArea: 3000, crown: [[0.8, 1.5], [1.14, 1.4], [0.62, 4], [0.78, 0.8], [0.25, 2]] as [number, number][] },
       sign: 'SANDS', signPixel: 2.2, signColour: '#ff2b20', signBright: 2.6,
     },
     wharf: {
@@ -639,7 +644,7 @@ export const landmarks = {
       fly: { u: [0.05, 0.8] as [number, number], w: [-0.62, 0.62] as [number, number], low: 21 }, // auditorium block on the frame (shares, + = rounded end), skillion low side
       sail: { over: 11, rise: 6, t: 0.6 }, // the upturned roof: cantilever beyond the block end, lift at its tip, thickness
       floor: 4, bay: 3, lit: 0.61,
-      colours: { stone: '#d3cdc2', glass: '#9fb4c2', roof: '#b9b6b0', sail: '#ecebe6', edge: '#e8f2ff' },
+      colours: { stone: '#a1998d', glass: '#9fb4c2', roof: '#b9b6b0', sail: '#ecebe6', edge: '#e8f2ff' }, // G4: grey-brown stone cladding (photos), was near-white
       edgeIntensity: 1.8,
     },
     kunIam: {
@@ -650,7 +655,7 @@ export const landmarks = {
       figure: [[0, 2.9], [1.2, 2.6], [5, 2.3], [9, 2.25], [11.5, 2.5], [13.5, 2.55], [14.6, 2.25], [15.4, 1.5], [16, 0.85], [16.5, 0.95], [17.6, 1.15], [18.6, 1.05], [19.4, 0.7], [20, 0.15]] as [number, number][],
       depth: 0.72, sleeves: { y: [8.5, 14.6] as [number, number], r: 0.75, out: 2.1 },
       facing: 300, // compass deg the statue faces (est.: towards the NAPE shore)
-      colours: { statue: '#e0b25a', base: '#b88a45', plinth: '#9b968c', lamp: '#fff0c8' },
+      colours: { statue: '#a88b5e', base: '#e4e1d9', plinth: '#9b968c', lamp: '#fff0c8' }, // G4 (photos): bronze figure on a white lotus dome (was all gold)
       bright: 1.25, lampBright: 2.5,
     },
     lotus: {
@@ -666,7 +671,7 @@ export const landmarks = {
     },
     portas: {
       // the 1870–71 granite gate (four dates on its face); OSM outline 19 × 3 m; proportions est. from photos
-      gate: { w: 9, h: 9.5, open: 2.1, spring: 4.4, attic: [7, 2.1] as [number, number], crest: [3.2, 1.6] as [number, number], wing: 4.8 },
+      gate: { w: 9, h: 9.5, open: 2.1, spring: 4.4, attic: [7, 2.1] as [number, number], crest: [3.2, 1.6] as [number, number], wing: 4.8, wingEnd: 0.9 }, // wing: m at the gate, sweeping down to wingEnd at the outer end
       colour: '#cdbb98',
       // the 2004 steel-and-glass border post (Posto Fronteiriço); height est.
       post: { h: 19, band: 4, floor: 4.5, bay: 3, lit: 0.53 },
@@ -706,7 +711,7 @@ export const landmarks = {
     },
     science: {
       // I. M. Pei, opened 2009. OSM has no height; the cone (≈ 69 m across the fitted outline arc) is est. 58 m high from photos
-      cone: { lat: 22.18587, lon: 113.5566, r: 34.3, h: 58, topShare: 0.28, tiltDeg: 11, lowAz: 150, segs: 48 }, // oblique top: lowAz = compass deg of its low side (est.)
+      cone: { lat: 22.18587, lon: 113.5566, r: 34.3, h: 58, topShare: 0.28, tiltDeg: 30, lean: 0.3, lowAz: 150, segs: 48 }, // oblique top: lowAz = compass deg of its low side (est.); G4 (photos): steep 30° top cut, axis leaning `lean` m/m away from lowAz (the high side near-vertical)
       dome: { lat: 22.18623, lon: 113.55755, r: 15.3, rings: 7, segs: 32 }, // planetarium: hemisphere on the podium (outline arc radius)
       hall: { corners: [[22.18723, 113.55793], [22.18702, 113.55741], [22.18648, 113.55717], [22.18667, 113.55768]] as [number, number][], h: 16 }, // convention hall (NE), est. height
       podium: { h: 10, band: [3.2, 4.2] as [number, number] }, // exhibition wing, est.; glowing window band y range

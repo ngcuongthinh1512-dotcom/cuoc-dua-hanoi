@@ -411,11 +411,15 @@ function gate(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const ct = at + G.attic[1];
   const [cw, ch] = G.crest;
   extrude(b, [-cw / 2, ct, cw / 2, ct, cw / 2, ct + ch * 0.55, 0, ct + ch, -cw / 2, ct + ch * 0.55], 'z', -d + 0.35, d - 0.35);
-  for (const sg of [-1, 1]) {
-    const [x0, x1] = sg < 0 ? [-f.a, -hw] : [hw, f.a];
-    box(b, x0, x1, lo, G.wing, -d * 0.55, d * 0.55);
-    box(b, x0 - (sg < 0 ? 0.15 : 0), x1 + (sg > 0 ? 0.15 : 0), G.wing, G.wing + 0.35, -d * 0.55 - 0.15, d * 0.55 + 0.15); // coping
-  }
+  // G4 (photos): the wings sweep down from the gate in a concave curve to a low end, not flat walls
+  const n = 10;
+  const curve = (t: number) => G.wingEnd + (G.wing - G.wingEnd) * (1 - t) ** 2; // t: 0 at the gate, 1 at the outer end
+  const R: number[] = [hw, lo, f.a, lo];
+  for (let k = n; k >= 0; k--) R.push(hw + ((f.a - hw) * k) / n, curve(k / n));
+  extrude(b, R, 'z', -d * 0.55, d * 0.55);
+  const Lw: number[] = [-f.a, lo, -hw, lo];
+  for (let k = 0; k <= n; k++) Lw.push(-hw - ((f.a - hw) * k) / n, curve(k / n));
+  extrude(b, Lw, 'z', -d * 0.55, d * 0.55);
   const s = new Sink();
   const y0 = ctx.minGround - L.sink;
   framePrism(s, f, -hw, -o, -d, d, y0, g + G.h);

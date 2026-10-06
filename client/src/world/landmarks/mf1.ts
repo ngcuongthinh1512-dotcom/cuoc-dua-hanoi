@@ -399,7 +399,8 @@ export function science(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   }
   cap(M, rings, top);
   k.prism(rings, yb, top);
-  // the cone: straight generatrix r(y) = R0 − kc·y, cut by an oblique plane (low side towards lowAz)
+  // the cone: straight generatrix r(y) = R0 − kc·y around an axis leaning `lean` m/m away from lowAz (oblique cone), cut by
+  // a plane through the axis at h, falling towards lowAz: y = h − tilt·d, d = distance from the axis(h) towards lowAz
   const cn = S.cone;
   const c = latLonToWorld(cn.lat, cn.lon);
   const kc = (cn.r * (1 - cn.topShare)) / cn.h;
@@ -407,18 +408,18 @@ export function science(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const [lx, lz] = [Math.sin((cn.lowAz * Math.PI) / 180), -Math.cos((cn.lowAz * Math.PI) / 180)];
   const cut = (phi: number) => {
     const cs = Math.cos(phi) * lx + Math.sin(phi) * lz;
-    return (cn.h - tilt * cs * cn.r) / (1 - tilt * kc * cs);
+    return (cn.h * (1 - tilt * cn.lean) - tilt * cs * cn.r) / (1 - tilt * cn.lean - tilt * kc * cs);
   };
   const ring = (y: number, phi: number): V3 => {
     const r = cn.r - kc * y;
-    return [c.x + r * Math.cos(phi), g + y, c.z + r * Math.sin(phi)];
+    return [c.x - lx * cn.lean * y + r * Math.cos(phi), g + y, c.z - lz * cn.lean * y + r * Math.sin(phi)];
   };
   const clad = paint(k, 'metal', col(C.clad));
   const y0 = yb - g;
   for (let s = 0; s < cn.segs; s++) {
     const [p0, p1, pm] = [(2 * Math.PI * s) / cn.segs, (2 * Math.PI * (s + 1)) / cn.segs, (2 * Math.PI * (s + 0.5)) / cn.segs];
     quadOut(clad, ring(y0, p0), ring(y0, p1), ring(cut(p1), p1), ring(cut(p0), p0), [Math.cos(pm), kc, Math.sin(pm)]);
-    triOut(clad, [c.x, g + cn.h, c.z], ring(cut(p0), p0), ring(cut(p1), p1), [0, 1, 0]);
+    triOut(clad, [c.x - lx * cn.lean * cn.h, g + cn.h, c.z - lz * cn.lean * cn.h], ring(cut(p0), p0), ring(cut(p1), p1), [0, 1, 0]);
   }
   const base: XZ = [];
   for (let s = 0; s < 24; s++) base.push(c.x + cn.r * Math.cos((2 * Math.PI * s) / 24), c.z + cn.r * Math.sin((2 * Math.PI * s) / 24));
@@ -433,7 +434,7 @@ export function science(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
     const phi = 2 * Math.PI * sp.turns * t;
     const y = sp.y0 + (yMax - sp.h - sp.y0) * t + dy;
     const r = cn.r - kc * y + sp.out;
-    return [c.x + r * Math.cos(phi), g + y, c.z + r * Math.sin(phi)];
+    return [c.x - lx * cn.lean * y + r * Math.cos(phi), g + y, c.z - lz * cn.lean * y + r * Math.sin(phi)];
   };
   for (let j = 0; j < nSeg; j++) {
     const phi = (2 * Math.PI * sp.turns * (j + 0.5)) / nSeg;

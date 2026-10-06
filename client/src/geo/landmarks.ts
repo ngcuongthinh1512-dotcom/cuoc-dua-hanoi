@@ -52,7 +52,7 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   { id: 'hotel-lisboa', name: 'Hotel Lisboa', group: 'm4', osm: [], zone: 'way/1313391925', near: 20, view: [200, 170] }, // zone = the resort site polygon: its 3 buildings (37 / 37 / 77 m) belong to the landmark
   { id: 'wynn-macau', name: 'Wynn Macau', group: 'm4', osm: ['relation/6279959'], zone: 'way/1215820171', near: 25, view: [250, 260] }, // zone = the resort site polygon: Wynn 94.5, Encore 177.5, Encore Tower, podium
   { id: 'mgm-macau', name: 'MGM Macau', group: 'm4', osm: ['way/605485397', 'way/192179915'], near: 25, view: [200, 250] },
-  { id: 'sands-macau', name: 'Sands Macao', group: 'm4', osm: ['way/164195448'], near: 20, view: [160, 200] },
+  { id: 'sands-macau', name: 'Sands Macao', group: 'm4', osm: ['way/164195448', 'way/1418312721'], near: 20, view: [160, 200] }, // way/1418312721 = the gold drum + crown (round, OSM h 61.8), G4
   { id: 'bank-of-china', name: 'Bank of China', group: 'm4', osm: ['way/699456294'], near: 15, view: [180, 220] },
   { id: 'fisherman-wharf', name: "Fisherman's Wharf", group: 'm4', osm: ['relation/4257072', 'relation/10387813'], near: 30, view: [320, 300] }, // relation/4257072 = the whole site (131 000 m², no building tag, kind 'artwork')
   { id: 'cultural-centre', name: 'Trung tâm Văn hóa Macao', group: 'm4', osm: ['way/192179917'], near: 20, view: [200, 170] },

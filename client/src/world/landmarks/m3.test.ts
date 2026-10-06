@@ -93,6 +93,7 @@ describe('m3 landmarks (stand-in outlines)', () => {
     ['MGM tower', 'mgm-macau', rec(rect(0, 0, 117, 20), { height: 120 }), 120],
     ['MGM podium', 'mgm-macau', rec(rect(800, 750, 990, 900), { height: 20.3, points: [{ kind: 'artwork', x: 996, z: 866, r: 5.7 }] }), 20.3],
     ['Sands', 'sands-macau', rec(rect(0, 0, 150, 290), { height: 46.7 }), 46.7],
+    ['Sands drum + crown', 'sands-macau', rec(circle(1594, 97, 23, 19), { height: 61.8 }), 61.8], // crown top = OSM height
     ['Wharf convention centre', 'fisherman-wharf', rec(rect(1640, -100, 1770, -10), { height: 20.8, kind: 'commercial' }), 20.8],
     ['Wharf site', 'fisherman-wharf', rec(rect(1640, -300, 1970, 470), { kind: 'artwork' }), 0],
   ];
@@ -108,7 +109,7 @@ describe('m3 landmarks (stand-in outlines)', () => {
     });
   }
   it('outline-bound pieces stay within their outline (+ a few m of lit strips / signs)', () => {
-    for (const [, id, r] of cases.filter(([n]) => !/site|podium/.test(n))) {
+    for (const [, id, r] of cases.filter(([n]) => !/site|podium|crown/.test(n))) { // the Sands crown brim overhangs its drum (photos)
       const { box } = stats(build(id, r));
       const xs = r.outer.filter((_, i) => i % 2 === 0);
       const zs = r.outer.filter((_, i) => i % 2 === 1);

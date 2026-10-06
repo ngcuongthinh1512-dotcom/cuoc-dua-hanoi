@@ -12,7 +12,8 @@
 //   mgm-macau, rebuilt from photos: the tower = 3 stacked tiers (copper / blue glass / gold) between wavy boundaries,
 //     each inset / trimmed a little differently, "MGM GRAND" across the gold tier; the podium with the Grande Praça
 //     glass vault and the golden lion on its OSM artwork point.
-//   sands-macau: gold glass block, lit bands, roof rim, red "SANDS" sign.
+//   sands-macau (G4, photos): gold glass drum (OSM way/1418312721) + stacked "hat" crown between dark glass wings with
+//     gold fins, red "SANDS" sign on the wings' roof.
 //   fisherman-wharf: the site polygon carries the Colosseum arcade (wrapping the plain OSM amphitheatre building) and a
 //     lighthouse on the seaward tip; the convention centre gets a "Babylon" ziggurat roof and an LED rim.
 import { landmarks as L, lighting as LT } from '../../config.ts';
@@ -627,15 +628,46 @@ function sands(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const ring = partRings(rec)?.[0];
   if (!ring) return EMPTY;
   const S = M.sands;
-  const top = rec.height ?? 46.7;
+  const D = S.drum;
   const g = ctx.ground;
-  renderPart({ ...rec, height: top, material: 'metal', colour: S.gold }, opts(ctx, top), s);
-  const b = paint(s, 'neon', glow(S.band, S.bandBright));
-  for (const y of S.bands) strip(b, ring, g + y, g + y + 0.7);
-  ribs(paint(s, 'neon', glow(S.band, S.ribBright)), ring, g + S.bands[0]!, g + top - 1, S.rib, 0.3);
-  strip(paint(s, 'neon', glow(S.rim, S.rimBright)), ring, g + top - 1, g + top + 0.2);
-  const m = midInside(ring);
-  roofSign(s, m.x, m.z, m.f.ux, m.f.uz, g + top, S.sign, S.signPixel, 1.2 * m.f.b, glow(S.signColour, S.signBright));
+  const yb = ctx.minGround - L.sink;
+  // G4 (photos): the small round record (OSM way/1418312721, h 61.8) = the gold glass drum carrying the stacked "hat"
+  // crown; the big one = dark navy glass wings with gold fins, cut off at the drum's centre line (no z-fighting walls)
+  if (Math.abs(ringArea(ring)) < D.maxArea) {
+    const [cx, cz] = ringCentroid(ring);
+    let r = 0;
+    for (let i = 0; i < ring.length; i += 2) r += Math.hypot(ring[i]! - cx, ring[i + 1]! - cz) / (ring.length / 2);
+    const crownH = D.crown.reduce((t, [, h]) => t + h, 0);
+    const top = (rec.height ?? 61.8) - crownH; // drum wall top: the crown reaches the OSM height
+    loft(paint(s, 'metal', rgb(S.gold)), [circle(cx, cz, r, yb, 48), circle(cx, cz, r, g + top, 48)]);
+    s.prism([circle(cx, cz, r, 0, 16).flatMap((p) => [p[0], p[2]])], yb, g + top);
+    const dr = circle(cx, cz, r, 0, 48).flatMap((p) => [p[0], p[2]]);
+    const b = paint(s, 'neon', glow(S.band, S.bandBright));
+    for (const y of S.bands) if (y < top - 1) strip(b, dr, g + y, g + y + 0.7);
+    ribs(paint(s, 'neon', glow(S.band, S.ribBright)), dr, g + S.bands[0]!, g + top, S.rib, 0.3);
+    // crown, bottom → top: [radius share, height m], plain gold (the 'metal' facade shader would draw windows), lit brims
+    let y = g + top;
+    const lit = paint(s, 'neon', glow(S.rim, S.rimBright));
+    const solid = paint(s, 'masonry', rgb(S.gold));
+    disc(solid, circle(cx, cz, r, y, 48), 1);
+    for (const [k, h] of D.crown) {
+      const lo = circle(cx, cz, r * k, y, 48);
+      const hi = circle(cx, cz, r * k, y + h, 48);
+      loft(solid, [lo, hi]);
+      disc(solid, lo, -1);
+      disc(solid, hi, 1);
+      if (k > 1) strip(lit, lo.flatMap((p) => [p[0], p[2]]), y + h - 0.35, y + h + 0.05);
+      y += h;
+    }
+    return s.out();
+  }
+  const body = (rec.height ?? 46.7) * S.bodyShare;
+  const wing = clipRing(ring, 0, -1, -D.z);
+  renderPart({ outer: wing, kind: rec.kind, height: body, material: 'metal', colour: S.dark }, opts(ctx, body), s);
+  ribs(paint(s, 'neon', glow(S.band, S.ribBright)), wing, g + 4, g + body - 1, S.rib, 0.3);
+  strip(paint(s, 'neon', glow(S.rim, S.rimBright)), wing, g + body - 1, g + body + 0.2);
+  const m = midInside(wing);
+  roofSign(s, m.x, m.z, m.f.ux, m.f.uz, g + body, S.sign, S.signPixel, 1.2 * m.f.b, glow(S.signColour, S.signBright));
   return s.out();
 }
 

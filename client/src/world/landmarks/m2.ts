@@ -897,12 +897,13 @@ function church(rec: BuildingRec, ctx: LandmarkCtx, c: ChurchCfg): BuildOut {
   }
   const door = paint(s, 'masonry', C.door);
   const dw = Math.min(1.3, mid * 0.45);
-  bx(door, f, front, front + 0.06, y0, y0 + Math.min(4.2, c.facadeH * 0.4), -dw, dw);
+  const dc = c.towers === 1 ? (-(c.side ?? 0) * tw) / 2 : 0; // door / window centre: beside an off-centre tower
+  bx(door, f, front, front + 0.06, y0, y0 + Math.min(4.2, c.facadeH * 0.4), dc - dw, dc + dw);
   if (c.towers === 2) for (const sd of [-1, 1]) bx(door, f, front, front + 0.06, y0, y0 + 3.2, sd * mid * 0.55 - 0.8, sd * mid * 0.55 + 0.8);
-  bx(win, f, front, front + 0.05, y0 + c.facadeH * 0.62, y0 + c.facadeH * 0.85, -dw * 0.6, dw * 0.6);
+  bx(win, f, front, front + 0.05, y0 + c.facadeH * 0.62, y0 + c.facadeH * 0.85, dc - dw * 0.6, dc + dw * 0.6);
   if (c.towers !== 1) for (const sd of [-1, 1]) bx(win, f, front, front + 0.05, y0 + c.facadeH * 0.64, y0 + c.facadeH * 0.84, sd * mid * 0.5 - 0.5, sd * mid * 0.5 + 0.5);
   // towers: shaft, cornices, belfry openings, cap
-  const towerAt = c.towers === 2 ? [-f.b + tw / 2, f.b - tw / 2] : c.towers === 1 ? [0] : [];
+  const towerAt = c.towers === 2 ? [-f.b + tw / 2, f.b - tw / 2] : c.towers === 1 ? [(c.side ?? 0) * (nw - tw / 2)] : [];
   const capB = paint(s, 'masonry', c.cap === 'dome' ? C.trim : C.roof);
   for (const w of towerAt) {
     const [t0, t1] = c.towers === 1 ? [f1 - tw, f1] : [f0, f1];
