@@ -1,7 +1,7 @@
 // Phase 6 track B (docs/plans/phase6.md §3.13, §5.2): the other teams, rebuilt from ticks (SPEC §7): a PlayerState per
 // slot interpolated remote.interpolationMs behind the server clock, drawn with CharacterModel + CharacterAnimator (team
 // shirt, name tag) and a BikeModel while riding; ghosts (no Rapier body), hidden beyond presence.renderRadius.
-import { MOVE_MODES, PLAYER_ACTIONS, type GestureKind, type MoveMode, type PlayerAction, type PoseSample, type TeamInfo, type TickEntry } from '@race/shared/protocol';
+import { type Avatar, MOVE_MODES, PLAYER_ACTIONS, type GestureKind, type MoveMode, type PlayerAction, type PoseSample, type TeamInfo, type TickEntry } from '@race/shared/protocol';
 import { MathUtils, type Scene, Vector3 } from 'three';
 import { bell } from '../audio/sfx.ts';
 import { bike as B, bikeTopSpeed, movement, playerSetup, remote as R } from '../config.ts';
@@ -126,12 +126,16 @@ export class RemotePlayers {
     public renderRadius: number,
   ) {}
 
-  /** Welcome.teams: names, colours, slots (also after a reconnect). */
+  /** Welcome.teams: names, colours, slots, avatars (also after a reconnect). */
   setTeams(teams: readonly TeamInfo[]) {
     this.teams = new Map(teams.map((t) => [t.slot, t]));
     for (const [slot, r] of this.slots) {
       const t = this.teams.get(slot);
       if (!t) continue;
+      if ((t.avatar ?? 0) !== r.model.avatar) {
+        this.drop(slot, r); // another body: rebuilt by the next tick
+        continue;
+      }
       if (t.name !== r.team.name) r.model.setName(t.name);
       if (t.colour !== r.team.colour) r.model.setShirt(t.colour);
       r.team = t;
@@ -139,11 +143,14 @@ export class RemotePlayers {
     }
   }
 
-  setOnline(slot: number, online: boolean) {
+  /** `team` message; Leg 2: online carries the avatar the team's client chose (another one → the body is rebuilt). */
+  setOnline(slot: number, online: boolean, avatar?: Avatar) {
     const t = this.teams.get(slot);
     if (t) t.online = online;
+    if (t && avatar !== undefined) t.avatar = avatar;
     const r = this.slots.get(slot);
-    if (r && !online) this.hide(r);
+    if (r && avatar !== undefined && avatar !== r.model.avatar) this.drop(slot, r);
+    else if (r && !online) this.hide(r);
   }
 
   /** One server tick: poses of the teams within the interest radius (never the local player). A slot missing from it
@@ -212,7 +219,7 @@ export class RemotePlayers {
     // ponytail: a team created after our welcome stays unseen until our next welcome (reconnect); the Host creates teams
     // before the start. Upgrade: `team` online messages carry the TeamInfo.
     if (!team) return undefined;
-    const model = new CharacterModel(this.asset, { shirt: team.colour, name: team.name });
+    const model = new CharacterModel(this.asset, { shirt: team.colour, name: team.name, avatar: team.avatar });
     model.root.visible = false;
     this.scene.add(model.root);
     const state: PlayerState = {
@@ -221,6 +228,12 @@ export class RemotePlayers {
     const r: Remote = { team, track: new Track(), model, animator: new CharacterAnimator(model), state, live: false };
     this.slots.set(slot, r);
     return r;
+  }
+
+  private drop(slot: number, r: Remote) {
+    r.model.dispose();
+    r.bike?.model.dispose();
+    this.slots.delete(slot);
   }
 
   private hide(r: Remote) {
@@ -278,9 +291,9 @@ export function parsePeers(v: string | null): FakePeer[] {
 
 const FAKE = { names: ['Đội Xanh', 'Đội Vàng', 'Đội Tím', 'Đội Cam'], colours: ['#2f7de1', '#e8c21c', '#8e44c9', '#f07f1d'], turn: 0.3 };
 
-/** Teams for fake peers: names / colours of a stand-in race. */
+/** Teams for fake peers: names / colours of a stand-in race, avatars alternating (Nam, Nữ, …). */
 export const fakeTeams = (peers: readonly FakePeer[]): TeamInfo[] =>
-  peers.map((p, i) => ({ slot: p.slot, id: `t${p.slot}`, name: FAKE.names[i % FAKE.names.length]!, colour: FAKE.colours[i % FAKE.colours.length]!, online: true }));
+  peers.map((p, i) => ({ slot: p.slot, id: `t${p.slot}`, name: FAKE.names[i % FAKE.names.length]!, colour: FAKE.colours[i % FAKE.colours.length]!, online: true, avatar: (i % 2) as Avatar }));
 
 /** The tick a server would send at `ms` (simulated clock): walkers go straight ahead at their mode's speed, riders at 60 %
  *  of the top speed along a circle (turn rate FAKE.turn: they lean); a peer with an action stands still and plays it,

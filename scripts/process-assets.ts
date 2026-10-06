@@ -11,9 +11,9 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { type Accessor, Document, type GLTF, type Material, type Mesh, NodeIO, type Texture } from '@gltf-transform/core';
+import { type Accessor, Document, type GLTF, type Material, NodeIO, type Node as GNode, type Texture } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { copyToDocument, dedup, meshopt, prune, resample, simplify, textureCompress, unpartition, weld } from '@gltf-transform/functions';
+import { dedup, meshopt, prune, resample, simplify, weld } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 // ponytail: @gltf-transform/extensions and sharp are dependencies of the approved @gltf-transform/{functions,cli}
 // (hoisted), not direct ones; add them to devDependencies if npm ever stops hoisting them.
@@ -21,6 +21,7 @@ import sharp from 'sharp';
 import { bikeModel, npc, npcAssets } from '../client/src/config.ts';
 import { UAL_CLIPS } from '../client/src/player/Animation.ts';
 import './assets/graphics8c.ts'; // Phase 8C graphics targets (hdri, textures, trees, props, flamme) + their credits.json lines
+import { BIP_TO_UE, maskTop, retargeter, type RigBone, sampleTrack, UE_TO_UAL } from './assets/rig.ts';
 import { inChrome, readFbxAvatar, readFbxClip, type RawAvatar, type RawClip, readFbxSoup, unb64 } from './fbx.ts';
 
 const root = join(import.meta.dirname, '..');
@@ -83,8 +84,7 @@ await MeshoptEncoder.ready;
 await MeshoptSimplifier.ready;
 
 
-// ── Player (docs/plans/phase3.md §2): UBC Superhero_Male + Hair_SimpleParted on one skin, and 15 UAL clips renamed to
-// its UE bone names (same tree and bone axes: no retargeting, only the pelvis translation scaled to the UBC hips).
+// ── UBC body + UAL clips: the NPC scooter / moto riders (riderTris) and the retarget source of the player clips. ──
 const UBC = join(src, 'Universal Base Characters[Standard]/Universal Base Characters[Standard]');
 const UAL = join(src, 'universal_animation_librarystandard/Animation Library[Standard]/Godot/AnimationLibrary_Godot_Standard.glb');
 const PLAYER_CLIPS = [...new Set([...Object.values(UAL_CLIPS), 'Death01'])]; // Death01: second half of the crash
@@ -96,86 +96,6 @@ async function readBody() {
   for (const img of json.images) if (!existsSync(join(dir, img.uri))) img.uri = img.uri.replace(/_png\.png$/, '.png');
   const resources = Object.fromEntries([...json.buffers, ...json.images].map(({ uri }) => [uri, new Uint8Array(readFileSync(join(dir, uri)))]));
   return io.readJSON({ json, resources });
-}
-
-async function player() {
-  const doc = await readBody();
-  const r = doc.getRoot();
-  const skin = r.listSkins()[0]!;
-  const armature = r.listNodes().find((n) => n.getName() === 'Armature')!;
-  const hairMat = r.listMaterials().find((m) => m.getName() === 'MI_Hair_1')!; // the eyebrows' material = the hair's
-  const hairDoc = await io.read(join(UBC, 'Hairstyles/Rigged to Head Bone/glTF (Godot -Unreal)/Hair_SimpleParted.gltf'));
-  const hairSkin = hairDoc.getRoot().listSkins()[0]!;
-  const hairNode = hairDoc.getRoot().listNodes().find((n) => n.getMesh())!;
-  // Same joint list; the hair skin is the generic one of every body, so only the joints it weights (Head) must bind alike.
-  const [hj, bj] = [hairSkin.listJoints(), skin.listJoints()];
-  const [hi, bi] = [hairSkin.getInverseBindMatrices()!.getArray()!, skin.getInverseBindMatrices()!.getArray()!];
-  const used = new Set<number>();
-  for (const p of hairNode.getMesh()!.listPrimitives()) {
-    const [J, W] = [p.getAttribute('JOINTS_0')!, p.getAttribute('WEIGHTS_0')!];
-    for (let i = 0; i < J.getCount(); i++) W.getElement(i, [0, 0, 0, 0]).forEach((w, c) => w > 0 && used.add(J.getElement(i, [0, 0, 0, 0])[c]!));
-  }
-  const bad = [...used].filter((j) => hj[j]!.getName() !== bj[j]?.getName() || [...Array(16).keys()].some((k) => Math.abs(hi[j * 16 + k]! - bi[j * 16 + k]!) > 1e-4));
-  if (bad.length) throw new Error(`player: hair joints ${bad.map((j) => hj[j]!.getName())} differ from the body skin`);
-  const hair = copyToDocument(doc, hairDoc, [hairNode.getMesh()!]).get(hairNode.getMesh()!) as Mesh;
-  for (const p of hair.listPrimitives()) p.setMaterial(hairMat);
-  armature.addChild(doc.createNode('Hair').setMesh(hair).setSkin(skin));
-  for (const p of r.listMeshes().flatMap((m) => m.listPrimitives())) {
-    for (const s of p.listSemantics()) if (/^COLOR_|^TEXCOORD_[1-9]/.test(s)) p.setAttribute(s, null); // white / unused
-  }
-  const body = r.listMaterials().find((m) => m.getName() === 'MI_Superhero_Male')!;
-  const rough = await sharp(body.getMetallicRoughnessTexture()!.getImage()!).stats();
-  body.setMetallicRoughnessTexture(null).setRoughnessFactor(rough.channels[1]!.mean / 255).setDoubleSided(false); // closed mesh
-  await doc.transform(
-    unpartition(),
-    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [256, 256], quality: 85, pattern: /Eye/ }),
-    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [1024, 1024], quality: 85, pattern: /^(?!.*Eye)/ }),
-  );
-  return doc;
-}
-
-async function playerAnims() {
-  const ubcSkin = (await readBody()).getRoot().listSkins()[0]!;
-  const ubc = ubcSkin.listJoints().filter((j) => !j.getName().includes('_leaf'));
-  const doc = await io.read(UAL);
-  const r = doc.getRoot();
-  const ual = r.listSkins()[0]!.listJoints();
-  if (ual.length !== ubc.length) throw new Error(`playerAnims: ${ual.length} UAL joints vs ${ubc.length} UBC`);
-  const name = new Map(ual.map((j, i) => [j, ubc[i]!.getName()]));
-  ual.forEach((j, i) => {
-    const [a, b] = [j.getParentNode(), ubc[i]!.getParentNode()];
-    if (i > 0 && name.get(a!) !== b?.getName()) throw new Error(`playerAnims: ${j.getName()} parent ${a?.getName()} ≠ ${b?.getName()}`);
-  });
-  const [root, hips] = [ual[0]!, ual[1]!];
-  const k = ubc[1]!.getTranslation()[2] / hips.getTranslation()[2]; // hip height at rest (root frame is z-up): legs longer
-  for (const n of r.listNodes()) if (n.getMesh()) n.dispose();
-  r.listSkins()[0]!.dispose();
-  for (const [j, n] of name) j.setName(n);
-  const scaled = new Set<Accessor>();
-  for (const a of r.listAnimations()) {
-    if (!PLAYER_CLIPS.includes(a.getName())) {
-      for (const s of a.listSamplers()) s.dispose(); // orphan samplers would keep their accessors from prune()
-      a.dispose();
-      continue;
-    }
-    for (const ch of a.listChannels()) {
-      const [node, path, s] = [ch.getTargetNode(), ch.getTargetPath(), ch.getSampler()!];
-      if (node === hips && path === 'translation') {
-        const o = s.getOutput()!;
-        if (!scaled.has(o)) o.setArray(Float32Array.from(o.getArray()!, (v) => v * k));
-        scaled.add(o);
-      } else if (path !== 'rotation' || node === root) {
-        ch.dispose();
-        s.dispose();
-      }
-    }
-  }
-  const clips = r.listAnimations().map((a) => a.getName());
-  if (clips.length !== PLAYER_CLIPS.length) throw new Error(`playerAnims: clips ${clips} ≠ ${PLAYER_CLIPS}`);
-  if (r.listNodes().some((n) => n.getName().startsWith('DEF-'))) throw new Error('playerAnims: DEF- bone left');
-  console.log(`player-anims: ${clips.length} clip, hông × ${k.toFixed(4)}`);
-  await doc.transform(resample());
-  return doc;
 }
 
 // ── Bike (docs/plans/phase4.md §2.1, track A): Poly "Bicycle", one mesh of 6 materials, faces +Z, raw units. Split by
@@ -737,78 +657,113 @@ async function readTga(file: string, size: number, opaque: boolean) {
   }
 }
 
-async function npcPeds() {
-  const N = npcAssets;
-  const tile = N.atlas / 2;
-  const raws = await inChrome(async (page) => {
+type Acc = (type: 'SCALAR' | 'VEC2' | 'VEC3' | 'VEC4' | 'MAT4', a: Float32Array | Uint16Array | Uint32Array) => Accessor;
+const TILES = ['body', 'head', 'opacity'] as const;
+
+/** Reads Rocketbox avatars' FBX in Chrome (one browser for the list). */
+const readRbAvatars = (list: readonly { dir: string; name: string }[]) =>
+  inChrome(async (page) => {
     const r: RawAvatar[] = [];
-    for (const a of AVATARS) r.push(await readFbxAvatar(page, join(RB, a.dir, 'Export', `${a.name}.fbx`)));
+    for (const a of list) r.push(await readFbxAvatar(page, join(RB, a.dir, 'Export', `${a.name}.fbx`)));
     return r;
   });
+
+/** Atlas tiles of an avatar at `tile`² RGBA: body, head, opacity (null when the avatar has none: the tile stays black). */
+const rbTiles = (a: { dir: string; tex: string }, tile: number) =>
+  Promise.all(TILES.map((k) => {
+    const file = join(RB, a.dir, 'Textures', `${a.tex}_${k}_color.tga`);
+    return k === 'opacity' && !existsSync(file) ? null : readTga(file, tile, k !== 'opacity');
+  }));
+
+/** 2×2 atlas (`size`²) of the tiles in order: body (top left) | head (top right) / opacity (bottom left) | 4th (bottom
+ *  right); black background, alpha 1; WebP. `keepAlpha`: the tiles' alpha is copied as is (player: hair cut-out + tint
+ *  mask). ponytail: without it sharp composites 'over' the opaque background, which flattens the opacity tile (npc-peds.glb
+ *  as committed: NPC hair cards opaque); rebuild npc-peds with keepAlpha to cut them out. */
+async function rbAtlas(tiles: readonly (Buffer | null)[], size: number, keepAlpha = false) {
+  const tile = size / 2;
+  if (keepAlpha) {
+    const px = Buffer.alloc(size * size * 4);
+    for (let i = 3; i < px.length; i += 4) px[i] = 255;
+    tiles.forEach((t, k) => {
+      for (let y = 0; t && y < tile; y++) t.copy(px, ((Math.floor(k / 2) * tile + y) * size + (k % 2) * tile) * 4, y * tile * 4, (y + 1) * tile * 4);
+    });
+    return new Uint8Array(await sharp(px, { raw: { width: size, height: size, channels: 4 } }).webp({ quality: 85, alphaQuality: 100 }).toBuffer());
+  }
+  const atlas = sharp({ create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }).composite(
+    tiles.flatMap((input, i) => (input ? [{ input, raw: { width: tile, height: tile, channels: 4 as const }, left: (i % 2) * tile, top: Math.floor(i / 2) * tile }] : [])),
+  );
+  return new Uint8Array(await atlas.webp({ quality: 85, alphaQuality: 100 }).toBuffer());
+}
+
+/** A Rocketbox avatar's skinned geometry (bind matrix and ×0.01 baked in: the glTF mesh node is the identity; UVs → the
+ *  atlas tiles, V flipped to glTF) and its skeleton under `group` (cm → m), checked against the file's inverse binds. */
+function rbSkinned(doc: Document, acc: Acc, raw: RawAvatar, group: GNode, name: string) {
+  const [P, Nr, UV, SW] = [unb64(raw.pos, Float32Array), unb64(raw.nrm, Float32Array), unb64(raw.uv, Float32Array), unb64(raw.skinWeight, Float32Array)];
+  const SI = unb64(raw.skinIndex, Uint16Array);
+  const n = P.length / 3;
+  const [pos, nrm, uv] = [new Float32Array(n * 3), new Float32Array(n * 3), new Float32Array(n * 2)];
+  for (let i = 0; i < n; i++) {
+    pos.set(xform(raw.bind, [P[i * 3]!, P[i * 3 + 1]!, P[i * 3 + 2]!]).map((v) => v * CM), i * 3);
+    nrm.set(xform(raw.bind, [Nr[i * 3]!, Nr[i * 3 + 1]!, Nr[i * 3 + 2]!], 0), i * 3);
+  }
+  for (const g of raw.groups) {
+    const k = TILES.findIndex((s) => g.material.endsWith(s));
+    if (k < 0) throw new Error(`${name}: material ${g.material}`);
+    for (let i = g.start; i < g.start + g.count; i++) {
+      const [u, v] = [Math.min(1, Math.max(0, UV[i * 2]!)), Math.min(1, Math.max(0, 1 - UV[i * 2 + 1]!))];
+      uv.set([((k % 2) + u) / 2, (Math.floor(k / 2) + v) / 2], i * 2);
+    }
+  }
+  const nodes = new Map(raw.bones.map((b) => [b.name, doc.createNode(b.name).setTranslation(b.p.map((v) => v * CM) as [number, number, number]).setRotation(b.q as [number, number, number, number])]));
+  const byName = new Map(raw.bones.map((b) => [b.name, b]));
+  const world = new Map<string, Mat4>(); // bones come in file order: a parent may follow its child
+  const worldOf = (b: (typeof raw.bones)[number]): Mat4 => {
+    if (!world.has(b.name)) {
+      const local = compose(b.p.map((v) => v * CM), b.q);
+      world.set(b.name, b.parent ? mul(worldOf(byName.get(b.parent)!), local) : local);
+    }
+    return world.get(b.name)!;
+  };
+  for (const b of raw.bones) {
+    (b.parent ? nodes.get(b.parent)! : group).addChild(nodes.get(b.name)!);
+    worldOf(b);
+  }
+  const ibm = unb64(raw.inverses, Float32Array);
+  const joints = raw.bones.slice(raw.skin);
+  let err = 0;
+  joints.forEach((b, j) => {
+    for (const t of [12, 13, 14]) ibm[j * 16 + t]! *= CM;
+    const m = mul(world.get(b.name)!, [...ibm.slice(j * 16, j * 16 + 16)]);
+    m.forEach((v, i) => (err = Math.max(err, Math.abs(v - Number(i % 5 === 0)))));
+  });
+  if (err > 2e-3) throw new Error(`${name}: bind pose ≠ inverse bind matrices (${err.toFixed(4)})`);
+  const skin = doc.createSkin(name).setSkeleton(nodes.get(raw.bones[0]!.name)!).setInverseBindMatrices(acc('MAT4', ibm));
+  for (const b of joints) skin.addJoint(nodes.get(b.name)!);
+  const attrs: Mesh3['attrs'] = {
+    POSITION: { type: 'VEC3', array: pos }, NORMAL: { type: 'VEC3', array: nrm }, TEXCOORD_0: { type: 'VEC2', array: uv },
+    JOINTS_0: { type: 'VEC4', array: SI }, WEIGHTS_0: { type: 'VEC4', array: SW },
+  };
+  return { attrs, skin, nodes, world, joints: joints.map((b) => b.name) };
+}
+
+async function npcPeds() {
+  const N = npcAssets;
+  const raws = await readRbAvatars(AVATARS);
   copyFileSync(join(RB, '../LICENSE.md'), join(out, 'LICENSE-rocketbox.md')); // MIT: the notice must ship with the models
   const doc = new Document();
   const buffer = doc.createBuffer();
   const scene = doc.createScene('npc-peds');
-  const acc = (type: 'SCALAR' | 'VEC2' | 'VEC3' | 'VEC4' | 'MAT4', a: Float32Array | Uint16Array | Uint32Array) => doc.createAccessor().setType(type).setArray(a as never).setBuffer(buffer);
+  const acc: Acc = (type, a) => doc.createAccessor().setType(type).setArray(a as never).setBuffer(buffer);
   for (const [ai, a] of AVATARS.entries()) {
-    const raw = raws[ai]!;
     // atlas: body (top left) | head (top right) / opacity (bottom left); alpha only in the opacity tile
-    const px = await Promise.all((['body', 'head', 'opacity'] as const).map((k) => readTga(join(RB, a.dir, 'Textures', `${a.tex}_${k}_color.tga`), tile, k !== 'opacity')));
-    const atlas = sharp({ create: { width: N.atlas, height: N.atlas, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } }).composite(
-      px.map((input, i) => ({ input, raw: { width: tile, height: tile, channels: 4 as const }, left: (i % 2) * tile, top: Math.floor(i / 2) * tile })),
-    );
-    const image = new Uint8Array(await atlas.webp({ quality: 85, alphaQuality: 100 }).toBuffer());
+    const image = await rbAtlas(await rbTiles(a, N.atlas / 2), N.atlas);
     const tex = doc.createTexture(`${a.name}_atlas`).setImage(image).setMimeType('image/webp');
     const mat = doc.createMaterial(a.name).setBaseColorTexture(tex).setAlphaMode('MASK').setAlphaCutoff(0.5).setRoughnessFactor(0.9).setMetallicFactor(0).setDoubleSided(true);
-    // geometry: bind matrix and ×0.01 baked in (the glTF mesh node is the identity), UVs → atlas tiles, V flipped to glTF
-    const [P, Nr, UV, SW] = [unb64(raw.pos, Float32Array), unb64(raw.nrm, Float32Array), unb64(raw.uv, Float32Array), unb64(raw.skinWeight, Float32Array)];
-    const SI = unb64(raw.skinIndex, Uint16Array);
-    const n = P.length / 3;
-    const [pos, nrm, uv] = [new Float32Array(n * 3), new Float32Array(n * 3), new Float32Array(n * 2)];
-    for (let i = 0; i < n; i++) {
-      pos.set(xform(raw.bind, [P[i * 3]!, P[i * 3 + 1]!, P[i * 3 + 2]!]).map((v) => v * CM), i * 3);
-      nrm.set(xform(raw.bind, [Nr[i * 3]!, Nr[i * 3 + 1]!, Nr[i * 3 + 2]!], 0), i * 3);
-    }
-    for (const g of raw.groups) {
-      const k = (['body', 'head', 'opacity'] as const).findIndex((s) => g.material.endsWith(s));
-      if (k < 0) throw new Error(`npcPeds: material ${g.material}`);
-      for (let i = g.start; i < g.start + g.count; i++) {
-        const [u, v] = [Math.min(1, Math.max(0, UV[i * 2]!)), Math.min(1, Math.max(0, 1 - UV[i * 2 + 1]!))];
-        uv.set([((k % 2) + u) / 2, (Math.floor(k / 2) + v) / 2], i * 2);
-      }
-    }
-    // skeleton (cm → m) and its check against the file's inverse bind matrices
     const group = doc.createNode(`ped_${ai}`).setExtras({ gender: a.gender, avatar: a.name, height: 0 });
-    const nodes = new Map(raw.bones.map((b) => [b.name, doc.createNode(b.name).setTranslation(b.p.map((v) => v * CM) as [number, number, number]).setRotation(b.q as [number, number, number, number])]));
-    const byName = new Map(raw.bones.map((b) => [b.name, b]));
-    const world = new Map<string, Mat4>(); // bones come in file order: a parent may follow its child
-    const worldOf = (b: (typeof raw.bones)[number]): Mat4 => {
-      if (!world.has(b.name)) {
-        const local = compose(b.p.map((v) => v * CM), b.q);
-        world.set(b.name, b.parent ? mul(worldOf(byName.get(b.parent)!), local) : local);
-      }
-      return world.get(b.name)!;
-    };
-    for (const b of raw.bones) {
-      (b.parent ? nodes.get(b.parent)! : group).addChild(nodes.get(b.name)!);
-      worldOf(b);
-    }
-    const ibm = unb64(raw.inverses, Float32Array);
-    const joints = raw.bones.slice(raw.skin);
-    let err = 0;
-    joints.forEach((b, j) => {
-      for (const t of [12, 13, 14]) ibm[j * 16 + t]! *= CM;
-      const m = mul(world.get(b.name)!, [...ibm.slice(j * 16, j * 16 + 16)]);
-      m.forEach((v, i) => (err = Math.max(err, Math.abs(v - Number(i % 5 === 0)))));
-    });
-    if (err > 2e-3) throw new Error(`npcPeds ${a.name}: bind pose ≠ inverse bind matrices (${err.toFixed(4)})`);
-    const skin = doc.createSkin(a.name).setSkeleton(nodes.get(raw.bones[0]!.name)!).setInverseBindMatrices(acc('MAT4', ibm));
-    for (const b of joints) skin.addJoint(nodes.get(b.name)!);
+    const { attrs: full, skin } = rbSkinned(doc, acc, raws[ai]!, group, a.name);
+    const pos = full.POSITION!.array;
+    const n = pos.length / 3;
     // LODs
-    const full: Mesh3['attrs'] = {
-      POSITION: { type: 'VEC3', array: pos }, NORMAL: { type: 'VEC3', array: nrm }, TEXCOORD_0: { type: 'VEC2', array: uv },
-      JOINTS_0: { type: 'VEC4', array: SI }, WEIGHTS_0: { type: 'VEC4', array: SW },
-    };
     const lod0 = await decimate({ attrs: full }, Infinity);
     const lod1 = await decimate({ attrs: lod0.attrs, index: lod0.index }, Math.min(N.lod1Ratio * triCount(lod0), 0.97 * N.maxTris.pedLod1), 0.05);
     for (const [lod, m] of [lod0, lod1].entries()) {
@@ -878,6 +833,252 @@ async function npcPedAnims() {
   return doc;
 }
 
+// ═════ Leg 2 player (docs/plans/leg2-characters.md (b)): two Rocketbox avatars (menu "Nhân vật: Nam / Nữ"), UAL clips
+// retargeted onto them. player.glb: nodes player_m / player_f (extras avatar, gender, height, stride), each a Bip01
+// skeleton whose body bones carry the client's UE names (rig.ts BONES: wave arm, rider IK, trunk) and ONE skinned
+// primitive (body + head + hair + a code-built backpack on spine_03) with ONE MASK material on a 2048² atlas: body | head /
+// opacity | backpack swatches. Atlas alpha outside the opacity tile = the team-colour mask (CharacterModel's shader):
+// 255 = as is, TINT_ALPHA = × team colour (the tank top, made a neutral grey with its folds; the backpack body).
+interface PlayerAvatar { dir: string; name: string; tex: string; gender: 'm' | 'f'; top: (r: number, g: number, b: number, x: number, y: number) => boolean }
+const PLAYER_AVATARS: readonly PlayerAvatar[] = [
+  // blue tank top (light side panels + navy middle): every clearly blue texel (shorts / skin / shoes are not)
+  { dir: 'Avatars/Professions/Sports_Male_04', name: 'Sports_Male_04', tex: 'm026', gender: 'm', top: (r, g, b) => b > r + 25 && b > g + 10 },
+  // grey tank top: its UV island (the middle column, above the watch), unsaturated, not the black gaps (trousers / shoes elsewhere)
+  { dir: 'Avatars/Professions/Sports_Female_02', name: 'Sports_Female_02', tex: 'f013', gender: 'f', top: (r, g, b, x, y) => x > 0.33 && x < 0.66 && y < 0.8 && Math.max(r, g, b) - Math.min(r, g, b) < 18 && r + g + b > 120 },
+];
+const PLAYER_ATLAS = 2048;
+const TINT_ALPHA = 153; // CharacterModel: tint m = (1 − a) × 2.5; above the 0.5 alpha cut (the shadow pass keeps the shirt)
+const TOP_GREY = 0.75; // linear grey of the median shirt texel (× team colour)
+// Backpack (≤ 600 triangles, bind pose, m): body W × H × D on the back, its top `below` under the shoulder joints; flap, a
+// light pocket + trim, two dark shoulder straps. Swatches in the 4th atlas tile: u (0–1 across it), sRGB, alpha.
+const PACK = { size: [0.28, 0.4, 0.16], round: 0.035, below: 0.04, gap: 0.01, strap: 0.011 } as const;
+const SWATCH = { body: { u: 0.25, rgb: [105, 105, 105], a: TINT_ALPHA }, trim: { u: 0.625, rgb: [226, 226, 220], a: 255 }, strap: { u: 0.875, rgb: [40, 40, 42], a: 255 } } as const;
+type Swatch = keyof typeof SWATCH;
+
+let playerRawsP: Promise<RawAvatar[]> | undefined;
+const playerRaws = () => (playerRawsP ??= readRbAvatars(PLAYER_AVATARS)); // one Chrome for player + player-anims
+
+/** Rounded box (centre c, size s, edge radius r): 6 faces × 3 × 3 quads, each edge bevelled in 2 segments (108 triangles). */
+function roundedBox(c: readonly number[], s: readonly number[], r0: number) {
+  const h = s.map((v) => v / 2);
+  const r = Math.min(r0, ...h.map((v) => v * 0.9));
+  const pos: number[] = [];
+  const nrm: number[] = [];
+  const at = (x: number[]) => {
+    const inner = x.map((v, k) => Math.max(-h[k]! + r, Math.min(h[k]! - r, v)));
+    const d = x.map((v, k) => v - inner[k]!);
+    const n = d.map((v) => v / Math.hypot(...d));
+    return { p: inner.map((v, k) => c[k]! + v + r * n[k]!), n };
+  };
+  for (let a = 0; a < 3; a++) {
+    for (const sg of [1, -1]) {
+      const [u, v] = [(a + 1) % 3, (a + 2) % 3];
+      const grid = (k: number) => [-h[k]!, -h[k]! + r, h[k]! - r, h[k]!];
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          const q = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([x, y]) => {
+            const p = [0, 0, 0];
+            p[a] = sg * h[a]!;
+            p[u] = grid(u)[x!]!;
+            p[v] = grid(v)[y!]!;
+            return at(p);
+          });
+          if (sg < 0) q.reverse(); // counter-clockwise seen from outside
+          for (const k of [0, 1, 2, 0, 2, 3]) pos.push(...q[k]!.p), nrm.push(...q[k]!.n);
+        }
+      }
+    }
+  }
+  return { pos, nrm };
+}
+
+/** The backpack as a triangle soup in the avatar's bind pose, UVs on the swatches. Placed from the body itself: its back
+ *  (min z of the spine-weighted vertices behind the pack), shoulder tops, chest. Each vertex is skinned like the nearest
+ *  spine-weighted body vertex (spine / neck / clavicle joints only, renormalised): it follows the back as it bends (one rigid
+ *  joint left it hanging off a rider's hunched back). */
+function backpack(body: Mesh3['attrs'], joints: readonly string[], world: ReadonlyMap<string, Mat4>) {
+  const [P, J, W] = [body.POSITION!.array, body.JOINTS_0!.array, body.WEIGHTS_0!.array];
+  const dom = (i: number) => {
+    let b = 0;
+    for (let c = 1; c < 4; c++) if (W[i * 4 + c]! > W[i * 4 + b]!) b = c;
+    return joints[J[i * 4 + b]!]!;
+  };
+  const verts = Array.from({ length: P.length / 3 }, (_, i) => ({ x: P[i * 3]!, y: P[i * 3 + 1]!, z: P[i * 3 + 2]!, bone: dom(i) }));
+  const torso = verts.filter((v) => /^Bip01_Spine[12]?$/.test(v.bone));
+  const [W0, H, D] = PACK.size;
+  const top = world.get('Bip01_L_UpperArm')![13]! - PACK.below;
+  const cy = top - H / 2;
+  const back = Math.min(...torso.filter((v) => Math.abs(v.x) < 0.12 && v.y > top - H && v.y < top).map((v) => v.z));
+  const cz = back - PACK.gap - D / 2;
+  const parts: [{ pos: number[]; nrm: number[] }, Swatch][] = [
+    [roundedBox([0, cy, cz], PACK.size, PACK.round), 'body'],
+    [roundedBox([0, top - 0.035, cz - 0.004], [W0 + 0.012, 0.07, D + 0.012], 0.03), 'body'], // flap
+    [roundedBox([0, cy - 0.06, cz - D / 2 - 0.018], [0.2, 0.16, 0.045], 0.02), 'trim'], // pocket
+    [bar([-W0 / 2, top - 0.072, cz - D / 2 - 0.008], [W0 / 2, top - 0.072, cz - D / 2 - 0.008], 0.007), 'trim'], // flap edge
+  ];
+  for (const side of [1, -1]) {
+    const near = (v: (typeof verts)[number], x: number, w: number) => Math.abs(v.x - side * x) < w;
+    const shoulder = verts.filter((v) => near(v, 0.1, 0.025) && Math.abs(v.z) < 0.12 && /Spine2|Clavicle|Neck/.test(v.bone)).reduce((m, v) => (v.y > m.y ? v : m));
+    const front = (y: number) => Math.max(...torso.filter((v) => near(v, 0.1, 0.03) && Math.abs(v.y - y) < 0.03).map((v) => v.z));
+    const pts = [
+      [side * 0.075, top - 0.03, back - 0.004],
+      [side * 0.1, shoulder.y + PACK.strap, shoulder.z],
+      [side * 0.105, shoulder.y - 0.08, front(shoulder.y - 0.08) + PACK.strap],
+      [side * 0.11, shoulder.y - 0.25, front(shoulder.y - 0.25) + PACK.strap],
+    ];
+    for (let k = 0; k < 3; k++) parts.push([bar(pts[k]!, pts[k + 1]!, PACK.strap), 'strap']);
+  }
+  const pos = parts.flatMap(([g]) => g.pos);
+  const n = pos.length / 3;
+  const keep = (j: number) => /^Bip01_(Spine\d?|Neck|[LR]_Clavicle)$/.test(joints[j]!);
+  const near = verts.flatMap((v, i) => (/^Bip01_Spine\d?$/.test(v.bone) ? [i] : []));
+  const [jo, we] = [new Uint16Array(n * 4), new Float32Array(n * 4)];
+  for (let k = 0; k < n; k++) {
+    const [x, y, z] = pos.slice(k * 3, k * 3 + 3) as [number, number, number];
+    const i = near.reduce((b, j) => (Math.hypot(verts[j]!.x - x, verts[j]!.y - y, verts[j]!.z - z) < Math.hypot(verts[b]!.x - x, verts[b]!.y - y, verts[b]!.z - z) ? j : b));
+    const w = [0, 1, 2, 3].map((c) => (keep(J[i * 4 + c]!) ? W[i * 4 + c]! : 0));
+    const sum = w.reduce((a, v) => a + v, 0);
+    for (let c = 0; c < 4; c++) (jo[k * 4 + c] = J[i * 4 + c]!), (we[k * 4 + c] = w[c]! / sum);
+  }
+  const uv = parts.flatMap(([g, s]) => Array.from({ length: g.pos.length / 3 }, () => [(1 + SWATCH[s].u) / 2, 0.75]).flat());
+  return {
+    POSITION: { type: 'VEC3', array: Float32Array.from(pos) },
+    NORMAL: { type: 'VEC3', array: Float32Array.from(parts.flatMap(([g]) => g.nrm)) },
+    TEXCOORD_0: { type: 'VEC2', array: Float32Array.from(uv) },
+    JOINTS_0: { type: 'VEC4', array: jo },
+    WEIGHTS_0: { type: 'VEC4', array: we },
+  } satisfies Mesh3['attrs'];
+}
+
+async function player() {
+  const raws = await playerRaws();
+  copyFileSync(join(RB, '../LICENSE.md'), join(out, 'LICENSE-rocketbox.md')); // MIT: the notice ships with the models
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const scene = doc.createScene('player');
+  const acc: Acc = (type, a) => doc.createAccessor().setType(type).setArray(a as never).setBuffer(buffer);
+  const tile = PLAYER_ATLAS / 2;
+  let hip0 = 0;
+  for (const [ai, a] of PLAYER_AVATARS.entries()) {
+    const raw = raws[ai]!;
+    const tiles = await rbTiles(a, tile);
+    const share = maskTop(tiles[0]!, tile, a.top, TOP_GREY, TINT_ALPHA);
+    const pack = Buffer.alloc(tile * tile * 4);
+    for (let i = 0; i < tile * tile; i++) {
+      const u = (i % tile) / tile;
+      const s = SWATCH[u < 0.5 ? 'body' : u < 0.75 ? 'trim' : 'strap'];
+      pack.set([...s.rgb, s.a], i * 4);
+    }
+    const tex = doc.createTexture(`${a.name}_atlas`).setImage(await rbAtlas([...tiles, pack], PLAYER_ATLAS, true)).setMimeType('image/webp');
+    const mat = doc.createMaterial(a.name).setBaseColorTexture(tex).setAlphaMode('MASK').setAlphaCutoff(0.5).setRoughnessFactor(0.85).setMetallicFactor(0).setDoubleSided(true);
+    const group = doc.createNode(`player_${a.gender}`);
+    const { attrs, skin, nodes, world, joints } = rbSkinned(doc, acc, raw, group, a.name);
+    for (const [bip, ue] of BIP_TO_UE) {
+      if (!nodes.has(bip)) throw new Error(`player ${a.name}: bone ${bip} missing`);
+      nodes.get(bip)!.setName(ue);
+    }
+    const bag = backpack(attrs, joints, world);
+    const merged = Object.fromEntries(Object.entries(attrs).map(([k, v]) => {
+      const b = bag[k as keyof typeof bag].array;
+      const m = new (v.array.constructor as Float32ArrayConstructor)(v.array.length + b.length);
+      m.set(v.array);
+      m.set(b, v.array.length);
+      return [k, { type: v.type, array: m }];
+    })) as Mesh3['attrs'];
+    const m = await decimate({ attrs: merged }, Infinity);
+    const prim = doc.createPrimitive().setMaterial(mat).setIndices(acc('SCALAR', m.index));
+    for (const [s, at] of Object.entries(m.attrs)) prim.setAttribute(s, acc(at.type, at.array));
+    group.addChild(doc.createNode(a.name).setMesh(doc.createMesh(a.name).addPrimitive(prim)).setSkin(skin));
+    const ys = attrs.POSITION!.array.filter((_, i) => i % 3 === 1);
+    const hip = world.get('Bip01_L_Thigh')![13]!;
+    hip0 ||= hip;
+    const height = +(Math.max(...ys) - Math.min(...ys)).toFixed(3);
+    // stride: × the clip speeds of character.clipSpeed (measured on the first avatar): legs this much longer
+    group.setExtras({ avatar: a.name, gender: a.gender, height, stride: +(hip / hip0).toFixed(3) });
+    scene.addChild(group);
+    console.log(`player: ${a.name} ${triCount(m)} tam giác (ba lô ${bag.POSITION.array.length / 9}), cao ${height} m, hông ${hip.toFixed(3)} m, áo ${(share * 100).toFixed(1)} % ô thân`);
+  }
+  return doc;
+}
+
+/** UAL clips (PLAYER_CLIPS) retargeted onto both avatars (rig.ts retargeter): m_<clip> / f_<clip>, rotations of the
+ *  mapped bones + the pelvis translation, on one set of nodes (the male rig, rest pose: the animation tests drive it). */
+async function playerAnims() {
+  const raws = await playerRaws();
+  const ual = (await io.read(UAL)).getRoot();
+  const src: RigBone[] = ual.listNodes().filter((n) => !n.getMesh()).map((n) => ({ name: n.getName(), parent: n.getParentNode()?.getName() ?? null, t: n.getTranslation(), q: n.getRotation() }));
+  const pairs = new Map([...UE_TO_UAL]);
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const scene = doc.createScene('player-anims');
+  const acc = (type: 'SCALAR' | 'VEC3' | 'VEC4', a: Float32Array) => doc.createAccessor().setType(type).setArray(a as never).setBuffer(buffer);
+  const node = new Map<string, GNode>();
+  const report: string[] = [];
+  for (const [ai, a] of PLAYER_AVATARS.entries()) {
+    const seen = new Set<string>();
+    const dst: RigBone[] = raws[ai]!.bones
+      .filter((b) => !FACE_BONE.test(b.name) && !seen.has(b.name) && seen.add(b.name))
+      .map((b) => ({ name: BIP_TO_UE.get(b.name) ?? b.name, parent: b.parent && (BIP_TO_UE.get(b.parent) ?? b.parent), t: b.p.map((v) => v * CM), q: b.q }));
+    if (!ai) {
+      for (const b of dst) node.set(b.name, doc.createNode(b.name).setTranslation(b.t as [number, number, number]).setRotation(b.q as [number, number, number, number]));
+      for (const b of dst) (b.parent ? node.get(b.parent)! : scene).addChild(node.get(b.name)!);
+    }
+    const { frame, k } = retargeter(src, dst, pairs, 'pelvis', ['thigh_l', 'DEF-thigh.L']);
+    for (const clip of PLAYER_CLIPS) {
+      const anim = ual.listAnimations().find((x) => x.getName() === clip);
+      if (!anim) throw new Error(`playerAnims: UAL clip ${clip} missing`);
+      // source tracks: rotations of every bone but the root, the hips translation (no root motion), as before
+      const tracks = anim.listChannels().filter((ch) => ch.getTargetNode()!.getName() !== 'root' && (ch.getTargetPath() === 'rotation' || (ch.getTargetPath() === 'translation' && ch.getTargetNode()!.getName() === 'DEF-hips')));
+      for (const ch of tracks) if (ch.getSampler()!.getInterpolation() !== 'LINEAR') throw new Error(`playerAnims: ${clip} not LINEAR`);
+      const times = [...new Set(tracks.flatMap((ch) => [...ch.getSampler()!.getInput()!.getArray()!].map((t) => +t.toFixed(5))))].sort((x, y) => x - y);
+      const out = new Map<string, number[]>(); // "bone.rotation" / "pelvis.translation" → values
+      const balls: number[][] = [];
+      for (const t of times) {
+        const pose = new Map<string, { t?: number[]; q?: number[] }>();
+        for (const ch of tracks) {
+          const s = ch.getSampler()!;
+          const v = sampleTrack(s.getInput()!.getArray()!, s.getOutput()!.getArray()!, ch.getTargetPath() === 'rotation' ? 4 : 3, t);
+          const n = ch.getTargetNode()!.getName();
+          pose.set(n, { ...pose.get(n), [ch.getTargetPath() === 'rotation' ? 'q' : 't']: v });
+        }
+        const { local, world } = frame(pose);
+        for (const [b, l] of local) {
+          const r = out.get(`${b}.rotation`) ?? [];
+          const q = l.q.toArray();
+          const prev = r.slice(-4);
+          if (prev.length && prev.reduce((s, x, c) => s + x * q[c]!, 0) < 0) q.forEach((x, c) => (q[c] = -x)); // one hemisphere
+          out.set(`${b}.rotation`, [...r, ...q]);
+          if (l.t) out.set(`${b}.translation`, [...(out.get(`${b}.translation`) ?? []), ...l.t.toArray()]);
+        }
+        balls.push(['ball_l', 'ball_r'].flatMap((n) => [world.get(n)!.elements[13]!, world.get(n)!.elements[14]!]));
+      }
+      const anim2 = doc.createAnimation(`${a.gender}_${clip}`);
+      const input = acc('SCALAR', Float32Array.from(times));
+      for (const [key, values] of out) {
+        const [b, path] = key.split('.') as [string, 'rotation' | 'translation'];
+        const s = doc.createAnimationSampler().setInput(input).setOutput(acc(path === 'rotation' ? 'VEC4' : 'VEC3', Float32Array.from(values))).setInterpolation('LINEAR');
+        anim2.addSampler(s).addChannel(doc.createAnimationChannel().setTargetNode(node.get(b)!).setTargetPath(path).setSampler(s));
+      }
+      // checks: feet on the ground standing; stance-foot speed of the locomotion clips (feet do not slide at it)
+      const low = Math.min(balls[0]![0]!, balls[0]![2]!);
+      if (clip === 'Idle_Loop' && Math.abs(low) > 0.06) throw new Error(`playerAnims ${a.name}: Idle_Loop toes at y ${low.toFixed(3)} m`);
+      if (clip === 'Walk_Loop' || clip === 'Jog_Fwd_Loop') {
+        const v: number[] = [];
+        for (let f = 1; f < times.length; f++) {
+          const dt = times[f]! - times[f - 1]!;
+          const minY = Math.min(...balls.map((b) => Math.min(b[0]!, b[2]!)));
+          for (const c of [0, 2]) if (balls[f]![c]! < minY + 0.02) v.push(-(balls[f]![c + 1]! - balls[f - 1]![c + 1]!) / dt);
+        }
+        report.push(`${a.gender}_${clip} ${(v.reduce((s, x) => s + x, 0) / v.length).toFixed(2)} m/s`);
+      }
+      if (clip === 'Idle_Loop') report.push(`${a.gender} hông × ${k.toFixed(3)}, ngón chân Idle y ${low.toFixed(3)} m`);
+    }
+  }
+  console.log(`player-anims: ${doc.getRoot().listAnimations().length} clip; ${report.join(', ')}`);
+  await doc.transform(resample(), dedup());
+  return doc;
+}
+
 mkdirSync(out, { recursive: true });
 const BUILDS = [['player', player], ['player-anims', playerAnims], ['bike', bike], ['npc-vehicles', npcVehicles], ['npc-peds', npcPeds], ['npc-ped-anims', npcPedAnims]] as const;
 for (const [name, build] of BUILDS.filter(([n]) => !only.length || only.includes(n))) {
@@ -890,7 +1091,7 @@ for (const [name, build] of BUILDS.filter(([n]) => !only.length || only.includes
   if (bytes > MAX_BYTES) throw new Error(`${file} > 25 MB`);
 }
 const playerBytes = ['player', 'player-anims'].reduce((s, n) => s + (existsSync(join(out, `${n}.glb`)) ? statSync(join(out, `${n}.glb`)).size : 0), 0);
-if (playerBytes > 2 * 2 ** 20) throw new Error(`player*.glb ${(playerBytes / 2 ** 20).toFixed(2)} MB > 2 MB (docs/plans/phase3.md §8)`);
+if (playerBytes > 6 * 2 ** 20) throw new Error(`player*.glb ${(playerBytes / 2 ** 20).toFixed(2)} MB > 6 MB (Leg 2: two avatars ≤ 2.5 MB + clips)`);
 
 // credits.json: every downloaded asset (manifest.json written by the download step) + the map data. Each line = a
 // Vietnamese usage label + the manifest attribution (its own label prefix dropped); "(đã chỉnh sửa)" only on the files
@@ -905,10 +1106,19 @@ const ROCKETBOX: Entry = {
   attribution: 'Người đi đường: "Microsoft Rocketbox Avatar Library" – © 2020 Microsoft, MIT, qua GitHub (đã chỉnh sửa)',
   usedFor: 'Pedestrian NPC: 4 avatars + 14 animations (LICENSE-rocketbox.md ships with the models)',
 };
+// Leg 2: the player avatars (docs/plans/leg2-characters.md (b), the 7 files approved 2026-10-06; same MIT notice file)
+const ROCKETBOX_PLAYER: Entry = {
+  name: 'rocketbox-player',
+  pageUrl: 'https://github.com/microsoft/Microsoft-Rocketbox',
+  licence: 'MIT',
+  author: 'Microsoft',
+  attribution: 'Người chơi (nhân vật): "Microsoft Rocketbox Avatar Library" (Sports_Male_04, Sports_Female_02) – © 2020 Microsoft, MIT, qua GitHub (đã chỉnh sửa)',
+  usedFor: 'Player character: 2 avatars + a code-built backpack (LICENSE-rocketbox.md ships with the models)',
+};
 const all = JSON.parse(readFileSync(join(src, 'manifest.json'), 'utf8')) as Entry[];
-const manifest = [...all.filter((e) => !e.name.startsWith('ped-')), ...(all.some((e) => e.name === 'rocketbox') ? [] : [ROCKETBOX])];
+const manifest = [...all.filter((e) => !e.name.startsWith('ped-')), ...[ROCKETBOX, ROCKETBOX_PLAYER].filter((r) => !all.some((e) => e.name === r.name))];
 // read by eiffel() / arc() / player() / playerAnims() / bike() / npcVehicles() (scooter, moto) / npcPeds() above (the CC0 attributions carry no "(đã chỉnh sửa)" to keep)
-const MODIFIED = new Set(['eiffel_scott-marshall.glb', 'arc-triomphe_hoanghiepvu.glb', 'Universal Base Characters[Standard].zip', 'universal_animation_librarystandard.zip', 'bicycle_poly-by-google.glb', 'scooter_poly-by-google.glb', 'motorcycle_jeremy.glb', 'rocketbox']);
+const MODIFIED = new Set(['eiffel_scott-marshall.glb', 'arc-triomphe_hoanghiepvu.glb', 'Universal Base Characters[Standard].zip', 'universal_animation_librarystandard.zip', 'bicycle_poly-by-google.glb', 'scooter_poly-by-google.glb', 'motorcycle_jeremy.glb', 'rocketbox', 'rocketbox-player']);
 const LABELS: [RegExp, string][] = [
   [/^eiffel_/, 'Tháp Eiffel'],
   [/^arc-triomphe_/, 'Khải Hoàn Môn'],
@@ -916,9 +1126,10 @@ const LABELS: [RegExp, string][] = [
   [/^(free_low_poly_vehicles|suv|taxi|truck)/, 'Xe NPC'],
   [/^(scooter|motorcycle)_/, 'Xe máy NPC'],
   [/^bicycle_/, 'Xe đạp'],
+  [/^rocketbox-player/, 'Người chơi (nhân vật)'],
   [/^rocketbox/, 'Người đi đường'],
   [/^universal_animation_library/, 'Người chơi (hoạt ảnh)'],
-  [/^Universal Base Characters/, 'Người chơi (nhân vật)'],
+  [/^Universal Base Characters/, 'Người lái xe máy NPC'], // Leg 2: no longer the player's body (riderTris)
 ];
 const label = (name: string) => {
   const hit = LABELS.find(([re]) => re.test(name));
@@ -938,6 +1149,8 @@ const credits = [
     url: 'https://github.com/tilezen/joerd/blob/master/docs/attribution.md',
   },
   ...manifest.map(credit),
+  // the 8C lines stay when no <assets>/8c is at hand (graphics8c.ts replaces them on exit when it is)
+  ...(existsSync(join(root, 'client/public/credits.json')) ? (JSON.parse(readFileSync(join(root, 'client/public/credits.json'), 'utf8')) as { set?: string }[]).filter((c) => c.set === '8c') : []),
 ];
 writeFileSync(join(root, 'client/public/credits.json'), `${JSON.stringify(credits, null, 1)}\n`);
 console.log(`client/public/credits.json: ${credits.length} mục`);

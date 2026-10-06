@@ -7,6 +7,7 @@ import { crashSound, bell, rolling } from '../audio/sfx.ts';
 import { bike as B, bikeModel, npc, playerSetup, thirdPersonCamera } from '../config.ts';
 import type { Input } from '../core/Input.ts';
 import type { CarKind, ExclusionZone, NpcAnchor } from '../npc/types.ts';
+import { pickAvatar } from '../ui/settings.ts';
 import { notice } from '../ui/Toasts.ts';
 import { type BikeAsset, loadBikeAsset } from '../vehicle/BikeModel.ts';
 import { Bikes, groundAt } from '../vehicle/Bikes.ts';
@@ -25,6 +26,8 @@ export interface PlayerOverrides {
   /** Phase 6: in a real race (?race=, not ?offline=1): the test hooks below are dropped (only npc* stay), no dev bikes
    *  (the server's shared bikes instead, track C). */
   online?: true;
+  /** Leg 2 "Nhân vật" (settings.pickAvatar: offline ?avatar=0|1 wins): 0 = Nam, 1 = Nữ. */
+  avatar?: 0 | 1;
   spawn?: { x: number; z: number; yawDeg: number };
   camMode?: CameraMode;
   /** Camera yaw relative to "behind the body", degrees (180 = in front, looking at the face). */
@@ -78,9 +81,11 @@ export function parseOverrides(q: URLSearchParams, online = false): PlayerOverri
     ...(zones.length ? { npcZones: zones } : {}),
     ...(test.length ? { npcTest: test } : {}),
   };
-  if (online) return { online: true, ...npcPart };
+  const avatar = pickAvatar(q, online);
+  if (online) return { online: true, avatar, ...npcPart };
   return {
     ...npcPart,
+    avatar,
     ...(p?.length === 3 && p.every(Number.isFinite) ? { spawn: { x: p[0]!, z: p[1]!, yawDeg: p[2]! } } : {}),
     ...(q.has('orbit') && Number.isFinite(orbit) ? { orbitDeg: orbit } : {}),
     camMode: oneOf(q.get('camMode'), thirdPersonCamera.modes),
@@ -157,7 +162,7 @@ export class Player {
   static async create(scene: Scene, world: RAPIER.World, camera: PerspectiveCamera, env: PlayerEnv, o: PlayerOverrides = {}, team?: { id: string; name: string; colour: string }) {
     const [character, bike] = await Promise.all([loadCharacterAsset(), loadBikeAsset()]);
     const [id, name, colour] = team ? [team.id, team.name, team.colour] : [playerSetup.teamName, playerSetup.teamName, playerSetup.teamColour];
-    const model = new CharacterModel(character, { shirt: colour, name });
+    const model = new CharacterModel(character, { shirt: colour, name, avatar: o.avatar });
     scene.add(model.root);
     const bikes = new Bikes(scene, bike, id);
     return new Player(model, bikes, { character, bike }, world, camera, env, o);

@@ -89,8 +89,8 @@
   "author": "Quaternius"
  },
  {
-  "title": "Người chơi (nhân vật): Universal Base Characters",
-  "text": "Người chơi (nhân vật): \"Universal Base Characters\" – Quaternius, qua itch.io (CC0, ghi nguồn cho lịch sự)",
+  "title": "Người lái xe máy NPC: Universal Base Characters",
+  "text": "Người lái xe máy NPC: \"Universal Base Characters\" – Quaternius, qua itch.io (CC0, ghi nguồn cho lịch sự)",
   "licence": "CC0 1.0",
   "url": "https://quaternius.itch.io/universal-base-characters",
   "author": "Quaternius"
@@ -105,6 +105,13 @@
  {
   "title": "Người đi đường: Microsoft Rocketbox Avatar Library",
   "text": "Người đi đường: \"Microsoft Rocketbox Avatar Library\" – © 2020 Microsoft, MIT, qua GitHub (đã chỉnh sửa)",
+  "licence": "MIT",
+  "url": "https://github.com/microsoft/Microsoft-Rocketbox",
+  "author": "Microsoft"
+ },
+ {
+  "title": "Người chơi (nhân vật): Microsoft Rocketbox Avatar Library",
+  "text": "Người chơi (nhân vật): \"Microsoft Rocketbox Avatar Library\" (Sports_Male_04, Sports_Female_02) – © 2020 Microsoft, MIT, qua GitHub (đã chỉnh sửa)",
   "licence": "MIT",
   "url": "https://github.com/microsoft/Microsoft-Rocketbox",
   "author": "Microsoft"

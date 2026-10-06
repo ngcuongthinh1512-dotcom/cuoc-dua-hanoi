@@ -797,11 +797,12 @@ export const playerSetup = {
 
 // ── A · character model + animation (player/CharacterModel.ts, player/Animation.ts, scripts/process-assets.ts) ──
 export const character = {
-  modelUrl: 'models/player.glb', // UBC Superhero_Male + Hair_SimpleParted, one skin (npm run process-assets)
-  clipsUrl: 'models/player-anims.glb', // 15 UAL clips, bones renamed to the UBC (UE) names
-  // shirt = team colour; bone-weight mask (docs/plans/phase3.md §2), colour where the mask passes smoothstep(edge)
-  // hair: tint × the grey UBC hair texture (T_Hair_1 is untinted, mean ≈ 0.56) → dark brown hair and eyebrows
-  outfit: { pants: '#2d3342', shoes: '#1d1d20', hair: '#8a6446', edge: [0.35, 0.65] as const },
+  // Leg 2: Rocketbox Sports_Male_04 / Sports_Female_02 + backpack (player_m / player_f, menu "Nhân vật"), one skin each
+  modelUrl: 'models/player.glb',
+  clipsUrl: 'models/player-anims.glb', // 15 UAL clips retargeted per avatar: m_* / f_* (scripts/assets/rig.ts)
+  // tank top + backpack = team colour × the atlas grey (folds kept); at night they also glow nightGlow × that colour
+  // (× lighting.emissiveScale) so the team still reads under the moon
+  outfit: { nightGlow: 0.35 },
   fade: 0.2, // s crossfade between clips
   // m: fixed frustum-culling sphere per skinned mesh, centre y above the feet; bones reach 2.06 m from it lying in the
   // crash (Death01 moves the pelvis back), 1.3 m swimming / celebrating; + mesh and hair around the bones
@@ -810,15 +811,16 @@ export const character = {
   // same at 3 m and 20 m); m above the head; hidden beyond maxDistance (m); canvas font px (texture resolution)
   nameTag: { lift: 0.2, scale: 0.05, maxDistance: 80, fontPx: 48 },
   // Locomotion playback = ground speed / the clip's own speed (m/s at timeScale 1), clamped: feet don't slide. Walk / jog:
-  // stance-foot speed measured on the clip × the hip-height ratio (1.035); swim: one stroke cycle ≈ 2.4 m.
-  clipSpeed: { Walk_Loop: 1.09, Jog_Fwd_Loop: 6.1, Swim_Fwd_Loop: 1.8 } as Readonly<Record<string, number>>,
+  // stance-foot speed of the retargeted clip on avatar 0 (process-assets player-anims prints it; avatar 1 × its stride);
+  // swim: one stroke cycle ≈ 2.4 m.
+  clipSpeed: { Walk_Loop: 0.94, Jog_Fwd_Loop: 5.68, Swim_Fwd_Loop: 1.8 } as Readonly<Record<string, number>>,
   timeScale: { min: 0.4, max: 1.6 },
   // m the body is raised while a clip plays, × its blend weight: Swim_Fwd_Loop lies horizontally at the pelvis height of
   // an upright swimmer (swim.floatDepth keeps the head of Swim_Idle_Loop out), which would sink the whole crawl.
   clipLift: { Swim_Fwd_Loop: 0.3 } as Readonly<Record<string, number>>,
   moveThreshold: 0.25, // m/s horizontal: below = idle / swimIdle / land
   // m/s: on foot Jog_Fwd_Loop from jogFrom[1], back to Walk_Loop below jogFrom[0]; in between both
-  // clips slide a little (Walk_Loop tops out at 1.09 × 1.6 = 1.74 m/s, Jog_Fwd_Loop starts at 6.1 × 0.4 = 2.44 m/s)
+  // clips slide a little (Walk_Loop tops out at 0.94 × 1.6 = 1.50 m/s, Jog_Fwd_Loop starts at 5.68 × 0.4 = 2.27 m/s)
   jogFrom: [1.8, 2.1] as const,
   jump: { startAt: 0.07, startSeconds: 0.45 }, // s into Jump_Start (push-off, after its crouch); s before Jump_Loop
   land: { seconds: 0.45, speed: 1.5 }, // Jump_Land (only when landing nearly still): s shown, playback speed

@@ -101,7 +101,7 @@ describe('NetClient (fake socket, fake timers)', () => {
     client = new NetClient(
       { race: 'paris', token: 'tok en', role: 'team' },
       { welcome: () => {}, tick: () => void ticks++, message: () => {}, status: (c, r) => void status.push([c, r]) },
-      { open: (u) => new FakeSocket(u), url: 'ws://x/api/race/paris/ws' },
+      { open: (u) => new FakeSocket(u), url: 'ws://x/api/race/paris/ws', avatar: 1 },
     );
     client.connect();
   });
@@ -111,7 +111,7 @@ describe('NetClient (fake socket, fake timers)', () => {
   });
 
   it('opens the race socket with the token; connected after the welcome; poses only then', () => {
-    expect(last().url).toBe('ws://x/api/race/paris/ws?token=tok%20en');
+    expect(last().url).toBe('ws://x/api/race/paris/ws?token=tok%20en&avatar=1'); // Leg 2: the avatar once per connection
     last().open();
     client.sendPose(pose(1));
     expect(last().sent).toEqual([]); // no welcome yet

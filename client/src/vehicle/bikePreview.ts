@@ -3,6 +3,7 @@
 //     fixes that bike's crank angle (°) · rider=1   the player on each bike (seated, IK) · speed=<m/s>   rolled for t s
 //   t=<s> (default 1) · lean=<°> (+ = right) · steer=<°> (+ = left) · owner=<#hex>   team lock marker · sparkle=1
 //   crash=1   bikes lying on their side, the player in the crash pose beside them · dist=<m> camera distance
+//   avatar=0|1|alt   Leg 2 rider body (Nam / Nữ; alt = by position)
 import * as THREE from 'three';
 import { bike as B, bikeModel, playerSetup, render as R } from '../config.ts';
 import { CharacterAnimator } from '../player/Animation.ts';
@@ -52,7 +53,8 @@ items.forEach(([yawDeg, crankDeg], i) => {
   };
   const model = new BikeModel(bikeAsset);
   scene.add(model.root);
-  const person3d = charAsset ? new CharacterModel(charAsset, { shirt: playerSetup.teamColour }) : undefined;
+  const avatar = q.get('avatar') === 'alt' ? i % 2 : num('avatar');
+  const person3d = charAsset ? new CharacterModel(charAsset, { shirt: playerSetup.teamColour, avatar }) : undefined;
   const anim = person3d ? new CharacterAnimator(person3d) : undefined;
   if (person3d) scene.add(person3d.root);
   for (let t = 0, dt = 1 / 60; t < T; t += dt) {

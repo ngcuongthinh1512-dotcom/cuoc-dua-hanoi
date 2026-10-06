@@ -25,10 +25,11 @@ export async function login(server: Harness, race: string, body: { code: string 
   return { status: r.status, body: (await r.json()) as { ok: boolean; token?: string; error?: string; team?: { id: string; slot: number } } };
 }
 
-/** A client socket with a message queue: `next()` resolves with the next parsed server message (or the close). */
-export async function openSocket(server: Harness, race: string, token: string) {
+/** A client socket with a message queue: `next()` resolves with the next parsed server message (or the close).
+ *  `query`: more URL parameters (Leg 2: `&avatar=1`). */
+export async function openSocket(server: Harness, race: string, token: string, query = '') {
   const { url } = await server.listen();
-  const ws = new WebSocket(`${url.origin.replace(/^http/, 'ws')}/api/race/${race}/ws?token=${encodeURIComponent(token)}`);
+  const ws = new WebSocket(`${url.origin.replace(/^http/, 'ws')}/api/race/${race}/ws?token=${encodeURIComponent(token)}${query}`);
   const queue: unknown[] = [];
   const waiters: ((m: unknown) => void)[] = [];
   const push = (m: unknown) => (waiters.length ? waiters.shift()!(m) : queue.push(m));

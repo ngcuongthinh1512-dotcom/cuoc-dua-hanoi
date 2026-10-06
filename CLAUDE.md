@@ -8,6 +8,7 @@
 > - Districts = the 5 freguesias (`PARISHES` in `geo/districts.ts`, OSM admin_level 6 + `name:pt`), not arrondissements.
 > - Paris landmark registry (`geo/landmarks.ts`), `PADS`, the Paris skyline and Haussmann style (`buildings.haussmannHeight`) are switched off; the g1–g5 files are Paris leftovers, kept until Macao replacements exist.
 > - Louvre room removed in Leg 2, see git history before commit 9425533 (`docs/reports/leg2-louvre-removed.md`).
+> - Player body = Rocketbox `Sports_Male_04` / `Sports_Female_02` + a code-built backpack (`player.glb` nodes `player_m` / `player_f`, Bip01 body bones renamed to the UE names by `scripts/assets/rig.ts`; `player-anims.glb` = the 15 UAL clips retargeted per avatar `m_*` / `f_*`); menu "Nhân vật: Nam / Nữ" (`settings.avatar`, DEV `?avatar=0|1` offline); protocol v10: socket URL `avatar`, `TeamInfo.avatar`, `team` online `{avatar}`; team colour = atlas alpha mask (tank top + backpack) in CharacterModel's shader (`docs/reports/leg2-player-avatars.md`). NPC pedestrians unchanged.
 > - Deploy names: Worker + R2 bucket `cuoc-dua-macao` / `cuoc-dua-macao-media` (never share them with the Paris deployment).
 
 Browser 3D race game (1 leg in central Paris) + Host screen. Full spec: `docs/SPEC.md` (§17 overrides earlier sections). Never edit `docs/SPEC.md` (only the orchestrator appends user decisions to §17).

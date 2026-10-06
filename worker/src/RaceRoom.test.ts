@@ -74,21 +74,26 @@ describe('RaceRoom', () => {
     expect(t.body.team).toMatchObject({ id: teamId, slot: 0 });
     const first = await openSocket(server, RACE, t.body.token!);
     const w = await first.next<Welcome>();
-    expect(w).toMatchObject({ role: 'team', team: { id: teamId, name: 'Đội Xanh', player: 'An', online: true }, pose: null });
+    expect(w).toMatchObject({ role: 'team', team: { id: teamId, name: 'Đội Xanh', player: 'An', online: true, avatar: 0 }, pose: null });
     expect(w.teams).toHaveLength(2);
     const st = w.start!; // Phase 7: a team never seen appears at its spot at the leg start (D17)
     await sleep(800); // D4: the trusted point may follow ≈ 6.5 m/s × the time since the socket opened
     first.send(encodePose({ x: st.x + 3, y: 0.5, z: st.z - 2, yaw: 1, mode: 'walk', action: 'none' }));
     first.send({ t: 'gesture', g: 'wave' });
-    const second = await openSocket(server, RACE, t.body.token!);
+    const second = await openSocket(server, RACE, t.body.token!, '&avatar=1'); // Leg 2: "Nhân vật: Nữ"
     expect(await first.next()).toMatchObject({ t: 'kick', reason: 'otherDevice' });
     expect(await first.next()).toMatchObject({ closed: CLOSE.otherDevice });
     const w2 = await second.next<Welcome>();
     expect(w2.pose).toMatchObject({ x: expect.closeTo(st.x + 3, 1), z: expect.closeTo(st.z - 2, 1), mode: 'walk', bikeId: null });
     const host = await openSocket(server, RACE, hostToken);
     const hw = await host.next<Welcome>();
-    expect(hw.teams.find((x) => x.id === teamId)?.online).toBe(true);
-    second.close();
+    expect(hw.teams.find((x) => x.id === teamId)).toMatchObject({ online: true, avatar: 1 }); // the newest socket's
+    expect(hw.teams.find((x) => x.id !== teamId)?.avatar).toBeUndefined(); // offline: unknown
+    const third = await openSocket(server, RACE, t.body.token!, '&avatar=7'); // anything but 1 = 0
+    expect(await host.until((m) => m.t === 'team' && m.online)).toMatchObject({ t: 'team', slot: 0, online: true, avatar: 0 });
+    expect(await second.until((m) => m.t === 'kick')).toMatchObject({ reason: 'otherDevice' });
+    second.close(); // like NetClient on a kick (here the server's close frame did not reach this Node socket in time)
+    third.close();
     expect(await host.until((m) => m.t === 'team')).toMatchObject({ t: 'team', slot: 0, online: false });
     host.close();
   });
