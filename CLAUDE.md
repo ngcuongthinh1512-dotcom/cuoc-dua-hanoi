@@ -77,3 +77,6 @@ docs/     SPEC.md, RACE_RULES.md (player rules, Vietnamese), plans/phase2.md (pa
 - Visual check via `npm run screenshot`, then look at the PNG.
 - Minimal code; deliberate shortcuts get `// ponytail: <ceiling>, <upgrade path>`.
 - Do not leave `wrangler dev` / `workerd` / `vite` running.
+
+## Leg 2 – phòng casino (quy ước, chưa bắt đầu)
+Làm trên nhánh git riêng + một merge commit; module tự chứa (client `casino/`, worker `casino.ts`, giao thức riêng) đăng ký qua một file registry loại thử thách; dữ liệu theo chặng ở thư mục theo chặng. Chi tiết: `docs/plans/leg2-master.md`.

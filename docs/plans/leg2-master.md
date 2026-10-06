@@ -21,6 +21,7 @@ Quy tắc mô hình: dùng **Opus**; **Fable chỉ khi thật sự cần** (anh 
 | B3 – Đêm đầy đủ | hộp mật thư / Chặng dừng / bậc thang sáng, đèn xe NPC, trời + biển + neon + đèn lồng + cửa sổ nhấp nháy | `40db8e2` |
 | R – Review và sửa | review code (Fable) + hình ảnh (Fable, Opus), sửa chữ Paris, điểm lộ trình bị chôn, collider chắn lối đi, DEM dọc đường, viền thảm Chặng dừng | `9cda91c` |
 | S – Tốc độ | hoàn lại ×1,5, hệ số xe đạp 1,3 | `512cd9b`, `9425533` |
+| P – Nhân vật | Rocketbox nam `Sports_Male_04` / nữ `Sports_Female_02` + ba lô code, chỉ người chơi (NPC giữ nguyên), giao thức v10 `avatar`, menu "Nhân vật" | `0b189db` (merge `63fe31f`) |
 | G1 – Grand Lisboa v2 | dựng lại theo ảnh thật (đế vòm, eo, đỉnh sen) | `e595592` |
 Số liệu lúc commit R: scripts 120, shared 82, client 865, worker 187 test xanh; `npm run build` thoát 0.
 
@@ -40,6 +41,11 @@ Số liệu lúc commit R: scripts 120, shared 82, client 865, worker 187 test x
 | 7 | D – Deploy riêng | tên Worker / R2 `cuoc-dua-macao`, `docs/DEPLOY.md` đúng tên, `HOST_PASSWORD`, `npm run deploy` do anh chạy | trang Host chạy trên miền riêng | tài khoản Cloudflare |
 | 8 | Tài liệu | `docs/RACE_RULES.md` cho Macao (đêm, tốc độ, phòng casino, luật không dùng AI), README, `TODO.md` | tài liệu khớp bản chạy | luật AI / hình thức đua |
 | 9 | Cổng cuối | `npm run build && npm test`, `sim --full`, chụp lại bộ ảnh, review cuối (Opus; Fable chỉ khi cần) | xanh, báo cáo `docs/reports/leg2-gate.md` | |
+
+## Quy ước phòng casino (để Leg 3 gỡ không tốn token)
+1. Làm trên **nhánh git riêng**, gộp vào main bằng **một merge commit** (Leg 3 fork từ commit trước đó hoặc `git revert -m 1`); không lẫn thay đổi khác.
+2. Dựng thành **module tự chứa**: thư mục riêng (client `casino/`, worker `casino.ts`, kiểu giao thức riêng), đăng ký qua **một file registry** loại thử thách; gỡ = xóa thư mục + một dòng.
+3. Dữ liệu riêng từng chặng (asset, file chặng, địa danh) nằm trong thư mục theo chặng; loại thử thách không dùng thì cứ để trống trong JSON của chặng.
 
 ## Việc nhỏ đã biết (chưa xếp phase)
 - ~~Phòng Louvre và nội dung Paris (chặng test `louvre.json`, `LouvreRoom.ts`, `client/public/art/`, kiểu `louvre`)~~ – đã gỡ ở C1.
