@@ -1,19 +1,17 @@
-// Track A (docs/plans/phase3.md §2): the skinned player body (public/models/player.glb + player-anims.glb, made by
-// scripts/process-assets.ts), loaded once and cloned per character. Team shirt / trousers / shoes are painted by a
-// bone-weight mask in one shared shader (per-instance colour uniforms); a canvas name tag sits above the head.
-// Unreadable files → console.warn and a capsule in the shirt colour (the game still runs).
+// Track A (docs/plans/phase3.md §2), Leg 2 (docs/plans/leg2-characters.md): the skinned player bodies (public/models/
+// player.glb: Rocketbox avatars player_m / player_f with a backpack + player-anims.glb: retargeted UAL clips m_* / f_*, made
+// by scripts/process-assets.ts), loaded once and cloned per character. The team colour tints the tank top and the backpack
+// through the atlas alpha (one shared shader, per-instance colour uniform; a little glow at night); a canvas name tag sits
+// above the head. Unreadable files → console.warn and a capsule in the shirt colour (the game still runs).
 import {
   type AnimationClip,
   AnimationMixer,
   Box3,
-  type BufferAttribute,
-  Float32BufferAttribute,
   CanvasTexture,
   CapsuleGeometry,
   Color,
   type ColorRepresentation,
   Group,
-  type InterleavedBufferAttribute,
   LOD,
   type Material,
   Mesh,
@@ -30,46 +28,33 @@ import {
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { character as C } from '../config.ts';
+import { character as C, lighting } from '../config.ts';
+import { isNight } from '../world/night.ts';
 
-/** Loaded once (body + clips); every CharacterModel clones it. Shared geometry / textures: never dispose them per model. */
+/** One avatar (body + its clips), loaded once; every CharacterModel clones it. Shared geometry / textures: never dispose
+ *  them per model. `avatars` (loadCharacterAsset): every avatar by index (0 = Nam, 1 = Nữ), the asset itself = avatar 0. */
 export interface CharacterAsset {
   readonly scene: Object3D;
   readonly clips: readonly AnimationClip[];
+  readonly avatars?: readonly CharacterAsset[];
 }
 
-/** Bones whose skin weights make the shirt (to the elbow), trousers (to the ankle), shoes: UBC / UE names. */
-export const OUTFIT_BONES = [/^(spine_0[1-3]|clavicle_|upperarm_)/, /^(pelvis|thigh_|calf_)/, /^(foot_|ball_)/] as const;
+/** Root nodes of player.glb by avatar index (settings "Nhân vật": 0 = Nam, 1 = Nữ) and their clip prefixes. */
+export const AVATARS = [{ node: 'player_m', clips: 'm_' }, { node: 'player_f', clips: 'f_' }] as const;
 
-type Attr = BufferAttribute | InterleavedBufferAttribute;
-/** Per vertex [shirt, pants, shoes] = the summed skin weights of each part's bones (0…1). */
-export function outfitMask(skinIndex: Attr, skinWeight: Attr, boneNames: readonly string[]): Float32Array {
-  const part = boneNames.map((n) => OUTFIT_BONES.findIndex((re) => re.test(n)));
-  const out = new Float32Array(skinIndex.count * 3);
-  for (let i = 0; i < skinIndex.count; i++) {
-    for (let c = 0; c < 4; c++) {
-      const k = part[skinIndex.getComponent(i, c)] ?? -1;
-      if (k >= 0) out[i * 3 + k]! += skinWeight.getComponent(i, c);
-    }
-  }
-  return out;
+/** The clips of avatar `i` (player-anims.glb `m_Idle_Loop`…) under their UAL names (Animation.ts UAL_CLIPS); a file
+ *  without prefixed clips (old rig, tests) keeps them all. */
+export function avatarClips(clips: readonly AnimationClip[], i: number): AnimationClip[] {
+  const p = AVATARS[i]?.clips ?? AVATARS[0].clips;
+  const own = clips.filter((c) => c.name.startsWith(p));
+  if (!own.length && !clips.some((c) => AVATARS.some((a) => c.name.startsWith(a.clips)))) return [...clips];
+  return own.map((c) => Object.assign(c.clone(), { name: c.name.slice(p.length) }));
 }
 
-/** Adds the outfit mask to every mesh that has one (unskinned = all shirt: the capsule) and the head height. */
+/** Bind-pose height (name tag) of the asset. */
 export function prepareAsset(scene: Object3D, clips: readonly AnimationClip[]): CharacterAsset {
   scene.updateMatrixWorld(true);
-  scene.traverse((o) => {
-    if (!(o instanceof Mesh)) return;
-    const g = o.geometry;
-    const mask =
-      o instanceof SkinnedMesh
-        ? outfitMask(g.getAttribute('skinIndex'), g.getAttribute('skinWeight'), o.skeleton.bones.map((b) => b.name))
-        : new Float32Array(g.getAttribute('position').count * 3).map((_, i) => (i % 3 ? 0 : 1));
-    if (mask.some((v) => v > 0)) g.setAttribute('outfit', new Float32BufferAttribute(mask, 3));
-    const m = o.material as MeshStandardMaterial;
-    if (m.name === 'MI_Hair_1') m.color.set(C.outfit.hair); // shared by hair + eyebrows, tinted once per asset
-  });
-  scene.userData.height = new Box3().setFromObject(scene).max.y; // skinned bounds in the bind pose
+  scene.userData.height ??= new Box3().setFromObject(scene).max.y; // skinned bounds in the bind pose
   return { scene, clips };
 }
 
@@ -77,7 +62,16 @@ export async function loadCharacterAsset(url = C.modelUrl, clipsUrl = C.clipsUrl
   try {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const [body, anims] = await Promise.all([loader.loadAsync(url), loader.loadAsync(clipsUrl)]);
-    return prepareAsset(body.scene, anims.animations);
+    const avatars = AVATARS.map(({ node }, i) => {
+      const scene = body.scene.getObjectByName(node);
+      if (!scene) throw new Error(`no ${node}`);
+      scene.removeFromParent();
+      // GLTFLoader makes node names unique across the file (the second skeleton's pelvis → pelvis_1): back to the bones'
+      // own names, which the clips and the animator use
+      scene.traverse((o) => typeof o.userData.name === 'string' && (o.name = o.userData.name));
+      return prepareAsset(scene, avatarClips(anims.animations, i));
+    });
+    return { ...avatars[0]!, avatars };
   } catch (e) {
     console.warn(`CharacterModel: ${url} / ${clipsUrl} missing or unreadable, capsule stand-in`, e);
     const body = new Mesh(new CapsuleGeometry(0.3, 1.2), new MeshStandardMaterial());
@@ -94,23 +88,31 @@ export interface CharacterOptions {
   tag?: ColorRepresentation;
   /** m from the camera beyond which the tag hides; omitted = character.nameTag.maxDistance. */
   tagDistance?: number;
+  /** Avatar index in CharacterAsset.avatars (0 = Nam, 1 = Nữ); omitted / unknown = 0. */
+  avatar?: number;
 }
 
-type OutfitUniforms = Record<'uShirt' | 'uPants' | 'uShoes', { value: Color }>;
-const [E0, E1] = C.outfit.edge.map((v) => v.toFixed(3));
-/** One function object for every instance → one shared program (customProgramCacheKey = its source). */
+type OutfitUniforms = Record<'uShirt', { value: Color }>;
+const GLOW = (C.outfit.nightGlow * lighting.emissiveScale).toFixed(3);
+/** One function object for every instance → one shared program (customProgramCacheKey = its source). Atlas tiles (uv):
+ *  body (0, 0) | head (1, 0) / opacity (0, 1) | backpack (1, 1); alpha in the body and backpack tiles = the tint mask
+ *  (1 = as is, ≤ 0.6 = × the team colour), in the opacity tile = the hair cut-out; no map (capsule) = all team colour. */
 function outfitShader(this: Material, shader: WebGLProgramParametersWithUniforms) {
   Object.assign(shader.uniforms, this.userData.outfit as OutfitUniforms);
-  shader.vertexShader = `attribute vec3 outfit;\nvarying vec3 vOutfit;\n${shader.vertexShader}`.replace(
-    '#include <begin_vertex>',
-    '#include <begin_vertex>\n\tvOutfit = outfit;',
-  );
-  shader.fragmentShader = `uniform vec3 uShirt, uPants, uShoes;\nvarying vec3 vOutfit;\n${shader.fragmentShader}`.replace(
-    '#include <map_fragment>',
-    `#include <map_fragment>
-\tvec3 outfitW = smoothstep(vec3(${E0}), vec3(${E1}), vOutfit);
-\tdiffuseColor.rgb = mix(mix(mix(diffuseColor.rgb, uShirt, outfitW.x), uPants, outfitW.y), uShoes, outfitW.z);`,
-  );
+  shader.fragmentShader = `uniform vec3 uShirt;\n${shader.fragmentShader}`
+    .replace(
+      '#include <map_fragment>',
+      `#include <map_fragment>
+#ifdef USE_MAP
+\tvec2 outfitTile = step(vec2(0.5), vMapUv);
+\tfloat outfitM = (1.0 - abs(outfitTile.x - outfitTile.y)) * clamp((1.0 - diffuseColor.a) * 2.5, 0.0, 1.0);
+\tdiffuseColor.a = mix(1.0, diffuseColor.a, outfitTile.y * (1.0 - outfitTile.x));
+#else
+\tfloat outfitM = 1.0;
+#endif
+\tdiffuseColor.rgb *= mix(vec3(1.0), uShirt, outfitM);`,
+    )
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>${isNight() ? `\n\ttotalEmissiveRadiance += diffuseColor.rgb * outfitM * ${GLOW};` : ''}`);
 }
 
 /** Canvas sprite, constant size on screen (character.nameTag), hidden beyond maxDistance by an LOD. STYLE_GUIDE:
@@ -149,18 +151,21 @@ export class CharacterModel {
   /** Bound to the cloned skeleton; the animator drives it. */
   readonly mixer: AnimationMixer;
   readonly clips: readonly AnimationClip[];
-  private readonly outfit: OutfitUniforms = {
-    uShirt: { value: new Color() },
-    uPants: { value: new Color(C.outfit.pants) },
-    uShoes: { value: new Color(C.outfit.shoes) },
-  };
-  private readonly materials: Material[] = []; // per-instance clones (the shared eye / hair materials are the asset's)
+  private readonly outfit: OutfitUniforms = { uShirt: { value: new Color() } };
+  private readonly materials: Material[] = []; // per-instance clones
   private readonly height: number;
+  /** Avatar index drawn (CharacterOptions.avatar, 0 when the asset has no such avatar). */
+  readonly avatar: number;
+  /** × character.clipSpeed: this avatar's legs are this much longer than avatar 0's (player.glb extras.stride). */
+  readonly stride: number;
   private tag: ReturnType<typeof nameTag> | undefined;
   private readonly tagColour: Color;
   private readonly tagDistance: number;
 
-  constructor(asset: CharacterAsset, opts: CharacterOptions) {
+  constructor(assets: CharacterAsset, opts: CharacterOptions) {
+    const asset = assets.avatars?.[opts.avatar ?? 0] ?? assets;
+    this.avatar = asset === assets ? 0 : (opts.avatar ?? 0);
+    this.stride = (asset.scene.userData.stride as number | undefined) ?? 1;
     const body = (this.body = cloneSkinned(asset.scene));
     body.rotation.y = Math.PI; // glTF faces +Z; PlayerState yaw 0 faces −Z
     body.updateMatrixWorld(true);
@@ -174,7 +179,6 @@ export class CharacterModel {
         const s = o.matrixWorld.getMaxScaleOnAxis();
         o.boundingSphere = new Sphere(new Vector3(0, y, 0).applyMatrix4(o.matrixWorld.clone().invert()), radius / s);
       }
-      if (!o.geometry.hasAttribute('outfit')) return;
       const m = (o.material as Material).clone();
       m.userData.outfit = this.outfit;
       m.onBeforeCompile = outfitShader;
@@ -214,9 +218,7 @@ export class CharacterModel {
     this.root.rotation.y = yaw;
   }
 
-  /** Frees what this instance owns (materials, tag texture, the cloned skeletons' bone textures), not the shared asset.
-   *  ponytail: SkeletonUtils.clone gives each of the 4 meshes its own Skeleton (4 bone textures per character); bind them
-   *  to one if Phase 4B crowds show bone uploads (player.glb's 4 skins have separate inverse-bind accessors). */
+  /** Frees what this instance owns (materials, tag texture, the cloned skeleton's bone texture), not the shared asset. */
   dispose() {
     this.body.traverse((o) => o instanceof SkinnedMesh && o.skeleton.dispose());
     this.root.removeFromParent();

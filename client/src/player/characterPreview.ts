@@ -3,6 +3,7 @@
 //   poses=idle,walk,jog,air,wave,openBox,celebrate,crash   one character per pose (AnimState / gesture names;
 //     `pose@s` = its own simulated time) · turn=<°>   extra body yaw (0 = facing the camera; 180 = backs)
 //   t=<s>   simulated time of the poses without @ (gestures start at 0) · dist=<m>   camera distance (default: fits the row)
+//   avatar=0|1|alt   Leg 2 body (Nam / Nữ; alt = Nam, Nữ, … by position, the default)
 import * as THREE from 'three';
 import { movement, playerSetup, render as R } from '../config.ts';
 import { CharacterAnimator } from './Animation.ts';
@@ -13,6 +14,7 @@ const q = new URLSearchParams(location.search);
 const poses = (q.get('poses') ?? 'idle,walk,jog,air,wave,openBox,celebrate,crash').split(',');
 const turn = THREE.MathUtils.degToRad(Number(q.get('turn') ?? 20));
 const T = Number(q.get('t') ?? 1.2);
+const avatarAt = (i: number) => (q.get('avatar') === '0' || q.get('avatar') === '1' ? Number(q.get('avatar')) : i % 2);
 const TEAMS = [['#d8342c', 'Đội Đỏ'], ['#2c6bd8', 'Đội Xanh']] as const;
 const GAP = 1.3; // m between characters
 const LIFT: Record<string, number> = { air: 0.4 }; // m: the jump loop above the ground
@@ -59,7 +61,7 @@ const width = (poses.length - 1) * GAP;
 const cast = poses.map((p, i) => {
   const [pose, at] = p.split('@') as [string, string?];
   const [shirt, name] = TEAMS[i % 2]!;
-  const model = new CharacterModel(asset, { shirt, name: i < 2 ? name : null }); // two tags: the rest would overlap
+  const model = new CharacterModel(asset, { shirt, name: i < 2 ? name : null, avatar: avatarAt(i) }); // two tags: the rest would overlap
   model.setPose(new THREE.Vector3(i * GAP - width / 2, LIFT[pose] ?? 0, 0), Math.PI + turn); // yaw π faces +Z (camera)
   scene.add(model.root);
   const anim = new CharacterAnimator(model);

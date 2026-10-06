@@ -164,7 +164,7 @@ Xong (báo cáo `docs/reports/phase11.md`): `sim --full` (Host bot Hoàn tác / 
 - Đồ họa SPEC §14 còn lại sau 8C: cascaded shadow map (hiện 1 hộp bóng 160 m đi theo camera, chưa snap theo texel nên mép bóng hơi rung), mặt trời thật + ngày–đêm (hiện cố định buổi chiều), bầu trời động (bloom, SMAA, cài đặt chất lượng đã có ở 8C).
 - LOD cho nhà (ban công, ống khói dựng ở mọi khoảng cách; cửa sổ chỉ vẽ trên texture), cây (140 tam giác/cây) và đồ phố; lượng tử hóa + Meshopt.
 - Giải phóng bản sao geometry trên CPU sau khi upload lên GPU.
-- Nhân vật: LOD / instancing cho nhân vật ở xa, thân nữ, texture KTX2.
+- Nhân vật: LOD / instancing cho nhân vật ở xa, texture KTX2 (thân nữ: xong ở Leg 2, `docs/reports/leg2-player-avatars.md`).
 - Chuẩn bị XONG (2026-10-03, `docs/reports/phase12-prep.md`): `docs/DEPLOY.md` (hướng dẫn cho người không chuyên: tài khoản, bucket R2, secret, `npm run deploy`, trang Host sau deploy, checklist trước ngày đua, hạn mức Free + bộ đếm, sự cố, xóa dữ liệu cũ) + lệnh `npm run deploy` (root → `wrangler deploy` trong worker); dry-run qua, file tĩnh lớn nhất 6,1 MB (`sky_2k.hdr`) ≤ 25 MB, không có nội dung chặng thật / đáp án / `chang-that` trong `client/dist` hay bundle Worker. **Chờ người dùng**: tạo tài khoản Cloudflare + `wrangler login`, rồi làm theo DEPLOY.md §2–3 (chưa deploy thật, chưa tạo bucket / secret).
 - Sau lần deploy đầu: đo số request / dòng ghi SQLite thực tế trên Cloudflare (Dashboard Metrics + mục "Hạn mức Cloudflare (ước tính)" trên trang Host) so với ngân sách ở SPEC §3 (Phase 11 đã đo bằng bot trong máy: `docs/reports/phase11.md`); ghi vào đây.
 
@@ -198,3 +198,4 @@ Xong (báo cáo `docs/reports/host-minimap.md`, ảnh `screenshots/p11-host-map.
 - Đo FPS thật trên máy thật (chất lượng cao / thấp); `sim --full` đo hạn mức 2 giờ cho Macao.
 - Nhập chặng thật (ngoài repo) + gắn lộ trình vào địa danh; `docs/RACE_RULES.md` cho Macao (đêm, tốc độ 4 / 5,2 m/s, luật không dùng AI).
 - Deploy riêng (`cuoc-dua-macao`, `cuoc-dua-macao-media`): anh làm theo `docs/DEPLOY.md`.
+- Nhân vật người chơi Rocketbox nam / nữ có ba lô (`docs/reports/leg2-player-avatars.md`) – còn lại: người đi đường NPC (`npc-peds.glb`) có tóc dạng thẻ bị mất alpha khi ghép atlas (sharp composite 'over' nền đen: tóc NPC vẽ đặc) – sửa = build lại `npc-peds` với `rbAtlas(…, keepAlpha)` khi anh cho đổi NPC; người dẫn Chặng dừng dùng nhân vật nam (áo màu tối); ba lô cứng xuyên đất khi nằm ngã (crash) và hơi xuyên vai khi giơ tay; chưa có LOD xa cho nhân vật (≈ 8–9 nghìn tam giác / người).

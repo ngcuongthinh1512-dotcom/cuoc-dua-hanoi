@@ -14,7 +14,9 @@
 //     client `watch on/off`, host.spectator rotate + HostState.spectatorCode / spectators, CLOSE.full / kick 'full'.
 // 8 = SPEC §17.44 multi-box tasks: TaskView.input 'parts' + partLabels, race answer {parts}, ReviewItem.partLabels.
 // 9 = Leg 2 (Macao): everything 4 added (the Louvre room) removed.
-export const PROTOCOL_VERSION = 9;
+// 10 = Leg 2 player avatars: the socket URL carries `avatar` (0 = Nam, 1 = Nữ, once per connection), TeamInfo.avatar,
+//      `team` online {avatar}. No per-tick byte.
+export const PROTOCOL_VERSION = 10;
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */

@@ -2,7 +2,7 @@
 // NET.sendHz only when the rounded array changed (SPEC §3), ops as JSON, `ping` every NET.pingMs (auto-answered by the
 // server without waking it: the round trip is the ping shown in F3), reconnects with backoff, stops on `kick`.
 import {
-  CLOSE, decodeTick, encodePose, NET, PROTOCOL_VERSION, samePose,
+  type Avatar, CLOSE, decodeTick, encodePose, NET, PROTOCOL_VERSION, samePose,
   type ClientMessage, type KickReason, type PoseSample, type ServerMessage, type TickArray, type TickEntry, type Welcome,
 } from '@race/shared/protocol';
 import { net, netClient, remote } from '../config.ts';
@@ -95,7 +95,8 @@ export class NetClient {
   constructor(
     readonly session: Session,
     readonly events: NetEvents,
-    private readonly deps: { open?: (url: string) => Socket; url?: string } = {},
+    /** open / url: tests; avatar: Leg 2 "Nhân vật" (the body others see), sent once per connection in the URL. */
+    private readonly deps: { open?: (url: string) => Socket; url?: string; avatar?: Avatar } = {},
   ) {}
 
   get connected() {
@@ -106,7 +107,7 @@ export class NetClient {
     if (this.stopped) return;
     const url =
       this.deps.url ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${net.apiBase}/race/${encodeURIComponent(this.session.race)}/ws`;
-    const ws = (this.ws = (this.deps.open ?? ((u) => new WebSocket(u) as unknown as Socket))(`${url}?token=${encodeURIComponent(this.session.token)}`));
+    const ws = (this.ws = (this.deps.open ?? ((u) => new WebSocket(u) as unknown as Socket))(`${url}?token=${encodeURIComponent(this.session.token)}&avatar=${this.deps.avatar ?? 0}`));
     ws.onmessage = (e) => typeof e.data === 'string' && this.receive(e.data);
     ws.onclose = (e) => this.closed(ws, e.code);
   }

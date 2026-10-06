@@ -306,7 +306,7 @@ async function start() {
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
         if (race?.message(m)) return; // race / book / zone (Phase 7) → RaceHud
-        if (m.t === 'team') remote?.setOnline(m.slot, m.online), spectate?.team(m.slot, m.online, m.racing);
+        if (m.t === 'team') remote?.setOnline(m.slot, m.online, m.avatar), spectate?.team(m.slot, m.online, m.racing);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') {
           if (m.code === 'penalized') toast(penalizedText(m.score, m.of)); // SPEC §17.31
@@ -320,7 +320,7 @@ async function start() {
         netPanel.textContent = connected ? '' : netDownText(reason ?? 'closed');
         netPanel.hidden = connected;
       },
-    });
+    }, { avatar: overrides.avatar }); // Leg 2: the body the other teams see ("Nhân vật"), once per connection
   if (net && player) {
     player.bikes.net = net; // team / colour: Player.create(…, session.team)
     player.bikes.ground = (x, z, y) => groundAt(world, x, z, Math.max(y, env.heightAt(x, z)) + 3);

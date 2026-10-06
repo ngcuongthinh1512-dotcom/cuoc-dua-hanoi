@@ -50,7 +50,15 @@ export interface TeamInfo {
   /** SPEC §17.40: still racing (not checked in, not out). The server always sends it; absent (demo / old data) = racing.
    *  The watch bar lists only online + racing teams. */
   racing?: boolean;
+  /** Leg 2: the body the team's client chose ("Nhân vật": 0 = Nam, 1 = Nữ), from its socket URL; absent (offline team,
+   *  demo) = 0. Other clients draw that avatar. */
+  avatar?: Avatar;
 }
+
+/** Leg 2 player avatar index (client CharacterModel AVATARS): 0 = Nam, 1 = Nữ. */
+export type Avatar = 0 | 1;
+/** The `avatar` socket URL parameter → an Avatar (anything else = 0). */
+export const avatarOf = (v: unknown): Avatar => (v === 1 || v === '1' ? 1 : 0);
 
 /** One shared bike (SPEC §6.2–6.4) as clients see it. parked = standing at a rack next to a checkpoint. */
 export interface BikeInfo {
@@ -419,8 +427,9 @@ export type ServerMessage =
   | TickArray
   | Welcome
   | { t: 'kick'; reason: KickReason }
-  /** A team went online / offline; SPEC §17.40: `racing` when that changed instead (checked in / out: the watch bar drops it). */
-  | { t: 'team'; slot: number; online: boolean; racing?: boolean }
+  /** A team went online / offline; SPEC §17.40: `racing` when that changed instead (checked in / out: the watch bar drops it).
+   *  Leg 2: online → also its avatar (the socket's). */
+  | { t: 'team'; slot: number; online: boolean; racing?: boolean; avatar?: Avatar }
   /** Changed bikes (full = the whole list); `gone` = ids that vanished (abandoned, replaced, removed by the Host). */
   | { t: 'bikes'; list: BikeInfo[]; gone?: string[]; full?: boolean }
   /** reason 'finished': the team checked in or the race is over (a spectator, SPEC §8.6 / §8.10). */

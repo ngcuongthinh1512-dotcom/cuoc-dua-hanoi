@@ -9,7 +9,7 @@ import { bikeModel, character as C, playerSetup, swim } from '../config.ts';
 import { bikeState, loadBike } from '../vehicle/BikeModel.test.ts';
 import { BikeModel } from '../vehicle/BikeModel.ts';
 import { type AnimState, armWeight, CharacterAnimator, crashPose, locomotionScale, pickState, UAL_CLIPS, UAL_CRASH_FALL } from './Animation.ts';
-import { CharacterModel, prepareAsset } from './CharacterModel.ts';
+import { avatarClips, CharacterModel, prepareAsset } from './CharacterModel.ts';
 import type { MoveMode, PlayerAction, PlayerState } from './types.ts';
 
 const MODELS = new URL('../../public/models/', import.meta.url);
@@ -119,9 +119,10 @@ describe('player-anims.glb', async () => {
   const anims = await loadGlb('player-anims.glb');
   const names = anims.animations.map((c) => c.name);
 
-  it('15 clips: every state of UAL_CLIPS + the crash fall', () => {
-    expect(new Set(names)).toEqual(new Set([...Object.values(UAL_CLIPS), UAL_CRASH_FALL]));
-    expect(names).toHaveLength(15);
+  it('15 clips per avatar (m_ / f_): every state of UAL_CLIPS + the crash fall', () => {
+    const want = [...new Set([...Object.values(UAL_CLIPS), UAL_CRASH_FALL])];
+    expect(want).toHaveLength(15);
+    expect(new Set(names)).toEqual(new Set(['m_', 'f_'].flatMap((p) => want.map((c) => p + c))));
     const all: AnimState[] = ['idle', 'walk', 'jog', 'jumpStart', 'air', 'land', 'swimIdle', 'swimFwd', 'openBox', 'pickUp', 'celebrate', 'crash', 'climbOut', 'talk', 'cycle'];
     for (const s of all) expect(UAL_CLIPS[s], s).toBeDefined();
   });
@@ -141,7 +142,7 @@ describe('player-anims.glb', async () => {
 
   it('animator on the clip skeleton: states change, wave raises the right hand, celebrate both, no NaN', async () => {
     const rig = await loadGlb('player-anims.glb'); // the bone tree without a mesh: enough to drive and measure
-    const model = new CharacterModel(prepareAsset(rig.scene, rig.animations), { shirt: '#d8342c' });
+    const model = new CharacterModel(prepareAsset(rig.scene, avatarClips(rig.animations, 0)), { shirt: '#d8342c' });
     const anim = new CharacterAnimator(model);
     const at = (n: string) => model.root.getObjectByName(n)!.getWorldPosition(new Vector3());
     for (let i = 0; i < 30; i++) anim.update(state({ speed: 4 }), 1 / 30);
@@ -169,7 +170,7 @@ describe('player-anims.glb', async () => {
 
   it('swimming forward: the horizontal crawl is lifted (character.clipLift) so the head reaches the surface; idle swim is not', async () => {
     const rig = await loadGlb('player-anims.glb');
-    const model = new CharacterModel(prepareAsset(rig.scene, rig.animations), { shirt: '#d8342c' });
+    const model = new CharacterModel(prepareAsset(rig.scene, avatarClips(rig.animations, 0)), { shirt: '#d8342c' });
     const anim = new CharacterAnimator(model);
     const head = () => (model.root.updateMatrixWorld(true), model.root.getObjectByName('Head')!.getWorldPosition(new Vector3()).y);
     for (const speed of [0, 4]) {
@@ -189,7 +190,7 @@ describe('player-anims.glb', async () => {
 
 describe('rider IK (player-anims.glb rig on bike.glb)', async () => {
   const [rig, bike] = [await loadGlb('player-anims.glb'), new BikeModel(await loadBike())];
-  const model = new CharacterModel(prepareAsset(rig.scene, rig.animations), { shirt: '#d8342c' });
+  const model = new CharacterModel(prepareAsset(rig.scene, avatarClips(rig.animations, 0)), { shirt: '#d8342c' });
   const anim = new CharacterAnimator(model);
   const at = (n: string) => model.root.getObjectByName(n)!.getWorldPosition(new Vector3());
   const b = bikeState({ position: new Vector3(3, 0.5, -2), yaw: 0.7, rider: 'p', lean: 0.15, steer: 0.1 });

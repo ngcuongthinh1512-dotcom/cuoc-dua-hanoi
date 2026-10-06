@@ -7,7 +7,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { SPRINT_MULTIPLIER } from '@race/shared';
 import { startSpot } from '@race/shared/leg';
-import { boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
+import { avatarOf, boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Avatar, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
 import { HOST, newClaims, signToken, spectatorClaims, spectatorCodeOf, verifyToken } from './auth.ts';
 import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, readProgress, setMeta, type EventRow, type TeamRow } from './db.ts';
@@ -28,6 +28,8 @@ interface Attachment {
   box: string | null;
   /** SPEC §17.40: a team socket in the watch mode (`watch on`): its ticks carry every online team once the team is over. */
   watch?: boolean;
+  /** Leg 2: the team's avatar (socket URL `avatar`, once per connection): TeamInfo.avatar / `team` online. */
+  avatar?: Avatar;
 }
 
 /** Per-team state kept in teams.state (JSON): presence fields + the Phase 7 race fields (race/engine.ts TeamRace, `step`
@@ -195,7 +197,7 @@ export class RaceRoom extends DurableObject<Env> {
     this.counters.http++;
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname === '/login') return this.login(request);
-    if (request.method === 'GET' && url.pathname === '/ws') return this.upgrade(request, url.searchParams.get('token'));
+    if (request.method === 'GET' && url.pathname === '/ws') return this.upgrade(request, url.searchParams.get('token'), avatarOf(url.searchParams.get('avatar')));
     // Phase 8 (D13): the Worker asks whether team `team` may load image `name` (it streams R2 itself): 204 yes / 404 no
     if (request.method === 'GET' && url.pathname === '/media') return new Response(null, { status: this.engine.mediaAllowed(url.searchParams.get('team') ?? '', url.searchParams.get('name') ?? '') ? 204 : 404 });
     // SPEC §17.25: the Worker checked the Host token
@@ -244,7 +246,7 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   /** WebSocket upgrade: a valid token for this race → Hibernation API accept, one socket per team (§8.10), `welcome`. */
-  private async upgrade(request: Request, token: string | null): Promise<Response> {
+  private async upgrade(request: Request, token: string | null, avatar: Avatar): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return json({ ok: false, error: 'expected_websocket' }, 426);
     const claims = await verifyToken(this.env.HOST_PASSWORD, token, this.race);
     const pair = new WebSocketPair();
@@ -277,7 +279,7 @@ export class RaceRoom extends DurableObject<Env> {
       this.saveTeamState(team, { ...s, reconnects: s.reconnects + 1, lastSeen: now, ...(e.first ? { startOrder: e.startOrder, joinedAt: now } : {}) });
       race = this.engine.welcome(team.id, l?.valid ?? null, e.first, now);
       const shown = race.boxes.find((b) => !b.opened);
-      server.serializeAttachment({ role, team: team.id, since: now, box: shown ? boxKey(shown) : null } satisfies Attachment);
+      server.serializeAttachment({ role, team: team.id, since: now, box: shown ? boxKey(shown) : null, avatar } satisfies Attachment);
       // Newer device wins (accepted first, so the old socket's close does not take the team offline).
       for (const old of this.sockets(team.id)) {
         if (old === server) continue;
@@ -290,7 +292,7 @@ export class RaceRoom extends DurableObject<Env> {
       server.serializeAttachment({ role, team: role, since: now, box: null } satisfies Attachment);
     }
     this.send(server, this.welcome(role, team, race, now));
-    if (team) this.broadcast({ t: 'team', slot: team.slot, online: true }, server);
+    if (team) this.broadcast({ t: 'team', slot: team.slot, online: true, avatar }, server);
     else if (role === HOST) this.send(server, this.hostState(now));
     this.soon(now); // ticks for the new set of peers + host.state
     // Bike spawning alarm (SPEC §3: only while a team is online; track C's alarm() re-arms while players remain).
@@ -764,7 +766,8 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   private info(t: TeamRow, online: Set<string>): TeamInfo {
-    return { slot: t.slot, id: t.id, name: t.name, colour: t.colour, online: online.has(t.id), racing: racing(this.teamState(t)) };
+    const ws = online.has(t.id) ? this.sockets(t.id).at(-1) : undefined; // the newest socket (an older one is being kicked)
+    return { slot: t.slot, id: t.id, name: t.name, colour: t.colour, online: online.has(t.id), racing: racing(this.teamState(t)), ...(ws ? { avatar: att(ws).avatar ?? 0 } : {}) };
   }
 
   private welcome(role: Role, team: TeamRow | undefined, race: RaceWelcome | null, now: number): Welcome {

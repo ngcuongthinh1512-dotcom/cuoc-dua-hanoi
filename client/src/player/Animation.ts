@@ -156,7 +156,7 @@ export class CharacterAnimator {
     for (const c of model.clips) this.actions.set(c.name, model.mixer.clipAction(c));
     for (const s of ['l', 'r']) {
       const arm = ['spine_03', `upperarm_${s}`, `lowerarm_${s}`, `hand_${s}`].map((n) => model.root.getObjectByName(n));
-      if (arm.every(Boolean)) this.arms.set(s, arm as Object3D[]); // ponytail: UBC bone names; Phase 4B rigs map theirs
+      if (arm.every(Boolean)) this.arms.set(s, arm as Object3D[]); // UE names (player.glb renames the Bip01 bones)
     }
     const bone = (n: string) => model.root.getObjectByName(n);
     for (const names of [['thigh', 'calf', 'foot', 'ball'], ['upperarm', 'lowerarm', 'hand', 'middle_01']]) {
@@ -214,7 +214,7 @@ export class CharacterAnimator {
       if (a && next === 'jumpStart' && this.time === 0) a.time = C.jump.startAt;
       if (a && next === 'land') a.timeScale = C.land.speed;
       const own = C.clipSpeed[name];
-      if (a && own) a.timeScale = locomotionScale(hSpeed(p), own);
+      if (a && own) a.timeScale = locomotionScale(hSpeed(p), own * this.model.stride);
     }
     this.model.mixer.update(dt);
     let lift = 0;

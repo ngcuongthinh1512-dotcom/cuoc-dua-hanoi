@@ -1,61 +1,59 @@
-// Outfit mask from the skin weights, team colour only on the masked (body) material, missing files → capsule.
-import { readFileSync } from 'node:fs';
+// Leg 2 avatars: clip split per avatar, team colour on a per-instance clone of one shared shader (atlas-alpha mask),
+// avatar choice + stride, missing files → capsule.
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { character as C, raceClient } from '../config.ts';
-import { CharacterModel, loadCharacterAsset, OUTFIT_BONES, outfitMask, prepareAsset } from './CharacterModel.ts';
+import { AVATARS, avatarClips, type CharacterAsset, CharacterModel, loadCharacterAsset, prepareAsset } from './CharacterModel.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const BONES = ['root', 'pelvis', 'spine_01', 'Head', 'thigh_l', 'foot_l', 'upperarm_r', 'hand_r'];
-const attr = (a: number[], normalized = false) => new THREE.BufferAttribute(normalized ? new Uint8Array(a) : new Uint16Array(a), 4, normalized);
+const BONES = ['Bip01', 'pelvis', 'spine_01', 'spine_03', 'Head', 'thigh_l', 'foot_l', 'upperarm_r', 'hand_r'];
 
-describe('outfitMask', () => {
-  it('sums the weights per part: one shirt bone → shirt 1, trousers 0; blends split; skin (Head, hand) stays 0', () => {
-    const idx = attr([2, 0, 0, 0, 1, 4, 0, 0, 3, 7, 0, 0, 5, 6, 0, 0]);
-    const w = attr([255, 0, 0, 0, 128, 127, 0, 0, 255, 0, 0, 0, 51, 204, 0, 0], true); // u8 normalized, as in player.glb
-    const m = outfitMask(idx, w, BONES);
-    expect([...m.subarray(0, 3)]).toEqual([1, 0, 0]); // spine_01
-    expect(m[3]).toBe(0);
-    expect(m[4]).toBeCloseTo(1); // pelvis + thigh = trousers
-    expect([...m.subarray(6, 9)]).toEqual([0, 0, 0]); // Head (+ hand_r at weight 0)
-    expect(m[9]).toBeCloseTo(0.8); // upperarm_r 0.8 → shirt …
-    expect(m[11]).toBeCloseTo(0.2); // … foot_l 0.2 → shoes
-  });
-
-  it('the part bones exist in player.glb', () => {
-    const b = readFileSync(new URL('../../public/models/player.glb', import.meta.url));
-    const names = (JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString()) as { nodes: { name: string }[] }).nodes.map((n) => n.name);
-    for (const re of OUTFIT_BONES) expect(names.filter((n) => re.test(n)).length).toBeGreaterThanOrEqual(2);
+describe('avatarClips', () => {
+  const clip = (n: string) => new THREE.AnimationClip(n, 1, [new THREE.QuaternionKeyframeTrack('pelvis.quaternion', [0], [0, 0, 0, 1])]);
+  it('the m_ / f_ clips of an avatar under their UAL names; an unprefixed file keeps all; an unknown index = avatar 0', () => {
+    const all = ['m_Idle_Loop', 'm_Walk_Loop', 'f_Idle_Loop', 'f_Walk_Loop'].map(clip);
+    expect(avatarClips(all, 0).map((c) => c.name)).toEqual(['Idle_Loop', 'Walk_Loop']);
+    expect(avatarClips(all, 1).map((c) => c.name)).toEqual(['Idle_Loop', 'Walk_Loop']);
+    expect(avatarClips(all, 1)[0]).not.toBe(all[2]); // clones: the loaded clips keep their names
+    expect(all[2]!.name).toBe('f_Idle_Loop');
+    expect(avatarClips(all, 9).map((c) => c.name)).toEqual(['Idle_Loop', 'Walk_Loop']);
+    expect(avatarClips([clip('Idle_Loop')], 1).map((c) => c.name)).toEqual(['Idle_Loop']);
+    expect(AVATARS.map((a) => a.node)).toEqual(['player_m', 'player_f']);
   });
 });
 
-/** A two-mesh skinned character: a body weighted to spine_01 and a head-only "eyes" mesh sharing nothing. */
-function fixture() {
+/** One skinned avatar mesh (textured: the atlas path of the shader) on a few named bones; `stride` like player.glb's extras. */
+function fixture(stride?: number) {
   const bones = BONES.map((n) => Object.assign(new THREE.Bone(), { name: n }));
-  const skinned = (joint: number, name: string) => {
-    const g = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-    const n = g.getAttribute('position').count;
-    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(Array.from({ length: n * 4 }, (_, i) => (i % 4 ? 0 : joint)), 4));
-    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(Array.from({ length: n * 4 }, (_, i) => (i % 4 ? 0 : 1)), 4));
-    const m = new THREE.SkinnedMesh(g, new THREE.MeshStandardMaterial({ name }));
-    m.name = name;
-    m.bind(new THREE.Skeleton(bones));
-    return m;
-  };
-  return new THREE.Group().add(bones[0]!, skinned(2, 'body'), skinned(3, 'eyes'));
+  for (let i = 1; i < bones.length; i++) bones[0]!.add(bones[i]!);
+  const g = new THREE.BoxGeometry(0.4, 1.7, 0.3).translate(0, 0.85, 0);
+  const n = g.getAttribute('position').count;
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(Array.from({ length: n * 4 }, (_, i) => (i % 4 ? 0 : 2)), 4));
+  g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(Array.from({ length: n * 4 }, (_, i) => (i % 4 ? 0 : 1)), 4));
+  const m = new THREE.SkinnedMesh(g, new THREE.MeshStandardMaterial({ name: 'body', map: new THREE.Texture() }));
+  m.name = 'body';
+  m.bind(new THREE.Skeleton(bones));
+  const root = new THREE.Group().add(bones[0]!, m);
+  if (stride) root.userData.stride = stride;
+  return root;
 }
+const twoAvatars = (): CharacterAsset => {
+  const avatars = [prepareAsset(fixture(), []), prepareAsset(fixture(1.03), [])];
+  return { ...avatars[0]!, avatars };
+};
 
 describe('CharacterModel', () => {
-  it('team colour on a per-instance clone of the masked material only; shared eyes untouched; π turn; no NaN', () => {
-    const asset = prepareAsset(fixture(), []);
-    const eyes = asset.scene.getObjectByName('eyes') as THREE.Mesh;
-    expect(eyes.geometry.hasAttribute('outfit')).toBe(false);
-    const [a, b] = [new CharacterModel(asset, { shirt: '#d8342c' }), new CharacterModel(asset, { shirt: '#2c6bd8' })];
-    const mat = (m: CharacterModel, n: string) => (m.root.getObjectByName(n) as THREE.Mesh).material as THREE.Material;
-    expect(mat(a, 'body')).not.toBe(mat(b, 'body'));
-    expect(mat(a, 'body').onBeforeCompile).toBe(mat(b, 'body').onBeforeCompile); // one program
-    expect(mat(a, 'eyes')).toBe(eyes.material);
+  it('team colour on a per-instance clone of one shared program; avatar + stride; π turn; culling; dispose', () => {
+    const asset = twoAvatars();
+    const [a, b] = [new CharacterModel(asset, { shirt: '#d8342c' }), new CharacterModel(asset, { shirt: '#2c6bd8', avatar: 1 })];
+    const mat = (m: CharacterModel) => (m.root.getObjectByName('body') as THREE.Mesh).material as THREE.Material;
+    expect(mat(a)).not.toBe(mat(b));
+    expect(mat(a)).not.toBe((asset.scene.getObjectByName('body') as THREE.Mesh).material); // the asset's stays untouched
+    expect(mat(a).onBeforeCompile).toBe(mat(b).onBeforeCompile); // one program
+    expect([a.avatar, b.avatar, a.stride, b.stride]).toEqual([0, 1, 1, 1.03]);
+    expect(new CharacterModel(asset, { shirt: '#fff', avatar: 5 }).avatar).toBe(0); // unknown → Nam
+    expect(new CharacterModel(prepareAsset(fixture(), []), { shirt: '#fff', avatar: 1 }).avatar).toBe(0); // one-avatar asset
     expect(a.shirt.getHexString()).toBe('d8342c');
     b.setShirt('#ffffff');
     expect([a.shirt.getHexString(), b.shirt.getHexString()]).toEqual(['d8342c', 'ffffff']);
@@ -74,6 +72,19 @@ describe('CharacterModel', () => {
     for (const f of freed) expect(f).toHaveBeenCalledOnce();
   });
 
+  it('shader: tint = team colour × the atlas mask (body / backpack tiles), hair cut-out only in the opacity tile', () => {
+    const m = new CharacterModel(twoAvatars(), { shirt: '#d8342c' });
+    const material = (m.root.getObjectByName('body') as THREE.Mesh).material as THREE.Material;
+    const shader = { uniforms: {}, vertexShader: '', fragmentShader: 'void main() {\n#include <map_fragment>\n#include <emissivemap_fragment>\n}' } as unknown as THREE.WebGLProgramParametersWithUniforms;
+    material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+    expect((shader.uniforms as Record<string, { value: THREE.Color }>).uShirt!.value).toBe(m.shirt);
+    const f = shader.fragmentShader;
+    expect(f).toContain('uniform vec3 uShirt');
+    expect(f).toContain('outfitTile = step(vec2(0.5), vMapUv)');
+    expect(f).toContain('diffuseColor.rgb *= mix(vec3(1.0), uShirt, outfitM)');
+    expect(f).toContain('outfitTile.y * (1.0 - outfitTile.x)'); // alpha kept only in the opacity tile (0, 1)
+  });
+
   it('name tag: the Vietnamese text drawn once, above the head, shown within nameTag.maxDistance only', () => {
     const drawn: string[] = [];
     const ctx = new Proxy({ measureText: (t: string) => ({ width: t.length * 20 }), fillText: (t: string) => drawn.push(t) }, {
@@ -81,7 +92,7 @@ describe('CharacterModel', () => {
       set: () => true,
     });
     vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) });
-    const m = new CharacterModel(prepareAsset(fixture(), []), { shirt: '#d8342c', name: 'Đội Xanh dương' });
+    const m = new CharacterModel(twoAvatars(), { shirt: '#d8342c', name: 'Đội Xanh dương', avatar: 1 });
     expect(drawn).toEqual(['Đội Xanh dương']);
     const lod = m.root.children.find((o): o is THREE.LOD => o instanceof THREE.LOD)!;
     expect(lod.position.y).toBeGreaterThan(0);
@@ -111,16 +122,19 @@ describe('CharacterModel', () => {
     expect(lod.levels[1]!.distance).toBe(C.nameTag.maxDistance); // teams keep the long one
   });
 
-  it('missing files → console.warn and a capsule in the shirt colour (all-shirt mask), no clips', async () => {
+  it('missing files → console.warn and a capsule in the shirt colour (no map: all tinted), no clips, one avatar', async () => {
     vi.stubGlobal('fetch', async () => new Response('', { status: 404 }));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const asset = await loadCharacterAsset('http://test/missing.glb', 'http://test/missing-anims.glb');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing or unreadable'), expect.anything());
     expect(asset.clips).toHaveLength(0);
-    let mask: THREE.BufferAttribute | undefined;
-    asset.scene.traverse((o) => void (o instanceof THREE.Mesh && (mask = o.geometry.getAttribute('outfit') as THREE.BufferAttribute)));
-    expect(mask?.getX(0)).toBe(1);
+    expect(asset.avatars).toBeUndefined();
     expect(asset.scene.userData.height).toBeCloseTo(1.8);
+    const m = new CharacterModel(asset, { shirt: '#d8342c', avatar: 1 });
+    expect(m.avatar).toBe(0);
+    const shader = { uniforms: {}, vertexShader: '', fragmentShader: '#include <map_fragment>\n#include <emissivemap_fragment>' } as unknown as THREE.WebGLProgramParametersWithUniforms;
+    ((m.root.getObjectByProperty('isMesh', true) as THREE.Mesh).material as THREE.Material).onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+    expect(shader.fragmentShader).toMatch(/#else\n\tfloat outfitM = 1\.0;/);
     warn.mockRestore();
   });
 });

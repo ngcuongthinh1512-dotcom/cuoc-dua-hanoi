@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodePose, decodeTick, encodePose, encodeTick, isClientMessage, parseFrame, POSE_LEN, samePose } from './codec.ts';
 import { NET, PROTOCOL_VERSION } from './constants.ts';
-import { type HostMessage, MOVE_MODES, PLAYER_ACTIONS, type PoseSample, submitCode, TAG, type UndoItem, type ZoneMember } from './types.ts';
+import { avatarOf, type HostMessage, MOVE_MODES, PLAYER_ACTIONS, type PoseSample, type ServerMessage, submitCode, TAG, type TeamInfo, type UndoItem, type ZoneMember } from './types.ts';
 
 const pose: PoseSample = { x: 123.456, y: 1.234, z: -910.117, yaw: 2.5, mode: 'bike', action: 'none' };
 
@@ -203,8 +203,15 @@ describe('frames and JSON messages', () => {
     expect(JSON.parse(JSON.stringify({ zone, undo }))).toEqual({ zone, undo });
   });
 
+  it('Leg 2 (v10): avatar from the socket URL, 0 unless exactly 1; TeamInfo / team online carry it through JSON', () => {
+    expect(PROTOCOL_VERSION).toBe(10);
+    expect([avatarOf('1'), avatarOf(1), avatarOf('0'), avatarOf(null), avatarOf('2'), avatarOf('x'), avatarOf(undefined)]).toEqual([1, 1, 0, 0, 0, 0, 0]);
+    const info: TeamInfo = { slot: 1, id: 't1', name: 'Đội Đỏ', colour: '#d8342c', online: true, racing: true, avatar: 1 };
+    const online: ServerMessage = { t: 'team', slot: 1, online: true, avatar: 1 };
+    expect(JSON.parse(JSON.stringify({ info, online }))).toEqual({ info, online });
+  });
+
   it('Leg 2 (v9): the Louvre room ops are gone (pick / lock / view / credits refused)', () => {
-    expect(PROTOCOL_VERSION).toBe(9);
     const gone: unknown[] = [
       { t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: true },
       { t: 'race', op: 'lock', step: 'T3' },

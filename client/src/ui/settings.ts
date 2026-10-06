@@ -11,9 +11,11 @@ export interface Settings {
   invertY: boolean;
   /** × the camera's mouseSensitivity and gamepadLookSpeed (menu.sensitivity range). */
   mouseSensitivity: number;
+  /** Leg 2 "Nhân vật": 0 = Nam, 1 = Nữ (CharacterModel avatar index); read once at load, sent to the server on connect. */
+  avatar: 0 | 1;
 }
 
-const DEFAULTS: Readonly<Settings> = { invertY: false, mouseSensitivity: 1 };
+const DEFAULTS: Readonly<Settings> = { invertY: false, mouseSensitivity: 1, avatar: 0 };
 
 /** The live object: cameras read it every frame, the menu writes it (keep the identity). */
 export const settings: Settings = { ...DEFAULTS };
@@ -39,6 +41,7 @@ export function loadSettings(store: SettingsStore | undefined = browserStore()):
     const saved = JSON.parse(store?.getItem(M.storageKey) ?? 'null') as Partial<Record<keyof Settings, unknown>> | null;
     if (typeof saved?.invertY === 'boolean') settings.invertY = saved.invertY;
     if (typeof saved?.mouseSensitivity === 'number') settings.mouseSensitivity = clampSensitivity(saved.mouseSensitivity);
+    if (saved?.avatar === 0 || saved?.avatar === 1) settings.avatar = saved.avatar;
   } catch {
     // unreadable storage or broken JSON: defaults
   }
@@ -86,6 +89,36 @@ export function qualityRow(): HTMLElement {
     hint.textContent = saveQuality(select.value as Quality)
       ? `Đã lưu "${select.selectedOptions[0]!.text}". Tải lại trang để áp dụng.`
       : 'Trình duyệt chặn lưu cài đặt: không lưu được.';
+    select.blur(); // core/Input.ts ignores keys while a <select> has the focus (Esc, M…)
+  };
+  const box = document.createElement('div');
+  box.append(row, hint);
+  return box;
+}
+
+/** The player's avatar this page load: offline a DEV ?avatar=0|1 wins (screenshots), else the stored choice. */
+export const pickAvatar = (q: URLSearchParams, online: boolean): 0 | 1 => (!online && (q.get('avatar') === '0' || q.get('avatar') === '1') ? (Number(q.get('avatar')) as 0 | 1) : settings.avatar);
+
+/** The "Nhân vật" row (select Nam / Nữ + hint) for the Esc menu's settings pane: stored at once, applied after a reload
+ *  (the body and the server's copy of the choice are made at load). */
+export function avatarRow(): HTMLElement {
+  const select = document.createElement('select');
+  select.id = 'menu-avatar';
+  select.append(new Option('Nam', '0'), new Option('Nữ', '1'));
+  select.value = String(settings.avatar);
+  const label = document.createElement('label');
+  label.htmlFor = select.id;
+  label.textContent = 'Nhân vật';
+  const row = document.createElement('div');
+  row.className = 'menu-row';
+  row.append(label, select);
+  const hint = document.createElement('p');
+  hint.className = 'menu-hint';
+  hint.textContent = 'Đổi nhân vật: áp dụng sau khi tải lại trang.';
+  select.onchange = () => {
+    settings.avatar = select.value === '1' ? 1 : 0;
+    saveSettings();
+    hint.textContent = `Đã chọn "${select.selectedOptions[0]!.text}". Tải lại trang để áp dụng.`;
     select.blur(); // core/Input.ts ignores keys while a <select> has the focus (Esc, M…)
   };
   const box = document.createElement('div');
