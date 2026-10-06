@@ -719,17 +719,28 @@ export const landmarks = {
       centre: { floor: 4.5, edgeColour: '#8fd0ff', edgeIntensity: 2, edgeH: 0.5 }, // convention centre: slab spacing, roof-edge LED
     },
     lisboa: {
-      // Grand Lisboa: 261 m total (Wikipedia; CTBUH lists 258 m architectural); OSM 211.5 on the tower outline is the
-      // shell below the crown. Bulb shape est. from photos: widest at `bulgeY`, tip at `height`.
+      // Grand Lisboa: 261 m to the mast tip (Wikipedia; CTBUH lists 258 m architectural); OSM's 211.5 is not used. Shape est.
+      // from the user's frontal photo (2026-10-06): plain gold shaft with a waist over the dome, lotus crown of stepped petal
+      // rows from ≈ 40 % of the height, small sphere + mast. Plan = ellipse on the OSM rectangle's frame (63 × 33 m).
       height: 261,
-      bulge: [1.6, 1.35] as [number, number], // × footprint half-sizes (long, short axis) at bulgeY
-      bulgeY: 222, waistY: 75, waist: [0.82, 0.88] as [number, number], tipY: 261, tip: [0.08, 0.02] as [number, number],
-      floor: 4.2, bandShare: 0.22, // floor pitch (m); share of each floor that is the lit band
-      segments: 28, rows: 3, // ring segments; loft rows per floor (keeps the bulb curve smooth)
-      podium: { wallTop: 18, domeTop: 54, domeRings: 10, ledRows: [0.12, 0.25, 0.38, 0.5, 0.62, 0.74, 0.86] }, // egg: dome over the walls, LED bands at these shares of its height
-      canopy: { width: 36, depth: 14, y: 9, thickness: 1.2, columns: 4, azimuth: 135 }, // main entrance (SE, Avenida de Lisboa)
-      colours: { gold: '#c9962e', band: '#ffb545', podium: '#5a4a32', concrete: '#9a948a', led: ['#ff2d95', '#2d7bff', '#19e3d1', '#ffb545', '#ff6a2d'] },
-      bandIntensity: 1.6, ledIntensity: 1.3, tipIntensity: 2.5,
+      shaft: [[0, 0.78, 0.85], [60, 0.62, 0.72]] as [number, number, number][], // [y, × half-long, × half-short]: waist over the dome, then straight
+      floor: 4.2, bandEvery: 3, bandH: 0.9, segments: 24, // dark floor band (m tall) every n floors on the shaft; ring segments
+      coreTop: 232, // shaft / core roof inside the crown; the spire sits on it
+      crown: {
+        rows: [[95, 170, 1.08], [120, 195, 1.14], [146, 220, 1.12], [172, 242, 1.04]] as [number, number, number][], // [base y, tip y, × half-sizes at the tip]
+        petals: 10, width: 0.72, // per row (rows offset by half a petal); angular half-width × the petal step (overlap)
+        ears: 16, // m higher tips towards the long-axis ends (the corner "ears" of the front view)
+        cup: 0.015, tuck: 0.06, // petal edges pulled in (overlaps cross, no coplanar faces); tip curls back by this share of the flare
+        vSteps: 14, tSteps: 4, // grid rows (= gold / darker stripes) and columns per petal
+        edge: { width: 0.9, lift: 0.12, from: 0.2 }, // lit petal edge strips: m wide, m off the skin, from this share of the petal up
+      },
+      spire: [[0, 2.6], [8, 2.6], [9.5, 4], [12, 5], [15, 4.2], [17.5, 1.8], [18, 1.4], [29, 0.5]] as [number, number][], // [y over coreTop, r]: stem, sphere, mast (top = height)
+      signY: [-7, -4] as [number, number], // lit sign ring around the core, y over coreTop
+      dome: { top: 54, base: 0.82, fit: 0.98, rows: 16, cells: 60, capDeg: 80, ribEvery: 4, rib: 0.45, tealEvery: 12, whiteEvery: 20 }, // squashed sphere: OSM 54 m; base = × the outline radius at the foot (max = fit × outline); diamond lattice: lat rows, cells around (multiple of the 'every's)
+      flank: { half: 4.5, at: 1.0, tiers: [[1, 30], [0.78, 35], [0.56, 39], [0.34, 42]] as [number, number][] }, // two stepped towers at the dome's E / W ends: [× half, top y]
+      canopy: { azimuth: 180, apex: 16, rim: 12, rimY: 7, rimSpread: 70, fins: 4, spread: [24, 84] as [number, number], fin: [9, 15, 15, 3.2] as [number, number, number, number] }, // main entrance (S, faces the photo's view): tent + leaf fins per side over this spread (°): [foot r, tip r, tip y, half-width] (m)
+      colours: { gold: '#d9a441', core: '#8a6324', band: '#4a3412', petalIn: '#7a5a22', stripe: '#a87a2a', white: '#efe9da', spire: '#a8853a', line: '#ffb545', edge: '#ffcf6a', sign: '#fff0c0', rib: '#ffe6b0', teal: '#22c8c0', red: '#ff2a3a', soffit: '#ffc46a' },
+      lineIntensity: 0.8, edgeIntensity: 1.6, signIntensity: 2.2, ribIntensity: 1.1, tealIntensity: 0.7, redIntensity: 1.6, soffitIntensity: 1.2,
     },
   },
 };
@@ -748,7 +759,7 @@ export const preview = {
 // ── Foundation · movement + test session (player/Player.ts, main.ts) ──
 // SPEC §6.1: the leg file's `movement` block overrides footSpeed / bikeSpeedMultiplier (server-sent, Phase 6).
 export const movement = {
-  footSpeed: 6, // m/s: standard on-foot speed (the "jog" clip; ×1,5 since 2026-10-04, SPEC §17.43)
+  footSpeed: 4, // m/s: standard on-foot speed (the "jog" clip). Leg 2 (Macao): back to 4 (Leg 1 Paris has ×1.5 = 6, SPEC §17.43)
   sprintMultiplier: SPRINT_MULTIPLIER, // SPEC §17.29: × the top speed (foot, swim, bike) while sprint (Shift / LB) is held; the server's limits use the same constant
   bikeSpeedMultiplier: 1.5, // Phase 4: bike speed = footSpeed × this
 };
@@ -914,7 +925,7 @@ export const bikeModel = {
 // ── B · bike physics + interaction (vehicle/BikeController.ts, vehicle/Bikes.ts, audio/sfx.ts, player/*) ──
 export const bike = {
   accelTime: 1, // s from 0 to bikeTopSpeed() (SPEC §6.1)
-  brakeDecel: 10, // m/s² while braking (S): 9 m/s → 0 in 0.9 s / 4 m, 18 m/s (Shift) in 1.8 s (was 7 at the 6 m/s top, same stopping time)
+  brakeDecel: 7, // m/s² while braking (S). Leg 2: back to 7 (Leg 1 ×1.5 speeds used 10)
   coastDecel: 0.6, // m/s² rolling without input
   reverseSpeed: 1, // m/s backwards (S held once stopped): get the nose out of a wall
   turnRate: { slow: 2.4, top: 1.3 }, // rad/s at ~0 and at top speed (linear in between)
@@ -922,7 +933,7 @@ export const bike = {
   steerMaxDeg: 25, // front wheel angle at full A / D when slow (half of it at top speed), visual only
   // Turning faster than `rate` rad/s caps the speed at top − loss × excess (m/s per rad/s); above the cap it bleeds at
   // brakeDecel (SPEC §6.1: sharp turns slow down). Full A / D at top speed settles ≈ 87 % of top.
-  sharpTurn: { rate: 1.1, loss: 3 }, // loss ×1.5 with the 9 m/s top (SPEC §17.43): the same share of `top` lost as before
+  sharpTurn: { rate: 1.1, loss: 2 }, // Leg 2: back to 2 (Leg 1 ×1.5 speeds used 3)
   leanMaxDeg: 25, // roll at full turn rate and top speed
   leanSharpness: 6, // 1/s
   paveGrip: 0.65, // × turn rate, acceleration and brake on cobbles (SPEC §6.6: less friction on pavé); top speed unchanged

@@ -22,8 +22,8 @@
     "stuckMinutes": 45
   },
   "movement": {
-    "footSpeed": 6,
-    "bikeSpeedMultiplier": 1.5
+    "footSpeed": 4,
+    "bikeSpeedMultiplier": 1.3
   },
   "vehicles": {
     "corridorMeters": 150,

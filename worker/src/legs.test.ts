@@ -51,9 +51,9 @@ describe('legs/macao-demo.json', () => {
     }
   });
 
-  it('uses foot speed 6 m/s and bike = 1.5 × foot (SPEC §17.43)', () => {
-    expect(leg.movement.footSpeed).toBe(6);
-    expect(leg.movement.bikeSpeedMultiplier).toBe(1.5);
+  it('uses foot speed 4 m/s and bike = 1.3 × foot (Leg 2: no ×1.5 of SPEC §17.43)', () => {
+    expect(leg.movement.footSpeed).toBe(4);
+    expect(leg.movement.bikeSpeedMultiplier).toBe(1.3);
   });
 
   it('enables only the Express Pass', () => {
