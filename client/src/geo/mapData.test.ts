@@ -132,7 +132,7 @@ describe.skipIf(!hasData)('real map data', () => {
     const leg = read<{ steps: { id: string; destination?: { lat: number; lon: number } }[] }>('../../../worker/legs/macao-demo.json', import.meta.url);
     const dests = leg.steps.filter((s) => /^L[1-6]$/.test(s.id) && s.destination);
     expect(dests.length).toBe(6);
-    const walkable = new Set(['bridge', 'fountain', 'artwork', 'ruins']); // landmark outlines that are not buildings (ruins: L1 sits on the Ruínas steps until plan §5.2 moves it in front)
+    const walkable = new Set(['bridge', 'fountain', 'artwork', 'ruins']); // landmark outlines that are not buildings (L1 now stands at the foot of the Ruínas stair, leg2-fixes.md)
     const blocking = all('buildings').filter((b) => !walkable.has(b.kind));
     for (const s of dests) {
       const { x, z } = W(s.destination!.lat, s.destination!.lon);

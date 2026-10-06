@@ -72,7 +72,7 @@ export function summaryLines(s: Summary): string[] {
 }
 
 const FORM = `<form class="menu-box login-box" novalidate>
-  <h2>Cuộc đua Paris</h2>
+  <h2>Cuộc đua Ma Cao</h2>
   <p class="menu-note" data-k="note"></p>
   <label class="login-field"><span data-k="label"></span><input data-k="input" autocomplete="off" spellcheck="false" /></label>
   <p class="login-error" role="alert" data-k="error"></p>
@@ -185,5 +185,5 @@ export function login(race: string): Promise<Session> {
  *  blocking it; a submit / "Tiếp tục" just closes them. */
 export function previewLogin(back: boolean) {
   if (back) void welcomeBack('Đội Xanh', { reconnects: 2, lastSeen: Date.now() - 7 * 60_000, step: 'Thử thách 2' }).then(close);
-  else form('paris', readStoredCode(), async () => close());
+  else form('macao', readStoredCode(), async () => close());
 }

@@ -14,7 +14,7 @@ export interface Env {
 /** Race ids come from the Host's link (/?race=<id>): short slugs, one Durable Object each (docs/plans/phase6.md §3.1). */
 const RACE_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 /** A link without ?race= (client config net.defaultRace). */
-const DEFAULT_RACE = 'paris';
+const DEFAULT_RACE = 'macao';
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 // Static assets (client/dist) are matched before this handler runs; only unmatched paths get here.

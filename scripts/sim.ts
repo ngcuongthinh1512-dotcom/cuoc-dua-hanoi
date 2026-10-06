@@ -351,7 +351,7 @@ export function legStats(progress: StepProgressView[], louvreSteps: ReadonlySet<
  *  page lists); `--leg path/to/leg.json` → the file's text (host.leg {json}). */
 export function legArg(arg: string): { id?: string; json?: string; file: string } {
   if (arg.endsWith('.json')) {
-    if (!existsSync(arg)) throw new Error(`Không tìm thấy file chặng "${arg}" (kiểm tra đường dẫn; ví dụ --leg ~/Documents/chang-that/paris-1.json)`);
+    if (!existsSync(arg)) throw new Error(`Không tìm thấy file chặng "${arg}" (kiểm tra đường dẫn; ví dụ --leg ~/Documents/chang-that/macao-1.json)`);
     return { json: readFileSync(arg, 'utf8'), file: arg };
   }
   const name = arg.replace(/-filled$/, '.filled');
@@ -773,7 +773,7 @@ function print(r: SimReport) {
 
 export const USAGE = `Cách dùng: npm run sim -- [tùy chọn]   (bot chơi thử qua WebSocket thật; hướng dẫn: docs/LEG_FORMAT.md mục "Chơi thử tự động")
   --leg <mã | file.json>  chơi HẾT một chặng: mã chặng có sẵn (mini, macao-demo-filled, macao-demo) hoặc đường dẫn file chặng
-                          (vd. --leg ~/Documents/chang-that/paris-1.json). Không có --leg: bot đi bộ ngẫu nhiên (đo lưu lượng).
+                          (vd. --leg ~/Documents/chang-that/macao-1.json). Không có --leg: bot đi bộ ngẫu nhiên (đo lưu lượng).
                           Bot nhận thử thách, gõ đáp án (đáp án hoặc đáp án tham khảo trong file; nhánh ảnh: "đã gửi bài"), chọn nhánh,
                           một bot đổi nhánh một lần; một Host bot tự duyệt mọi bài chờ và phạt một lần (bài đầu của bot thứ 2 ở thử
                           thách đầu). Phạt được rút còn 6 giây / 12 giây để chạy nhanh (chặng thật vẫn giữ 3 / 10 phút khi đua).

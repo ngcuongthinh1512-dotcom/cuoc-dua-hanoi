@@ -30,6 +30,9 @@ const glow = (hex: string, intensity: number) => rgb(hex, intensity * LT.emissiv
 /** Sink + one buffer per (material, colour, lod), so a buffer keeps its colour however calls interleave; merged at out(). */
 class Paints extends Sink {
   private readonly tints = new Map<string, { buf: MeshBuffer; lod?: 'near' }>();
+  /** Stair ramps: their own collider flagged `stairs` (walkable; bikes refuse them, world/stairs.ts). */
+  readonly rv: number[] = [];
+  readonly ri: number[] = [];
   tint(m: MaterialId, c: V3, lod?: 'near') {
     const k = `${m}|${c.join(',')}|${lod ?? ''}`;
     let e = this.tints.get(k);
@@ -42,7 +45,8 @@ class Paints extends Sink {
   }
   override out(): BuildOut {
     const o = super.out();
-    return { ...o, meshes: mergeBuckets([...o.meshes, ...[...this.tints.values()].map((e) => e.buf.bucket(e.lod))]) };
+    const ramps = this.ri.length ? [{ vertices: new Float32Array(this.rv), indices: new Uint32Array(this.ri), stairs: true as const }] : [];
+    return { ...o, meshes: mergeBuckets([...o.meshes, ...[...this.tints.values()].map((e) => e.buf.bucket(e.lod))]), colliders: [...o.colliders, ...ramps] };
   }
 }
 const paint = (s: Paints, m: MaterialId, hex: string | V3, lod?: 'near') => s.tint(m, typeof hex === 'string' ? rgb(hex) : hex, lod);
@@ -147,6 +151,35 @@ function bx(b: MeshBuffer, f: Fr, a0: number, a1: number, y0: number, y1: number
 function cbx(s: Paints, f: Fr, a0: number, a1: number, y0: number, y1: number, w0: number, w1: number) {
   s.prism([[...atXZ(f, a0, w0), ...atXZ(f, a1, w0), ...atXZ(f, a1, w1), ...atXZ(f, a0, w1)]], y0, y1);
 }
+/** Vertical prism mesh over a counter-clockwise ring: side walls y0…y1 + top cap (the collider is s.prism). */
+function prismMesh(b: MeshBuffer, ring: XZ, y0: number, y1: number) {
+  for (let i = 0, n = ring.length; i < n; i += 2) {
+    const [ax, az, bx2, bz] = [ring[i]!, ring[i + 1]!, ring[(i + 2) % n]!, ring[(i + 3) % n]!];
+    quadOut(b, [ax, y0, az], [bx2, y0, bz], [bx2, y1, bz], [ax, y1, az], [az - bz, 0, bx2 - ax]); // outward (−ez, ex)
+  }
+  const idx = triangulate(ring);
+  const P = (k: number): V3 => [ring[2 * k]!, y1, ring[2 * k + 1]!];
+  for (let k = 0; k < idx.length; k += 3) triOut(b, P(idx[k]!), P(idx[k + 1]!), P(idx[k + 2]!), UP);
+}
+/** The part of a counter-clockwise ring with a0 ≤ a ≤ a1 in frame f (Sutherland–Hodgman on the two half-planes). */
+export function bandOf(ring: XZ, f: Fr, a0: number, a1: number): XZ {
+  const A = (x: number, z: number) => (x - f.cx) * f.ux + (z - f.cz) * f.uz;
+  let poly = ring;
+  for (const [lim, sd] of [[a0, 1], [a1, -1]] as const) {
+    const out: XZ = [];
+    for (let i = 0, n = poly.length; i < n; i += 2) {
+      const [px, pz, qx, qz] = [poly[i]!, poly[i + 1]!, poly[(i + 2) % n]!, poly[(i + 3) % n]!];
+      const [dp, dq] = [sd * (A(px, pz) - lim), sd * (A(qx, qz) - lim)];
+      if (dp >= 0) out.push(px, pz);
+      if (dp >= 0 !== dq >= 0) {
+        const t = dp / (dp - dq);
+        out.push(px + (qx - px) * t, pz + (qz - pz) * t);
+      }
+    }
+    poly = out;
+  }
+  return poly.length >= 6 && ringArea(poly) > 1e-3 ? poly : [];
+}
 /** Hexahedron between two 4-point rings (bottom face optional). */
 function block(b: MeshBuffer, lo: V3[], hi: V3[], bottom = false) {
   loft(b, [lo, hi]);
@@ -225,7 +258,7 @@ function lion(b: MeshBuffer, f: Fr, a: number, w: number, y: number) {
   bx(b, f, a - 0.05, a + 0.4, y + 1.1, y + 1.6, w - 0.24, w + 0.24);
 }
 
-/** Steps from (x, z) at yTop down along (dx, dz) until they meet floor(); width across. Ramp collider. Returns the run (m). */
+/** Steps from (x, z) at yTop down along (dx, dz) until they meet floor(); width across. Ramp collider (`stairs`). Returns the run (m). */
 function stairs(s: Paints, b: MeshBuffer, floor: H, x: number, z: number, dx: number, dz: number, yTop: number, width: number) {
   const { riser, tread } = M.stair;
   const f: Fr = { cx: x, cz: z, ux: dx, uz: dz, a: 0, b: 0 };
@@ -239,9 +272,9 @@ function stairs(s: Paints, b: MeshBuffer, floor: H, x: number, z: number, dx: nu
   if (n) {
     const run = (n + 1) * tread;
     const yEnd = yTop - (n + 1) * riser;
-    const c = s.cv.length / 3;
-    for (const [a, y] of [[0, yTop], [run, yEnd]] as const) for (const w of [-hw, hw]) s.cv.push(...at(f, a, y, w));
-    s.ci.push(c, c + 2, c + 3, c, c + 3, c + 1);
+    const c = s.rv.length / 3;
+    for (const [a, y] of [[0, yTop], [run, yEnd]] as const) for (const w of [-hw, hw]) s.rv.push(...at(f, a, y, w));
+    s.ri.push(c, c + 2, c + 3, c, c + 3, c + 1);
   }
   return n * tread;
 }
@@ -350,6 +383,8 @@ interface RingWall {
   outBase: number; outTop: number; inner: number; // offsets from the OSM line: outer face foot / top (outwards), inner face (inwards)
   bot: H; botIn: H; top: H; // outer foot, inner foot, top (y at a point)
   gap?: { edge: number; t0: number; t1: number; top?: H }; // gate: no wall there, or a low wall up to top
+  gates?: readonly (readonly [number, number])[]; // extra openings (world x, z on the line, gateWidth m wide): OSM footways through the wall
+  gateWidth?: number;
   merlon?: { w: number; gap: number; h: number };
   collide?: boolean;
   lights?: { every: number; buf: MeshBuffer }; // uplighter boxes at the outer foot, one per `every` m
@@ -369,11 +404,20 @@ function ringWall(s: Paints, b: MeshBuffer, ring: XZ, o: RingWall, merlons?: Mes
     const len = Math.hypot(ex, ez);
     if (len < 1e-3) continue;
     const out: V3 = [-ez / len, 0, ex / len];
+    // openings on this edge (t along it): the gate, then the extra ones within 3 m of the line
+    const cuts: [number, number][] = o.gap?.edge === i ? [[o.gap.t0, o.gap.t1]] : [];
+    const [ax, az] = [ring[2 * i]!, ring[2 * i + 1]!];
+    for (const [gx, gz] of o.gates ?? []) {
+      const t = ((gx - ax) * ex + (gz - az) * ez) / (len * len);
+      const hw = (o.gateWidth ?? 2.4) / 2 / len;
+      if (t > 0 && t < 1 && Math.abs((gx - ax) * ez - (gz - az) * ex) / len < 3) cuts.push([Math.max(0, t - hw), Math.min(1, t + hw)]);
+    }
+    cuts.sort((p, q) => p[0] - q[0]);
     const pieces: [number, number, H][] = [];
-    if (o.gap?.edge === i) {
-      pieces.push([0, o.gap.t0, o.top], [o.gap.t1, 1, o.top]);
-      if (o.gap.top) pieces.push([o.gap.t0, o.gap.t1, o.gap.top]);
-    } else pieces.push([0, 1, o.top]);
+    let tc = 0;
+    for (const [c0, c1] of cuts) (pieces.push([tc, c0, o.top]), (tc = c1));
+    pieces.push([tc, 1, o.top]);
+    if (o.gap?.edge === i && o.gap.top) pieces.push([o.gap.t0, o.gap.t1, o.gap.top]);
     for (const [t0, t1, top] of pieces) {
       if (t1 - t0 < 1e-4) continue;
       const [b0, b1, o0, o1, i0, i1] = [lerp(RB, i, j, t0), lerp(RB, i, j, t1), lerp(RT, i, j, t0), lerp(RT, i, j, t1), lerp(RI, i, j, t0), lerp(RI, i, j, t1)];
@@ -381,9 +425,9 @@ function ringWall(s: Paints, b: MeshBuffer, ring: XZ, o: RingWall, merlons?: Mes
       quadOut(b, [b0[0], o.bot(...b0), b0[1]], [b1[0], o.bot(...b1), b1[1]], T(o1), T(o0), out);
       quadOut(b, [i0[0], o.botIn(...i0), i0[1]], [i1[0], o.botIn(...i1), i1[1]], T(i1), T(i0), [-out[0], 0, -out[2]]);
       quadOut(b, T(o0), T(o1), T(i1), T(i0), UP);
-      const isGap = o.gap?.edge === i && top === o.top;
-      if (isGap && t1 === o.gap!.t0) quadOut(b, [b1[0], o.bot(...b1), b1[1]], [i1[0], o.botIn(...i1), i1[1]], T(i1), T(o1), [ex, 0, ez]);
-      if (isGap && t0 === o.gap!.t1) quadOut(b, [b0[0], o.bot(...b0), b0[1]], [i0[0], o.botIn(...i0), i0[1]], T(i0), T(o0), [-ex, 0, -ez]);
+      const isGap = top === o.top;
+      if (isGap && cuts.some((c) => c[0] === t1)) quadOut(b, [b1[0], o.bot(...b1), b1[1]], [i1[0], o.botIn(...i1), i1[1]], T(i1), T(o1), [ex, 0, ez]);
+      if (isGap && cuts.some((c) => c[1] === t0)) quadOut(b, [b0[0], o.bot(...b0), b0[1]], [i0[0], o.botIn(...i0), i0[1]], T(i0), T(o0), [-ex, 0, -ez]);
       if (o.band && top === o.top) {
         const E = (p: [number, number], y: number): V3 => [p[0] + out[0] * 0.04, y, p[1] + out[2] * 0.04];
         quadOut(o.band.buf, E(o0, top(...o0) - o.band.h), E(o1, top(...o1) - o.band.h), E(o1, top(...o1)), E(o0, top(...o0)), out);
@@ -586,10 +630,13 @@ function ama(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const tiers = amaTiers(f, ctx.height);
   const granite = paint(s, 'masonry', C.granite);
   const a = (d: number) => f.a - d; // depth from the front → a
+  const ring = partRings(rec)?.[0] ?? rec.outer;
   for (const [k, t] of tiers.entries()) {
     const { lo } = rangeIn(ctx.height, f, a(t.d1), a(t.d0), -f.b, f.b);
-    bx(granite, f, a(t.d1), a(t.d0), lo - L.sink, t.y, -f.b, f.b);
-    cbx(s, f, a(t.d1), a(t.d0), lo - L.sink, t.y, -f.b, f.b);
+    // Leg 2 fix (code review M3): the terrace is the outline's band, not the frame's (the footway in the outline's
+    // north-west notch, beside the Barra square, stays free)
+    const band = bandOf(ring, f, a(t.d1), a(t.d0));
+    if (band.length) prismMesh(granite, band, lo - L.sink, t.y), s.prism([band], lo - L.sink, t.y);
     // steps down to the tier in front (side steps between terraces, the front flight through the gate)
     const below: H = k ? () => tiers[k - 1]!.y : ctx.height;
     const w = k === 0 ? 0 : (k % 2 ? -1 : 1) * (f.b - 2.5);
@@ -752,8 +799,9 @@ function louLimIoc(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const gap = { edge: gEdge, t0: 0.5 - gw / 2 / glen, t1: 0.5 + gw / 2 / glen };
   const foot: H = (x, z) => h(x, z) - 0.4;
   const top: H = (x, z) => h(x, z) + G.wallH;
-  ringWall(s, paint(s, 'masonry', C.wall), ring, { outBase: G.thick / 2, outTop: G.thick / 2, inner: G.thick / 2, bot: foot, botIn: foot, top, gap, collide: true });
-  ringWall(s, paint(s, 'masonry', C.coping), ring, { outBase: G.thick / 2 + 0.15, outTop: G.thick / 2 + 0.15, inner: G.thick / 2 + 0.15, bot: (x, z) => top(x, z) - 0.05, botIn: (x, z) => top(x, z) - 0.05, top: (x, z) => top(x, z) + 0.3, gap });
+  const gates = G.gates; // Leg 2 fix: the OSM footway through the north-west wall
+  ringWall(s, paint(s, 'masonry', C.wall), ring, { outBase: G.thick / 2, outTop: G.thick / 2, inner: G.thick / 2, bot: foot, botIn: foot, top, gap, gates, collide: true });
+  ringWall(s, paint(s, 'masonry', C.coping), ring, { outBase: G.thick / 2 + 0.15, outTop: G.thick / 2 + 0.15, inner: G.thick / 2 + 0.15, bot: (x, z) => top(x, z) - 0.05, botIn: (x, z) => top(x, z) - 0.05, top: (x, z) => top(x, z) + 0.3, gap, gates });
   const [mx, mz] = [(ax + bx_) / 2, (az + bz) / 2];
   const [ux, uz] = [(bx_ - ax) / glen, (bz - az) / glen];
   const g: Fr = { cx: mx, cz: mz, ux: -uz, uz: ux, a: 0, b: 0 }; // +a out of the garden
@@ -785,10 +833,12 @@ function church(rec: BuildingRec, ctx: LandmarkCtx, c: ChurchCfg): BuildOut {
   if (!rings) return EMPTY;
   const s = new Paints();
   const C = c.colours;
-  const f = facing(rings[0]!, c.az);
-  const { lo, hi } = rangeIn(ctx.height, f, -f.a, f.a, -f.b, f.b);
-  const yb = lo - L.sink;
-  const y0 = hi + c.platform;
+  const ring = rings[0]!;
+  const f = facing(ring, c.az);
+  // Leg 2 fix (code review H2 / M1): platform + collider follow the OSM outline, not its bounding frame (the frame of a
+  // skewed / notched outline covered the street beside it: Calçada do Tronco Velho, the steps up to São Lourenço)
+  const yb = ctx.minGround - L.sink;
+  const y0 = maxInside(ring, ctx.height) + c.platform;
   const wall = paint(s, 'masonry', C.wall);
   const trim = paint(s, 'masonry', C.trim);
   const tw = c.towers ? c.towerW : 0;
@@ -796,10 +846,10 @@ function church(rec: BuildingRec, ctx: LandmarkCtx, c: ChurchCfg): BuildOut {
   const fa = f.a; // front at +fa
   const nw = f.b * c.nave;
   // platform + steps to the street in front
+  s.prism([ring], yb, y0 + c.wallH); // the whole body (platform, nave, façade block) as one solid
   if (c.platform > 0.05) {
-    bx(paint(s, 'masonry', C.trim), f, -fa - 0.8, fa + 1.2, yb, y0, -f.b - 0.8, f.b + 0.8);
-    cbx(s, f, -fa - 0.8, fa + 1.2, yb, y0, -f.b - 0.8, f.b + 0.8);
-    stairs(s, trim, ctx.height, ...atXZ(f, fa + 1.22, 0), f.ux, f.uz, y0, Math.min(2 * f.b, 10));
+    prismMesh(paint(s, 'masonry', C.trim), ring, yb, y0);
+    stairs(s, trim, ctx.height, ...atXZ(f, fa + 0.02, 0), f.ux, f.uz, y0, Math.min(2 * f.b, 10));
   }
   // nave: walls, plinth + cornice bands, gable roof, side windows
   const nave = [-fa, fa - td] as const;
@@ -807,7 +857,6 @@ function church(rec: BuildingRec, ctx: LandmarkCtx, c: ChurchCfg): BuildOut {
   bx(trim, f, nave[0] - 0.12, nave[1], y0, y0 + 0.7, -nw - 0.12, nw + 0.12);
   bx(trim, f, nave[0] - 0.15, nave[1], y0 + c.wallH - 0.5, y0 + c.wallH, -nw - 0.15, nw + 0.15);
   gableRoof(paint(s, 'masonry', C.roof), wall, f, nave[0], nave[1], nw, y0 + c.wallH, c.rise, 0.6);
-  cbx(s, f, nave[0], fa, yb, y0 + c.wallH, -nw, nw);
   const win = lamp(s, M.lamp.window, M.glow.window);
   const len = nave[1] - nave[0];
   for (let k = 0; k < c.windows; k++) {
@@ -819,7 +868,6 @@ function church(rec: BuildingRec, ctx: LandmarkCtx, c: ChurchCfg): BuildOut {
   const top = y0 + c.facadeH;
   const mid = c.towers === 2 ? f.b - tw : c.towers === 1 ? tw / 2 + 0.01 : f.b;
   if (c.towers !== 1) bx(wall, f, f0, f1, yb, top, -mid, mid); // 1 tower: the nave's gable end is the façade
-  cbx(s, f, f0, f1, yb, top, -f.b, f.b);
   if (c.pediment > 0) {
     // triangular pediment over the centre (front + back faces, sloped tops in trim)
     const [p0, p1] = [f1 - 0.6, f1 + 0.1];

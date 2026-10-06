@@ -75,7 +75,7 @@ describe('ruinas-sao-paulo', () => {
   it('builds finite geometry within budget, with walkable stair colliders', () => {
     expect(finite(out)).toBe(true);
     expect(tris(out)).toBeLessThan(25_000);
-    expect(out.colliders.filter((c) => c.stairs).length).toBe(R.stair.flights * 2 - 1); // a ramp per flight + landing
+    expect(out.colliders.filter((c) => c.stairs).length).toBe(R.stair.flights * 2 - 1 + 2); // a ramp per flight + landing, 2 side flights
     expect(out.colliders.length).toBeGreaterThan(R.stair.flights * 2);
   });
   it('the façade stands on the platform rise m above the stair foot and reaches its published height', () => {
@@ -90,8 +90,9 @@ describe('ruinas-sao-paulo', () => {
   });
   it('stays inside the outline bbox widened by the platform and the stair', () => {
     const b = bbox(out);
-    expect(b.x0).toBeGreaterThan(139.5 - R.terrace.halfWidth);
-    expect(b.x1).toBeLessThan(159.7 + R.terrace.halfWidth);
+    const side = (R.terrace.rise / R.sideStairs.riser + 1) * R.sideStairs.tread; // the side flights' run
+    expect(b.x0).toBeGreaterThan(139.5 - R.terrace.halfWidth - side);
+    expect(b.x1).toBeLessThan(159.7 + R.terrace.halfWidth + side);
     expect(b.z0).toBeGreaterThan(-475.3 - R.terrace.back);
     expect(b.z1).toBeLessThan(-437.5 + R.stair.bottom + 2);
   });
@@ -123,7 +124,7 @@ describe('ruinas-sao-paulo', () => {
     expect(b.y1).toBeCloseTo(8 + R.ruinWall.h, 3);
     expect(b.x0).toBeGreaterThan(175.3 - 1);
     expect(b.x1).toBeLessThan(212.7 + 1);
-    expect(o.colliders.length).toBe(1);
+    expect(o.colliders.length).toBe(0); // Leg 2 fix: knee-high remains, no collider (OSM footways run through them)
   });
 });
 

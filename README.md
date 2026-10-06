@@ -1,6 +1,6 @@
-# Cuộc đua Paris
+# Cuộc đua Ma Cao
 
-Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự giữa trung tâm Paris: mỗi đội một người chơi, đi bộ hoặc nhặt xe đạp, lần lượt mở mật thư, làm Lựa chọn kép, Thử thách rồi về Chặng dừng. Người tổ chức theo dõi trực tiếp mọi đội trên màn hình Host. Toàn bộ chạy trên Cloudflare (Workers + Durable Object + R2).
+Game 3D chạy trên trình duyệt mô phỏng một chặng đua tuần tự trên bán đảo Ma Cao (chặng 2; bản fork của Cuộc đua Paris): mỗi đội một người chơi, đi bộ hoặc nhặt xe đạp, lần lượt mở mật thư, làm Lựa chọn kép, Thử thách rồi về Chặng dừng. Người tổ chức theo dõi trực tiếp mọi đội trên màn hình Host. Toàn bộ chạy trên Cloudflare (Workers + Durable Object + R2).
 
 Đặc tả đầy đủ: [`docs/SPEC.md`](docs/SPEC.md). Luật cho người chơi: [`docs/RACE_RULES.md`](docs/RACE_RULES.md).
 

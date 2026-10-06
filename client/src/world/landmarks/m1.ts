@@ -787,7 +787,20 @@ function mandarimSite(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const ring = grow(simplify(r0, M.simplify), -0.6);
   if (!(ringArea(ring) > 0)) return EMPTY;
   const B = new Build(ctx, ctx.ground, S.siteWall);
-  for (const e of edgesOf(ring)) {
+  // pieces of every edge between the gates (OSM footways through the site wall)
+  const pieces = edgesOf(ring).flatMap((e0) => {
+    const cuts = S.gates.map(([gx, gz]) => [(gx - e0.ax) * e0.ux + (gz - e0.az) * e0.uz, Math.abs(-(gx - e0.ax) * e0.uz + (gz - e0.az) * e0.ux)] as const)
+      .filter(([t, d]) => d < 3 && t > 0 && t < e0.len).map(([t]) => t).sort((p, q) => p - q);
+    const out: Edge[] = [];
+    let t0 = 0;
+    for (const t of [...cuts, e0.len + S.gateWidth / 2]) {
+      const t1 = Math.min(e0.len, t - S.gateWidth / 2);
+      if (t1 - t0 > 0.1) out.push({ ...e0, ax: e0.ax + e0.ux * t0, az: e0.az + e0.uz * t0, len: t1 - t0 });
+      t0 = t + S.gateWidth / 2;
+    }
+    return out;
+  });
+  for (const e of pieces) {
     const [bx, bz] = at(e, e.len, 0);
     const [ga, gb] = [ctx.height(e.ax, e.az), ctx.height(bx, bz)];
     const [ta, tb] = [ga + S.siteWall, gb + S.siteWall];

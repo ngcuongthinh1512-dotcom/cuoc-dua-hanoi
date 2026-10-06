@@ -462,7 +462,9 @@ function colosseum(s: Sink, ctx: LandmarkCtx) {
   loft(wall, [ring(yb), ring(yg + total)]);
   loft(wall, [ring(yg + total, -3), ring(yb, -3)]); // inner face (seen from above, over the plain block)
   for (let k = 0; k < n; k++) quadOut(wall, ring(yg + total, -3)[k]!, ring(yg + total, -3)[(k + 1) % n]!, ring(yg + total)[(k + 1) % n]!, ring(yg + total)[k]!, [0, 1, 0]);
-  s.prism([ring(0).flatMap((p) => [p[0], p[2]])], yb, yg + total);
+  // Leg 2 fix (code review M3): the arcade is open at street level (footways run through it): the collider is the wall
+  // ring above the ground tier only, not a solid ellipse
+  s.prism([ring(0).flatMap((p) => [p[0], p[2]]), ring(0, -3).reverse().flatMap((p) => [p[0], p[2]])], yg + C.tiers[0]!, yg + total);
   const dark = paint(s, 'masonry', rgb(C.arch));
   const lit = paint(s, 'neon', glow(C.lit, C.litBright));
   const pil = paint(s, 'masonry', rgb(C.colour), 'near');

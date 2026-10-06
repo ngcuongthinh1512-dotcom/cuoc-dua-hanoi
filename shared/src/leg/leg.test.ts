@@ -102,7 +102,7 @@ describe('leg schema', () => {
   });
 
   it('refuses a time zone the Host page cannot format (review fix: Intl throws, the Host screen stopped drawing)', () => {
-    for (const tz of ['Paris', 'UTC+7', 'Europe/Paris ']) expect(errors({ ...mini(), timezone: tz })).toEqual([`múi giờ: "${tz}" không phải múi giờ hợp lệ; dùng tên múi giờ chuẩn dạng Châu_lục/Thành_phố (tên IANA), ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"`]);
+    for (const tz of ['Paris', 'UTC+7', 'Europe/Paris ']) expect(errors({ ...mini(), timezone: tz })).toEqual([`múi giờ: "${tz}" không phải múi giờ hợp lệ; dùng tên múi giờ chuẩn dạng Châu_lục/Thành_phố (tên IANA), ví dụ "Asia/Ho_Chi_Minh", "Asia/Macau"`]);
     expect(errors({ ...mini(), timezone: 'Europe/Paris' })).toEqual([]);
   });
 

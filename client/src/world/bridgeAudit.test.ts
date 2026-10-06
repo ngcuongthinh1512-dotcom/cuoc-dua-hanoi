@@ -153,6 +153,9 @@ describe.skipIf(!has)('bridge audit', () => {
     // Ponte da Amizade (E coast: steps 3–6 m, blocked), the Rotunda da Amizade viaduct + the Ma Man Kei bridge (NE: decks of
     // different bridge ways meet at different heights, steps 0.5–12 m), 昌盛大桥 (NW corner: the chain is cut by the map edge,
     // no floor beyond), Ponte de Sai Van (SW: a ±17.7 m step where the upper and lower decks touch). Report: docs/reports/leg2-tests-workspaces.md.
+    // TODO(organiser safety, docs/reports/leg2-fixes.md item 4): these are REAL steps a team can fall from (Sai Van starts next to
+    // Macau Tower, a likely leg point): no route point, bike corridor or Pit Stop on them (docs/LEG_FORMAT.md, TODO.md) until
+    // BridgeBuilder / npc/roads.ts buildDecks join the decks of differently named bridge ways.
     const KNOWN_MACAO = /^(友誼大橋|友誼圓形地行車天橋|昌盛大桥|西灣大橋 Ponte de Sai Van|馬萬祺博士大馬路)/;
     const blocking = findings.filter((f) => f.includes('(lệch 0.0 m)') && !/^\(không tên|props|landmarks|buildings|Belmondo/.test(f) && !KNOWN_MACAO.test(f));
     expect(names.size).toBeGreaterThan(30); // Macao: 42 sea bridges (Paris 38)

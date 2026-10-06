@@ -114,7 +114,7 @@ export const lighting = {
   // (radius m); an opened box: halo / pool × opened, stripes keep their dim day look
   boxes: { emissive: 1.1, beam: 2.2, halo: { size: 1.6, spread: 0.02, strength: 1.3, y: 1.4 }, pool: { radius: 2.6, strength: 0.45 }, opened: 0.3 },
   // Pit Stop mat (race/PitStop.ts): stripes = the lit rim (emissive), carpet emissive, column colour × beam
-  pit: { rim: 1.6, carpet: 0.25, beam: 2.5 },
+  pit: { rim: 0.5, carpet: 0.25, beam: 2.5 }, // rim 1.6 → 0.5 (leg2-fixes.md item 6): with bloom the gold band hid the player and the mat
   // stair flights (world/StairBuilder.ts nosing strips, material 'stairGlow', hidden by day): strip width m, lift m,
   // inset m from each side, colour × intensity
   stairs: { strip: 0.06, lift: 0.006, inset: 0.12, colour: '#ffe0a8', intensity: 2.2 },
@@ -463,6 +463,7 @@ export const landmarks = {
       wall: '#858987', plaster: '#ecebe4', roof: '#4b4f53', ridge: '#383b3e', walls: 7.5, roof3: 3, eave: 0.8, courtWall: 5, siteWall: 3.8,
       plan: [0.13, 0.09, 0.15, 0.1, 0.13, 0.09, 0.14, 0.17] as number[], // shares of the long axis: hall, court, hall, … (est.)
       moon: { r: 1.35, h: 4.2, sill: 0.15 },
+      gates: [[-465.1, 535.8]] as [number, number][], gateWidth: 2.4, // site wall openings (world x, z) where OSM footways cross it (Leg 2 fix)
     },
     domingos: { // St Dominic's (1587, façade 18th c.): OSM h 17.9 = nave ridge; façade 21 m, tower 24 m (est.)
       az: 167, walls: 14, ridge: 17.9, facade: 21, tower: { size: 5.5, height: 24 }, wall: '#f0cd6c', trim: '#fbf8ef', roof: '#8d6a55',
@@ -531,6 +532,7 @@ export const landmarks = {
     louLimIoc: {
       // Jardim Lou Lim Ioc (1906): Suzhou-style walled garden; pond from OSM (water.json); features placed from the OSM pond (est.)
       wallH: 2.8, thick: 0.4, gateAz: 225, moon: 1.5,
+      gates: [[819.3, -727.2]] as [number, number][], // world x, z: plain openings where OSM footways cross the wall (Leg 2 fix)
       hallAz: 180, hall: { eave: 5, rise: 3 }, pavilionMax: 60, // zone members: m² below which a building is a pavilion
       pavilions: [[845, -757, 6, 3], [912, -791, 4, 3.2]] as [number, number, number, number][], // x, z, sides, radius
       rockery: { x: 889, z: -819, r: 6, n: 14, h: 4.5 },
@@ -677,7 +679,11 @@ export const landmarks = {
       // the stone platform the façade stands on and its great stair (68 steps in reality): the AWS DEM is blurred flat
       // here (≈ 5 m everywhere), so the climb is built: rise = est. 9 m over the OSM steps way (43 m)
       terrace: { halfWidth: 12.5, back: 40, rise: 9 }, // m: half-width of the platform, how far it reaches behind the façade
-      stair: { halfWidth: 10, bottom: 68.65, top: 21.65, flights: 4, landing: 4, cheek: { w: 0.6, h: 0.9 } }, // local z (south of the façade foot): bottom = Rua de S. Paulo (world z ≈ −369), top = OSM stair end (z ≈ −416)
+      stair: { halfWidth: 10, bottom: 63.5, top: 21.65, flights: 4, landing: 4, cheek: { w: 0.6, h: 0.9 } }, // local z (south of the façade foot): bottom = just north of the OSM pedestrian way across the stair foot (world z ≈ −373; was 68.65: its cheeks barred that way), top = OSM stair end (z ≈ −416)
+      // side flights down both platform edges where the OSM footway across the Largo in front of the façade leaves it (local
+      // z, m; Rua da Ressurreição on the west, the college remains on the east): the DEM is flat, so without them that footway
+      // ends at a 9 m drop (Leg 2 fix, docs/reports/leg2-fixes.md)
+      sideStairs: { z: 10, width: 3.5, riser: 0.18, tread: 0.3 },
       ruinWall: { h: 1.1, t: 0.7, gapEvery: 7, gap: 1.6 }, // low wall remains along the nave outline and the college outline (east)
       // floodlit façade: unlit vertex colours = stone × (ambient + strength × max(0, n·dir) × (1 − fade·y/height)); dir = from the
       // lamps on the platform up into the façade (uplighting), × lighting.emissiveScale. Same by day (the worker knows no time).
@@ -993,6 +999,9 @@ export const npc = {
   seed: 1, // each sim xors its own constant into it; URL ?npcSeed= overrides
   density: 2, // × traffic.perKm / crowd.perKm, then × the automatic factor (npcRender.autoDensity); URL ?npcDensity=; 2 since 2026-10-04 (SPEC §17.43)
   zoneMargin: 3, // m added to every ExclusionZone radius
+  // Leg 2: [x, z, r] where a landmark builds walking surfaces above the DEM (NPCs walk the DEM and would sink into them):
+  // the Ruínas de São Paulo platform + great stair (local z −40 … 63.5 of the façade frame, ±12.5 m)
+  landmarkZones: [[150, -466, 14], [150, -445, 14], [150, -424, 14], [150, -403, 14], [150, -385, 13]] as [number, number, number][],
   vehicles: npcVehicles as Readonly<Record<keyof typeof npcVehicles, NpcVehicle>>,
   paints: ['#f2f2ef', '#1d1f22', '#8d9296', '#c3c7ca', '#1f3350', '#7a1f22', '#35503a'], // sRGB body paints
 };
@@ -1329,7 +1338,7 @@ export const hudWidgets = {
 
 // ── Foundation · session (net/session.ts, main.ts) ──
 export const net = {
-  defaultRace: 'paris', // race id when the URL has no ?race= (the Host's link carries one); each race = one Durable Object
+  defaultRace: 'macao', // race id when the URL has no ?race= (the Host's link carries one); each race = one Durable Object
   apiBase: '/api', // same origin (Workers Static Assets + Worker); the Vite dev server proxies it to wrangler dev (vite.config.ts)
 };
 
@@ -1423,7 +1432,7 @@ export const raceClient = {
   lockEndSlackMs: 1000,
   // Pit Stop (SPEC §8.6 + §17.38): a red mat with yellow stripes at the zone centre, long axis along the zone yaw; its size is
   // PIT_MAT (shared/src/constants.ts): the server counts a team as at the Pit Stop only ON it + the host NPC
-  mat: { length: PIT_MAT.length, width: PIT_MAT.width, colour: '#b3201c', stripe: '#f2c230', stripeWidth: 0.5, lift: 0.04 },
+  mat: { length: PIT_MAT.length, width: PIT_MAT.width, colour: '#b3201c', stripe: '#f2c230', stripeWidth: 0.5, lift: 0.3 }, // lift = carpet thickness: over the paving overlays (sidewalk tops 0.2 m, Largo do Senado calçada 0.26 m), else buried (leg2-fixes.md item 2)
   // the finish marker, drawn with the mat (so revealed by the same rule, SPEC §17.10): a red light column at the mat centre
   // (taller and redder than a clue box's yellow one, MeshBasic: no bloom needed)
   matBeam: { height: 40, width: 0.5, spread: 0.01, colour: '#ff3b2f', opacity: 0.8 }, // spread: m of width per m of distance (≥ width)

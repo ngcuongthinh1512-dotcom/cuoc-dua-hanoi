@@ -5,6 +5,7 @@
 // `kind: 'mat'` box is the Pit Stop mat (race/PitStop.ts); every change reports the zones (NPC exclusion, D20).
 // Phase 8 (docs/plans/phase8.md D7): boxes keyed by step|branch (a detour branch's box), `box remove` after a branch
 // switch, the box's front turned to BoxInfo.yaw.
+import { PIT_MAT } from '@race/shared';
 import { matMesh } from '../race/PitStop.ts';
 import type { BoxInfo, ServerMessage } from '@race/shared/protocol';
 import {
@@ -32,6 +33,15 @@ export function nextBoxes(list: readonly BoxInfo[], m: BoxMessage): BoxInfo[] {
 /** root.rotation.y of a box whose front (the side the team reads it from) faces `yaw` (BoxInfo.yaw: 0 = north, + = west).
  *  The model's front is +z (the lid hinges at −z), so + π, like CharacterModel. */
 export const boxRotation = (yaw = 0) => yaw + Math.PI;
+
+/** The Pit Stop mat's tilt on a slope (Euler order YXZ after the yaw): the terrain at its two ends / two sides, so a
+ *  sloping square (Largo do Senado) does not bury its uphill end under the paving (leg2-fixes.md item 2). */
+export function matTilt(x: number, z: number, yaw: number, h: (x: number, z: number) => number, length = PIT_MAT.length, width = PIT_MAT.width) {
+  const [c, s] = [Math.cos(yaw), Math.sin(yaw)];
+  const along = h(x + (s * length) / 2, z + (c * length) / 2) - h(x - (s * length) / 2, z - (c * length) / 2); // local +z end − −z end
+  const across = h(x + (c * width) / 2, z - (s * width) / 2) - h(x - (c * width) / 2, z + (s * width) / 2); // local +x side − −x side
+  return { pitch: -Math.atan2(along, length), roll: Math.atan2(across, width) };
+}
 
 /** DEV ?boxes=step[|branch],x,z[,opened][,yawDeg];… (p6-boxes, p8-box-*): stand-in boxes without a server (zone radius
  *  20 m); `kind` 'mat' (?mat, p7-mat): Pit Stop mats instead. */
@@ -201,6 +211,11 @@ export class ClueBoxes {
       const root = b.kind === 'mat' ? matMesh() : boxMesh(b.opened);
       root.position.set(b.x, this.terrainAt(b.x, b.z), b.z);
       root.rotation.y = b.kind === 'mat' ? (b.yaw ?? 0) : boxRotation(b.yaw); // the mat: long axis along the zone yaw (= the server's onPitMat rectangle, SPEC §17.38)
+      if (b.kind === 'mat') {
+        const t = matTilt(b.x, b.z, b.yaw ?? 0, this.terrainAt);
+        root.rotation.order = 'YXZ';
+        [root.rotation.x, root.rotation.z] = [t.pitch, t.roll];
+      }
       this.scene.add(root);
       this.drawn.set(key, { root, info: b, placed: false });
     }

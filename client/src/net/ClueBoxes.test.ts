@@ -1,8 +1,8 @@
 import type { BoxInfo } from '@race/shared/protocol';
-import { type BufferGeometry, type Mesh, type MeshStandardMaterial, type Object3D, Scene, Vector3 } from 'three';
+import { type BufferGeometry, type Mesh, type MeshStandardMaterial, Object3D, Scene, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { clueBox, lighting as LT } from '../config.ts';
-import { boxRotation, ClueBoxes, nextBoxes, parseBoxes } from './ClueBoxes.ts';
+import { boxRotation, ClueBoxes, matTilt, nextBoxes, parseBoxes } from './ClueBoxes.ts';
 
 const box = (step: string, opened = false): BoxInfo => ({ step, x: 10, z: -20, opened, r: 20 });
 
@@ -166,5 +166,23 @@ describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', 
     cb.reset([box('L1')]);
     expect(uuids(scene.children[0]!).some((u) => ids.includes(u))).toBe(false);
     cb.dispose();
+  });
+});
+
+describe('matTilt (leg2-fixes.md item 2)', () => {
+  it('lays the mat on a sloping plane: its corners at the terrain height, whatever the yaw', () => {
+    const h = (x: number, z: number) => 0.05 * x - 0.03 * z; // a plane
+    for (const yaw of [0, 0.7, -1.2, Math.PI]) {
+      const t = matTilt(10, -5, yaw, h);
+      const o = new Object3D();
+      o.position.set(10, h(10, -5), -5);
+      o.rotation.order = 'YXZ';
+      o.rotation.set(t.pitch, yaw, t.roll);
+      o.updateMatrixWorld();
+      for (const [u, v] of [[8, 16], [-8, 16], [8, -16], [-8, -16]]) {
+        const p = new Vector3(u, 0, v).applyMatrix4(o.matrixWorld);
+        expect(p.y).toBeCloseTo(h(p.x, p.z), 1);
+      }
+    }
   });
 });

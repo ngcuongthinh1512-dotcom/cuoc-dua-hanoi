@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai Cuộc đua Paris lên Cloudflare (cho người không chuyên)
+# Hướng dẫn triển khai Cuộc đua Ma Cao lên Cloudflare (cho người không chuyên)
 
 Game chạy hoàn toàn trên Cloudflare (gói Free đủ cho một cuộc đua 2 giờ, 8 đội): một **Worker** phục vụ trang web + API, một **Durable Object** `RaceRoom` (bộ nhớ SQLite) cho mỗi cuộc đua, một **bucket R2** `MEDIA` chứa hình mật thư, và một **secret** `HOST_PASSWORD` là mật khẩu trang Host. Không cần máy chủ riêng.
 
@@ -87,7 +87,7 @@ Mỗi lần sửa mã / cập nhật bản mới → chạy lại `npm run deplo
 ## 4. Sau khi deploy: chuẩn bị một cuộc đua trên trang Host
 
 1. Mở `https://cuoc-dua-macao.<tên>.workers.dev/host.html`.
-2. **Mã cuộc đua**: đặt một mã mới cho mỗi cuộc đua / mỗi buổi diễn tập, ví dụ `paris-2026-11-15` (chữ thường a–z, số, gạch ngang, ≤ 32 ký tự). Mỗi mã là một phòng riêng, dữ liệu không lẫn nhau. Gõ **Mật khẩu Host** (bước 2b) → **Đăng nhập**.
+2. **Mã cuộc đua**: đặt một mã mới cho mỗi cuộc đua / mỗi buổi diễn tập, ví dụ `macao-2026-11-15` (chữ thường a–z, số, gạch ngang, ≤ 32 ký tự). Mỗi mã là một phòng riêng, dữ liệu không lẫn nhau. Gõ **Mật khẩu Host** (bước 2b) → **Đăng nhập**.
 3. **Nạp chặng thật**: mục "Chặng" → "Nạp chặng từ file" → chọn file chặng thật (file này nằm **ngoài** repo, ví dụ trong `~/Documents/chang-that/`; đã kiểm bằng `npm run leg:check -- <đường dẫn file>` trước đó, 0 lỗi). Chặng nạp xong hiện tên + số bước; cảnh báo (nếu có) hiện ngay dưới. Chặng chỉ nằm trong Durable Object của mã cuộc đua này, không bao giờ vào trang web của người chơi.
 4. **Hình mật thư (R2)**: mục này liệt kê mọi tên hình `r2:` mà chặng nhắc tới, kèm trạng thái "chưa có" / "đã có". Với từng tên: bấm chọn file (JPEG / PNG / WebP, ≤ 5 MB) → tải lên → bấm **Xem** để kiểm. Hình lưu theo mã cuộc đua (`<mã>/<tên>`): diễn tập ở mã khác thì phải tải lại.
 5. **Tạo đội**: ô "Tạo đội", mỗi dòng một đội `Tên đội; Tên người chơi` → **Tạo đội & sinh mã**. Bảng "Các đội" / "Thứ tự vào game" hiện **mã đội 6 ký tự** mỗi đội kèm nút **Sao chép**. Chép từng mã vào bảng tính / giấy để phát cho các đội (in / tin nhắn). Mã không hiện lại trong game, nên lưu bảng này.
@@ -102,7 +102,7 @@ Luật chơi cho đội: `docs/RACE_RULES.md` (cũng mở được trong game).
 
 ## 5. Checklist kiểm trước ngày đua (làm trên bản đã deploy, mã cuộc đua diễn tập riêng)
 
-- [ ] `npm run deploy` xong không lỗi; mở link game, thấy Paris + nhân vật ở Bir-Hakeim / xuất phát của chặng.
+- [ ] `npm run deploy` xong không lỗi; mở link game, thấy Ma Cao + nhân vật ở Largo do Senado / xuất phát của chặng.
 - [ ] **FPS máy thật**: game không còn phím mở bảng FPS (người chơi không thấy). Để tự kiểm, mở `https://<địa chỉ>/?offline=1&debug=1` (thế giới thử, có bảng thông số). Mục tiêu ≥ 30 ổn định. Nếu thấp: **Esc → Cài đặt → Chất lượng đồ họa → Thấp**, tải lại trang. Máy yếu tự chọn Thấp; ở Cao, nếu FPS tụt game tự hạ cấp (hiện thông báo nhỏ). Nhớ dặn các đội cách này.
 - [ ] Thử trên **2 trình duyệt** (Chrome + Edge hoặc Firefox / Safari) và ít nhất một máy Windows + một macOS: đăng nhập mã đội, đi, lấy xe (F), mở hòm (F), Sổ mật thư (Tab), Enter mở lại thẻ.
 - [ ] Trang Host trên một máy khác: nạp chặng, tải đủ hình R2 (mọi dòng "đã có", bấm Xem được), tạo 2 đội thử, chép mã, đăng nhập 2 đội trên 2 tab / 2 máy, thấy nhau trên bản đồ.

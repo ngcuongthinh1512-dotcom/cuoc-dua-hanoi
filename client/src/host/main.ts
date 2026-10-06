@@ -53,7 +53,7 @@ function loginView() {
   };
   pwIn.addEventListener('keydown', (e) => e.key === 'Enter' && void go());
   app.replaceChildren(
-    el('h1', {}, 'Cuộc đua Paris – Host'),
+    el('h1', {}, 'Cuộc đua Ma Cao – Host'),
     el('section', {}, el('label', {}, 'Mã cuộc đua ', raceIn), el('label', {}, 'Mật khẩu Host ', pwIn), el('button', { onclick: () => void go() }, 'Đăng nhập'), err),
   );
 }
@@ -138,7 +138,7 @@ function mainView() {
   sigs.status = sigs.leg = sigs.start = sigs.queue = sigs.undo = sigs.matrix = sigs.media = '';
   drawNotify();
   app.replaceChildren(
-    el('h1', {}, `Cuộc đua Paris – Host · ${race}`),
+    el('h1', {}, `Cuộc đua Ma Cao – Host · ${race}`),
     el('p', {}, 'Link cho người chơi: ', el('code', {}, link), ' ', el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(link) }, 'Sao chép')),
     specBox,
     banner, noticeBox, err, queueWrap,

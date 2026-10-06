@@ -246,6 +246,24 @@ function platform(k: Sink, hAt: (x: number, z: number) => number, T: number): Tr
   }
   inner.push([z, y - 0.03]);
   nose.push([z, y]);
+  // side flights at sideStairs.z, outward along ±x down to the terrain (box steps + one walkable ramp each)
+  const SS = R.sideStairs;
+  const hz = SS.width / 2;
+  for (const sd of [-1, 1]) {
+    let [x, yy] = [sd * hw, 0];
+    for (let q = 0; q < 80; q++) {
+      const xb = x + sd * SS.tread;
+      const g = Math.min(hAt(x, SS.z - hz), hAt(xb, SS.z - hz), hAt(x, SS.z + hz), hAt(xb, SS.z + hz)) - T;
+      if (yy - SS.riser <= g + 0.02) break;
+      box(M, Math.min(x, xb), Math.max(x, xb), g - 0.4, yy - SS.riser, SS.z - hz, SS.z + hz);
+      [x, yy] = [xb, yy - SS.riser];
+    }
+    if (x === sd * hw) continue;
+    const [xe, ye] = [x + sd * SS.tread, yy - SS.riser];
+    // upward-facing quad: (x0, 0, z−) → (xe, ye, z−) → (xe, ye, z+) → (x0, 0, z+); winding flipped on the west side
+    const v = new Float32Array([sd * hw, 0, SS.z - hz, xe, ye, SS.z - hz, xe, ye, SS.z + hz, sd * hw, 0, SS.z + hz]);
+    ramps.push({ vertices: v, indices: new Uint32Array(sd > 0 ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3]), stairs: true });
+  }
   // core under the steps and the two cheek walls: profiles extruded along x
   const yLow = -R.terrace.rise - 2;
   const core = [...inner.flat(), z, yLow, ST.top - 0.5, yLow];
@@ -264,7 +282,7 @@ function platform(k: Sink, hAt: (x: number, z: number) => number, T: number): Tr
 }
 
 /** Low ruin walls with gaps along the given edges (world coords); `top(x, z)` / `bottom(x, z)` give the wall's y. */
-function ruinWalls(k: Sink, edges: [number, number, number, number][], top: (x: number, z: number) => number, bottom: (x: number, z: number) => number) {
+function ruinWalls(k: Sink, edges: [number, number, number, number][], top: (x: number, z: number) => number, bottom: (x: number, z: number) => number, collide = true) {
   const RW = R.ruinWall;
   const M = paint(k, 'masonry', col(L.colours.stone, 0.9));
   for (const [ax, az, bx, bz] of edges) {
@@ -285,7 +303,7 @@ function ruinWalls(k: Sink, edges: [number, number, number, number][], top: (x: 
         quadOut(M, V(i, yb), V(j, yb), V(j, yAt(j)), V(i, yAt(i)), [-(ring[2 * j + 1]! - ring[2 * i + 1]!), 0, ring[2 * j]! - ring[2 * i]!]);
       }
       quadOut(M, V(0, yAt(0)), V(1, yAt(1)), V(2, yAt(2)), V(3, yAt(3)), [0, 1, 0]);
-      k.prism([ring], yb, Math.max(...ys));
+      if (collide) k.prism([ring], yb, Math.max(...ys));
     }
   }
 }
@@ -318,7 +336,8 @@ export function ruinas(rec: BuildingRec, ctx: LandmarkCtx, h?: Pick<Helpers, 're
   if (kind === 'facade') return EMPTY;
   if (kind === 'college') {
     const k = new Sink();
-    ruinWalls(k, edgesOf(rec.outer), (x, z) => ctx.height(x, z) + R.ruinWall.h, (x, z) => ctx.height(x, z) - B.baseSink);
+    // no collider (Leg 2 fix): knee-high remains whose gaps do not match the OSM footways running through the college
+    ruinWalls(k, edgesOf(rec.outer), (x, z) => ctx.height(x, z) + R.ruinWall.h, (x, z) => ctx.height(x, z) - B.baseSink, false);
     return k.out();
   }
   if (kind === 'museum') {

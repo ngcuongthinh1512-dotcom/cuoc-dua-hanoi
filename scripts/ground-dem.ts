@@ -43,6 +43,29 @@ for (const f of readdirSync(join(data, 'chunks'))) {
   }
 }
 
+// Leg 2 fix (docs/reports/leg2-fixes.md item 5): streets get the full blur too. Radar spikes away from any OSM footprint
+// (flyover piers, trees, unmapped blocks: a 10 m ridge across Av. Comercial de Macau by the Bank of China) stood on the
+// roads as walls; road nodes within ROAD_HALF m of a way's centre line now count as built-up.
+const ROAD_HALF = 8;
+const road = new Uint8Array(W * H);
+for (const f of readdirSync(join(data, 'chunks'))) {
+  if (f === 'index.json') continue;
+  const c = JSON.parse(readFileSync(join(data, 'chunks', f), 'utf8')) as ChunkData;
+  for (const r of c.roads) {
+    for (let k = 0; k + 3 < r.pts.length; k += 2) {
+      const [ax, az, bx, bz] = [r.pts[k]!, r.pts[k + 1]!, r.pts[k + 2]!, r.pts[k + 3]!];
+      const l2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1;
+      const i0 = Math.max(Math.floor((Math.min(ax, bx) - ROAD_HALF - minX) / C), 0), i1 = Math.min(Math.ceil((Math.max(ax, bx) + ROAD_HALF - minX) / C), W - 1);
+      const j0 = Math.max(Math.floor((Math.min(az, bz) - ROAD_HALF - minZ) / C), 0), j1 = Math.min(Math.ceil((Math.max(az, bz) + ROAD_HALF - minZ) / C), H - 1);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const [x, z] = [minX + i * C, minZ + j * C];
+        const t = Math.min(1, Math.max(0, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / l2));
+        if (Math.hypot(x - ax - t * (bx - ax), z - az - t * (bz - az)) <= ROAD_HALF) road[j * W + i] = 1;
+      }
+    }
+  }
+}
+
 // mean over a (2·WINDOW + 1 m) box = coverage × height (separable running sums)
 const r = Math.round(WINDOW / C);
 const mean = new Float32Array(W * H);
@@ -78,7 +101,7 @@ const smooth = (radiusM: number) => {
   const bl = blur(blur(demF, rad), rad); // two box passes ≈ Gaussian σ = radius / 1.4
   return Int16Array.from(dem, (v, i) => {
     if (v <= FLOOR_DM) return v; // sea
-    const t = Math.min(1, mean[i]! / FULL_AT);
+    const t = road[i] ? 1 : Math.min(1, mean[i]! / FULL_AT);
     return Math.max(Math.round(v + t * (bl[i]! - v)), FLOOR_DM);
   });
 };

@@ -7,13 +7,13 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { latLonToWorld, RACE_BBOX, worldToLatLon } from '@race/shared';
+import { latLonToWorld, PIT_MAT, RACE_BBOX, worldToLatLon } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, WayFlag, pathPolyline, segPoint, shortestPath } from '@race/shared/graph';
 import { MEDIA } from '@race/shared/protocol';
 import { type Artwork, type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, mediaItems, normalizeAnswer, parseLeg, placeOf, r2Names, startSpot, words } from '@race/shared/leg';
 import { roads, traffic } from '../client/src/config.ts';
 import { CHUNK_SIZE, type ChunkData, type WaterData } from '../client/src/geo/chunkData.ts';
-import { districtAt, inRing } from '../client/src/geo/districts.ts';
+import { districtAt, districtLabel, inRing } from '../client/src/geo/districts.ts';
 import { flatHeightGrid, heightAt, parseHeightGrid } from '../client/src/geo/heightGrid.ts';
 import { LANDMARKS } from '../client/src/geo/landmarks.ts';
 import { StreetLocator } from '../client/src/geo/locate.ts';
@@ -52,7 +52,18 @@ interface MapData {
   carriageway(x: number, z: number): string | null;
   /** Ground height (DEM, m, y of the world) for the screenshot camera. */
   ground(x: number, z: number): number;
+  /** Name of a landmark whose outline holds (x, z) or passes within LANDMARK_NEAR m (its detailed build: platform, steps,
+   *  walls, may stand there), walkable squares excluded; null = none. */
+  landmarkAt(x: number, z: number): string | null;
+  /** Share (0…1) of the Pit Stop mat (PIT_MAT, long axis along yawDeg) over solid building footprints, sampled every 2 m. */
+  matBlocked(x: number, z: number, yawDeg: number): number;
 }
+
+/** m: a point this close to a landmark outline gets the "built detail" warning (leg2-fixes.md item 2). */
+const LANDMARK_NEAR = 1.5;
+/** Landmark records the game leaves open (squares the teams walk on): no warning there. */
+const WALKABLE_LANDMARKS = new Set(['largo-senado', 'praca-flor-de-lotus']);
+const WALKABLE_RECORD = (b: ChunkData['buildings'][number]) => WALKABLE_LANDMARKS.has(b.landmark!) || (b.landmark === 'templo-ama' && b.kind === 'artwork'); // the Barra square
 
 export function loadMap(root = ROOT): MapData {
   const read = <T>(p: string) => JSON.parse(readFileSync(join(root, p), 'utf8')) as T;
@@ -158,8 +169,35 @@ export function loadMap(root = ROOT): MapData {
       return path ? { meters: path.length, snapA: Math.min(snapA, 300), snapB } : null;
     },
   };
+  // ponytail: the landmark details (client/src/world/landmarks) cannot run here (DOM / three types), so outlines + a margin
+  // stand for their volumes; a platform or stair built far outside its outline (Ruínas' 60 m stair) is not seen.
+  const segDist = (x: number, z: number, r: number[]) => {
+    let d = Infinity;
+    for (let i = 0, n = r.length; i < n; i += 2) d = Math.min(d, segPoint(x, z, r[i]!, r[i + 1]!, r[(i + 2) % n]!, r[(i + 3) % n]!)[1]);
+    return d;
+  };
+  const landmarkAt = (x: number, z: number) => {
+    const [ci, cj] = [Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE)];
+    for (let i = ci - 1; i <= ci + 1; i++)
+      for (let j = cj - 1; j <= cj + 1; j++)
+        for (const b of chunk(i, j)?.buildings ?? []) {
+          if (!b.landmark || WALKABLE_RECORD(b)) continue;
+          if (inRing(x, z, b.outer) || segDist(x, z, b.outer) <= LANDMARK_NEAR) return LANDMARK_NAME.get(b.landmark) ?? b.landmark;
+        }
+    return null;
+  };
+  const matBlocked = (x: number, z: number, yawDeg: number) => {
+    const [c, sn] = [Math.cos((yawDeg * Math.PI) / 180), Math.sin((yawDeg * Math.PI) / 180)];
+    let [n, bad] = [0, 0];
+    for (let u = -PIT_MAT.width / 2; u <= PIT_MAT.width / 2; u += 2)
+      for (let v = -PIT_MAT.length / 2; v <= PIT_MAT.length / 2; v += 2) {
+        n++;
+        if (footprints(x + c * u + sn * v, z - sn * u + c * v).some(solid())) bad++;
+      }
+    return bad / n;
+  };
   return {
-    geo, graph, water, waterAt, onBridge, carriageway,
+    geo, graph, water, waterAt, onBridge, carriageway, landmarkAt, matBlocked,
     street: (x, z) => locator.at(x, z),
     district: (x, z) => districtAt(water.districts, x, z),
     ground: (x, z) => heightAt(grid, x, z),
@@ -423,7 +461,7 @@ function mapReport(leg: Leg, map: MapData) {
     const walk = walks.length ? `đi bộ ≈ ${Math.round(Math.min(...walks.map((w) => w.meters + w.snapA + w.snapB)))} m từ điểm trước` : p.step === 0 ? 'điểm xuất phát' : 'KHÔNG đi bộ tới được';
     const step = p.step === 0 ? null : leg.steps[p.step - 1]!;
     lines.push(`• ${step ? `Bước ${p.step} (${p.id}, ${step.type})` : 'Xuất phát'}: ${p.label || '(chưa đặt tên)'}${p.branch ? ` — hòm nhánh ${p.branch}` : ''}${p.r ? ` — vùng ${p.r} m` : ''} — ${walk}`);
-    lines.push(`    ${street ?? 'không có tên đường gần đó'}${dis ? `, Quận ${dis}` : ''} — ${lat}, ${lon}`);
+    lines.push(`    ${street ?? 'không có tên đường gần đó'}${dis ? `, ${districtLabel(dis)}` : ''} — ${lat}, ${lon}`);
     const xz = (x: number, z: number) => `${+x.toFixed(1)},${+z.toFixed(1)}`;
     if (!step) {
       const c = compass(leg.start.yawDeg);
@@ -457,14 +495,22 @@ function mapReport(leg: Leg, map: MapData) {
       warned.add(key);
       const bridge = map.onBridge(p.x, p.z);
       const wet = map.waterAt(p.x, p.z);
-      if (wet === 'river' && !bridge) add('warning', where, 'nằm giữa sông, đội không đứng được; dời vào bờ hoặc lên mặt cầu');
+      if (wet === 'river' && !bridge) add('warning', where, 'nằm giữa biển / sông (mặt nước lớn), đội không đứng được; dời vào bờ hoặc lên mặt cầu');
       if (wet === 'pond' && !bridge) add('warning', where, 'nằm giữa mặt nước (hồ / bể nước / đài phun nước), đội không đứng được; dời ra chỗ đất cạnh đó');
       if (bridge && !wet)
-        add('warning', where, 'nằm trên đoạn cầu bắc qua đất (bờ / đảo), không phải qua mặt nước: kiểm tra đúng mặt cầu đi bộ, không phải nóc cầu cạn metro / đường sắt (giữa cầu Bir-Hakeim trên đảo Île aux Cygnes: bình thường)');
+        add('warning', where, 'nằm trên đoạn cầu bắc qua đất (bờ / đảo), không phải qua mặt nước: kiểm tra đúng mặt cầu đi bộ, không phải nóc cầu cạn metro / đường sắt');
+      // Leg 2 (leg2-fixes.md item 2): landmark details build platforms / steps / walls around their outlines (the demo's Pit
+      // Stop stood in Leal Senado's body, its first box on the Ruínas platform)
+      const lm = map.landmarkAt(p.x, p.z);
+      if (lm) add('warning', where, `nằm trong / sát (≤ ${LANDMARK_NEAR} m) khuôn viên địa danh ${lm}: bệ, bậc thang, tường dựng chi tiết có thể che ${step?.type === 'pit_stop' ? 'thảm' : 'hộp'} hoặc chặn lối; dời ra sân / vỉa hè TRƯỚC mặt địa danh và xem ảnh (lệnh "Xem")`);
       const road = map.carriageway(p.x, p.z);
       if (road) add('warning', where, step
         ? `tâm nằm giữa lòng đường xe chạy (${road}): ${step.type === 'pit_stop' ? 'thảm Chặng dừng' : 'hộp mật thư'} sẽ nằm giữa dòng xe; dời lên vỉa hè / quảng trường cạnh đó`
         : `nằm giữa lòng đường xe chạy (${road}): đội vào game giữa dòng xe; dời lên vỉa hè / lối đi bộ`);
+    }
+    if (step?.type === 'pit_stop') { // after the warned-once block: the Pit Stop usually repeats the last route's point
+      const share = map.matBlocked(p.x, p.z, p.yawDeg);
+      if (share > 0.05) add('warning', where, `thảm Chặng dừng ${PIT_MAT.width} × ${PIT_MAT.length} m (cạnh dài theo "yawDeg": ${p.yawDeg}) chồng lên nhà ${Math.round(share * 100)} % diện tích: đội không đứng lên được phần đó, thảm bị che; dời tâm ra giữa quảng trường hoặc xoay "yawDeg" theo chiều dài quảng trường`);
     }
     // bike-rack suggestion (SPEC §6.4): a rack in the file, else the nearest graph rack 20–120 m away, else a spot on the walkable road
     if (step && !p.rack && !rackPts.has(key)) {
@@ -562,7 +608,7 @@ export function checkFile(file: string, opts: { root?: string; scanDirs?: string
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const file = process.argv[2];
   if (!file || file === '--help' || file === '-h') {
-    console.error('Cách dùng: npm run leg:check -- <đường-dẫn-file-chặng.json>   (ví dụ: npm run leg:check -- ~/Documents/chang-that/paris-1.json; hướng dẫn: docs/LEG_FORMAT.md)');
+    console.error('Cách dùng: npm run leg:check -- <đường-dẫn-file-chặng.json>   (ví dụ: npm run leg:check -- ~/Documents/chang-that/macao-1.json; hướng dẫn: docs/LEG_FORMAT.md)');
     process.exit(file ? 0 : 2);
   }
   const r = checkFile(file);

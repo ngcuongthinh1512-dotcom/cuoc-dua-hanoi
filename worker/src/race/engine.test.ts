@@ -373,11 +373,11 @@ describe('RaceEngine', () => {
       return (to(team).filter((m) => (m as { t: string }).t === 'race').at(-1) as { view: RaceView }).view;
     };
     const a = finish('t1', 100); // t1 entered after t0's order but touches the mat first
-    expect(a.result).toEqual({ rank: 1, total: 3, kind: 'first', npc: '(GIẢ) Đội t1 về nhất tại cầu Iéna!', toast: '(GIẢ) Về đích thứ 1/3', card: '(GIẢ) Đội t1 về nhất trên 3 đội.' });
+    expect(a.result).toEqual({ rank: 1, total: 3, kind: 'first', npc: '(GIẢ) Đội t1 về nhất tại vườn Vasco da Gama!', toast: '(GIẢ) Về đích thứ 1/3', card: '(GIẢ) Đội t1 về nhất trên 3 đội.' });
     expect(f.teams.get('t1')).toMatchObject({ rank: 1, out: false, finishAt: 100 });
     expect(f.events.at(-1)).toEqual(['finish', { rank: 1, out: false, total: 3 }]);
     const b = finish('t0', 200);
-    expect(b.result).toMatchObject({ rank: 2, kind: 'finish', npc: '(GIẢ) Đội t0 về đích thứ 2 tại cầu Iéna!', card: '(GIẢ) Chúc mừng Đội t0: về đích thứ 2 trên 3 đội tại cầu Iéna.' });
+    expect(b.result).toMatchObject({ rank: 2, kind: 'finish', npc: '(GIẢ) Đội t0 về đích thứ 2 tại vườn Vasco da Gama!', card: '(GIẢ) Chúc mừng Đội t0: về đích thứ 2 trên 3 đội tại vườn Vasco da Gama.' });
     expect(Object.keys(b)).not.toContain('officialMs');
     e.onPose('t1', at(4), 300); // checked in already: nothing changes
     expect(f.teams.get('t1')!.rank).toBe(1);

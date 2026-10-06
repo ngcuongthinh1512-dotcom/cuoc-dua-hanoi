@@ -17,6 +17,8 @@ const MAX_BUCKETS_LANDMARK = 28;
 const MAX_TRIANGLES_LANDMARK = 250_000;
 // Leg 2 (Macao): the long sea bridges (Sai Van, Ponte da Amizade, the Zhuhai viaducts) put 60–111k triangles into 7 of 323 chunks
 // (slab + railing + deck of a 1–2 km span, 4–14 bridge pieces each, same bucket count): their own budget (docs/reports/leg2-tests-workspaces.md).
+// Note: the selector (≥ BRIDGE_PIECES pieces) gives that 120k budget to 56 of the 323 chunks, not only those 7 (in-town chunks with
+// a few flyovers too, e.g. 1_1, 2_1, 3_-4); limits unchanged (docs/reports/leg2-fixes.md item 4).
 const BRIDGE_PIECES = 4;
 const MAX_TRIANGLES_BRIDGES = 120_000;
 

@@ -64,7 +64,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const { report } = run(legs('test/mini.json'));
     const l1 = miniJson().steps[0].destination; // L1 = Largo do Senado (Leg 2: was Place du Trocadéro)
     const [lat, lon] = [l1.lat.toFixed(5), l1.lon.toFixed(5)];
-    expect(report).toContain('Rua do Dr. Soares, Quận 5'); // the street + the district (a freguesia in Macao) of L1
+    expect(report).toContain('Largo do Senado, Freguesia Sé'); // the street + the district (a freguesia in Macao) of L1
     expect(report).toContain(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=19/${lat}/${lon}`);
     expect(report).toContain(`Vệ tinh: https://www.google.com/maps?q=${lat},${lon}&t=k&z=19`);
     // the game's spectator camera 65 m south-up of the point, a mat on it (organiser review: the old preview showed no point)
@@ -142,6 +142,18 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(errors(r4).some((x) => x.includes('ngoài bản đồ đua'))).toBe(true);
   });
 
+  it('Leg 2 (leg2-fixes.md item 2): a point against a landmark outline and a Pit Stop mat over buildings are warnings', () => {
+    const j = miniJson();
+    // the old demo points: L6 / PS 1 m from Leal Senado's body, the mat (yawDeg 0) 72 % over buildings; L1 on the Ruínas nave
+    const ps = j.steps.find((s: { type: string }) => s.type === 'pit_stop').destination;
+    Object.assign(j.steps[0].destination, { lat: 22.197575, lon: 113.54086 });
+    Object.assign(ps, { lat: 22.193455, lon: 113.539297, yawDeg: 0 });
+    const warn = runT('lm.json', j).issues.filter((i) => i.level === 'warning').map((i) => i.message);
+    expect(warn.some((m) => m.includes('khuôn viên địa danh Ruínas de São Paulo'))).toBe(true);
+    expect(warn.some((m) => m.includes('khuôn viên địa danh Leal Senado'))).toBe(true);
+    expect(warn.some((m) => m.startsWith('thảm Chặng dừng 16 × 32 m'))).toBe(true);
+  });
+
   it('a point in the middle of the river (Leg 2: the sea, a `river: true` polygon) is a warning; a bad timezone is an error (the server refuses the leg)', () => {
     const j = miniJson();
     const w = latLonToWorld(22.19, 113.5295); // the Inner Harbour
@@ -150,12 +162,12 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     Object.assign(j.steps[2].destination, { lat: 22.19, lon: 113.5295 }); // somewhere in the sea
     const r = runT('w1.json', j);
     expect(r.ok).toBe(true);
-    expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('giữa sông') && i.message.includes('lên mặt cầu'))).toBe(true);
+    expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('giữa biển') && i.message.includes('lên mặt cầu'))).toBe(true);
     const tz = runT('w2.json', { ...j, timezone: 'Viet/Nam' });
     expect(tz.ok).toBe(false);
     expect(tz.issues.filter((i) => i.where === 'múi giờ')).toEqual([expect.objectContaining({ level: 'error', message: expect.stringContaining('"Viet/Nam" không phải múi giờ hợp lệ') })]);
     // the time zone error does not hide the map checks (organiser review: two rounds to see the next error)
-    expect(tz.issues.some((i) => i.level === 'warning' && i.message.includes('giữa sông'))).toBe(true);
+    expect(tz.issues.some((i) => i.level === 'warning' && i.message.includes('giữa biển'))).toBe(true);
     expect(tz.report).toContain('Các điểm trên bản đồ');
   });
 
@@ -163,7 +175,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const leg = parseLeg(miniJson());
     if (!leg.ok) throw new Error('mini invalid');
     const secrets = secretStrings(leg.leg);
-    expect(secrets).toContain('(GIẢ) Lên quảng trường có tầm nhìn đẹp nhất ra \'bà đầm sắt\'.');
+    expect(secrets).toContain('(GIẢ) Lên quảng trường lát sóng đen trắng trước tòa thị chính cũ.');
     expect(secrets.some((s) => s === '42')).toBe(false);
     const dir = mkdtempSync(join(tmpdir(), 'legleak-'));
     expect(scanLeaks([dir], secrets, dir)).toEqual([]);
@@ -452,9 +464,9 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     const parsed = parseLeg(miniJson());
     if (!parsed.ok) throw new Error('mini invalid');
     const secrets = secretStrings(parsed.leg);
-    for (const x of ['(GIẢ) {tên đội} về đích thứ {n} tại cầu Iéna!', '(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}.']) expect(secrets).toContain(x);
+    for (const x of ['(GIẢ) {tên đội} về đích thứ {n} tại vườn Vasco da Gama!', '(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}.']) expect(secrets).toContain(x);
     const dir = mkdtempSync(join(tmpdir(), 'legann-'));
-    writeFileSync(join(dir, 'x.js'), JSON.stringify(['(GIẢ) {tên đội} về nhất tại cầu Iéna!']));
+    writeFileSync(join(dir, 'x.js'), JSON.stringify(['(GIẢ) {tên đội} về nhất tại vườn Vasco da Gama!']));
     expect(errors(checkFile(legs('test/mini.json'), { root, map, scanDirs: [dir] }))).toEqual([expect.stringContaining('chứa nguyên văn "(GIẢ) {tên đội} về nhất')]);
   });
 
@@ -462,7 +474,7 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     const parsed = parseLeg(miniJson());
     if (!parsed.ok) throw new Error('mini invalid');
     const secrets = secretStrings(parsed.leg);
-    const refs = ['42 (bốn mươi hai) – GIẢ', '(GIẢ) Ảnh thấy rõ chân tháp phía sau'];
+    const refs = ['42 (bốn mươi hai) – GIẢ', '(GIẢ) Ảnh thấy rõ mặt tiền thư viện phía sau'];
     for (const x of refs) expect(secrets).toContain(x);
     const lone = mkdtempSync(join(tmpdir(), 'legref1-'));
     writeFileSync(join(lone, 'x.json'), JSON.stringify({ a: refs[0] }));

@@ -1,6 +1,6 @@
 {
   "id": "macao-demo",
-  "title": "Chặng Demo – Paris",
+  "title": "Chặng Demo – Ma Cao (lời dẫn GIẢ)",
   "timezone": "Asia/Ho_Chi_Minh",
   "eliminationLeg": false,
   "mapLabels": "streets-only",
@@ -76,14 +76,14 @@
       "id": "L1",
       "type": "route_info",
       "label": "Lộ trình 1",
-      "clue": "Ngược đại lộ đẹp nhất thế giới về phía tây, tới cổng vòm khổng lồ nằm giữa vòng xuyến có 12 đại lộ tỏa ra. Hộp mật thư đặt ở đầu đại lộ. Phương tiện: tự chọn.",
+      "clue": "(GIẢ) Từ đền thờ nữ thần biển, đi lên phố cổ tìm bức mặt tiền đá đứng một mình trên đỉnh dãy bậc thang dài. Hộp mật thư đặt ở chân bậc. Phương tiện: tự chọn.",
       "transport": {
         "allowed": "any"
       },
       "destination": {
         "name": "Ruínas de São Paulo – chân bậc thang",
-        "lat": 22.197575,
-        "lon": 113.54086,
+        "lat": 22.196887,
+        "lon": 113.540863,
         "radius": 30
       }
     },
@@ -91,14 +91,14 @@
       "id": "L2",
       "type": "route_info",
       "label": "Lộ trình 2",
-      "clue": "Tìm nơi có tầm nhìn đẹp nhất để ngắm 'bà đầm sắt' từ bờ bên kia sông Seine. Phương tiện: tự chọn.",
+      "clue": "(GIẢ) Xuống dốc về phía cảng cũ, tìm góc phố buôn bán ở mép tây khu phố cổ. Phương tiện: tự chọn.",
       "transport": {
         "allowed": "any"
       },
       "destination": {
-        "name": "Largo do Senado",
-        "lat": 22.194195,
-        "lon": 113.538797,
+        "name": "Rua dos Mercadores",
+        "lat": 22.194182,
+        "lon": 113.538702,
         "radius": 35
       }
     },
@@ -146,7 +146,7 @@
       "id": "L3",
       "type": "route_info",
       "label": "Lộ trình 3",
-      "clue": "Băng qua sông, tới ngay dưới chân 'bà đầm sắt'. Bắt buộc: đi bộ.",
+      "clue": "(GIẢ) Sang phía đông, tới quảng trường lát sóng đen trắng giữa những dinh thự sơn màu pastel. Bắt buộc: đi bộ.",
       "transport": {
         "mandatory": "walk"
       },
@@ -178,22 +178,7 @@
       "id": "L4",
       "type": "route_info",
       "label": "Lộ trình 4",
-      "clue": "Men theo bờ sông Seine về phía đông, tới cây cầu mạ vàng lộng lẫy nhất Paris. Hộp mật thư nằm trên cầu. Phương tiện: tự chọn.",
-      "transport": {
-        "allowed": "any"
-      },
-      "destination": {
-        "name": "Fortaleza do Monte – chân đồi",
-        "lat": 22.19714,
-        "lon": 113.54261,
-        "radius": 35
-      }
-    },
-    {
-      "id": "L5",
-      "type": "route_info",
-      "label": "Lộ trình 5",
-      "clue": "Tới nhà ga xe lửa cũ nay là bảo tàng của những bức tranh Ấn tượng. Phương tiện: tự chọn.",
+      "clue": "(GIẢ) Xuống phố cổ, tìm nhà thờ màu vàng kem, cửa xanh, trên quảng trường mang tên một vị thánh dòng Đa Minh. Phương tiện: tự chọn.",
       "transport": {
         "allowed": "any"
       },
@@ -202,6 +187,21 @@
         "lat": 22.19487,
         "lon": 113.54049,
         "radius": 30
+      }
+    },
+    {
+      "id": "L5",
+      "type": "route_info",
+      "label": "Lộ trình 5",
+      "clue": "(GIẢ) Lên pháo đài cổ trên đồi, nơi đại bác từng bắn trả hạm đội tấn công thành phố. Hộp mật thư ở chân tường phía đông. Phương tiện: tự chọn.",
+      "transport": {
+        "allowed": "any"
+      },
+      "destination": {
+        "name": "Fortaleza do Monte – chân tường phía đông",
+        "lat": 22.197144,
+        "lon": 113.542658,
+        "radius": 35
       }
     },
     {
@@ -225,14 +225,14 @@
       "id": "L6",
       "type": "route_info",
       "label": "Lộ trình 6",
-      "clue": "Chặng dừng! Băng qua sông, tới kim tự tháp kính trước cung điện từng là nơi ở của các vua Pháp. Người dẫn chương trình đang chờ bạn. Bắt buộc: đi bộ.",
+      "clue": "Chặng dừng! (GIẢ) Trở về quảng trường có đài phun nước, đối diện tòa thị chính cũ có mặt tiền trắng. Người dẫn chương trình đang chờ bạn. Bắt buộc: đi bộ.",
       "transport": {
         "mandatory": "walk"
       },
       "destination": {
-        "name": "Praça de Ferreira do Amaral",
-        "lat": 22.193455,
-        "lon": 113.539297,
+        "name": "Largo do Senado",
+        "lat": 22.193839,
+        "lon": 113.540021,
         "radius": 20
       }
     },
@@ -241,10 +241,11 @@
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Praça de Ferreira do Amaral",
-        "lat": 22.193455,
-        "lon": 113.539297,
-        "radius": 20
+        "name": "Largo do Senado",
+        "lat": 22.193839,
+        "lon": 113.540021,
+        "radius": 20,
+        "yawDeg": -40
       }
     }
   ]

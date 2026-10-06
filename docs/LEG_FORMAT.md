@@ -2,15 +2,15 @@
 
 Tài liệu cho **Host / người tổ chức** (không cần biết lập trình). Một **chặng** là toàn bộ nội dung của một cuộc đua: đội xuất phát ở đâu, đi qua những điểm nào, mật thư là gì, nhiệm vụ nào, đáp án nào. Chặng nằm trong **một file `.json`** (chữ thuần, mở được bằng Notepad / TextEdit / VS Code).
 
-> Nội dung chặng thật chưa có trong dự án. Mọi ví dụ dưới đây là **nội dung GIẢ** (ghi "(GIẢ)") để bạn thấy dạng file. Chặng demo `worker/legs/macao-demo.json` có 6 mật thư lộ trình là **câu mẫu** lấy từ bản đặc tả (chỉ để chạy thử, không phải nội dung thật: thay hết khi viết chặng thật); các ô Lựa chọn kép / thử thách của nó **để trống** chờ bạn điền.
+> Nội dung chặng thật chưa có trong dự án. Mọi ví dụ dưới đây là **nội dung GIẢ** (ghi "(GIẢ)") để bạn thấy dạng file. Chặng demo `worker/legs/macao-demo.json` có 6 mật thư lộ trình là **câu mẫu GIẢ** về các địa danh Ma Cao (chỉ để chạy thử, không phải nội dung thật: thay hết khi viết chặng thật); các ô Lựa chọn kép / thử thách của nó **để trống** chờ bạn điền.
 
 ## 1. Quy trình 4 bước
 
-1. **Viết file** `.json` (copy `worker/legs/test/mini.json` hoặc `worker/legs/macao-demo.json` làm mẫu rồi sửa). **Để file chặng thật NGOÀI thư mục dự án**, ví dụ `Tài liệu/chang-that/paris-1.json` (mục 9): không bao giờ trong `client/` (mọi thứ trong đó được gửi tới máy người chơi), và cũng không trong thư mục dự án (dễ bị đưa lên git cùng mã nguồn). Thư mục `worker/legs/` chỉ chứa các chặng demo / test có sẵn.
+1. **Viết file** `.json` (copy `worker/legs/test/mini.json` hoặc `worker/legs/macao-demo.json` làm mẫu rồi sửa). **Để file chặng thật NGOÀI thư mục dự án**, ví dụ `Tài liệu/chang-that/macao-1.json` (mục 9): không bao giờ trong `client/` (mọi thứ trong đó được gửi tới máy người chơi), và cũng không trong thư mục dự án (dễ bị đưa lên git cùng mã nguồn). Thư mục `worker/legs/` chỉ chứa các chặng demo / test có sẵn.
 2. **Kiểm tra:** mở Terminal ở thư mục dự án và chạy (đường dẫn là chỗ file của bạn; có thể kéo thả file vào cửa sổ Terminal để dán đường dẫn)
 
    ```
-   npm run leg:check -- ~/Documents/chang-that/paris-1.json
+   npm run leg:check -- ~/Documents/chang-that/macao-1.json
    ```
 
    Lệnh in ra **LỖI** (phải sửa; máy chủ sẽ từ chối), **CẢNH BÁO** (nên xem), **CÒN TRỐNG** (ô bạn chưa điền; cho phép khi soạn nháp, nhưng phải điền hết trước khi mở cuộc đua). Cuối cùng là bảng từng điểm trên bản đồ (mục 8). Một lần chạy liệt kê **mọi** lỗi tìm được (kể cả khi file có lỗi múi giờ hay sai thứ tự bước, phần kiểm tra bản đồ vẫn chạy); chỉ khi file sai cú pháp JSON hoặc sai dạng (thiếu trường, sai kiểu) thì lệnh dừng ở đó.
@@ -21,9 +21,9 @@ Tài liệu cho **Host / người tổ chức** (không cần biết lập trìn
 
 ## 2. Cuộc đua mới, nạp chặng, tạo đội, phát mã, mở
 
-Mỗi cuộc đua có một **mã cuộc đua** (race id, ví dụ `thu`, `paris-1`; chỉ chữ thường, số, gạch ngang). Thứ tự đúng:
+Mỗi cuộc đua có một **mã cuộc đua** (race id, ví dụ `thu`, `macao-1`; chỉ chữ thường, số, gạch ngang). Thứ tự đúng:
 
-1. Chọn **mã cuộc đua mới** (vd. `thu` để diễn tập, `paris-1` cho buổi thật).
+1. Chọn **mã cuộc đua mới** (vd. `thu` để diễn tập, `macao-1` cho buổi thật).
 2. Vào Host của mã đó, **nạp chặng** (bước 4 ở trên).
 3. **Tạo đội**, phát mã đăng nhập cho từng đội. Đội vào game bằng link `…/?race=<mã cuộc đua>` (trang Host in sẵn link này) rồi nhập mã đội.
 4. Khi sẵn sàng, bấm **Mở cuộc đua**. Không cần nhập giờ xuất phát: không có đồng hồ riêng của từng đội, thứ hạng là **thứ tự về đích thực** (SPEC §17.22, §17.23).
@@ -49,7 +49,7 @@ Quy tắc viết JSON: chữ nằm trong dấu ngoặc kép `"..."`; số không
 
 | Trường | Bắt buộc? | Mặc định | Ý nghĩa, ví dụ |
 |---|---|---|---|
-| `id` | có | | Mã chặng: chữ thường a–z, số, gạch ngang, ≤ 32 ký tự, không bắt đầu bằng gạch ngang. `"paris-1"` |
+| `id` | có | | Mã chặng: chữ thường a–z, số, gạch ngang, ≤ 32 ký tự, không bắt đầu bằng gạch ngang. `"macao-1"` |
 | `title` | có | | Tên chặng (hiện cho Host). `"Chặng Paris 2026"` |
 | `timezone` | không | `"Asia/Ho_Chi_Minh"` | Múi giờ trang Host **hiện giờ** (giờ vào game, giờ xong từng bước, giờ về đích; Host ở đâu cũng được). Viết đúng tên chuẩn dạng `Châu_lục/Thành_phố` (gọi là tên IANA): `"Asia/Ho_Chi_Minh"`, `"Europe/Paris"`. Sai tên (vd. `"Paris"`, `"UTC+7"`, `"GMT+7"`): **LỖI**, máy chủ không nạp chặng |
 | `start` | có | | Nơi xuất phát, mục 4 |
@@ -180,7 +180,9 @@ Chỗ giữ được thay khi gửi: `{n}` = thứ hạng, `{tổng}` = số đ�
 
 **Đặt tâm ở đâu:** vỉa hè, quảng trường, bờ sông, giữa cầu (lối đi bộ); **không bao giờ trong nhà** (LỖI; `leg:check` gợi ý sẵn "điểm ngoài nhà gần nhất"), **không giữa lòng đường xe chạy** (cảnh báo: hộp sẽ đứng giữa dòng xe NPC), không giữa sông / bể nước, không trên nóc cầu cạn metro. Phải có đường đi bộ gần để đội đi tới (không thì LỖI "không đi bộ tới được").
 
-Hai địa danh đứng dưới được: sân **dưới tháp Eiffel** (giữa 4 chân) và **dưới vòm Khải Hoàn Môn** (hai lối đi xuyên qua vòm; đặt vào trụ đá thì vẫn LỖI "nằm trong một tòa nhà"). Riêng Khải Hoàn Môn đứng trên đảo giữa vòng xuyến Étoile, không nối với đường đi bộ của bản đồ (ngoài đời đi qua đường hầm, game không có hầm): điểm dưới vòm luôn có cảnh báo "đường đi bộ gần nhất cách tâm 60–70 m, xa hơn bán kính" (bình thường); đội phải tự đi bộ băng qua vòng xuyến (xe NPC dừng khi người chơi đứng trước mũi xe).
+**Gần địa danh Ma Cao (chặng 2):** đặt điểm ở sân / vỉa hè **trước mặt** địa danh, không trên bệ, bậc hay trong tường của nó. Game dựng chi tiết nhiều địa danh (bệ + 68 bậc Ruínas de São Paulo, sân thượng Fortaleza do Monte, các tầng đá chùa A-Ma, bệ nhà thờ, tường vườn): `leg:check` cảnh báo khi điểm nằm trong / sát (≤ 1,5 m) đường viền địa danh, nhưng **không thấy** phần dựng vượt ra ngoài đường viền (bậc lớn Ruínas dài 60 m về phía nam): luôn xem ảnh ("Xem") của điểm gần địa danh. Ví dụ điểm tốt: chân bậc Ruínas (22.19689, 113.54086), giữa Largo do Senado (22.19384, 113.54002, Chặng dừng `"yawDeg": -40` theo chiều dài quảng trường), chân tường phía đông Monte (22.19714, 113.54266).
+**Thảm Chặng dừng 16 × 32 m** cần chỗ trống đủ rộng: `leg:check` cảnh báo khi thảm (cạnh dài theo `yawDeg`) chồng lên nhà hơn 5 % diện tích.
+**Cầu không đặt điểm (chặng 2):** Ponte de Sai Van (đầu cầu sát Macau Tower), Ponte da Amizade, cầu cạn Rotunda da Amizade / cầu Ma Man Kei, 昌盛大桥 và nhánh rẽ Viaduto da Estrada da Bela Vista có **bậc thật** giữa các đoạn mặt cầu (0,5–18 m): người / xe đạp có thể rơi hoặc kẹt. Không đặt điểm, bãi xe hay lộ trình xe đạp bắt buộc qua đó (TODO.md).
 
 **Chọn bán kính:**
 - Vùng là **vòng tròn phẳng** quanh tâm, **không tính cao thấp**: điểm giữa cầu có lối đi bên dưới (vd. cầu Bir-Hakeim với lối Allée des Cygnes bên dưới) thì đội đứng dưới gầm cũng tính là tới; điểm trên bậc thang / sân thượng thì đứng tầng dưới cũng tính. Muốn tránh: đặt tâm xa chỗ chồng tầng hơn bán kính.
@@ -375,18 +377,18 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
 | Chặng | Dòng cuối | Các cảnh báo (bình thường, đã biết) |
 |---|---|---|
 | `worker/legs/test/mini.json` | `Hợp lệ: 0 cảnh báo, 0 ô còn trống.` | không có |
-| `worker/legs/macao-demo.json` | `Hợp lệ: 1 cảnh báo, 17 ô còn trống.` | `Bước 9 (L6) › điểm đến: đường đi bộ gần nhất cách tâm 39 m, xa hơn bán kính 20 m` (điểm trước kim tự tháp Louvre đã thống nhất ở bản đặc tả; sân Cour Napoléon lát đá đi được, dữ liệu đường đi bộ chỉ có ở mép sân). 17 ô còn trống là các ô Lựa chọn kép / thử thách chờ bạn điền |
-| `worker/legs/test/macao-demo.filled.json` (`macao-demo-filled`, demo đã điền nội dung GIẢ) | `Hợp lệ: 1 cảnh báo, 0 ô còn trống.` | cảnh báo L6 như `macao-demo` |
-| `worker/legs/test/near.json` (các điểm cách nhau vài chục mét quanh Concorde, `boxReveal` nhỏ, để chạy thử nhanh) | `Hợp lệ: 2 cảnh báo, 0 ô còn trống.` | `điểm xuất phát: nằm giữa lòng đường xe chạy (Avenue des Champs-Élysées)…`, `Bước 3 (L2) › điểm đến: tâm nằm giữa lòng đường xe chạy (Place de la Concorde)…` (chặng thử, cố ý đặt giữa quảng trường) |
+| `worker/legs/macao-demo.json` | `Hợp lệ: 0 cảnh báo, 17 ô còn trống.` | không có. 17 ô còn trống là các ô Lựa chọn kép / thử thách chờ bạn điền |
+| `worker/legs/test/macao-demo.filled.json` (`macao-demo-filled`, demo đã điền nội dung GIẢ) | `Hợp lệ: 0 cảnh báo, 0 ô còn trống.` | không có |
+| `worker/legs/test/near.json` (các điểm cách nhau vài chục mét trong Largo do Senado, `boxReveal` nhỏ, để chạy thử nhanh) | `Hợp lệ: 0 cảnh báo, 0 ô còn trống.` | không có |
 
 ```json
 {
   "id": "mini",
   "title": "Chặng ngắn để test (NỘI DUNG GIẢ)",
   "start": {
-    "name": "Cầu Bir-Hakeim – lối đi bộ dưới cầu cạn metro, phía Passy",
-    "lat": 48.85585,
-    "lon": 2.28744,
+    "name": "Largo do Pagode da Barra – trước đền A-Ma",
+    "lat": 22.18647,
+    "lon": 113.53097,
     "yawDeg": 33,
     "spreadMeters": 5
   },
@@ -395,15 +397,15 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
       "id": "L1",
       "type": "route_info",
       "label": "Lộ trình 1",
-      "clue": "(GIẢ) Lên quảng trường có tầm nhìn đẹp nhất ra 'bà đầm sắt'.",
+      "clue": "(GIẢ) Lên quảng trường lát sóng đen trắng trước tòa thị chính cũ.",
       "destination": {
-        "name": "Sân trước Palais de Chaillot",
-        "lat": 48.86215,
-        "lon": 2.28843,
+        "name": "Largo do Senado",
+        "lat": 22.193839,
+        "lon": 113.540021,
         "radius": 35,
         "bikeParking": {
-          "lat": 48.8625,
-          "lon": 2.2878
+          "lat": 22.193622,
+          "lon": 113.53972
         },
         "yawDeg": 150
       },
@@ -420,20 +422,20 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
       "type": "challenge",
       "label": "Thử thách 1",
       "task": {
-        "title": "(GIẢ) Câu hỏi ở vườn Trocadéro",
+        "title": "(GIẢ) Câu hỏi ở vườn Vasco da Gama",
         "description": "(GIẢ) 6 × 7 = ?",
         "media": [
-          "https://example.invalid/gia/vuon-trocadero",
+          "https://example.invalid/gia/vuon-vasco-da-gama",
           "r2:test-gia-2.jpg"
         ],
         "location": {
-          "name": "Vườn Trocadéro (phía dưới)",
-          "lat": 48.8605,
-          "lon": 2.2903,
+          "name": "Công viên Vasco da Gama (lối phụ)",
+          "lat": 22.197172,
+          "lon": 113.544817,
           "radius": 30,
           "bikeParking": {
-            "lat": 48.8601,
-            "lon": 2.2899
+            "lat": 22.196628,
+            "lon": 113.544532
           }
         },
         "verification": "host_approval",
@@ -451,14 +453,14 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
       "id": "L2",
       "type": "route_info",
       "label": "Lộ trình 2",
-      "clue": "(GIẢ) Qua sông, tới chân tháp. Bắt buộc: đi bộ.",
+      "clue": "(GIẢ) Sang phía đông, tới quảng trường Tap Seac. Bắt buộc: đi bộ.",
       "transport": {
         "mandatory": "walk"
       },
       "destination": {
-        "name": "Chân tháp Eiffel",
-        "lat": 48.8583,
-        "lon": 2.2945,
+        "name": "Praça do Tap Seac",
+        "lat": 22.19823,
+        "lon": 113.547,
         "radius": 40
       }
     },
@@ -480,14 +482,14 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
               "bảy"
             ],
             "location": {
-              "name": "Phía bắc chân tháp, lối ra sông",
-              "lat": 48.85878,
-              "lon": 2.29469,
+              "name": "Phía bắc quảng trường Tap Seac, cạnh thư viện",
+              "lat": 22.19871,
+              "lon": 113.547135,
               "radius": 15,
               "yawDeg": 135,
               "bikeParking": {
-                "lat": 48.85899,
-                "lon": 2.29478
+                "lat": 22.198992,
+                "lon": 113.547199
               }
             }
           }
@@ -498,22 +500,22 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
           "summary": "(GIẢ) Gửi ảnh cho Host.",
           "task": {
             "title": "(GIẢ) Ảnh",
-            "description": "(GIẢ) Chụp màn hình dưới chân tháp.",
+            "description": "(GIẢ) Chụp màn hình trước thư viện Tap Seac.",
             "kind": "free",
             "verification": "host_approval",
             "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook.",
             "location": {
-              "name": "Bãi cỏ Champ de Mars",
-              "lat": 48.8562,
-              "lon": 2.2978,
+              "name": "Khoảng sân rộng ở Tap Seac",
+              "lat": 22.19613,
+              "lon": 113.549345,
               "radius": 30,
               "bikeParking": {
-                "lat": 48.8558,
-                "lon": 2.2972
+                "lat": 22.19573,
+                "lon": 113.548918
               }
             },
             "referenceAnswers": [
-              "(GIẢ) Ảnh thấy rõ chân tháp phía sau"
+              "(GIẢ) Ảnh thấy rõ mặt tiền thư viện phía sau"
             ]
           }
         }
@@ -523,11 +525,11 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
       "id": "L3",
       "type": "route_info",
       "label": "Lộ trình 3",
-      "clue": "(GIẢ) Chặng dừng ở giữa cây cầu nối tháp với quảng trường.",
+      "clue": "(GIẢ) Chặng dừng ở khu vườn có tượng nhà hàng hải, phía nam Tap Seac.",
       "destination": {
-        "name": "Giữa cầu Iéna",
-        "lat": 48.8596,
-        "lon": 2.29243,
+        "name": "Jardim Vasco da Gama",
+        "lat": 22.1962,
+        "lon": 113.54633,
         "radius": 25
       }
     },
@@ -536,10 +538,24 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Giữa cầu Iéna",
-        "lat": 48.8596,
-        "lon": 2.29243,
+        "name": "Jardim Vasco da Gama",
+        "lat": 22.1962,
+        "lon": 113.54633,
         "radius": 25
+      },
+      "announce": {
+        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại vườn Vasco da Gama!",
+        "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
+        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại vườn Vasco da Gama.",
+        "first": {
+          "npc": "(GIẢ) {tên đội} về nhất tại vườn Vasco da Gama!",
+          "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
+        },
+        "out": {
+          "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.",
+          "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}",
+          "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}."
+        }
       }
     }
   ]
@@ -623,7 +639,7 @@ Mẹo khác: thiếu dấu phẩy **giữa** hai mục cũng báo lỗi ở dòn
 Sau khi `leg:check` ra "Hợp lệ", cho **bot** chơi hết chặng để chắc mọi bước đi được, mọi hộp mở được, đội về đích và có xếp hạng. Không cần chạy máy chủ hay trang Host: lệnh tự dựng một máy chủ tạm trong máy (y như máy chủ thật), nạp chặng, tạo đội bot, mở cuộc đua, rồi mỗi bot đi bộ theo đường đi bộ tới từng điểm, mở hộp, làm nhiệm vụ (bấm "Nhận thử thách" nếu có câu gợi ý; **gõ** đáp án đầu tiên trong `answers`, không có thì trong `referenceAnswers`, không có nữa thì "(bot) trả lời"; nhiệm vụ ảnh thì gửi bài rỗng) và check-in ở thảm. Một **Host ảo** duyệt bài của các bot.
 
 ```
-npm run sim -- --leg ~/Documents/chang-that/paris-1.json --bots 2 --speedup 2
+npm run sim -- --leg ~/Documents/chang-that/macao-1.json --bots 2 --speedup 2
 ```
 
 - `--leg`: đường dẫn file chặng, hoặc mã chặng có sẵn (`mini`, `macao-demo-filled`).

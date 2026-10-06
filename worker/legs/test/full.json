@@ -13,15 +13,15 @@
       "id": "L1",
       "type": "route_info",
       "label": "Lộ trình 1",
-      "clue": "(GIẢ) Lên quảng trường có tầm nhìn đẹp nhất ra 'bà đầm sắt'.",
+      "clue": "(GIẢ) Lên quảng trường lát sóng đen trắng trước tòa thị chính cũ.",
       "destination": {
         "name": "Largo do Senado",
-        "lat": 22.193455,
-        "lon": 113.539297,
+        "lat": 22.193839,
+        "lon": 113.540021,
         "radius": 35,
         "bikeParking": {
-          "lat": 22.1939,
-          "lon": 113.538952
+          "lat": 22.193622,
+          "lon": 113.53972
         },
         "yawDeg": 150
       },
@@ -38,10 +38,10 @@
       "type": "challenge",
       "label": "Thử thách 1",
       "task": {
-        "title": "(GIẢ) Câu hỏi ở vườn Trocadéro",
+        "title": "(GIẢ) Câu hỏi ở vườn Vasco da Gama",
         "description": "(GIẢ) 6 × 7 = ?",
         "media": [
-          "https://example.invalid/gia/vuon-trocadero",
+          "https://example.invalid/gia/vuon-vasco-da-gama",
           "r2:test-gia-2.jpg"
         ],
         "location": {
@@ -93,7 +93,7 @@
       "id": "L2",
       "type": "route_info",
       "label": "Lộ trình 2",
-      "clue": "(GIẢ) Qua sông, tới chân tháp. Bắt buộc: đi bộ.",
+      "clue": "(GIẢ) Sang phía đông, tới quảng trường Tap Seac. Bắt buộc: đi bộ.",
       "transport": {
         "mandatory": "walk"
       },
@@ -140,7 +140,7 @@
           "summary": "(GIẢ) Gửi ảnh cho Host.",
           "task": {
             "title": "(GIẢ) Ảnh",
-            "description": "(GIẢ) Chụp màn hình dưới chân tháp.",
+            "description": "(GIẢ) Chụp màn hình trước thư viện Tap Seac.",
             "kind": "free",
             "verification": "host_approval",
             "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook.",
@@ -155,7 +155,7 @@
               }
             },
             "referenceAnswers": [
-              "(GIẢ) Ảnh thấy rõ chân tháp phía sau"
+              "(GIẢ) Ảnh thấy rõ mặt tiền thư viện phía sau"
             ]
           }
         }
@@ -165,7 +165,7 @@
       "id": "L-LV",
       "type": "route_info",
       "label": "Lộ trình Louvre",
-      "clue": "(GIẢ) Ra bãi cỏ lớn phía đông-nam tháp: hòm này dẫn xuống phòng tranh.",
+      "clue": "(GIẢ) Ra khoảng sân rộng phía đông-nam quảng trường: hòm này dẫn xuống phòng tranh.",
       "destination": {
         "name": "Praça do Tap Seac – bãi phía sau (GIẢ)",
         "lat": 22.19523,
@@ -367,7 +367,7 @@
       "id": "L3",
       "type": "route_info",
       "label": "Lộ trình 3",
-      "clue": "(GIẢ) Chặng dừng ở giữa cây cầu nối tháp với quảng trường.",
+      "clue": "(GIẢ) Chặng dừng ở khu vườn có tượng nhà hàng hải, phía nam Tap Seac.",
       "destination": {
         "name": "Jardim Vasco da Gama",
         "lat": 22.1962,
@@ -386,11 +386,11 @@
         "radius": 25
       },
       "announce": {
-        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại cầu Iéna!",
+        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại vườn Vasco da Gama!",
         "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
-        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại cầu Iéna.",
+        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại vườn Vasco da Gama.",
         "first": {
-          "npc": "(GIẢ) {tên đội} về nhất tại cầu Iéna!",
+          "npc": "(GIẢ) {tên đội} về nhất tại vườn Vasco da Gama!",
           "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
         },
         "out": {

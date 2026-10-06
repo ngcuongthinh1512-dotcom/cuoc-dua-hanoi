@@ -456,7 +456,7 @@ async function start() {
   // (fill + warm-up) with the world; __READY__ waits for that. ?npc=0 off.
   let npcs: Npc | undefined;
   // D20 (SPEC §17.5): no NPC inside a box / mat zone (+ npc.zoneMargin); ?npcZone circles kept
-  const npcZones = () => [...(overrides.npcZones ?? []), ...boxes.boxes.map((b) => ({ x: b.x, z: b.z, r: b.r }))];
+  const npcZones = () => [...(overrides.npcZones ?? []), ...npcCfg.landmarkZones.map(([x, z, r]) => ({ x, z, r })), ...boxes.boxes.map((b) => ({ x: b.x, z: b.z, r: b.r }))];
   boxes.onChange = () => npcs?.setExclusionZones(npcZones());
   let npcReady = !(npcCfg.enabled && overrides.npc !== false);
   if (!npcReady) {

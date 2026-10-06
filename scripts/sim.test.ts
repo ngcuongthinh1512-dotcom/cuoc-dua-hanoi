@@ -338,7 +338,7 @@ describe('sim --leg (Phase 7 / 8)', () => {
     const a = answersOf(mini);
     expect(a.get('T1')).toBe('42'); // answers[0] wins over referenceAnswers
     expect(a.get('D1/A')).toBe('7');
-    expect(a.get('D1/B')).toBe('(GIẢ) Ảnh thấy rõ chân tháp phía sau'); // only referenceAnswers: kept (the bot types "" for a photo task anyway)
+    expect(a.get('D1/B')).toBe('(GIẢ) Ảnh thấy rõ mặt tiền thư viện phía sau'); // only referenceAnswers: kept (the bot types "" for a photo task anyway)
     expect(a.has('L1')).toBe(false);
     const only = JSON.stringify({ steps: [{ id: 'X', task: { referenceAnswers: ['tham khảo'] } }, { id: 'Y', task: {} }] });
     expect([...answersOf(only)]).toEqual([['X', 'tham khảo']]);

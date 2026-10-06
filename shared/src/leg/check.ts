@@ -164,7 +164,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
   try {
     new Intl.DateTimeFormat('en', { timeZone: leg.timezone });
   } catch {
-    add('error', ['timezone'], `"${leg.timezone}" không phải múi giờ hợp lệ; dùng tên múi giờ chuẩn dạng Châu_lục/Thành_phố (tên IANA), ví dụ "Asia/Ho_Chi_Minh", "Europe/Paris"`);
+    add('error', ['timezone'], `"${leg.timezone}" không phải múi giờ hợp lệ; dùng tên múi giờ chuẩn dạng Châu_lục/Thành_phố (tên IANA), ví dụ "Asia/Ho_Chi_Minh", "Asia/Macau"`);
   }
 
   // ids, order, Pit Stop
