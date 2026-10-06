@@ -221,13 +221,11 @@ export function radialAt(ring: XZ, cx: number, cz: number, lam: number): number 
 }
 
 /** Lotus petal at height share v (0 base … 1 tip): [angular half-width share (a bit narrower at the foot, full from 0.3,
- *  ogive point from 0.72), flare share (leaves the shaft fast, full at 0.78, curls back by `tuck` at the tip)]. */
+ *  sharp ogive point from 0.8), flare share (leaves the shaft fast and keeps opening outwards to the tip: widest at the tip)]. */
 export function petalShape(v: number): [number, number] {
-  const x = (v - 0.72) / 0.28;
-  const w = v < 0.3 ? 0.55 + 0.45 * Math.sin((Math.PI / 2) * (v / 0.3)) : v < 0.72 ? 1 : Math.max(0, 1 - x) ** 0.8;
-  const peak = 0.78;
-  const f = v <= peak ? 1 - (1 - v / peak) ** 2.2 : 1 - G.crown.tuck * ((v - peak) / (1 - peak)) ** 2;
-  return [Math.max(0.03, w), f];
+  const x = (v - 0.8) / 0.2;
+  const w = v < 0.3 ? 0.55 + 0.45 * Math.sin((Math.PI / 2) * (v / 0.3)) : v < 0.8 ? 1 : Math.max(0, 1 - x) ** 0.8;
+  return [Math.max(0.03, w), 1 - (1 - v) ** 1.6];
 }
 
 type Paint = readonly [MeshBuffer, V3];
@@ -298,17 +296,20 @@ function lisboaTower(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   }
   disc(paint(s, 'masonry', rgb(C.band)), shaftRing(top), 1);
 
-  // lotus crown: rows of petals, each row offset by half a petal and starting higher, so its foot hides behind the row below
+  // lotus crown: rows of petals, each row offset by half a petal, starting higher and opening wider (stepped vase), so its
+  // foot hides behind the row below and the crown is widest at the top; it overhangs the OSM rectangle (no collider there)
   const step = TAU / K.petals;
   K.rows.forEach(([y0, y1, flare], k) => {
     const [bu, bw] = [sh(y0, 1) * 1.01, sh(y0, 2) * 1.01];
     for (let i = 0; i < K.petals; i++) {
       const th = step * (i + (k % 2) / 2);
-      const tipY = y1 + K.ears * Math.cos(th) ** 2;
+      // ears: higher tips towards the long-axis ends; notch: the top row dips on the broad faces (V over the sign / spire)
+      const notch = k === K.rows.length - 1 ? K.notch * Math.abs(Math.sin(th)) ** 12 : 0;
+      const tipY = y1 + K.ears * Math.cos(th) ** 2 - notch;
       const grid = Array.from({ length: K.vSteps + 1 }, (_, a) => {
         const v = a / K.vSteps;
         const [hw, fl] = petalShape(v);
-        const [su, sw] = [bu + (flare - bu) * fl, bw + (flare - bw) * fl];
+        const [su, sw] = [bu + (flare - bu) * fl, bw + (flare * K.deep - bw) * fl];
         return Array.from({ length: K.tSteps + 1 }, (_, b) => {
           const t = (2 * b) / K.tSteps - 1;
           const c = 1 - K.cup * t * t + (i % 2) * 0.004;

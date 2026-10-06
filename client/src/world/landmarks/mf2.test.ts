@@ -35,13 +35,13 @@ describe('mf2 helpers', () => {
     expect(keyed([[0, 1], [10, 3]], 5)).toBeCloseTo(2, 6);
     expect(keyed([[0, 1], [10, 3]], 50)).toBe(3);
   });
-  it('petalShape: narrow foot, widest mid-way, pointed tip; flare 0 at the foot, full near the top, tucked back at the tip', () => {
+  it('petalShape: narrow foot, wide body, pointed tip; flare 0 at the foot, opening outwards all the way to the tip', () => {
     const [foot, mid, tip] = [petalShape(0), petalShape(0.55), petalShape(1)];
     expect(foot[0]).toBeLessThan(mid[0]);
     expect(tip[0]).toBeLessThan(0.05);
     expect(foot[1]).toBe(0);
-    expect(petalShape(0.78)[1]).toBeCloseTo(1, 6);
-    expect(tip[1]).toBeCloseTo(1 - G.crown.tuck, 6);
+    expect(tip[1]).toBe(1);
+    for (let v = 0.1; v <= 1; v += 0.1) expect(petalShape(v)[1]).toBeGreaterThan(petalShape(v - 0.1)[1]);
   });
   it('radialAt: distance to the ring along an azimuth', () => {
     expect(radialAt(circle(5, 5, 10, 64), 5, 5, 0.3)).toBeCloseTo(10, 1);
@@ -106,7 +106,8 @@ describe('grand-lisboa', () => {
     expect(s.maxY).toBeCloseTo(10 + G.height, 3);
     const shaftW = 63 * G.shaft.at(-1)![1];
     const flare = Math.max(...G.crown.rows.map((r) => r[2]));
-    expect(s.box.x1 - s.box.x0).toBeGreaterThan(63 * flare * 0.95); // crown ≈ 1.7 × the shaft
+    expect(G.crown.rows.at(-1)![2]).toBe(flare); // widest tier at the top
+    expect(s.box.x1 - s.box.x0).toBeGreaterThan(63 * flare * 0.95); // crown ≈ 1.6–1.8 × the shaft, overhanging the footprint
     expect(s.box.x1 - s.box.x0).toBeGreaterThan(shaftW * 1.5);
     expect(s.box.x1 - s.box.x0).toBeLessThan(63 * flare * 1.05);
     expect(s.materials).toEqual(['masonry', 'metal', 'neon']);

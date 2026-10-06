@@ -727,10 +727,10 @@ export const landmarks = {
       floor: 4.2, bandEvery: 3, bandH: 0.9, segments: 24, // dark floor band (m tall) every n floors on the shaft; ring segments
       coreTop: 232, // shaft / core roof inside the crown; the spire sits on it
       crown: {
-        rows: [[95, 170, 1.08], [120, 195, 1.14], [146, 220, 1.12], [172, 242, 1.04]] as [number, number, number][], // [base y, tip y, × half-sizes at the tip]
+        rows: [[95, 165, 0.8], [118, 190, 0.9], [142, 214, 1.0], [166, 240, 1.1]] as [number, number, number][], // [base y, tip y, × half-sizes at the tip]: each tier wider (stepped vase, widest at the top)
         petals: 10, width: 0.72, // per row (rows offset by half a petal); angular half-width × the petal step (overlap)
-        ears: 16, // m higher tips towards the long-axis ends (the corner "ears" of the front view)
-        cup: 0.015, tuck: 0.06, // petal edges pulled in (overlaps cross, no coplanar faces); tip curls back by this share of the flare
+        ears: 10, notch: 22, deep: 1.3, // m higher tips towards the long-axis ends (corner "ears"); m lower top-row tips on the broad faces (V notch over the sign); short-axis flare × this
+        cup: 0.015, // petal edges pulled in (overlaps cross, no coplanar faces)
         vSteps: 14, tSteps: 4, // grid rows (= gold / darker stripes) and columns per petal
         edge: { width: 0.9, lift: 0.12, from: 0.2 }, // lit petal edge strips: m wide, m off the skin, from this share of the petal up
       },
