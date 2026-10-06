@@ -33,7 +33,8 @@ export type MaterialId =
   | 'bronze'
   | 'waterJet'
   | 'neon'
-  | 'neonSign';
+  | 'neonSign'
+  | 'stairGlow'; // night nosing strips on stair flights (world/stairs.ts createStairMaterials: hidden by day)
 
 /** Buckets of these materials MUST carry a `color` attribute (linear RGB: per-building tint, park green) and their
  *  materials use vertexColors; buckets of every other material MUST NOT. geom.MeshBuffer applies this rule itself. */
@@ -41,8 +42,10 @@ export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terra
 
 /** metro = Guimard railings + the stairwell under them, metroMask = the depth-only lid that cuts the ground open over it
  *  (StreetProps.createPropMeshes). Phase 8C (graphics8c.props): bench, cafe (table + 2 chairs), shelter (bus stop),
- *  bouquiniste (a stretch of book stalls on the quay parapet), from models/props.glb. */
-export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro' | 'metroMask' | 'bench' | 'cafe' | 'shelter' | 'bouquiniste';
+ *  bouquiniste (a stretch of book stalls on the quay parapet), from models/props.glb.
+ *  Leg 2 night (StreetProps, drawn at night only): lantern (red paper lanterns), shopSign (neon blades + LED panels: a unit
+ *  box scaled per instance), aviation (red roof lights on towers). */
+export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro' | 'metroMask' | 'bench' | 'cafe' | 'shelter' | 'bouquiniste' | 'lantern' | 'shopSign' | 'aviation';
 
 /** One indexed triangle list for one material. uv in metres unless the material says otherwise. */
 export interface MeshBucket {

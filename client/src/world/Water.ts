@@ -2,6 +2,11 @@
 // Module top level must not touch the DOM (textures are DataTextures built inside createWater).
 import {
   BackSide,
+  CanvasTexture,
+  InstancedMesh,
+  MeshBasicMaterial,
+  Matrix4,
+  SphereGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -27,7 +32,8 @@ import type { WaterData } from '../geo/chunkData.ts';
 import { type HeightGrid, heightAt } from '../geo/heightGrid.ts';
 import { triangulate } from './geom.ts';
 import { graphics } from './graphics.ts';
-import { isNight } from './night.ts';
+import { hash01 } from './geom.ts';
+import { isNight, nightTime } from './night.ts';
 import { quayMesh, riverLevel } from './Terrain.ts';
 
 const GW = graphics8c.water;
@@ -87,6 +93,87 @@ export function skyEnvironment(w = 64, h = 32): Texture {
   return t;
 }
 
+type Poly = WaterData['polygons'][number];
+
+/** Pure: distance from (x, z) to the nearest edge of the ring. */
+function ringDistance(r: readonly number[], x: number, z: number) {
+  let best = Infinity;
+  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+    const [x0, z0, x1, z1] = [r[j]!, r[j + 1]!, r[i]!, r[i + 1]!];
+    const l2 = (x1 - x0) ** 2 + (z1 - z0) ** 2;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - x0) * (x1 - x0) + (z - z0) * (z1 - z0)) / l2)) : 0;
+    best = Math.min(best, Math.hypot(x0 + t * (x1 - x0) - x, z0 + t * (z1 - z0) - z));
+  }
+  return best;
+}
+function inRing(o: readonly number[], x: number, z: number) {
+  let inside = false;
+  for (let i = 0, j = o.length - 2; i < o.length; j = i, i += 2) {
+    const [xi, zi, xj, zj] = [o[i]!, o[i + 1]!, o[j]!, o[j + 1]!];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Pure (lighting.waterLights): the shoreline lights of the sea polygons (every shoreStep m, shoreShare of them, colour
+ *  hashed; edges on the polygon's bounding box = the map border, skipped), the boats (≥ boats.minShore m out, inside the
+ *  sea, not in a hole) and the casino glints → [x, z, radius m, colour] spots. */
+export function waterLightSpots(seas: Poly[]) {
+  const C = lighting.waterLights;
+  const shore: [number, number, number, string][] = [];
+  const boats: [number, number, string][] = [];
+  for (const p of seas) {
+    const o = p.outer;
+    let [minX, maxX, minZ, maxZ] = [Infinity, -Infinity, Infinity, -Infinity];
+    for (let i = 0; i < o.length; i += 2) [minX, maxX, minZ, maxZ] = [Math.min(minX, o[i]!), Math.max(maxX, o[i]!), Math.min(minZ, o[i + 1]!), Math.max(maxZ, o[i + 1]!)];
+    const border = (x: number, z: number) => Math.min(x - minX, maxX - x, z - minZ, maxZ - z) < 2;
+    for (const r of [o, ...(p.holes ?? [])]) {
+      for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+        const [x0, z0, x1, z1] = [r[j]!, r[j + 1]!, r[i]!, r[i + 1]!];
+        if (border(x0, z0) && border(x1, z1)) continue;
+        const len = Math.hypot(x1 - x0, z1 - z0);
+        for (let s = hash01(x0, z0, 71) * C.shoreStep; s < len; s += C.shoreStep) {
+          const [x, z] = [x0 + ((x1 - x0) * s) / len, z0 + ((z1 - z0) * s) / len];
+          if (hash01(x, z, 72) < C.shoreShare) shore.push([x, z, C.dot, C.colours[Math.floor(hash01(x, z, 73) * C.colours.length)]!]);
+        }
+      }
+    }
+    const B = C.boats;
+    for (let k = 0; boats.length < B.count * (seas.indexOf(p) + 1) && k < B.count * 40; k++) {
+      const [x, z] = [minX + hash01(k, seas.indexOf(p), 74) * (maxX - minX), minZ + hash01(k, seas.indexOf(p), 75) * (maxZ - minZ)];
+      if (!inRing(o, x, z) || (p.holes ?? []).some((h) => inRing(h, x, z))) continue;
+      if ([o, ...(p.holes ?? [])].some((r) => ringDistance(r, x, z) < B.minShore)) continue;
+      boats.push([x, z, B.colours[Math.floor(hash01(x, z, 76) * B.colours.length)]!]);
+    }
+  }
+  return { shore, boats };
+}
+
+/** Night: the light map canvas (world rect `rect` = [x0, z0, size x, size z]) of the shore lights, boats and glints. */
+function lightMap(spots: [number, number, number, string][], rect: number[]) {
+  const C = lighting.waterLights;
+  const c = document.createElement('canvas');
+  c.width = c.height = C.mapSize;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, C.mapSize, C.mapSize);
+  g.globalCompositeOperation = 'lighter';
+  const [x0, z0, w, h] = rect as [number, number, number, number];
+  for (const [x, z, r, colour] of spots) {
+    const [px, py, rx, ry] = [((x - x0) / w) * C.mapSize, ((z - z0) / h) * C.mapSize, (r / w) * C.mapSize, (r / h) * C.mapSize];
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+    grad.addColorStop(0, colour);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.setTransform(Math.max(rx, 1), 0, 0, Math.max(ry, 1), px, py);
+    g.fillStyle = grad;
+    g.fillRect(-1, -1, 2, 2);
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.flipY = false; // v = 0 = canvas top = z0
+  return t;
+}
+
 /** Adds the water to the scene (after carveRiver); call update(dt) every frame (scrolling normal map).
  *  Seine polygons: flat at riverLevel, plus the stone quays of Terrain.quayMesh (walls from the carved bed, coping).
  *  Other water (fountains, ponds): flat at the mean terrain height of the ring + otherLift, not carved. */
@@ -141,6 +228,59 @@ export function createWater(scene: Scene, water: WaterData, grid: HeightGrid): {
       );
     };
   }
+  // Leg 2 night (lighting.waterLights): the city's lights on the sea. The reflected view ray (ripple normal) meets the
+  // plane y = level + height where the light map lies: the ripples stretch the shore lights into streaks toward the viewer.
+  // ponytail: a 2D map at one height (no occlusion, no real reflection of the buildings); a Reflector if FPS ever allows.
+  const C = lighting.waterLights;
+  let boats: InstancedMesh | undefined;
+  if (isNight()) {
+    const base = new Color(C.base);
+    const seas = water.polygons.filter((p) => p.river);
+    const { shore, boats: boatSpots } = waterLightSpots(seas);
+    const pts = seas.flatMap((p) => p.outer);
+    const xs = pts.filter((_, i) => i % 2 === 0);
+    const zs = pts.filter((_, i) => i % 2 === 1);
+    const rect = xs.length ? [Math.min(...xs), Math.min(...zs), Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs)] : [0, 0, 1, 1];
+    const map = typeof document !== 'undefined' ? lightMap([...shore, ...boatSpots.map(([x, z, c]): [number, number, number, string] => [x, z, C.dot * 0.6, c]), ...C.glints], rect) : undefined;
+    const prev = material.onBeforeCompile;
+    material.onBeforeCompile = (sh, r) => {
+      prev.call(material, sh, r);
+      sh.uniforms.uLightMap = { value: map ?? null };
+      sh.uniforms.uNightTime = nightTime;
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWaterWorld;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvWaterWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>\nvarying vec3 vWaterWorld;\nuniform sampler2D uLightMap;`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+\ttotalEmissiveRadiance += vec3(${base.r.toFixed(4)}, ${base.g.toFixed(4)}, ${base.b.toFixed(4)});
+${map ? `\t{
+\t\tvec3 wN = inverseTransformDirection(normal, viewMatrix);
+\t\tvec3 wV = normalize(vWaterWorld - cameraPosition);
+\t\tvec3 wR = reflect(wV, normalize(vec3(wN.x * 2.5, wN.y, wN.z * 2.5))); // ripples × 2.5: longer streaks
+\t\tif (wR.y > 0.002) {
+\t\t\tvec2 q = vWaterWorld.xz + wR.xz * (${C.height.toFixed(2)} / wR.y);
+\t\t\tvec2 uv = (q - vec2(${rect[0]!.toFixed(1)}, ${rect[1]!.toFixed(1)})) / vec2(${rect[2]!.toFixed(1)}, ${rect[3]!.toFixed(1)});
+\t\t\tfloat fres = 0.35 + 0.65 * pow(1.0 - clamp(dot(-wV, wN), 0.0, 1.0), 3.0);
+\t\t\ttotalEmissiveRadiance += textureLod(uLightMap, uv, 1.0).rgb * ${C.strength.toFixed(3)} * fres;
+\t\t}
+\t}` : ''}`);
+    };
+    material.customProgramCacheKey = () => `water-night${two ? '2' : ''}${map ? 'm' : ''}`;
+    if (boatSpots.length) {
+      const B = C.boats;
+      const k = graphics().on('post') ? B.intensity : 1;
+      boats = new InstancedMesh(new SphereGeometry(B.size / 2, 8, 6), new MeshBasicMaterial(), boatSpots.length);
+      const m = new Matrix4();
+      boatSpots.forEach(([x, z, c], i) => {
+        boats!.setMatrixAt(i, m.makeTranslation(x, level + 0.8 + 1.2 * hash01(x, z, 77), z));
+        boats!.setColorAt(i, new Color(c).multiplyScalar(k));
+      });
+      boats.computeBoundingSphere();
+      boats.name = 'boat lights';
+    }
+  }
+
   const surface = new BufferGeometry();
   surface.setAttribute('position', new Float32BufferAttribute(pos, 3));
   surface.setAttribute('normal', new Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
@@ -158,6 +298,7 @@ export function createWater(scene: Scene, water: WaterData, grid: HeightGrid): {
   const wallMesh = new Mesh(walls, new MeshStandardMaterial({ color: W.wallColour, roughness: 0.9, side: DoubleSide, shadowSide: BackSide }));
   wallMesh.castShadow = wallMesh.receiveShadow = true;
   wallMesh.name = 'quay-walls';
+  if (boats) waterMesh.add(boats); // world coordinates (the water mesh sits at the origin)
   scene.add(waterMesh, wallMesh);
 
   return {

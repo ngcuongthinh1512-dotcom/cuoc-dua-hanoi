@@ -7,9 +7,14 @@
 // switch, the box's front turned to BoxInfo.yaw.
 import { matMesh } from '../race/PitStop.ts';
 import type { BoxInfo, ServerMessage } from '@race/shared/protocol';
-import { BoxGeometry, CylinderGeometry, Float32BufferAttribute, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, type Scene, type Vector3 } from 'three';
+import {
+  AdditiveBlending, BoxGeometry, CylinderGeometry, Float32BufferAttribute, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial,
+  PlaneGeometry, type Scene, Sprite, SpriteMaterial, type Vector3,
+} from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { clueBox as C } from '../config.ts';
+import { clueBox as C, lighting as LT } from '../config.ts';
+import { additive, falloff, nightHdr } from '../world/glow.ts';
+import { isNight } from '../world/night.ts';
 
 export type BoxMessage = Extract<ServerMessage, { t: 'box' }>;
 
@@ -47,7 +52,11 @@ let parts: ReturnType<typeof makeParts> | undefined;
 function makeParts() {
   const { base: B, post: P, head: H, lid: L, beam: M, colours: c } = C;
   const box = (w: number, h: number, d: number, y: number) => new BoxGeometry(w, h, d).translate(0, y + h / 2, 0);
-  const lit = (color: string) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: C.glow, roughness: 0.5 });
+  const night = isNight();
+  const NB = LT.boxes;
+  // night: brighter emissive, an additive HDR column, a halo sprite + a ground pool (no real light); day: as before
+  const lit = (color: string) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: night ? NB.emissive * LT.emissiveScale : C.glow, roughness: 0.5 });
+  const halo = (k: number) => new SpriteMaterial({ map: falloff('round'), color: nightHdr(c.post, NB.halo.strength * k), blending: AdditiveBlending, depthWrite: false });
   const across = P.size + 2 * P.proud;
   const top = B.height + P.height + H.height + L.height;
   const beam = new CylinderGeometry(M.width / 2, M.width / 2, M.height, 8, 1, true).translate(0, top + M.height / 2, 0);
@@ -55,7 +64,9 @@ function makeParts() {
   beam.setAttribute('color', new Float32BufferAttribute(Array.from({ length: ys.count }, (_, i) => [1, 1, 1, 1 - (ys.getY(i) - top) / M.height]).flat(), 4)); // alpha 1 → 0 upward
   return {
     beam,
-    beamMat: new MeshBasicMaterial({ color: c.post, vertexColors: true, transparent: true, depthWrite: false, opacity: 0 }), // normal blending: stays yellow on a bright sky
+    beamMat: night
+      ? new MeshBasicMaterial({ color: nightHdr(c.post, NB.beam), vertexColors: true, transparent: true, depthWrite: false, opacity: 0, blending: AdditiveBlending })
+      : new MeshBasicMaterial({ color: c.post, vertexColors: true, transparent: true, depthWrite: false, opacity: 0 }), // normal blending: stays yellow on a bright sky
     body: mergeGeometries([box(B.size, B.height + B.sink, B.size, -B.sink), box(H.size, H.height, H.size, B.height + P.height)])!,
     post: box(P.size, P.height, P.size, B.height),
     stripes: mergeGeometries([box(P.stripe, P.height, across, B.height), box(across, P.height, P.stripe, B.height)])!, // a "+" through the post: one stripe per face
@@ -64,6 +75,13 @@ function makeParts() {
     yellow: lit(c.post),
     red: lit(c.stripe),
     redOpened: new MeshStandardMaterial({ color: c.opened, roughness: 0.8 }),
+    ...(night && {
+      halo: halo(1),
+      haloOpened: halo(NB.opened),
+      pool: new PlaneGeometry(2 * NB.pool.radius, 2 * NB.pool.radius).rotateX(-Math.PI / 2).translate(0, 0.03, 0),
+      poolMat: additive('round', nightHdr(c.post, NB.pool.strength)),
+      poolOpened: additive('round', nightHdr(c.post, NB.pool.strength * NB.opened)),
+    }),
   };
 }
 
@@ -79,6 +97,14 @@ function boxMesh(opened: boolean) {
     g.add(o);
   }
   g.getObjectByName('lid')!.position.set(0, C.base.height + C.post.height + C.head.height, -C.lid.size / 2);
+  if (P.halo) {
+    const halo = new Sprite(P.halo);
+    halo.name = 'halo';
+    halo.position.y = LT.boxes.halo.y;
+    const pool = new Mesh(P.pool, P.poolMat);
+    pool.name = 'pool';
+    g.add(halo, pool);
+  }
   return paint(g, opened);
 }
 
@@ -87,6 +113,10 @@ function paint(g: Group, opened: boolean) {
   g.getObjectByName('lid')!.rotation.x = opened ? (-C.lid.openDeg * Math.PI) / 180 : 0;
   (g.getObjectByName('stripes') as Mesh).material = opened ? parts!.redOpened : parts!.red;
   g.getObjectByName('beam')!.visible = !opened;
+  const halo = g.getObjectByName('halo') as Sprite | undefined; // night: the next target bright, opened ones dim
+  if (halo) halo.material = opened ? parts!.haloOpened! : parts!.halo!;
+  const pool = g.getObjectByName('pool') as Mesh | undefined;
+  if (pool) pool.material = opened ? parts!.poolOpened! : parts!.poolMat!;
   return g;
 }
 
@@ -127,7 +157,7 @@ export class ClueBoxes {
   /** Drops every box and frees the shared box parts (the next box builds them again). */
   dispose() {
     this.reset([]);
-    for (const p of Object.values(parts ?? {})) p.dispose();
+    for (const p of Object.values(parts ?? {})) p.dispose(); // the falloff texture is shared (world/glow.ts): kept
     parts = undefined;
   }
 
@@ -139,6 +169,8 @@ export class ClueBoxes {
     for (const d of this.drawn.values()) {
       const y = this.groundAt(d.info.x, d.info.z);
       if (y !== null && (!d.placed || y > d.root.position.y)) (d.root.position.y = y), (d.placed = true);
+      const halo = eye && d.root.getObjectByName('halo');
+      if (halo) halo.scale.setScalar(Math.max(LT.boxes.halo.size, Math.hypot(d.info.x - eye.x, d.info.z - eye.z) * LT.boxes.halo.spread));
       const beam = d.root.getObjectByName('beam');
       if (!eye || !beam?.visible) continue;
       const dist = Math.hypot(d.info.x - eye.x, d.info.z - eye.z);

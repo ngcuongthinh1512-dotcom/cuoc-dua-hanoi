@@ -19,14 +19,15 @@ import {
   SphereGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { graphics8c as G8, lighting as LT, props as P, roads as R, stairs as ST } from '../config.ts';
+import { buildings as BC, graphics8c as G8, lighting as LT, props as P, roads as R, stairs as ST } from '../config.ts';
 import { type ChunkData, type ChunkKey, chunkKey } from '../geo/chunkData.ts';
 import { districtPlaque } from '../geo/districts.ts';
 import type { PropLods, PropMeshes } from './attach.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind, TriMesh } from './buildTypes.ts';
 import { hash01, MeshBuffer } from './geom.ts';
 import { graphics } from './graphics.ts';
-import { isNight } from './night.ts';
+import { buildingHeight } from './BuildingBuilder.ts';
+import { isNight, nightTime } from './night.ts';
 import { quadOut } from './landmarks/kit.ts';
 import { roadWidth, sidewalkWidth } from './RoadBuilder.ts';
 import { createTreeLods } from './Vegetation.ts';
@@ -36,9 +37,14 @@ const STREET = new Set([...P.carKinds, ...P.streetKinds]);
 
 /** Instance matrix (column-major): scale s, yaw about +Y (local +Z → (sin yaw, cos yaw)), then translate. */
 export function pushMatrix(out: number[], x: number, y: number, z: number, yaw: number, s = 1) {
-  const c = Math.cos(yaw) * s;
-  const n = Math.sin(yaw) * s;
-  out.push(c, 0, -n, 0, 0, s, 0, 0, n, 0, c, 0, x, y, z, 1);
+  pushBox(out, x, y, z, yaw, s, s, s);
+}
+
+/** pushMatrix with a scale per local axis (x across, y up, z = the front). */
+export function pushBox(out: number[], x: number, y: number, z: number, yaw: number, sx: number, sy: number, sz: number) {
+  const c = Math.cos(yaw);
+  const n = Math.sin(yaw);
+  out.push(c * sx, 0, -n * sx, 0, 0, sy, 0, 0, n * sz, 0, c * sz, 0, x, y, z, 1);
 }
 
 interface Arm { a: number; dx: number; dz: number; hw: number; name?: string }
@@ -296,21 +302,22 @@ function buildSigns(spots: SignSpot[], ctx: BuildCtx): Pick<BuildOut, 'meshes' |
 const Q = P.place8c;
 const SIDEWALK = R.lift + R.curbHeight; // m: props stand on the raised sidewalk
 
-/** Point in the outer ring of a building of this chunk (bounding box first). */
-export function inBuilding(chunk: ChunkData, x: number, z: number) {
-  for (const b of chunk.buildings) {
-    const o = b.outer;
-    let [minX, maxX, minZ, maxZ] = [Infinity, -Infinity, Infinity, -Infinity];
-    for (let i = 0; i < o.length; i += 2) [minX, maxX, minZ, maxZ] = [Math.min(minX, o[i]!), Math.max(maxX, o[i]!), Math.min(minZ, o[i + 1]!), Math.max(maxZ, o[i + 1]!)];
-    if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
-    let inside = false;
-    for (let i = 0, j = o.length - 2; i < o.length; j = i, i += 2) {
-      const [xi, zi, xj, zj] = [o[i]!, o[i + 1]!, o[j]!, o[j + 1]!];
-      if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-    }
-    if (inside) return true;
+/** Point in a ring (bounding box first). */
+function inRing(o: readonly number[], x: number, z: number) {
+  let [minX, maxX, minZ, maxZ] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (let i = 0; i < o.length; i += 2) [minX, maxX, minZ, maxZ] = [Math.min(minX, o[i]!), Math.max(maxX, o[i]!), Math.min(minZ, o[i + 1]!), Math.max(maxZ, o[i + 1]!)];
+  if (x < minX || x > maxX || z < minZ || z > maxZ) return false;
+  let inside = false;
+  for (let i = 0, j = o.length - 2; i < o.length; j = i, i += 2) {
+    const [xi, zi, xj, zj] = [o[i]!, o[i + 1]!, o[j]!, o[j + 1]!];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
   }
-  return false;
+  return inside;
+}
+
+/** Point in the outer ring of a building of this chunk. */
+export function inBuilding(chunk: ChunkData, x: number, z: number) {
+  return chunk.buildings.some((b) => inRing(b.outer, x, z));
 }
 
 /** Distance from (x, z) to the edge of the nearest car carriageway of this chunk (negative: on it). */
@@ -458,6 +465,103 @@ export function placeBouquinistes(chunk: ChunkData, ctx: BuildCtx): Spot[] {
   return out;
 }
 
+// ── Leg 2 night (lighting.lanterns / neon / aviation): placed in every build (the worker cannot tell day from night), the
+// main thread draws them only at night (createPropMeshes). Visual only, no colliders. ──
+
+/** Red paper lanterns: within the lanterns.zones circles, a string across every lanterns.spacing m of the old-town streets
+ *  (lanterns.kinds), a lantern every `gap` m of it, sagging toward the middle; none inside a building. */
+export function placeLanterns(chunk: ChunkData, height: (x: number, z: number) => number): number[] {
+  const C = LT.lanterns;
+  const out: number[] = [];
+  for (const r of chunk.roads) {
+    if (!C.kinds.includes(r.kind)) continue;
+    const span = Math.min(C.maxSpan, roadWidth(r) + 2);
+    const n = Math.max(2, Math.round(span / C.gap));
+    along(r, C.spacing, C.spacing / 2, (x, z, tx, tz) => {
+      if (!C.zones.some(([zx, zz, zr]) => Math.hypot(x - zx, z - zz) < zr)) return;
+      const y0 = height(x, z) + C.height;
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n;
+        const [lx, lz] = [x + tz * (t - 0.5) * span, z - tx * (t - 0.5) * span];
+        if (inBuilding(chunk, lx, lz)) continue;
+        pushBox(out, lx, y0 - C.sag * (1 - (2 * t - 1) ** 2), lz, Math.atan2(tx, tz), C.size[0], C.size[1], C.size[0]);
+      }
+    });
+  }
+  return out;
+}
+
+/** Neon blade signs (sticking out of the facade) and flat LED panels above the shop band: on the outer-ring edges of
+ *  buildings ≥ neon.minHeight that face a street (≤ neon.reach m from its edge, no other building in front), a candidate
+ *  every neon.step m, neon.share of them (hashed). A unit box per instance (pushBox), front = out of the facade. */
+export function placeShopSigns(chunk: ChunkData, height: (x: number, z: number) => number): number[] {
+  const C = LT.neon;
+  const streets = chunk.roads.filter((r) => C.kinds.includes(r.kind));
+  const out: number[] = [];
+  if (!streets.length) return out;
+  const nearStreet = (x: number, z: number) => streets.some((r) => {
+    const hw = roadWidth(r) / 2 + C.reach;
+    for (let i = 0; i + 1 < r.pts.length / 2; i++) {
+      const [x0, z0, x1, z1] = [r.pts[2 * i]!, r.pts[2 * i + 1]!, r.pts[2 * i + 2]!, r.pts[2 * i + 3]!];
+      const l2 = (x1 - x0) ** 2 + (z1 - z0) ** 2;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - x0) * (x1 - x0) + (z - z0) * (z1 - z0)) / l2)) : 0;
+      if (Math.hypot(x0 + t * (x1 - x0) - x, z0 + t * (z1 - z0) - z) < hw) return true;
+    }
+    return false;
+  });
+  for (const b of chunk.buildings) {
+    if (b.landmark || (b.minHeight ?? 0) > 0 || BC.macao.blankKinds.includes(b.kind) || buildingHeight(b) < C.minHeight) continue;
+    const o = b.outer;
+    const n = o.length / 2;
+    for (let i = 0; i < n; i++) {
+      const [ax, az, bx, bz] = [o[2 * i]!, o[2 * i + 1]!, o[(2 * i + 2) % o.length]!, o[(2 * i + 3) % o.length]!];
+      const len = Math.hypot(bx - ax, bz - az);
+      if (len < 4) continue;
+      const [ex, ez] = [(bx - ax) / len, (bz - az) / len];
+      let [nx, nz] = [ez, -ex]; // one normal; flipped when it points into the building
+      const [mx, mz] = [(ax + bx) / 2, (az + bz) / 2];
+      if (inRing(o, mx + nx * 0.3, mz + nz * 0.3)) [nx, nz] = [-nx, -nz];
+      const yaw = Math.atan2(nx, nz);
+      for (let s = C.step / 2; s < len - 1; s += C.step) {
+        const [px, pz] = [ax + ex * s, az + ez * s];
+        if (hash01(px, pz, 61) >= C.share) continue;
+        if (inBuilding(chunk, px + nx * 1.5, pz + nz * 1.5) || !nearStreet(px + nx, pz + nz)) continue;
+        const g = height(px, pz);
+        const led = hash01(px, pz, 62) < C.ledShare && s > C.led[0] / 2 + 0.3 && s < len - C.led[0] / 2 - 0.3;
+        const [w, h, d] = led ? C.led : C.blade;
+        pushBox(out, px + nx * (d / 2 + 0.05), g + C.y + h / 2, pz + nz * (d / 2 + 0.05), yaw, w, h, d);
+      }
+    }
+  }
+  return out;
+}
+
+/** Aviation lights: aviation.corners roof corners of every building ≥ aviation.minHeight, 0.6 m in from the edge. */
+export function placeAviation(chunk: ChunkData, height: (x: number, z: number) => number): number[] {
+  const C = LT.aviation;
+  const out: number[] = [];
+  for (const b of chunk.buildings) {
+    const h = buildingHeight(b);
+    if (b.landmark || h < C.minHeight) continue;
+    const o = b.outer;
+    const n = o.length / 2;
+    let [gMin, gMax, cx, cz] = [Infinity, -Infinity, 0, 0];
+    for (let i = 0; i < n; i++) {
+      const y = height(o[2 * i]!, o[2 * i + 1]!);
+      [gMin, gMax, cx, cz] = [Math.min(gMin, y), Math.max(gMax, y), cx + o[2 * i]! / n, cz + o[2 * i + 1]! / n];
+    }
+    const top = Math.max(gMin, gMax - BC.groundSpan) + h + C.size / 2; // BuildingBuilder's ground + height
+    for (let k = 0; k < Math.min(C.corners, n); k++) {
+      const i = Math.floor((k * n) / Math.min(C.corners, n));
+      const [x, z] = [o[2 * i]!, o[2 * i + 1]!];
+      const d = Math.hypot(cx - x, cz - z) || 1;
+      const f = Math.min(0.6, d / 2) / d;
+      pushMatrix(out, x + (cx - x) * f, top, z + (cz - z) * f, 0, C.size);
+    }
+  }
+  return out;
+}
+
 export const buildStreetProps: Builder = (chunk, ctx) => {
   const { owned, points } = findJunctions(chunk, ctx.key);
   const lamps: number[] = [];
@@ -483,7 +587,10 @@ export const buildStreetProps: Builder = (chunk, ctx) => {
   }
 
   const signs = buildSigns(spots, ctx);
-  const sets: [PropKind, number[]][] = [['lamp', lamps], ['morris', morris], ['metro', metro], ['metroMask', metro]];
+  const sets: [PropKind, number[]][] = [
+    ['lamp', lamps], ['morris', morris], ['metro', metro], ['metroMask', metro],
+    ['lantern', placeLanterns(chunk, ctx.height)], ['shopSign', placeShopSigns(chunk, ctx.height)], ['aviation', placeAviation(chunk, ctx.height)],
+  ];
   if (G8.props.enabled) {
     // the worker cannot know the quality: placement is the same everywhere, the main thread only picks the levels
     const at = (list: Spot[]) => {
@@ -624,9 +731,68 @@ export function createPropMeshes(): PropMeshes {
     metro: { ...mesh([...metro, ...metroWell()], 0.6), renderOrder: -2 },
     metroMask: { geometry: lid, material: new MeshBasicMaterial({ colorWrite: false }), renderOrder: -1, castShadow: false },
     bench: lods(1.2), cafe: lods(1.2), shelter: lods(3.1), bouquiniste: lods(4.6),
+    ...nightProps(),
   };
   if (on && typeof document !== 'undefined') void track(loadPropModels(out, g.quality));
   return out;
+}
+
+const glsl = (n: number) => n.toFixed(4);
+const vec3 = (c: Color) => `vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)})`;
+/** HDR factor for the unlit night lights: × intensity only with post-processing (bloom), else plain (no white blow-out). */
+const hdr = (k: number) => (graphics().on('post') ? k : 1) * LT.emissiveScale;
+
+/** An unlit night light material: colour × hdr(intensity); `vertex` = GLSL run per vertex (instanceMatrix, uNightTime and
+ *  `position` in scope) that sets `vec3 vTint` (× the colour). Invisible by day (no draw call). */
+function nightLight(colour: string, intensity: number, vertex: string, fog = true) {
+  const m = new MeshBasicMaterial({ color: new Color(colour).multiplyScalar(hdr(intensity)), fog, visible: isNight() });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uNightTime = nightTime;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uNightTime;\nvarying vec3 vTint;\nfloat nHash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n\tvTint = vec3(1.0);\n#ifdef USE_INSTANCING\n\t${vertex}\n#endif`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTint;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb *= vTint;');
+  };
+  m.customProgramCacheKey = () => vertex;
+  return m;
+}
+
+/** A paper lantern at unit size (body r 0.5 lit; dark caps and its cord up to the string, gold tassel; vertex colours). */
+function lanternGeometry() {
+  return mergeGeometries([
+    part(new SphereGeometry(0.5, 10, 8), '#ffffff'),
+    part(cyl(0.22, 0.22, 0.12, 8), '#0a0604', 0, 0.48),
+    part(cyl(0.22, 0.22, 0.12, 8), '#0a0604', 0, -0.48),
+    part(cyl(0.02, 0.02, 1.1, 4, true), '#0a0604', 0, 1.05),
+    part(cyl(0.05, 0.09, 0.4, 5, true), '#3a2a06', 0, -0.72),
+  ].map((g) => (g.deleteAttribute('uv'), g)))!;
+}
+
+/** Leg 2 night props (placeLanterns / placeShopSigns / placeAviation): unlit, drawn only at night. */
+function nightProps(): Pick<PropMeshes, 'lantern' | 'shopSign' | 'aviation'> {
+  const N = LT.neon;
+  const A = LT.aviation;
+  const pal = N.colours.map((c) => new Color(c));
+  // neon: colour i of the palette by instance; LED panels (wide boxes) cycle to the next colour with moving bars, a few
+  // blades flicker; blades show character rows
+  const pick = (v: string) => pal.map((c, i) => (i === pal.length - 1 ? vec3(c) : `${v} < ${glsl((i + 1) / pal.length)} ? ${vec3(c)} : `)).join('');
+  const neon = nightLight('#ffffff', N.intensity, `vec3 nP = instanceMatrix[3].xyz;
+	float nS = nHash(nP.xz);
+	float nS2 = fract(nS + uNightTime * ${glsl(N.ledRate / (2.0 * Math.PI))});
+	bool nLed = length(instanceMatrix[0].xyz) > 1.0;
+	vTint = nLed ? (${pick('nS2')}) * (0.65 + 0.35 * step(0.5, fract(position.x * 7.0 - uNightTime * 1.3)))
+	  : (${pick('nS')}) * (0.6 + 0.4 * step(0.3, fract(position.y * 5.0 + 0.5)));
+	if (!nLed && fract(nS * 7.3) < ${glsl(N.flicker)}) vTint *= step(0.25, nHash(vec2(floor(uNightTime * 9.0), nS)));`);
+  const aviation = nightLight(A.colour, A.intensity, `vec3 nP = instanceMatrix[3].xyz;
+	vTint = vec3(mix(0.06, 1.0, step(fract(uNightTime / ${glsl(A.period)} + nHash(floor(nP.xz / 40.0)) * 0.15), ${glsl(A.on)})));`, false);
+  return {
+    // per-instance distance cut (attach.ts lodInstances): no draw call for a chunk whose signs / lanterns are all far
+    lantern: { lods: { levels: [{ parts: [{ geometry: lanternGeometry(), material: Object.assign(nightLight(LT.lanterns.colour, LT.lanterns.intensity, 'vTint = vec3(0.8 + 0.4 * nHash(instanceMatrix[3].xz));'), { vertexColors: true }) }], distance: LT.lanterns.distance }], radius: 1 } },
+    shopSign: { lods: { levels: [{ parts: [{ geometry: part(new BoxGeometry(1, 1, 1), '#ffffff'), material: neon }], distance: N.distance }], radius: 2 } },
+    aviation: { geometry: part(new SphereGeometry(0.5, 8, 6), '#ffffff'), material: aviation, castShadow: false },
+  };
 }
 
 /** Night (world/night.ts, lighting.lamp): every lamp level gets an unlit HDR bulb at `bulbY` (bloom) and an additive light
@@ -635,10 +801,18 @@ export function createPropMeshes(): PropMeshes {
 export function lampGlow(levels: PropLods['levels'], bulbY: number): PropLods['levels'] {
   if (!isNight()) return levels;
   const C = LT.lamp;
+  // white instead of sodium inside the lampModern areas: × (modern / sodium) per channel, on the instance position
+  const [warm, white] = [new Color(C.colour), new Color(LT.lampModern.colour)];
+  const ratio = new Color(white.r / warm.r, white.g / warm.g, white.b / warm.b);
+  const inModern = LT.lampModern.areas.map(([x0, z0, x1, z1]) => `\tm = max(m, step(${glsl(x0)}, p.x) * step(p.x, ${glsl(x1)}) * step(${glsl(z0)}, p.z) * step(p.z, ${glsl(z1)}));`);
+  const tint = `vec3 p = instanceMatrix[3].xyz;
+\tfloat m = 0.0;
+${inModern.join('\n')}
+	vTint = mix(vec3(1.0), ${vec3(ratio)}, m);`;
   const bulb = {
     geometry: new SphereGeometry(C.bulbRadius, 8, 6).translate(0, bulbY, 0),
     // HDR only for the bloom; without post-processing it would tone-map to white
-    material: new MeshBasicMaterial({ color: new Color(C.colour).multiplyScalar(graphics().on('post') ? C.intensity : 1), fog: false }),
+    material: nightLight(C.colour, C.intensity, tint, false),
   };
   const n = 64;
   const fall = new Uint8Array(n * n * 4);
@@ -651,7 +825,7 @@ export function lampGlow(levels: PropLods['levels'], bulbY: number): PropLods['l
   const r = C.pool.radius;
   const pool = {
     geometry: new PlaneGeometry(2 * r, 2 * r).rotateX(-Math.PI / 2).translate(0, SIDEWALK + 0.03, 0),
-    material: new MeshBasicMaterial({
+    material: Object.assign(nightLight(C.colour, 1, tint), {
       color: new Color(C.colour).multiplyScalar(C.pool.strength), map, blending: AdditiveBlending, transparent: true,
       depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, shadowSide: BackSide,
     }),

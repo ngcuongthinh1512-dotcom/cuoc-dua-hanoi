@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { props as P } from '../config.ts';
+import { lighting as LT, props as P } from '../config.ts';
 import { type ChunkData, chunkBounds, type RoadRec } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import type { BuildCtx } from './buildTypes.ts';
-import { buildStreetProps, createPropMeshes, findJunctions, inBuilding, placeBenches, placeBouquinistes, placeLamps, placeShelters, placeSigns, propColliders, signCell, splitName } from './StreetProps.ts';
+import { buildStreetProps, createPropMeshes, findJunctions, inBuilding, placeBenches, placeBouquinistes, placeAviation, placeLamps, placeLanterns, placeShelters, placeShopSigns, placeSigns, propColliders, signCell, splitName } from './StreetProps.ts';
 import { roadWidth } from './RoadBuilder.ts';
 import { buildVegetation } from './Vegetation.ts';
 
@@ -177,5 +177,37 @@ describe('street props placement', () => {
       expect(Math.cos(s.yaw)).toBeCloseTo(-1, 5);
     }
     expect(placeBouquinistes({ ...chunk, roads: [{ ...road, name: 'Rue X' }] }, { ...ctx, height: quay })).toEqual([]);
+  });
+});
+
+describe('Leg 2 night props (lanterns, shop signs, aviation lights)', () => {
+  const pos = (m: number[]) => Array.from({ length: m.length / 16 }, (_, i) => [m[16 * i + 12]!, m[16 * i + 13]!, m[16 * i + 14]!] as const);
+  it('lanterns only inside the zones, over the street, sagging under lanterns.height', () => {
+    const [zx, zz] = LT.lanterns.zones[0]!;
+    const road = { pts: [zx - 200, zz, zx + 200, zz], kind: 'residential', oneway: false, roundabout: false, junctions: [] };
+    const l = pos(placeLanterns({ ...chunk([road]) }, () => 2));
+    expect(l.length).toBeGreaterThan(0);
+    for (const [x, y, z] of l) {
+      expect(LT.lanterns.zones.some(([a, b, r]) => Math.hypot(x - a, zz - b) < r)).toBe(true);
+      expect(Math.abs(z - zz)).toBeLessThanOrEqual(LT.lanterns.maxSpan / 2);
+      expect(y).toBeLessThanOrEqual(2 + LT.lanterns.height);
+      expect(y).toBeGreaterThanOrEqual(2 + LT.lanterns.height - LT.lanterns.sag);
+    }
+  });
+  it('shop signs on the street face of a tall building, outside it; aviation lights on its roof', () => {
+    const road = { pts: [0, 88, 250, 88], kind: 'residential', oneway: false, roundabout: false, junctions: [] };
+    const tower = { outer: [0, 60, 250, 60, 250, 80, 0, 80], kind: 'yes', height: 120 }; // street side z = 80
+    const c = { ...chunk([road]), buildings: [tower] };
+    const signs = pos(placeShopSigns(c, () => 0));
+    expect(signs.length).toBeGreaterThan(0);
+    for (const [, y, z] of signs) {
+      expect(z).toBeGreaterThan(80); // in front of the facade, toward the street
+      expect(z).toBeLessThan(82);
+      expect(y).toBeGreaterThan(LT.neon.y);
+    }
+    const air = pos(placeAviation(c, () => 0));
+    expect(air.length).toBe(LT.aviation.corners);
+    for (const [, y] of air) expect(y).toBeCloseTo(120 + LT.aviation.size / 2, 5);
+    expect(placeAviation({ ...c, buildings: [{ ...tower, height: 40 }] }, () => 0)).toEqual([]);
   });
 });

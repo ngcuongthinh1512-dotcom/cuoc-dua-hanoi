@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { facadeNightGlsl, initTimeOfDay, pickTime } from './night.ts';
+import { lighting as L } from '../config.ts';
+import { facadeNightGlsl, initTimeOfDay, litShareAt, pickTime } from './night.ts';
 
 describe('pickTime (Leg 2 night)', () => {
   it('?time= only offline, else the config default', () => {
@@ -20,5 +21,21 @@ describe('facadeNightGlsl (lit windows / shop signs)', () => {
     expect(w.glow).toContain('vec2(2.0000, 2.0000)'); // raw uv = bays × floors
     expect(w.glow).toContain('totalEmissiveRadiance');
     expect(facadeNightGlsl(true, 0.25, 1)!.glow).toContain('fSign');
+  });
+});
+
+describe('lit window share by lighting.hour, TV flicker', () => {
+  it('dusk = windows.litShare, small hours = × lateShare, clamped', () => {
+    expect(litShareAt(0)).toBeCloseTo(L.windows.litShare);
+    expect(litShareAt(1)).toBeCloseTo(L.windows.litShare * L.windows.lateShare);
+    expect(litShareAt(2)).toBeCloseTo(litShareAt(1));
+    expect(litShareAt(0.5)).toBeLessThan(litShareAt(0));
+  });
+  it('the facade glow reads the shared time uniform', () => {
+    initTimeOfDay(new URLSearchParams('time=night'), false);
+    const w = facadeNightGlsl(false, 0.5, 0.5)!;
+    expect(w.uniforms.uNightTime).toBeDefined();
+    expect(w.fragmentHead).toContain('uniform float uNightTime');
+    expect(w.glow).toContain('fTv');
   });
 });

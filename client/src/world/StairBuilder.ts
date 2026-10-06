@@ -3,7 +3,7 @@
 // the Phase 3 KCC climbs: a ramp through the mid-riser points when the flight is walkable (≤ player.maxSlopeDeg), else
 // boxes. Stair colliders carry `stairs: true` (chunkBuild keeps them apart, ChunkManager registers their handles in
 // world/stairs.ts).
-import { player as PL, roads as RC, stairs as S, terrain as T } from '../config.ts';
+import { lighting as LT, player as PL, roads as RC, stairs as S, terrain as T } from '../config.ts';
 import type { StairRec } from '../geo/chunkData.ts';
 import type { BuildCtx, Builder, TriMesh } from './buildTypes.ts';
 import { MeshBuffer, type V3 } from './geom.ts';
@@ -60,8 +60,9 @@ export function flightOf(r: StairRec, height: BuildCtx['height']): Flight {
 /** Top of step k (k = −1: the start level). */
 export const stepTop = (f: Flight, k: number) => (k < 0 ? f.y0 : f.y0 + ((f.y1 - f.y0) * (k + 1)) / f.n + (f.lift[k] ?? 0));
 
-/** Visual + collider of one flight. */
-export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBuffer, rail: MeshBuffer, colliders: TriMesh[]) {
+/** Visual + collider of one flight; `glow`: a thin strip on every step nosing (material 'stairGlow': lit at night only;
+ *  quay flights: none under the water). */
+export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBuffer, rail: MeshBuffer, colliders: TriMesh[], glow?: MeshBuffer) {
   const p = new Path(f.pts);
   const L = p.length;
   const hw = f.width / 2;
@@ -112,6 +113,16 @@ export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBu
     const [dx, dz] = p.dir(s0);
     const face: V3 = yb > ya ? [-dx, 0, -dz] : [dx, 0, dz];
     if (Math.abs(yb - ya) > 1e-3) quadOut(stone, P(-hw, s0, ya), P(hw, s0, ya), P(hw, s0, yb), P(-hw, s0, yb), face, 0, ya, f.width, yb);
+    const G = LT.stairs;
+    if (glow && Math.abs(yb - ya) > 1e-3 && (!f.wall || Math.max(ya, yb) > level)) {
+      // an L round the nose: on the upper tread (seen from above) and down the riser top (seen from below), lifted off both
+      const up = yb > ya;
+      const [y, a, b] = up ? [yb + G.lift, s0, s0 + G.strip] : [ya + G.lift, s0 - G.strip, s0];
+      const r = up ? s0 - G.lift : s0 + G.lift;
+      const w = hw - G.inset;
+      quadOut(glow, P(-w, a, y), P(w, a, y), P(w, b, y), P(-w, b, y), [0, 1, 0]);
+      quadOut(glow, P(-w, r, y - G.strip - G.lift), P(w, r, y - G.strip - G.lift), P(w, r, y), P(-w, r, y), face);
+    }
   }
   // Stringers (both sides) from under the ground to stringer.height above the nosing line, with end caps.
   const sw = S.stringer.width;
@@ -231,7 +242,8 @@ export function buildFlight(f: Flight, height: BuildCtx['height'], stone: MeshBu
 export const buildStairs: Builder = (chunk, ctx) => {
   const stone = new MeshBuffer('sidewalk');
   const rail = new MeshBuffer('railing');
+  const glow = new MeshBuffer('stairGlow');
   const colliders: TriMesh[] = [];
-  for (const r of chunk.stairs ?? []) if (r.pts.length >= 4) buildFlight(flightOf(r, ctx.height), ctx.height, stone, rail, colliders);
-  return { meshes: [stone.bucket(), rail.bucket()].filter((b) => b.index.length), instances: [], colliders };
+  for (const r of chunk.stairs ?? []) if (r.pts.length >= 4) buildFlight(flightOf(r, ctx.height), ctx.height, stone, rail, colliders, glow);
+  return { meshes: [stone.bucket(), rail.bucket(), glow.bucket()].filter((b) => b.index.length), instances: [], colliders };
 };

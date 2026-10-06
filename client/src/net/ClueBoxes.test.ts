@@ -1,7 +1,7 @@
 import type { BoxInfo } from '@race/shared/protocol';
 import { type BufferGeometry, type Mesh, type MeshStandardMaterial, type Object3D, Scene, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { clueBox } from '../config.ts';
+import { clueBox, lighting as LT } from '../config.ts';
 import { boxRotation, ClueBoxes, nextBoxes, parseBoxes } from './ClueBoxes.ts';
 
 const box = (step: string, opened = false): BoxInfo => ({ step, x: 10, z: -20, opened, r: 20 });
@@ -57,7 +57,8 @@ describe('clue boxes (SPEC §17.10: drawn only from what the server sent)', () =
 });
 
 describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', () => {
-  const meshes = (o: Object3D) => o.children as Mesh<BufferGeometry, MeshStandardMaterial>[];
+  // the prop itself; night adds a halo sprite + a ground pool (own test below)
+  const meshes = (o: Object3D) => o.children.filter((c) => c.name !== 'halo' && c.name !== 'pool') as Mesh<BufferGeometry, MeshStandardMaterial>[];
   const part = (o: Object3D, name: string) => meshes(o).find((m) => m.name === name)!;
   const uuids = (o: Object3D) => meshes(o).map((m) => m.geometry.uuid);
 
@@ -129,6 +130,19 @@ describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', 
     cb.update(new Vector3(10 + 150, 1.7, -20));
     expect(beam.material.opacity).toBeCloseTo(clueBox.beam.opacity, 5);
     expect(beam.scale.x * clueBox.beam.width).toBeCloseTo(150 * clueBox.beam.spread, 5);
+    cb.dispose();
+  });
+
+  it('night (config default): halo + ground pool, both dimmer on an opened box; the halo grows with distance', () => {
+    const scene = new Scene();
+    const cb = new ClueBoxes(scene, () => 0, () => 0);
+    cb.reset([box('L1'), { ...box('L2', true), x: 30 }]);
+    const [shut, open] = scene.children;
+    const glow = (o: Object3D, n: string) => (o.getObjectByName(n) as unknown as { material: { color: { r: number } } }).material.color.r;
+    expect(glow(open!, 'halo')).toBeLessThan(glow(shut!, 'halo'));
+    expect(glow(open!, 'pool')).toBeLessThan(glow(shut!, 'pool'));
+    cb.update(new Vector3(0, 0, 500));
+    expect(shut!.getObjectByName('halo')!.scale.x).toBeCloseTo(500 * LT.boxes.halo.spread, 0); // ≈ 500 m away
     cb.dispose();
   });
 

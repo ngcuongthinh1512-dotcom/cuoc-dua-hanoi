@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { physics, player as PL, stairs as S, terrain as T } from '../config.ts';
+import { lighting as LT, physics, player as PL, stairs as S, terrain as T } from '../config.ts';
 import type { StairRec } from '../geo/chunkData.ts';
 import { CharacterController } from '../player/CharacterController.ts';
 import type { MoveIntent, PlayerEnv } from '../player/types.ts';
@@ -17,6 +17,21 @@ function colliderOf(r: StairRec, height: (x: number, z: number) => number) {
   buildFlight(flightOf(r, height), height, new MeshBuffer('sidewalk'), new MeshBuffer('railing'), out);
   return out[0]!;
 }
+
+describe('night nosing strips', () => {
+  it('one L strip per riser (tread + riser top) at the nose of the upper tread (going up and going down)', () => {
+    for (const pts of [[0, 0, 0, -6], [0, -6, 0, 0]]) {
+      const glow = new MeshBuffer('stairGlow');
+      const f = flightOf({ pts, width: 3 }, hill(6));
+      buildFlight(f, hill(6), new MeshBuffer('sidewalk'), new MeshBuffer('railing'), [], glow);
+      const b = glow.bucket();
+      expect(b.index.length).toBe(f.n * 12); // tread + riser quad per step
+      let top = -Infinity;
+      for (let i = 1; i < b.position.length; i += 3) top = Math.max(top, b.position[i]!);
+      expect(top).toBeCloseTo(3 + LT.stairs.lift, 1); // the highest strip lies on the top tread (+ its terrain lift)
+    }
+  });
+});
 
 describe('flightOf / stepTop', () => {
   it('step_count wins; else |Δh| / riser; never a riser above player.maxStep', () => {
@@ -42,11 +57,11 @@ describe('flightOf / stepTop', () => {
 });
 
 describe('buildStairs', () => {
-  it('draws sidewalk + railing buckets and one stair collider covering the flight', () => {
+  it('draws sidewalk + railing + stairGlow buckets and one stair collider covering the flight', () => {
     const out = buildStairs({ v: 2, key: '0_-1', buildings: [], roads: [], bridges: [], areas: [], points: [], stairs: [osm(6)] }, {
       key: '0_-1', bounds: { minX: 0, minZ: -250, maxX: 250, maxZ: 0 }, height: hill(6),
     });
-    expect(out.meshes.map((m) => m.material).sort()).toEqual(['railing', 'sidewalk']);
+    expect(out.meshes.map((m) => m.material).sort()).toEqual(['railing', 'sidewalk', 'stairGlow']);
     for (const m of out.meshes) expect(m.position.every(Number.isFinite)).toBe(true);
     expect(out.colliders).toHaveLength(1);
     const c = out.colliders[0]!;

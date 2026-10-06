@@ -113,6 +113,7 @@ const FALLBACK_COLOUR: Record<MaterialId, number> = {
   waterJet: 0xe8f2f8,
   neon: 0xffffff, // × vertex colour
   neonSign: 0xff2f78,
+  stairGlow: 0xffe0a8,
 };
 
 /** Flat-coloured stand-in for a material no package provides yet (vertexColors iff VERTEX_COLOR has it). */
@@ -126,7 +127,7 @@ export function withFallbacks(provided: Partial<Materials>): Materials {
   return Object.fromEntries(ids.map((id) => [id, provided[id] ?? defaultMaterial(id)])) as Materials;
 }
 
-const GROUND: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'sidewalk', 'asphalt', 'pave', 'marking']); // receive only
+const GROUND: ReadonlySet<MaterialId> = new Set<MaterialId>(['terrain', 'sidewalk', 'asphalt', 'pave', 'marking', 'stairGlow']); // receive only
 
 // ponytail: per-chunk InstancedMeshes and CPU copies of every geometry are kept (no dispose-after-upload); global
 // instancing and freeing CPU arrays in Phase 12. LOD: only the landmark 'near' buckets (ChunkManager hides them far away).

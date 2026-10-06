@@ -37,7 +37,29 @@ export const timeOfDay: 'day' | 'night' = 'night';
 export const lighting = {
   // canvas sky (replaces the daytime HDRI at night): zenith → horizon gradient (horizon = fog colour = city glow), stars
   sky: { zenith: '#02040b', horizon: '#232634', stars: 900, starAlpha: [0.25, 0.9] as const, starBand: 0.85 }, // starBand: share of the upper sky (0…zenith) with stars
+  // full night (agent N-B, Sky.ts): a warm city-glow band under the horizon colour (glow from glowFrom of the 0…horizon
+  // gradient), clouds lit from below by the city (brighter toward the horizon), stars = a Points cloud that twinkles
+  // (size px, twinkle 0–1 depth, rate rad/s), the moon disc + halo painted at lighting.moon's direction (radius px of 1024)
+  skyFull: {
+    mid: '#070b18', glow: '#3d302f', glowFrom: 0.6,
+    clouds: 45, cloudColour: [135, 104, 92] as const, cloudAlpha: 0.15,
+    starSize: [1.2, 2.6] as const, twinkle: 0.55, twinkleRate: 2.2,
+    moon: { disc: 5, halo: 70, haloAlpha: 0.22, colour: '#dfe6ff' },
+  },
   water: { zenith: '#0a1020', horizon: '#3a3a48' }, // the reflection gradient of the sea (Water.skyEnvironment)
+  // full night (agent N-B, Water.ts): fake reflections of the city: a 2D light map (shoreline lights every `step` m, glints
+  // at the casinos) looked up where the reflected view ray meets y = height; the ripples stretch it into streaks. `base`
+  // = a dim emissive so the sea is never pitch black; boats / buoys = small instanced lights (count, colours).
+  waterLights: {
+    mapSize: 1024, height: 9, strength: 4, shoreStep: 14, shoreShare: 0.7, dot: 16, // px of the map, m
+    colours: ['#ffc477', '#ffd9a0', '#e6eeff', '#ff9a6a'],
+    glints: [ // x, z, radius m, colour: the casinos (landmark centroids) + the Macau Tower
+      [409, 290, 70, '#ffcf6a'], [640, 560, 80, '#ffd27a'], [920, 860, 60, '#ffbf5a'], [1594, 203, 60, '#ffd890'],
+      [956, 550, 40, '#ffe0a0'], [-210, 1510, 40, '#ffb8f0'],
+    ] as [number, number, number, string][],
+    base: '#0b1420',
+    boats: { count: 40, colours: ['#ff3a2a', '#3aff6a', '#fff2d0'], size: 1.2, intensity: 6, minShore: 60 }, // m from the shore
+  },
   moon: { color: 0x9db2df, intensity: 1.3, position: { x: 300, y: 260, z: -230 } }, // m from the target: east-north-east, ≈ 35° high
   hemi: { sky: 0x5a6a90, ground: 0x3a3024, intensity: 2.2 }, // with the image-based light (high quality)
   low: { moonIntensity: 1.6, hemiIntensity: 2.9 }, // without it (low quality / runtime downgrade): same street brightness
@@ -46,6 +68,28 @@ export const lighting = {
   // street lamps (StreetProps): an unlit bulb (HDR colour × intensity → bloom), a soft additive pool on the pavement, and a
   // bulb-only level from the lamp's last LOD out to farDistance (city lights from afar). m.
   lamp: { colour: '#ffc477', intensity: 7, bulbRadius: 0.2, pool: { radius: 5.5, strength: 0.32 }, farDistance: 650 },
+  // lamps inside these world rects [x0, z0, x1, z1] (modern boulevards: Nam Van / ZAPE / NAPE / the north) are white instead
+  // of sodium (StreetProps shader on the instance position)
+  lampModern: { colour: '#e9f0ff', areas: [[350, -3000, 3000, 3000], [-1500, -3000, 3000, -1100]] as [number, number, number, number][] },
+  // red paper lanterns strung across the old-town streets (StreetProps): within these circles [x, z, r], on `kinds`, a string
+  // every `spacing` m, a lantern every `gap` m of it, `height` m up with `sag`; size m; intensity HDR (bloom)
+  lanterns: {
+    zones: [[-185, -75, 95], [95, -95, 120]] as [number, number, number][], // Rua da Felicidade; Senado / São Domingos
+    kinds: ['residential', 'pedestrian', 'living_street'], spacing: 16, gap: 2.6, height: 5.4, sag: 0.6,
+    size: [0.42, 0.55] as const, colour: '#ff1408', intensity: 1.6, maxSpan: 12, distance: 350, // m: not drawn farther
+  },
+  // neon blade signs (vertical, out from the facade) and LED panels (flat) above the shop band of street facades
+  // (StreetProps, buildings ≥ minHeight m): a candidate every `step` m of facade, share of them get one; canned colours,
+  // LED panels cycle (ledRate rad/s), blades flicker sometimes (flicker share). Sizes m [w, h, depth].
+  neon: {
+    kinds: ['primary', 'secondary', 'tertiary', 'residential', 'pedestrian', 'living_street', 'unclassified'],
+    minHeight: 9, step: 7, share: 0.35, ledShare: 0.3, reach: 6, // reach: facade ≤ m from a street edge
+    blade: [0.12, 2.6, 0.9] as const, led: [3.2, 1.4, 0.1] as const, y: 5.2,
+    colours: ['#ff2f6a', '#2ff0ff', '#ffd23a', '#7a5cff', '#3aff7a', '#ff7a2a'], intensity: 2.6, flicker: 0.15, ledRate: 0.6,
+    distance: 450, // m: not drawn farther (per instance)
+  },
+  // red aviation lights on the roof corners of buildings ≥ minHeight m (StreetProps), blinking (period s, on share)
+  aviation: { minHeight: 100, size: 0.7, colour: '#ff1a10', intensity: 9, period: 1.6, on: 0.45, corners: 4 },
   // lit windows (facade shader, night.ts facadeNightGlsl): in a lit building (MeshBucket.lit > 0, buildings.macao.litShare
   // of them) litShare of its windows glow, hash of (window, building seed); colour = `colour` or a palette pick
   // (cumulative weights: warm white, yellow, tv blue, pink), brightness × [0.6, 1.2]
@@ -54,12 +98,36 @@ export const lighting = {
     colour: '#ffcf8f',
     intensity: 1.1,
     palette: [['#ffe6bf', 0.45], ['#ffcf8f', 0.8], ['#8fb4ff', 0.95], ['#ff9ad0', 1]] as [string, number][],
+    lateShare: 0.4, // × litShare at lighting.hour = 1 (small hours); hour 0 = litShare as is
+    switchSeconds: 240, // each window re-rolls on / off at this period (own phase): lights go on and off slowly
+    tv: { share: 0.12, colour: '#7fa2ff', rate: 7, depth: 0.6 }, // share of the windows lit by a flickering TV
   },
+  hour: 0.25, // 0 = dusk … 1 = small hours: the lit window share (windows.lateShare); per leg
   // shop bands at night: openShare of the shops (hash of shop, building) light their signboard (its own colour × sign) and
   // the shop window (× interior); the rest stay dark
   shops: { openShare: 0.6, sign: 1.8, interior: 1.1 },
   emissiveScale: 1, // global × on every nightGlow() (windows, landmark signs / floodlights)
   signBrightness: 0.6, // street-name plaques: unlit (MeshBasic) at this brightness, readable without a light
+  // ── night gameplay (agent N-A): all × emissiveScale; HDR factors (> 1) only with post-processing (bloom), else × 1 ──
+  // clue boxes (net/ClueBoxes.ts): yellow / red emissive (day: clueBox.glow), the light column's colour × beam (additive),
+  // an additive halo sprite at the head (≥ size m, ≥ spread m per m of distance: a dot from afar) and a ground pool
+  // (radius m); an opened box: halo / pool × opened, stripes keep their dim day look
+  boxes: { emissive: 1.1, beam: 2.2, halo: { size: 1.6, spread: 0.02, strength: 1.3, y: 1.4 }, pool: { radius: 2.6, strength: 0.45 }, opened: 0.3 },
+  // Pit Stop mat (race/PitStop.ts): stripes = the lit rim (emissive), carpet emissive, column colour × beam
+  pit: { rim: 1.6, carpet: 0.25, beam: 2.5 },
+  // stair flights (world/StairBuilder.ts nosing strips, material 'stairGlow', hidden by day): strip width m, lift m,
+  // inset m from each side, colour × intensity
+  stairs: { strip: 0.06, lift: 0.006, inset: 0.12, colour: '#ffe0a8', intensity: 2.2 },
+  // NPC cars (npc/NpcRenderer.ts, 2 extra instanced draw calls): lamp boxes on the template's own surface (height share
+  // of the body, x share of the half width; twoWheeler: one lamp in the middle), colours × intensity; braking tail × brake;
+  // taxi roof sign; road glow = an additive cone `cone` [width, length] m ahead of the nose
+  cars: {
+    head: { colour: '#fff1d6', intensity: 3, size: [0.32, 0.14] as const, y: 0.42, x: 0.72 },
+    tail: { colour: '#ff1a0c', intensity: 1.2, brake: 3, size: [0.3, 0.12] as const, y: 0.5, x: 0.76 },
+    twoWheeler: { y: 0.55, size: [0.16, 0.12] as const },
+    roof: { colour: '#fff6c8', intensity: 2.5 },
+    cone: { width: 4.5, length: 11, strength: 0.38, colour: '#ffe9c4', lift: 0.06 },
+  },
 };
 
 export const physics = {

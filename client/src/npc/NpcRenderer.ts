@@ -8,7 +8,9 @@ import {
   MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, SphereGeometry, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { npcRender as R, roads as RC, traffic } from '../config.ts';
+import { lighting as LT, npc as NPC, npcRender as R, roads as RC, traffic } from '../config.ts';
+import { additive, nightHdr } from '../world/glow.ts';
+import { isNight } from '../world/night.ts';
 import type { NpcAssets } from './NpcAssets.ts';
 import type { NpcRoads } from './roads.ts';
 import type { CarKind, CarPose, LightQuery, Seat, SignalHead } from './types.ts';
@@ -94,6 +96,53 @@ function eyeInside(geometry: BufferGeometry, m: Matrix4, eye: Vector3): boolean 
 }
 const BULB_Y = { red: -0.2, amber: -0.425, green: -0.65 } as const; // below the pole top
 
+type P3 = [number, number, number];
+/** Night lamps of one vehicle template (model space, nose +Z): lamp box centres on the body's own surface, the taxi's roof
+ *  sign box (centre, size) and the nose z (road glow start). */
+export interface LampSpots { head: P3[]; tail: P3[]; roof?: { at: P3; size: P3 }; nose: number }
+
+/** Pure: lighting.cars spots from the template's vertices. Head / tail: per lamp x (± x share of the half width; a two-
+ *  wheeler: one, in the middle) at the height share y of the body, z = the frontmost / rearmost vertex near that point
+ *  (falls back to the bounding box). Roof (taxi): the box of the vertices within 0.12 m of the top, when narrower than
+ *  0.9 m (a sign); else a 0.6 × 0.15 × 0.25 m sign on the roof. */
+export function lampSpots(g: BufferGeometry, twoWheeler: boolean, taxi: boolean): LampSpots {
+  const C = LT.cars;
+  const box = g.boundingBox ?? (g.computeBoundingBox(), g.boundingBox)!;
+  const [min, max] = [box.min, box.max];
+  const h = max.y - min.y;
+  const half = (max.x - min.x) / 2;
+  const cx = (min.x + max.x) / 2;
+  const p = g.getAttribute('position');
+  const spot = (yShare: number, xShare: number, front: boolean): P3[] => {
+    const y = min.y + h * yShare;
+    const band = Math.max(0.1, 0.12 * h);
+    return (twoWheeler ? [0] : [-xShare, xShare]).map((xs) => {
+      const x = cx + xs * half;
+      let z = front ? -Infinity : Infinity;
+      for (let i = 0; i < p.count; i++) {
+        if (Math.abs(p.getY(i) - y) > band || Math.abs(p.getX(i) - x) > 0.25 * half + 0.1) continue;
+        z = front ? Math.max(z, p.getZ(i)) : Math.min(z, p.getZ(i));
+      }
+      return [x, y, Number.isFinite(z) ? z : front ? max.z : min.z];
+    });
+  };
+  const yh = twoWheeler ? C.twoWheeler.y : C.head.y;
+  const head = spot(yh, C.head.x, true);
+  const out: LampSpots = { head, tail: spot(twoWheeler ? C.twoWheeler.y : C.tail.y, C.tail.x, false), nose: Math.max(...head.map((s) => s[2])) };
+  if (taxi) {
+    let [x0, x1, z0, z1] = [Infinity, -Infinity, Infinity, -Infinity];
+    for (let i = 0; i < p.count; i++) {
+      if (p.getY(i) < max.y - 0.12) continue;
+      [x0, x1, z0, z1] = [Math.min(x0, p.getX(i)), Math.max(x1, p.getX(i)), Math.min(z0, p.getZ(i)), Math.max(z1, p.getZ(i))];
+    }
+    out.roof = x1 - x0 < 0.9
+      ? { at: [(x0 + x1) / 2, max.y - 0.06, (z0 + z1) / 2], size: [x1 - x0 + 0.02, 0.14, z1 - z0 + 0.02] }
+      : { at: [cx, max.y + 0.075, (min.z + max.z) / 2], size: [0.6, 0.15, 0.25] };
+  }
+  return out;
+}
+const MAX_LAMPS = CAPACITY * 5;
+
 export class NpcRenderer {
   readonly root = new Group();
   /** Per kind; a kind missing from the assets is not drawn. */
@@ -103,6 +152,14 @@ export class NpcRenderer {
   readonly bulbs: InstancedMesh;
   readonly zebras: InstancedMesh;
   readonly chairs: InstancedMesh;
+  /** Night only (lighting.cars): head / tail / taxi roof lamps (unlit HDR boxes, instance colour) and the road glow ahead. */
+  readonly lamps?: InstancedMesh;
+  readonly cones?: InstancedMesh;
+  private readonly spots = new Map<CarKind, LampSpots>();
+  private readonly lampColour = isNight()
+    ? { head: nightHdr(LT.cars.head.colour, LT.cars.head.intensity), tail: nightHdr(LT.cars.tail.colour, LT.cars.tail.intensity),
+        brake: nightHdr(LT.cars.tail.colour, LT.cars.tail.brake), roof: nightHdr(LT.cars.roof.colour, LT.cars.roof.intensity) }
+    : undefined;
   private heads: readonly SignalHead[] = [];
   private readonly headAt: Vector3[] = []; // pole foot per head
 
@@ -128,6 +185,43 @@ export class NpcRenderer {
     this.chairs = instanced(chairGeometry(), new MeshStandardMaterial({ color: R.chair.colour, roughness: 0.5 }), MAX_CHAIRS);
     this.chairs.receiveShadow = true;
     this.root.add(this.wheels, this.poles, this.bulbs, this.zebras, this.chairs);
+    if (this.lampColour) {
+      const C = LT.cars.cone;
+      this.lamps = instanced(new BoxGeometry(1, 1, 1), new MeshBasicMaterial(), MAX_LAMPS, true);
+      // the cone texture starts at v = 0: after the turns v runs along +Z (nose), from z = 0 to 1
+      const cone = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2).rotateY(Math.PI).translate(0, 0, 0.5);
+      this.cones = instanced(cone, additive('cone', nightHdr(C.colour, C.strength)), CAPACITY);
+      this.cones.renderOrder = 1; // over the road markings
+      this.root.add(this.lamps, this.cones);
+    }
+  }
+
+  private spotsOf(kind: CarKind, geometry: BufferGeometry) {
+    let s = this.spots.get(kind);
+    if (!s) this.spots.set(kind, (s = lampSpots(geometry, NPC.vehicles[kind].dims[0] < 1, kind === 'taxi')));
+    return s;
+  }
+
+  /** Night: the lamps + road glow of the car placed by `m` (m4). Returns the next lamp index. */
+  private carLamps(c: CarPose, t: { geometry: BufferGeometry }, m: Matrix4, n: number, k: number): number {
+    const C = LT.cars;
+    const S = this.spotsOf(c.kind, t.geometry);
+    const two = S.head.length === 1;
+    const add = (at: P3, size: readonly number[], colour: Color) => {
+      if (n >= MAX_LAMPS) return;
+      r4.makeScale(size[0]!, size[1]!, size[2]!).setPosition(at[0], at[1], at[2]);
+      this.lamps!.setMatrixAt(n, w4.multiplyMatrices(m, r4));
+      this.lamps!.setColorAt(n++, colour);
+    };
+    const L = this.lampColour!;
+    const [hs, ts] = [two ? C.twoWheeler.size : C.head.size, two ? C.twoWheeler.size : C.tail.size];
+    for (const s of S.head) add(s, [hs[0], hs[1], 0.06], L.head);
+    for (const s of S.tail) add(s, [ts[0], ts[1], 0.06], c.braking ? L.brake : L.tail);
+    if (S.roof) add(S.roof.at, S.roof.size, L.roof);
+    const w = two ? 0.6 : 1;
+    r4.makeScale(C.cone.width * w, 1, C.cone.length * w).setPosition(0, C.cone.lift, S.nose);
+    this.cones!.setMatrixAt(k, w4.multiplyMatrices(m, r4));
+    return n;
   }
 
   /** Every car at its render pose; wheels roll by CarPose.wheel (m) / the template's wheel radius. A car whose body box
@@ -136,6 +230,7 @@ export class NpcRenderer {
   cars(cars: readonly CarPose[], prev: ReadonlyMap<number, Snap>, alpha: number, eye?: Vector3) {
     for (const mesh of this.carMeshes.values()) mesh.count = 0;
     let w = 0;
+    let [n, k] = [0, 0]; // night lamps, road glows
     for (const c of cars) {
       const mesh = this.carMeshes.get(c.kind);
       const t = this.assets.vehicles.get(c.kind);
@@ -146,6 +241,7 @@ export class NpcRenderer {
       const i = mesh.count++;
       mesh.setMatrixAt(i, m4);
       mesh.setColorAt(i, col.setHex(c.paint));
+      if (this.lamps) n = this.carLamps(c, t, m4, n, k++);
       for (const [ax, ay, az] of t.axles) {
         if (w >= MAX_WHEELS) break;
         r4.makeRotationX(p.wheel / (t.wheelRadius || 1)).scale(scl.set(R.wheelWidth, t.wheelRadius, t.wheelRadius)).setPosition(ax, ay, az);
@@ -154,6 +250,7 @@ export class NpcRenderer {
     }
     for (const mesh of this.carMeshes.values()) done(mesh, mesh.count);
     done(this.wheels, w);
+    if (this.lamps) done(this.lamps, n), done(this.cones!, k);
   }
 
   /** Signal heads near the anchor (gathered again every npcRender.refresh m): the pole foot is SignalHead (x, z) itself

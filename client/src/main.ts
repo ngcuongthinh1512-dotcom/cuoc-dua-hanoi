@@ -46,6 +46,7 @@ import { createBuildingMaterials } from './world/BuildingBuilder.ts';
 import type { ToWorker } from './world/buildTypes.ts';
 import { ChunkManager } from './world/ChunkManager.ts';
 import { createLandmarkMaterials } from './world/landmarks/index.ts';
+import { createStairMaterials } from './world/stairs.ts';
 import { createLandmarkModels } from './world/landmarks/models.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
 import { createSky } from './world/Sky.ts';
@@ -156,7 +157,7 @@ async function start() {
   const materials = withFallbacks(
     Object.assign(
       {},
-      ...[createTerrainMaterials, createBuildingMaterials, createRoadMaterials, createPropMaterials, createLandmarkMaterials].map(
+      ...[createTerrainMaterials, createBuildingMaterials, createRoadMaterials, createPropMaterials, createLandmarkMaterials, createStairMaterials].map(
         (f) => attempt(f.name, f) ?? {},
       ),
     ),

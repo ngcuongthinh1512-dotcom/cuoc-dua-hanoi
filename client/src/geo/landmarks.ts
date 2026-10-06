@@ -46,15 +46,15 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   { id: 'fortaleza-monte', name: 'Fortaleza do Monte', group: 'm3', osm: ['way/46510080'], zone: 'way/46510080', near: 20, view: [150, 220] }, // OSM h 57.1 (includes the hill)
   { id: 'fortaleza-guia', name: 'Fortaleza da Guia', group: 'm3', osm: ['way/404669396'], zone: 'way/404669396', near: 20, view: [200, 170] }, // historic=fort, no building tag, no height
   { id: 'farol-guia', name: 'Hải đăng Guia', group: 'm3', osm: ['way/230576208'], near: 15, view: [220, 70] }, // OSM h 104.2 = hill + tower (the tower itself ≈ 15 m): the group decides
-  { id: 'templo-ama', name: 'Chùa A-Ma', group: 'm3', osm: ['way/192187333', 'relation/18544991'], near: 25, view: [270, 130] }, // relation/18544991 = Largo do Pagode da Barra (the plaza in front)
+  { id: 'templo-ama', name: 'Chùa A-Ma', group: 'm3', osm: ['way/192187333', 'relation/18544991'], near: 25, view: [300, 90] }, // relation/18544991 = Largo do Pagode da Barra (the plaza in front)
   { id: 'kun-iam-tong', name: 'Kun Iam Tong', group: 'm3', osm: ['way/895766783', 'way/1111251970', 'way/1111251972'], near: 20, view: [200, 100] }, // no outline on the bus-stop node n/2165428407: the 3 temple halls 40–60 m away (building=temple, Tianhou Hall, Shakya Mani Hall)
-  { id: 'jardim-lou-lim-ioc', name: 'Vườn Lou Lim Ioc', group: 'm3', osm: ['way/265433531'], zone: 'way/265433531', near: 10, view: [160, 170] }, // park polygon (kind 'artwork')
+  { id: 'jardim-lou-lim-ioc', name: 'Vườn Lou Lim Ioc', group: 'm3', osm: ['way/265433531'], zone: 'way/265433531', near: 10, view: [20, 260] }, // park polygon (kind 'artwork')
   { id: 'hotel-lisboa', name: 'Hotel Lisboa', group: 'm4', osm: [], zone: 'way/1313391925', near: 20, view: [200, 170] }, // zone = the resort site polygon: its 3 buildings (37 / 37 / 77 m) belong to the landmark
   { id: 'wynn-macau', name: 'Wynn Macau', group: 'm4', osm: ['relation/6279959'], zone: 'way/1215820171', near: 25, view: [250, 260] }, // zone = the resort site polygon: Wynn 94.5, Encore 177.5, Encore Tower, podium
   { id: 'mgm-macau', name: 'MGM Macau', group: 'm4', osm: ['way/605485397', 'way/192179915'], near: 25, view: [200, 250] },
   { id: 'sands-macau', name: 'Sands Macao', group: 'm4', osm: ['way/164195448'], near: 20, view: [160, 200] },
   { id: 'bank-of-china', name: 'Bank of China', group: 'm4', osm: ['way/699456294'], near: 15, view: [180, 220] },
-  { id: 'fisherman-wharf', name: "Fisherman's Wharf", group: 'm4', osm: ['relation/4257072', 'relation/10387813'], near: 30, view: [230, 180] }, // relation/4257072 = the whole site (131 000 m², no building tag, kind 'artwork')
+  { id: 'fisherman-wharf', name: "Fisherman's Wharf", group: 'm4', osm: ['relation/4257072', 'relation/10387813'], near: 30, view: [320, 300] }, // relation/4257072 = the whole site (131 000 m², no building tag, kind 'artwork')
   { id: 'cultural-centre', name: 'Trung tâm Văn hóa Macao', group: 'm4', osm: ['way/192179917'], near: 20, view: [200, 170] },
   { id: 'kun-iam-statue', name: 'Tượng Kun Iam', group: 'm4', osm: ['way/231068755'], near: 25, view: [140, 100] }, // OSM: the Kun Iam Ecumenical Centre footprint, tourism=artwork, h 20 (= the 20 m statue); its plaza is way/192179912 (pedestrian)
   { id: 'portas-do-cerco', name: 'Portas do Cerco', group: 'm4', osm: ['way/173864406', 'way/138665744'], near: 20, view: [180, 120] },

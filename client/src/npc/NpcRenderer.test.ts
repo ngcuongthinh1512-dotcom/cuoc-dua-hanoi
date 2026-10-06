@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { npcRender as R } from '../config.ts';
 import { TrafficLights } from './lights.ts';
 import { loadNpcAssets, type NpcAssets } from './NpcAssets.ts';
-import { carQuaternion, lerpPose, NpcRenderer, type Snap } from './NpcRenderer.ts';
+import { carQuaternion, lampSpots, lerpPose, NpcRenderer, type Snap } from './NpcRenderer.ts';
 import { NpcRoads } from './roads.ts';
 import type { CarKind, CarPose, LightQuery, SignalHead } from './types.ts';
 
@@ -113,5 +113,27 @@ describe.skipIf(!existsSync(graphFile))('NpcRenderer lights (real TrafficLights,
       b.setFromMatrixPosition(m).sub(p);
       expect(b.x * -Math.sin(h.yaw) + b.z * -Math.cos(h.yaw)).toBeCloseTo(R.lights.bulbOut, 4);
     });
+  });
+});
+
+describe('night car lamps (config timeOfDay night)', () => {
+  it('2 head + 2 tail per car (+ taxi roof, 1 + 1 on a two-wheeler), heads at the nose = ahead of travel, brake brighter', () => {
+    const r = new NpcRenderer(assets);
+    const braking = { ...car(2, 'sedan', 0, 20, 0), braking: true };
+    r.cars([car(1, 'sedan', 0, 0, 0), braking, car(3, 'taxi', 0, 40, 0), car(4, 'moto', 0, 60, 0)], new Map(), 1);
+    expect([r.lamps!.count, r.cones!.count]).toEqual([4 + 4 + 5 + 2, 4]);
+    const at = (i: number) => new Vector3().setFromMatrixPosition(new Matrix4().fromArray(r.lamps!.instanceMatrix.array, i * 16));
+    // yaw 0 = heading north (−Z): head lamps in front (z < 0), tail lamps behind
+    expect([at(0).z < -1, at(1).z < -1, at(2).z > 1, at(3).z > 1]).toEqual([true, true, true, true]);
+    expect(Math.sign(at(0).x) * Math.sign(at(1).x)).toBe(-1); // one each side
+    const c = (i: number) => new Color().fromArray(r.lamps!.instanceColor!.array, i * 3);
+    expect(c(6).r).toBeGreaterThan(c(2).r); // the braking sedan's tail
+  });
+  it('lampSpots: a stand-in box puts the lamps on its faces, a wide flat roof gets a small sign', () => {
+    const t = assets.vehicles.get('taxi')!;
+    const s = lampSpots(t.geometry, false, true);
+    const box = t.geometry.boundingBox!;
+    expect(s.head.every((p) => p[2] === box.max.z) && s.tail.every((p) => p[2] === box.min.z)).toBe(true);
+    expect(s.roof!.size).toEqual([0.6, 0.15, 0.25]);
   });
 });

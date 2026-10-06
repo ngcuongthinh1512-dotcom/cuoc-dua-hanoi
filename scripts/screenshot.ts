@@ -325,7 +325,7 @@ if (existsSync(join(dataDir, 'index.json'))) {
     } else if (t) {
       const [tx, tz] = [t.x / t.w, t.z / t.w];
       const ty = ground(tx, tz) + Math.min(t.top, 120) * 0.4;
-      PRESETS[`lm-${d.id}`] = worldCam(tx + dx * dist, ty + Math.max(30, dist * 0.35), tz + dz * dist, tx, ty, tz);
+      PRESETS[`lm-${d.id}`] = worldCam(tx + dx * dist, ty + Math.max(45, dist * 0.8), tz + dz * dist, tx, ty, tz);
     }
   }
   // Street level at the demo leg destinations (eye 1.7 m), facing the landmark of that step (L3 / T / PS: no registered landmark, no preset).

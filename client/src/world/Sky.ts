@@ -12,47 +12,59 @@ import { Sky as SkyMesh } from 'three/examples/jsm/objects/Sky.js';
 import { graphics8c, lighting as L, render as R } from '../config.ts';
 import { hash01 } from './geom.ts';
 import { graphics } from './graphics.ts';
-import { isNight } from './night.ts';
+import { isNight, nightTime } from './night.ts';
 import { sceneEnvironmentOn, skyEnvironment } from './Water.ts';
 
 const G = graphics8c.sky;
 
 function skyTexture(night: boolean): THREE.Texture {
   const S = night ? L.sky : R.sky;
+  const F = L.skyFull;
   const c = document.createElement('canvas');
-  const k = night ? 2 : 1; // night: 2× texels so the stars stay small dots
-  c.width = 1024 * k;
-  c.height = 512 * k; // equirect: y = 0 zenith, 256 k horizon
+  c.width = 1024;
+  c.height = 512; // equirect: y = 0 zenith, 256 horizon
   const g = c.getContext('2d')!;
-  g.scale(k, k);
   const grad = g.createLinearGradient(0, 0, 0, 256);
   grad.addColorStop(0, S.zenith);
+  // night: a warm city-glow band just above the horizon (the horizon itself = the fog colour)
+  if (night) grad.addColorStop(F.glowFrom, F.mid), grad.addColorStop(0.93, F.glow);
   grad.addColorStop(1, S.horizon);
   g.fillStyle = grad;
   g.fillRect(0, 0, 1024, 256);
   g.fillStyle = S.horizon;
-  g.fillRect(0, 256, 1024, 256);
+  g.fillRect(0, 256, 1024, 512);
   if (night) {
-    // Stars: 1–2 texel dots, fainter toward the horizon (city glow). ponytail: 2K canvas (≈ 8 MB VRAM), still soft
-    // dots on screen; a Points cloud on the sky dome if they must be crisp.
-    const [a0, a1] = L.sky.starAlpha;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    for (let i = 0; i < L.sky.stars; i++) {
-      const y = Math.pow(hash01(i, 5), 1.5) * 256 * L.sky.starBand;
-      g.fillStyle = `rgba(235,240,255,${(a0 + (a1 - a0) * hash01(i, 6)) * (1 - y / 256)})`;
-      const r = hash01(i, 7) < 0.1 ? 2 : 1;
-      g.fillRect(hash01(i, 4) * 1024 * k, y * k, r, r);
+    // the moon (lighting.moon direction; three's equirect: u = atan2(z, x) / 2π + 0.5, row = (0.5 − asin(y) / π) · 512)
+    // and its halo, stretched 1 / cos(elevation) across like the projection; the stars are a Points cloud (starPoints)
+    const d = new THREE.Vector3(L.moon.position.x, L.moon.position.y, L.moon.position.z).normalize();
+    const [mx, my] = [(Math.atan2(d.z, d.x) / (2 * Math.PI) + 0.5) * 1024, (0.5 - Math.asin(d.y) / Math.PI) * 512];
+    const M = F.moon;
+    g.setTransform(1 / Math.cos(Math.asin(d.y)), 0, 0, 1, mx, my);
+    for (const [r, a] of [[M.halo, M.haloAlpha], [M.disc * 1.6, 0.9]] as const) {
+      const halo = g.createRadialGradient(0, 0, M.disc * 0.5, 0, 0, r);
+      halo.addColorStop(0, `rgba(223,230,255,${a})`);
+      halo.addColorStop(1, 'rgba(223,230,255,0)');
+      g.fillStyle = halo;
+      g.fillRect(-r, -r, 2 * r, 2 * r);
     }
+    g.fillStyle = M.colour;
+    g.beginPath();
+    g.arc(0, 0, M.disc, 0, 2 * Math.PI);
+    g.fill();
+    g.setTransform(1, 0, 0, 1, 0, 0);
   }
   // Thin clouds: soft flattened blobs between ~8° and ~40° elevation; x wraps around.
-  for (let i = 0; i < (night ? 0 : R.sky.clouds); i++) {
+  // Night: the same blobs, lit from below by the city (warm, stronger toward the horizon).
+  const [cr, cg, cb] = night ? F.cloudColour : [255, 255, 255];
+  for (let i = 0; i < (night ? F.clouds : R.sky.clouds); i++) {
     const x = hash01(i, 1) * 1024;
     const y = 140 + hash01(i, 2) * 95;
     const r = 30 + hash01(i, 3) * 70;
+    const a = night ? F.cloudAlpha * (0.4 + 0.6 * ((y - 140) / 95)) : R.sky.cloudAlpha;
     for (const dx of [-1024, 0, 1024]) {
       const blob = g.createRadialGradient(x + dx, y, 0, x + dx, y, r);
-      blob.addColorStop(0, `rgba(255,255,255,${R.sky.cloudAlpha})`);
-      blob.addColorStop(1, 'rgba(255,255,255,0)');
+      blob.addColorStop(0, `rgba(${cr},${cg},${cb},${a})`);
+      blob.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
       g.fillStyle = blob;
       g.setTransform(1, 0, 0, 0.3, 0, y * 0.7); // flatten vertically about y
       g.fillRect(x + dx - r, y - r, 2 * r, 2 * r);
@@ -63,6 +75,44 @@ function skyTexture(night: boolean): THREE.Texture {
   t.mapping = THREE.EquirectangularReflectionMapping;
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/** Night stars: one Points draw call on a sphere around the camera (Sky.update), fainter toward the horizon (city glow),
+ *  each twinkling at its own phase (nightTime). Drawn after the opaque world (transparent), so buildings hide them. */
+function starPoints(): THREE.Points {
+  const F = L.skyFull;
+  const n = L.sky.stars;
+  const pos = new Float32Array(3 * n);
+  const seed = new Float32Array(2 * n); // alpha, size
+  const [a0, a1] = L.sky.starAlpha;
+  for (let i = 0; i < n; i++) {
+    const el = (Math.PI / 2) * (1 - Math.pow(hash01(i, 5), 1.5) * L.sky.starBand); // as the old canvas stars: denser up high
+    const az = hash01(i, 4) * 2 * Math.PI;
+    pos.set([Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)], 3 * i);
+    const fade = Math.min(1, Math.sin(el) * 3); // fainter near the horizon
+    seed.set([(a0 + (a1 - a0) * hash01(i, 6)) * fade, F.starSize[0] + (F.starSize[1] - F.starSize[0]) * Math.pow(hash01(i, 7), 3)], 2 * i);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('star', new THREE.BufferAttribute(seed, 2));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uNightTime: nightTime, uPx: { value: Math.min(window.devicePixelRatio || 1, R.maxPixelRatio) } },
+    vertexShader: `attribute vec2 star; uniform float uNightTime; uniform float uPx; varying float vA;
+void main() {
+  float ph = fract(sin(dot(position.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;
+  vA = star.x * (1.0 - ${F.twinkle.toFixed(3)} * (0.5 + 0.5 * sin(uNightTime * ${F.twinkleRate.toFixed(3)} * (0.6 + ph * 0.13) + ph)));
+  gl_PointSize = star.y * uPx;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`,
+    fragmentShader: `varying float vA;
+void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(vec3(0.92, 0.94, 1.0), vA * (1.0 - smoothstep(0.4, 1.0, d))); }`,
+    transparent: true,
+    depthWrite: false,
+  });
+  const p = new THREE.Points(geo, mat);
+  p.frustumCulled = false;
+  p.name = 'stars';
+  return p;
 }
 
 export type RGB = [number, number, number];
@@ -150,6 +200,7 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
   scene.add(sun, sun.target);
 
   let skyMesh: SkyMesh | undefined;
+  let stars: THREE.Points | undefined;
   let toneMappedLater = false;
   let horizon: RGB | undefined; // the HDRI's, once loaded (night: the canvas horizon)
   const sunDir = new THREE.Vector3(s.position.x, s.position.y, s.position.z).normalize();
@@ -159,6 +210,7 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
     horizon = [c.r, c.g, c.b];
     fog.color.setRGB(...fogColour(horizon, toneMappedLater), THREE.LinearSRGBColorSpace);
     if (envOn) (scene.environment = canvasSky), (scene.environmentIntensity = L.environmentIntensity);
+    scene.add((stars = starPoints()));
   }
   if (on) {
     toneMappedLater = graphics().on('post');
@@ -258,6 +310,7 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
       }
       skyMesh?.position.copy(p);
       skyMesh?.scale.setScalar(far);
+      if (stars) stars.position.copy(p), stars.scale.setScalar(far * 0.9), (nightTime.value = performance.now() / 1000);
     },
   };
 }

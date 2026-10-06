@@ -5,11 +5,13 @@
 // 2026-10-03 (SPEC §17.38): the mat is PIT_MAT (16 × 32 m, shared/src/constants.ts), turned to the zone yaw (ClueBoxes), and
 // IS the check-in zone (the server: onPitMat); a red light column marks it. The "VỀ ĐÍCH" gate was dropped.
 import { BoxGeometry, CylinderGeometry, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, Vector3 } from 'three';
-import { raceClient } from '../config.ts';
+import { lighting as LT, raceClient } from '../config.ts';
 import { CharacterAnimator } from '../player/Animation.ts';
 import { tickAction, yawOf } from '../player/CharacterController.ts';
 import { type CharacterAsset, CharacterModel } from '../player/CharacterModel.ts';
 import type { PlayerState } from '../player/types.ts';
+import { nightHdr } from '../world/glow.ts';
+import { isNight } from '../world/night.ts';
 
 const M = raceClient.mat;
 const BM = raceClient.matBeam;
@@ -19,13 +21,15 @@ function makeParts() {
   const beam = new CylinderGeometry(BM.width / 2, BM.width / 2, BM.height, 8, 1, true).translate(0, BM.height / 2, 0);
   const ys = beam.getAttribute('position');
   beam.setAttribute('color', new Float32BufferAttribute(Array.from({ length: ys.count }, (_, i) => [1, 1, 1, 1 - ys.getY(i) / BM.height]).flat(), 4)); // alpha 1 → 0 upward
+  const night = isNight(); // night (lighting.pit): lit rim (the stripes), a faint carpet glow, an HDR column; day as before
+  const k = LT.emissiveScale;
   return {
     carpet: new BoxGeometry(M.width, M.lift, M.length).translate(0, M.lift / 2, 0),
     stripe: new BoxGeometry(M.stripeWidth, M.lift, M.length).translate(0, M.lift, 0),
-    red: new MeshStandardMaterial({ color: M.colour, roughness: 0.9 }),
-    yellow: new MeshStandardMaterial({ color: M.stripe, emissive: M.stripe, emissiveIntensity: 0.25, roughness: 0.7 }),
+    red: new MeshStandardMaterial({ color: M.colour, roughness: 0.9, ...(night && { emissive: M.colour, emissiveIntensity: LT.pit.carpet * k }) }),
+    yellow: new MeshStandardMaterial({ color: M.stripe, emissive: M.stripe, emissiveIntensity: night ? LT.pit.rim * k : 0.25, roughness: 0.7 }),
     beam,
-    beamMat: new MeshBasicMaterial({ color: BM.colour, vertexColors: true, transparent: true, depthWrite: false, opacity: BM.opacity }),
+    beamMat: new MeshBasicMaterial({ color: night ? nightHdr(BM.colour, LT.pit.beam) : BM.colour, vertexColors: true, transparent: true, depthWrite: false, opacity: BM.opacity }),
   };
 }
 

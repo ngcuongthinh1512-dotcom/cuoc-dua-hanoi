@@ -711,6 +711,7 @@ function facadeMaterial(map: THREE.Texture, masked: boolean, roughness: number, 
   m.onBeforeCompile = (s) => {
     s.fragmentShader = s.fragmentShader.replace('#include <color_fragment>', `${night?.glow ?? ''}\n\t${tint}\n\tdiffuseColor.a = 1.0;`);
     if (!night) return;
+    Object.assign(s.uniforms, night.uniforms); // night.ts nightTime (TV flicker, windows switching on / off)
     s.vertexShader = s.vertexShader.replace('#include <common>', `#include <common>\n${night.vertexHead}`).replace('#include <begin_vertex>', `#include <begin_vertex>\n\t${night.vertex}`);
     s.fragmentShader = s.fragmentShader.replace('#include <common>', `#include <common>\n${night.fragmentHead}`);
   };
