@@ -368,12 +368,296 @@ export const landmarks = {
     waterJet: '#e8f2f8',
   },
   // Leg 2 (Macao): one block per landmark group agent (m1…m4 Opus, mf1 / mf2 Fable); each edits only its own block.
-  m1: {},
-  m2: {},
-  m3: {},
-  m4: {},
-  mf1: {},
-  mf2: {},
+  // m1 (world/landmarks/m1.ts, agent o1): Senado square + Portuguese civil buildings / churches + Casa do Mandarim. m above the
+  // façade's ground unless noted; "est." = estimated from photos (docs/reports/leg2-landmarks-o1.md), else the source is cited.
+  // az = compass deg the main façade faces (the outline edge closest to it carries the façade). Colours sRGB.
+  m1: {
+    simplify: 1, // m: outline vertices closer than this to the line through their neighbours are dropped (jogs of the OSM ways)
+    // floodlit heritage at night: unlit 'neon' with the light baked into the vertex colours (the worker knows no time of day):
+    // albedo × tint × (ambient + strength·|n_xz|·(1 − fade·y/H) + top·n_y) × lighting.emissiveScale
+    flood: { tint: '#fff0dc', ambient: 0.3, strength: 0.6, fade: 0.4, top: 0.22 },
+    window: { trim: 0.16, depth: 0.1, dark: '#1b2027', door: '#4a3224', shutter: '#2f6a4c', litShare: 0.4, glow: 0.9 }, // glow × lighting.windows.intensity
+    leal: { // Leal Senado (1784, façade 1876): OSM h 16.8 = pediment top
+      // simplify 1.3: the 3 OSM pieces of the front (1.1 m jogs) → one 45 m façade
+      az: 45, height: 16.8, simplify: 1.3, bay: 4.1, string: 6, cornice: 12.4, balustrade: 1.3, wall: '#f4f1e9', trim: '#d6cfbf', plinth: '#8b8781', roof: '#6f6c66',
+      stair: { steps: 4, riser: 0.16, tread: 0.34, width: 7 },
+    },
+    santaCasa: { az: 300, height: 16.5, bay: 4.4, string: 6.2, cornice: 12.6, attic: 1.4, wall: '#f7f5ef', trim: '#d9d2c2', plinth: '#8b8781', roof: '#6f6c66' }, // OSM h 16.5
+    teatro: { // Dom Pedro V Theatre (1860): OSM h 37 includes the hill → walls 11 m + hipped roof 4 m (est.)
+      az: 33, walls: 11, roof: 4, bay: 4.2, wall: '#b9d6b4', trim: '#f5f3ec', roofCol: '#7a5a48',
+      portico: { width: 15, columns: 4, pair: 1.1, r: 0.42, height: 8.2, entablature: 1.1, pediment: 2.8 }, // paired Tuscan columns (est.)
+    },
+    quartel: { // Moorish Barracks (1874, Cassuto): 2 storeys of pointed-arch verandas on a granite podium; OSM h 29.3 includes the hill (est. 12 m)
+      az: 44, storey: 5.4, parapet: 1, bay: 3.6, arch: 2.5, wall: '#e2b24e', trim: '#fbf7ee', podium: '#8e8a83', roof: '#8a8178',
+      tower: { size: 5, extra: 3.2 }, merlon: { w: 0.55, gap: 0.65, h: 0.7 }, stair: { riser: 0.17, tread: 0.32, width: 6 },
+    },
+    mandarim: { // Mandarin's House (1869): grey-brick halls round courtyards; OSM h 24.9 = hill (est. halls 7.5 m + 3 m roof)
+      wall: '#858987', plaster: '#ecebe4', roof: '#4b4f53', ridge: '#383b3e', walls: 7.5, roof3: 3, eave: 0.8, courtWall: 5, siteWall: 3.8,
+      plan: [0.13, 0.09, 0.15, 0.1, 0.13, 0.09, 0.14, 0.17] as number[], // shares of the long axis: hall, court, hall, … (est.)
+      moon: { r: 1.35, h: 4.2, sill: 0.15 },
+    },
+    domingos: { // St Dominic's (1587, façade 18th c.): OSM h 17.9 = nave ridge; façade 21 m, tower 24 m (est.)
+      az: 167, walls: 14, ridge: 17.9, facade: 21, tower: { size: 5.5, height: 24 }, wall: '#f0cd6c', trim: '#fbf8ef', roof: '#8d6a55',
+    },
+    se: { // Sé Cathedral (rebuilt 1937): OSM has no height; towers 27 m, gable 21 m, nave 15 m (est.)
+      az: 342, walls: 15, ridge: 20, gable: 21, tower: { w: 6.5, height: 27, cap: 3 }, wall: '#ddd4c2', trim: '#f6f2e8', roof: '#7a7068',
+      fountain: { r: 2.6, wall: 0.55 },
+    },
+    largo: { // Largo do Senado: Portuguese calçada (cream limestone, black basalt waves running along the square)
+      base: '#e8e0cc', wave: '#2b2b2d', lift: 0.23, // lift: over the sidewalk curb tops (roads.lift + curbHeight)
+      period: 3.2, amp: 1.1, length: 9, share: 0.42, step: 0.6, mesh: 2.5,
+      // fountain (OSM way/402086255, ⌀ 7.1 m): basin, inner tier, pedestal with the armillary sphere (est.)
+      fountain: { lat: 22.193683, lon: 113.539889, r: 3.55, wall: 0.8, inner: 1.5, sphere: 0.85, top: 3.4, water: '#2d4b52', glow: '#7fc8ff' },
+    },
+  },
+  // m2 (world/landmarks/m2.ts, agent o2): hill forts, Chinese temples, Lou Lim Ioc garden, hill churches. m above the
+  // ground; "est." = estimated from photos (docs/reports/leg2-landmarks-o2.md), else the source is cited. az = compass deg
+  // (0 = north) the front faces. Colours sRGB; lamps = 'neon' (unlit, × glow × lighting.emissiveScale, on day and night).
+  m2: {
+    lamp: { red: '#ff3020', warm: '#ffb85c', window: '#ffc07a', beacon: '#fff0c0', ember: '#ff7a2a' },
+    glow: { lantern: 2.2, window: 0.8, beacon: 6, ember: 3, uplight: 4, crest: 0.75 },
+    crest: 0.35, // m: lit strip under the top of the fort walls (floodlit look at night; a pale string course by day)
+    stair: { riser: 0.17, tread: 0.34 }, // steps (ramp collider: 27°, under player.maxSlopeDeg)
+    monte: {
+      // Fortaleza do Monte (1617–1626): hilltop fort ≈ 10 000 m² (Wikipedia "Fortaleza do Monte"); wall figures est.
+      terraceRise: 1, // terrace this far above the highest DEM point inside the walls (the DEM smooths the hill)
+      parapet: 1.1, thick: 1.5, batter: 1.4, // outer face leans in: its foot is batter m outside its top
+      merlon: { w: 1.8, gap: 1.1, h: 0.9 },
+      cannons: 24, // est.: rows of cannons in the embrasures (photos)
+      gateAz: 60, stairWidth: 4, // gate + steps on the edge facing this way (lowest climb there: the hill's high side)
+      lightEvery: 14, // m between uplighters at the wall foot
+      minFortArea: 4000, // m²: smaller records are zone members (Museu de Macau on the terrace, OSM h 62 = asl)
+      museum: { above: 5, colour: '#cfc6b4' }, // m above the terrace (est.)
+      colours: { wall: '#b4a991', top: '#9c927f', terrace: '#a39b8b', cannon: '#2a2c2e', carriage: '#4b3a29' },
+    },
+    guia: {
+      // Fortaleza da Guia (1622–1638) on Guia hill: low walls along the hilltop (est.), gate gap 3 m
+      wallH: 3.2, thick: 1, merlon: { w: 1.4, gap: 1, h: 0.7 }, gateAz: 170, gate: 3, lightEvery: 12,
+      house: { height: 5.5, colour: '#f1ede2', roof: '#9a5a3c' }, // zone members (chapel 1622, keeper's houses): est.
+      // Farol da Guia (1865, first modern lighthouse on the China coast): ≈ 15 m white tower (Wikipedia "Guia Lighthouse");
+      // the OSM h 104.2 counts the hill. Profile [m above ground, radius]; radii est.
+      lighthouse: {
+        tower: [[0, 3.1], [1.2, 3.1], [1.25, 2.7], [11.2, 2.2]] as [number, number][],
+        gallery: [11.2, 11.6, 2.9], lantern: [11.6, 13.3, 1.45], dome: [13.3, 14.5, 1.7], vane: 15,
+        windows: 3, rail: 0.9,
+      },
+      colours: { wall: '#d6d0c2', top: '#bdb6a6', tower: '#f3f1ea', dome: '#3c4249', rail: '#2a2e33', door: '#5a3a22' },
+    },
+    ama: {
+      // Templo de A-Ma (1488): gate on the Barra square, halls climbing the hill behind (est. from photos)
+      az: 270, // the gate faces the Inner Harbour (west)
+      tiers: [0, 5, 13, 21] as number[], // m from the front edge where a terrace starts
+      gate: { width: 13, height: 5.4, opening: [3, 3.6] as [number, number], depth: 1.4, rise: 1.8 },
+      halls: [ // tier, depth, width, w offset (+ = right seen from the gate), eave, roof rise
+        [1, 6.5, 14, 0, 4.2, 2.6], [2, 5.5, 9, -3.5, 3.8, 2.3], [3, 5, 8, 4, 3.6, 2.2],
+      ] as [number, number, number, number, number, number][],
+      coils: 12, // incense coils hanging in front of the prayer hall
+      colours: { granite: '#a8a296', brick: '#7f7b74', column: '#a3271f', door: '#7d1d16', roof: '#40594a', ridge: '#5d8a66', lion: '#9c968a', coil: '#6b3a22', rock: '#8c867b' },
+    },
+    kunIam: {
+      // Kun Iam Tong (1627; halls 17th c.): three halls, Shiwan ceramic figures on the ridges (est. from photos)
+      az: 212, eave: 5, rise: 4, porch: 2.2, over: 1.3, court: 10,
+      colours: { brick: '#8a857c', granite: '#aaa498', column: '#9f2a20', door: '#7d1d16', roof: '#3d5a48', ridge: '#cfc6b0' },
+      figures: ['#d9b23a', '#2f8f6a', '#c8482f', '#3d6fb0', '#e8e0cf'],
+    },
+    louLimIoc: {
+      // Jardim Lou Lim Ioc (1906): Suzhou-style walled garden; pond from OSM (water.json); features placed from the OSM pond (est.)
+      wallH: 2.8, thick: 0.4, gateAz: 225, moon: 1.5,
+      hallAz: 180, hall: { eave: 5, rise: 3 }, pavilionMax: 60, // zone members: m² below which a building is a pavilion
+      pavilions: [[845, -757, 6, 3], [912, -791, 4, 3.2]] as [number, number, number, number][], // x, z, sides, radius
+      rockery: { x: 889, z: -819, r: 6, n: 14, h: 4.5 },
+      colours: { wall: '#f0ede4', coping: '#565d64', column: '#a32a22', roof: '#4b5157', deck: '#b9b3a6', rock: '#8a8578', base: '#a7a195' },
+    },
+    churches: {
+      // OSM heights (40.5 / 39.2 / 73.3) count the hill: figures below est. from photos. towers: 0 | 1 (centre) | 2 (corners)
+      'sao-lourenco': { az: 195, wallH: 12, rise: 5, towers: 2, towerW: 6, towerH: 23, cap: 'dome', facadeH: 15, pediment: 3.5, platform: 1.6, nave: 0.8, windows: 5, colours: { wall: '#e8d7a2', trim: '#f6f3ea', roof: '#8e5c40', door: '#4c3324' } },
+      'santo-agostinho': { az: 200, wallH: 13, rise: 4.5, towers: 0, towerW: 0, towerH: 0, cap: 'dome', facadeH: 16, pediment: 4, platform: 0.4, nave: 0.95, windows: 5, colours: { wall: '#e7cd84', trim: '#f6f3ea', roof: '#8a5a40', door: '#4a5a3a' } },
+      'ermida-penha': { az: 45, wallH: 8, rise: 3.5, towers: 1, towerW: 4.4, towerH: 20, cap: 'pyramid', facadeH: 10.5, pediment: 0, platform: 0.3, nave: 1, windows: 4, colours: { wall: '#e8e5dd', trim: '#ffffff', roof: '#5e6166', door: '#4c3324' } },
+    } as Record<string, { az: number; wallH: number; rise: number; towers: 0 | 1 | 2; towerW: number; towerH: number; cap: 'dome' | 'pyramid'; facadeH: number; pediment: number; platform: number; nave: number; windows: number; colours: { wall: string; trim: string; roof: string; door: string } }>,
+    penhaHouse: { height: 10, colour: '#eeebe3', roof: '#9a5a3c' }, // the bishop's residence beside the chapel (2 storeys + hipped roof, est.)
+  },
+  // m3 (world/landmarks/m3.ts): Hotel Lisboa, Wynn, MGM, Sands, Fisherman's Wharf (docs/reports/leg2-landmarks-o3.md).
+  // OSM heights are kept; everything without a cited figure is estimated from photos. Neon = linear colour × bright ×
+  // lighting.emissiveScale (unlit 'neon' bucket, on by day as well, like mf2). World x / z = OSM nodes the records lack.
+  m3: {
+    pixel: 0.8, // share of a sign pixel cell lit (the rest = the gap between bulbs)
+    lisboa: {
+      // Hotel Lisboa (1970) + Casino Lisboa: the round 37.4 m OSM drum = the casino rotunda with the gold "birdcage" crown
+      drumTop: 23, // m: drum wall top (inside the 27.8 m podium), the cage above it reaches the OSM height (est.)
+      cage: [[0, 1], [0.3, 1.06], [0.6, 0.98], [0.82, 0.72], [0.94, 0.4], [1, 0.08]] as [number, number][], // [share of cage height, × drum r]
+      ribs: 36, cageRings: 7, segs: 36,
+      tower: { band: 3.2, lit: 0.3, sign: 'LISBOA', pixel: 1.3 }, // 76.8 m tower: lit band every `band` m, roof sign (bulbs)
+      podiumBands: [7, 13.5, 20], podiumRib: 4.5, // m: bulb strips on the 27.8 m podium, gold lattice ribs between them
+      colours: { wall: '#ece4cf', drum: '#e8d9b0', shell: '#b8862e', rib: '#ffc35a', ring: '#fff1c0', band: '#ffd890', sign: '#ff3a28', podium: '#f0e2c2', bulb: '#ffcf70' },
+      bright: { rib: 1.8, ring: 2.2, band: 1.2, sign: 2.4, bulb: 1.6 },
+    },
+    wynn: {
+      // Wynn Macau (2006, OSM 94.5 m) + Encore (2010, OSM 177.5 m): curved bronze-gold glass slabs
+      gold: '#b8904e', podium: '#e9dcc0', rim: '#ffd27a', rimBright: 2, rib: 7, ribBright: 1.2, // podium: lit gold ribs every `rib` m
+      floor: 3.6, lit: 0.25, band: '#ffe2a8', bandBright: 1, // lit band per floor (share of the floor), whole slab
+      sign: 'WYNN', signPixel: 1.6, signColour: '#ff2a2a', signBright: 2.6,
+      // Performance Lake (OSM node 4874240221 "Fountain Show"): jets on rings around it
+      lake: { x: 622, z: 564, rings: [[0, 1, 16], [6, 8, 9], [13, 14, 6]] as [number, number, number][], jetR: 0.5, jet: '#cfeaff', jetBright: 1.1, light: '#5ab8ff', lightBright: 2 }, // [ring r, jets, jet height]
+      kiosk: 6, // m: the untagged 10 × 15 m pavilion by the lake (OSM way/422413328)
+    },
+    mgm: {
+      // MGM Macau (2007): 3 wave sections in gold / silver / rose gold; OSM 120 m on the whole tower, the two lower
+      // sections are estimates (photos: the waves step down towards the west)
+      tops: [100, 111, 120], colours: ['#c09048', '#b8bcc4', '#c48a72'],
+      floor: 3, lit: 0.22, band: '#fff0d0', bandBright: 0.9,
+      sign: 'MGM', signPixel: 2, signColour: '#ffc860', signBright: 2.4,
+      podium: '#d8c49a', rim: '#ffcf70', rimBright: 1.6, rib: 6, ribBright: 1.1,
+      // Grande Praça (OSM node 12438388701): glass barrel vault on the podium roof (est. 50 × 26 m, 9 m high)
+      praca: { x: 902, z: 858, length: 50, width: 26, rise: 9 },
+      // golden lion (OSM way/823036882, on the podium record's artwork point): sitting lion on a round plinth (est. 8 m)
+      lion: { plinth: 2.4, scale: 1.15, facing: 110, colour: '#e0a838', bright: 0.9 }, // facing: compass deg (est.: towards Av. Dr. Sun Yat-Sen)
+    },
+    sands: {
+      // Sands Macao (2004, OSM 46.7 m): gold reflective glass, red sign
+      gold: '#c79c46', bands: [6, 14, 22, 30, 38], band: '#ffcf70', bandBright: 1.6, rib: 5, ribBright: 0.9, rim: '#ffd890', rimBright: 2, // ribs + bands = gold LED grid
+      sign: 'SANDS', signPixel: 2.2, signColour: '#ff2b20', signBright: 2.6,
+    },
+    wharf: {
+      // Fisherman's Wharf (2005). The amphitheatre is OSM way/192180012 (a plain building without height, not part of
+      // the landmark): the Colosseum arcade wraps it (centre / half-axes fitted to its outline, height est.)
+      colosseum: { x: 1708, z: 17, a: 49, b: 26, tiers: [8, 8, 6], // tiers: m; the plain block inside is 20 m (buildings.defaultHeight)
+        arches: 34, colour: '#d8c29a', arch: '#3b2f22', lit: '#ffc070', litBright: 1.8 },
+      // "Babylon" stepped roof on the convention centre (OSM relation/10387813, h 20.8): est.
+      ziggurat: { steps: [34, 25, 16], stepH: 4, colour: '#cfae6a', edge: '#ffb84a', edgeBright: 1.8 },
+      rim: '#7fd0ff', rimBright: 1.4,
+      // lighthouse on the site's seaward tip (outline point farthest towards `azimuth`, `inset` m back)
+      lighthouse: { azimuth: 120, inset: 8, height: 18, r: 2.2, white: '#f2efe8', red: '#b8322a', lamp: '#fff4c0', lampBright: 3 },
+    },
+  },
+  // m4 (world/landmarks/m4.ts): Bank of China, Cultural Centre, Kun Iam statue, Lotus Square, Portas do Cerco. Published
+  // figures cite their source, the rest is estimated from photos (docs/reports/leg2-landmarks-o4.md). Night: statues /
+  // the 1870 arch = 'neon' with a baked floodlight (colour × (ambient + strength · lit side) × emissiveScale, the same by
+  // day), glass = 'curtain' with lit windows at night only (BuildingBuilder's facade shader).
+  m4: {
+    // floodlight bake: ambient + strength × side light (normal's horizontal part, or n·dir), × (1 − fade · height share)
+    flood: { ambient: 0.45, strength: 0.75, fade: 0.35, top: 0.25 }, // top: extra on up-facing faces (moon / spill)
+    boc: {
+      // 163 m, 38 floors, 1991, P&T Architects (Wikipedia "Bank of China Building, Macau", SkyscraperPage); OSM h 116.3
+      // = the top of the main shaft, the rest is the stepped crown + mast
+      height: 163, body: 116.3,
+      tiers: [[0.9, 126], [0.76, 134], [0.6, 141], [0.44, 147]] as [number, number][], // [scale about the centroid, top m]
+      pyramid: 156, // m: apex of the crown pyramid over the last tier; the mast goes on to `height`
+      mast: 0.7, // m half-width
+      floor: 4.1, bay: 3, // m: curtain uv (163 m / 38 floors ≈ 4.3)
+      lattice: { w: 9, h: 8.2, t: 0.55, out: 0.18 }, // the diamond lattice: cell width (fitted per face), height, strip width, offset
+      colours: { glass: '#8fa6bb', granite: '#d8d0c4', crown: '#c9c3ba', mast: '#9aa0a6', edge: '#cfe6ff', beacon: '#ff3020' },
+      edgeIntensity: 2.6, edgeH: 0.8, beaconIntensity: 4, lit: 0.37, // lit = the window seed (curtain shader)
+    },
+    cultural: {
+      // Macau Cultural Centre (1999, O-BS / Intergaup / Caldeira Cabral): Grand Auditorium + Macao Museum of Art; OSM h 25.6
+      // = the auditorium block; the rest of the shape estimated from photos
+      wall: 16, lobby: 5.5, strip: [10, 12.2] as [number, number], // m: main block top, glazed lobby band, ribbon window
+      fly: { u: [0.05, 0.8] as [number, number], w: [-0.62, 0.62] as [number, number], low: 21 }, // auditorium block on the frame (shares, + = rounded end), skillion low side
+      sail: { over: 11, rise: 6, t: 0.6 }, // the upturned roof: cantilever beyond the block end, lift at its tip, thickness
+      floor: 4, bay: 3, lit: 0.61,
+      colours: { stone: '#d3cdc2', glass: '#9fb4c2', roof: '#b9b6b0', sail: '#ecebe6', edge: '#e8f2ff' },
+      edgeIntensity: 1.8,
+    },
+    kunIam: {
+      // 20 m bronze statue on a 7 m lotus dome base 19 m across with 16 petals housing the Kun Iam Ecumenical Centre
+      // (opened 1999, sculptor Cristina Leiria; Macao Government Tourism Office / gcs.gov.mo); OSM outline = the base (r ≈ 9.7)
+      base: { h: 7, petals: 16, depth: 0.08, plinth: 0.8 },
+      // robe profile [y above the base, radius]; cross-section deeper across the shoulders (depth share)
+      figure: [[0, 2.9], [1.2, 2.6], [5, 2.3], [9, 2.25], [11.5, 2.5], [13.5, 2.55], [14.6, 2.25], [15.4, 1.5], [16, 0.85], [16.5, 0.95], [17.6, 1.15], [18.6, 1.05], [19.4, 0.7], [20, 0.15]] as [number, number][],
+      depth: 0.72, sleeves: { y: [8.5, 14.6] as [number, number], r: 0.75, out: 2.1 },
+      facing: 300, // compass deg the statue faces (est.: towards the NAPE shore)
+      colours: { statue: '#e0b25a', base: '#b88a45', plinth: '#9b968c', lamp: '#fff0c8' },
+      bright: 1.25, lampBright: 2.5,
+    },
+    lotus: {
+      // "Lotus Flower in Full Bloom": gilded bronze, 6 m high, 3.6 m across, 6.5 t, on a base of 23 red granite pieces in
+      // three lotus-leaf layers (Wikipedia "Lotus Square"; ICM handover museum). `at` = centroid of its OSM outline
+      // w/192179914 "Lotus Flower in Full Bloom" (r ≈ 6.4 m: the granite base); n/7668244537 is another, 1995 "Lotus Statue"
+      at: [22.194427, 113.553406] as [number, number],
+      tiers: [[6.4, 1.0], [5.0, 0.9], [3.6, 0.9]] as [number, number][], // [radius, height] of the 3 granite layers (est.)
+      stem: { h: 1.0, r: 0.5 }, flower: { h: 5.0 }, // ≈ 6 m in all: stem + flower (3.6 m across)
+      paving: { r: 8.5, rings: 3 }, // the square around it (est.)
+      colours: { gold: '#f0c060', granite: '#8c3a30', pave: '#b7a99a', pave2: '#8e8378' },
+      bright: 1.35, graniteBright: 0.8,
+    },
+    portas: {
+      // the 1870–71 granite gate (four dates on its face); OSM outline 19 × 3 m; proportions est. from photos
+      gate: { w: 9, h: 9.5, open: 2.1, spring: 4.4, attic: [7, 2.1] as [number, number], crest: [3.2, 1.6] as [number, number], wing: 4.8 },
+      colour: '#cdbb98',
+      // the 2004 steel-and-glass border post (Posto Fronteiriço); height est.
+      post: { h: 19, band: 4, floor: 4.5, bay: 3, lit: 0.53 },
+      postColours: { glass: '#9fb1bd', cladding: '#d9dcdf', edge: '#e8f2ff' },
+      edgeIntensity: 1.6,
+    },
+  },
+  // mf1 (world/landmarks/mf1.ts): Ruínas de São Paulo + Macau Science Center. Published figures cite their source, the
+  // rest is estimated from photos (docs/reports/leg2-landmarks-f1.md).
+  mf1: {
+    ruinas: {
+      // façade ≈ 27 m high × 23.5 m wide (Macau Heritage / Wikipedia "Ruins of St. Paul's"); OSM outline h 26.4
+      width: 23.5, height: 27, depth: 1.6, // m: the stone wall is ≈ 1.6 m thick (est.)
+      front: 5.6, // m south of the nave outline's south edge: the façade line of OSM way/192183185 (the 21 × 2 m building=yes slab)
+      museumTop: 11, // m above its ground: the Museum of Sacred Art / Crypt (way/192573692, OSM h 30.3) if registered, level with the platform
+      tiers: [6.6, 12.2, 17.6, 22.2, 25.5], // m: top of tiers 1–4 and of the pediment (the cross reaches `height`); proportions est.
+      tier4Width: 14, pedimentWidth: 10, // m (est.)
+      cornice: { h: 0.6, out: 0.9 }, // entablature band between tiers: height, projection in front of the wall (over the capitals)
+      column: { r: 0.36, cap: 0.85, segs: 8 }, // shaft radius, square capital / base side; shafts stand columnOut in front of the wall
+      columnOut: 0.45,
+      statue: { h: 2.6, r: 0.45 }, // the 6 bronze figures (4 Jesuit saints, the Virgin, the child Jesus)
+      niche: 0.9, // m: recess depth of the niches / relief panels (front layer of the wall)
+      buttress: { w: 1, d: 1.2, n: 3 }, // ribs on the back (the modern steel stair is not built)
+      // the stone platform the façade stands on and its great stair (68 steps in reality): the AWS DEM is blurred flat
+      // here (≈ 5 m everywhere), so the climb is built: rise = est. 9 m over the OSM steps way (43 m)
+      terrace: { halfWidth: 12.5, back: 40, rise: 9 }, // m: half-width of the platform, how far it reaches behind the façade
+      stair: { halfWidth: 10, bottom: 68.65, top: 21.65, flights: 4, landing: 4, cheek: { w: 0.6, h: 0.9 } }, // local z (south of the façade foot): bottom = Rua de S. Paulo (world z ≈ −369), top = OSM stair end (z ≈ −416)
+      ruinWall: { h: 1.1, t: 0.7, gapEvery: 7, gap: 1.6 }, // low wall remains along the nave outline and the college outline (east)
+      // floodlit façade: unlit vertex colours = stone × (ambient + strength × max(0, n·dir) × (1 − fade·y/height)); dir = from the
+      // lamps on the platform up into the façade (uplighting), × lighting.emissiveScale. Same by day (the worker knows no time).
+      flood: { stone: '#f1d9ad', ambient: 0.32, strength: 0.8, fade: 0.5, dir: [0, -0.45, 0.9] as [number, number, number], lamp: '#fff0c8', lampBright: 2.5 },
+      lamps: [[-4.5, 7], [4.5, 7], [-9.5, 7], [9.5, 7]] as [number, number][], // local x, z of the floodlight boxes on the platform
+    },
+    science: {
+      // I. M. Pei, opened 2009. OSM has no height; the cone (≈ 69 m across the fitted outline arc) is est. 58 m high from photos
+      cone: { lat: 22.18587, lon: 113.5566, r: 34.3, h: 58, topShare: 0.28, tiltDeg: 11, lowAz: 150, segs: 48 }, // oblique top: lowAz = compass deg of its low side (est.)
+      dome: { lat: 22.18623, lon: 113.55755, r: 15.3, rings: 7, segs: 32 }, // planetarium: hemisphere on the podium (outline arc radius)
+      hall: { corners: [[22.18723, 113.55793], [22.18702, 113.55741], [22.18648, 113.55717], [22.18667, 113.55768]] as [number, number][], h: 16 }, // convention hall (NE), est. height
+      podium: { h: 10, band: [3.2, 4.2] as [number, number] }, // exhibition wing, est.; glowing window band y range
+      spiral: { turns: 2.5, y0: 5, y1Share: 0.9, h: 1.4, out: 0.3, bright: 1.6 }, // the lit spiral slit following the inner ramp
+      colours: { clad: '#cfd4d9', podium: '#dcdedf', spiral: '#8fd0ff', band: '#ffe6bd', hall: '#c4c8cc' },
+      bandBright: 1.2,
+    },
+  },
+  // mf2 (world/landmarks/mf2.ts): Macau Tower + Grand Lisboa. Night lights = 'neon' buckets (unlit, HDR colour × intensity
+  // × lighting.emissiveScale → bloom); the chunk worker cannot tell day from night, so they stay on by day as well.
+  mf2: {
+    tower: {
+      // Macau Tower, 338 m total (Wikipedia / macautower.com.mo); pod levels from the OSM parts (205–240) and the published
+      // observation deck 223 m (level 58) / Skywalk 233 m (level 61). Radii est. from photos.
+      shaft: [[0, 11], [12, 9.2], [60, 7.6], [200, 6.8]] as [number, number][], // [y, r]: concrete shaft profile
+      fins: { count: 8, topY: 74, innerR: 9, outerR: 19, thickness: 2.4, colliderH: 3 }, // flared base fins (8 in OSM)
+      pod: [[200, 6.8], [205, 14], [210, 22.5], [219, 22.5], [224, 22.5], [229, 20.5], [233, 17], [236, 14], [240, 9]] as [number, number][],
+      glassBand: [210, 224] as [number, number], // observation levels: glass between these y
+      skywalk: { y: 233, r: 20, width: 2.2, railH: 1.2, posts: 24 },
+      mast: [[240, 2.6], [300, 2.2], [300, 1.4], [318, 1.4], [318, 0.7], [338, 0.7]] as [number, number][],
+      segments: 24,
+      colours: { concrete: '#b6b2aa', pod: '#9aa0a8', glassLit: '#ffd9a0', ring: '#8a6cff', beacon: '#ff2a1a' },
+      ringIntensity: 2.5, ringH: 1.2, glassLitIntensity: 1.5, beaconIntensity: 12, beaconSize: 1, // neon is not tone-mapped: a channel > 1 clips, so keep the hue (ring stays purple) and let bloom do the rest
+      centre: { floor: 4.5, edgeColour: '#8fd0ff', edgeIntensity: 2, edgeH: 0.5 }, // convention centre: slab spacing, roof-edge LED
+    },
+    lisboa: {
+      // Grand Lisboa: 261 m total (Wikipedia; CTBUH lists 258 m architectural); OSM 211.5 on the tower outline is the
+      // shell below the crown. Bulb shape est. from photos: widest at `bulgeY`, tip at `height`.
+      height: 261,
+      bulge: [1.6, 1.35] as [number, number], // × footprint half-sizes (long, short axis) at bulgeY
+      bulgeY: 222, waistY: 75, waist: [0.82, 0.88] as [number, number], tipY: 261, tip: [0.08, 0.02] as [number, number],
+      floor: 4.2, bandShare: 0.22, // floor pitch (m); share of each floor that is the lit band
+      segments: 28, rows: 3, // ring segments; loft rows per floor (keeps the bulb curve smooth)
+      podium: { wallTop: 18, domeTop: 54, domeRings: 10, ledRows: [0.12, 0.25, 0.38, 0.5, 0.62, 0.74, 0.86] }, // egg: dome over the walls, LED bands at these shares of its height
+      canopy: { width: 36, depth: 14, y: 9, thickness: 1.2, columns: 4, azimuth: 135 }, // main entrance (SE, Avenida de Lisboa)
+      colours: { gold: '#c9962e', band: '#ffb545', podium: '#5a4a32', concrete: '#9a948a', led: ['#ff2d95', '#2d7bff', '#19e3d1', '#ffb545', '#ff6a2d'] },
+      bandIntensity: 1.6, ledIntensity: 1.3, tipIntensity: 2.5,
+    },
+  },
 };
 
 // ── Step 0 · dev preview harness (preview.html, src/preview.ts; dev server only) ──

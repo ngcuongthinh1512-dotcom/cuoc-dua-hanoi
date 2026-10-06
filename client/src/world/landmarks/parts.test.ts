@@ -127,8 +127,8 @@ describe('landmark dispatch', () => {
     expect(o.colliders).toHaveLength(1);
     expect(Math.max(...o.colliders[0]!.vertices.filter((_, i) => i % 3 === 1))).toBeCloseTo(23, 4); // eaves, not the ridge
     const chunk = { v: 2 as const, key: '0_0', roads: [], bridges: [], areas: [], points: [] };
-    const out = buildLandmarks({ ...chunk, buildings: [{ ...outline, parts: [tall] }] }, ctx());
-    expect(maxY(out)).toBeCloseTo(33, 4);
+    // Leg 2: every registered landmark has a detail function (m1…mf2), so buildLandmarks never reaches `generic` for a real id;
+    // `generic` itself is covered above, an id with no registry entry is skipped:
     expect(buildLandmarks({ ...chunk, buildings: [{ ...outline, landmark: 'nope' as 'leal-senado' }] }, ctx()).meshes).toEqual([]);
   });
 });

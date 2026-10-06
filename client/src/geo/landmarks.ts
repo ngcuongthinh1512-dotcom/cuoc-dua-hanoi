@@ -31,7 +31,7 @@ export const LANDMARK_NEAR = 12;
 /** Leg 2 (Macao): the 30 landmarks (31 ids, Guia = fortress + lighthouse) chosen 2026-10-06, docs/plans/leg2-landmarks.md §0.
  *  `view` azimuths are first guesses for the base screenshots (`lm-<id>`); the groups may adjust them. */
 export const LANDMARKS: readonly LandmarkDef[] = [
-  { id: 'ruinas-sao-paulo', name: 'Ruínas de São Paulo', group: 'mf1', osm: ['way/1001795463', 'way/1001795464'], near: 25, view: [135, 80] }, // façade faces SE; OSM h 26.4 on the first outline, none on the second (steps)
+  { id: 'ruinas-sao-paulo', name: 'Ruínas de São Paulo', group: 'mf1', osm: ['way/1001795463', 'way/1001795464', 'way/192183185'], near: 25, view: [135, 80] }, // façade faces SE; OSM h 26.4 on the first outline, none on the second (steps)
   { id: 'sao-domingos', name: 'Nhà thờ São Domingos', group: 'm1', osm: ['way/192573688'], near: 20, view: [200, 70] },
   { id: 'se-catedral', name: 'Sé Catedral', group: 'm1', osm: ['way/330368426'], near: 20, view: [190, 90] }, // OSM has no height (church default), left to the group
   { id: 'sao-lourenco', name: 'Nhà thờ São Lourenço', group: 'm1', osm: ['way/279952093'], near: 15, view: [200, 90] }, // OSM h 40.5 (likely includes the hill)
@@ -43,22 +43,22 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   { id: 'casa-mandarim', name: 'Casa do Mandarim', group: 'm2', osm: ['way/404235920', 'way/848078997'], near: 15, view: [180, 120] }, // way/404235920 = the museum site (no building tag), way/848078997 = the house
   { id: 'quartel-mouros', name: 'Quartel dos Mouros', group: 'm2', osm: ['way/192187335'], near: 15, view: [150, 110] },
   { id: 'teatro-dom-pedro', name: 'Nhà hát Dom Pedro V', group: 'm2', osm: ['way/389129455'], near: 15, view: [150, 90] },
-  { id: 'fortaleza-monte', name: 'Fortaleza do Monte', group: 'm3', osm: ['way/46510080'], near: 20, view: [150, 220] }, // OSM h 57.1 (includes the hill)
-  { id: 'fortaleza-guia', name: 'Fortaleza da Guia', group: 'm3', osm: ['way/404669396'], near: 20, view: [200, 170] }, // historic=fort, no building tag, no height
+  { id: 'fortaleza-monte', name: 'Fortaleza do Monte', group: 'm3', osm: ['way/46510080'], zone: 'way/46510080', near: 20, view: [150, 220] }, // OSM h 57.1 (includes the hill)
+  { id: 'fortaleza-guia', name: 'Fortaleza da Guia', group: 'm3', osm: ['way/404669396'], zone: 'way/404669396', near: 20, view: [200, 170] }, // historic=fort, no building tag, no height
   { id: 'farol-guia', name: 'Hải đăng Guia', group: 'm3', osm: ['way/230576208'], near: 15, view: [220, 70] }, // OSM h 104.2 = hill + tower (the tower itself ≈ 15 m): the group decides
   { id: 'templo-ama', name: 'Chùa A-Ma', group: 'm3', osm: ['way/192187333', 'relation/18544991'], near: 25, view: [270, 130] }, // relation/18544991 = Largo do Pagode da Barra (the plaza in front)
   { id: 'kun-iam-tong', name: 'Kun Iam Tong', group: 'm3', osm: ['way/895766783', 'way/1111251970', 'way/1111251972'], near: 20, view: [200, 100] }, // no outline on the bus-stop node n/2165428407: the 3 temple halls 40–60 m away (building=temple, Tianhou Hall, Shakya Mani Hall)
-  { id: 'jardim-lou-lim-ioc', name: 'Vườn Lou Lim Ioc', group: 'm3', osm: ['way/265433531'], near: 10, view: [160, 170] }, // park polygon (kind 'artwork')
+  { id: 'jardim-lou-lim-ioc', name: 'Vườn Lou Lim Ioc', group: 'm3', osm: ['way/265433531'], zone: 'way/265433531', near: 10, view: [160, 170] }, // park polygon (kind 'artwork')
   { id: 'hotel-lisboa', name: 'Hotel Lisboa', group: 'm4', osm: [], zone: 'way/1313391925', near: 20, view: [200, 170] }, // zone = the resort site polygon: its 3 buildings (37 / 37 / 77 m) belong to the landmark
-  { id: 'wynn-macau', name: 'Wynn Macau', group: 'm4', osm: ['relation/6279959'], zone: 'way/1215820171', near: 25, view: [200, 250] }, // zone = the resort site polygon: Wynn 94.5, Encore 177.5, Encore Tower, podium
+  { id: 'wynn-macau', name: 'Wynn Macau', group: 'm4', osm: ['relation/6279959'], zone: 'way/1215820171', near: 25, view: [250, 260] }, // zone = the resort site polygon: Wynn 94.5, Encore 177.5, Encore Tower, podium
   { id: 'mgm-macau', name: 'MGM Macau', group: 'm4', osm: ['way/605485397', 'way/192179915'], near: 25, view: [200, 250] },
   { id: 'sands-macau', name: 'Sands Macao', group: 'm4', osm: ['way/164195448'], near: 20, view: [160, 200] },
   { id: 'bank-of-china', name: 'Bank of China', group: 'm4', osm: ['way/699456294'], near: 15, view: [180, 220] },
-  { id: 'fisherman-wharf', name: "Fisherman's Wharf", group: 'm4', osm: ['relation/4257072', 'relation/10387813'], near: 30, view: [160, 420] }, // relation/4257072 = the whole site (131 000 m², no building tag, kind 'artwork')
+  { id: 'fisherman-wharf', name: "Fisherman's Wharf", group: 'm4', osm: ['relation/4257072', 'relation/10387813'], near: 30, view: [230, 180] }, // relation/4257072 = the whole site (131 000 m², no building tag, kind 'artwork')
   { id: 'cultural-centre', name: 'Trung tâm Văn hóa Macao', group: 'm4', osm: ['way/192179917'], near: 20, view: [200, 170] },
   { id: 'kun-iam-statue', name: 'Tượng Kun Iam', group: 'm4', osm: ['way/231068755'], near: 25, view: [140, 100] }, // OSM: the Kun Iam Ecumenical Centre footprint, tourism=artwork, h 20 (= the 20 m statue); its plaza is way/192179912 (pedestrian)
   { id: 'portas-do-cerco', name: 'Portas do Cerco', group: 'm4', osm: ['way/173864406', 'way/138665744'], near: 20, view: [180, 120] },
-  { id: 'praca-flor-de-lotus', name: 'Praça Flor de Lótus', group: 'm4', osm: ['way/192179907'], near: 20, view: [160, 200] }, // park polygon (kind 'artwork'); the gold lotus statue is a bare node n/7668244537 (22.19643, 113.55285, historic=monument), not kept by build-chunks
+  { id: 'praca-flor-de-lotus', name: 'Praça Flor de Lótus', group: 'm4', osm: ['way/192179907', 'way/192179914'], near: 20, view: [160, 200] }, // park polygon (kind 'artwork'); the gold lotus statue is a bare node n/7668244537 (22.19643, 113.55285, historic=monument), not kept by build-chunks
   { id: 'macau-tower', name: 'Macau Tower', group: 'mf2', osm: ['relation/21176879', 'relation/10366309'], near: 40, height: 338, view: [220, 420] }, // Macau Tower 338 m (Wikipedia / macautower.com.mo); OSM has no height on the tower outline
   { id: 'grand-lisboa', name: 'Grand Lisboa', group: 'mf2', osm: ['way/192182405', 'way/192182404'], near: 20, view: [100, 380] },
   { id: 'science-center', name: 'Trung tâm Khoa học Macao', group: 'mf1', osm: ['relation/2590433'], near: 25, view: [250, 260] }, // OSM has no height and no published figure I am sure of: left to the group
