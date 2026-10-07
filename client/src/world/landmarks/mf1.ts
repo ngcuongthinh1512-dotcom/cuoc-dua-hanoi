@@ -10,7 +10,7 @@
 //   Macau Science Center: podium from the OSM multipolygon (with its courtyard) carrying a glowing window band, the
 //     truncated cone with an oblique top and the lit spiral slit, the planetarium hemisphere, the convention hall box.
 import { latLonToWorld } from '@race/shared';
-import { buildings as B, landmarks as L, lighting } from '../../config.ts';
+import { buildings as B, landmarks as L, lighting, timeOfDay } from '../../config.ts';
 import type { BuildingRec, LandmarkId, XZ } from '../../geo/chunkData.ts';
 import type { BuildOut, MaterialId, MeshBucket, TriMesh } from '../buildTypes.ts';
 import { MeshBuffer, triangulate, type V3 } from '../geom.ts';
@@ -414,7 +414,8 @@ export function science(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
     const r = cn.r - kc * y;
     return [c.x - lx * cn.lean * y + r * Math.cos(phi), g + y, c.z - lz * cn.lean * y + r * Math.sin(phi)];
   };
-  const clad = paint(k, 'metal', col(C.clad));
+  // the moon would turn the grey metal dark blue: the vertex colour is lifted (> 1 is fine, the shading stays) so it reads as by day
+  const clad = paint(k, 'metal', col(C.clad, timeOfDay === 'night' ? S.nightCladBoost : 1));
   const y0 = yb - g;
   for (let s = 0; s < cn.segs; s++) {
     const [p0, p1, pm] = [(2 * Math.PI * s) / cn.segs, (2 * Math.PI * (s + 1)) / cn.segs, (2 * Math.PI * (s + 0.5)) / cn.segs];

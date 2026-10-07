@@ -718,6 +718,7 @@ export const landmarks = {
       spiral: { turns: 2.5, y0: 5, y1Share: 0.9, h: 1.4, out: 0.3, bright: 1.6 }, // the lit spiral slit following the inner ramp
       colours: { clad: '#cfd4d9', podium: '#dcdedf', spiral: '#8fd0ff', band: '#ffe6bd', hall: '#c4c8cc' },
       bandBright: 1.2,
+      nightCladBoost: 3, // cone / dome vertex colour × this at night so the grey metal keeps its daytime look (ponytail: fixed night, a ?time=day dev view over-exposes it)
     },
   },
   // mf2 (world/landmarks/mf2.ts): Macau Tower + Grand Lisboa. Night lights = 'neon' buckets (unlit, HDR colour × intensity
