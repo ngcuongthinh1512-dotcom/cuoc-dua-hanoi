@@ -3,6 +3,7 @@
 Lập 2026-10-09 theo mô tả của anh (lấy ý từ Rooms of Realities, chương 3 "Nemo's Mysterious Formula"; luật gốc không có tài liệu công khai nên đây là luật của anh, không chép game). **Chưa code.** Phần "quy luật ra màu" anh sẽ giải thích sau.
 
 ## Bàn thí nghiệm
+Bố cục (ảnh anh gửi 2026-10-09, em đọc, chờ xác nhận): phía trước giá là một hàng ổ tròn nằm ngang; trên giá có 3 ống màu Xám, Đỏ, Xanh Lá, mỗi ống nối xuống một ổ giữa bằng thanh và tay gạt. Ổ trái ở cạnh bảng nhiệt độ, ổ reset ở bên phải cạnh bảng kết quả.
 Một ống nghiệm duy nhất người chơi cầm, 5 ô đặt ống:
 
 | Ô | Khi đặt ống vào |
