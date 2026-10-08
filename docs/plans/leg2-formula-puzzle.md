@@ -15,15 +15,18 @@ Một ống nghiệm duy nhất người chơi cầm, 5 ô đặt ống:
 - Nhiệt độ ban đầu 30. Không thể xuống dưới 0 (tối đa 3 lần đặt màu × 10 = 30).
 - Kết quả cần đạt (bảng bên phải): **60°** và ống đổi **màu xanh biển có bọt khí ở giữa**. Công thức (anh nói 2026-10-09, **em đang xác nhận cách đọc**): Xanh Lá → Đỏ → Xám, hoặc Xanh Lá → Xám → Đỏ, hoặc "thả ngay vào ô bên trái". Cách đọc em đề xuất: Xanh Lá, rồi **ô nhiệt ngay sau đó**, rồi Đỏ và Xám theo thứ tự nào cũng được (30 − 10 + 50 − 5 − 5 = 60°). Đây là cách duy nhất với 3 màu cho đúng 60°.
 
-## Luật trộn màu (anh nói 2026-10-09; X = Xám, R = Đỏ, G = Xanh Lá)
+## Luật trộn màu (bản final của anh, 2026-10-09; X = Xám, R = Đỏ, G = Xanh Lá; cặp màu trộn không phụ thuộc thứ tự)
 | Trộn | Ống thành |
 |---|---|
-| X + R | Xanh Lá nhạt, có bọt (tờ gợi ý dán trong phòng) |
-| X + G | Đỏ nhạt hơn, có bọt |
-| (X + G) + R | **Xanh Dương, mất bọt** |
-| G + R, R + G | Vàng (anh xác nhận: hai thứ tự như nhau) |
-| (G + R) + X | **Xanh Dương** |
-Chưa biết: (X + R) + G; các cặp còn lại (X + R, X + G) có đối xứng như R + G không (em đang giả định có); ô nhiệt có đổi màu không; kết quả hai màu rồi ô nhiệt.
+| một màu | màu đó |
+| G + R | Vàng |
+| G + X | Cam, có bọt |
+| X + R | Xanh Lá nhạt, có bọt |
+| Vàng + X | **Xanh Dương có bọt** (kết quả cần đạt) |
+| Cam + R | Xanh Dương không bọt |
+| Xanh Lá nhạt + (G, em đoán: anh viết "Đỏ") | Đen |
+Sáu hoán vị 3 màu: G,R,X và R,G,X → Xanh Dương có bọt; G,X,R và X,G,R → Xanh Dương không bọt; X,R,G và R,X,G → Đen (**chờ anh xác nhận dòng Xanh Lá nhạt + G**).
+**Đặt thắng:** Xanh Dương có bọt + 60°. Nhiệt độ 60° với 3 màu chỉ ra khi ô nhiệt đặt ngay sau màu đầu tiên (30 − 10 + 50 − 5 − 5), nên chỉ có 2 cách thắng: G, nhiệt, R, X và R, nhiệt, G, X. Giả định ô nhiệt không đổi màu ống.
 
 ## Hệ quả tính được
 - Mỗi màu dùng tối đa một lần giữa hai lần reset, nên chuỗi trong ống là hoán vị không lặp của A, B, C, dài 0–3.
