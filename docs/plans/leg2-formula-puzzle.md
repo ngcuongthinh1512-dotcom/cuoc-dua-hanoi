@@ -21,9 +21,9 @@ Một ống nghiệm duy nhất người chơi cầm, 5 ô đặt ống:
 | X + R | Xanh Lá nhạt, có bọt (tờ gợi ý dán trong phòng) |
 | X + G | Đỏ nhạt hơn, có bọt |
 | (X + G) + R | **Xanh Dương, mất bọt** |
-| G + R | Vàng |
+| G + R, R + G | Vàng (anh xác nhận: hai thứ tự như nhau) |
 | (G + R) + X | **Xanh Dương** |
-Chưa biết: (X + R) + G; thứ tự ngược (R + X…) có giống không; ô nhiệt có đổi màu không; kết quả hai màu rồi ô nhiệt.
+Chưa biết: (X + R) + G; các cặp còn lại (X + R, X + G) có đối xứng như R + G không (em đang giả định có); ô nhiệt có đổi màu không; kết quả hai màu rồi ô nhiệt.
 
 ## Hệ quả tính được
 - Mỗi màu dùng tối đa một lần giữa hai lần reset, nên chuỗi trong ống là hoán vị không lặp của A, B, C, dài 0–3.
