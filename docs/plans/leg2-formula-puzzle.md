@@ -12,7 +12,7 @@ Một ống nghiệm duy nhất người chơi cầm, 5 ô đặt ống:
 | Ô phải (reset) | ống rỗng ngay, nhiệt độ về 30, ô nhiệt dùng lại được |
 
 - Nhiệt độ ban đầu 30. Không thể xuống dưới 0 (tối đa 3 lần đặt màu × 10 = 30).
-- Kết quả cần đạt (bảng bên phải): **60°** và ống đổi **màu xanh biển có bọt khí ở giữa**. Quy luật chuỗi màu để ra kết quả đó: **chờ anh**.
+- Kết quả cần đạt (bảng bên phải): **60°** và ống đổi **màu xanh biển có bọt khí ở giữa**. Công thức (anh nói 2026-10-09, **em đang xác nhận cách đọc**): Xanh Lá → Đỏ → Xám, hoặc Xanh Lá → Xám → Đỏ, hoặc "thả ngay vào ô bên trái". Cách đọc em đề xuất: Xanh Lá, rồi **ô nhiệt ngay sau đó**, rồi Đỏ và Xám theo thứ tự nào cũng được (30 − 10 + 50 − 5 − 5 = 60°). Đây là cách duy nhất với 3 màu cho đúng 60°.
 
 ## Hệ quả tính được
 - Mỗi màu dùng tối đa một lần giữa hai lần reset, nên chuỗi trong ống là hoán vị không lặp của A, B, C, dài 0–3.
@@ -25,7 +25,7 @@ Một ống nghiệm duy nhất người chơi cầm, 5 ô đặt ống:
 - Module tự chứa trên nhánh git riêng, đăng ký bằng một file registry (quy ước phòng casino, `docs/plans/leg2-master.md`).
 
 ## Câu hỏi mở
-1. Quy luật chuỗi màu → kết quả xanh biển có bọt (anh sẽ nói).
+1. Xác nhận cách đọc công thức ở trên (ô nhiệt đặt ngay sau Xanh Lá). Các chuỗi khác thì ống đổi màu gì, hay giữ nguyên?
 2. Đạt kết quả thì tính qua thử thách ngay, hay đội phải xác nhận / Host duyệt?
 3. Có chống thử hết 12–65 trạng thái không (giới hạn số lần reset, thời gian chờ mỗi lần reset, hay chấp nhận vì manh mối nằm ở nơi khác)?
 4. Mỗi đội một bàn riêng, hay dùng chung?
