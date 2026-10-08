@@ -24,8 +24,8 @@ Một ống nghiệm duy nhất người chơi cầm, 5 ô đặt ống:
 | X + R | Xanh Lá nhạt, có bọt |
 | Vàng + X | **Xanh Dương có bọt** (kết quả cần đạt) |
 | Cam + R | Xanh Dương không bọt |
-| Xanh Lá nhạt + (G, em đoán: anh viết "Đỏ") | Đen |
-Sáu hoán vị 3 màu: G,R,X và R,G,X → Xanh Dương có bọt; G,X,R và X,G,R → Xanh Dương không bọt; X,R,G và R,X,G → Đen (**chờ anh xác nhận dòng Xanh Lá nhạt + G**).
+| Xanh Lá nhạt + G | Đen (anh xác nhận 2026-10-09) |
+Sáu hoán vị 3 màu: G,R,X và R,G,X → Xanh Dương có bọt; G,X,R và X,G,R → Xanh Dương không bọt; X,R,G và R,X,G → Đen.
 **Đặt thắng:** Xanh Dương có bọt + 60°. Nhiệt độ 60° với 3 màu chỉ ra khi ô nhiệt đặt ngay sau màu đầu tiên (30 − 10 + 50 − 5 − 5), nên chỉ có 2 cách thắng: G, nhiệt, R, X và R, nhiệt, G, X. Giả định ô nhiệt không đổi màu ống.
 
 ## Hệ quả tính được
