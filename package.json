@@ -19,6 +19,7 @@
     "dev:api": "npm run dev:api -w worker",
     "screenshot": "tsx scripts/screenshot.ts",
     "ride-check": "tsx scripts/ride-check.ts",
+    "landmark-audit": "tsx scripts/landmark-audit.ts",
     "sim": "tsx scripts/sim.ts",
     "leg:check": "tsx scripts/leg-check.ts",
     "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts",
