@@ -4,7 +4,8 @@
 // Night: statues + the 1870 gate = 'neon' (unlit) with a baked floodlight (bakeFlood: the same by day, the chunk worker knows
 // no time of day); glass = 'curtain' buckets with `lit` (BuildingBuilder's facade shader: lit windows at night only); light
 // strips = 'neon'. No real lights. Colliders: simplified prisms only (SPEC §5.9).
-//   bank-of-china: curtain shaft on the outline to the OSM height, granite diamond lattice, stepped crown, pyramid, mast.
+//   bank-of-china: main outline = glass shaft with granite bands to 116.3 m, the tower outline (OSM 166 m) = the central
+//     shaft on top of it with setbacks and the red-lit ornament; lit corner lines (audit a4, photos).
 //   cultural-centre: glazed lobby band + stone block, the auditorium block (+u = the rounded end) with the upturned roof.
 //   kun-iam-statue: plinth, 16-petal lotus dome (the ecumenical centre), 20 m robed figure with sleeves, floodlight boxes.
 //   praca-flor-de-lotus: the park record is not drawn; the golden lotus + its granite base + the paving at config `at`
@@ -18,6 +19,7 @@ import type { BuildOut, MeshBucket } from '../buildTypes.ts';
 import { MeshBuffer, mergeBuckets, triangulate, type V3 } from '../geom.ts';
 import type { DetailFn, LandmarkCtx } from './index.ts';
 import { arch, box, extrude, footprintFrame, type Frame, loft, place, quadOut, triOut } from './kit.ts';
+import { clipRing } from './m3.ts';
 import { parseColour, partRings, Sink } from './parts.ts';
 
 const M = L.m4;
@@ -108,69 +110,50 @@ const circleXZ = (cx: number, cz: number, r: number, n = 12): XZ => xz(ellipse(c
 
 const BC = M.boc;
 
-/** Diamond lattice strips on every face of ring r from y0 to y1 (each cell gets both diagonals), offset `out` outwards. */
-export function lattice(b: MeshBuffer, r: XZ, y0: number, y1: number, D: { w: number; h: number; t: number; out: number }) {
-  const rows = Math.max(1, Math.round((y1 - y0) / D.h));
-  const ch = (y1 - y0) / rows;
-  for (let i = 0, n = r.length; i < n; i += 2) {
-    const [ax, az, bx, bz] = [r[i]!, r[i + 1]!, r[(i + 2) % n]!, r[(i + 3) % n]!];
-    const len = Math.hypot(bx - ax, bz - az);
-    if (len < 1) continue;
-    const [ex, ez] = [(bx - ax) / len, (bz - az) / len];
-    const nrm: V3 = [-ez, 0, ex];
-    const cols = Math.max(1, Math.round(len / D.w));
-    const cw = len / cols;
-    const P = (s: number, y: number, side: number, o: number): V3 => [ax + ex * (s + side) + nrm[0] * o, y, az + ez * (s + side) + nrm[2] * o];
-    const strip = (s0: number, ya: number, s1: number, yb: number, o: number) => {
-      const t = Math.min(D.t / 2, cw / 4);
-      quadOut(b, P(s0, ya, -t, o), P(s0, ya, t, o), P(s1, yb, t, o), P(s1, yb, -t, o), nrm);
-    };
-    for (let c = 0; c < cols; c++) {
-      for (let k = 0; k < rows; k++) {
-        const [s0, s1, ya, yb] = [c * cw, (c + 1) * cw, y0 + k * ch, y0 + (k + 1) * ch];
-        strip(s0, ya, s1, yb, D.out);
-        strip(s1, ya, s0, yb, D.out + 0.03); // a hair further out: the crossing strips never share a plane
-      }
-    }
-  }
-}
-
+/** One of the two BOC records (audit a4, photos: Commons "Lakeview Tower and Bank of China as seen from Praca Ferreira
+ *  Amaral.jpg", "MC Macau 澳門 Bank of China Building facade night March 2019 IX2.jpg"): the main outline = the full-width
+ *  shaft to `body` (where the outer wings stop), the tower outline inside it (OSM 166 m) = the central shaft from the main
+ *  roof on up, its setbacks and the red-lit ornament to `height`. Blue glass with brown granite spandrels (no diagonal
+ *  lattice: that is the Hong Kong BOC); at night a lit line up every corner and round every setback. Both records count
+ *  from the ground at `at`, so the tower part starts exactly on the main roof (no coplanar overlap on the shared walls). */
 function bankOfChina(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const rings = partRings(rec);
   if (!rings) return EMPTY;
   const r = rings[0]!;
   const [cx, cz] = ringCentroid(r);
-  const g = ctx.ground;
-  const yb = ctx.minGround - L.sink;
+  const g = ctx.height(BC.at[0], BC.at[1]);
+  const tower = (rec.height ?? 0) > BC.body + 1;
   const C = BC.colours;
   const s = new Sink();
   const glass = new MeshBuffer('curtain', true);
   glass.color = rgb(C.glass);
   glass.lit = BC.lit;
-  walls(glass, r, yb, g + BC.body, BC.bay, BC.floor, g);
-  lattice(paint(s, 'masonry', rgb(C.granite)), r, g + BC.lattice.h * 0.5, g + BC.body, BC.lattice);
-  const crown = paint(s, 'masonry', rgb(C.crown));
+  const granite = paint(s, 'masonry', rgb(C.granite));
+  const led = paint(s, 'neon', glow(C.edge, BC.edgeIntensity));
   const meanR = (q: XZ) => q.reduce((a, v, i) => a + (i % 2 ? Math.hypot(q[i - 1]! - cx, v - cz) : 0), 0) / (q.length / 2);
-  const edge = (q: XZ, y: number) => walls(paint(s, 'neon', glow(C.edge, BC.edgeIntensity)), scaleRing(q, 1 + 0.08 / meanR(q), cx, cz), y - BC.edgeH, y + 0.05);
-  let [prev, top] = [r, g + BC.body];
-  cap(crown, [r], top, 1);
-  edge(r, top);
+  const grow = (q: XZ, d: number) => scaleRing(q, 1 + d / meanR(q), cx, cz);
+  /** Glass shaft on q from y0 to y1: granite band per floor, lit corner lines above the podium, roof + lit roof edge. */
+  const shaft = (q: XZ, y0: number, y1: number) => {
+    walls(glass, q, y0, y1, BC.bay, BC.floor, g);
+    for (let y = g + BC.floor * Math.max(1, Math.ceil((y0 - g) / BC.floor)); y < y1 - 1; y += BC.floor) walls(granite, grow(q, 0.1), y, y + BC.floor * BC.spandrel);
+    const w = BC.cornerW / 2;
+    for (let i = 0; i < q.length; i += 2) box(led, q[i]! - w, q[i]! + w, Math.max(y0, g + BC.podium), y1, q[i + 1]! - w, q[i + 1]! + w);
+    cap(granite, [q], y1, 1);
+    walls(led, grow(q, 0.08), y1 - BC.edgeH, y1 + 0.05);
+  };
+  if (!tower) {
+    const yb = ctx.minGround - L.sink;
+    shaft(r, yb, g + BC.body);
+    s.prism([r], yb, g + BC.body);
+    return out(s, [glass.bucket()]);
+  }
+  let y = g + BC.body;
   for (const [k, t] of BC.tiers) {
-    const q = scaleRing(r, k, cx, cz);
-    walls(paint(s, 'masonry', rgb(C.crown)), q, top, g + t);
-    cap(crown, [q], g + t, 1);
-    edge(q, g + t);
-    [prev, top] = [q, g + t];
+    shaft(scaleRing(r, k, cx, cz), y, g + t);
+    y = g + t;
   }
-  const apex: V3 = [cx, g + BC.pyramid, cz];
-  for (let i = 0, n = prev.length; i < n; i += 2) {
-    const [ax, az, bx, bz] = [prev[i]!, prev[i + 1]!, prev[(i + 2) % n]!, prev[(i + 3) % n]!];
-    triOut(crown, [ax, top, az], [bx, top, bz], apex, [-(bz - az), 0.5, bx - ax]);
-  }
-  const mast = paint(s, 'metal', rgb(C.mast));
-  box(mast, cx - BC.mast, cx + BC.mast, g + BC.pyramid - 2, g + BC.height - 0.6, cz - BC.mast, cz + BC.mast);
-  box(paint(s, 'neon', glow(C.beacon, BC.beaconIntensity)), cx - 0.6, cx + 0.6, g + BC.height - 0.6, g + BC.height, cz - 0.6, cz + 0.6);
-  s.prism([r], yb, g + BC.body);
+  const ball = [0.05, 0.55, 0.9, 1, 0.9, 0.55, 0.05].map((k, i, a) => ellipse(cx, cz, k * BC.ornament, k * BC.ornament, y + ((g + BC.height - y) * i) / (a.length - 1), 12));
+  loft(paint(s, 'neon', glow(C.ornament, BC.ornamentIntensity)), ball);
   return out(s, [glass.bucket()]);
 }
 
@@ -226,7 +209,20 @@ function cultural(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const loc = new MeshBuffer('masonry');
   loc.color = rgb(C.stone);
   const base = CC.wall - 0.5;
-  block(loc, [[u0, base, w0], [u1, base, w0], [u1, base, w1], [u0, base, w1]], [[u0, roofY(u0), w0], [u1, roofY(u1), w0], [u1, roofY(u1), w1], [u0, roofY(u0), w1]]);
+  // the block = the outline cut to that box (a plain box stood 4.6 m out of the rounded end and 1.6 m into the side notch, audit a4)
+  let foot: XZ = [];
+  for (let i = 0; i < rings[0]!.length; i += 2) {
+    const [dx, dz] = [rings[0]![i]! - f.cx, rings[0]![i + 1]! - f.cz];
+    foot.push(dx * f.ux + dz * f.uz, -dx * f.uz + dz * f.ux);
+  }
+  foot = clipRing(clipRing(clipRing(clipRing(foot, -1, 0, -u0), 1, 0, u1), 0, -1, -w0), 0, 1, w1);
+  for (let i = 0, n = foot.length; i < n; i += 2) {
+    const [ax, az, bx, bz] = [foot[i]!, foot[i + 1]!, foot[(i + 2) % n]!, foot[(i + 3) % n]!];
+    quadOut(loc, [ax, base, az], [bx, base, bz], [bx, roofY(bx), bz], [ax, roofY(ax), az], [-(bz - az), 0, bx - ax]);
+  }
+  const ti = triangulate(foot);
+  const at = (i: number): V3 => [foot[2 * i]!, roofY(foot[2 * i]!), foot[2 * i + 1]!];
+  for (let k = 0; k < ti.length; k += 3) triOut(loc, at(ti[k]!), at(ti[k + 1]!), at(ti[k + 2]!), [0, 1, 0]);
   loc.color = rgb(C.sail);
   const S = CC.sail;
   const xs = u0 + (u1 - u0) * 0.35;
@@ -241,7 +237,7 @@ function cultural(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   led.color = glow(C.edge, CC.edgeIntensity);
   block(led, [[xe - 0.05, sy(xe) - 0.1, sw[0] - 2], [xe + 0.12, sy(xe) - 0.1, sw[0] - 2], [xe + 0.12, sy(xe) - 0.1, sw[1] + 2], [xe - 0.05, sy(xe) - 0.1, sw[1] + 2]],
     [[xe - 0.05, sy(xe) + S.t + 0.1, sw[0] - 2], [xe + 0.12, sy(xe) + S.t + 0.1, sw[0] - 2], [xe + 0.12, sy(xe) + S.t + 0.1, sw[1] + 2], [xe - 0.05, sy(xe) + S.t + 0.1, sw[1] + 2]]);
-  framePrism(s, f, u0, u1, w0, w1, g + base, g + top);
+  s.prism([foot.flatMap((v, i) => (i % 2 ? [] : toWorld(f, v, foot[i + 1]!)))], g + base, g + top);
   return out(s, [glass.bucket(), place(loc.bucket(), f, g), place(led.bucket(), f, g)]);
 }
 
@@ -297,7 +293,7 @@ function kunIam(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
     disc(fig, sl[0]!, -1);
   }
   const H = fy + KI.figure.at(-1)![0] - y0;
-  s.prism([xz(ellipse(cx, cz, R, R, 0, 16))], yb, y0 + B.h);
+  s.prism([xz(ellipse(cx, cz, R + 0.6, R + 0.6, 0, 16))], yb, y0 + B.h); // + 0.6: the plinth's rim (0.8 m, above player.maxStep) is solid too
   s.prism([circleXZ(cx, cz, KI.figure[0]![1])], y0 + B.h, fy + KI.figure.at(-1)![0]);
   return out(s, [
     bakeFlood(lotus.bucket(), rgb(C.base), y0, H, KI.bright, front),
@@ -353,6 +349,7 @@ function lotusSquare(ctx: LandmarkCtx): BuildOut {
   const y = Math.max(...ys) + 0.06;
   const skirt = paint(s, 'masonry', rgb(C.pave2));
   loft(skirt, [ellipse(cx, cz, P.r, P.r, Math.min(...ys) - 0.4, 48), ellipse(cx, cz, P.r, P.r, y, 48)]);
+  s.prism([xz(edge)], Math.min(...ys) - 0.4, y); // the DEM falls 4 m across the disc: without it a body walked into the skirt and under the base
   for (let k = 0; k < P.rings; k++) {
     const b = paint(s, 'masonry', rgb(k % 2 ? C.pave2 : C.pave));
     const [ri, ro] = [(P.r * k) / P.rings, (P.r * (k + 1)) / P.rings];

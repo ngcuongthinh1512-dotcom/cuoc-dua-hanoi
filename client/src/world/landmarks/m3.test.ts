@@ -5,6 +5,7 @@ import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
 import { clipRing, details, ellipseAt, fanArch, lisboaPiece, mgmWave, outlineCurve, signCols, signRuns } from './m3.ts';
+import { parseColour, recordGround } from './parts.ts';
 
 type Id = 'hotel-lisboa' | 'wynn-macau' | 'mgm-macau' | 'sands-macau' | 'fisherman-wharf';
 const ctx = (id: Id): LandmarkCtx => ({ key: '0_0', bounds: chunkBounds('0_0'), height: () => 10, def: LANDMARK_BY_ID.get(id)!, ground: 10, minGround: 10 });
@@ -132,6 +133,7 @@ describe('m3 landmarks (stand-in outlines)', () => {
     ['MGM podium', 'mgm-macau', rec(rect(800, 750, 990, 900), { height: 20.3, points: [{ kind: 'artwork', x: 996, z: 866, r: 5.7 }] }), 20.3],
     ['Sands', 'sands-macau', rec(rect(0, 0, 150, 290), { height: 46.7 }), 46.7],
     ['Sands drum + crown', 'sands-macau', rec(circle(1594, 97, 23, 19), { height: 61.8 }), 61.8], // crown top = OSM height
+    ['Sands hotel tower', 'sands-macau', rec(rect(1580, 270, 1630, 300), { height: 116.7 }), 116.7], // 1 500 m²: below drum.maxArea, still not the drum
     ['Wharf convention centre', 'fisherman-wharf', rec(rect(1640, -100, 1770, -10), { height: 20.8, kind: 'commercial' }), 20.8],
     ['Wharf site', 'fisherman-wharf', rec(rect(1640, -300, 1970, 470), { kind: 'artwork' }), 0],
     ['Wharf Roman Amphitheatre', 'fisherman-wharf', rec(AMPHI), 0],
@@ -180,6 +182,17 @@ describe('m3 landmarks (stand-in outlines)', () => {
     expect(mid!.b).toBeGreaterThan(mid!.r); // blue glass
     expect(high!.r).toBeGreaterThan(high!.b); // gold
   });
+  it('the Sands hotel tower is a gold slab to its OSM height, not a second drum + crown; its low outline draws nothing (audit a4)', () => {
+    const o = build('sands-macau', rec(rect(1580, 270, 1630, 300), { height: 116.7 }));
+    const { maxY, box } = stats(o);
+    expect(maxY).toBeCloseTo(10 + 116.7 + 0.2, 3); // + the LED rim
+    expect(box.x0).toBeGreaterThan(1580 - 1);
+    expect(box.x1).toBeLessThan(1630 + 1);
+    const metal = o.meshes.find((m) => m.material === 'metal')!;
+    const gold = parseColour(L.m3.sands.gold)!;
+    for (let k = 0; k < 3; k++) expect(metal.color![k]).toBeCloseTo(gold[k]!, 5);
+    expect(build('sands-macau', rec(rect(1620, 280, 1680, 340))).meshes).toEqual([]); // the hotel's low outline under the wings
+  });
   it('Casino Lisboa: a drum on its configured circle, crown above the podium cut', () => {
     const K = L.m3.lisboa.casino;
     const o = build('hotel-lisboa', rec(circle(523, 411, 75, 40), { height: 27.8, kind: 'hotel' }));
@@ -206,6 +219,41 @@ describe('m3 landmarks (stand-in outlines)', () => {
     const { maxY } = stats(o);
     expect(maxY).toBeGreaterThanOrEqual(10 + C.tiers.reduce((t, h) => t + h, 0)); // the full 22 m of the three tiers
     expect(stats(build('fisherman-wharf', rec(rect(1640, -300, 1970, 470), { kind: 'artwork' }))).box.x1).toBeLessThan(1970); // the site: only the lighthouse, set back from the tip
+  });
+  it('on a slope the casino drum and the Colosseum arcade reach the lowest ground: no gap under their walls (audit a4)', () => {
+    // ground falling 6 cm per m to the east (the DEM under both: 2–2.5 m across); per 20° sector around the centre, the
+    // lowest vertex of the wall must not be above the ground under it
+    const slope = (x: number) => 10 - 0.06 * (x - 500);
+    const gap = (o: BuildOut, cx: number, cz: number, keep: (m: string, x: number, z: number) => boolean) => {
+      const low = new Map<number, number>();
+      for (const m of o.meshes) {
+        for (let i = 0; i < m.position.length; i += 3) {
+          const [x, y, z] = [m.position[i]!, m.position[i + 1]!, m.position[i + 2]!];
+          if (!keep(m.material, x, z)) continue;
+          const k = Math.floor((Math.atan2(z - cz, x - cx) / Math.PI + 1) * 9) % 18;
+          low.set(k, Math.min(low.get(k) ?? Infinity, y - slope(x)));
+        }
+      }
+      expect(low.size).toBe(18);
+      return Math.max(...low.values());
+    };
+    const on = (id: Id, outer: XZ): LandmarkCtx => ({ ...ctx(id), height: slope, ...recordGround(outer, slope) });
+    const K = L.m3.lisboa.casino;
+    const pod = rec(circle(523, 411, 75, 40), { height: 27.8, kind: 'hotel' });
+    const casino = details['hotel-lisboa']!(pod, [], on('hotel-lisboa', pod.outer), helpers);
+    expect(gap(casino, K.x, K.z, (_, x, z) => Math.abs(Math.hypot(x - K.x, z - K.z) - K.r) < 0.01)).toBeLessThanOrEqual(0);
+    const amphi = AMPHI.map((v, i) => (i % 2 ? v : v - 1200)); // moved next to x = 500 (the slope's origin)
+    const wall = details['fisherman-wharf']!(rec(amphi), [], on('fisherman-wharf', amphi), helpers);
+    expect(gap(wall, 1708 - 1200, 15, (m) => m === 'masonry')).toBeLessThanOrEqual(0);
+  });
+  it('the Wharf lighthouse on a quay corner stands on the quay top, not in the carved bank in front of it (audit a4)', () => {
+    const site = rec(rect(1640, -300, 1970, 470), { kind: 'artwork' }); // lighthouse ≈ (1963.6, 465.2), x + z ≈ 2429
+    const bank = (x: number, z: number) => (x + z > 2425 ? 2 : 10); // the bank falls 8 m right at the tip
+    const o = details['fisherman-wharf']!(site, [], { ...ctx('fisherman-wharf'), height: bank }, helpers);
+    expect(stats(o).box.x1).toBeGreaterThan(1960); // still on the tip
+    let minY = Infinity;
+    for (const m of o.meshes) for (let i = 1; i < m.position.length; i += 3) minY = Math.min(minY, m.position[i]!);
+    expect(minY).toBeCloseTo(10 - L.sink, 6);
   });
   it('unknown small Wynn records fall back to the generic renderer (the pavilion kept low)', () => {
     const st = stats(build('wynn-macau', rec(rect(0, 0, 10, 15))));
