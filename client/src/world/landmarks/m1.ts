@@ -907,14 +907,19 @@ function seCatedral(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
     win(front, lit, raw, len / 2, base + 9, 2.6, 5, 'arch', S.trim, 'glass', z);
     for (const s of [-1, 1]) win(front, lit, raw, len / 2 + s * (len / 2 - tw) * 0.55, base + 9.5, 1.3, 3.6, 'arch', S.trim, 'glass', z);
   });
-  // twin towers on the façade corners, 0.4 m proud of the façade wall
+  // twin towers on the façade corners, 0.4 m proud of the façade wall, as deep as the outline behind them (leg 2 audit: the
+  // outline steps in 4.8 m behind the east corner, a square tower stood 2 m inside the neighbouring house); cap 0 = flat
+  // top behind a balustrade (Commons "Cathedral of the Nativity of Our Lady of Macau, 2023 (01).jpg"), else pyramid + cross
   for (const [x0, x1] of [[-0.4, tw], [len - tw, len + 0.4]] as const) {
-    const tr = localRing(front, x0, x1, -tw, 0.9);
+    let d = tw;
+    while (d > 2 && ![x0 + 1, (x0 + x1) / 2, x1 - 1].every((x) => inRing(...at(front, x, -d), ring))) d -= 0.25;
+    const tr = localRing(front, x0, x1, -d, 0.9);
     tower(B, tr, yb, base, base + T.height - T.cap, T.cap, S.wall, S.trim, S.roof, [base + T.height - T.cap - 6.5, base + T.height - T.cap - 1.8]);
     cornice(B.lit, tr, base + 7.4, base + 7.9, 0.2, S.trim);
     cornice(B.lit, tr, yb, base + 0.7, 0.15, '#9a948a');
-    B.on(front, (lit) => cross(lit, (x0 + x1) / 2, base + T.height - 0.1, 0.9 - (tw + 0.9) / 2, 1.8, S.trim));
     const te = edgesOf(tr);
+    if (T.cap > 0) B.on(front, (lit) => cross(lit, (x0 + x1) / 2, base + T.height - 0.1, 0.9 - (d + 0.9) / 2, 1.8, S.trim));
+    else for (const e of te) B.on(e, (lit) => balustrade(lit, 0, e.len, base + T.height, 1, 0, S.trim));
     for (const e of te) B.on(e, (lit, raw) => win(e, lit, raw, e.len / 2, base + 9.5, 1.2, 3.2, 'arch', S.trim));
   }
   const fp = rec.points?.find((p) => p.kind === 'fountain');

@@ -380,16 +380,18 @@ export function renderPart(p: PartLike, o: PartOpts, sink: Sink): boolean {
   const roofBuf = bufOf(roofPick);
   const rt = tile(roofPick);
   if (planes) {
-    planes.forEach((pl, i) => {
-      let region = rings;
-      for (let j = 0; j < planes.length && region.length; j++) {
-        if (j === i) continue;
-        const d: Plane = [pl[0] - planes[j]![0], pl[1] - planes[j]![1], pl[2] - planes[j]![2]];
-        const clipped = region.map((r) => clipHalf(r, d));
-        region = clipped[0]!.length >= 6 && Math.abs(ringArea(clipped[0]!)) > 1e-4 ? [clipped[0]!, ...clipped.slice(1).filter((q) => q.length >= 6 && Math.abs(ringArea(q)) > 1e-4)] : [];
-      }
-      if (region.length) cap(roofBuf, region, (x, z) => wt + R * Math.min(1, Math.max(0, evalPlane(pl, x, z))), 1, rt);
-    });
+    // each plane's region, clipped per footprint triangle (convex: exact). Clipping a concave footprint as one ring bridged
+    // its separate pieces along the clip line, across the gap (leg 2 audit: the Penha residence's hipped roof over the courtyard)
+    const idx = triangulate(outer, rings.slice(1));
+    const pts = rings.flat();
+    for (let t = 0; t < idx.length; t += 3) {
+      const tri = [idx[t]!, idx[t + 1]!, idx[t + 2]!].flatMap((k) => [pts[2 * k]!, pts[2 * k + 1]!]);
+      planes.forEach((pl, i) => {
+        let region = tri;
+        for (let j = 0; j < planes.length && region.length >= 6; j++) if (j !== i) region = clipHalf(region, [pl[0] - planes[j]![0], pl[1] - planes[j]![1], pl[2] - planes[j]![2]]);
+        if (region.length >= 6 && Math.abs(ringArea(region)) > 1e-4) cap(roofBuf, [region], (x, z) => wt + R * Math.min(1, Math.max(0, evalPlane(pl, x, z))), 1, rt);
+      });
+    }
   } else if (shape === 'pyramidal' || shape === 'cone') {
     const [cx, cz] = ringCentroid(outer);
     const apex: V3 = [cx, top, cz];

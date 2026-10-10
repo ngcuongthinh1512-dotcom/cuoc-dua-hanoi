@@ -469,7 +469,9 @@ export const landmarks = {
       az: 167, walls: 14, ridge: 17.9, facade: 21, tower: { size: 5.5, height: 24 }, wall: '#f0cd6c', trim: '#fbf8ef', roof: '#8d6a55',
     },
     se: { // Sé Cathedral (rebuilt 1937): OSM has no height; towers 27 m, gable 21 m, nave 15 m (est.)
-      az: 342, walls: 15, ridge: 20, gable: 21, tower: { w: 6.5, height: 27, cap: 3 }, wall: '#ddd4c2', trim: '#f6f2e8', roof: '#7a7068',
+      // tower cap 0: flat tops behind balustrades, no spires (audit 2026-10-10, Commons "Igreja da Sé 2011a.JPG" and
+      // "Cathedral of the Nativity of Our Lady of Macau, 2023 (01).jpg"); > 0 = pyramid of that height + cross
+      az: 342, walls: 15, ridge: 20, gable: 21, tower: { w: 6.5, height: 27, cap: 0 }, wall: '#ddd4c2', trim: '#f6f2e8', roof: '#7a7068',
       fountain: { r: 2.6, wall: 0.55 },
     },
     largo: { // Largo do Senado: Portuguese calçada (cream limestone, black basalt waves running along the square)
@@ -540,11 +542,17 @@ export const landmarks = {
     },
     churches: {
       // OSM heights (40.5 / 39.2 / 73.3) count the hill: figures below est. from photos. towers: 0 | 1 (centre) | 2 (corners)
-      'sao-lourenco': { az: 195, wallH: 12, rise: 5, towers: 2, towerW: 6, towerH: 23, cap: 'dome', facadeH: 15, pediment: 3.5, platform: 1.6, nave: 0.8, windows: 5, colours: { wall: '#e8d7a2', trim: '#f6f3ea', roof: '#8e5c40', door: '#4c3324' } },
+      // audit 2026-10-10 (Commons "Igreja de São Lourenço.jpg", "Exterior of Igreja de São Lourenço (Macau), 2023 (03).jpg"):
+      // the twin towers end flat behind a balustrade with corner urns (no domes)
+      'sao-lourenco': { az: 195, wallH: 12, rise: 5, towers: 2, towerW: 6, towerH: 23, cap: 'flat', facadeH: 15, pediment: 3.5, platform: 1.6, nave: 0.8, windows: 5, colours: { wall: '#e8d7a2', trim: '#f6f3ea', roof: '#8e5c40', door: '#4c3324' } },
       'santo-agostinho': { az: 200, wallH: 13, rise: 4.5, towers: 0, towerW: 0, towerH: 0, cap: 'dome', facadeH: 16, pediment: 4, platform: 0.4, nave: 0.95, windows: 5, colours: { wall: '#e7cd84', trim: '#f6f3ea', roof: '#8a5a40', door: '#4a5a3a' } },
-      // G4 (photos): grey granite neo-Romanesque, the bell tower + spire at the façade's right corner (side −1 = right seen from the front), not centred
-      'ermida-penha': { az: 45, wallH: 8, rise: 3.5, towers: 1, side: -1, towerW: 4.4, towerH: 20, cap: 'pyramid', facadeH: 10.5, pediment: 0, platform: 0.3, nave: 1, windows: 4, colours: { wall: '#a9a59b', trim: '#c8c4ba', roof: '#5e6166', door: '#4c3324' } },
-    } as Record<string, { az: number; wallH: number; rise: number; towers: 0 | 1 | 2; side?: -1 | 0 | 1; towerW: number; towerH: number; cap: 'dome' | 'pyramid'; facadeH: number; pediment: number; platform: number; nave: number; windows: number; colours: { wall: string; trim: string; roof: string; door: string } }>, // side: 1 tower off-centre to the façade's left / right edge
+      // G4 (photos): grey granite neo-Romanesque, the bell tower + spire at the façade's right corner (side −1 = right seen from the front), not centred.
+      // Audit 2026-10-10: the façade is the nave's gable END (Commons "Capela de Nossa Senhora da Penha 2011a.JPG", side view
+      // "Penha Church 西望洋聖堂 - panoramio.jpg"): az 132 = the outline's free SE end (its NW end is the narrower chancel, shared
+      // with the residence); az 45 had put a 30 m broadside façade on the long NE wall. nave 0.96 (was 1): the side wall stands
+      // 0.24 m behind the tower's outer face (flush, the two faces flickered)
+      'ermida-penha': { az: 132, wallH: 8, rise: 3.5, towers: 1, side: -1, towerW: 4.4, towerH: 20, cap: 'pyramid', facadeH: 10.5, pediment: 0, platform: 0.3, nave: 0.96, windows: 4, colours: { wall: '#a9a59b', trim: '#c8c4ba', roof: '#5e6166', door: '#4c3324' } },
+    } as Record<string, { az: number; wallH: number; rise: number; towers: 0 | 1 | 2; side?: -1 | 0 | 1; towerW: number; towerH: number; cap: 'dome' | 'pyramid' | 'flat'; facadeH: number; pediment: number; platform: number; nave: number; windows: number; colours: { wall: string; trim: string; roof: string; door: string } }>, // side: 1 tower off-centre to the façade's left / right edge
     penhaHouse: { height: 10, colour: '#eeebe3', roof: '#9a5a3c' }, // the bishop's residence beside the chapel (2 storeys + hipped roof, est.)
   },
   // m3 (world/landmarks/m3.ts): Hotel Lisboa, Wynn, MGM, Sands, Fisherman's Wharf (docs/reports/leg2-landmarks-o3.md).
