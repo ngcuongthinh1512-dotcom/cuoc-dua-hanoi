@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { landmarks as L } from '../../config.ts';
-import { type BuildingRec, type ChunkData, chunkBounds, type LandmarkId, ringArea, type XZ } from '../../geo/chunkData.ts';
+import { type BuildingRec, type ChunkData, chunkBounds, type LandmarkId, ringArea, type WaterData, type XZ } from '../../geo/chunkData.ts';
+import { heightAt, parseHeightGrid } from '../../geo/heightGrid.ts';
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
+import { carveRiver } from '../Terrain.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
 import { amaTiers, densify, details, edgeFacing, facing, maxInside, monteTerrace, rand } from './m2.ts';
+import { parseColour, recordGround } from './parts.ts';
 
 const M = L.m2;
 type HF = (x: number, z: number) => number;
@@ -156,6 +159,11 @@ describe('m2 landmarks on synthetic outlines', () => {
     expect(side.maxY).toBeLessThan(10 + M.kunIam.eave + M.kunIam.rise + 3);
     expect(main.tris).toBeLessThan(15_000);
   });
+  it('kun-iam-tong: on a slope the plinth reaches the lowest ground (it stopped 0.8 m under the floor: a gap on the low side)', () => {
+    const r = rect(0, 0, 15, 13);
+    const s = stats(build('kun-iam-tong', { outer: r, kind: 'yes' }, (x) => 10 + 0.15 * x)); // 2.25 m across
+    expect(s.minY).toBeLessThanOrEqual(10 - L.sink + 1e-6);
+  });
   it('jardim-lou-lim-ioc: wall with a moon gate, pavilions, rockery inside the garden box', () => {
     const r = densify(rect(800, -840, 960, -690), 40).ring;
     const o = build('jardim-lou-lim-ioc', { outer: r, kind: 'artwork' });
@@ -233,5 +241,99 @@ describe('m2 churches on the real OSM outlines (leg 2 audit)', () => {
     const chapel = real('-2_2', 'ermida-penha').find((b) => Math.abs(ringArea(b.outer)) < 400)!;
     const f = facing(chapel.outer, M.churches['ermida-penha']!.az);
     expect(f.a).toBeGreaterThan(2 * f.b);
+  });
+});
+
+// the real OSM records (committed chunk data) on the carved DEM, as the chunk worker builds them
+describe('m2 on the real Macao records', () => {
+  const data = join(import.meta.dirname, '../../../public/data');
+  const grid = parseHeightGrid(JSON.parse(readFileSync(join(data, 'elevation.json'), 'utf8')), readFileSync(join(data, 'elevation.bin')));
+  carveRiver(grid, JSON.parse(readFileSync(join(data, 'water.json'), 'utf8')) as WaterData);
+  const dem: HF = (x, z) => heightAt(grid, x, z);
+  const recsOf = (id: LandmarkId, keys: string[]) => keys.flatMap((k) => (JSON.parse(readFileSync(join(data, `chunks/${k}.json`), 'utf8')) as ChunkData).buildings.filter((b) => b.landmark === id));
+  const real = (id: LandmarkId, rec: BuildingRec) => details[id]!(rec, [], { key: '0_0', bounds: chunkBounds('0_0'), height: dem, def: LANDMARK_BY_ID.get(id)!, ...recordGround(rec.outer, dem) }, helpers);
+  const inRing = (x: number, z: number, p: XZ) => {
+    let inside = false;
+    for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) if (p[i + 1]! > z !== p[j + 1]! > z && x < ((p[j]! - p[i]!) * (z - p[i + 1]!)) / (p[j + 1]! - p[i + 1]!) + p[i]!) inside = !inside;
+    return inside;
+  };
+  const edgeDist = (x: number, z: number, p: XZ) => {
+    let d = Infinity;
+    for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+      const [ax, az, bx, bz] = [p[j]!, p[j + 1]!, p[i]!, p[i + 1]!];
+      const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2 || 1)));
+      d = Math.min(d, Math.hypot(x - ax - t * (bx - ax), z - az - t * (bz - az)));
+    }
+    return d;
+  };
+  /** Farthest vertex outside the ring (m), 0 when all are inside. */
+  const spill = (o: BuildOut, ring: XZ) => {
+    let d = 0;
+    for (const m of o.meshes) for (let i = 0; i < m.position.length; i += 3) if (!inRing(m.position[i]!, m.position[i + 2]!, ring)) d = Math.max(d, edgeDist(m.position[i]!, m.position[i + 2]!, ring));
+    return d;
+  };
+
+  it('jardim-lou-lim-ioc: nothing leaves the park wall (the rockery spilled 4 m over it) or a zone building\'s own outline', () => {
+    const recs = recsOf('jardim-lou-lim-ioc', ['3_-4', '3_-3']);
+    expect(recs.length).toBe(6);
+    for (const r of recs) {
+      const o = real('jardim-lou-lim-ioc', r);
+      if (r.kind === 'artwork') expect(spill(o, r.outer)).toBeLessThan(1); // the wall's outer half + coping (mitred) and the moon gate sit on the line
+      else if (Math.abs(ringArea(r.outer)) >= M.louLimIoc.pavilionMax) expect(spill(o, r.outer), `${r.height ?? '-'} m record`).toBeLessThan(0.01); // on its outline
+      expect(stats(o).nan).toBe(0);
+    }
+  });
+  it('jardim-lou-lim-ioc: the moon gate stands where the OSM footway enters, pavilion floors clear the pond plane', () => {
+    const park = recsOf('jardim-lou-lim-ioc', ['3_-4']).find((r) => r.kind === 'artwork')!;
+    const o = real('jardim-lou-lim-ioc', park);
+    const G = M.louLimIoc;
+    const topNear = (x: number, z: number) => {
+      let y = -Infinity;
+      for (const m of o.meshes) for (let i = 0; i < m.position.length; i += 3) if (Math.hypot(m.position[i]! - x, m.position[i + 2]! - z) < 3) y = Math.max(y, m.position[i + 1]! - dem(x, z));
+      return y;
+    };
+    expect(topNear(...G.entrance)).toBeGreaterThan(G.wallH + 0.9); // the moon gate's coping, over the wall's
+    expect(topNear(843.4, -699.8)).toBeLessThan(G.wallH + 0.5); // not on the next edge any more, in front of the toilets
+    const pond = (JSON.parse(readFileSync(join(data, 'water.json'), 'utf8')) as WaterData).polygons.find((p) => !p.river && inRing(845, -757, p.outer))!;
+    const level = pond.outer.reduce((s, v, i) => (i % 2 ? s + dem(pond.outer[i - 1]!, v) : s), 0) / (pond.outer.length / 2) + 0.1; // Water.ts
+    for (const [x, z, n, r] of G.pavilions) {
+      const floor = Math.max(...Array.from({ length: n }, (_, k) => dem(x + r * Math.cos(Math.PI / n + (2 * Math.PI * k) / n), z + r * Math.sin(Math.PI / n + (2 * Math.PI * k) / n)))) + G.floor;
+      if (inRing(x, z, pond.outer)) expect(floor).toBeGreaterThan(level + 0.2);
+    }
+  });
+  it('jardim-lou-lim-ioc: pavilion bases and the rockery keep off every OSM way, step and footbridge (paths.test samples no bridges)', () => {
+    const lines = ['3_-4', '3_-3'].flatMap((k) => {
+      const c = JSON.parse(readFileSync(join(data, `chunks/${k}.json`), 'utf8')) as ChunkData;
+      return [...c.roads, ...(c.stairs ?? []), ...(c.bridges ?? [])].map((w) => w.pts);
+    });
+    const dist = (x: number, z: number) => Math.min(...lines.map((p) => {
+      let d = Infinity;
+      for (let i = 0; i + 3 < p.length; i += 2) {
+        const [ax, az, bx, bz] = [p[i]!, p[i + 1]!, p[i + 2]!, p[i + 3]!];
+        const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2 || 1)));
+        d = Math.min(d, Math.hypot(x - ax - t * (bx - ax), z - az - t * (bz - az)));
+      }
+      return d;
+    }));
+    const G = M.louLimIoc;
+    for (const [x, z, , r] of G.pavilions) expect(dist(x, z), `pavilion ${x}, ${z}`).toBeGreaterThan(r * 1.05 + 0.5); // at 845, −757 the base sat on the footbridge
+    expect(dist(G.rockery.x, G.rockery.z)).toBeGreaterThan(G.rockery.r + 1.5);
+  });
+  it('templo-ama: the inscribed boulders behind the halls sit in the hill (they floated at the top terrace level)', () => {
+    const rec = recsOf('templo-ama', ['-4_3']).find((r) => r.kind !== 'artwork')!;
+    const o = real('templo-ama', rec);
+    const rock = parseColour(M.ama.colours.rock)!;
+    const low = new Map<string, number>(); // rock (north / south of the axis) → lowest vertex over the terrain
+    const zc = (Math.min(...rec.outer.filter((_, i) => i % 2)) + Math.max(...rec.outer.filter((_, i) => i % 2))) / 2;
+    for (const m of o.meshes) {
+      if (!m.color) continue;
+      for (let i = 0; i < m.position.length; i += 3) {
+        if (Math.abs(m.color[i]! - rock[0]) + Math.abs(m.color[i + 1]! - rock[1]) + Math.abs(m.color[i + 2]! - rock[2]) > 1e-4) continue;
+        const k = m.position[i + 2]! < zc ? 'n' : 's';
+        low.set(k, Math.min(low.get(k) ?? Infinity, m.position[i + 1]! - dem(m.position[i]!, m.position[i + 2]!)));
+      }
+    }
+    expect([...low.keys()].sort()).toEqual(['n', 's']);
+    for (const v of low.values()) expect(v).toBeLessThan(0);
   });
 });

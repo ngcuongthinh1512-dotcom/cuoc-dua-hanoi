@@ -460,7 +460,7 @@ export const landmarks = {
     },
     quartel: { // Moorish Barracks (1874, Cassuto): 2 storeys of pointed-arch verandas on a granite podium; OSM h 29.3 includes the hill (est. 12 m)
       az: 44, storey: 5.4, parapet: 1, bay: 3.6, arch: 2.5, wall: '#e2b24e', trim: '#fbf7ee', podium: '#8e8a83', roof: '#8a8178',
-      tower: { size: 5, extra: 3.2 }, merlon: { w: 0.55, gap: 0.65, h: 0.7 }, stair: { riser: 0.17, tread: 0.32, width: 6 },
+      tower: { size: 5, extra: 3.2, proud: 0.4 }, merlon: { w: 0.55, gap: 0.65, h: 0.7 }, stair: { riser: 0.17, tread: 0.32, width: 6 }, // proud: m the corner towers stand out of the walls (> the 0.35 m cornices)
     },
     mandarim: { // Mandarin's House (1869): grey-brick halls round courtyards; OSM h 24.9 = hill (est. halls 7.5 m + 3 m roof)
       wall: '#858987', plaster: '#ecebe4', roof: '#4b4f53', ridge: '#383b3e', walls: 7.5, roof3: 3, eave: 0.8, courtWall: 5, siteWall: 3.8,
@@ -536,11 +536,20 @@ export const landmarks = {
     },
     louLimIoc: {
       // Jardim Lou Lim Ioc (1906): Suzhou-style walled garden; pond from OSM (water.json); features placed from the OSM pond (est.)
-      wallH: 2.8, thick: 0.4, gateAz: 225, moon: 1.5,
-      gates: [[819.3, -727.2]] as [number, number][], // world x, z: plain openings where OSM footways cross the wall (Leg 2 fix)
-      hallAz: 180, hall: { eave: 5, rise: 3 }, pavilionMax: 60, // zone members: m² below which a building is a pavilion
-      pavilions: [[845, -757, 6, 3], [912, -791, 4, 3.2]] as [number, number, number, number][], // x, z, sides, radius
-      rockery: { x: 889, z: -819, r: 6, n: 14, h: 4.5 },
+      wallH: 2.8, thick: 0.4, moon: 1.5,
+      // the moon gate stands where the only OSM footway crosses the wall (the real entrance, Estrada de Adolfo Loureiro; world
+      // x, z); the edge facing 225° put it 0.9 m in front of the toilets' back wall, the footway through a plain gap beside it
+      entrance: [819.3, -727.2] as [number, number],
+      pavilionMax: 60, // zone members: m² below which a building is a pavilion
+      floor: 0.8, // m: pavilion floor over the highest ground under it (the pond plane is 0.1 m over its mean shore, Water.ts: 0.45 left it awash)
+      // the other zone members on their own OSM outline (generic renderer), m above ground. Chun Chou Tong (OSM way/432827409):
+      // yellow, white columns, flat roof + balustrade (Commons "盧廉若公園春草堂 Lou Lim Loc Garden Chuncao Pavilion - panoramio.jpg")
+      villa: { at: [878, -798] as [number, number], height: 8.5, colour: '#e2c36e', roofShape: 'flat' },
+      corridor: { height: 4.2, colour: '#f0ede4', roofShape: 'flat' }, // a member round a court (百步廊 Hundred Steps Promenade, est.)
+      house: { height: 8, colour: '#f0ede4', roofShape: 'hipped', roofColour: '#4b5157' }, // toilets, Iong Sam Tong (est.)
+      // x, z, sides, radius (est.): the hexagonal one in the pond's round west pool (at 845, −757 its base sat on the footbridge)
+      pavilions: [[837.5, -759.5, 6, 3], [912, -791, 4, 3.2]] as [number, number, number, number][],
+      rockery: { x: 865, z: -783, r: 6, n: 14, h: 4.5 }, // est.: by the pond west of Chun Chou Tong, ≥ 9 m from walls / buildings / ways (at 889, −819 it spilled 4 m over the north wall)
       colours: { wall: '#f0ede4', coping: '#565d64', column: '#a32a22', roof: '#4b5157', deck: '#b9b3a6', rock: '#8a8578', base: '#a7a195' },
     },
     churches: {

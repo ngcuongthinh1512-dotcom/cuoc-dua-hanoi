@@ -21,6 +21,7 @@ import type { BuildOut, MaterialId, MeshBucket, TriMesh } from '../buildTypes.ts
 import { hash01, type MeshBuffer, mergeBuckets, offsetPolyline, triangulate, type V3 } from '../geom.ts';
 import type { DetailFn, LandmarkCtx } from './index.ts';
 import { box, extrude, type Frame, footprintFrame, place, quadOut, triOut } from './kit.ts';
+import { maxInside } from './m2.ts';
 import { parseColour, partRings, renderPart, Sink } from './parts.ts';
 
 const M = L.m1;
@@ -637,10 +638,11 @@ function quartel(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
       for (let x = M2.gap; x + M2.w < e.len; x += M2.w + M2.gap) slab(lit, S.wall, x, x + M2.w, top, top + M2.h, -0.35, 0, 'near');
     });
   }
-  // corner towers: pushed 0.3 m out of both walls (no coplanar faces), one storey higher, merlons
+  // corner towers: `proud` m out of both walls, in front of the 0.3 / 0.35 m cornices and veranda parapets (at 0.3 m they
+  // were coplanar: z-fighting stripes across the towers), one storey higher, merlons
   const T = S.tower;
   for (const e of edges) {
-    const tr = localRing(e, -0.3, T.size - 0.3, -T.size + 0.3, 0.3);
+    const tr = localRing(e, -T.proud, T.size - T.proud, -T.size + T.proud, T.proud);
     const tt = top + T.extra;
     renderPart({ outer: tr, kind: 'yes', height: tt - base, colour: S.wall, roofColour: S.roof }, { ground: base, height: ctx.height, fallbackTop: tt - base }, B.lit);
     cornice(B.lit, tr, yb, base + 0.2, 0.3, S.podium);
@@ -694,13 +696,16 @@ function mandarimHouse(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const S = M.mandarim;
   const ring = prep(rec);
   if (!ring) return EMPTY;
-  const base = ctx.ground;
-  const B = new Build(ctx, base, S.walls + S.roof3);
+  const B = new Build(ctx, ctx.ground, S.walls + S.roof3);
   const yb = ctx.minGround - L.sink;
   const parts = slices(ring, S.plan);
+  // each hall / court on the highest ground under it (the outline climbs ≈ 6.6 m of DEM: one floor for all left the east court's
+  // paving and the doors facing it up to 3 m under the terrain); a door on a cut stands on the higher of its two floors
+  const floor = parts.map((p) => (p.piece ? maxInside(p.piece, ctx.height, 2) + 0.05 : -Infinity));
   let courts = 0;
-  for (const { piece, a, b, hall, f } of parts) {
+  for (const [i, { piece, a, b, hall, f }] of parts.entries()) {
     if (!piece) continue;
+    const base = floor[i]!;
     if (hall) {
       body(B, piece, yb, base + S.walls, base + S.walls, S.wall, S.roof);
       roof(B, grow(piece, S.eave), base, S.walls, S.roof3, 'gabled', S.roof); // tiled roof with overhanging eaves
@@ -716,12 +721,13 @@ function mandarimHouse(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
         if (e.len < 4) continue;
         if (onCut(e, f, [a, b])) {
           // hall front on a court: tall timber door, lattice windows (lit warm), two red lanterns under the eaves
+          const sill = Math.max(base, floor[Math.abs(e.ax * f.ux + e.az * f.uz - a) < 0.05 ? i - 1 : i + 1] ?? -Infinity);
           B.on(e, (lit, raw) => {
             const xm = e.len / 2;
-            win(e, lit, raw, xm, base, 2, 3.4, 'rect', S.ridge, 'door');
+            win(e, lit, raw, xm, sill, 2, 3.4, 'rect', S.ridge, 'door');
             for (const s of [-1, 1]) {
-              for (let k = 1; k <= 2; k++) if (xm + s * k * 3.2 > 1.2 && xm + s * k * 3.2 < e.len - 1.2) win(e, lit, raw, xm + s * k * 3.2, base + 1, 1.8, 2.6, 'rect', S.ridge);
-              box(paint(raw, 'neon', lin('#ff3a22', 1.6 * LT.emissiveScale)), xm + s * 1.9 - 0.2, xm + s * 1.9 + 0.2, base + 3.8, base + 4.4, 0.25, 0.65);
+              for (let k = 1; k <= 2; k++) if (xm + s * k * 3.2 > 1.2 && xm + s * k * 3.2 < e.len - 1.2) win(e, lit, raw, xm + s * k * 3.2, sill + 1, 1.8, 2.6, 'rect', S.ridge);
+              box(paint(raw, 'neon', lin('#ff3a22', 1.6 * LT.emissiveScale)), xm + s * 1.9 - 0.2, xm + s * 1.9 + 0.2, sill + 3.8, sill + 4.4, 0.25, 0.65);
             }
           });
           continue;
