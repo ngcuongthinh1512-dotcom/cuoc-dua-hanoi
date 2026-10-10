@@ -40,9 +40,10 @@ const ALLOWED: Record<string, number> = {
   'sands-macau: service (inside)': 1,
   'science-center: footway (inside)': 16,
   'casa-mandarim: footway (wall)': 2, // through the house's courts (solid in the game)
-  'jardim-lou-lim-ioc: footway (inside)': 2, // through the garden hall
+  // the footway grazes the west corner of the Hundred Steps Promenade (a covered walk round a court, solid in the game); the
+  // zone buildings follow their outlines since leg2-audit-a3 (the frame-sized halls also walled Estrada de Adolfo Loureiro)
+  'jardim-lou-lim-ioc: footway (inside)': 1,
   // edge cases left (≤ 2 m of a wide way, or the border post at the map's north edge)
-  'jardim-lou-lim-ioc: tertiary 羅利老馬路 Estrada de Adolfo Loureiro (wall)': 2,
   'portas-do-cerco: service (inside)': 26,
   'portas-do-cerco: secondary (inside)': 2,
   'portas-do-cerco: footway (inside)': 16,

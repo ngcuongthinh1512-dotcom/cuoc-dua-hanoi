@@ -7,7 +7,8 @@
 //   fortaleza-guia: low walls following the hilltop, merlons, gate gap. farol-guia: the 15 m white lighthouse (OSM h ignored).
 //   templo-ama: terraces up the Barra hill, granite gate with lions, three halls with curved roofs, lanterns, incense coils.
 //   kun-iam-tong: each of the three OSM halls = a hall with a curved roof + ceramic ridge figures; the main one gets a forecourt.
-//   jardim-lou-lim-ioc: white wall with a moon gate along the park outline, pavilions, rockery (the zig-zag bridge is an OSM bridge).
+//   jardim-lou-lim-ioc: white wall along the park outline, moon gate at the OSM entrance, pavilions, rockery, the zone buildings on
+//   their own outlines (Chun Chou Tong yellow); the zig-zag bridge is an OSM bridge.
 //   sao-lourenco / santo-agostinho / ermida-penha: platform + steps, nave with a gable roof, façade (towers / pediment), windows.
 import { landmarks as L, lighting as LT } from '../../config.ts';
 import { type BuildingRec, type LandmarkId, type PartRec, ringArea, type XZ } from '../../geo/chunkData.ts';
@@ -336,11 +337,13 @@ function hallRoof(roof: MeshBuffer, ridge: MeshBuffer, f: Fr, ac: number, wc: nu
 }
 
 interface HallColours { brick: string; granite: string; column: string; door: string; roof: string; ridge: string }
-/** Chinese hall facing +a: plinth, brick walls, red porch columns + beam, red door, curved roof, front lanterns. */
-function cnHall(s: Paints, f: Fr, ac: number, wc: number, depth: number, width: number, y0: number, eave: number, rise: number, C: HallColours, o: { porch: number; over: number; lanterns: number; figures?: string[] }) {
+/** Chinese hall facing +a: plinth, brick walls, red porch columns + beam, red door, curved roof, front lanterns. `foot`: the
+ *  plinth's bottom (default 0.8 m under the floor, enough on a terrace); a hall on the bare slope passes its lowest ground. */
+function cnHall(s: Paints, f: Fr, ac: number, wc: number, depth: number, width: number, y0: number, eave: number, rise: number, C: HallColours, o: { porch: number; over: number; lanterns: number; figures?: string[]; foot?: number }) {
   const [ha, hw] = [depth / 2, width / 2];
   const front = ac + ha;
-  bx(paint(s, 'masonry', C.granite), f, ac - ha - 0.4, front + 0.4, y0 - 0.8, y0 + 0.35, wc - hw - 0.4, wc + hw + 0.4);
+  const foot = Math.min(o.foot ?? y0 - 0.8, y0 - 0.8);
+  bx(paint(s, 'masonry', C.granite), f, ac - ha - 0.4, front + 0.4, foot, y0 + 0.35, wc - hw - 0.4, wc + hw + 0.4);
   bx(paint(s, 'masonry', C.brick), f, ac - ha, front - o.porch, y0 + 0.35, y0 + eave, wc - hw, wc + hw);
   const red = paint(s, 'masonry', C.column);
   const cols = Math.max(2, Math.round(width / 3.5) + 1);
@@ -373,7 +376,7 @@ function cnHall(s: Paints, f: Fr, ac: number, wc: number, depth: number, width: 
     const w = wc - hw + (width * (k + 0.5)) / o.lanterns;
     lantern(lb, ...at(f, front + o.over * 0.3, y0 + eave - 0.9, w), 0.35);
   }
-  cbx(s, f, ac - ha - 0.4, front + 0.4, y0 - 0.8, y0 + 0.35, wc - hw - 0.4, wc + hw + 0.4);
+  cbx(s, f, ac - ha - 0.4, front + 0.4, foot, y0 + 0.35, wc - hw - 0.4, wc + hw + 0.4);
   cbx(s, f, ac - ha, front - 0.1, y0 + 0.35, y0 + eave + rise * 0.6, wc - hw, wc + hw);
 }
 
@@ -383,8 +386,6 @@ interface RingWall {
   outBase: number; outTop: number; inner: number; // offsets from the OSM line: outer face foot / top (outwards), inner face (inwards)
   bot: H; botIn: H; top: H; // outer foot, inner foot, top (y at a point)
   gap?: { edge: number; t0: number; t1: number; top?: H }; // gate: no wall there, or a low wall up to top
-  gates?: readonly (readonly [number, number])[]; // extra openings (world x, z on the line, gateWidth m wide): OSM footways through the wall
-  gateWidth?: number;
   merlon?: { w: number; gap: number; h: number };
   collide?: boolean;
   lights?: { every: number; buf: MeshBuffer }; // uplighter boxes at the outer foot, one per `every` m
@@ -404,15 +405,8 @@ function ringWall(s: Paints, b: MeshBuffer, ring: XZ, o: RingWall, merlons?: Mes
     const len = Math.hypot(ex, ez);
     if (len < 1e-3) continue;
     const out: V3 = [-ez / len, 0, ex / len];
-    // openings on this edge (t along it): the gate, then the extra ones within 3 m of the line
+    // the gate's opening on this edge (t along it)
     const cuts: [number, number][] = o.gap?.edge === i ? [[o.gap.t0, o.gap.t1]] : [];
-    const [ax, az] = [ring[2 * i]!, ring[2 * i + 1]!];
-    for (const [gx, gz] of o.gates ?? []) {
-      const t = ((gx - ax) * ex + (gz - az) * ez) / (len * len);
-      const hw = (o.gateWidth ?? 2.4) / 2 / len;
-      if (t > 0 && t < 1 && Math.abs((gx - ax) * ez - (gz - az) * ex) / len < 3) cuts.push([Math.max(0, t - hw), Math.min(1, t + hw)]);
-    }
-    cuts.sort((p, q) => p[0] - q[0]);
     const pieces: [number, number, H][] = [];
     let tc = 0;
     for (const [c0, c1] of cuts) (pieces.push([tc, c0, o.top]), (tc = c1));
@@ -677,11 +671,16 @@ function ama(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
       }
     }
   }
-  // boulders with carved inscriptions on the hill at the back
+  // boulders with carved inscriptions on the hill at the back: on the top terrace where the outline reaches the frame's back
+  // corners, else seated in the hill (the real outline is notched there: a foot at the terrace level floated 0.3–1.6 m)
   const rnd = rand(1488);
   const rk = paint(s, 'masonry', C.rock);
   const last = tiers.at(-1)!;
-  for (const w of [-f.b + 3, f.b - 3.5]) rock(rk, ...at(f, a(last.d1) + 2.5, last.y, w), 2.4, 1.5, 1.8, rnd);
+  for (const w of [-f.b + 3, f.b - 3.5]) {
+    const [x, z] = atXZ(f, a(last.d1) + 2.5, w);
+    const hill = Math.min(...[[-2, 0], [2, 0], [0, -2], [0, 2]].map(([dx, dz]) => ctx.height(x + dx!, z + dz!)));
+    rock(rk, x, inRing(x, z, ring) ? last.y : hill - 0.5, z, 2.4, 1.5, 1.8, rnd);
+  }
   return s.out();
 }
 
@@ -694,7 +693,7 @@ function kunIamTong(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const f = facing(rec.outer, K.az);
   const { lo, hi } = rangeIn(ctx.height, f, -f.a, f.a, -f.b, f.b);
   const y0 = hi + 0.2;
-  cnHall(s, f, 0, 0, 2 * f.a - 1, 2 * f.b - 1, y0, K.eave, K.rise, C, { porch: K.porch, over: K.over, lanterns: 4, figures: K.figures });
+  cnHall(s, f, 0, 0, 2 * f.a - 1, 2 * f.b - 1, y0, K.eave, K.rise, C, { porch: K.porch, over: K.over, lanterns: 4, figures: K.figures, foot: lo - L.sink });
   if (rec.kind === 'temple') {
     // forecourt: paving, incense urn, lions, lantern posts
     const g = paint(s, 'masonry', C.granite);
@@ -748,7 +747,7 @@ function moonGate(s: Paints, b: MeshBuffer, g: Fr, gw: number, th: number, y0: n
 function pavilion(s: Paints, h: H, x: number, z: number, n: number, r: number) {
   const C = M.louLimIoc.colours;
   const corner = circle(x, z, r, 0, n, Math.PI / n);
-  const y0 = Math.max(...corner.map((p) => h(p[0], p[2]))) + 0.45;
+  const y0 = Math.max(...corner.map((p) => h(p[0], p[2]))) + M.louLimIoc.floor;
   const yLo = Math.min(...corner.map((p) => h(p[0], p[2]))) - L.sink;
   const base = paint(s, 'masonry', C.base);
   revolve(base, x, z, [[yLo, r * 1.05], [y0, r * 1.05]], n, Math.PI / n);
@@ -778,31 +777,43 @@ function louLimIoc(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const C = G.colours;
   const s = new Paints();
   if (rec.kind !== 'artwork') {
-    // zone members: the hall by the pond (Chinese hall on its outline), small ones = pavilions
+    // zone members: small ones = pavilions, the others on their own OSM outline (generic renderer; a Chinese hall on the
+    // outline's frame spilled 4 m over Estrada de Adolfo Loureiro, into the pond and over the Promenade's court, and floated
+    // up to 2.7 m on the slope); Chun Chou Tong as the real yellow villa
     const area = Math.abs(ringArea(rec.outer));
-    const f = facing(rec.outer, G.hallAz);
-    if (area < G.pavilionMax) pavilion(s, ctx.height, f.cx, f.cz, 4, Math.sqrt(area) / 2);
-    else {
-      const { hi } = rangeIn(ctx.height, f, -f.a, f.a, -f.b, f.b);
-      cnHall(s, f, 0, 0, 2 * f.a - 2, 2 * f.b - 2, hi + 0.3, G.hall.eave, G.hall.rise, { brick: C.wall, granite: C.base, column: C.column, door: C.column, roof: C.roof, ridge: C.coping }, { porch: 2, over: 1.2, lanterns: 4 });
+    if (area < G.pavilionMax) {
+      const f = footprintFrame(rec.outer);
+      pavilion(s, ctx.height, f.cx, f.cz, 4, Math.sqrt(area) / 2);
+      return s.out();
     }
-    return s.out();
+    const style = inRing(G.villa.at[0], G.villa.at[1], rec.outer) ? G.villa : rec.holes?.length ? G.corridor : G.house;
+    return zoneBuilding(rec, ctx, maxInside(rec.outer, ctx.height) + style.height, style); // full height on the high side of the slope
   }
-  const { ring, edge: gEdge } = densify(rings[0]!, 6, edgeFacing(rings[0]!, G.gateAz, 2 * G.moon + 3));
+  // the moon gate where the OSM footway enters (the real entrance), on the outline edge nearest to it
+  const r0 = rings[0]!;
+  const [ex, ez] = G.entrance;
+  const near = (i: number) => {
+    const [ax, az, bx, bz] = [r0[2 * i]!, r0[2 * i + 1]!, r0[(2 * i + 2) % r0.length]!, r0[(2 * i + 3) % r0.length]!];
+    const t = Math.max(0, Math.min(1, ((ex - ax) * (bx - ax) + (ez - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2 || 1)));
+    return { d: Math.hypot(ax + t * (bx - ax) - ex, az + t * (bz - az) - ez), t };
+  };
+  let ge = 0;
+  for (let i = 1; i < r0.length / 2; i++) if (near(i).d < near(ge).d) ge = i;
+  const { ring, edge: gEdge } = densify(r0, 6, ge);
   const h = ctx.height;
-  // wall + tiled coping, moon gate in a gap on the edge facing gateAz
+  // wall + tiled coping, moon gate in a gap
   const gi = 2 * gEdge;
   const n = ring.length;
   const [ax, az, bx_, bz] = [ring[gi]!, ring[gi + 1]!, ring[(gi + 2) % n]!, ring[(gi + 3) % n]!];
   const glen = Math.hypot(bx_ - ax, bz - az);
   const gw = 2 * G.moon + 1.6;
-  const gap = { edge: gEdge, t0: 0.5 - gw / 2 / glen, t1: 0.5 + gw / 2 / glen };
+  const tc = Math.min(Math.max(near(ge).t, gw / 2 / glen), 1 - gw / 2 / glen);
+  const gap = { edge: gEdge, t0: tc - gw / 2 / glen, t1: tc + gw / 2 / glen };
   const foot: H = (x, z) => h(x, z) - 0.4;
   const top: H = (x, z) => h(x, z) + G.wallH;
-  const gates = G.gates; // Leg 2 fix: the OSM footway through the north-west wall
-  ringWall(s, paint(s, 'masonry', C.wall), ring, { outBase: G.thick / 2, outTop: G.thick / 2, inner: G.thick / 2, bot: foot, botIn: foot, top, gap, gates, collide: true });
-  ringWall(s, paint(s, 'masonry', C.coping), ring, { outBase: G.thick / 2 + 0.15, outTop: G.thick / 2 + 0.15, inner: G.thick / 2 + 0.15, bot: (x, z) => top(x, z) - 0.05, botIn: (x, z) => top(x, z) - 0.05, top: (x, z) => top(x, z) + 0.3, gap, gates });
-  const [mx, mz] = [(ax + bx_) / 2, (az + bz) / 2];
+  ringWall(s, paint(s, 'masonry', C.wall), ring, { outBase: G.thick / 2, outTop: G.thick / 2, inner: G.thick / 2, bot: foot, botIn: foot, top, gap, collide: true });
+  ringWall(s, paint(s, 'masonry', C.coping), ring, { outBase: G.thick / 2 + 0.15, outTop: G.thick / 2 + 0.15, inner: G.thick / 2 + 0.15, bot: (x, z) => top(x, z) - 0.05, botIn: (x, z) => top(x, z) - 0.05, top: (x, z) => top(x, z) + 0.3, gap });
+  const [mx, mz] = [ax + (bx_ - ax) * tc, az + (bz - az) * tc];
   const [ux, uz] = [(bx_ - ax) / glen, (bz - az) / glen];
   const g: Fr = { cx: mx, cz: mz, ux: -uz, uz: ux, a: 0, b: 0 }; // +a out of the garden
   const yg = h(mx, mz);

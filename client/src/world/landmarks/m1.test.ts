@@ -6,7 +6,7 @@ import { type BuildingRec, type ChunkData, chunkBounds, type LandmarkId, ringAre
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut, MeshBucket } from '../buildTypes.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
-import { at, bakeFlood, clipHalf, details, edgesOf, facing, grow, shape, simplify, slices, waveQuads } from './m1.ts';
+import { at, bakeFlood, clipHalf, details, edgesOf, facing, grow, lin, shape, simplify, slices, waveQuads } from './m1.ts';
 
 const M = L.m1;
 const rect = (x0: number, z0: number, x1: number, z1: number): XZ => [x0, z0, x1, z0, x1, z1, x0, z1];
@@ -133,6 +133,59 @@ describe('m1 details on the real outlines', () => {
     expect(front.len).toBeGreaterThan(35); // the 3 OSM pieces of the front merge into one ≈ 45 m edge
     const base = Math.min(...[0.3, front.len / 2, front.len - 0.3].map((sx) => slope(...at(front, sx, 0.6))));
     expect(s.box.y1 - base).toBeCloseTo(M.leal.height + 0.45, 0);
+  });
+  it('quartel: no two differently coloured faces share the visible plane of the front (z-fighting: towers vs cornices / parapets)', () => {
+    // axis-aligned stand-in: the z = 0 wall faces −z; sample the façade, frontmost −z-facing surfaces under each point
+    const r = pos(rect(0, 0, 60, 30));
+    const ctx: LandmarkCtx = { key: '0_0', bounds: chunkBounds('0_0'), height: () => 2, def: LANDMARK_BY_ID.get('quartel-mouros')!, ground: 2, minGround: 2 };
+    const out = details['quartel-mouros']!({ outer: r, kind: 'yes', height: 29.3, landmark: 'quartel-mouros' }, [], ctx, helpers);
+    const tris: { p: number[]; c: number[] }[] = [];
+    for (const m of out.meshes) {
+      if (!m.color) continue;
+      for (let k = 0; k < m.index.length; k += 3) {
+        const v = [m.index[k]!, m.index[k + 1]!, m.index[k + 2]!];
+        if (v.some((i) => m.normal[3 * i + 2]! > -0.99)) continue; // faces −z only
+        tris.push({ p: v.flatMap((i) => [m.position[3 * i]!, m.position[3 * i + 1]!, m.position[3 * i + 2]!]), c: v.flatMap((i) => [m.color![3 * i]!, m.color![3 * i + 1]!, m.color![3 * i + 2]!]) });
+      }
+    }
+    const S = M.quartel;
+    let [samples, fights] = [0, [] as string[]];
+    for (let x = -0.6; x < 60.6; x += 0.173) {
+      for (let y = 2.3; y < 2 + 0.4 + 2 * S.storey + S.parapet + S.tower.extra; y += 0.131) {
+        const hits: { z: number; c: number[] }[] = [];
+        for (const { p, c } of tris) {
+          const d = (p[4]! - p[7]!) * (p[0]! - p[6]!) + (p[6]! - p[3]!) * (p[1]! - p[7]!);
+          if (Math.abs(d) < 1e-9) continue;
+          const l1 = ((p[4]! - p[7]!) * (x - p[6]!) + (p[6]! - p[3]!) * (y - p[7]!)) / d;
+          const l2 = ((p[7]! - p[1]!) * (x - p[6]!) + (p[0]! - p[6]!) * (y - p[7]!)) / d;
+          const l3 = 1 - l1 - l2;
+          if (l1 <= 1e-6 || l2 <= 1e-6 || l3 <= 1e-6) continue;
+          hits.push({ z: l1 * p[2]! + l2 * p[5]! + l3 * p[8]!, c: [0, 1, 2].map((j) => l1 * c[j]! + l2 * c[3 + j]! + l3 * c[6 + j]!) });
+        }
+        if (hits.length < 2) continue;
+        samples++;
+        hits.sort((a, b) => a.z - b.z);
+        const [a, b] = [hits[0]!, hits[1]!];
+        if (b.z - a.z < 1e-3 && Math.max(...a.c.map((v, j) => Math.abs(v - b.c[j]!))) > 0.02) fights.push(`${x.toFixed(2)},${y.toFixed(2)} z ${a.z.toFixed(3)}`);
+      }
+    }
+    expect(samples).toBeGreaterThan(1000);
+    expect(fights.slice(0, 5)).toEqual([]);
+  });
+  it('casa-mandarim: on the slope no court paving lies under the terrain (one floor for the whole house buried the high end)', () => {
+    const { key, rec } = recs.find((r) => r.rec.landmark === 'casa-mandarim' && r.rec.kind !== 'artwork')!;
+    const out = details['casa-mandarim']!(rec, [], ctxOf(key, rec), helpers);
+    const pave = lin('#9b9890');
+    let n = 0;
+    for (const m of out.meshes) {
+      if (!m.color) continue;
+      for (let i = 0; i < m.position.length; i += 3) {
+        if (Math.abs(m.color[i]! - pave[0]) + Math.abs(m.color[i + 1]! - pave[1]) + Math.abs(m.color[i + 2]! - pave[2]) > 1e-4) continue;
+        n++;
+        expect(m.position[i + 1]!).toBeGreaterThan(slope(m.position[i]!, m.position[i + 2]!)); // a planar slope peaks at a corner
+      }
+    }
+    expect(n).toBeGreaterThanOrEqual(4 * 3); // four courts
   });
   it('the largo fountain stands inside the square', () => {
     const { key, rec } = recs.find((r) => r.rec.landmark === 'largo-senado')!;
