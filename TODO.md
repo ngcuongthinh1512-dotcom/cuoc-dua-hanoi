@@ -195,6 +195,9 @@ Xong (báo cáo `docs/reports/host-minimap.md`, ảnh `screenshots/p11-host-map.
 - Sửa hình dáng địa danh theo ảnh thật: Grand Lisboa (đỉnh sen), Hotel Lisboa, MGM (đang làm); rà 9 địa danh chưa xem cận + Sands, A-Ma, Penha, Macau Tower, Science Center.
 - Cảnh xa: Macau Tower / Grand Lisboa bị sương che từ ~700 m; bóng Taipa / Cotai; mặt phẳng nền quảng trường Flor de Lótus.
 - `KNOWN_MACAO` / `KNOWN_STEPS` (cầu biển ở rìa khung, bậc cầu 3–17,7 m cạnh Macau Tower): xử lý ở BridgeBuilder nếu muốn bỏ danh sách bỏ qua.
+- Cầu vượt / cầu cạn layer 1 trên đất (305 sàn: cầu bộ hành qua phố, nhánh cầu cạn thấp, LRT) vẫn nằm sát mặt đất, từ rà soát a5 không còn lan can (trước là tường chắn phố); làm cầu vượt thật = nâng sàn kèm bậc / dốc lên (way OSM khác) (`docs/reports/leg2-audit-a5.md`).
+- Bờ hồ Nam Van / Sai Van / hồ chứa / ao là dốc đất trong 1 ô lưới (răng cưa nhìn từ trên); muốn tường kè như biển: gắn `river` cho hồ lớn ở `build-chunks` (đổi water.json, bậc kè, khe cầu) — anh quyết.
+- Vũng sáng đèn đường là mặt phẳng ở cao độ vỉa hè: trên phố dốc / đỉnh dốc thành vệt sáng mảnh ngang đường ở xa (cần instance riêng có nghiêng).
 - Đo FPS thật trên máy thật (chất lượng cao / thấp); `sim --full` đo hạn mức 2 giờ cho Macao.
 - Nhập chặng thật (ngoài repo) + gắn lộ trình vào địa danh; `docs/RACE_RULES.md` cho Macao (đêm, tốc độ 4 / 5,2 m/s, luật không dùng AI).
 - Deploy riêng (`cuoc-dua-macao`, `cuoc-dua-macao-media`): anh làm theo `docs/DEPLOY.md`.

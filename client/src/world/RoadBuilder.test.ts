@@ -123,4 +123,11 @@ describe('buildBridges', () => {
     expect(top(alone)).toBeCloseTo(C.bridge.riverDeck + C.bridge.railLayerStep); // over the channel, no road deck
     expect(get(alone, 'asphalt')).toBeUndefined(); // rail deck: no road surface
   });
+
+  it('a layer-1 footbridge lying on the street it crosses (not lifted) gets no parapets; the same over a ditch keeps them', () => {
+    const street = road({ kind: 'residential', pts: [0, 0, 0, 100] });
+    const over = (h: (x: number) => number) => buildBridges(chunk([street], [{ pts: [-30, 50, 30, 50], kind: 'footway', layer: 1 }]), ctx((x) => h(x)));
+    expect(get(over(() => 0), 'railing')).toBeUndefined(); // the deck lies on the street: it would wall it off
+    expect(get(over((x) => (Math.abs(x) < 20 ? -8 : 0)), 'railing')).toBeDefined(); // a real drop under the deck
+  });
 });

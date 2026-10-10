@@ -29,12 +29,12 @@ import {
 } from 'three';
 import { graphics8c, lighting, water as W } from '../config.ts';
 import type { WaterData } from '../geo/chunkData.ts';
-import { type HeightGrid, heightAt } from '../geo/heightGrid.ts';
+import type { HeightGrid } from '../geo/heightGrid.ts';
 import { triangulate } from './geom.ts';
 import { graphics } from './graphics.ts';
 import { hash01 } from './geom.ts';
 import { isNight, nightTime } from './night.ts';
-import { quayMesh, riverLevel } from './Terrain.ts';
+import { quayMesh, riverLevel, waterLevelOf } from './Terrain.ts';
 
 const GW = graphics8c.water;
 
@@ -176,21 +176,17 @@ function lightMap(spots: [number, number, number, string][], rect: number[]) {
 
 /** Adds the water to the scene (after carveRiver); call update(dt) every frame (scrolling normal map).
  *  Seine polygons: flat at riverLevel, plus the stone quays of Terrain.quayMesh (walls from the carved bed, coping).
- *  Other water (fountains, ponds): flat at the mean terrain height of the ring + otherLift, not carved. */
+ *  Other water (lakes, fountains, ponds): flat at its rim height + otherLift (Terrain.waterLevelOf; carveRiver sank the
+ *  ground under it). */
 export function createWater(scene: Scene, water: WaterData, grid: HeightGrid): { update(dt: number): void } {
   const level = riverLevel(grid, water);
   const pos: number[] = [];
   const uv: number[] = [];
   const index: number[] = [];
-  for (const p of water.polygons) {
+  for (const [pi, p] of water.polygons.entries()) {
     const holes = p.holes ?? [];
     const pts = [p.outer, ...holes].flat();
-    let y = level;
-    if (!p.river) {
-      let sum = 0;
-      for (let i = 0; i < p.outer.length; i += 2) sum += heightAt(grid, p.outer[i]!, p.outer[i + 1]!);
-      y = sum / (p.outer.length / 2) + W.otherLift;
-    }
+    const y = waterLevelOf(grid, water, pi);
     const base = pos.length / 3;
     for (let i = 0; i < pts.length; i += 2) pos.push(pts[i]!, y, pts[i + 1]!), uv.push(pts[i]! / W.normalTile, pts[i + 1]! / W.normalTile);
     for (const k of triangulate(p.outer, holes)) index.push(base + k);

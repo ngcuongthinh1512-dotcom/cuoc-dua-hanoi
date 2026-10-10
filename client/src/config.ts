@@ -346,7 +346,9 @@ export const terrain = {
 
 export const water = {
   roughness: 0.15,
-  otherLift: 0.1, // m above local terrain for non-river water (not carved)
+  otherLift: 0.1, // m: non-river water (lakes, ponds, basins) lies this far above its rim height (Terrain.carveRiver)
+  lakeRim: 0.05, // rim height = this quantile of the heights along a lake's outer ring (the DEM's rims dip in places)
+  lakeDepth: 0.4, // m: every node inside a lake sinks at least this far under its surface (no DEM island pokes through)
   normalScroll: 0.02, // UV units per second
   colour: '#3d5a66',
   normalTile: 24, // m per normal-map repeat
@@ -365,7 +367,8 @@ export const props = {
   carKinds: ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street',
     'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link'], // highway=* that get lamps
   streetKinds: ['pedestrian'], // + carKinds: roads whose junctions get signs / Morris columns
-  morrisOneIn: 6, // a Morris column at 1 in N junctions (hashed)
+  morrisOneIn: Infinity, // a Morris column at 1 in N junctions (hashed); Leg 2 (Macao): none, a Paris advertising column (Leg 1: 6)
+  metroEntrances: false, // a Guimard "Métropolitain" entrance + well at every OSM subway_entrance (Leg 1 Paris: true); Macao has no metro
   cornerInset: { sign: 0.7, morris: 2.2 }, // m from the curb line into the corner sidewalk
   maxTriangles: 300, // per prop mesh
   signs: {

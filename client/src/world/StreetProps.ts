@@ -581,7 +581,7 @@ export const buildStreetProps: Builder = (chunk, ctx) => {
 
   const metro: number[] = [];
   for (const p of chunk.points) {
-    if (p.kind !== 'subway_entrance') continue;
+    if (p.kind !== 'subway_entrance' || !P.metroEntrances) continue;
     const d = towardRoad(chunk, p.x, p.z);
     pushMatrix(metro, p.x, ctx.height(p.x, p.z), p.z, d ? Math.atan2(d[0], d[1]) : hash01(p.x, p.z, 14) * 2 * Math.PI);
   }

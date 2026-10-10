@@ -22,6 +22,17 @@ function grid(n: number, step: number): ChunkData {
   ]);
 }
 
+/** f() with the Paris street furniture of Leg 1 (Morris columns 1 in 6 junctions, Guimard metro entrances); Macao has neither. */
+function paris<T>(f: () => T): T {
+  const saved = { morrisOneIn: P.morrisOneIn, metroEntrances: P.metroEntrances };
+  Object.assign(P, { morrisOneIn: 6, metroEntrances: true });
+  try {
+    return f();
+  } finally {
+    Object.assign(P, saved);
+  }
+}
+
 const sameNameTooClose = (s: ReturnType<typeof placeSigns>) =>
   s.some((a, i) => s.some((b, k) => k > i && a.name === b.name && Math.hypot(a.x - b.x, a.z - b.z) < P.signs.dedupe));
 
@@ -90,12 +101,15 @@ describe('street props placement', () => {
   });
 
   it('buildStreetProps: Morris ≈ 1 in morrisOneIn junctions, metro faces the nearest road, no NaN', () => {
-    const out = buildStreetProps(grid(10, 24), ctx); // no OffscreenCanvas in Node → signs skipped (warned once)
+    const out = paris(() => buildStreetProps(grid(10, 24), ctx)); // no OffscreenCanvas in Node → signs skipped (warned once)
     const morris = out.instances.find((s) => s.kind === 'morris')!.matrices.length / 16;
-    expect(morris).toBeGreaterThan(100 / P.morrisOneIn / 2.5);
-    expect(morris).toBeLessThan((100 / P.morrisOneIn) * 2.5);
-    expect(buildStreetProps(grid(10, 24), ctx)).toEqual(out);
-    const f = buildStreetProps(fixture, ctx);
+    expect(morris).toBeGreaterThan(100 / 6 / 2.5);
+    expect(morris).toBeLessThan((100 / 6) * 2.5);
+    expect(paris(() => buildStreetProps(grid(10, 24), ctx))).toEqual(out);
+    // Leg 2 (Macao): no Paris advertising column, no Guimard entrance
+    const macao = [...buildStreetProps(grid(10, 24), ctx).instances, ...buildStreetProps(fixture, ctx).instances];
+    expect(macao.filter((s) => s.kind === 'morris' || s.kind === 'metro')).toEqual([]);
+    const f = paris(() => buildStreetProps(fixture, ctx));
     const metro = f.instances.find((s) => s.kind === 'metro')!.matrices;
     expect(metro.length).toBe(16);
     // Entrance at (100, 95), road at z = 100 → local +Z (column 2: m[8], m[10]) points south (+Z).
@@ -105,7 +119,7 @@ describe('street props placement', () => {
   });
 
   it('prop colliders: a hexagonal prism per lamp / Morris column, a box per metro entrance, in the chunk trimesh', () => {
-    const out = buildStreetProps(fixture, ctx);
+    const out = paris(() => buildStreetProps(fixture, ctx));
     const n = (k: string) => (out.instances.find((s) => s.kind === k)?.matrices.length ?? 0) / 16;
     const [col] = out.colliders;
     expect(n('lamp') + n('metro')).toBeGreaterThan(0);
