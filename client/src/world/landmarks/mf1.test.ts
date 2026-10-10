@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { landmarks as L } from '../../config.ts';
-import { chunkBounds, type BuildingRec } from '../../geo/chunkData.ts';
+import { chunkBounds, type BuildingRec, type XZ } from '../../geo/chunkData.ts';
+import { inRing } from '../../geo/districts.ts';
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { MeshBuffer } from '../geom.ts';
@@ -90,11 +91,42 @@ describe('ruinas-sao-paulo', () => {
   });
   it('stays inside the outline bbox widened by the platform and the stair', () => {
     const b = bbox(out);
-    const side = (R.terrace.rise / R.sideStairs.riser + 1) * R.sideStairs.tread; // the side flights' run
-    expect(b.x0).toBeGreaterThan(139.5 - R.terrace.halfWidth - side);
-    expect(b.x1).toBeLessThan(159.7 + R.terrace.halfWidth + side);
+    const side = R.terrace.halfWidth + R.sideStairs.width + 1; // the side flights run along the walls; + the frame's 0.9° turn
+    expect(b.x0).toBeGreaterThan(149.9 - side);
+    expect(b.x1).toBeLessThan(149.9 + side);
     expect(b.z0).toBeGreaterThan(-475.3 - R.terrace.back);
     expect(b.z1).toBeLessThan(-437.5 + R.stair.bottom + 2);
+  });
+  it('the side flights run along the platform walls: nothing enters the Cinemateca Paixão or Calçada de S. Paulo', () => {
+    // audit a1: run outwards they crossed Rua da Ressurreição into the cinema and lay across the road (bikes refuse stairs)
+    const CINEMA: XZ = [110.5, -415.3, 115.8, -420.1, 114.9, -421.2, 118.8, -424.8, 120.2, -423.2, 122.6, -424.5, 122.5, -425.9, 120.9, -426, 120.9, -428.5, 123.5, -428.1, 126.3, -429.2, 127, -422.4, 125.1, -422.7, 124.5, -421.1, 123.5, -420, 125.2, -418, 124.8, -417.7, 115.2, -409.6]; // OSM way/791076490
+    const ROAD: XZ = [167.8, -464.4, 168.1, -428.5, 168.4, -386]; // OSM way/307331943 centreline, residential: 7 m carriageway
+    const toRoad = (x: number, z: number) => Math.min(...[0, 2].map((i) => {
+      const [ax, az, bx, bz] = ROAD.slice(i, i + 4) as [number, number, number, number];
+      const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2)));
+      return Math.hypot(x - ax - t * (bx - ax), z - az - t * (bz - az));
+    }));
+    let n = 0;
+    for (const m of out.meshes) {
+      for (let i = 0; i < m.position.length; i += 3) {
+        const [x, y, z] = [m.position[i]!, m.position[i + 1]!, m.position[i + 2]!];
+        if (y < 5 + 0.05) continue; // under the ground
+        n++;
+        expect(inRing(x, z, CINEMA), `vertex ${x.toFixed(1)}, ${z.toFixed(1)} in the cinema`).toBe(false);
+        expect(toRoad(x, z), `vertex ${x.toFixed(1)}, ${z.toFixed(1)} on the road`).toBeGreaterThan(3.5);
+      }
+    }
+    expect(n).toBeGreaterThan(1000);
+    const f = facadeFrame(NAVE.outer);
+    const side = out.colliders.filter((c) => c.stairs).slice(-2); // the side ramps: against the walls, the flights' width out
+    expect(side).toHaveLength(2);
+    for (const c of side) {
+      for (let i = 0; i < c.vertices.length; i += 3) {
+        const u = Math.abs((c.vertices[i]! - f.cx) * f.ux + (c.vertices[i + 2]! - f.cz) * f.uz);
+        expect(u).toBeGreaterThan(R.terrace.halfWidth - 1e-3);
+        expect(u).toBeLessThan(R.terrace.halfWidth + R.sideStairs.width + 1e-3);
+      }
+    }
   });
   it('uses the unlit material for the floodlit façade and masonry for the stone platform', () => {
     const mats = new Set(out.meshes.map((m) => m.material));

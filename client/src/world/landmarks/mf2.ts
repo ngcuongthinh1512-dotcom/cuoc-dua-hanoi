@@ -190,9 +190,15 @@ function conventionCentre(rec: BuildingRec, ctx: LandmarkCtx, h: Helpers): Build
   renderPart({ ...rec, material: 'glass', roofMaterial: 'concrete' }, { ground: g, height: ctx.height, fallbackTop: top }, s);
   const slabs = paint(s, 'masonry', rgb(T.colours.concrete));
   for (let y = T.centre.floor; y < top - 1; y += T.centre.floor) slab(slabs, rings, g + y);
+  // LED strip: each edge faces out of the outline by the ring's winding (loft's centroid hint turned it inwards on the
+  // south side's concave notch: a dark gap from outside, audit a1)
   const led = paint(s, 'neon', glow(T.centre.edgeColour, T.centre.edgeIntensity));
   const rim = outward(rings[0]!, 0.08);
-  loft(led, [g + top - T.centre.edgeH, g + top].map((y) => Array.from({ length: rim.length / 2 }, (_, i): V3 => [rim[2 * i]!, y, rim[2 * i + 1]!])));
+  const [y0, y1, w] = [g + top - T.centre.edgeH, g + top, Math.sign(ringArea(rim))];
+  for (let i = 0, n = rim.length; i < n; i += 2) {
+    const [ax, az, bx, bz] = [rim[i]!, rim[i + 1]!, rim[(i + 2) % n]!, rim[(i + 3) % n]!];
+    quadOut(led, [ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az], [w * (az - bz), 0, w * (bx - ax)]);
+  }
   return s.out();
 }
 

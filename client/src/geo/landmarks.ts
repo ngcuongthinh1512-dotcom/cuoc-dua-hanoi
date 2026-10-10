@@ -31,7 +31,7 @@ export const LANDMARK_NEAR = 12;
 /** Leg 2 (Macao): the 30 landmarks (31 ids, Guia = fortress + lighthouse) chosen 2026-10-06, docs/plans/leg2-landmarks.md §0.
  *  `view` azimuths are first guesses for the base screenshots (`lm-<id>`); the groups may adjust them. */
 export const LANDMARKS: readonly LandmarkDef[] = [
-  { id: 'ruinas-sao-paulo', name: 'Ruínas de São Paulo', group: 'mf1', osm: ['way/1001795463', 'way/1001795464', 'way/192183185'], near: 25, view: [135, 80] }, // façade faces SE; OSM h 26.4 on the first outline, none on the second (steps)
+  { id: 'ruinas-sao-paulo', name: 'Ruínas de São Paulo', group: 'mf1', osm: ['way/1001795463', 'way/1001795464', 'way/192183185', 'way/192573692'], near: 25, view: [135, 80] }, // façade faces SE; OSM h 26.4 on the first outline, none on the second (steps); way/192573692 = Museu de Arte Sacra e Cripta (OSM h 30.3 made a generic 30 m block behind the façade; really one storey over the nave floor) → mf1 'museum'
   { id: 'sao-domingos', name: 'Nhà thờ São Domingos', group: 'm1', osm: ['way/192573688'], near: 20, view: [200, 70] },
   { id: 'se-catedral', name: 'Sé Catedral', group: 'm1', osm: ['way/330368426'], near: 20, view: [190, 90] }, // OSM has no height (church default), left to the group
   { id: 'sao-lourenco', name: 'Nhà thờ São Lourenço', group: 'm1', osm: ['way/279952093'], near: 15, view: [200, 90] }, // OSM h 40.5 (likely includes the hill)
