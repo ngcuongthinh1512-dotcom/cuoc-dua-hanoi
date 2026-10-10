@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { latLonToWorld } from '@race/shared';
 import { Color, Mesh, Scene } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { terrain as T, water as W } from '../config.ts';
+import { landmarks as L, terrain as T, water as W } from '../config.ts';
 import { chunkBounds, type WaterData } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
@@ -149,6 +149,23 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
         if (grid.h[r * grid.cols + c]! >= y) expect.fail(`water polygon ${i}: ground at node ${c}, ${r} above its surface ${y}`);
       });
     });
+  });
+
+  it('every Performance Lake jet (m3.ts wynnPodium: bed + lakeDepth) stands in the lake, whose surface is that high over the bed', () => {
+    const K = L.m3.wynn.lake;
+    const inRing = (x: number, z: number, r: number[]) => {
+      let inside = false;
+      for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) if (r[i + 1]! > z !== r[j + 1]! > z && x < r[i]! + ((z - r[i + 1]!) * (r[j]! - r[i]!)) / (r[j + 1]! - r[i + 1]!)) inside = !inside;
+      return inside;
+    };
+    const lake = water.polygons.findIndex((p) => !p.river && inRing(K.x, K.z, p.outer));
+    expect(lake).toBeGreaterThanOrEqual(0);
+    for (const [r, count] of K.rings)
+      for (let k = 0; k < count; k++) {
+        const [x, z] = [K.x + r * Math.cos((2 * Math.PI * k) / count), K.z + r * Math.sin((2 * Math.PI * k) / count)];
+        expect(inRing(x, z, water.polygons[lake]!.outer), `jet ${r}/${k} in the lake`).toBe(true);
+        expect(waterLevelOf(grid, water, lake) - heightAt(grid, x, z)).toBeCloseTo(W.lakeDepth, 3);
+      }
   });
 
   it('Rapier heightfield matches heightAt within 2 cm', async () => {

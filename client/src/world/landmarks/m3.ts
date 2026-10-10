@@ -18,7 +18,7 @@
 //   fisherman-wharf: the Roman Amphitheatre record (OSM way/192180012) carries the Colosseum arcade along its own outline
 //     (smoothed, inside it: no spill over the neighbouring houses) with a solid core + arena roof; the site polygon a
 //     lighthouse on the seaward tip; the convention centre a "Babylon" ziggurat roof and an LED rim.
-import { landmarks as L, lighting as LT } from '../../config.ts';
+import { landmarks as L, lighting as LT, water as WA } from '../../config.ts';
 import { type BuildingRec, type LandmarkId, type PartRec, ringArea, type XZ } from '../../geo/chunkData.ts';
 import { ringCentroid } from '../../geo/clip.ts';
 import type { BuildOut, MaterialId } from '../buildTypes.ts';
@@ -477,7 +477,7 @@ function wynnPodium(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   ribs(paint(s, 'neon', glow(W.rim, W.ribBright)), rings[0]!, ctx.ground + 5, ctx.ground + rec.height! - 1.2, W.rib, 0.3);
   // Performance Lake: water jets on rings around the fountain node, a lit ring at each jet foot
   const K = W.lake;
-  const yw = ctx.height(K.x, K.z) + 0.05;
+  const yw = ctx.height(K.x, K.z) + WA.lakeDepth + 0.05; // Terrain.carveRiver sinks the lake bed lakeDepth under its surface: the jets stand on the water
   const jet = paint(s, 'neon', glow(K.jet, K.jetBright), 'near'); // lit from below at night: the jets glow
   const light = paint(s, 'neon', glow(K.light, K.lightBright), 'near');
   for (const [r, count, h] of K.rings) {

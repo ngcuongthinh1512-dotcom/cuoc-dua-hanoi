@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { landmarks as L } from '../../config.ts';
+import { landmarks as L, water as WA } from '../../config.ts';
 import { type BuildingRec, chunkBounds, ringArea, type XZ } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
@@ -254,6 +254,12 @@ describe('m3 landmarks (stand-in outlines)', () => {
     let minY = Infinity;
     for (const m of o.meshes) for (let i = 1; i < m.position.length; i += 3) minY = Math.min(minY, m.position[i]!);
     expect(minY).toBeCloseTo(10 - L.sink, 6);
+  });
+  it('Performance Lake jets stand on the water: lakeDepth above the carved bed (the lowest lit vertex is the lowest jet foot)', () => {
+    const o = build('wynn-macau', rec(rect(600, 500, 900, 760), { height: 23.1 }));
+    let minY = Infinity;
+    for (const m of o.meshes) if (m.material === 'neon') for (let i = 1; i < m.position.length; i += 3) minY = Math.min(minY, m.position[i]!);
+    expect(minY).toBeCloseTo(10 + WA.lakeDepth + 0.05, 6);
   });
   it('unknown small Wynn records fall back to the generic renderer (the pavilion kept low)', () => {
     const st = stats(build('wynn-macau', rec(rect(0, 0, 10, 15))));
