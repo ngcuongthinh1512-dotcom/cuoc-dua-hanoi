@@ -6,7 +6,8 @@ import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { MeshBuffer } from '../geom.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
-import { compass, details, lattice, petal, roundEndFrame, scaleRing, walls } from './m4.ts';
+import { compass, details, petal, roundEndFrame, scaleRing, walls } from './m4.ts';
+import { recordGround } from './parts.ts';
 
 const M = L.m4;
 const G = 10;
@@ -46,12 +47,6 @@ describe('m4 helpers', () => {
   it('scaleRing scales about the given centre', () => {
     expect(scaleRing(rect(0, 0, 10, 10), 0.5, 5, 5)).toEqual(rect(2.5, 2.5, 7.5, 7.5));
   });
-  it('lattice: 2 strips per cell, cells fitted to each face', () => {
-    const b = new MeshBuffer('masonry');
-    lattice(b, rect(0, 0, 18, 9), 0, 16, { w: 9, h: 8, t: 0.5, out: 0.2 });
-    // faces 18, 9, 18, 9 m → 2 + 1 + 2 + 1 columns × 2 rows × 2 strips × 2 triangles
-    expect(b.bucket().index.length / 3).toBe(6 * 2 * 2 * 2);
-  });
   it('roundEndFrame points +u at the end with more vertices', () => {
     const ring = [...rect(0, 0, 40, 20).slice(0, 4), 45, 5, 46, 10, 45, 15, ...rect(0, 0, 40, 20).slice(4)];
     expect(roundEndFrame(ring).ux).toBeGreaterThan(0.9);
@@ -67,15 +62,28 @@ describe('m4 helpers', () => {
 });
 
 describe('m4 landmarks', () => {
-  it('bank-of-china: shaft + crown to 163 m, curtain with lit seed, ≤ 15k triangles', () => {
-    const o = build('bank-of-china', { outer: rect(0, 0, 45, 40), kind: 'office', height: 116.3 });
-    const s = stats(o);
+  it('bank-of-china: main shaft to 116.3 m + the tower record on its roof up to 163 m, curtain with lit seed, ≤ 15k triangles', () => {
+    const main = build('bank-of-china', { outer: rect(0, 0, 45, 40), kind: 'office', height: 116.3 });
+    const s = stats(main);
     expect(s.nan).toBe(0);
-    expect(s.maxY).toBeCloseTo(G + M.boc.height, 3);
+    expect(s.maxY).toBeCloseTo(G + M.boc.body + 0.05, 3); // + the lit roof edge
     expect(s.tris).toBeLessThan(15000);
-    expect(s.materials).toEqual(['curtain', 'masonry', 'metal', 'neon']);
-    expect(o.meshes.find((m) => m.material === 'curtain')!.lit![0]).toBeCloseTo(M.boc.lit, 6);
-    expect(o.colliders.length).toBe(1);
+    expect(s.materials).toEqual(['curtain', 'masonry', 'neon']);
+    expect(main.meshes.find((m) => m.material === 'curtain')!.lit![0]).toBeCloseTo(M.boc.lit, 6);
+    expect(main.colliders.length).toBe(1);
+    const t = stats(build('bank-of-china', { outer: rect(0, 5, 30, 40), kind: 'commercial', height: 166 }));
+    expect(t.nan).toBe(0);
+    expect(t.maxY).toBeCloseTo(G + M.boc.height, 3);
+    expect(t.tris).toBeLessThan(15000);
+  });
+  it('bank-of-china: on a slope both records share one ground, the tower part starts exactly on the main roof (audit a4)', () => {
+    const slope = (x: number, z: number) => G + 0.08 * x - 0.05 * z; // the two outlines' own grounds differ here
+    const at = (outer: XZ, height: number) => details['bank-of-china']!({ outer, kind: 'yes', height }, [], { ...ctx('bank-of-china'), height: slope, ...recordGround(outer, slope) }, helpers);
+    const main = at(rect(300, 360, 390, 440), 116.3);
+    const tower = at(rect(320, 370, 370, 420), 166);
+    const roof = Math.max(...main.meshes.filter((m) => m.material === 'curtain').flatMap((m) => [...m.position].filter((_, i) => i % 3 === 1)));
+    const foot = stats(tower).minY;
+    expect(foot).toBeCloseTo(roof, 6);
   });
   it('cultural-centre: block + auditorium to the OSM height, the sail higher still', () => {
     const outer = [...rect(0, 0, 100, 60).slice(0, 4), 110, 15, 113, 30, 110, 45, ...rect(0, 0, 100, 60).slice(4)];
@@ -85,6 +93,32 @@ describe('m4 landmarks', () => {
     expect(s.maxY).toBeLessThan(G + 25.6 + M.cultural.sail.rise + 2);
     expect(s.tris).toBeLessThan(15000);
   });
+  it('cultural-centre: the auditorium block stays on its outline at a pointed end and a side notch (audit a4)', () => {
+    // the box on the frame (x 52.5–90, z 11.4–48.6) stuck out of this pointed end and across the notch at x 55–65, z 0–14
+    const outer = [0, 0, 55, 0, 55, 14, 65, 14, 65, 0, 70, 0, 85, 8, 95, 18, 100, 30, 95, 42, 85, 52, 70, 60, 0, 60];
+    const o = build('cultural-centre', { outer, kind: 'yes', height: 25.6 });
+    const C = M.cultural;
+    const inside = (x: number, z: number) => {
+      let [ins, d] = [false, Infinity];
+      for (let i = 0, j = outer.length - 2; i < outer.length; j = i, i += 2) {
+        const [ax, az, bx, bz] = [outer[j]!, outer[j + 1]!, outer[i]!, outer[i + 1]!];
+        if (az > z !== bz > z && x < ((bx - ax) * (z - az)) / (bz - az) + ax) ins = !ins;
+        const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2)));
+        d = Math.min(d, Math.hypot(x - ax - t * (bx - ax), z - az - t * (bz - az)));
+      }
+      return ins || d < 0.01;
+    };
+    let n = 0;
+    for (const m of o.meshes.filter((q) => q.material === 'masonry')) {
+      for (let i = 0; i < m.position.length; i += 3) {
+        const y = m.position[i + 1]! - G;
+        if (Math.abs(y - (C.wall - 0.5)) > 0.01) continue; // the block's foot ring (no other vertex at that height)
+        n++;
+        expect(inside(m.position[i]!, m.position[i + 2]!), `${m.position[i]}, ${m.position[i + 2]}`).toBe(true);
+      }
+    }
+    expect(n).toBeGreaterThan(7);
+  });
   it('kun-iam-statue: 7 m base + 20 m figure on the plinth', () => {
     const o = build('kun-iam-statue', { outer: circle(0, 0, 9.7), kind: 'yes', height: 20 });
     const s = stats(o);
@@ -92,6 +126,7 @@ describe('m4 landmarks', () => {
     expect(s.maxY).toBeCloseTo(G + M.kunIam.base.plinth + M.kunIam.base.h + 20, 3);
     expect(s.tris).toBeLessThan(15000);
     expect(o.colliders.length).toBe(1);
+    expect(Math.max(...[...o.colliders[0]!.vertices].filter((_, i) => i % 3 === 0))).toBeCloseTo(9.7 + 0.6, 3); // the plinth's rim is solid too (audit a4)
   });
   it('praca-flor-de-lotus: the lotus stands at the configured node, ≈ 6 m over its granite base', () => {
     const o = build('praca-flor-de-lotus', { outer: rect(500, 500, 600, 600), kind: 'artwork' });
@@ -107,6 +142,13 @@ describe('m4 landmarks', () => {
     expect(s.maxY - (G + 0.06 + base)).toBeLessThan(7);
     expect(s.tris).toBeLessThan(15000);
     expect(build('praca-flor-de-lotus', { outer: circle(0, 0, 6.4), kind: 'yes' }).meshes).toEqual([]); // the statue outline
+    // on a slope the level paving disc is a solid platform: no walking into its skirt and under the granite base (audit a4)
+    const slope = (x: number) => G + 0.3 * (x - p.x);
+    const o2 = details['praca-flor-de-lotus']!({ outer: rect(500, 500, 600, 600), kind: 'artwork' }, [], { ...ctx('praca-flor-de-lotus'), height: slope }, helpers);
+    const R = M.lotus.paving.r;
+    const ys = o2.colliders.flatMap((c) => [...c.vertices].filter((_, i) => i % 3 === 1));
+    expect(Math.min(...ys)).toBeCloseTo(G - 0.3 * R - 0.4, 3); // from under the lowest ground…
+    expect(ys.some((y) => Math.abs(y - (G + 0.3 * R + 0.06)) < 1e-3)).toBe(true); // …to the disc top
   });
   it('portas-do-cerco: the small outline is the gate, the big one the border post', () => {
     const gate = stats(build('portas-do-cerco', { outer: rect(0, 0, 19, 3), kind: 'yes' }));

@@ -615,6 +615,8 @@ export const landmarks = {
       // drum = its own OSM record (way/1418312721, h 61.8 = drum + crown, the records below maxArea m²); z = its centre (world
       // m): the wings' outline is cut there; crown [radius share, height m] bottom → top (est. from photos)
       drum: { z: 97, maxArea: 3000, crown: [[0.8, 1.5], [1.14, 1.4], [0.62, 4], [0.78, 0.8], [0.25, 2]] as [number, number][] },
+      // the hotel tower = the record taller than `above` m (OSM way/1201888817, h 116.7; audit a4): gold glass, a lit band per floor
+      tower: { above: 80, floor: 3.4, lit: 0.2, bandBright: 0.9, inset: 0.3 }, // inset: m off its outline (one edge lies ON the casino's wall: no z-fighting, hidden below the wings' roof)
       sign: 'SANDS', signPixel: 2.2, signColour: '#ff2b20', signBright: 2.6,
     },
     wharf: {
@@ -627,7 +629,7 @@ export const landmarks = {
       ziggurat: { steps: [34, 25, 16], stepH: 4, colour: '#cfae6a', edge: '#ffb84a', edgeBright: 1.8 },
       rim: '#7fd0ff', rimBright: 1.4,
       // lighthouse on the site's seaward tip (outline point farthest towards `azimuth`, `inset` m back)
-      lighthouse: { azimuth: 120, inset: 8, height: 18, r: 2.2, white: '#f2efe8', red: '#b8322a', lamp: '#fff4c0', lampBright: 3 },
+      lighthouse: { azimuth: 120, inset: 8, reach: 6, height: 18, r: 2.2, white: '#f2efe8', red: '#b8322a', lamp: '#fff4c0', lampBright: 3 }, // reach: m, its ground = the highest terrain this far around (audit a4)
     },
   },
   // m4 (world/landmarks/m4.ts): Bank of China, Cultural Centre, Kun Iam statue, Lotus Square, Portas do Cerco. Published
@@ -638,16 +640,17 @@ export const landmarks = {
     // floodlight bake: ambient + strength × side light (normal's horizontal part, or n·dir), × (1 − fade · height share)
     flood: { ambient: 0.45, strength: 0.75, fade: 0.35, top: 0.25 }, // top: extra on up-facing faces (moon / spill)
     boc: {
-      // 163 m, 38 floors, 1991, P&T Architects (Wikipedia "Bank of China Building, Macau", SkyscraperPage); OSM h 116.3
-      // = the top of the main shaft, the rest is the stepped crown + mast
+      // 163 m, 38 floors, 1991, P&T Architects (Wikipedia "Bank of China Building, Macau", SkyscraperPage). Two OSM records
+      // (audit a4): the main outline w/699456294 (h 116.3 = where the outer wings stop, photos) and the tower w/356056416
+      // inside it (h 166, 38 levels) = the central shaft going on up; 163 = the tip of the ornament
       height: 163, body: 116.3,
-      tiers: [[0.9, 126], [0.76, 134], [0.6, 141], [0.44, 147]] as [number, number][], // [scale about the centroid, top m]
-      pyramid: 156, // m: apex of the crown pyramid over the last tier; the mast goes on to `height`
-      mast: 0.7, // m half-width
-      floor: 4.1, bay: 3, // m: curtain uv (163 m / 38 floors ≈ 4.3)
-      lattice: { w: 9, h: 8.2, t: 0.55, out: 0.18 }, // the diamond lattice: cell width (fitted per face), height, strip width, offset
-      colours: { glass: '#8fa6bb', granite: '#d8d0c4', crown: '#c9c3ba', mast: '#9aa0a6', edge: '#cfe6ff', beacon: '#ff3020' },
-      edgeIntensity: 2.6, edgeH: 0.8, beaconIntensity: 4, lit: 0.37, // lit = the window seed (curtain shader)
+      at: [356.9, 403.7] as [number, number], // world x, z (main outline's centroid): both records count their heights from the ground here
+      tiers: [[1, 150], [0.8, 155], [0.55, 159]] as [number, number][], // the tower part: [scale about its centroid, top m] (est.)
+      ornament: 2.2, // m: radius of the red-lit ornament on the top, up to `height` (est.)
+      floor: 4.1, bay: 3, spandrel: 0.32, // m: curtain uv (163 m / 38 floors ≈ 4.3); share of each floor clad in granite
+      podium: 24, cornerW: 0.35, // m: the lit corner lines start above the granite podium (night photos); their width
+      colours: { glass: '#8fa6bb', granite: '#9a7a6c', edge: '#cfe6ff', ornament: '#ff3020' }, // granite: the brown cladding (photos)
+      edgeIntensity: 2.6, edgeH: 0.8, ornamentIntensity: 4, lit: 0.37, // lit = the window seed (curtain shader)
     },
     cultural: {
       // Macau Cultural Centre (1999, O-BS / Intergaup / Caldeira Cabral): Grand Auditorium + Macao Museum of Art; OSM h 25.6

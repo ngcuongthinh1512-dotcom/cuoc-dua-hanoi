@@ -13,7 +13,8 @@
 //     each inset / trimmed a little differently, "MGM GRAND" across the gold tier; the podium with the Grande Praça
 //     glass vault and the golden lion on its OSM artwork point.
 //   sands-macau (G4, photos): gold glass drum (OSM way/1418312721) + stacked "hat" crown between dark glass wings with
-//     gold fins, red "SANDS" sign on the wings' roof.
+//     gold fins, red "SANDS" sign on the wings' roof; the hotel tower (way/1201888817) gold glass too, the hotel's low
+//     outline (way/667429625, under the wings) nothing (audit a4).
 //   fisherman-wharf: the Roman Amphitheatre record (OSM way/192180012) carries the Colosseum arcade along its own outline
 //     (smoothed, inside it: no spill over the neighbouring houses) with a solid core + arena roof; the site polygon a
 //     lighthouse on the seaward tip; the convention centre a "Babylon" ziggurat roof and an LED rim.
@@ -339,7 +340,9 @@ function lisboaCasino(s: Sink, ctx: LandmarkCtx) {
   const [x, z, R, n] = [K.x, K.z, K.r, K.segs];
   const g = ctx.height(x, z);
   const ring = (r: number, y: number, m = n) => circle(x, z, r, y, m);
-  loft(paint(s, 'masonry', rgb(C.base)), [ring(R, g - L.sink), ring(R, g + K.base)]);
+  // the drum stands on a slope (the ground falls 2.5 m to the SW): its foot goes down to the lowest ground on its rim, no gap
+  const foot = Math.min(...ring(R, 0).map((p) => ctx.height(p[0], p[2]))) - L.sink;
+  loft(paint(s, 'masonry', rgb(C.base)), [ring(R, foot), ring(R, g + K.base)]);
   loft(paint(s, 'neon', glow(C.panel, B.panel)), [ring(R, g + K.base), ring(R, g + K.grid)]);
   const mul = paint(s, 'masonry', rgb(C.mullion));
   for (let j = 0; j < K.rows; j++) {
@@ -358,7 +361,7 @@ function lisboaCasino(s: Sink, ctx: LandmarkCtx) {
   const y1 = yc + K.cornice;
   loft(gold, [ring(R, yc), ring(R + 0.8, yc + 0.4), ring(R + 0.8, y1)]);
   disc(gold, ring(R + 0.8, y1), 1);
-  s.prism([circle(x, z, R, 0, 24).flatMap((p) => [p[0], p[2]])], g - L.sink, y1);
+  s.prism([circle(x, z, R, 0, 24).flatMap((p) => [p[0], p[2]])], foot, y1);
   // crown: fan arches, inner drum, dome, rosette, finial
   const w = ((TAU * R) / K.petals) * K.petalW;
   const tilt = (K.tilt * Math.PI) / 180;
@@ -680,6 +683,15 @@ function sands(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const D = S.drum;
   const g = ctx.ground;
   const yb = ctx.minGround - L.sink;
+  // "Sands Macao Hotel" (OSM way/667429625, no height, inside the casino outline under the wings' roof, most of its walls ON
+  // the casino's): nothing, a plain block z-fought with the dark walls (audit a4)
+  if (!rec.height) return EMPTY;
+  // the hotel tower (OSM way/1201888817, inside the wings' outline): gold glass like the drum (audit a4, photo Commons
+  // "Macau Fisherman's Wharf and Sands Macau 13-06-2025(1).jpg"), not a plain punched-window tower
+  if (rec.height > S.tower.above) {
+    litSlab(s, inset(ring, S.tower.inset), ctx, rec.height, S.gold, S.tower.floor, S.tower.lit, glow(S.band, S.tower.bandBright), glow(S.rim, S.rimBright));
+    return s.out();
+  }
   // G4 (photos): the small round record (OSM way/1418312721, h 61.8) = the gold glass drum carrying the stacked "hat"
   // crown; the big one = dark navy glass wings with gold fins, cut off at the drum's centre line (no z-fighting walls)
   if (Math.abs(ringArea(ring)) < D.maxArea) {
@@ -731,7 +743,7 @@ function colosseum(s: Sink, ctx: LandmarkCtx, outline: XZ) {
   const cur = outlineCurve(outline, C.smooth);
   const [cx, cz] = ringCentroid(outline);
   const yg = ctx.height(cx, cz);
-  const yb = yg - L.sink;
+  const yb = ctx.minGround - L.sink; // the DEM falls 2 m to the E / SE: the wall (and the ground tier's pilasters) reach the lowest ground, no gap
   const total = C.tiers.reduce((t, h) => t + h, 0);
   const n = C.arches * 2;
   const wall = paint(s, 'masonry', rgb(C.colour));
@@ -778,9 +790,9 @@ function colosseum(s: Sink, ctx: LandmarkCtx, outline: XZ) {
       // pilaster on the bay's edge
       const e2 = cur.at(k / C.arches, C.edge);
       const Q = (u: number, o: number, y: number): V3 => [e2.x + e2.tx * u + e2.nx * o, y, e2.z + e2.tz * u + e2.nz * o];
-      const [w, d] = [0.45, 0.5];
+      const [w, d, p0] = [0.45, 0.5, tier ? y0 : yb];
       for (const [u0, o0, u1, o1] of [[-w, d, w, d], [w, 0, w, d], [-w, d, -w, 0]] as const) {
-        quadOut(pil, Q(u0, o0, y0), Q(u1, o1, y0), Q(u1, o1, y0 + h), Q(u0, o0, y0 + h), [e2.nx * (o0 + o1 - 0.5) + e2.tx * (u0 + u1), 0, e2.nz * (o0 + o1 - 0.5) + e2.tz * (u0 + u1)]);
+        quadOut(pil, Q(u0, o0, p0), Q(u1, o1, p0), Q(u1, o1, y0 + h), Q(u0, o0, y0 + h), [e2.nx * (o0 + o1 - 0.5) + e2.tx * (u0 + u1), 0, e2.nz * (o0 + o1 - 0.5) + e2.tz * (u0 + u1)]);
       }
     }
     y0 += h;
@@ -805,7 +817,9 @@ function lighthouse(s: Sink, site: XZ, ctx: LandmarkCtx) {
   const [cx, cz] = ringCentroid(site);
   const l = Math.hypot(cx - px, cz - pz) || 1;
   const [x, z] = [px + ((cx - px) / l) * H.inset, pz + ((cz - pz) / l) * H.inset];
-  const yg = ctx.height(x, z);
+  // the tip is on the quay: the DEM there is carveRiver's slope down to the sea bed (8 m under the coping), the highest
+  // ground within `reach` is the quay top
+  const yg = Math.max(ctx.height(x, z), ...circle(x, z, H.reach, 0, 8).map((p) => ctx.height(p[0], p[2])));
   const bands = 6;
   const rAt = (t: number) => H.r * (1 - 0.3 * t);
   for (let k = 0; k < bands; k++) {
