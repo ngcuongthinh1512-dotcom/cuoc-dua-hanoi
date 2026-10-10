@@ -735,7 +735,7 @@ export const landmarks = {
       podium: { h: 10, band: [3.2, 4.2] as [number, number] }, // exhibition wing, est.; glowing window band y range
       spiral: { turns: 2.5, y0: 5, y1Share: 0.9, h: 1.4, out: 0.3, bright: 1.6 }, // the lit spiral slit following the inner ramp
       colours: { clad: '#cfd4d9', podium: '#dcdedf', spiral: '#8fd0ff', band: '#ffe6bd', hall: '#c4c8cc' },
-      bandBright: 1.2,
+      bandBright: 0.8, // < 1: a channel over 1 clips (the neon bucket is not tone-mapped) and the warm band read as a burnt-out white strip
       nightCladBoost: 3, // cone / dome vertex colour × this at night so the grey metal keeps its daytime look (ponytail: fixed night, a ?time=day dev view over-exposes it)
     },
   },
