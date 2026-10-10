@@ -4,12 +4,12 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { latLonToWorld } from '@race/shared';
 import { Color, Mesh, Scene } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { terrain as T } from '../config.ts';
+import { terrain as T, water as W } from '../config.ts';
 import { chunkBounds, type WaterData } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
 import { PADS } from '../geo/landmarks.ts';
-import { buildTerrain, carveRiver, createTerrainCollider, flattenPads, quayMesh, riverLevel } from './Terrain.ts';
+import { buildTerrain, carveRiver, createTerrainCollider, fillRings, flattenPads, quayMesh, riverLevel, waterLevelOf } from './Terrain.ts';
 import { createWater } from './Water.ts';
 
 const flat = (): HeightGrid => ({ minX: 0, minZ: 0, cell: 5, cols: 61, rows: 61, h: new Float32Array(61 * 61) });
@@ -57,6 +57,27 @@ describe('carveRiver', () => {
       else if (ax === bx) expect(Math.sign(n[0]!)).toBe({ 100: 1, 130: -1, 170: 1, 200: -1 }[ax!]); // walls look at the water
     }
     expect(quads).toBe(2 * 6); // 2 banks + 4 island edges, wall + coping each
+  });
+
+  it('sinks lakes under a surface at their rim height (no DEM island, none where the quay band rose) and raises a low bank', () => {
+    const g: HeightGrid = { minX: 0, minZ: 0, cell: 5, cols: 121, rows: 61, h: new Float32Array(121 * 61) };
+    const node = (x: number, z: number) => (z / 5) * g.cols + x / 5;
+    g.h[node(475, 150)] = 4; // a DEM bump in the far pond
+    g.h[node(445, 150)] = -2; // a dip beside its west shore (off the ring itself)
+    const far = { river: false, outer: [450, 100, 500, 100, 500, 200, 450, 200] }; // beyond the quay band's reach
+    const near = { river: false, outer: [220, 100, 260, 100, 260, 140, 220, 140] }; // in the quay band of the river
+    const w: WaterData = { v: 1, polygons: [...square.polygons, far, near] };
+    carveRiver(g, w);
+    for (const i of [1, 2]) {
+      const y = waterLevelOf(g, w, i);
+      expect(y).toBeCloseTo(W.otherLift, 5); // the rims stood at 0 before the carve
+      fillRings([w.polygons[i]!.outer], 0, 0, 5, g.cols, g.rows, (c, r) => expect(at(g, c, r)).toBeLessThanOrEqual(y - W.lakeDepth + 1e-6));
+    }
+    expect(g.h[node(445, 150)]).toBeCloseTo(0, 5);
+    const scene = new Scene();
+    createWater(scene, w, g);
+    const ys = Array.from((scene.getObjectByName('water') as Mesh).geometry.getAttribute('position').array).filter((_, k) => k % 3 === 1);
+    expect(ys.filter((y) => Math.abs(y - W.otherLift) < 1e-5)).toHaveLength(8); // both ponds' corners
   });
 
   it('warns and leaves the grid alone when no node is in a river', () => {
@@ -118,6 +139,16 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
     expect(heightAt(grid, 2382, 393)).toBeCloseTo(level - T.riverDepth, 4); // the carved bed, mid Outer Harbour
     // Leg 2: the DEM's own sea floor beyond the carved polygons goes deeper (−36), Paris had nothing below the carved bed
     expect(grid.h.reduce((a, b) => Math.min(a, b))).toBeLessThanOrEqual(level - T.riverDepth + 1e-4);
+  });
+
+  it('no ground node inside a lake / pond reaches its surface (Nam Van had DEM islands up to 35 m)', () => {
+    water.polygons.forEach((p, i) => {
+      if (p.river) return;
+      const y = waterLevelOf(grid, water, i);
+      fillRings([p.outer, ...(p.holes ?? [])], grid.minX, grid.minZ, grid.cell, grid.cols, grid.rows, (c, r) => {
+        if (grid.h[r * grid.cols + c]! >= y) expect.fail(`water polygon ${i}: ground at node ${c}, ${r} above its surface ${y}`);
+      });
+    });
   });
 
   it('Rapier heightfield matches heightAt within 2 cm', async () => {

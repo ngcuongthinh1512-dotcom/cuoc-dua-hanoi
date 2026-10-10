@@ -3,9 +3,9 @@
 import RAPIER from '@dimforge/rapier3d-compat'; // sideEffects: false → tree-shaken out of the worker bundle
 import { latLonToWorld } from '@race/shared';
 import { Color, type Material, MeshStandardMaterial } from 'three';
-import { stairs as ST, terrain as T } from '../config.ts';
+import { stairs as ST, terrain as T, water as W } from '../config.ts';
 import { CHUNK_SIZE, ringArea, type WaterData, type XZ } from '../geo/chunkData.ts';
-import type { HeightGrid } from '../geo/heightGrid.ts';
+import { type HeightGrid, heightAt } from '../geo/heightGrid.ts';
 import { PADS } from '../geo/landmarks.ts';
 import type { Builder, MaterialId, TriMesh } from './buildTypes.ts';
 import { MeshBuffer, offsetPolyline, type V3 } from './geom.ts';
@@ -40,7 +40,35 @@ function riverMask(g: HeightGrid, water: WaterData): Uint8Array {
   return mask;
 }
 
-const carved = new WeakMap<HeightGrid, { level: number; water: WaterData }>();
+const carved = new WeakMap<HeightGrid, { level: number; water: WaterData; lakes: number[] }>();
+
+/** Surface y of every other water polygon (lake, pond, basin; NaN for a river), index-aligned with water.polygons: the
+ *  water.lakeRim quantile of the heights along its outer ring (no higher than the low part of its rim) + water.otherLift. */
+function lakeLevels(g: HeightGrid, water: WaterData): number[] {
+  return water.polygons.map((p) => {
+    if (p.river) return Number.NaN;
+    const r = p.outer;
+    const hs: number[] = [];
+    for (let i = 0; i < r.length; i += 2) {
+      const [ax, az, bx, bz] = [r[i]!, r[i + 1]!, r[(i + 2) % r.length]!, r[(i + 3) % r.length]!];
+      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / g.cell));
+      for (let k = 0; k < n; k++) hs.push(heightAt(g, ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n));
+    }
+    hs.sort((a, b) => a - b);
+    return hs[Math.floor(W.lakeRim * (hs.length - 1))]! + W.otherLift;
+  });
+}
+
+/** Surface y of water polygon i: the river level, or its lake level (carveRiver), else the mean ring height + otherLift. */
+export function waterLevelOf(g: HeightGrid, water: WaterData, i: number): number {
+  const p = water.polygons[i]!;
+  if (p.river) return riverLevel(g, water);
+  const y = carved.get(g)?.lakes[i];
+  if (y !== undefined && !Number.isNaN(y)) return y;
+  let sum = 0;
+  for (let k = 0; k < p.outer.length; k += 2) sum += heightAt(g, p.outer[k]!, p.outer[k + 1]!);
+  return sum / (p.outer.length / 2) + W.otherLift;
+}
 
 /** Quantile q (default: median) of the grid heights over the masked nodes (NaN if none). */
 function quantile(g: HeightGrid, mask: Uint8Array, q = 0.5): number {
@@ -108,6 +136,7 @@ function ringDistance(ring: XZ, x: number, z: number): number {
  *  banks, so beyond the band that floor falls off at quayGrade until it meets the DEM (no trench behind the quay).
  *  ponytail: the lower quays (berges) end up at street level under the band, carve them from WaterData.quays if needed. */
 export function carveRiver(g: HeightGrid, water: WaterData): void {
+  const lakes = lakeLevels(g, water); // from the rims as the DEM has them, before the quay band below raises some
   const mask = riverMask(g, water);
   const found = quantile(g, mask);
   if (Number.isNaN(found)) {
@@ -167,7 +196,38 @@ export function carveRiver(g: HeightGrid, water: WaterData): void {
     if (d === 0) g.h[k] = level - T.riverDepth;
     else if (d < reach) g.h[k] = Math.max(g.h[k]!, top - T.quayGrade * Math.max(0, d - T.quayBand));
   }
-  carved.set(g, { level, water });
+  // Lakes, ponds, basins (not carved like the sea): every node inside sinks water.lakeDepth under the surface (the DEM's
+  // bumps and the quay band above stood out of the water as islands); every land node next to one, and every island
+  // (hole), is raised to its rim height (no water sheet hanging over a low bank). Sea bed nodes stay.
+  const lake = new Int16Array(g.h.length).fill(-1);
+  water.polygons.forEach((p, i) => {
+    if (p.river) return;
+    const y = lakes[i]!;
+    fillRings([p.outer, ...(p.holes ?? [])], g.minX, g.minZ, cell, cols, rows, (c, r) => {
+      const k = r * cols + c;
+      g.h[k] = Math.min(g.h[k]!, y - W.lakeDepth);
+      lake[k] = i;
+    });
+    for (const hole of p.holes ?? []) {
+      fillRings([hole], g.minX, g.minZ, cell, cols, rows, (c, r) => {
+        const k = r * cols + c;
+        if (dist[k]) g.h[k] = Math.max(g.h[k]!, y - W.otherLift);
+      });
+    }
+  });
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const k = r * cols + c;
+      if (lake[k]! >= 0 || dist[k] === 0) continue;
+      for (let rr = Math.max(r - 1, 0); rr <= Math.min(r + 1, rows - 1); rr++) {
+        for (let cc = Math.max(c - 1, 0); cc <= Math.min(c + 1, cols - 1); cc++) {
+          const i = lake[rr * cols + cc]!;
+          if (i >= 0) g.h[k] = Math.max(g.h[k]!, lakes[i]! - W.otherLift);
+        }
+      }
+    }
+  }
+  carved.set(g, { level, water, lakes });
 }
 
 /** Ring oriented so the river is on its LEFT (outer counter-clockwise from above, holes clockwise). */

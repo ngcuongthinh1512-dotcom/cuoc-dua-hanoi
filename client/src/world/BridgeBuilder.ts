@@ -137,6 +137,10 @@ export const buildBridges: Builder = (chunk, ctx) => {
     const mid = p.at(0, L / 2);
     const overRiver = ctx.height(mid[0], mid[1]) < base(mid[0], mid[1], L / 2) - 3;
     const up = rail(b) || !overRiver ? Math.max(0, b.layer - 1) * railLayerStep : 0;
+    // A land deck of layer 1 (the usual OSM tag of an overpass) is not lifted: it lies on the street, path or square under
+    // it, where its parapets stood as a 1.1 m wall across (or along) the way. ponytail: no parapets at grade; a real overpass
+    // needs its stairs / ramps (other OSM ways) raised with it.
+    const atGrade = !overRiver && !up;
     const y: YFn =
       up && rail(b) ? (x, z) => (lowerAt(x, z) ?? Math.max(ctx.height(x, z), riverDeck)) + up : (x, z, s) => base(x, z, s) + up;
 
@@ -185,7 +189,7 @@ export const buildBridges: Builder = (chunk, ctx) => {
     // Railings (parapets) on the outer edges.
     const r = buf('railing');
     for (const side of [1, -1] as const) {
-      if (gaps[side === 1 ? 0 : 1]! < Infinity || C.bridge.bare.includes(b.name ?? '')) continue;
+      if (atGrade || gaps[side === 1 ? 0 : 1]! < Infinity || C.bridge.bare.includes(b.name ?? '')) continue;
       const [o, i] = [side * H, side * (H - RT)];
       wall(r, p, r0, r1, o, y, 0, RH, side, max);
       wall(r, p, r0, r1, i, y, 0, RH, side === 1 ? -1 : 1, max);
