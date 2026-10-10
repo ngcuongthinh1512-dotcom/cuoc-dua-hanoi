@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { landmarks as L } from '../../config.ts';
-import { type BuildingRec, chunkBounds, type LandmarkId, ringArea, type XZ } from '../../geo/chunkData.ts';
+import { type BuildingRec, type ChunkData, chunkBounds, type LandmarkId, ringArea, type XZ } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
@@ -173,7 +175,7 @@ describe('m2 landmarks on synthetic outlines', () => {
       const s = stats(build(id, { outer: r, kind: 'church', height: 40 }));
       expect(s.nan, id).toBe(0);
       expect(s.tris, id).toBeLessThan(15_000);
-      const top = 10 + c.platform + Math.max(c.towerH + (c.cap === 'dome' ? 4 : 5.6), c.facadeH + c.pediment + 1.8, c.wallH + c.rise);
+      const top = 10 + c.platform + Math.max(c.towerH + { dome: 4, pyramid: 5.6, flat: 1.7 }[c.cap], c.facadeH + c.pediment + 1.8, c.wallH + c.rise);
       expect(s.maxY, id).toBeCloseTo(top, 1);
       expectInside({ meshes: build(id, { outer: r, kind: 'church' }).meshes, instances: [], colliders: [] }, r, 12);
     }
@@ -181,5 +183,55 @@ describe('m2 landmarks on synthetic outlines', () => {
   it('ermida-penha: the large outline is the residence (no tower)', () => {
     const s = stats(build('ermida-penha', { outer: rect(0, 0, 25, 30), kind: 'yes', height: 73.3 }));
     expect(s.maxY).toBeLessThanOrEqual(10 + M.penhaHouse.height + 1e-6);
+  });
+});
+
+/** Even-odd point in polygon. */
+const inRing = (x: number, z: number, p: XZ) => {
+  let inside = false;
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+    if (p[i + 1]! > z !== p[j + 1]! > z && x < ((p[j]! - p[i]!) * (z - p[i + 1]!)) / (p[j + 1]! - p[i + 1]!) + p[i]!) inside = !inside;
+  }
+  return inside;
+};
+const edgeDist = (x: number, z: number, p: XZ) => {
+  let d = Infinity;
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+    const [ax, az, bx, bz] = [p[j]!, p[j + 1]!, p[i]!, p[i + 1]!];
+    const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2 || 1)));
+    d = Math.min(d, Math.hypot(x - ax - t * (bx - ax), z - az - t * (bz - az)));
+  }
+  return d;
+};
+/** Farthest a vertex ≥ 2.5 m above the (flat, y 10) ground lies outside the outline (0 = all inside). */
+function spill(o: BuildOut, r: XZ) {
+  let d = 0;
+  for (const m of o.meshes) for (let i = 0; i < m.position.length; i += 3) if (m.position[i + 1]! >= 12.5 && !inRing(m.position[i]!, m.position[i + 2]!, r)) d = Math.max(d, edgeDist(m.position[i]!, m.position[i + 2]!, r));
+  return d;
+}
+
+// the real records (committed chunk data): the leg 2 audit found the church builders spilling out of the OSM outlines
+const real = (key: string, id: LandmarkId) => (JSON.parse(readFileSync(join(import.meta.dirname, `../../../public/data/chunks/${key}.json`), 'utf8')) as ChunkData).buildings.filter((b) => b.landmark === id);
+describe('m2 churches on the real OSM outlines (leg 2 audit)', () => {
+  const cases: [LandmarkId, string, string][] = [
+    ['sao-lourenco', '-2_1', 'the twin towers stand on the narrower façade block, not in the street beside it'],
+    ['santo-agostinho', '-1_0', 'the nave stops at the notched back (it reached 10 m into the neighbouring house), an annex fills the rest'],
+    ['ermida-penha', '-2_2', 'chapel + residence (whose hipped roof bridged the courtyard)'],
+  ];
+  for (const [id, key, why] of cases) {
+    it(`${id}: nothing above 2.5 m leaves the outline by more than 1.5 m (cornices, eaves); ${why}`, () => {
+      const recs = real(key, id);
+      expect(recs.length).toBeGreaterThan(0);
+      for (const rec of recs) {
+        const o = build(id, rec);
+        expect(stats(o).nan).toBe(0);
+        expect(spill(o, rec.outer), `${id} ${rec.kind}`).toBeLessThan(1.5);
+      }
+    });
+  }
+  it('ermida-penha: the façade is the chapel\'s short (gable) end, as in the photos, not its 30 m long side', () => {
+    const chapel = real('-2_2', 'ermida-penha').find((b) => Math.abs(ringArea(b.outer)) < 400)!;
+    const f = facing(chapel.outer, M.churches['ermida-penha']!.az);
+    expect(f.a).toBeGreaterThan(2 * f.b);
   });
 });

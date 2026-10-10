@@ -141,3 +141,37 @@ describe('m1 details on the real outlines', () => {
     expect(out.colliders.length).toBe(1); // the basin
   });
 });
+
+/** Even-odd point in polygon / distance to the ring's edges. */
+const inRing = (x: number, z: number, p: XZ) => {
+  let inside = false;
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+    if (p[i + 1]! > z !== p[j + 1]! > z && x < ((p[j]! - p[i]!) * (z - p[i + 1]!)) / (p[j + 1]! - p[i + 1]!) + p[i]!) inside = !inside;
+  }
+  return inside;
+};
+const edgeDist = (x: number, z: number, p: XZ) => {
+  let d = Infinity;
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+    const [ax, az, bx, bz] = [p[j]!, p[j + 1]!, p[i]!, p[i + 1]!];
+    const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2 || 1)));
+    d = Math.min(d, Math.hypot(x - ax - t * (bx - ax), z - az - t * (bz - az)));
+  }
+  return d;
+};
+
+describe('m1 on the real outlines: nothing above 2.5 m leaves the OSM outline by more than 1.6 m (leg 2 audit)', () => {
+  for (const id of ['se-catedral', 'sao-domingos', 'santa-casa', 'leal-senado'] as LandmarkId[]) {
+    it(`${id}${id === 'se-catedral' ? ': the east tower stops where the outline steps in (it stood 2 m inside the neighbouring house)' : ''}`, () => {
+      const { key, rec } = recs.find((r) => r.rec.landmark === id)!;
+      let d = 0;
+      for (const m of details[id]!(rec, [], ctxOf(key, rec), helpers).meshes) {
+        for (let i = 0; i < m.position.length; i += 3) {
+          const [x, y, z] = [m.position[i]!, m.position[i + 1]!, m.position[i + 2]!];
+          if (y >= slope(x, z) + 2.5 && !inRing(x, z, rec.outer)) d = Math.max(d, edgeDist(x, z, rec.outer));
+        }
+      }
+      expect(d).toBeLessThan(1.6); // cornices, tower fronts 0.9 m proud; the São Domingos balcony: 1.5 m
+    });
+  }
+});

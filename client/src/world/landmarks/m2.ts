@@ -1,8 +1,8 @@
 // Leg 2 landmark group m2 (docs/plans/leg2-landmarks.md §4, agent o2): hill forts, Chinese temples, the Lou Lim Ioc garden and
 // three hill churches, built in code from the OSM outlines (no downloads). Tunables: config landmarks.m2 (published figures
 // cited there, the rest est.). Night: 'neon' buckets only (unlit MeshBasic, colour × lighting.emissiveScale; the chunk worker
-// cannot tell day from night, so lanterns / windows / the beacon read as coloured glass by day). Colliders: platforms, walls,
-// halls, steps (ramp), never detail geometry (SPEC §5.9).
+// cannot tell day from night, so lanterns / windows / the beacon read as coloured glass by day); the churches are floodlit with
+// m1's bakeFlood like the m1 churches. Colliders: platforms, walls, halls, steps (ramp), never detail geometry (SPEC §5.9).
 //   fortaleza-monte: terrace on the hilltop + battered outer wall down the slope, parapet, merlons, cannons, gate steps.
 //   fortaleza-guia: low walls following the hilltop, merlons, gate gap. farol-guia: the 15 m white lighthouse (OSM h ignored).
 //   templo-ama: terraces up the Barra hill, granite gate with lions, three halls with curved roofs, lanterns, incense coils.
@@ -15,6 +15,7 @@ import type { BuildOut, MaterialId } from '../buildTypes.ts';
 import { MeshBuffer, mergeBuckets, offsetPolyline, triangulate, type V3 } from '../geom.ts';
 import type { DetailFn, LandmarkCtx } from './index.ts';
 import { footprintFrame, loft, quadOut, triOut } from './kit.ts';
+import { bakeFlood } from './m1.ts';
 import { parseColour, partRings, renderPart, Sink } from './parts.ts';
 
 const M = L.m2;
@@ -839,21 +840,35 @@ function church(rec: BuildingRec, ctx: LandmarkCtx, c: ChurchCfg): BuildOut {
   // skewed / notched outline covered the street beside it: Calçada do Tronco Velho, the steps up to São Lourenço)
   const yb = ctx.minGround - L.sink;
   const y0 = maxInside(ring, ctx.height) + c.platform;
+  const yf = c.platform > 0.05 ? y0 : yb; // walls stand on the platform (its sides cover the slope; flush faces from yb flickered)
   const wall = paint(s, 'masonry', C.wall);
   const trim = paint(s, 'masonry', C.trim);
   const tw = c.towers ? c.towerW : 0;
-  const td = c.towers === 2 ? Math.min(c.towerW, f.a * 0.4) : c.towers === 1 ? c.towerW * 0.6 : 1.2; // façade block depth (1 tower: its part in front of the nave)
+  const td = c.towers === 2 ? Math.min(c.towerW, f.a * 0.4) : c.towers === 1 ? 0.4 : 1.2; // façade block depth (1 tower: proud of the nave's gable front)
   const fa = f.a; // front at +fa
   const nw = f.b * c.nave;
+  // Leg 2 audit: the façade spans the outline's front edge, not the frame (São Lourenço: a 20 m façade block on a 30 m frame,
+  // the twin towers stood in the street beside it) and the nave stays inside the outline (Santo Agostinho's notched back put
+  // it 10 m into the neighbouring house): its ends move in until they are inside, the outline behind it is a flat annex
+  const fe = edgeFacing(ring, (Math.atan2(f.ux, -f.uz) * 180) / Math.PI, 4);
+  const ws = [fe, (fe + 1) % (ring.length / 2)].map((i) => (ring[2 * i]! - f.cx) * -f.uz + (ring[2 * i + 1]! - f.cz) * f.ux);
+  const [wl, wr] = [Math.max(-f.b, Math.min(...ws)), Math.min(f.b, Math.max(...ws))];
+  const g: Fr = { ...f, cx: f.cx - ((wl + wr) / 2) * f.uz, cz: f.cz + ((wl + wr) / 2) * f.ux, b: (wr - wl) / 2 }; // the façade's frame
+  const across = (a: number) => Array.from({ length: 41 }, (_, i) => atXZ(f, a, (nw - 0.6) * (i / 20 - 1))).every(([x, z]) => inRing(x, z, ring)); // the end wall less the eaves overhang
+  let [n0, n1] = [-fa + 0.05, fa - td];
+  while (n1 > n0 + 6 && !across(n1)) n1 -= 0.25;
+  while (n0 < n1 - 6 && !across(n0)) n0 += 0.25;
   // platform + steps to the street in front
   s.prism([ring], yb, y0 + c.wallH); // the whole body (platform, nave, façade block) as one solid
   if (c.platform > 0.05) {
     prismMesh(paint(s, 'masonry', C.trim), ring, yb, y0);
-    stairs(s, trim, ctx.height, ...atXZ(f, fa + 0.02, 0), f.ux, f.uz, y0, Math.min(2 * f.b, 10));
+    stairs(s, trim, ctx.height, ...atXZ(g, fa + 0.02, 0), f.ux, f.uz, y0, Math.min(2 * g.b, 10));
   }
+  const annex = bandOf(ring, f, -fa - 1, n0);
+  if (annex.length) prismMesh(wall, annex, yf, y0 + c.wallH - 0.6);
   // nave: walls, plinth + cornice bands, gable roof, side windows
-  const nave = [-fa, fa - td] as const;
-  bx(wall, f, nave[0], nave[1], yb, y0 + c.wallH, -nw, nw);
+  const nave = [n0, n1] as const;
+  bx(wall, f, nave[0], nave[1], yf, y0 + c.wallH, -nw, nw);
   bx(trim, f, nave[0] - 0.12, nave[1], y0, y0 + 0.7, -nw - 0.12, nw + 0.12);
   bx(trim, f, nave[0] - 0.15, nave[1], y0 + c.wallH - 0.5, y0 + c.wallH, -nw - 0.15, nw + 0.15);
   gableRoof(paint(s, 'masonry', C.roof), wall, f, nave[0], nave[1], nw, y0 + c.wallH, c.rise, 0.6);
@@ -863,73 +878,96 @@ function church(rec: BuildingRec, ctx: LandmarkCtx, c: ChurchCfg): BuildOut {
     const ac = nave[0] + (len * (k + 0.5)) / c.windows;
     for (const sd of [-1, 1]) bx(win, f, ac - 0.6, ac + 0.6, y0 + c.wallH * 0.35, y0 + c.wallH * 0.8, sd > 0 ? nw : -nw - 0.05, sd > 0 ? nw + 0.05 : -nw);
   }
-  // façade block
-  const [f0, f1] = [fa - td, fa];
+  // façade block (frame g: centred on the outline's front edge)
+  const [f0, f1] = [n1, fa];
   const top = y0 + c.facadeH;
-  const mid = c.towers === 2 ? f.b - tw : c.towers === 1 ? tw / 2 + 0.01 : f.b;
-  if (c.towers !== 1) bx(wall, f, f0, f1, yb, top, -mid, mid); // 1 tower: the nave's gable end is the façade
+  const mid = c.towers === 2 ? g.b - tw : c.towers === 1 ? tw / 2 + 0.01 : g.b;
+  if (c.towers !== 1) bx(wall, g, f0, f1, yf, top, -mid, mid); // 1 tower: the nave's gable end is the façade
   if (c.pediment > 0) {
     // triangular pediment over the centre (front + back faces, sloped tops in trim)
     const [p0, p1] = [f1 - 0.6, f1 + 0.1];
     for (const [aa, sd] of [[p0, -1], [p1, 1]] as const) {
-      const o = at(f, sd, 0, 0);
-      triOut(wall, at(f, aa, top, -mid), at(f, aa, top, mid), at(f, aa, top + c.pediment, 0), [o[0] - f.cx, 0, o[2] - f.cz]);
+      const o = at(g, sd, 0, 0);
+      triOut(wall, at(g, aa, top, -mid), at(g, aa, top, mid), at(g, aa, top + c.pediment, 0), [o[0] - g.cx, 0, o[2] - g.cz]);
     }
     for (const sd of [-1, 1]) {
-      const q = [at(f, p0 - 0.1, top, sd * (mid + 0.3)), at(f, p1 + 0.15, top, sd * (mid + 0.3)), at(f, p1 + 0.15, top + c.pediment + 0.3, 0), at(f, p0 - 0.1, top + c.pediment + 0.3, 0)] as const;
-      const o = at(f, 0, 0, sd);
-      quadOut(trim, q[0], q[1], q[2], q[3], [o[0] - f.cx, 1, o[2] - f.cz]);
+      const q = [at(g, p0 - 0.1, top, sd * (mid + 0.3)), at(g, p1 + 0.15, top, sd * (mid + 0.3)), at(g, p1 + 0.15, top + c.pediment + 0.3, 0), at(g, p0 - 0.1, top + c.pediment + 0.3, 0)] as const;
+      const o = at(g, 0, 0, sd);
+      quadOut(trim, q[0], q[1], q[2], q[3], [o[0] - g.cx, 1, o[2] - g.cz]);
     }
-    bx(trim, f, f1 - 0.2, f1 + 0.1, top + c.pediment + 0.3, top + c.pediment + 1.8, -0.1, 0.1, true); // cross
-    bx(trim, f, f1 - 0.2, f1 + 0.1, top + c.pediment + 1.1, top + c.pediment + 1.3, -0.5, 0.5, true);
+    bx(trim, g, f1 - 0.2, f1 + 0.1, top + c.pediment + 0.3, top + c.pediment + 1.8, -0.1, 0.1, true); // cross
+    bx(trim, g, f1 - 0.2, f1 + 0.1, top + c.pediment + 1.1, top + c.pediment + 1.3, -0.5, 0.5, true);
   }
-  // façade trim: base, entablature, cornice, pilasters (front), door, window above
-  const front = f1;
-  const pil = Math.max(2, Math.round((2 * mid) / 3.5));
+  // façade trim: base, entablature, cornice, pilasters (front) round an odd number of bays (the door in the middle one),
+  // door, window above (1 tower: on the nave's gable front)
+  const front = c.towers === 1 ? n1 : f1;
+  const pil = Math.max(3, Math.round((2 * mid) / 3.5) | 1);
+  const bay = (2 * mid - 0.7) / pil;
   if (c.towers !== 1) {
-    bx(trim, f, front - 0.2, front + 0.12, y0, y0 + 0.7, -mid - 0.1, mid + 0.1);
-    bx(trim, f, front - 0.2, front + 0.18, y0 + c.facadeH * 0.55, y0 + c.facadeH * 0.55 + 0.6, -mid - 0.1, mid + 0.1);
-    bx(trim, f, front - 0.2, front + 0.25, top - 0.6, top, -mid - 0.15, mid + 0.15);
+    bx(trim, g, front - 0.2, front + 0.12, y0, y0 + 0.7, -mid - 0.1, mid + 0.1);
+    bx(trim, g, front - 0.2, front + 0.18, y0 + c.facadeH * 0.55, y0 + c.facadeH * 0.55 + 0.6, -mid - 0.1, mid + 0.1);
+    bx(trim, g, front - 0.2, front + 0.25, top - 0.6, top, -mid - 0.15, mid + 0.15);
     for (let k = 0; k <= pil; k++) {
-      const w = -mid + 0.35 + ((2 * mid - 0.7) * k) / pil;
-      bx(trim, f, front, front + 0.15, y0 + 0.7, top - 0.6, w - 0.3, w + 0.3);
+      const w = -mid + 0.35 + bay * k;
+      bx(trim, g, front, front + 0.15, y0 + 0.7, top - 0.6, w - 0.3, w + 0.3);
     }
   }
   const door = paint(s, 'masonry', C.door);
-  const dw = Math.min(1.3, mid * 0.45);
+  const dw = Math.min(1.3, mid * 0.45, c.towers === 1 ? 1.3 : bay / 2 - 0.35); // between the pilasters
   const dc = c.towers === 1 ? (-(c.side ?? 0) * tw) / 2 : 0; // door / window centre: beside an off-centre tower
-  bx(door, f, front, front + 0.06, y0, y0 + Math.min(4.2, c.facadeH * 0.4), dc - dw, dc + dw);
-  if (c.towers === 2) for (const sd of [-1, 1]) bx(door, f, front, front + 0.06, y0, y0 + 3.2, sd * mid * 0.55 - 0.8, sd * mid * 0.55 + 0.8);
-  bx(win, f, front, front + 0.05, y0 + c.facadeH * 0.62, y0 + c.facadeH * 0.85, dc - dw * 0.6, dc + dw * 0.6);
-  if (c.towers !== 1) for (const sd of [-1, 1]) bx(win, f, front, front + 0.05, y0 + c.facadeH * 0.64, y0 + c.facadeH * 0.84, sd * mid * 0.5 - 0.5, sd * mid * 0.5 + 0.5);
+  bx(door, g, front, front + 0.06, y0, y0 + Math.min(4.2, c.facadeH * 0.4), dc - dw, dc + dw);
+  if (c.towers === 2) for (const sd of [-1, 1]) bx(door, g, front, front + 0.06, y0, y0 + 3.2, sd * bay - Math.min(0.8, dw), sd * bay + Math.min(0.8, dw)); // in the next bays
+  bx(win, g, front, front + 0.05, y0 + c.facadeH * 0.62, y0 + c.facadeH * 0.85, dc - dw * 0.6, dc + dw * 0.6);
+  if (c.towers !== 1) for (const sd of [-1, 1]) bx(win, g, front, front + 0.05, y0 + c.facadeH * 0.64, y0 + c.facadeH * 0.84, sd * mid * 0.5 - 0.5, sd * mid * 0.5 + 0.5);
   // towers: shaft, cornices, belfry openings, cap
-  const towerAt = c.towers === 2 ? [-f.b + tw / 2, f.b - tw / 2] : c.towers === 1 ? [(c.side ?? 0) * (nw - tw / 2)] : [];
+  const towerAt = c.towers === 2 ? [-g.b + tw / 2, g.b - tw / 2] : c.towers === 1 ? [(c.side ?? 0) * (g.b - tw / 2)] : [];
   const capB = paint(s, 'masonry', c.cap === 'dome' ? C.trim : C.roof);
   for (const w of towerAt) {
     const [t0, t1] = c.towers === 1 ? [f1 - tw, f1] : [f0, f1];
     const ht = tw / 2;
-    bx(wall, f, t0, t1, yb, y0 + c.towerH, w - ht, w + ht);
-    cbx(s, f, t0, t1, yb, y0 + c.towerH, w - ht, w + ht);
-    for (const y of [y0 + c.facadeH - 0.6, y0 + c.towerH - 0.5]) bx(trim, f, t0 - 0.15, t1 + 0.15, y, y + 0.5, w - ht - 0.15, w + ht + 0.15);
-    bx(trim, f, t0 - 0.12, t1 + 0.12, y0, y0 + 0.7, w - ht - 0.12, w + ht + 0.12);
+    bx(wall, g, t0, t1, yf, y0 + c.towerH, w - ht, w + ht);
+    cbx(s, g, t0, t1, yb, y0 + c.towerH, w - ht, w + ht);
+    for (const y of [y0 + c.facadeH - 0.6, y0 + c.towerH - 0.5]) bx(trim, g, t0 - 0.15, t1 + 0.15, y, y + 0.5, w - ht - 0.15, w + ht + 0.15);
+    bx(trim, g, t0 - 0.12, t1 + 0.12, y0, y0 + 0.7, w - ht - 0.12, w + ht + 0.12);
     const b0 = y0 + c.towerH - 4.2;
     const dark = paint(s, 'masonry', '#2a2622');
     for (const [aa, ww, faceA] of [[t1, w, true], [t0, w, true], [(t0 + t1) / 2, w - ht, false], [(t0 + t1) / 2, w + ht, false]] as const) {
-      if (faceA) bx(dark, f, aa - 0.04, aa + 0.04, b0, b0 + 2.8, ww - ht * 0.45, ww + ht * 0.45);
-      else bx(dark, f, aa - ht * 0.45, aa + ht * 0.45, b0, b0 + 2.8, ww - 0.04, ww + 0.04);
+      if (faceA) bx(dark, g, aa - 0.04, aa + 0.04, b0, b0 + 2.8, ww - ht * 0.45, ww + ht * 0.45);
+      else bx(dark, g, aa - ht * 0.45, aa + ht * 0.45, b0, b0 + 2.8, ww - 0.04, ww + 0.04);
     }
     const [ca, cy] = [(t0 + t1) / 2, y0 + c.towerH];
-    const [x, , z] = at(f, ca, 0, w);
+    const [x, , z] = at(g, ca, 0, w);
     if (c.cap === 'dome') {
       revolve(capB, x, z, [[cy, ht * 0.85], [cy + 0.6, ht * 0.85], [cy + 1.6, ht * 0.7], [cy + 2.4, ht * 0.4], [cy + 2.8, 0.15]], 12);
       revolve(trim, x, z, [[cy + 2.8, 0.08], [cy + 4.0, 0.08]], 4);
-    } else {
-      const sq = (r: number, y: number): V3[] => [at(f, ca - r, y, w - r), at(f, ca + r, y, w - r), at(f, ca + r, y, w + r), at(f, ca - r, y, w + r)];
+    } else if (c.cap === 'pyramid') {
+      const sq = (r: number, y: number): V3[] => [at(g, ca - r, y, w - r), at(g, ca + r, y, w - r), at(g, ca + r, y, w + r), at(g, ca - r, y, w + r)];
       loft(capB, [sq(ht + 0.2, cy), sq(0.08, cy + 4.5)]);
       revolve(trim, x, z, [[cy + 4.5, 0.08], [cy + 5.6, 0.08]], 4);
+    } else {
+      // 'flat': roof behind a balustrade (plinth, posts, rail), urns on the corners
+      const r = ht + 0.1;
+      for (const [a0, a1, w0, w1] of [[t0 - 0.1, t1 + 0.1, w - r, w - r + 0.3], [t0 - 0.1, t1 + 0.1, w + r - 0.3, w + r], [t0 - 0.1, t0 + 0.2, w - r, w + r], [t1 - 0.2, t1 + 0.1, w - r, w + r]] as const) {
+        bx(trim, g, a0, a1, cy, cy + 0.2, w0, w1);
+        bx(trim, g, a0, a1, cy + 0.8, cy + 0.95, w0, w1);
+        for (let i = 0; i < 6; i++) {
+          const [p, q] = a1 - a0 > w1 - w0 ? [a0 + ((a1 - a0) * (i + 0.5)) / 6, (w0 + w1) / 2] : [(a0 + a1) / 2, w0 + ((w1 - w0) * (i + 0.5)) / 6];
+          bx(trim, g, p - 0.12, p + 0.12, cy + 0.2, cy + 0.8, q - 0.12, q + 0.12);
+        }
+      }
+      for (const u of [t0 + 0.05, t1 - 0.05]) {
+        for (const v of [w - r + 0.15, w + r - 0.15]) {
+          const [ux, , uz] = at(g, u, 0, v);
+          revolve(trim, ux, uz, [[cy + 0.95, 0.2], [cy + 1.25, 0.28], [cy + 1.55, 0.12], [cy + 1.7, 0.03]], 6);
+        }
+      }
     }
   }
-  return s.out();
+  // floodlit at night like the m1 churches (Sé, São Domingos; m1 bakeFlood, config landmarks.m1.flood): the race runs at night
+  // and the plain masonry read as a dark mass (leg 2 audit)
+  const o = s.out();
+  const H = Math.max(c.towerH, c.facadeH + c.pediment, c.wallH + c.rise);
+  return { ...o, meshes: o.meshes.map((m) => bakeFlood(m, y0, H)) };
 }
 
 /** Ermida da Penha: the small outline = the chapel, the large one (wrapped around it) = the bishop's residence. */
