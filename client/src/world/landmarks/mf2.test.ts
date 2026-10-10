@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { landmarks as L } from '../../config.ts';
 import { type BuildingRec, chunkBounds, type PartRec, type XZ } from '../../geo/chunkData.ts';
+import { inRing } from '../../geo/districts.ts';
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
@@ -93,6 +94,25 @@ describe('macau-tower', () => {
     expect(s.materials).toEqual(['glass', 'masonry', 'neon']);
     expect(s.box.x1).toBeLessThan(150.2);
     expect(fn({ outer: circle(100, 200, 22.5), kind: 'yes', landmark: 'macau-tower' }, [], ctx('macau-tower'), helpers).meshes).toEqual([]);
+  });
+
+  it('convention centre: the roof-edge LED faces out of the outline on every edge, the concave notch included', () => {
+    // the real outline (chunk -1_5): loft's centroid hint turned the strip on the south side's notch inwards (a dark gap, audit a1)
+    const CENTRE: XZ = [-102.6, 1506.8, -106, 1496.8, -109.3, 1487.4, -114.9, 1470.9, -117.2, 1464.2, -122.3, 1465.4, -130.8, 1467.6, -144.2, 1468.6, -158.7, 1466.9, -170.9, 1463.8, -176.7, 1461.4, -181.2, 1459.5, -186.3, 1462.3, -194.3, 1466.7, -251.2, 1497.7, -241.3, 1507.3, -229.9, 1515.1, -216.5, 1523.4, -198.9, 1531.1, -183.5, 1537.5, -180.7, 1523.4, -162.3, 1530.4, -162.1, 1524.3, -148.8, 1524.9, -148, 1520.8, -130.9, 1518.4, -101, 1511.6];
+    for (const outer of [CENTRE, CENTRE.flatMap((_, i, a) => (i % 2 ? [] : [a[a.length - 2 - i]!, a[a.length - 1 - i]!]))]) { // both windings
+      const led = fn({ outer, kind: 'commercial', height: 39, landmark: 'macau-tower' }, [], ctx('macau-tower'), helpers).meshes.find((m) => m.material === 'neon')!;
+      const p = led.position;
+      expect(led.index.length / 3).toBe(CENTRE.length); // 2 triangles per edge
+      for (let t = 0; t < led.index.length; t += 3) {
+        const [a, b, c] = [0, 1, 2].map((k) => led.index[t + k]! * 3) as [number, number, number];
+        const [ux, uy, uz, vx, vy, vz] = [p[b]! - p[a]!, p[b + 1]! - p[a + 1]!, p[b + 2]! - p[a + 2]!, p[c]! - p[a]!, p[c + 1]! - p[a + 1]!, p[c + 2]! - p[a + 2]!];
+        const [nx, nz] = [uy * vz - uz * vy, ux * vy - uy * vx]; // front face (counter-clockwise) normal
+        const l = Math.hypot(nx, nz);
+        const [mx, mz] = [(p[a]! + p[b]! + p[c]!) / 3, (p[a + 2]! + p[b + 2]! + p[c + 2]!) / 3];
+        expect(inRing(mx + (0.4 * nx) / l, mz + (0.4 * nz) / l, CENTRE), `LED at ${mx.toFixed(1)}, ${mz.toFixed(1)}`).toBe(false);
+        expect(inRing(mx - (0.4 * nx) / l, mz - (0.4 * nz) / l, CENTRE)).toBe(true);
+      }
+    }
   });
 });
 

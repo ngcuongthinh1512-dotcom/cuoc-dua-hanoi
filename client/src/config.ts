@@ -687,7 +687,7 @@ export const landmarks = {
       // façade ≈ 27 m high × 23.5 m wide (Macau Heritage / Wikipedia "Ruins of St. Paul's"); OSM outline h 26.4
       width: 23.5, height: 27, depth: 1.6, // m: the stone wall is ≈ 1.6 m thick (est.)
       front: 5.6, // m south of the nave outline's south edge: the façade line of OSM way/192183185 (the 21 × 2 m building=yes slab)
-      museumTop: 11, // m above its ground: the Museum of Sacred Art / Crypt (way/192573692, OSM h 30.3) if registered, level with the platform
+      museumTop: 16.5, // m above its ground (≈ 2.2): the Museum of Sacred Art / Crypt (way/192573692, OSM h 30.3, registered by audit a1): one storey (≈ 4 m) over the platform, as on Commons "Behind the façade of St. Paul's in Macau.jpg"
       tiers: [6.6, 12.2, 17.6, 22.2, 25.5], // m: top of tiers 1–4 and of the pediment (the cross reaches `height`); proportions est.
       tier4Width: 14, pedimentWidth: 10, // m (est.)
       cornice: { h: 0.6, out: 0.9 }, // entablature band between tiers: height, projection in front of the wall (over the capitals)
@@ -698,12 +698,15 @@ export const landmarks = {
       buttress: { w: 1, d: 1.2, n: 3 }, // ribs on the back (the modern steel stair is not built)
       // the stone platform the façade stands on and its great stair (68 steps in reality): the AWS DEM is blurred flat
       // here (≈ 5 m everywhere), so the climb is built: rise = est. 9 m over the OSM steps way (43 m)
-      terrace: { halfWidth: 12.5, back: 40, rise: 9 }, // m: half-width of the platform, how far it reaches behind the façade
+      terrace: { halfWidth: 12.5, back: 49.5, rise: 9 }, // m: half-width of the platform, how far it reaches behind the façade (audit a1: 40 → 49.5, up to the museum's recessed middle, which was a closed 10 m pit between its wings)
       stair: { halfWidth: 10, bottom: 63.5, top: 21.65, flights: 4, landing: 4, cheek: { w: 0.6, h: 0.9 } }, // local z (south of the façade foot): bottom = just north of the OSM pedestrian way across the stair foot (world z ≈ −373; was 68.65: its cheeks barred that way), top = OSM stair end (z ≈ −416)
-      // side flights down both platform edges where the OSM footway across the Largo in front of the façade leaves it (local
-      // z, m; Rua da Ressurreição on the west, the college remains on the east): the DEM is flat, so without them that footway
-      // ends at a 9 m drop (Leg 2 fix, docs/reports/leg2-fixes.md)
-      sideStairs: { z: 10, width: 3.5, riser: 0.18, tread: 0.3 },
+      // side flights down both platform walls from where the OSM footway across the Largo in front of the façade leaves it
+      // (local z, m; Rua da Ressurreição on the west, Calçada de S. Paulo on the east): the DEM is flat, so without them that
+      // footway ends at a 9 m drop (Leg 2 fix, docs/reports/leg2-fixes.md). dir = local z each flight descends along, against
+      // the wall on the OSM footway there: west north (way/248826423), east south (way/710516683). Audit a1: run outwards
+      // they crossed Rua da Ressurreição into the Cinemateca Paixão and lay across Calçada de S. Paulo; width keeps the east
+      // one off that road's carriageway
+      sideStairs: { z: 10, width: 1.8, riser: 0.18, tread: 0.3, dir: [-1, 1] as [number, number] },
       ruinWall: { h: 1.1, t: 0.7, gapEvery: 7, gap: 1.6 }, // low wall remains along the nave outline and the college outline (east)
       // floodlit façade: unlit vertex colours = stone × (ambient + strength × max(0, n·dir) × (1 − fade·y/height)); dir = from the
       // lamps on the platform up into the façade (uplighting), × lighting.emissiveScale. Same by day (the worker knows no time).

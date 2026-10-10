@@ -246,23 +246,24 @@ function platform(k: Sink, hAt: (x: number, z: number) => number, T: number): Tr
   }
   inner.push([z, y - 0.03]);
   nose.push([z, y]);
-  // side flights at sideStairs.z, outward along ±x down to the terrain (box steps + one walkable ramp each)
+  // side flights against both platform walls, from sideStairs.z along local z (dir) down to the terrain (box steps + one
+  // walkable ramp each): run outwards along ±x they crossed the side streets (audit a1)
   const SS = R.sideStairs;
-  const hz = SS.width / 2;
-  for (const sd of [-1, 1]) {
-    let [x, yy] = [sd * hw, 0];
+  for (const [sd, dz] of [[-1, SS.dir[0]], [1, SS.dir[1]]] as const) {
+    const [xa, xb] = [sd * hw, sd * (hw + SS.width)];
+    let [z, yy] = [SS.z, 0];
     for (let q = 0; q < 80; q++) {
-      const xb = x + sd * SS.tread;
-      const g = Math.min(hAt(x, SS.z - hz), hAt(xb, SS.z - hz), hAt(x, SS.z + hz), hAt(xb, SS.z + hz)) - T;
+      const zb = z + dz * SS.tread;
+      const g = Math.min(hAt(xa, z), hAt(xb, z), hAt(xa, zb), hAt(xb, zb)) - T;
       if (yy - SS.riser <= g + 0.02) break;
-      box(M, Math.min(x, xb), Math.max(x, xb), g - 0.4, yy - SS.riser, SS.z - hz, SS.z + hz);
-      [x, yy] = [xb, yy - SS.riser];
+      box(M, Math.min(xa, xb), Math.max(xa, xb), g - 0.4, yy - SS.riser, Math.min(z, zb), Math.max(z, zb));
+      [z, yy] = [zb, yy - SS.riser];
     }
-    if (x === sd * hw) continue;
-    const [xe, ye] = [x + sd * SS.tread, yy - SS.riser];
-    // upward-facing quad: (x0, 0, z−) → (xe, ye, z−) → (xe, ye, z+) → (x0, 0, z+); winding flipped on the west side
-    const v = new Float32Array([sd * hw, 0, SS.z - hz, xe, ye, SS.z - hz, xe, ye, SS.z + hz, sd * hw, 0, SS.z + hz]);
-    ramps.push({ vertices: v, indices: new Uint32Array(sd > 0 ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3]), stairs: true });
+    if (z === SS.z) continue;
+    const [ze, ye] = [z + dz * SS.tread, yy - SS.riser];
+    // upward-facing quad: (xa, 0, top) → (xb, 0, top) → (xb, ye, foot) → (xa, ye, foot); its winding flips with sd · dz
+    const v = new Float32Array([xa, 0, SS.z, xb, 0, SS.z, xb, ye, ze, xa, ye, ze]);
+    ramps.push({ vertices: v, indices: new Uint32Array(sd * dz > 0 ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3]), stairs: true });
   }
   // core under the steps and the two cheek walls: profiles extruded along x
   const yLow = -R.terrace.rise - 2;
