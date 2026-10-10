@@ -607,10 +607,11 @@ export const landmarks = {
       sign: 'SANDS', signPixel: 2.2, signColour: '#ff2b20', signBright: 2.6,
     },
     wharf: {
-      // Fisherman's Wharf (2005). The amphitheatre is OSM way/192180012 (a plain building without height, not part of
-      // the landmark): the Colosseum arcade wraps it (centre / half-axes fitted to its outline, height est.)
-      colosseum: { x: 1708, z: 17, a: 49, b: 26, tiers: [8, 8, 6], // tiers: m; the plain block inside is 20 m (buildings.defaultHeight)
-        arches: 34, colour: '#d8c29a', arch: '#3b2f22', lit: '#ffc070', litBright: 1.8 },
+      // Fisherman's Wharf (2005). The Roman Amphitheatre is OSM way/192180012 (its own landmark record, no height): the
+      // Colosseum arcade follows its outline (corners cut `smooth` times), the wall `edge` m inside it (cornices / pilasters / arch ends stay inside too); `core` = the solid
+      // block's / arena roof's height (m above ground, the plain block used to be 20 m); tiers: m
+      colosseum: { edge: -1, smooth: 3, core: 20.3, tiers: [8, 8, 6],
+        arches: 30, colour: '#d8c29a', arch: '#3b2f22', lit: '#ffc070', litBright: 1.8 },
       // "Babylon" stepped roof on the convention centre (OSM relation/10387813, h 20.8): est.
       ziggurat: { steps: [34, 25, 16], stepH: 4, colour: '#cfae6a', edge: '#ffb84a', edgeBright: 1.8 },
       rim: '#7fd0ff', rimBright: 1.4,

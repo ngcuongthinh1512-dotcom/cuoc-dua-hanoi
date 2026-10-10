@@ -4,7 +4,7 @@ import { type BuildingRec, chunkBounds, ringArea, type XZ } from '../../geo/chun
 import { LANDMARK_BY_ID } from '../../geo/landmarks.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { helpers, type LandmarkCtx } from './index.ts';
-import { clipRing, details, ellipseAt, fanArch, lisboaPiece, mgmWave, signCols, signRuns } from './m3.ts';
+import { clipRing, details, ellipseAt, fanArch, lisboaPiece, mgmWave, outlineCurve, signCols, signRuns } from './m3.ts';
 
 type Id = 'hotel-lisboa' | 'wynn-macau' | 'mgm-macau' | 'sands-macau' | 'fisherman-wharf';
 const ctx = (id: Id): LandmarkCtx => ({ key: '0_0', bounds: chunkBounds('0_0'), height: () => 10, def: LANDMARK_BY_ID.get(id)!, ground: 10, minGround: 10 });
@@ -82,6 +82,44 @@ describe('m3 pure helpers', () => {
   });
 });
 
+/** OSM way/192180012 (Anfiteatro Romano), world m: 9 points, ≈ 3 000 m², long axis tilted ~ −22° (an axis-aligned ellipse spilled over the houses). */
+const AMPHI: XZ = [1690.3, -3.1, 1660.7, 25.9, 1683.6, 38.1, 1704.5, 40.9, 1719.9, 36.7, 1736.5, 26, 1746.9, 0.7, 1747.4, -10, 1706.6, -9.8];
+/** Even-odd point in polygon. */
+const inRing = (x: number, z: number, p: XZ) => {
+  let inside = false;
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+    if (p[i + 1]! > z !== p[j + 1]! > z && x < ((p[j]! - p[i]!) * (z - p[i + 1]!)) / (p[j + 1]! - p[i + 1]!) + p[i]!) inside = !inside;
+  }
+  return inside;
+};
+
+describe('outlineCurve', () => {
+  it('stays inside a convex outline, is closed, evenly spaced, with unit outward normals (either winding)', () => {
+    for (const ring of [AMPHI, [...AMPHI.map((_, i) => AMPHI[AMPHI.length - 2 - (i - (i % 2)) + (i % 2)]!)]]) {
+      const c = outlineCurve(ring, 3);
+      expect(c.length).toBeGreaterThan(190);
+      expect(c.length).toBeLessThan(225);
+      const [cx, cz] = [1703, 17];
+      for (let k = 0; k < 60; k++) {
+        const e = c.at(k / 60, -0.01); // on a straight edge the curve IS the edge: a hair inside
+        expect(inRing(e.x, e.z, AMPHI)).toBe(true);
+        expect(Math.hypot(e.nx, e.nz)).toBeCloseTo(1, 6);
+        expect(e.nx * e.tx + e.nz * e.tz).toBeCloseTo(0, 6);
+        expect((e.x - cx) * e.nx + (e.z - cz) * e.nz).toBeGreaterThan(0); // the normal points away from the middle
+      }
+      const a = c.at(0.25), b = c.at(0.25 + 1 / 60), w = c.at(1.25);
+      expect(Math.hypot(a.x - w.x, a.z - w.z)).toBeLessThan(1e-9); // u wraps
+      expect(Math.hypot(b.x - a.x, b.z - a.z)).toBeCloseTo(c.length / 60, 0); // equal arc steps
+    }
+  });
+  it('an offset moves the point along the normal', () => {
+    const c = outlineCurve(AMPHI, 3);
+    const [p, q] = [c.at(0.1), c.at(0.1, -2)];
+    expect(Math.hypot(q.x - p.x, q.z - p.z)).toBeCloseTo(2, 9);
+    expect(inRing(q.x, q.z, AMPHI)).toBe(true);
+  });
+});
+
 describe('m3 landmarks (stand-in outlines)', () => {
   const cases: [string, Id, BuildingRec, number][] = [
     ['Lisboa round tower', 'hotel-lisboa', rec(circle(100, 100, 22, 19), { height: 37.4 }), 37.4],
@@ -96,6 +134,7 @@ describe('m3 landmarks (stand-in outlines)', () => {
     ['Sands drum + crown', 'sands-macau', rec(circle(1594, 97, 23, 19), { height: 61.8 }), 61.8], // crown top = OSM height
     ['Wharf convention centre', 'fisherman-wharf', rec(rect(1640, -100, 1770, -10), { height: 20.8, kind: 'commercial' }), 20.8],
     ['Wharf site', 'fisherman-wharf', rec(rect(1640, -300, 1970, 470), { kind: 'artwork' }), 0],
+    ['Wharf Roman Amphitheatre', 'fisherman-wharf', rec(AMPHI), 0],
   ];
   for (const [name, id, r, h] of cases) {
     it(`${name}: no NaN, within the triangle budget, has lights and colliders`, () => {
@@ -153,14 +192,20 @@ describe('m3 landmarks (stand-in outlines)', () => {
     expect(near).toBeGreaterThan(K.segs); // the window grid wraps the drum
     expect(stats(o).maxY).toBeGreaterThan(10 + K.grid + K.cornice + K.inner.h + K.dome.h);
   });
-  it('the Colosseum stands on its configured ellipse; the lighthouse inside the site', () => {
+  it('the Colosseum arcade follows the amphitheatre outline: nothing of it leaves the polygon (no spill over the houses)', () => {
     const C = L.m3.wharf.colosseum;
-    const o = build('fisherman-wharf', rec(rect(1640, -300, 1970, 470), { kind: 'artwork' }));
-    const { box } = stats(o);
-    expect(box.x0).toBeGreaterThan(C.x - C.a - 2);
-    expect(box.z0).toBeGreaterThan(C.z - C.b - 2);
-    expect(box.x1).toBeLessThan(1970); // the lighthouse is set back from the tip
-    expect(box.z1).toBeLessThan(470);
+    const o = build('fisherman-wharf', rec(AMPHI));
+    let n = 0;
+    for (const m of o.meshes) {
+      for (let i = 0; i < m.position.length; i += 3) {
+        n++;
+        expect(inRing(m.position[i]!, m.position[i + 2]!, AMPHI), `${m.material} vertex ${i / 3}`).toBe(true);
+      }
+    }
+    expect(n).toBeGreaterThan(2000);
+    const { maxY } = stats(o);
+    expect(maxY).toBeGreaterThanOrEqual(10 + C.tiers.reduce((t, h) => t + h, 0)); // the full 22 m of the three tiers
+    expect(stats(build('fisherman-wharf', rec(rect(1640, -300, 1970, 470), { kind: 'artwork' }))).box.x1).toBeLessThan(1970); // the site: only the lighthouse, set back from the tip
   });
   it('unknown small Wynn records fall back to the generic renderer (the pavilion kept low)', () => {
     const st = stats(build('wynn-macau', rec(rect(0, 0, 10, 15))));

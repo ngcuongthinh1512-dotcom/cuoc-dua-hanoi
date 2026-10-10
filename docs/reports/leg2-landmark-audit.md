@@ -35,3 +35,8 @@ Cách chụp cận: script tạm `.cache/g4/shot.ts` (gitignored, không thuộc
 - Mái Cultural Centre vẫn là mặt phẳng nghiêng (thật cong lõm); hoa sen Lótus hơi nhỏ so với bệ; nhà hát Dom Pedro V khó
   thấy chính diện vì nhà cao xung quanh (do OSM, không phải hình địa danh).
 - Ảnh nháp `screenshots/g4b-*`, `g4c-*`, `g4d-*`, `g4e-*` là ảnh tạm (gitignored), có thể xóa.
+
+## Cập nhật 2026-10-10 – Fisherman's Wharf: đấu trường La Mã
+- **Lỗi anh báo:** vòng vòm Colosseum "bị lẫn vào ngôi nhà". Nguyên nhân: vòng vòm là một **elip dựng sẵn theo trục x–z** (tâm 1708, 17; nửa trục 49 × 26 m) ước lượng bằng mắt, to hơn đường viền thật của nhà (OSM way/192180012, "Anfiteatro Romano", đa giác 9 điểm ≈ 2 977 m², trục dài nghiêng ≈ −22°) khoảng 34 % (≈ 1 174 m² nằm ngoài); phần thừa đâm vào các ngôi nhà bên cạnh (nhà 7,1 m ở (1734–1741, 28–35) nằm hẳn trong elip, thêm hai nhà ven đường).
+- **Sửa:** đưa way/192180012 vào địa danh `fisherman-wharf` (registry + `npm run build-chunks`: chỉ `6_0.json`, `index.json` đổi) để khối nhà trơn 20 m không còn được dựng riêng; `m3.ts` dựng vòm **dọc đúng đường viền đó**: `outlineCurve` (cắt góc Chaikin 3 lần, nằm TRONG đường viền, chia đều theo chiều dài) → tường lùi `edge` = 1 m vào trong (cornice, trụ, đầu vòm đều không ra ngoài), 30 vòm, lõi đặc + mái đấu trường 20,3 m (collider như khối nhà cũ). Elip dựng sẵn bỏ; `wharfSite` chỉ còn ngọn hải đăng.
+- **Test:** `outlineCurve` (kín, chia đều, pháp tuyến đơn vị hướng ra ngoài với cả hai chiều quay, nằm trong), "không đỉnh nào của vòm ra ngoài đa giác" với đường viền thật; `paths.test` (collider không chặn lối đi) vẫn xanh. Ảnh trên cao: vòm hình giọt nước theo đúng nền, các nhà bên cạnh đứng ngoài vòm.

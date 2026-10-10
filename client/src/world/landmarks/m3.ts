@@ -14,8 +14,9 @@
 //     glass vault and the golden lion on its OSM artwork point.
 //   sands-macau (G4, photos): gold glass drum (OSM way/1418312721) + stacked "hat" crown between dark glass wings with
 //     gold fins, red "SANDS" sign on the wings' roof.
-//   fisherman-wharf: the site polygon carries the Colosseum arcade (wrapping the plain OSM amphitheatre building) and a
-//     lighthouse on the seaward tip; the convention centre gets a "Babylon" ziggurat roof and an LED rim.
+//   fisherman-wharf: the Roman Amphitheatre record (OSM way/192180012) carries the Colosseum arcade along its own outline
+//     (smoothed, inside it: no spill over the neighbouring houses) with a solid core + arena roof; the site polygon a
+//     lighthouse on the seaward tip; the convention centre a "Babylon" ziggurat roof and an LED rim.
 import { landmarks as L, lighting as LT } from '../../config.ts';
 import { type BuildingRec, type LandmarkId, type PartRec, ringArea, type XZ } from '../../geo/chunkData.ts';
 import { ringCentroid } from '../../geo/clip.ts';
@@ -131,6 +132,54 @@ export function ellipseAt(cx: number, cz: number, a: number, b: number, t: numbe
   const nl = Math.hypot(b * c, a * s);
   const tl = Math.hypot(a * s, b * c);
   return { x: cx + a * c, z: cz + b * s, nx: (b * c) / nl, nz: (a * s) / nl, tx: (-a * s) / tl, tz: (b * c) / tl };
+}
+
+/** Closed smooth curve along an outline ring (XZ, any winding): the corners are cut `levels` times (Chaikin: the curve stays
+ *  INSIDE the outline) and positions are by arc length, so `at(u)` (u in [0, 1), wraps) spaces bays evenly. Returns the point
+ *  offset `d` m along the outward normal (negative = inwards), the unit tangent and the unit outward normal like `ellipseAt`
+ *  (counter-clockwise in x, z: normal = (tz, −tx)). Used where an axis-aligned ellipse spilled over the neighbours. */
+export function outlineCurve(outline: XZ, levels = 3) {
+  const m0 = outline.length / 2;
+  let area2 = 0;
+  for (let i = 0; i < m0; i++) {
+    const j = (i + 1) % m0;
+    area2 += outline[2 * i]! * outline[2 * j + 1]! - outline[2 * j]! * outline[2 * i + 1]!;
+  }
+  let p: number[] = [];
+  for (let i = 0; i < m0; i++) { const k = area2 < 0 ? m0 - 1 - i : i; p.push(outline[2 * k]!, outline[2 * k + 1]!); }
+  for (let lv = 0; lv < levels; lv++) {
+    const q: number[] = [];
+    for (let i = 0, n = p.length; i < n; i += 2) {
+      const j = (i + 2) % n;
+      q.push(0.75 * p[i]! + 0.25 * p[j]!, 0.75 * p[i + 1]! + 0.25 * p[j + 1]!, 0.25 * p[i]! + 0.75 * p[j]!, 0.25 * p[i + 1]! + 0.75 * p[j + 1]!);
+    }
+    p = q;
+  }
+  const m = p.length / 2;
+  const cum = [0];
+  for (let i = 0; i < m; i++) {
+    const j = (i + 1) % m;
+    cum.push(cum[i]! + Math.hypot(p[2 * j]! - p[2 * i]!, p[2 * j + 1]! - p[2 * i + 1]!));
+  }
+  const length = cum[m]!;
+  const sample = (u: number): [number, number] => {
+    const s = (((u % 1) + 1) % 1) * length;
+    let i = 0;
+    while (i < m - 1 && cum[i + 1]! <= s) i++;
+    const j = (i + 1) % m;
+    const t = (s - cum[i]!) / (cum[i + 1]! - cum[i]! || 1);
+    return [p[2 * i]! + (p[2 * j]! - p[2 * i]!) * t, p[2 * i + 1]! + (p[2 * j + 1]! - p[2 * i + 1]!) * t];
+  };
+  const at = (u: number, d = 0) => {
+    const [x0, z0] = sample(u - 0.004);
+    const [x1, z1] = sample(u + 0.004);
+    const l = Math.hypot(x1 - x0, z1 - z0) || 1;
+    const [tx, tz] = [(x1 - x0) / l, (z1 - z0) / l];
+    const [nx, nz] = [tz, -tx];
+    const [x, z] = sample(u);
+    return { x: x + nx * d, z: z + nz * d, nx, nz, tx, tz };
+  };
+  return { at, length };
 }
 
 // ── geometry helpers ──
@@ -673,33 +722,41 @@ function sands(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
 
 // ── Fisherman's Wharf ──
 
-/** Colosseum arcade: elliptical wall with arched bays per tier, cornices, lit arch outlines, pilasters (near). */
-function colosseum(s: Sink, ctx: LandmarkCtx) {
+/** Colosseum arcade along the Roman Amphitheatre's OWN outline (OSM way/192180012; an axis-aligned ellipse fitted by eye was 34 %
+ *  bigger and spilled over the neighbouring houses): wall with arched bays per tier, cornices, lit arch outlines, pilasters
+ *  (near). The wall stands `edge` m inside the outline (the cornices / pilasters / arch ends stay inside it); no plain OSM block is left
+ *  inside (the way belongs to the landmark): the solid core and the arena roof are built here. */
+function colosseum(s: Sink, ctx: LandmarkCtx, outline: XZ) {
   const C = M.wharf.colosseum;
-  const yg = ctx.height(C.x, C.z);
+  const cur = outlineCurve(outline, C.smooth);
+  const [cx, cz] = ringCentroid(outline);
+  const yg = ctx.height(cx, cz);
   const yb = yg - L.sink;
   const total = C.tiers.reduce((t, h) => t + h, 0);
   const n = C.arches * 2;
   const wall = paint(s, 'masonry', rgb(C.colour));
   const ring = (y: number, grow = 0): V3[] => Array.from({ length: n }, (_, k) => {
-    const e = ellipseAt(C.x, C.z, C.a + grow, C.b + grow, (TAU * k) / n);
+    const e = cur.at(k / n, C.edge + grow);
     return [e.x, y, e.z];
   });
-  loft(wall, [ring(yb), ring(yg + total)]);
-  loft(wall, [ring(yg + total, -3), ring(yb, -3)]); // inner face (seen from above, over the plain block)
-  for (let k = 0; k < n; k++) quadOut(wall, ring(yg + total, -3)[k]!, ring(yg + total, -3)[(k + 1) % n]!, ring(yg + total)[(k + 1) % n]!, ring(yg + total)[k]!, [0, 1, 0]);
-  // Leg 2 fix (code review M3): the arcade is open at street level (footways run through it): the collider is the wall
-  // ring above the ground tier only, not a solid ellipse
-  s.prism([ring(0).flatMap((p) => [p[0], p[2]]), ring(0, -3).reverse().flatMap((p) => [p[0], p[2]])], yg + C.tiers[0]!, yg + total);
+  const [top, topIn] = [ring(yg + total), ring(yg + total, -3)];
+  loft(wall, [ring(yb), top]);
+  loft(wall, [topIn, ring(yb, -3)]); // inner face (seen from above, over the core's roof)
+  for (let k = 0; k < n; k++) quadOut(wall, topIn[k]!, topIn[(k + 1) % n]!, top[(k + 1) % n]!, top[k]!, [0, 1, 0]);
+  const xz = (r: V3[]) => r.flatMap((p) => [p[0], p[2]]);
+  // Leg 2 fix (code review M3): the arcade is open at street level (footways run through it): the wall ring collider starts
+  // above the ground tier; the solid core (what the plain OSM block was) is the footprint up to the arena roof
+  s.prism([xz(ring(0)), xz(ring(0, -3).reverse())], yg + C.tiers[0]!, yg + total);
+  s.prism([xz(ring(0))], yb, yg + C.core);
   const dark = paint(s, 'masonry', rgb(C.arch));
   const lit = paint(s, 'neon', glow(C.lit, C.litBright));
   const pil = paint(s, 'masonry', rgb(C.colour), 'near');
+  const bay = cur.length / C.arches;
   let y0 = yg;
   C.tiers.forEach((h, tier) => {
     const attic = tier === C.tiers.length - 1;
     for (let k = 0; k < C.arches; k++) {
-      const e = ellipseAt(C.x, C.z, C.a, C.b, (TAU * (k + 0.5)) / C.arches);
-      const bay = (Math.PI * (C.a + C.b)) / C.arches; // ≈ perimeter / arches
+      const e = cur.at((k + 0.5) / C.arches, C.edge);
       const P = (u: number, y: number, o: number): V3 => [e.x + e.tx * u + e.nx * o, y, e.z + e.tz * u + e.nz * o];
       const out: V3 = [e.nx, 0, e.nz];
       const r = bay * 0.3;
@@ -719,7 +776,7 @@ function colosseum(s: Sink, ctx: LandmarkCtx) {
         }
       }
       // pilaster on the bay's edge
-      const e2 = ellipseAt(C.x, C.z, C.a, C.b, (TAU * k) / C.arches);
+      const e2 = cur.at(k / C.arches, C.edge);
       const Q = (u: number, o: number, y: number): V3 => [e2.x + e2.tx * u + e2.nx * o, y, e2.z + e2.tz * u + e2.nz * o];
       const [w, d] = [0.45, 0.5];
       for (const [u0, o0, u1, o1] of [[-w, d, w, d], [w, 0, w, d], [-w, d, -w, 0]] as const) {
@@ -728,11 +785,12 @@ function colosseum(s: Sink, ctx: LandmarkCtx) {
     }
     y0 += h;
     // cornice
-    loft(wall, [ring(y0 - 0.5, 0.6), ring(y0, 0.6)]);
-    for (let k = 0; k < n; k++) quadOut(wall, ring(y0, 0)[k]!, ring(y0, 0)[(k + 1) % n]!, ring(y0, 0.6)[(k + 1) % n]!, ring(y0, 0.6)[k]!, [0, 1, 0]);
+    const [cLo, cHi, c0] = [ring(y0 - 0.5, 0.6), ring(y0, 0.6), ring(y0, 0)];
+    loft(wall, [cLo, cHi]);
+    for (let k = 0; k < n; k++) quadOut(wall, c0[k]!, c0[(k + 1) % n]!, cHi[(k + 1) % n]!, cHi[k]!, [0, 1, 0]);
   });
-  strip(lit, ring(0).flatMap((p) => [p[0], p[2]]), yg + total - 0.3, yg + total + 0.3, 0.7); // lit crown
-  disc(paint(s, 'masonry', rgb('#b49a6e')), ring(yg + 20.3, -3), 1); // arena / cavea over the plain block's roof
+  strip(lit, xz(ring(0)), yg + total - 0.3, yg + total + 0.3, 0.5); // lit crown
+  disc(paint(s, 'masonry', rgb('#b49a6e')), ring(yg + C.core, -3), 1); // arena / cavea over the core
 }
 
 function lighthouse(s: Sink, site: XZ, ctx: LandmarkCtx) {
@@ -765,9 +823,16 @@ function lighthouse(s: Sink, site: XZ, ctx: LandmarkCtx) {
 
 function wharfSite(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
   const s = new Sink();
-  colosseum(s, ctx);
   const ring = partRings(rec)?.[0];
   if (ring) lighthouse(s, ring, ctx);
+  return s.out();
+}
+
+/** The Roman Amphitheatre record (OSM way/192180012: building=yes, no height, ~3 000 m²): the Colosseum arcade on its outline. */
+const isArena = (rec: BuildingRec) => !rec.height && Math.abs(ringArea(rec.outer)) < 6000;
+function wharfArena(rec: BuildingRec, ctx: LandmarkCtx): BuildOut {
+  const s = new Sink();
+  colosseum(s, ctx, rec.outer);
   return s.out();
 }
 
@@ -813,5 +878,5 @@ export const details: Partial<Record<LandmarkId, DetailFn>> = {
   },
   'mgm-macau': (rec, parts, ctx, h) => ((rec.height ?? 0) > 60 ? mgmTower(rec, ctx) : rec.height ? mgmPodium(rec, ctx) : h.generic(rec, parts, ctx)),
   'sands-macau': (rec, _parts, ctx) => sands(rec, ctx),
-  'fisherman-wharf': (rec, _parts, ctx) => (rec.kind === 'artwork' ? wharfSite(rec, ctx) : wharfCentre(rec, ctx)),
+  'fisherman-wharf': (rec, _parts, ctx) => (rec.kind === 'artwork' ? wharfSite(rec, ctx) : isArena(rec) ? wharfArena(rec, ctx) : wharfCentre(rec, ctx)),
 };

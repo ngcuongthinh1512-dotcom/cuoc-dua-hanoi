@@ -54,7 +54,7 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   { id: 'mgm-macau', name: 'MGM Macau', group: 'm4', osm: ['way/605485397', 'way/192179915'], near: 25, view: [200, 250] },
   { id: 'sands-macau', name: 'Sands Macao', group: 'm4', osm: ['way/164195448', 'way/1418312721'], near: 20, view: [160, 200] }, // way/1418312721 = the gold drum + crown (round, OSM h 61.8), G4
   { id: 'bank-of-china', name: 'Bank of China', group: 'm4', osm: ['way/699456294'], near: 15, view: [180, 220] },
-  { id: 'fisherman-wharf', name: "Fisherman's Wharf", group: 'm4', osm: ['relation/4257072', 'relation/10387813'], near: 30, view: [320, 300] }, // relation/4257072 = the whole site (131 000 m², no building tag, kind 'artwork')
+  { id: 'fisherman-wharf', name: "Fisherman's Wharf", group: 'm4', osm: ['relation/4257072', 'relation/10387813', 'way/192180012'], near: 30, view: [320, 300] }, // relation/4257072 = the whole site (131 000 m², no building tag, kind 'artwork'); way/192180012 = the Roman Amphitheatre (9-point outline, no height): its Colosseum arcade follows THIS outline (an axis-aligned ellipse spilled over the neighbouring houses)
   { id: 'cultural-centre', name: 'Trung tâm Văn hóa Macao', group: 'm4', osm: ['way/192179917'], near: 20, view: [200, 170] },
   { id: 'kun-iam-statue', name: 'Tượng Kun Iam', group: 'm4', osm: ['way/231068755'], near: 25, view: [140, 100] }, // OSM: the Kun Iam Ecumenical Centre footprint, tourism=artwork, h 20 (= the 20 m statue); its plaza is way/192179912 (pedestrian)
   { id: 'portas-do-cerco', name: 'Portas do Cerco', group: 'm4', osm: ['way/173864406', 'way/138665744'], near: 20, view: [180, 120] },
