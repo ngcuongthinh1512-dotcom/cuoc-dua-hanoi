@@ -192,7 +192,7 @@ Xong (báo cáo `docs/reports/host-minimap.md`, ảnh `screenshots/p11-host-map.
 
 ## Leg 2 – Macao (xem `docs/plans/leg2-master.md`)
 - Phòng Louvre: **đã gỡ hẳn** (anh chốt 2026-10-06; C1, `docs/reports/leg2-louvre-removed.md`; cơ chế cũ chọn / chốt / phạt / gợi ý / tin công khai xem lịch sử git trước commit `9425533`). Phòng casino do anh tự tạo sau, chưa bắt đầu.
-- Sửa hình dáng địa danh theo ảnh thật: Grand Lisboa (đỉnh sen), Hotel Lisboa, MGM (đang làm); rà 9 địa danh chưa xem cận + Sands, A-Ma, Penha, Macau Tower, Science Center.
+- Rà soát đồ hoạ + 31 địa danh xong (2026-10-10, `docs/reports/leg2-audit-summary.md`, đo lại bằng `npm run landmark-audit`). Anh còn quyết: PAD san gò chân Macau Tower, đèn pha thân tháp, tường bệ Ruínas 10 m trơn, tường kè cho hồ lớn, sàn Santo Agostinho cao 4,6 m so với Largo, dáng vườn Lou Lim Ioc (khối trơn chưa cửa sổ), mái bậc Casa do Mandarim.
 - Cảnh xa: Macau Tower / Grand Lisboa bị sương che từ ~700 m; bóng Taipa / Cotai; mặt phẳng nền quảng trường Flor de Lótus.
 - `KNOWN_MACAO` / `KNOWN_STEPS` (cầu biển ở rìa khung, bậc cầu 3–17,7 m cạnh Macau Tower): xử lý ở BridgeBuilder nếu muốn bỏ danh sách bỏ qua.
 - Cầu vượt / cầu cạn layer 1 trên đất (305 sàn: cầu bộ hành qua phố, nhánh cầu cạn thấp, LRT) vẫn nằm sát mặt đất, từ rà soát a5 không còn lan can (trước là tường chắn phố); làm cầu vượt thật = nâng sàn kèm bậc / dốc lên (way OSM khác) (`docs/reports/leg2-audit-a5.md`).
