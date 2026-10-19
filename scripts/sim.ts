@@ -316,7 +316,7 @@ export function legStats(progress: StepProgressView[]): LegStats {
   return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), correct: n('correct'), switches: progress.reduce((t, p) => t + p.branchSwitches, 0) };
 }
 
-/** `--leg mini` → the bundled id and its file (for the answers; `macao-demo-filled` = test/macao-demo.filled.json, the id the Host
+/** `--leg mini` → the bundled id and its file (for the answers; `bruxelles-demo-filled` = test/bruxelles-demo.filled.json, the id the Host
  *  page lists); `--leg path/to/leg.json` → the file's text (host.leg {json}). */
 export function legArg(arg: string): { id?: string; json?: string; file: string } {
   if (arg.endsWith('.json')) {
@@ -734,7 +734,7 @@ function print(r: SimReport) {
 }
 
 export const USAGE = `Cách dùng: npm run sim -- [tùy chọn]   (bot chơi thử qua WebSocket thật; hướng dẫn: docs/LEG_FORMAT.md mục "Chơi thử tự động")
-  --leg <mã | file.json>  chơi HẾT một chặng: mã chặng có sẵn (mini, macao-demo-filled, macao-demo) hoặc đường dẫn file chặng
+  --leg <mã | file.json>  chơi HẾT một chặng: mã chặng có sẵn (mini, bruxelles-demo-filled, bruxelles-demo) hoặc đường dẫn file chặng
                           (vd. --leg ~/Documents/chang-that/macao-1.json). Không có --leg: bot đi bộ ngẫu nhiên (đo lưu lượng).
                           Bot nhận thử thách, gõ đáp án (đáp án hoặc đáp án tham khảo trong file; nhánh ảnh: "đã gửi bài"), chọn nhánh,
                           một bot đổi nhánh một lần; một Host bot tự duyệt mọi bài chờ và phạt một lần (bài đầu của bot thứ 2 ở thử

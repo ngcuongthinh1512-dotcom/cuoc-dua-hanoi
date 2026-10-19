@@ -34,7 +34,7 @@ const overRiver = (x: number, z: number) => load().water.polygons.some((p) => p.
 describe.skipIf(!hasData)('real map data', () => {
   it('index lists every chunk of the bbox and each file exists', () => {
     const index = read<ChunkIndex>('chunks/index.json');
-    expect(index.keys.length).toBeGreaterThan(300);
+    expect(index.keys.length).toBeGreaterThan(200); // Leg 3: 252 chunks
     expect(load().chunks.map((c) => c.key)).toEqual(index.keys);
   });
 
@@ -43,9 +43,9 @@ describe.skipIf(!hasData)('real map data', () => {
     expect(polys.filter((p) => !(ringArea(p.outer) >= 2) || (p.holes ?? []).some((h) => !(ringArea(h) < 0)))).toEqual([]);
   });
 
-  it('4 distinct streets touch the Praça de Ferreira do Amaral roundabout', () => {
+  it('4 distinct streets touch the Place Rouppe roundabout', () => {
     const roads = all('roads');
-    const NAME = '亞馬喇前地 Praça de Ferreira do Amaral';
+    const NAME = 'Place Rouppe - Rouppeplein';
     const ring = roads.filter((r) => r.name === NAME && r.roundabout);
     expect(ring.length).toBeGreaterThan(0);
     expect(ring.every((r) => r.roundabout)).toBe(true);
@@ -53,34 +53,34 @@ describe.skipIf(!hasData)('real map data', () => {
     const names = new Set(
       roads.filter((r) => r.name && r.name !== NAME && r.pts.some((_, i) => i % 2 === 0 && v.has(`${r.pts[i]},${r.pts[i + 1]}`))).map((r) => r.name),
     );
-    expect([...names].sort()).toEqual(['仙德麗街 Rua Cidade de Sintra', '友誼大馬路 Avenida da Amizade', '嘉樂庇總督大橋 Ponte Governador Nobre de Carvalho', '蘇亞利斯博士大馬路 Avenida Doutor Mário Soares']);
+    expect([...names].sort()).toEqual(['Avenue de Stalingrad - Stalingradlaan', 'Rue de Tournai - Doornikstraat', 'Rue du Chasseur - Jagersstraat', 'Rue du Midi - Zuidstraat']);
   });
 
-  it('the Avenida de Horta e Costa carriageways lie within 30 m of the straight line between their ends', () => {
-    const [a, b] = [W(22.2053, 113.54422), W(22.20034, 113.54999)];
+  it('the Rue de la Loi carriageways lie within 30 m of the straight line between their ends', () => {
+    const [a, b] = [W(50.84687, 4.36236), W(50.84184, 4.38603)]; // Leg 3: Rue Royale junction → Schuman, measured max deviation 26.4 m
     const [dx, dz] = [b.x - a.x, b.z - a.z];
     const len = Math.hypot(dx, dz);
     const notCar = new Set(['cycleway', 'footway', 'path', 'pedestrian', 'steps']);
-    const pts = all('roads').filter((r) => r.name === '高士德大馬路 Avenida de Horta e Costa' && !notCar.has(r.kind)).flatMap((r) => r.pts);
+    const pts = all('roads').filter((r) => r.name === 'Rue de la Loi - Wetstraat' && !notCar.has(r.kind)).flatMap((r) => r.pts);
     expect(pts.length).toBeGreaterThan(20);
     let maxDev = 0;
     for (let i = 0; i < pts.length; i += 2) maxDev = Math.max(maxDev, Math.abs((pts[i]! - a.x) * dz - (pts[i + 1]! - a.z) * dx) / len);
     expect(maxDev).toBeLessThan(30);
   });
 
-  it('the Ponte Governador Nobre de Carvalho spans the sea (a river: true polygon)', () => {
-    const pieces = all('bridges').filter((b) => b.name === '嘉樂庇總督大橋 Ponte Governador Nobre de Carvalho');
+  it('the Chaussée de Ninove bridge spans the canal (a river: true polygon)', () => {
+    const pieces = all('bridges').filter((b) => b.name === 'Chaussée de Ninove - Ninoofsesteenweg');
     expect(pieces.length).toBeGreaterThan(0);
     expect(pieces.some((b) => overRiver(...midpoint(b.pts)))).toBe(true);
   });
 
-  it('the Wanzai shore → Macao peninsula segment crosses the Porto Interior', () => {
-    const [a, b] = [W(22.20468, 113.52797), W(22.20468, 113.53379)];
+  it('a west–east segment in the north-west corner crosses the Bruxelles–Charleroi canal', () => {
+    const [a, b] = [W(50.8498, 4.333), W(50.8498, 4.3395)];
     const hits = Array.from({ length: 101 }, (_, k) => overRiver(a.x + ((b.x - a.x) * k) / 100, a.z + ((b.z - a.z) * k) / 100));
     expect(hits.some(Boolean)).toBe(true);
     expect(hits[0] || hits[100]).toBe(false);
-    expect(overRiver(W(22.17954, 113.53171).x, W(22.17954, 113.53171).z)).toBe(false); // an islet is a hole of the sea polygon
-    expect(overRiver(0, 0)).toBe(false); // Largo do Senado
+    expect(overRiver(W(50.84575, 4.36399).x, W(50.84575, 4.36399).z)).toBe(false); // the Parc de Bruxelles pond is water but not a river polygon
+    expect(overRiver(0, 0)).toBe(false); // Grand-Place
   });
 
   it('chunk format v2', () => {
@@ -108,7 +108,7 @@ describe.skipIf(!hasData)('real map data', () => {
     expect(bad).toEqual([]);
   });
 
-  it('long bridge chains are split per chunk into continuous pieces (the rail viaduct shows along its length)', () => {
+  it('long bridge chains are split per chunk into continuous pieces (the rail viaducts show along their length)', () => {
     const pieces = load().chunks.flatMap((c) => c.bridges.filter((b) => b.chain).map((b) => ({ ...b, key: c.key })));
     const chains = new Map<string, typeof pieces>();
     for (const q of pieces) chains.set(q.chain!.ends.join(','), [...(chains.get(q.chain!.ends.join(',')) ?? []), q]);
@@ -124,12 +124,12 @@ describe.skipIf(!hasData)('real map data', () => {
         if (k + 1 < list.length && Math.abs(list[k + 1]!.chain!.s0 - end) < 0.2) expect(q.pts.slice(-2)).toEqual(list[k + 1]!.pts.slice(0, 2));
       }
     }
-    const viaduct = [...chains.values()].filter((l) => l[0]!.kind === 'rail' && l[0]!.layer === 2); // Leg 1: the Line 6 metro viaduct (kind subway)
+    const viaduct = [...chains.values()].filter((l) => l[0]!.kind === 'rail' && l[0]!.layer === 1); // Leg 3: the railway viaduct (Leg 1: Line 6 metro viaduct, layer 2)
     expect(Math.max(...viaduct.map((l) => new Set(l.map((q) => q.key)).size))).toBeGreaterThan(5);
   });
 
   it('leg destinations L1–L6 are not inside a building', () => {
-    const leg = read<{ steps: { id: string; destination?: { lat: number; lon: number } }[] }>('../../../worker/legs/macao-demo.json', import.meta.url);
+    const leg = read<{ steps: { id: string; destination?: { lat: number; lon: number } }[] }>('../../../worker/legs/bruxelles-demo.json', import.meta.url);
     const dests = leg.steps.filter((s) => /^L[1-6]$/.test(s.id) && s.destination);
     expect(dests.length).toBe(6);
     const walkable = new Set(['bridge', 'fountain', 'artwork', 'ruins']); // landmark outlines that are not buildings (L1 now stands at the foot of the Ruínas stair, leg2-fixes.md)

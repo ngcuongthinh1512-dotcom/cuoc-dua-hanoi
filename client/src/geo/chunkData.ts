@@ -33,15 +33,8 @@ export function ringArea(r: XZ): number {
 }
 
 /** Landmark ids: the registry in geo/landmarks.ts (SPEC §17.6, docs/plans/phase2b-assets.md §1). */
-export type LandmarkId =
-  | 'ruinas-sao-paulo' | 'sao-domingos' | 'se-catedral' | 'sao-lourenco'
-  | 'santo-agostinho' | 'ermida-penha' | 'leal-senado' | 'largo-senado'
-  | 'santa-casa' | 'casa-mandarim' | 'quartel-mouros' | 'teatro-dom-pedro'
-  | 'fortaleza-monte' | 'fortaleza-guia' | 'farol-guia' | 'templo-ama'
-  | 'kun-iam-tong' | 'jardim-lou-lim-ioc' | 'hotel-lisboa' | 'wynn-macau'
-  | 'mgm-macau' | 'sands-macau' | 'bank-of-china' | 'fisherman-wharf'
-  | 'cultural-centre' | 'kun-iam-statue' | 'portas-do-cerco' | 'praca-flor-de-lotus'
-  | 'macau-tower' | 'grand-lisboa' | 'science-center';
+/** Registry id of a landmark (geo/landmarks.ts), kebab-case. */
+export type LandmarkId = string;
 
 /** Simple 3D Buildings tags (wiki.openstreetmap.org/wiki/Simple_3D_Buildings), parsed, no defaults. Heights in m. */
 export interface S3dFacts {

@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { latLonToWorld } from '@race/shared';
 import { Color, Mesh, Scene } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { landmarks as L, terrain as T, water as W } from '../config.ts';
+import { terrain as T, water as W } from '../config.ts';
 import { chunkBounds, type WaterData } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
@@ -132,12 +132,12 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
     }
   });
 
-  it('carved grid has no NaN and a sea (a river: true polygon) below its quays', () => {
+  it('carved grid has no NaN and the canal (a river: true polygon) below its quays', () => {
     expect(grid.h.every(Number.isFinite)).toBe(true);
     const level = riverLevel(grid, water);
-    expect(level).toBeLessThan(-3); // the sea sits many metres below Largo do Senado (y = 0): −21 (the Seine: −5.5 below the Concorde)
-    expect(heightAt(grid, 2382, 393)).toBeCloseTo(level - T.riverDepth, 4); // the carved bed, mid Outer Harbour
-    // Leg 2: the DEM's own sea floor beyond the carved polygons goes deeper (−36), Paris had nothing below the carved bed
+    expect(level).toBeLessThan(-8); // Leg 3: the canal sits 10.6 m below the Grand-Place (y = 0) (Macao sea: −21; the Seine: −5.5)
+    expect(heightAt(grid, -395.7, -1400)).toBeCloseTo(level - T.riverDepth, 4); // the carved bed, mid canal (north-west corner)
+    // Leg 3: nothing lies below the carved bed (Leg 2: the DEM's own sea floor went deeper, −36)
     expect(grid.h.reduce((a, b) => Math.min(a, b))).toBeLessThanOrEqual(level - T.riverDepth + 1e-4);
   });
 
@@ -149,23 +149,6 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
         if (grid.h[r * grid.cols + c]! >= y) expect.fail(`water polygon ${i}: ground at node ${c}, ${r} above its surface ${y}`);
       });
     });
-  });
-
-  it('every Performance Lake jet (m3.ts wynnPodium: bed + lakeDepth) stands in the lake, whose surface is that high over the bed', () => {
-    const K = L.m3.wynn.lake;
-    const inRing = (x: number, z: number, r: number[]) => {
-      let inside = false;
-      for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) if (r[i + 1]! > z !== r[j + 1]! > z && x < r[i]! + ((z - r[i + 1]!) * (r[j]! - r[i]!)) / (r[j + 1]! - r[i + 1]!)) inside = !inside;
-      return inside;
-    };
-    const lake = water.polygons.findIndex((p) => !p.river && inRing(K.x, K.z, p.outer));
-    expect(lake).toBeGreaterThanOrEqual(0);
-    for (const [r, count] of K.rings)
-      for (let k = 0; k < count; k++) {
-        const [x, z] = [K.x + r * Math.cos((2 * Math.PI * k) / count), K.z + r * Math.sin((2 * Math.PI * k) / count)];
-        expect(inRing(x, z, water.polygons[lake]!.outer), `jet ${r}/${k} in the lake`).toBe(true);
-        expect(waterLevelOf(grid, water, lake) - heightAt(grid, x, z)).toBeCloseTo(W.lakeDepth, 3);
-      }
   });
 
   it('Rapier heightfield matches heightAt within 2 cm', async () => {

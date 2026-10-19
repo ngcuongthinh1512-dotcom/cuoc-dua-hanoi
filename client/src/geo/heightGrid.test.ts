@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { terrain } from '../config.ts';
 import { flatHeightGrid, type HeightGrid, heightAt, loadHeightGrid, parseHeightGrid } from './heightGrid.ts';
 
-// Synthetic DEM: the plane 30 m + 0.01·x − 0.02·z on a coarse 50 m grid covering the whole bbox (Macao: x −1.3…2.7 km, z −2.7…2.0 km).
+// Synthetic DEM: the plane 30 m + 0.01·x − 0.02·z on a coarse 50 m grid covering the whole bbox (Leg 3: bbox ≈ 4.5 × 3.3 km, well inside the grid).
 function planeDem() {
   const header = { minX: -3000, minZ: -4000, width: 131, height: 161, cellSize: 50 };
   const view = new DataView(new ArrayBuffer(header.width * header.height * 2));
@@ -74,15 +74,15 @@ describe('heightGrid', () => {
   });
 
   const dir = join(import.meta.dirname, '../../public/data');
-  it.skipIf(!existsSync(join(dir, 'elevation.bin')))('real DEM: Largo do Senado (origin) y = 0, the sea lies below it, Fortaleza do Monte is up the hill', () => {
+  it.skipIf(!existsSync(join(dir, 'elevation.bin')))('real DEM: Grand-Place (origin) y = 0, the Gare du Midi lies below it, the Place Royale is up the hill', () => {
     const g = parseHeightGrid(JSON.parse(readFileSync(join(dir, 'elevation.json'), 'utf8')), readFileSync(join(dir, 'elevation.bin')));
     const at = (lat: number, lon: number) => {
       const p = latLonToWorld(lat, lon);
       return heightAt(g, p.x, p.z);
     };
-    expect(at(22.19355, 113.5394)).toBeCloseTo(0, 5);
-    expect(at(22.19, 113.5625)).toBeLessThan(-3); // the Outer Harbour, east of the peninsula
-    expect(at(22.1963, 113.5423)).toBeGreaterThan(15); // Fortaleza do Monte is up the hill
+    expect(at(50.84675, 4.35247)).toBeCloseTo(0, 5);
+    expect(at(50.8355, 4.3365)).toBeLessThan(-2); // Leg 3: Gare du Midi, measured −3.1 m
+    expect(at(50.8419, 4.3623)).toBeGreaterThan(30); // Leg 3: Place Royale, measured 36.3 m
     expect(g.h.every(Number.isFinite)).toBe(true);
   });
 });

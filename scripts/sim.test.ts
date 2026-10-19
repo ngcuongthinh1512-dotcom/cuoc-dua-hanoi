@@ -345,9 +345,9 @@ describe('sim --leg (Phase 7 / 8)', () => {
 
   it('--leg <id> finds the test leg file; unknown id says so', () => {
     expect(legArg('mini')).toMatchObject({ id: 'mini' });
-    // the id the Host page lists → its file test/macao-demo.filled.json (organiser review: "Không tìm thấy chặng")
-    expect(legArg('macao-demo-filled')).toMatchObject({ id: 'macao-demo-filled', file: expect.stringMatching(/worker\/legs\/test\/macao-demo\.filled\.json$/) });
-    expect(legArg('macao-demo').file).toMatch(/worker\/legs\/macao-demo\.json$/);
+    // the id the Host page lists → its file test/bruxelles-demo.filled.json (organiser review: "Không tìm thấy chặng")
+    expect(legArg('bruxelles-demo-filled')).toMatchObject({ id: 'bruxelles-demo-filled', file: expect.stringMatching(/worker\/legs\/test\/bruxelles-demo\.filled\.json$/) });
+    expect(legArg('bruxelles-demo').file).toMatch(/worker\/legs\/bruxelles-demo\.json$/);
     expect(() => legArg('khong-co')).toThrow('khong-co');
     expect(() => legArg('/khong/co/chang.json')).toThrow('Không tìm thấy file chặng "/khong/co/chang.json"');
   });

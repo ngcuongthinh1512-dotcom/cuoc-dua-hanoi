@@ -148,18 +148,19 @@ describe('Crowd (living street)', () => {
 
 const root = join(import.meta.dirname, '../../..');
 const graphFile = join(root, 'shared/data/roadgraph.json');
-describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Largo do Senado)', { timeout: 120_000 }, () => {
+describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Grand-Place)', { timeout: 120_000 }, () => {
   const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
   const r = new NpcRoads(g, () => 0);
   const spot = { x: 0, z: 0 };
   const a0 = anchor(spot.x, spot.z, { body: false });
-  const camoes = latLonToWorld(22.1972, 113.5417); // Camões garden: benches all over (Paris: the Tuileries chairs)
+  const park = latLonToWorld(50.8454, 4.363); // Leg 3: Parc de Bruxelles: benches all over (Leg 2: Camões garden; Paris: the Tuileries chairs)
 
   it('walkers stay on the drawn sidewalks / living streets / footways; in the road only while crossing, near a node', () => {
     const c = new Crowd(r, 1);
+    const ap = anchor(park.x, park.z, { body: false }); // Leg 3: the Grand-Place is a pedestrian zone (no raised sidewalk): the park has sidewalks, paths and crossings
     const seen = { side: 0, living: 0, path: 0, cross: 0, bad: 0, samples: 0 };
     const bad: string[] = [];
-    run(c, 300, a0, (cr, t) => {
+    run(c, 300, ap, (cr, t) => {
       for (const p of cr.peds) {
         const m = cr.modeOf(p.id)!;
         if (p.stagger >= 0) continue;
@@ -175,9 +176,9 @@ describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Largo do Senado)
       }
     });
     console.log('Crowd bands:', seen, bad.slice(0, 8));
-    expect(seen.side).toBeGreaterThan(1000);
-    expect(seen.path).toBeGreaterThan(200);
-    expect(seen.cross).toBeGreaterThan(0);
+    expect(seen.side).toBeGreaterThan(70_000); // Leg 3 at the park: side 80,611, path 1.26 M, cross 1,203
+    expect(seen.path).toBeGreaterThan(1_000_000);
+    expect(seen.cross).toBeGreaterThan(1_000);
     console.log('bad', bad.length, 'of', seen.samples);
     expect(bad.length).toBe(0);
   });
@@ -194,7 +195,7 @@ describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Largo do Senado)
 
   it('exclusion zone: nobody in it after 5 minutes (spawn, walk, stand, sit)', () => {
     const c = new Crowd(r, 4);
-    const zone = { x: 60, z: -120, r: 40 }; // Avenida de Almeida Ribeiro side of Largo do Senado
+    const zone = { x: 60, z: -120, r: 40 }; // Leg 3: the Grand-Place side of the origin (Leg 2: Av. de Almeida Ribeiro)
     c.zones = [zone];
     let inside = 0, samples = 0;
     run(c, 300, a0, (cr) => {
@@ -231,8 +232,8 @@ describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Largo do Senado)
     expect(w.activity).toBe('wave');
   });
 
-  it('some pedestrians sit on the Camões garden benches', () => {
-    const c = new Crowd(r, 8), tuil = camoes;
+  it('some pedestrians sit on the Parc de Bruxelles benches', () => {
+    const c = new Crowd(r, 8), tuil = park;
     c.step(DT, anchor(tuil.x, tuil.z, { body: false }), 1, [], true);
     const seats = c.seatsNear(tuil.x, tuil.z, C.radius);
     const sitters = c.peds.filter((p) => p.activity === 'sit');
@@ -241,12 +242,11 @@ describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Largo do Senado)
     expect(new Set(sitters.map((p) => `${p.x},${p.z}`)).size).toBe(sitters.length); // one person per chair
   });
 
-  // Leg 2: run at Largo de São Domingos (80, −160: pedestrian streets). On Macao's narrow raised pavements the sidestep is clamped
-  // by the room toward the carriageway (crowd.ts dodgeStep), so e.g. at Santo António 3 of 12 seeds pass the standing player at
-  // 0.57 m (< bodyRadius + player.radius = 0.6) without a stagger: see docs/reports/leg2-tests-workspaces.md
+  // Leg 3: run at Place de la Monnaie (pedestrian streets). Leg 2: at Macao's narrow raised pavements the sidestep is clamped
+  // by the room toward the carriageway (crowd.ts dodgeStep), so some seeds passed at 0.57 m (< bodyRadius + player.radius = 0.6).
   it('a player standing still in a walker\'s way is walked past or turned away from (12 seeds), never touched, never stood at', () => {
     const out: string[] = [];
-    const dom = { x: 80, z: -160 };
+    const dom = latLonToWorld(50.84851, 4.35346); // Leg 3: Place de la Monnaie (closest approach of 12 seeds ≥ 0.93 m)
     const aw = anchor(dom.x, dom.z, { body: false });
     for (let seed = 1; seed <= 12; seed++) {
       const c = new Crowd(r, seed);
@@ -274,12 +274,12 @@ describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Largo do Senado)
     console.log('Player in the way:', out.join(' · '));
   });
 
-  it('seats: deterministic, ≥ seatRoadClear from car roads, some in the Camões garden', () => {
+  it('seats: deterministic, ≥ seatRoadClear from car roads, some in the Parc de Bruxelles', () => {
     const c1 = new Crowd(r, 1), c2 = new Crowd(r, 99);
-    const tuil = camoes;
+    const tuil = park;
     const s1 = c1.seatsNear(tuil.x, tuil.z, 250), s2 = c2.seatsNear(tuil.x, tuil.z, 250);
-    console.log('Camões garden seats within 250 m:', s1.length);
-    expect(s1.length).toBeGreaterThan(5);
+    console.log('Parc de Bruxelles seats within 250 m:', s1.length);
+    expect(s1.length).toBeGreaterThan(130); // 145
     expect(s2).toEqual(s1);
     expect(c1.seatsNear(tuil.x, tuil.z, 250)).toEqual(s1);
     for (const s of s1) {
@@ -302,17 +302,17 @@ describe.skipIf(!existsSync(graphFile))('Crowd (roadgraph.json, Largo do Senado)
     expect(go(1)).not.toBe(go(2));
   });
 
-  it('density follows the band length (Largo do Senado: > 20), capped by crowd.max', () => {
+  it('density follows the band length (Grand-Place: > 20), capped by crowd.max', () => {
     const c = new Crowd(r, 1);
     c.step(DT, anchor(0, 0), 1, [], true);
-    console.log('Largo do Senado peds at density 1:', c.peds.length, ' Praia Grande:', (() => { const d = new Crowd(r, 1); d.step(DT, anchor(320, 338), 1, [], true); return d.peds.length; })());
+    console.log('Grand-Place peds at density 1:', c.peds.length, ' Leg 2 Praia Grande spot (320, 338):', (() => { const d = new Crowd(r, 1); d.step(DT, anchor(320, 338), 1, [], true); return d.peds.length; })());
     expect(c.peds.length).toBeGreaterThan(20);
     expect(c.peds.length).toBeLessThanOrEqual(C.max);
   });
 
-  it('real Traffic + Crowd at density 1 (Praia Grande, Ferreira do Amaral, Tap Seac): no pedestrian inside a car body', () => {
+  it('real Traffic + Crowd at density 1 (Rue de la Loi, Boulevard Anspach, Rue Royale): no pedestrian inside a car body', () => {
     const P = (lat: number, lon: number) => latLonToWorld(lat, lon);
-    const spots = { praia: P(22.1905, 113.5425), ferreira: P(22.193, 113.547), tapseac: P(22.1982, 113.547) };
+    const spots = { loi: P(50.84438, 4.37435), anspach: P(50.8497, 4.3522), royale: P(50.8458, 4.3622) };
     const res: string[] = [];
     for (const [name, at] of Object.entries(spots)) {
       const a = anchor(at.x, at.z, { body: false }), tr = new Traffic(r, 1), cr = new Crowd(r, 1);

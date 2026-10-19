@@ -185,5 +185,5 @@ export function login(race: string): Promise<Session> {
  *  blocking it; a submit / "Tiếp tục" just closes them. */
 export function previewLogin(back: boolean) {
   if (back) void welcomeBack('Đội Xanh', { reconnects: 2, lastSeen: Date.now() - 7 * 60_000, step: 'Thử thách 2' }).then(close);
-  else form('macao', readStoredCode(), async () => close());
+  else form('bruxelles', readStoredCode(), async () => close());
 }

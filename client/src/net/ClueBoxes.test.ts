@@ -1,6 +1,7 @@
 import type { BoxInfo } from '@race/shared/protocol';
 import { type BufferGeometry, type Mesh, type MeshStandardMaterial, Object3D, Scene, Vector3 } from 'three';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { initTimeOfDay } from '../world/night.ts';
 import { clueBox, lighting as LT } from '../config.ts';
 import { boxRotation, ClueBoxes, matTilt, nextBoxes, parseBoxes } from './ClueBoxes.ts';
 
@@ -133,7 +134,11 @@ describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', 
     cb.dispose();
   });
 
-  it('night (config default): halo + ground pool, both dimmer on an opened box; the halo grows with distance', () => {
+  // Leg 3: config is 'day', so night is forced (?time=night offline), as for the NPC lamps
+  describe('night', () => {
+  beforeAll(() => initTimeOfDay(new URLSearchParams('time=night'), false));
+  afterAll(() => initTimeOfDay(new URLSearchParams(), false));
+  it('night (forced): halo + ground pool, both dimmer on an opened box; the halo grows with distance', () => {
     const scene = new Scene();
     const cb = new ClueBoxes(scene, () => 0, () => 0);
     cb.reset([box('L1'), { ...box('L2', true), x: 30 }]);
@@ -144,6 +149,7 @@ describe('ClueBoxes scene (Phase 7: opened in place, Pit Stop mat, zones out)', 
     cb.update(new Vector3(0, 0, 500));
     expect(shut!.getObjectByName('halo')!.scale.x).toBeCloseTo(500 * LT.boxes.halo.spread, 0); // ≈ 500 m away
     cb.dispose();
+  });
   });
 
   it('reveal / hide many times reuses the parts; dispose frees them (and a later box builds new ones)', () => {

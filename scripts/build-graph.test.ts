@@ -81,15 +81,11 @@ describe('build-graph (fixture)', () => {
 // --- the committed file (real OSM data) ---
 const FILE = new URL('../shared/data/roadgraph.json', import.meta.url);
 const real = RoadGraph.decode(JSON.parse(readFileSync(FILE, 'utf8')) as RoadGraphFile);
-const leg = JSON.parse(readFileSync(new URL('../worker/legs/macao-demo.json', import.meta.url), 'utf8')) as {
+const leg = JSON.parse(readFileSync(new URL('../worker/legs/bruxelles-demo.json', import.meta.url), 'utf8')) as {
   steps: { id: string; destination?: { lat: number; lon: number } }[];
 };
 const L = leg.steps.filter((s) => /^L[1-6]$/.test(s.id) && s.destination).map((s) => ({ id: s.id, ...latLonToWorld(s.destination!.lat, s.destination!.lon) }));
 const snap = (x: number, z: number) => real.nearestNode(x, z, 'walk', 80);
-const at = (lat: number, lon: number) => {
-  const w = latLonToWorld(lat, lon);
-  return snap(w.x, w.z);
-};
 const crow = (p: number, q: number) => Math.hypot(real.x[p]! - real.x[q]!, real.z[p]! - real.z[q]!);
 const route = (p: number, q: number) => shortestPath(real, p, q, 'walk');
 
@@ -101,10 +97,10 @@ describe('roadgraph.json (real data)', () => {
     expect(mb).toBeLessThan(5);
     // Leg 2: Macao's walk network is 86.6 % one component (Paris > 95 %): peninsula slivers cut by sea / reclamation lines and
     // gated or fenced footpaths stay separate. Measured 0.866, threshold = measured − ~1.5 points; "dominant" still holds.
-    expect(real.component.filter((c) => c === real.main).length / real.nodeCount).toBeGreaterThan(0.85);
+    expect(real.component.filter((c) => c === real.main).length / real.nodeCount).toBeGreaterThan(0.9);
   });
 
-  it('L1–L6 and the spawn are all walk-connected, paths ≤ 1.6 × straight line', () => {
+  it('L1–L6 and the spawn are all walk-connected, paths ≤ 1.7 × straight line (Leg 3: the medieval centre, measured 1.61)', () => {
     expect(L.length).toBe(6);
     const ns = [...L.map((p) => snap(p.x, p.z)), snap(playerSetup.spawn.x, playerSetup.spawn.z)];
     expect(ns.every((n) => n >= 0)).toBe(true);
@@ -112,12 +108,12 @@ describe('roadgraph.json (real data)', () => {
       for (let j = i + 1; j < ns.length; j++) {
         const p = route(ns[i]!, ns[j]!);
         expect(p, `${i}→${j}`).not.toBeNull();
-        if (crow(ns[i]!, ns[j]!) > 300) expect(p!.length / crow(ns[i]!, ns[j]!), `${i}→${j}`).toBeLessThan(1.6);
+        if (crow(ns[i]!, ns[j]!) > 300) expect(p!.length / crow(ns[i]!, ns[j]!), `${i}→${j}`).toBeLessThan(1.7);
       }
     }
   });
 
-  it('A* L1 → L6 under 30 ms; two routes across water (a lake, the sea inlet at Av. de Tai On) go over a bridge', () => {
+  it('A* L1 → L6 under 30 ms; the canal is crossed by walkable bridges', () => {
     const [p1, p6] = [snap(L[0]!.x, L[0]!.z), snap(L[5]!.x, L[5]!.z)];
     route(p1, p6); // warm-up (JIT)
     const t0 = performance.now();
@@ -125,24 +121,32 @@ describe('roadgraph.json (real data)', () => {
     const ms = performance.now() - t0;
     console.log(`A* L1 → L6: ${ms.toFixed(1)} ms`);
     expect(ms).toBeLessThan(30);
-    // Leg 2: Paris had obelisk → Eiffel / Louvre → Notre-Dame over the Seine. Macao has no river: a footway bridge over the sea
-    // (Av. de Tai On, NE, 145 m) and the Av. Dr. Sun Yat-Sen bridge over the lake (S) are the walkable water crossings.
-    for (const [from, to, max] of [[at(22.20696, 113.56546), at(22.20377, 113.55858), 1.3], [at(22.18188, 113.53959), at(22.18500, 113.54835), 1.9]] as const) {
-      const p = route(from, to)!;
-      expect(p.length / crow(from, to)).toBeLessThan(max);
-      const edges = p.nodes.slice(1).map((n, k) => real.edgesOf(n).find((e) => [real.edgeA[e], real.edgeB[e]].includes(p.nodes[k]!))!);
-      expect(edges.some((e) => real.flags(e) & WayFlag.bridge)).toBe(true);
+    // Leg 3: Brussels has no river inside the box, only the canal (NW edge): its crossings are walkable bridge edges that tie both banks
+    // into the one walk component.
+    const canal = (JSON.parse(readFileSync(new URL('../client/public/data/water.json', import.meta.url), 'utf8')) as { polygons: { river?: boolean; outer: number[] }[] }).polygons.filter((p) => p.river)[0]!.outer;
+    const near: number[] = [];
+    for (let e = 0; e < real.edgeA.length; e++) {
+      if (!(real.flags(e) & WayFlag.bridge) || !(real.flags(e) & WayFlag.walk)) continue;
+      const [mx, mz] = [(real.x[real.edgeA[e]!]! + real.x[real.edgeB[e]!]!) / 2, (real.z[real.edgeA[e]!]! + real.z[real.edgeB[e]!]!) / 2];
+      if (canal.some((v, i) => i % 2 === 0 && Math.hypot(v - mx, canal[i + 1]! - mz) < 40)) near.push(e);
     }
+    expect(near.length).toBeGreaterThan(20);
+    for (const e of near.slice(0, 8)) expect([real.edgeA[e], real.edgeB[e]].every((n) => real.component[n!] === real.main) || real.edgeLength[e]! < 40).toBe(true);
   });
 
-  it('surfaceAt: Rua de S. Paulo is pave (calçada portuguesa), Av. de Almeida Ribeiro asphalt; oneway streets bind cars on real data', () => {
-    // Leg 2: Paris had the sett Place de la Concorde (primary) / Rue de Rivoli. Macao: the calçada street up to the Ruínas de São Paulo
-    const conc = real.file.names.indexOf('大三巴街 Rua de S. Paulo'); // pave (OSM surface), residential
-    const e = real.edgeWay.findIndex((k) => real.file.ways[k]![3] === conc && real.file.kinds[real.file.ways[k]![0]!] === 'residential');
-    const [ca, cb] = [real.edgeA[e]!, real.edgeB[e]!];
-    expect(real.surfaceAt((real.x[ca]! + real.x[cb]!) / 2 + 1, (real.z[ca]! + real.z[cb]!) / 2)).toBe('pave');
-    const riv = latLonToWorld(22.19417, 113.53889); // Avenida de Almeida Ribeiro, centre line
-    expect(real.surfaceAt(riv.x, riv.z)).toBe('asphalt');
+  it('surfaceAt: Rue du Marché aux Herbes is pave (sett), Rue de la Loi asphalt; oneway streets bind cars on real data', () => {
+    // Leg 3: the cobbled street off the Grand-Place and the primary road of the European quarter
+    const edgeOf = (name: string, kind: string) => {
+      const n = real.file.names.indexOf(name);
+      return real.edgeWay.findIndex((k) => real.file.ways[k]![3] === n && real.file.kinds[real.file.ways[k]![0]!] === kind);
+    };
+    const mid = (e: number): [number, number] => [(real.x[real.edgeA[e]!]! + real.x[real.edgeB[e]!]!) / 2 + 1, (real.z[real.edgeA[e]!]! + real.z[real.edgeB[e]!]!) / 2];
+    const cobbled = edgeOf('Rue du Marché aux Herbes - Grasmarkt', 'living_street');
+    expect(cobbled).toBeGreaterThanOrEqual(0);
+    expect(real.surfaceAt(...mid(cobbled))).toBe('pave');
+    const loi = edgeOf('Rue de la Loi - Wetstraat', 'primary');
+    expect(loi).toBeGreaterThanOrEqual(0);
+    expect(real.surfaceAt(...mid(loi))).toBe('asphalt');
     let checked = 0;
     for (let e = 0; e < real.edgeA.length && checked < 20; e++) {
       if (real.component[real.edgeA[e]!] !== real.main) continue;

@@ -70,20 +70,20 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(waterFile))('FullMap (road
   const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
   const water = JSON.parse(readFileSync(waterFile, 'utf8')) as WaterData;
 
-  it('covers the whole map, labels streets around Largo do Senado without overlaps, click near the waypoint removes it', () => {
+  it('covers the whole map, labels streets around the Grand-Place without overlaps, click near the waypoint removes it', () => {
     const t0 = performance.now();
     const onWaypoint = vi.fn();
     const m = new FullMap(g, water, onWaypoint);
     console.log(`FullMap constructor: ${(performance.now() - t0).toFixed(1)} ms, extent ${m.extent.map(Math.round).join(', ')}`);
-    expect(m.extent[0]).toBeLessThan(-1300); // Macao: x −1379 … 2792 (Paris: ±3000)
-    expect(m.extent[2]).toBeGreaterThan(2700);
-    const v: MapView = { cx: 0, cz: 0, mpp: 1, w: 1280, h: 720 };
+    expect(m.extent[0]).toBeLessThan(-1300); // Leg 3: x −1331 … 3308, z −1574 … 1963
+    expect(m.extent[2]).toBeGreaterThan(3200);
+    const v: MapView = { cx: 300, cz: 250, mpp: 2, w: 1280, h: 720 }; // Leg 3: the old town's streets are short and curved, 1 m/px names only 4 of them here
     const t1 = performance.now();
     const ls = m.labels(v, measure);
-    console.log(`labels at 1 m/px: ${ls.length} in ${(performance.now() - t1).toFixed(1)} ms: ${ls.slice(0, 8).map((l) => l.text).join(' · ')}`);
+    console.log(`labels at 2 m/px: ${ls.length} in ${(performance.now() - t1).toFixed(1)} ms: ${ls.slice(0, 8).map((l) => l.text).join(' · ')}`);
     expect(ls.length).toBeGreaterThan(10);
     expect(noOverlaps(ls)).toBe(true);
-    expect(ls.map((l) => l.text)).toContain('亞美打利庇盧大馬路 (新馬路) Avenida de Almeida Ribeiro');
+    expect(ls.map((l) => l.text)).toContain('Rue de la Loi - Wetstraat');
     expect(ls.every((l) => g.file.names.includes(l.text))).toBe(true); // street names only (SPEC §4.6)
 
     Object.assign(m.view, v);
@@ -92,7 +92,7 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(waterFile))('FullMap (road
     m.click(sx + 5, sy - 5, target);
     expect(onWaypoint).toHaveBeenLastCalledWith(null);
     m.click(sx + 100, sy, target);
-    expect(onWaypoint).toHaveBeenLastCalledWith({ x: 150, z: -20 });
+    expect(onWaypoint).toHaveBeenLastCalledWith({ x: target.x + 100 * v.mpp, z: -20 });
     // outside RACE_BBOX (the map's `outside` margin): no waypoint
     onWaypoint.mockClear();
     Object.assign(m.view, { cx: m.extent[0], cz: m.extent[1], mpp: 6 });
@@ -102,9 +102,9 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(waterFile))('FullMap (road
 
   // Avenues are cut into short OSM ways at every junction: the names must still show (phase5-review2 M1).
   it.each([
-    ['高士德大馬路 Avenida de Horta e Costa', 681, -825, 1],
-    ['友誼大馬路 Avenida da Amizade', 320, 338, 2],
-    ['亞美打利庇盧大馬路 (新馬路) Avenida de Almeida Ribeiro', 62, -161, 1],
+    ['Rue de la Loi - Wetstraat', 1541, 264, 1],
+    ['Boulevard Anspach - Anspachlaan', -150, -250, 1],
+    ['Rue Royale - Koningsstraat', 300, 250, 2],
   ] as const)('names %s around (%d, %d) at %f m/px, no overlaps', (name, x, z, mpp) => {
     const m = new FullMap(g, water, () => {});
     const t0 = performance.now();

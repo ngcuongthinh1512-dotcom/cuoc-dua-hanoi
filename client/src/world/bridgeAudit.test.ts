@@ -149,16 +149,16 @@ describe.skipIf(!has)('bridge audit', () => {
     // straight 20 m run-off meets where the street turns. Unnamed pieces are OSM stair / footway fragments beside the
     // Passerelle Senghor; the Promenade Jean-Paul Belmondo (under the Line 6 viaduct) ends on the Passy stairs and between
     // the merging Bir-Hakeim carriageways: known, docs/reports/bridge-audit.md.
-    // Leg 2 (Macao): 5 named bridges 1.9–3 km from Largo do Senado, at the map edge, fail the audit and are listed here, not hidden:
-    // Ponte da Amizade (E coast: steps 3–6 m, blocked), the Rotunda da Amizade viaduct + the Ma Man Kei bridge (NE: decks of
-    // different bridge ways meet at different heights, steps 0.5–12 m), 昌盛大桥 (NW corner: the chain is cut by the map edge,
-    // no floor beyond), Ponte de Sai Van (SW: a ±17.7 m step where the upper and lower decks touch). Report: docs/reports/leg2-tests-workspaces.md.
-    // TODO(organiser safety, docs/reports/leg2-fixes.md item 4): these are REAL steps a team can fall from (Sai Van starts next to
-    // Macau Tower, a likely leg point): no route point, bike corridor or Pit Stop on them (docs/LEG_FORMAT.md, TODO.md) until
-    // BridgeBuilder / npc/roads.ts buildDecks join the decks of differently named bridge ways.
-    const KNOWN_MACAO = /^(友誼大橋|友誼圓形地行車天橋|昌盛大桥|西灣大橋 Ponte de Sai Van|馬萬祺博士大馬路)/;
-    const blocking = findings.filter((f) => f.includes('(lệch 0.0 m)') && !/^\(không tên|props|landmarks|buildings|Belmondo/.test(f) && !KNOWN_MACAO.test(f));
-    expect(names.size).toBeGreaterThan(30); // Macao: 42 sea bridges (Paris 38)
+    // Leg 3 (Brussels): 9 canal bridges (the Bruxelles–Charleroi canal, north-west corner, 1.0–1.5 km from the Grand-Place). Two named
+    // ones fail the audit and are listed here, not hidden (same class as Leg 2's Sai Van / Amizade): the Chaussée de Ninove (a primary
+    // and a service deck of the same bridge meet at one spot: 'chặn: bridges' at x≈−1170…−1176, z≈−349…−357) and the Passerelle Loredana
+    // Marchi (two deck ways meet at different heights: steps 0.5–1.3 m + 'chặn: bridges' at x≈−724…−729, z≈−819…−822).
+    // TODO(organiser safety, docs/reports/leg2-fixes.md item 4): no route point, bike corridor or Pit Stop on them until
+    // BridgeBuilder / npc/roads.ts buildDecks join the decks of bridge ways that touch.
+    const KNOWN_BRUXELLES = /^(Chaussée de Ninove - Ninoofsesteenweg|Passerelle Loredana Marchi)/;
+    // Leg 2 (Macao): 5 named bridges at the map edge failed the audit (Ponte da Amizade, Rotunda da Amizade viaduct, Ma Man Kei, 昌盛大桥, Sai Van).
+    const blocking = findings.filter((f) => f.includes('(lệch 0.0 m)') && !/^\(không tên|props|landmarks|buildings|Belmondo/.test(f) && !KNOWN_BRUXELLES.test(f));
+    expect(names.size).toBeGreaterThan(8); // Leg 3: 9 canal bridges (Macao: 42 sea bridges, Paris 38)
     expect(blocking).toEqual([]);
   }, 600_000);
 });

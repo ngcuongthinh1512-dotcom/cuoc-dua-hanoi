@@ -10,7 +10,7 @@ import { spawnCandidates } from './spawnCandidates.ts';
 
 const root = join(import.meta.dirname, '../../..');
 const graphFile = join(root, 'shared/data/roadgraph.json');
-const legFile = join(root, 'worker/legs/macao-demo.json'); // server-only content: read by this test, never bundled
+const legFile = join(root, 'worker/legs/bruxelles-demo.json'); // server-only content: read by this test, never bundled
 
 describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates (roadgraph.json, demo leg)', () => {
   const file = JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile;
@@ -50,7 +50,7 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates
     });
   });
 
-  // Leg 2: the Macao roadgraph has no bicycle_parking node (Paris: 16 racks on L3 → L4, none on L2 → L3), so the rack rules run
+  // Leg 3: the Bruxelles roadgraph has 2,184 bicycle_parking nodes, so to control which segment holds racks the rack rules run
   // on a copy of the graph that gets racks put on the demo leg: 16 on the corridor of segment R, chosen so that segment N's
   // corridor (the demo legs are short: corridors overlap) holds none of them, and 25 decoy racks off the route.
   const dm10 = (a: number[]) => a.map((v) => Math.round(v * 10));
@@ -63,9 +63,9 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates
   const racked = spawnCandidates(RoadGraph.decode({ ...file, bikeParking: dm10(bike) }), points, [], leg.vehicles);
   const rackSet = new Set(pairs(dm10(bike)).map(([x, z]) => `${x / 10},${z / 10}`));
 
-  it('no bicycle_parking in the Macao graph: every segment is sampled pavement points, ≥ minCandidates each', () => {
-    expect(file.bikeParking).toEqual([]);
-    expect(parking.size).toBe(0);
+  it('Leg 3: the Bruxelles graph has bicycle_parking nodes; every segment still has ≥ minCandidates points', () => {
+    expect(file.bikeParking.length / 2).toBeGreaterThan(1000);
+    expect(parking.size).toBeGreaterThan(1000);
     c.segments.forEach((seg) => expect(seg.length / 2).toBeGreaterThanOrEqual(serverBikes.minCandidates));
   });
 

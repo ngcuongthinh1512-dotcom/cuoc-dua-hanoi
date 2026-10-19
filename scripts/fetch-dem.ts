@@ -15,7 +15,7 @@ const ZOOM = 14;
 const CELL = 5; // m
 const SEA_FLOOR_DM = -150; // decimetres: −15 m
 const TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
-const USER_AGENT = 'cuoc-dua-macao/0.1 (game dev; one-time fetch)';
+const USER_AGENT = 'cuoc-dua-bi/0.1 (game dev; one-time fetch)';
 
 const root = join(import.meta.dirname, '..');
 const { values: args } = parseArgs({

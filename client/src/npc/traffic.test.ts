@@ -278,10 +278,11 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
   carveRiver(grid, JSON.parse(readFileSync(join(data, 'water.json'), 'utf8')) as WaterData);
   const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
   const roads = new NpcRoads(g, (x, z) => heightAt(grid, x, z));
-  const concorde = anchor(0, 0);
+  const hub = latLonToWorld(50.8458, 4.3622); // Leg 3: Rue Royale beside the Parc de Bruxelles, 28 cars at density 1 (the Grand-Place, a pedestrian zone, has only 12)
+  const concorde = anchor(hub.x, hub.z);
   const valid = (de: number) => roads.car[de >> 1] === 1 && g.allows(de >> 1, 'car', (de & 1) === 0);
 
-  it('5 min around Concorde: nobody goes against a oneway, same lane ≥ minGap, timing per step', () => {
+  it('5 min around Rue Royale: nobody goes against a oneway, same lane ≥ minGap, timing per step', () => {
     const tr = new Traffic(roads, 1);
     tr.step(DT, concorde, 1, NOPEDS, true);
     const n0 = tr.cars.length;
@@ -309,7 +310,7 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
       }
     }
     const ms = (performance.now() - t0) / steps;
-    console.log(`Traffic 5 min Concorde: ${n0} cars at start, ${tr.cars.length} at end, ${ms.toFixed(3)} ms/step incl. test checks, worst same-lane gap ${worst.toFixed(2)} m`);
+    console.log(`Traffic 5 min Rue Royale: ${n0} cars at start, ${tr.cars.length} at end, ${ms.toFixed(3)} ms/step incl. test checks, worst same-lane gap ${worst.toFixed(2)} m`);
     expect(bad).toBe(0);
     expect(gapBad).toBe(0);
     expect(tr.cars.length).toBeGreaterThan(10);
@@ -346,8 +347,8 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(still30 / cars).toBeLessThanOrEqual(0.1);
   }, 240_000);
 
-  it('Praça de Jorge Álvares: entries wait for gaps, ring cars go with the ring (clockwise: left-hand traffic), cars leave the ring within 90 s', () => {
-    const name = g.file.names.indexOf('區華利前地 Praça de Jorge Álvares');
+  it('Place Aimé Dandoy: entries wait for gaps, ring cars go with the ring (anticlockwise: right-hand traffic), cars leave the ring within 90 s', () => {
+    const name = g.file.names.indexOf('Place Aimé Dandoy - Aimé Dandoyplein');
     const isRing = (de: number) => g.file.ways[g.edgeWay[de >> 1]!]![3] === name && !!(g.flags(de >> 1) & WayFlag.roundabout);
     const tr = new Traffic(roads, 2);
     const nodes = [...g.edgeA.keys()].filter((e) => isRing(2 * e)).flatMap((e) => [g.edgeA[e]!, g.edgeB[e]!]);
@@ -365,7 +366,7 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
         if (was === true && !on) (exits++, enteredAt.delete(c.id));
         prevRing.set(c.id, on);
         if (on) {
-          // clockwise seen from above (left-hand traffic; anticlockwise on Leg 1): the edge must be travelled in its oneway direction
+          // anticlockwise seen from above (right-hand traffic, Leg 3; clockwise on Leg 2): the edge must be travelled in its oneway direction
           if ((c.route[0]! & 1) !== 0) wrong++;
           const t0 = enteredAt.get(c.id);
           if (t0 !== undefined && tr.time - t0 > 90) late++;
@@ -376,30 +377,30 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
         }
       }
     }
-    console.log(`Jorge Álvares: ${entries} entries, ${exits} exits, worst ring gap ${worst.toFixed(2)} m`);
-    expect(entries).toBeGreaterThan(3);
-    expect(exits).toBeGreaterThan(3);
+    console.log(`Aimé Dandoy: ${entries} entries, ${exits} exits, worst ring gap ${worst.toFixed(2)} m`);
+    expect(entries).toBeGreaterThan(50); // Leg 3: 64 / 62
+    expect(exits).toBeGreaterThan(50);
     expect(wrong).toBe(0);
     expect(late).toBe(0);
     expect(worst).toBeGreaterThanOrEqual(0);
   }, 120_000);
 
-  it('lights: ≈ 250 lit junctions (Macao; Paris ≈ 1,100), none on a roundabout, every head faces its arm', () => {
+  it('lights: ≈ 379 lit junctions (Bruxelles; Macao ≈ 250; Paris ≈ 1,100), none on a roundabout, every head faces its arm', () => {
     const t0 = performance.now();
     const lights = new TrafficLights(roads);
     const heads = lights.headsNear(0, 0, 1e5);
     const nodes = new Set(heads.map((h) => h.junction));
     console.log(`TrafficLights: ${nodes.size} lit nodes, ${heads.length} heads, ${(performance.now() - t0).toFixed(0)} ms`);
-    expect(nodes.size).toBeGreaterThan(200);
-    expect(nodes.size).toBeLessThan(350);
+    expect(nodes.size).toBeGreaterThan(360);
+    expect(nodes.size).toBeLessThan(400);
     for (const n of nodes) expect(g.edgesOf(n).some((e) => g.flags(e) & WayFlag.roundabout)).toBe(false);
     for (const h of heads.slice(0, 200)) expect(lights.stop(h.junction, h.edge)).toBeGreaterThan(0);
   });
 
-  it('SignalHead contract: every head around Largo do Senado, the Praia Grande and the Horta e Costa avenue stands off the carriageway on the driving-side kerb and looks at the oncoming cars', () => {
+  it('SignalHead contract: every head around the Grand-Place, Rue Royale and Rue de la Loi stands off the carriageway on the driving-side kerb and looks at the oncoming cars', () => {
     const lights = new TrafficLights(roads);
-    const praia = latLonToWorld(22.1905, 113.5425), horta = latLonToWorld(22.201, 113.546);
-    const heads = [[0, 0], [praia.x, praia.z], [horta.x, horta.z]].flatMap(([x, z]) => lights.headsNear(x!, z!, 300));
+    const royale = latLonToWorld(50.8458, 4.3622), loi = latLonToWorld(50.84438, 4.37435);
+    const heads = [[0, 0], [royale.x, royale.z], [loi.x, loi.z]].flatMap(([x, z]) => lights.headsNear(x!, z!, 300));
     expect(heads.length).toBeGreaterThan(30);
     let offRoad = 0, rightSide = 0, facing = 0; // rightSide = on the driving-side kerb
     for (const h of heads) {
@@ -427,9 +428,9 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
     expect(run(2)).not.toBe(a);
   }, 60_000);
 
-  it('sloped streets (Rue Royale, Opéra): cars on the drawn road, pedestrians on the drawn sidewalk / road (review M6)', () => {
+  it('sloped streets (Rue Royale, Rue de la Loi): cars on the drawn road, pedestrians on the drawn sidewalk / road (review M6)', () => {
     let worstCar = 0, lo = 0, hi = 0;
-    for (const at of [latLonToWorld(48.8676, 2.3236), latLonToWorld(48.8706, 2.332)]) {
+    for (const at of [latLonToWorld(50.8458, 4.3622), latLonToWorld(50.84438, 4.37435)]) {
       const a = anchor(at.x, at.z), tr = new Traffic(roads, 1), cr = new Crowd(roads, 1);
       cr.lights = tr.lights;
       const step = (fill = false) => (tr.step(DT, a, 1, cr.peds, fill), cr.step(DT, a, 1, tr.cars, fill));
@@ -452,10 +453,10 @@ describe.skipIf(!has)('Traffic (roadgraph.json, carved grid)', () => {
 
   // review2-complete F2: a box zone on the Rue de Rivoli × Castiglione lights (oneway: no way round once on Rivoli) made
   // cars queue inside it (151 → 480 samples, 77 → 252 standing). Sampled every 0.5 s, cars within 20 m of the centre.
-  // Leg 2: the lit junction 2014 of the Macao graph at (421.5, 96.4) (≈ 22.1927, 113.5435; found by scanning the 63 lit junctions
-  // within 900 m of Largo do Senado for one where the spot queues without a zone (seeds 1, 5) and stays clear with one).
-  it('box zone on a busy lit junction (Macao junction 2014): after 15 s no car stands in it and almost none drive through (seeds 1, 5)', () => {
-    const p = { x: 324, z: 74.1 }, zone = { x: 421.5, z: 96.4, r: 20 }; // player 100 m away, zone on the lit junction
+  // Leg 3: the lit junction 22446 of the Bruxelles graph at (702.5, −18.3) (≈ 50.8469, 4.3624, Rue Royale at the Parc de Bruxelles;
+  // found by scanning the 122 lit junctions within 900 m of Rue Royale for the one where the spot queues most without a zone).
+  it('box zone on a busy lit junction (Bruxelles junction 22446): after 15 s no car stands in it and almost none drive through (seeds 1, 5)', () => {
+    const p = { x: 602.5, z: -18.3 }, zone = { x: 702.5, z: -18.3, r: 20 }; // player 100 m away, zone on the lit junction
     const a = anchor(p.x, p.z);
     for (const seed of [1, 5]) {
       const tr = new Traffic(roads, seed), cr = new Crowd(roads, seed);

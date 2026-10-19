@@ -154,6 +154,6 @@ describe('RaceRoom', () => {
   it('logs into the default race when the link has no ?race=', async () => {
     const r = await server.fetch('/api/login', { method: 'POST', body: JSON.stringify({ host: TEST_PASSWORD }) });
     expect(r.status).toBe(200);
-    expect(await openSocket(server, 'macao', ((await r.json()) as { token: string }).token).then((s) => s.next())).toMatchObject({ t: 'welcome', race: 'macao' });
+    expect(await openSocket(server, 'bruxelles', ((await r.json()) as { token: string }).token).then((s) => s.next())).toMatchObject({ t: 'welcome', race: 'bruxelles' });
   });
 });

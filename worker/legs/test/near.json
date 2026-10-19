@@ -6,9 +6,9 @@
     "hysteresis": 10
   },
   "start": {
-    "name": "Largo do Senado – lối vào",
-    "lat": 22.19377,
-    "lon": 113.539819,
+    "name": "Grand-Place – lối vào",
+    "lat": 50.84697,
+    "lon": 4.353084,
     "yawDeg": 0,
     "spreadMeters": 3
   },
@@ -17,11 +17,11 @@
       "id": "L1",
       "type": "route_info",
       "label": "Lộ trình 1",
-      "clue": "(GIẢ) Đi tới điểm thứ nhất trên quảng trường.",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 1 (bản thử, không nêu tên điểm đến).",
       "destination": {
-        "name": "Largo do Senado – điểm 1",
-        "lat": 22.194092,
-        "lon": 113.540234,
+        "name": "Grand-Place – điểm 1",
+        "lat": 50.84729,
+        "lon": 4.35374,
         "radius": 20
       }
     },
@@ -41,11 +41,11 @@
       "id": "L2",
       "type": "route_info",
       "label": "Lộ trình 2",
-      "clue": "(GIẢ) Đi tới điểm thứ hai.",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 2 (bản thử, không nêu tên điểm đến).",
       "destination": {
-        "name": "Largo do Senado – điểm 2",
-        "lat": 22.193839,
-        "lon": 113.540021,
+        "name": "Grand-Place – điểm 2",
+        "lat": 50.84655,
+        "lon": 4.35275,
         "radius": 20
       }
     },
@@ -54,9 +54,9 @@
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Largo do Senado – điểm 2",
-        "lat": 22.193839,
-        "lon": 113.540021,
+        "name": "Grand-Place – điểm 2",
+        "lat": 50.84655,
+        "lon": 4.35275,
         "radius": 20,
         "yawDeg": -40
       },

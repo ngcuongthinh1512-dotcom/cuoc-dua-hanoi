@@ -14,10 +14,10 @@ const at = (lat: number, lon: number): P => latLonToWorld(lat, lon);
 describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
   const g = RoadGraph.decode(JSON.parse(readFileSync(file, 'utf8')) as RoadGraphFile);
   const spawn: P = playerSetup.spawn;
-  // Leg 2 (Macao); the spawn is 14 m from Largo do Senado. Leg 1 (Paris): Opéra, Louvre, Eiffel, Notre-Dame, Trocadéro, Panthéon, Arc, Orsay.
+  // Leg 3 (Brussels): the spawn is next to the Grand-Place. Leg 2 (Macao): Largo do Senado, Tap Seac, Ruínas, Monte, A-Ma…; Leg 1 (Paris): Opéra, Louvre, Eiffel…
   const PLACES = {
-    tapSeac: at(22.19823, 113.547), ruinas: at(22.19756, 113.54089), monte: at(22.19714, 113.54261), ama: at(22.18647, 113.53097),
-    kunIam: at(22.1905, 113.5495), ferreira: at(22.1932, 113.5465), louLim: at(22.2049, 113.5455), guia: at(22.1985, 113.5495),
+    royale: at(50.8419, 4.3623), arts: at(50.8442, 4.3569), parc: at(50.8454, 4.363), midi: at(50.8355, 4.3365),
+    cathedrale: at(50.84782, 4.36002), schuman: at(50.8431, 4.383), madou: at(50.8505, 4.37), cinq: at(50.8403, 4.3935),
   };
   const straight = (a: P, b: P) => Math.hypot(a.x - b.x, a.z - b.z);
   const len = (r: ArrayLike<number>) => { let s = 0; for (let i = 2; i < r.length; i += 2) s += Math.hypot(r[i]! - r[i - 2]!, r[i + 1]! - r[i - 1]!); return s; };
@@ -54,16 +54,16 @@ describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
     return out;
   };
 
-  it('Largo do Senado → Praça do Tap Seac on foot: route from the feet to the target, ≤ 1.3 × as the crow flies', () => {
-    const p = search(spawn, PLACES.tapSeac);
+  it('Grand-Place → Cathédrale St-Michel on foot: route from the feet to the target, ≤ 1.3 × as the crow flies', () => {
+    const p = search(spawn, PLACES.cathedrale);
     const r = p.route!;
     expect(r).not.toBeNull();
     expect(Math.hypot(r[0]! - spawn.x, r[1]! - spawn.z)).toBeLessThanOrEqual(1);
-    expect(r[r.length - 2]).toBeCloseTo(PLACES.tapSeac.x, 2);
-    expect(r[r.length - 1]).toBeCloseTo(PLACES.tapSeac.z, 2);
+    expect(r[r.length - 2]).toBeCloseTo(PLACES.cathedrale.x, 2);
+    expect(r[r.length - 1]).toBeCloseTo(PLACES.cathedrale.z, 2);
     expect(p.remaining).toBeCloseTo(len(r), 1);
-    expect(p.remaining).toBeLessThanOrEqual(1.3 * straight(spawn, PLACES.tapSeac));
-    expect(p.target).toMatchObject({ x: PLACES.tapSeac.x, z: PLACES.tapSeac.z });
+    expect(p.remaining).toBeLessThanOrEqual(1.3 * straight(spawn, PLACES.cathedrale));
+    expect(p.target).toMatchObject({ x: PLACES.cathedrale.x, z: PLACES.cathedrale.z });
     expect(follows(r).every((es) => es.some((e) => g.allows(e, 'walk', true)))).toBe(true);
   });
 
@@ -75,13 +75,13 @@ describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
       expect(p.remaining, name).toBeLessThanOrEqual(1.6 * straight(spawn, to));
       rows.push(`${name} ${(p.remaining / straight(spawn, to)).toFixed(2)}×`);
     }
-    const p = search(PLACES.ama, PLACES.kunIam);
-    expect(p.remaining).toBeLessThanOrEqual(1.6 * straight(PLACES.ama, PLACES.kunIam));
-    console.log(`[gps] Largo do Senado → ${rows.join(', ')}`);
+    const p = search(PLACES.midi, PLACES.cathedrale);
+    expect(p.remaining).toBeLessThanOrEqual(1.6 * straight(PLACES.midi, PLACES.cathedrale));
+    console.log(`[gps] Grand-Place → ${rows.join(', ')}`);
   });
 
   it('walking 200 m along the route: remaining falls 1 m per m, no new search', () => {
-    const p = search(spawn, PLACES.tapSeac);
+    const p = search(spawn, PLACES.cathedrale);
     const poly = Float32Array.from(p.route!);
     const total = p.remaining;
     let prev = total;
@@ -100,7 +100,7 @@ describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
   });
 
   it('40 m off the route: one new search; never more than one per gps.minInterval', () => {
-    const p = search(spawn, PLACES.tapSeac);
+    const p = search(spawn, PLACES.cathedrale);
     const poly = Float32Array.from(p.route!);
     for (let s = 1; s <= 100; s++) p.update(...(along(poly, s).slice(0, 2) as [number, number]), 'walk', 0.25);
     expect(p.stats.searches).toBe(1);
@@ -119,19 +119,19 @@ describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
   });
 
   it('a new target drops the old route and is searched again', () => {
-    const p = search(spawn, PLACES.tapSeac);
-    p.setTarget(PLACES.ruinas.x, PLACES.ruinas.z);
+    const p = search(spawn, PLACES.cathedrale);
+    p.setTarget(PLACES.madou.x, PLACES.madou.z);
     expect(p.route).toBeNull();
     expect(p.remaining).toBeNaN();
     p.update(spawn.x, spawn.z, 'walk', cfg.minInterval);
     expect(p.route).not.toBeNull();
-    expect(p.remaining).toBeLessThanOrEqual(1.3 * straight(spawn, PLACES.ruinas));
+    expect(p.remaining).toBeLessThanOrEqual(1.3 * straight(spawn, PLACES.madou));
     p.clear();
     expect([p.target, p.route, p.remaining]).toEqual([null, null, NaN]);
   });
 
   it('on the bike the route has no steps; a walking route may', () => {
-    const [a, b] = [PLACES.monte, PLACES.ruinas]; // Fortaleza do Monte → the Ruínas: the stairs down
+    const [a, b] = [{ x: 599.8, z: 125.5 }, PLACES.parc]; // Leg 3: the stairs below the Place Royale up to the Parc de Bruxelles (found by scanning the graph)
     const walk = search(a, b, 'walk'), bike = search(a, b, 'bike');
     const steps = (r: Float32Array) => follows(r).filter((es) => es.length && es.every((e) => g.flags(e) & WayFlag.steps)).length;
     expect(steps(walk.route!)).toBeGreaterThan(0);
@@ -140,9 +140,9 @@ describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
     expect(bike.remaining).toBeGreaterThan(walk.remaining); // the detour around the stairs
   });
 
-  it('a pocket near Jardim de São Francisco → the Ruínas by bike: no bike route, falls back to the walking one', () => {
-    const from: P = { x: 506.3, z: 349.2 }; // cut off from the street by stairs for bikes (found by scanning the Macao graph, Leg 2)
-    const to = PLACES.ruinas;
+  it('a pocket by the stairs near the Grand-Place → the Mont des Arts by bike: no bike route, falls back to the walking one', () => {
+    const from: P = { x: 278, z: 8.9 }; // cut off from the street by stairs for bikes (found by scanning the Brussels graph, Leg 3)
+    const to = PLACES.arts;
     const bikeNodes = [from, to].map((q) => g.nearestNode(q.x, q.z, 'bike', 80)) as [number, number];
     expect(bikeNodes.every((n) => n >= 0)).toBe(true);
     expect(shortestPath(g, bikeNodes[0], bikeNodes[1], 'bike')).toBeNull(); // precondition: the stairs cut the bike network
@@ -162,7 +162,7 @@ describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
   });
 
   it('arriving within gps.arriveRadius clears the waypoint and the route', () => {
-    const p = search(spawn, PLACES.tapSeac);
+    const p = search(spawn, PLACES.royale);
     const r = Float32Array.from(p.route!);
     const [x, z] = along(r, len(r) - (cfg.arriveRadius + 2));
     p.update(x, z, 'walk', 0.25);
@@ -175,7 +175,7 @@ describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
   });
 
   it('a target that cannot be reached keeps the waypoint, draws no route, retries once per interval', () => {
-    for (const [label, to] of [['outside the map', { x: 20000, z: 20000 }], ['mid-sea, far from a bridge', { x: 2382, z: 393 }]] as const) {
+    for (const [label, to] of [['outside the map', { x: 20000, z: 20000 }]] as const) {
       expect(g.nearestNode(to.x, to.z, 'walk', 80), label).toBe(-1);
       const p = new Gps(g);
       p.setTarget(to.x, to.z);
@@ -184,10 +184,10 @@ describe.skipIf(!existsSync(file))('Gps (roadgraph.json)', () => {
       expect([p.route, p.remaining], label).toEqual([null, NaN]);
       expect(p.stats.searches, label).toBeLessThanOrEqual(1 + Math.floor(4 / cfg.minInterval));
     }
-    // the feet in the sea (no node within reach): no route until they are back on land
+    // the feet outside the map (no node within reach; Leg 3 has no sea): no route until they are back on the streets
     const p = new Gps(g);
-    p.setTarget(PLACES.ruinas.x, PLACES.ruinas.z);
-    p.update(2382, 393, 'walk', 0);
+    p.setTarget(PLACES.arts.x, PLACES.arts.z);
+    p.update(20000, 20000, 'walk', 0);
     expect(p.route).toBeNull();
     p.update(spawn.x, spawn.z, 'walk', cfg.minInterval);
     expect(p.route).not.toBeNull();

@@ -1,4 +1,14 @@
-# CLAUDE.md – Cuộc đua Macao (Leg 2)
+# CLAUDE.md – Cuộc đua Bỉ (Leg 3)
+
+> **Leg 3 = trung tâm Bruxelles (Brussels), Bỉ.** Fork của `cuoc-dua-macao` nhánh `main` (Leg 2, trước khi có casino / thử thách Công thức / Macau Tower, đã mang theo lịch sử git).
+> Engine, server, Host, schema chặng giữ nguyên; THẾ GIỚI là Bruxelles. Khác với Leg 2 (cập nhật khi làm tiếp):
+> - `shared/src/constants.ts`: `ORIGIN` = Grand-Place 50.84675, 4.35247; `RACE_BBOX` = 50.83–50.86 N, 4.335–4.398 E (≈ 4,4 × 3,3 km ≈ 14,8 km²: Gare du Midi / Tour du Midi → Place Rogier, Grand-Place → Cinquantenaire).
+> - Ban ngày (`timeOfDay = 'day'` trong `client/src/config.ts`; code ban đêm của Leg 2 vẫn còn nhưng không chạy), xe và người đi bên PHẢI (`traffic.driveLeft = false`).
+> - Khu vực = các commune (`PARISHES` trong `geo/districts.ts`, OSM admin_level 8 + `name:fr`). Không có biển: `natural=coastline` rỗng; kênh Bruxelles–Charleroi được lưu như sông (`river: true`).
+> - Đã gỡ 30 địa danh Macao (m1–m4, mf1, mf2); `geo/landmarks.ts` là registry của Leg 3 (địa danh Bruxelles, vẽ bằng bộ dựng chung S3DB `parts.ts` từ OSM building:part, chi tiết dựng bằng code thêm sau).
+> - Bảng màu nhà (khối `buildings.macao` giữ tên cũ): gạch đỏ / nâu, đá kem, mái đá đen; biển hiệu cửa hàng chỉ còn vạch chữ trung tính.
+> - Tên triển khai: Worker + R2 `cuoc-dua-bi` / `cuoc-dua-bi-media`; race mặc định `bruxelles`.
+
 
 > **Leg 2 = Macao Peninsula.** This repo is a fork of the Paris project (`cuoc-dua-paris`, Leg 1; full history copied). Everything below was written for
 > Paris: the engine / server / Host / leg schema are unchanged, the WORLD is Macao. Differences so far (update as steps land):

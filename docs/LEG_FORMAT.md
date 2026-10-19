@@ -2,11 +2,11 @@
 
 Tài liệu cho **Host / người tổ chức** (không cần biết lập trình). Một **chặng** là toàn bộ nội dung của một cuộc đua: đội xuất phát ở đâu, đi qua những điểm nào, mật thư là gì, nhiệm vụ nào, đáp án nào. Chặng nằm trong **một file `.json`** (chữ thuần, mở được bằng Notepad / TextEdit / VS Code).
 
-> Nội dung chặng thật chưa có trong dự án. Mọi ví dụ dưới đây là **nội dung GIẢ** (ghi "(GIẢ)") để bạn thấy dạng file. Chặng demo `worker/legs/macao-demo.json` có 6 mật thư lộ trình là **câu mẫu GIẢ** về các địa danh Ma Cao (chỉ để chạy thử, không phải nội dung thật: thay hết khi viết chặng thật); các ô Lựa chọn kép / thử thách của nó **để trống** chờ bạn điền.
+> Nội dung chặng thật chưa có trong dự án. Mọi ví dụ dưới đây là **nội dung GIẢ** (ghi "(GIẢ)") để bạn thấy dạng file. Chặng demo `worker/legs/bruxelles-demo.json` có 6 mật thư lộ trình là **câu mẫu GIẢ** về các địa danh Ma Cao (chỉ để chạy thử, không phải nội dung thật: thay hết khi viết chặng thật); các ô Lựa chọn kép / thử thách của nó **để trống** chờ bạn điền.
 
 ## 1. Quy trình 4 bước
 
-1. **Viết file** `.json` (copy `worker/legs/test/mini.json` hoặc `worker/legs/macao-demo.json` làm mẫu rồi sửa). **Để file chặng thật NGOÀI thư mục dự án**, ví dụ `Tài liệu/chang-that/macao-1.json` (mục 9): không bao giờ trong `client/` (mọi thứ trong đó được gửi tới máy người chơi), và cũng không trong thư mục dự án (dễ bị đưa lên git cùng mã nguồn). Thư mục `worker/legs/` chỉ chứa các chặng demo / test có sẵn.
+1. **Viết file** `.json` (copy `worker/legs/test/mini.json` hoặc `worker/legs/bruxelles-demo.json` làm mẫu rồi sửa). **Để file chặng thật NGOÀI thư mục dự án**, ví dụ `Tài liệu/chang-that/macao-1.json` (mục 9): không bao giờ trong `client/` (mọi thứ trong đó được gửi tới máy người chơi), và cũng không trong thư mục dự án (dễ bị đưa lên git cùng mã nguồn). Thư mục `worker/legs/` chỉ chứa các chặng demo / test có sẵn.
 2. **Kiểm tra:** mở Terminal ở thư mục dự án và chạy (đường dẫn là chỗ file của bạn; có thể kéo thả file vào cửa sổ Terminal để dán đường dẫn)
 
    ```
@@ -15,7 +15,7 @@ Tài liệu cho **Host / người tổ chức** (không cần biết lập trìn
 
    Lệnh in ra **LỖI** (phải sửa; máy chủ sẽ từ chối), **CẢNH BÁO** (nên xem), **CÒN TRỐNG** (ô bạn chưa điền; cho phép khi soạn nháp, nhưng phải điền hết trước khi mở cuộc đua). Cuối cùng là bảng từng điểm trên bản đồ (mục 8). Một lần chạy liệt kê **mọi** lỗi tìm được (kể cả khi file có lỗi múi giờ hay sai thứ tự bước, phần kiểm tra bản đồ vẫn chạy); chỉ khi file sai cú pháp JSON hoặc sai dạng (thiếu trường, sai kiểu) thì lệnh dừng ở đó.
 3. **Sửa theo thông báo** rồi chạy lại cho tới khi dòng cuối là "Hợp lệ" và không còn LỖI. Mỗi thông báo nói rõ ở đâu ("Bước 3 (D1) › nhánh A › nhiệm vụ › tiêu đề") và sai gì; bảng ở mục 11 liệt kê các lỗi hay gặp và cách sửa.
-4. **Nạp vào cuộc đua:** mở trang Host (`/host.html`; khi chạy trên máy: `http://localhost:8787/host.html`, xem README), nhập mã cuộc đua và mật khẩu Host. Ở phần "Chặng": chọn chặng có sẵn (`macao-demo`, `macao-demo-filled`, `mini`) rồi bấm **Nạp**, hoặc **Nạp chặng từ file**: chọn file trên máy. Trang Host báo lại kết quả và danh sách ô còn trống. Sau đó **chơi thử**: tự động bằng `npm run sim` (mục 13) hoặc bằng tay với một cuộc đua riêng (mục 2).
+4. **Nạp vào cuộc đua:** mở trang Host (`/host.html`; khi chạy trên máy: `http://localhost:8787/host.html`, xem README), nhập mã cuộc đua và mật khẩu Host. Ở phần "Chặng": chọn chặng có sẵn (`bruxelles-demo`, `bruxelles-demo-filled`, `mini`) rồi bấm **Nạp**, hoặc **Nạp chặng từ file**: chọn file trên máy. Trang Host báo lại kết quả và danh sách ô còn trống. Sau đó **chơi thử**: tự động bằng `npm run sim` (mục 13) hoặc bằng tay với một cuộc đua riêng (mục 2).
 
 `leg:check` kiểm cả những thứ máy chủ không kiểm được (điểm nằm trong nhà, không đi bộ tới được, nằm giữa sông, giữa lòng đường xe chạy, đáp án lọt vào file tải về...). Vì vậy **luôn chạy `leg:check` trước khi nạp**.
 
@@ -317,8 +317,8 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
 | Chặng | Dòng cuối | Các cảnh báo (bình thường, đã biết) |
 |---|---|---|
 | `worker/legs/test/mini.json` | `Hợp lệ: 0 cảnh báo, 0 ô còn trống.` | không có |
-| `worker/legs/macao-demo.json` | `Hợp lệ: 0 cảnh báo, 17 ô còn trống.` | không có. 17 ô còn trống là các ô Lựa chọn kép / thử thách chờ bạn điền |
-| `worker/legs/test/macao-demo.filled.json` (`macao-demo-filled`, demo đã điền nội dung GIẢ) | `Hợp lệ: 0 cảnh báo, 0 ô còn trống.` | không có |
+| `worker/legs/bruxelles-demo.json` | `Hợp lệ: 0 cảnh báo, 17 ô còn trống.` | không có. 17 ô còn trống là các ô Lựa chọn kép / thử thách chờ bạn điền |
+| `worker/legs/test/bruxelles-demo.filled.json` (`bruxelles-demo-filled`, demo đã điền nội dung GIẢ) | `Hợp lệ: 0 cảnh báo, 0 ô còn trống.` | không có |
 | `worker/legs/test/near.json` (các điểm cách nhau vài chục mét trong Largo do Senado, `boxReveal` nhỏ, để chạy thử nhanh) | `Hợp lệ: 0 cảnh báo, 0 ô còn trống.` | không có |
 
 ```json
@@ -502,7 +502,7 @@ Kết quả `leg:check` thật của các chặng có sẵn (chạy lại đư�
 }
 ```
 
-Lưu ý khi viết chặng thật từ mẫu này: bước 1 (`L1`) là mật thư **phát ngoài game** cho các đội (ghi nguyên văn trong `clue`); ở `mini` nó dẫn tới một nơi khác nơi xuất phát, còn nếu mật thư 1 dẫn tới chính nơi xuất phát thì làm như mục 6. Mật thư các bước sau chỉ hiện trong game khi đội mở hộp. Chặng demo `macao-demo.json` có sẵn 10 bước với các điểm kiểm thử của dự án: thay 6 mật thư lộ trình mẫu, điền các ô trống (`clue`, `title`, `description`, `answers`...) rồi chạy `leg:check`.
+Lưu ý khi viết chặng thật từ mẫu này: bước 1 (`L1`) là mật thư **phát ngoài game** cho các đội (ghi nguyên văn trong `clue`); ở `mini` nó dẫn tới một nơi khác nơi xuất phát, còn nếu mật thư 1 dẫn tới chính nơi xuất phát thì làm như mục 6. Mật thư các bước sau chỉ hiện trong game khi đội mở hộp. Chặng demo `bruxelles-demo.json` có sẵn 10 bước với các điểm kiểm thử của dự án: thay 6 mật thư lộ trình mẫu, điền các ô trống (`clue`, `title`, `description`, `answers`...) rồi chạy `leg:check`.
 
 ## 11. Bảng thông báo hay gặp → cách sửa
 
@@ -576,12 +576,12 @@ Sau khi `leg:check` ra "Hợp lệ", cho **bot** chơi hết chặng để chắ
 npm run sim -- --leg ~/Documents/chang-that/macao-1.json --bots 2 --speedup 2
 ```
 
-- `--leg`: đường dẫn file chặng, hoặc mã chặng có sẵn (`mini`, `macao-demo-filled`).
+- `--leg`: đường dẫn file chặng, hoặc mã chặng có sẵn (`mini`, `bruxelles-demo-filled`).
 - `--bots`: số đội bot (2 là đủ). `--speedup 2`: nhanh gấp đôi (tối đa 2). Chặng 4 bước ≈ 2,3 km mất ≈ 7 phút ở `--speedup 2` (đo thật); lệnh tự dừng sau `--minutes` phút mô phỏng (mặc định 30) nếu bot chưa xong.
 - `npm run sim -- --help` in mọi tùy chọn.
 - Đọc kết quả: dòng `Chặng <mã> (N bước): 2 / 2 đội về đích (bị loại: 1) · xếp hạng 2 dòng` là đạt (bot về cuối cùng luôn bị loại, đúng luật). `← LỖI` ở cuối dòng hoặc mã thoát khác 0 = có đội không về đích / quá ngân sách ghi dữ liệu. "Thao tác bị từ chối (thử lại)" là các lần bot bấm F / gửi bài khi máy chủ chưa nhận vị trí mới nhất (thử lại là qua): chỉ đáng lo khi kèm "kẹt ở bước …". "Đội bị đánh dấu vượt tốc" khi tua nhanh là bình thường.
 - **Host ảo:** mọi bài chờ duyệt (câu gõ lẫn bài ảnh) được duyệt tự động; riêng câu đầu tiên của bot thứ hai ở thử thách đầu tiên bị **Phạt** một lần (bot chờ hết đếm ngược rồi gửi lại). Với Lựa chọn kép, bot thứ i chọn nhánh số i chia 2 lấy dư (bot đầu nhánh đầu, bot hai nhánh sau, …); bot thứ ba (chỉ có 2 bot thì bot thứ hai) còn **đổi nhánh một lần** ngay sau khi chọn (chờ hết đếm ngược, đi tới hòm nhánh kia, mở và làm). Vì vậy một lần chạy `--bots 2` thử đủ: gõ đáp án, Host duyệt, Host phạt, hai nhánh, đổi nhánh. Chặng thật thì **Host thật duyệt**, không có bot.
-- **Thời gian chờ:** để không phải chờ 3 và 10 phút thật, `sim` nạp chặng với hai đồng hồ đếm ngược của `penalties` rút xuống còn 6 và 12 giây (chỉ trong lần chạy thử; file của bạn không bị sửa; thử thách có `retryLockMinutes` riêng vẫn giữ số của nó). Chặng test đã có (`mini`, `macao-demo-filled`) vẫn khai báo phạt 3 và 10 phút như mặc định.
+- **Thời gian chờ:** để không phải chờ 3 và 10 phút thật, `sim` nạp chặng với hai đồng hồ đếm ngược của `penalties` rút xuống còn 6 và 12 giây (chỉ trong lần chạy thử; file của bạn không bị sửa; thử thách có `retryLockMinutes` riêng vẫn giữ số của nó). Chặng test đã có (`mini`, `bruxelles-demo-filled`) vẫn khai báo phạt 3 và 10 phút như mặc định.
 - Báo cáo thêm số câu trả lời, số lần Duyệt / Phạt và số lần đổi nhánh.
 - **Kịch bản Host đầy đủ (`--full`, cần ≥ 6 bot):** thêm vào lần chạy: Host ảo **Hoàn tác** một Duyệt trong 10 giây rồi duyệt lại, **Xóa cờ** đỏ đầu tiên (khi tua nhanh bot luôn bị cờ vượt tốc), **Cho qua** bot thứ 5 ở thử thách đầu (bot đó không trả lời), bot cuối đứng trên thảm mà không check-in → khi các đội khác về đích Host bấm **Kết thúc** → đội đó BỊ LOẠI; cuối cùng tải tệp "Xuất dữ liệu thời gian" (CSV + JSON) và kiểm: đủ đội, cột "Hạng cuối", không có IP. Dòng `Kịch bản Host (--full)` và `Xuất dữ liệu thời gian` của báo cáo phải không có `LỖI`. Chặng test đủ mọi loại bước: `npm run sim -- --leg full --bots 8 --speedup 2 --full`.
 - **Ngân sách Cloudflare:** dòng `N đội × 2 giờ` nội suy từ lần chạy ngắn ra cuộc đua thật 2 giờ với `--teams N` đội (mặc định 8) và so với ngưỡng SPEC §3 tính theo tỉ lệ (20 đội: 40 000 request, 20 000 dòng); `← VƯỢT NGÂN SÁCH` làm lệnh thoát khác 0.

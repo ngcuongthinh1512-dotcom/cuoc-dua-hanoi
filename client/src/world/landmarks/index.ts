@@ -1,5 +1,5 @@
 // Landmark builder (SPEC §17.6, docs/plans/phase2b-assets.md §5): every BuildingRec with .landmark goes to
-//   1. the group's DetailFn (m1…m4, mf1, mf2.ts, one file per group agent) if one is registered for its id,
+//   1. a DetailFn registered for its id in DETAILS (Leg 3: none yet, every landmark uses the generic renderer),
 //   2. else the generic S3DB renderer: its building:part (parts.ts); the outline too when the parts cover less than
 //      landmarks.partCoverage of it (S3DB: an outline with parts is not extruded); no parts → the outline alone.
 // Non-building outlines (bridge decks, fountains, artworks) are drawn by details only. A DetailFn that throws is
@@ -12,12 +12,8 @@ import { buildingHeight } from '../BuildingBuilder.ts';
 import { sceneEnvironmentOn, skyEnvironment } from '../Water.ts';
 import type { BuildCtx, Builder, BuildOut, MaterialId } from '../buildTypes.ts';
 import { mergeBuckets } from '../geom.ts';
-import { details as m1 } from './m1.ts';
-import { details as m2 } from './m2.ts';
-import { details as m3 } from './m3.ts';
-import { details as m4 } from './m4.ts';
-import { details as mf1 } from './mf1.ts';
-import { details as mf2 } from './mf2.ts';
+import { details as b } from './b.ts';
+import { details as c } from './c.ts';
 import * as kit from './kit.ts';
 import { parseColour, partHeights, partRings, pickMaterial, recordGround, renderPart, roofShape, Sink } from './parts.ts';
 
@@ -81,7 +77,7 @@ export const helpers = {
 } as const;
 export type Helpers = typeof helpers;
 
-const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...m1, ...m2, ...m3, ...m4, ...mf1, ...mf2 };
+const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...b, ...c };
 
 export const buildLandmarks: Builder = (chunk, ctx) => {
   const outs: BuildOut[] = [];

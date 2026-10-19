@@ -2,9 +2,9 @@
   "id": "mini",
   "title": "Chặng ngắn để test (NỘI DUNG GIẢ)",
   "start": {
-    "name": "Largo do Pagode da Barra – trước đền A-Ma",
-    "lat": 22.18647,
-    "lon": 113.53097,
+    "name": "Place Sainte-Catherine",
+    "lat": 50.8511,
+    "lon": 4.3468,
     "yawDeg": 33,
     "spreadMeters": 5
   },
@@ -13,17 +13,17 @@
       "id": "L1",
       "type": "route_info",
       "label": "Lộ trình 1",
-      "clue": "(GIẢ) Lên quảng trường lát sóng đen trắng trước tòa thị chính cũ.",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 1 (bản thử, không nêu tên điểm đến).",
       "destination": {
-        "name": "Largo do Senado",
-        "lat": 22.193839,
-        "lon": 113.540021,
+        "name": "Grand-Place",
+        "lat": 50.84675,
+        "lon": 4.35247,
         "radius": 35,
+        "yawDeg": 150,
         "bikeParking": {
-          "lat": 22.193622,
-          "lon": 113.53972
-        },
-        "yawDeg": 150
+          "lat": 50.84626,
+          "lon": 4.35214
+        }
       },
       "media": [
         {
@@ -38,20 +38,20 @@
       "type": "challenge",
       "label": "Thử thách 1",
       "task": {
-        "title": "(GIẢ) Câu hỏi ở vườn Vasco da Gama",
+        "title": "(GIẢ) Câu hỏi ở Công viên Bruxelles",
         "description": "(GIẢ) 6 × 7 = ?",
         "media": [
           "https://example.invalid/gia/vuon-vasco-da-gama",
           "r2:test-gia-2.jpg"
         ],
         "location": {
-          "name": "Công viên Vasco da Gama (lối phụ)",
-          "lat": 22.197172,
-          "lon": 113.544817,
+          "name": "Công viên Bruxelles (lối phụ)",
+          "lat": 50.8448,
+          "lon": 4.3617,
           "radius": 30,
           "bikeParking": {
-            "lat": 22.196628,
-            "lon": 113.544532
+            "lat": 50.84426,
+            "lon": 4.36096
           }
         },
         "verification": "host_approval",
@@ -69,14 +69,14 @@
       "id": "L2",
       "type": "route_info",
       "label": "Lộ trình 2",
-      "clue": "(GIẢ) Sang phía đông, tới quảng trường Tap Seac. Bắt buộc: đi bộ.",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 2 (bản thử, không nêu tên điểm đến).",
       "transport": {
         "mandatory": "walk"
       },
       "destination": {
-        "name": "Praça do Tap Seac",
-        "lat": 22.19823,
-        "lon": 113.547,
+        "name": "Place Royale",
+        "lat": 50.84211,
+        "lon": 4.36237,
         "radius": 40
       }
     },
@@ -98,15 +98,11 @@
               "bảy"
             ],
             "location": {
-              "name": "Phía bắc quảng trường Tap Seac, cạnh thư viện",
-              "lat": 22.19871,
-              "lon": 113.547135,
+              "name": "Jardin du Mont des Arts, cạnh thư viện",
+              "lat": 50.8456,
+              "lon": 4.3595,
               "radius": 15,
-              "yawDeg": 135,
-              "bikeParking": {
-                "lat": 22.198992,
-                "lon": 113.547199
-              }
+              "yawDeg": 135
             }
           }
         },
@@ -116,18 +112,18 @@
           "summary": "(GIẢ) Gửi ảnh cho Host.",
           "task": {
             "title": "(GIẢ) Ảnh",
-            "description": "(GIẢ) Chụp màn hình trước thư viện Tap Seac.",
+            "description": "(GIẢ) Chụp màn hình trước Thư viện Hoàng gia.",
             "kind": "free",
             "verification": "host_approval",
             "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook.",
             "location": {
-              "name": "Khoảng sân rộng ở Tap Seac",
-              "lat": 22.19613,
-              "lon": 113.549345,
+              "name": "Place du Petit Sablon",
+              "lat": 50.83949,
+              "lon": 4.35495,
               "radius": 30,
               "bikeParking": {
-                "lat": 22.19573,
-                "lon": 113.548918
+                "lat": 50.83941,
+                "lon": 4.35558
               }
             },
             "referenceAnswers": [
@@ -141,12 +137,16 @@
       "id": "L3",
       "type": "route_info",
       "label": "Lộ trình 3",
-      "clue": "(GIẢ) Chặng dừng ở khu vườn có tượng nhà hàng hải, phía nam Tap Seac.",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 3 (bản thử, không nêu tên điểm đến).",
       "destination": {
-        "name": "Jardim Vasco da Gama",
-        "lat": 22.1962,
-        "lon": 113.54633,
-        "radius": 25
+        "name": "Công viên Bruxelles (Parc de Bruxelles)",
+        "lat": 50.8454,
+        "lon": 4.363,
+        "radius": 25,
+        "bikeParking": {
+          "lat": 50.8456,
+          "lon": 4.36166
+        }
       }
     },
     {
@@ -154,17 +154,17 @@
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Jardim Vasco da Gama",
-        "lat": 22.1962,
-        "lon": 113.54633,
+        "name": "Công viên Bruxelles (Parc de Bruxelles)",
+        "lat": 50.8454,
+        "lon": 4.363,
         "radius": 25
       },
       "announce": {
-        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại vườn Vasco da Gama!",
+        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại Công viên Bruxelles!",
         "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
-        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại vườn Vasco da Gama.",
+        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại Công viên Bruxelles.",
         "first": {
-          "npc": "(GIẢ) {tên đội} về nhất tại vườn Vasco da Gama!",
+          "npc": "(GIẢ) {tên đội} về nhất tại Công viên Bruxelles!",
           "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
         },
         "out": {

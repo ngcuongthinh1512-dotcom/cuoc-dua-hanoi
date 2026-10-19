@@ -51,9 +51,11 @@ const WATER_FAIL_BYTES = 1024 * 1024;
 // Phase 5 (docs/plans/phase5.md §3): big-map park overview in water.json (whole map, not per chunk)
 const PARK_TOL = 2; // m, Douglas–Peucker tolerance
 const PARK_MIN_AREA = 400; // m²: smaller park / grass areas (verge strips) are left out of the overview
-/** Parish (Macao freguesia: boundary=administrative + admin_level=6 + name:pt in PARISHES) → its number 1…5, else 0. */
+/** Commune (Brussels: boundary=administrative + admin_level=8 + name:fr in PARISHES) → its number 1…n, else 0. */
 const districtNo = (t: Tags | undefined) =>
-  t?.boundary === 'administrative' && t.admin_level === '6' ? PARISHES.indexOf((t['name:pt'] ?? '') as (typeof PARISHES)[number]) + 1 : 0;
+  t?.boundary === 'administrative' && t.admin_level === '8'
+    ? PARISHES.indexOf((t['name:fr'] ?? t.name?.split(' - ')[0] ?? '') as (typeof PARISHES)[number]) + 1
+    : 0;
 
 const t0 = performance.now();
 const stats: Record<string, number> = {};
@@ -342,12 +344,12 @@ for (const { geometry: g, p } of features) {
       }
     } else if (cat === 'water') {
       const clipped = clipPoly(poly, waterRect);
-      const river = tags.water === 'river' || tags.waterway === 'riverbank' || /seine/i.test(tags.name ?? '');
+      const river = tags.water === 'river' || tags.water === 'canal' || tags.waterway === 'riverbank' || tags.waterway === 'canal' || /canal/i.test(tags.name ?? '');
       if (clipped) water.push({ river, ...clipped });
     }
   }
 }
-// Leg 2: the sea is filed as a river (carveRiver, quays, quay stairs, bridge gaps all key on `river`).
+// Leg 2 (Macao; Brussels has no coast: coastLines is empty there): the sea is filed as a river (carveRiver, quays, quay stairs, bridge gaps all key on `river`).
 for (const sea of seaPolygons(coastLines, waterRect)) {
   water.push({ river: true, outer: sea.outer, ...(sea.holes.length && { holes: sea.holes }) });
   bump('water.sea');

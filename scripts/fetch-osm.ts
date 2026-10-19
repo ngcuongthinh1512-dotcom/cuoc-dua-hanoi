@@ -13,12 +13,12 @@ import { type Bbox, tileGrid } from './geo.ts';
 
 const TILE_SIZE = 500; // m
 const DELAY_MS = 2500; // between requests (≥ 2 s, Overpass etiquette)
-const MAX_ATTEMPTS = 10; // Macao is dense: the main server rate-limits (429) often
+const MAX_ATTEMPTS = 10; // Brussels is dense: the main server rate-limits (429) often
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter', // fallback mirror (VK Maps)
 ];
-const USER_AGENT = 'cuoc-dua-macao/0.1 (game dev; one-time fetch)';
+const USER_AGENT = 'cuoc-dua-bi/0.1 (game dev; one-time fetch)';
 
 const root = join(import.meta.dirname, '..');
 const { values: args } = parseArgs({ options: { out: { type: 'string', default: join(root, '.cache/osm') } } });
@@ -58,7 +58,7 @@ const globalQuery = (b: Bbox) => {
   wr[natural=water]${B}; way[waterway~"^(river|riverbank)$"]${B}; way[natural=coastline]${C};
   way[barrier=retaining_wall]${B}; way[man_made~"^(embankment|quay)$"]${B};
   wr[leisure~"^(park|garden)$"]${B}; wr[landuse=grass]${B};
-  rel[boundary=administrative][admin_level=6]${B};
+  rel[boundary=administrative][admin_level=8]${B};
   rel[building]${B}; rel["building:part"]${B}; rel[highway]${B};
   rel[man_made=bridge]${B}; rel[bridge]${B}; rel[tunnel]${B};
   rel[amenity~"^(fountain|bicycle_parking)$"]${B}; rel[natural=tree_row]${B};
@@ -67,8 +67,8 @@ const globalQuery = (b: Bbox) => {
 out geom;`;
 };
 
-// Skyline (SPEC §17.6, phase2b-assets.md §5.7): Taipa / Cotai towers ≥ 60 m, outside RACE_BBOX; one small query.
-const SKYLINE_BBOX: Bbox = { south: 22.128, west: 113.545, north: 22.172, east: 113.600 }; // Taipa + Cotai towers, south of RACE_BBOX
+// Skyline (SPEC §17.6, phase2b-assets.md §5.7): towers ≥ 60 m around RACE_BBOX (Gare du Nord / Madou / Midi towers, Basilique de Koekelberg, Atomium side); one small query.
+const SKYLINE_BBOX: Bbox = { south: 50.80, west: 4.29, north: 50.90, east: 4.44 };
 const skylineQuery = () => {
   const B = bb(SKYLINE_BBOX);
   const tall = '["height"~"^([6-9][0-9]|[1-9][0-9][0-9])([.,][0-9]+)?( ?m)?$"]';

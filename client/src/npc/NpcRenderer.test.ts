@@ -2,11 +2,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, segPoint, WayFlag } from '@race/shared/graph';
 import { Color, Matrix4, Quaternion, Vector3 } from 'three';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { npcRender as R } from '../config.ts';
 import { TrafficLights } from './lights.ts';
 import { loadNpcAssets, type NpcAssets } from './NpcAssets.ts';
 import { carQuaternion, lampSpots, lerpPose, NpcRenderer, type Snap } from './NpcRenderer.ts';
+import { initTimeOfDay } from '../world/night.ts';
 import { NpcRoads } from './roads.ts';
 import type { CarKind, CarPose, LightQuery, SignalHead } from './types.ts';
 
@@ -116,7 +117,9 @@ describe.skipIf(!existsSync(graphFile))('NpcRenderer lights (real TrafficLights,
   });
 });
 
-describe('night car lamps (config timeOfDay night)', () => {
+describe('night car lamps (night forced: Leg 3 config is day)', () => {
+  beforeAll(() => initTimeOfDay(new URLSearchParams('time=night'), false));
+  afterAll(() => initTimeOfDay(new URLSearchParams(), false));
   it('2 head + 2 tail per car (+ taxi roof, 1 + 1 on a two-wheeler), heads at the nose = ahead of travel, brake brighter', () => {
     const r = new NpcRenderer(assets);
     const braking = { ...car(2, 'sedan', 0, 20, 0), braking: true };

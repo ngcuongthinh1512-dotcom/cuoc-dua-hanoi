@@ -21,11 +21,11 @@ export function districtAt(d: Districts | undefined, x: number, z: number): numb
   return 0;
 }
 
-/** Macao Peninsula freguesias (OSM admin_level 6, `name:pt`); district number n = index + 1. Taipa / Coloane lie outside the box. */
-export const PARISHES = ['Nossa Senhora de Fátima', 'Santo António', 'São Lázaro', 'Sé', 'São Lourenço'] as const;
+/** Brussels communes inside the box (OSM admin_level 8, `name:fr`); district number n = index + 1. */
+export const PARISHES = ['Bruxelles', 'Saint-Josse-ten-Noode', 'Ixelles', 'Etterbeek', 'Saint-Gilles', 'Schaerbeek', 'Molenbeek-Saint-Jean', 'Anderlecht'] as const;
 
-/** Street-plaque form: the parish name (Paris "8e Arrt" in Leg 1); 0 → "". */
+/** Street-plaque form: the commune name (Paris "8e Arrt" in Leg 1); 0 → "". */
 export const districtPlaque = (n: number) => PARISHES[n - 1] ?? '';
 
-/** HUD form (Vietnamese): 4 → "Freguesia Sé"; 0 → "". */
-export const districtLabel = (n: number) => (PARISHES[n - 1] ? `Freguesia ${PARISHES[n - 1]}` : '');
+/** HUD form (Vietnamese): 1 → "Commune Bruxelles"; 0 → "". */
+export const districtLabel = (n: number) => (PARISHES[n - 1] ? `Commune ${PARISHES[n - 1]}` : '');

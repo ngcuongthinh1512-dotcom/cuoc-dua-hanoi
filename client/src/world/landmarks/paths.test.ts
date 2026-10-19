@@ -19,34 +19,26 @@ const [KNEE, HIP] = [0.4, 1.0];
 /** Samples left blocked on purpose, `landmark: kind name (inside|wall)` → the most samples allowed (docs/reports/leg2-fixes.md
  *  item 3 lists them). A new finding or a higher count fails. */
 const ALLOWED: Record<string, number> = {
-  // the built terrace / platform top IS the walking surface there (the DEM is blurred flat): reached by the gate steps
-  // (Monte NE gate) / the great stair + side flights (Ruínas) / the front stair at the temple door (A-Ma)
-  'fortaleza-monte: footway (inside)': 394,
-  'ruinas-sao-paulo: footway (inside)': 48,
-  'ruinas-sao-paulo: footway 耶穌會紀念廣場 Largo da Companhia de Jesus (inside)': 7,
-  'ruinas-sao-paulo: steps (inside)': 9,
-  'templo-ama: footway (inside)': 1,
-  // the way is mapped through the OSM building outline (driveway / passage under a podium, indoor court): solid on purpose
-  'macau-tower: footway (inside)': 4,
-  'macau-tower: service (inside)': 43,
-  'bank-of-china: service (inside)': 1,
-  'hotel-lisboa: footway (inside)': 20,
-  'hotel-lisboa: footway (wall)': 1, // the OSM footway grazes the round casino drum's wall at (480, 449): same mapped-through-the-casino case
-  'wynn-macau: service (inside)': 36,
-  'wynn-macau: service (wall)': 2,
-  'fisherman-wharf: service (inside)': 36,
-  'sands-macau: residential 蒙地卡羅前地 Largo de Monte Carlo (inside)': 7,
-  'sands-macau: footway (inside)': 3,
-  'sands-macau: service (inside)': 1,
-  'science-center: footway (inside)': 16,
-  'casa-mandarim: footway (wall)': 2, // through the house's courts (solid in the game)
-  // the footway grazes the west corner of the Hundred Steps Promenade (a covered walk round a court, solid in the game); the
-  // zone buildings follow their outlines since leg2-audit-a3 (the frame-sized halls also walled Estrada de Adolfo Loureiro)
-  'jardim-lou-lim-ioc: footway (inside)': 1,
-  // edge cases left (≤ 2 m of a wide way, or the border post at the map's north edge)
-  'portas-do-cerco: service (inside)': 26,
-  'portas-do-cerco: secondary (inside)': 2,
-  'portas-do-cerco: footway (inside)': 16,
+  // Leg 3 (docs/reports/leg3-landmarks.md): OSM maps these ways THROUGH the building outline (passages under the block, station /
+  // library entrances, the stairs that climb the podium of the Palais de Justice / Gare Centrale): the solid body stays, a
+  // clue box is never placed there (leg:check rejects points inside buildings)
+  'sainte-catherine: steps (inside)': 2,
+  'bourse: pedestrian (inside)': 1,
+  'bourse: steps (inside)': 7,
+  'palais-de-justice: footway (inside)': 11,
+  'palais-de-justice: steps (inside)': 11,
+  'cathedrale-st-michel: footway (inside)': 2,
+  'gare-centrale: steps (inside)': 35,
+  'bibliotheque-royale: footway (inside)': 45,
+  'bozar: footway (inside)': 20,
+  'palais-royal: pedestrian (inside)': 1,
+  'palais-royal: service (inside)': 4,
+  'palais-royal: footway (inside)': 1,
+  'botanique: footway (inside)': 1,
+  'botanique: service (inside)': 1,
+  'justus-lipsius: service (inside)': 53,
+  'arcades-cinquantenaire: service (inside)': 2,
+  'arcades-cinquantenaire: pedestrian (inside)': 2,
 };
 
 type Tri = Float64Array; // ax ay az bx by bz cx cy cz

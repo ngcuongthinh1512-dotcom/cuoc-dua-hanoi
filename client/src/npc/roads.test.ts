@@ -68,12 +68,12 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(chunkDir))('NpcRoads (road
   console.log(`NpcRoads: ${(performance.now() - t0).toFixed(0)} ms`);
   const npcEdges = [...r.car.keys()].filter((e) => r.car[e]);
 
-  it('largest strongly connected car network without service (Macao: 8,021 nodes, 187.8 km; Paris ≈ 10,921 nodes, 304.5 km, phase4b.md §2.1)', () => {
+  it('largest strongly connected car network without service (Bruxelles: 10,243 nodes, 253.9 km; Macao 8,021 nodes, 187.8 km; Paris ≈ 10,921 nodes, 304.5 km, phase4b.md §2.1)', () => {
     const nodes = new Set(npcEdges.flatMap((e) => [g.edgeA[e]!, g.edgeB[e]!]));
     const km = npcEdges.reduce((s, e) => s + g.edgeLength[e]!, 0) / 1000;
-    expect(nodes.size).toBeGreaterThan(7_500);
-    expect(km).toBeGreaterThan(180);
-    expect(km).toBeLessThan(195);
+    expect(nodes.size).toBeGreaterThan(10_000);
+    expect(km).toBeGreaterThan(250);
+    expect(km).toBeLessThan(258);
     expect(npcEdges.every((e) => traffic.kinds.includes(r.kind(g.edgeWay[e]!)))).toBe(true);
     // strongly connected: every node is reached from the first one, forward and backward
     for (const forward of [true, false]) {
@@ -97,14 +97,14 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(chunkDir))('NpcRoads (road
     const key = (ax: number, az: number, bx: number, bz: number) => [ax, az, bx, bz].map((v) => v.toFixed(1)).join();
     for (let e = 0; e < g.edgeA.length; e++) if (g.flags(e) & WayFlag.car) edgeAt.set(key(g.x[g.edgeA[e]!]!, g.z[g.edgeA[e]!]!, g.x[g.edgeB[e]!]!, g.z[g.edgeB[e]!]!), e);
     const seen = { roundabout: 0, onewayPrimary: 0, residential: 0, all: 0 };
-    // Leg 2: every chunk (Paris looked at two: the Étoile + Champs-Élysées, whose widths came from widthByName; Macao has none)
+    // Leg 3: every chunk (Paris looked at two: the Étoile + Champs-Élysées, whose widths came from widthByName; Bruxelles has none)
     for (const k of readdirSync(chunkDir).filter((f) => /^-?\d+_-?\d+\.json$/.test(f))) {
       for (const rec of (JSON.parse(readFileSync(join(chunkDir, k), 'utf8')) as ChunkData).roads) {
         let e: number | undefined;
         for (let i = 0; e === undefined && i + 3 < rec.pts.length; i += 2) e = edgeAt.get(key(rec.pts[i]!, rec.pts[i + 1]!, rec.pts[i + 2]!, rec.pts[i + 3]!));
         if (e === undefined) continue;
         const w = g.edgeWay[e]!;
-        expect(2 * r.halfWidth(w), `${rec.name} ${rec.kind}`).toBeCloseTo(roadWidth(rec), 1);
+        expect(Math.abs(2 * r.halfWidth(w) - roadWidth(rec)), `${rec.name} ${rec.kind}`).toBeLessThanOrEqual(0.05 + 1e-4); // the graph keeps widths in dm (6.85 → 6.9)
         expect(r.sidewalk(w), `${rec.name} ${rec.kind}`).toBe(sidewalkWidth(rec));
         seen.all++;
         if (rec.roundabout) seen.roundabout++;
@@ -116,16 +116,16 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(chunkDir))('NpcRoads (road
     expect(Math.min(seen.roundabout, seen.onewayPrimary, seen.residential)).toBeGreaterThan(0);
   });
 
-  it('Praça do Lago Sai Van: NPC ring, 4 lanes one way, clockwise from above (traffic keeps left), ≥ 4 entries and exits', () => {
-    const name = g.file.names.indexOf('西灣湖廣場 Praça do Lago Sai Van');
+  it('Place Aimé Dandoy (50.8312, 4.3965): NPC ring, 2 lanes one way, anticlockwise from above (traffic keeps right), ≥ 4 entries and exits', () => {
+    const name = g.file.names.indexOf('Place Aimé Dandoy - Aimé Dandoyplein');
     const ring = [...g.edgeWay.keys()].filter((e) => g.file.ways[g.edgeWay[e]!]![3] === name && g.flags(e) & WayFlag.roundabout);
-    expect(ring.length).toBe(41);
+    expect(ring.length).toBe(16);
     expect(ring.every((e) => r.car[e])).toBe(true);
     const w = g.edgeWay[ring[0]!]!;
-    expect([r.lanes(w, true), r.lanes(w, false), r.halfWidth(w)]).toEqual([4, 0, 6.5]);
-    // shoelace in (east, north) = (x, −z): > 0 = anticlockwise seen from above (French rule); < 0 = clockwise (Macao: left-hand traffic)
+    expect([r.lanes(w, true), r.lanes(w, false), r.halfWidth(w)]).toEqual([2, 0, 3.5]);
+    // shoelace in (east, north) = (x, −z): > 0 = anticlockwise seen from above (right-hand traffic, Leg 3); < 0 = clockwise (Macao: left-hand traffic)
     const area = ring.reduce((s, e) => s - (g.x[g.edgeA[e]!]! * g.z[g.edgeB[e]!]! - g.x[g.edgeB[e]!]! * g.z[g.edgeA[e]!]!) / 2, 0);
-    expect(area * (traffic.driveLeft ? -1 : 1)).toBeGreaterThan(14_000);
+    expect(area * (traffic.driveLeft ? -1 : 1)).toBeGreaterThan(500); // Leg 3: 551 m² (a small ring)
     const onRing = new Set(ring.flatMap((e) => [g.edgeA[e]!, g.edgeB[e]!]));
     let entries = 0, exits = 0;
     for (const n of onRing) {
@@ -141,8 +141,8 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(chunkDir))('NpcRoads (road
 
   it('crossings on the NPC network (zebras, yielding, pedestrians)', () => {
     const kept = g.file.crossings.filter((c) => r.crossing[c]);
-    expect(kept.length).toBeGreaterThan(700); // Macao 788 (Paris > 4000)
-    expect(kept.filter((c) => Math.hypot(g.x[c]!, g.z[c]!) < 250).length).toBeGreaterThanOrEqual(10); // around Largo do Senado
+    expect(kept.length).toBeGreaterThan(3_700); // Bruxelles 3,762 (Macao 788, Paris > 4000)
+    expect(kept.filter((c) => Math.hypot(g.x[c]!, g.z[c]!) < 250).length).toBeGreaterThanOrEqual(17); // around the Grand-Place (19)
     expect(r.crossing.reduce((s, c) => s + c, 0)).toBe(kept.length);
   });
 });
@@ -155,10 +155,10 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(join(root, 'client/public/
   const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
   const r = new NpcRoads(g, (x, z) => heightAt(grid, x, z));
 
-  it('Avenida Doutor Ma Man Kei bridge (the border, over the sea): the deck stays > 5 m above the sea, the approach is on the ground', () => {
-    const name = g.file.names.indexOf('馬萬祺博士大馬路 Avenida Doutor Ma Man Kei');
+  it('Place Sainctelette bridges (over the canal, NW corner): the deck stays > 5 m above the canal, the terrain under is the canal bed', () => {
+    const name = g.file.names.indexOf('Place Sainctelette - Saincteletteplaats');
     const edges = [...g.edgeWay.keys()].filter((e) => g.file.ways[g.edgeWay[e]!]![3] === name && g.flags(e) & WayFlag.bridge && r.car[e]);
-    expect(edges.length).toBeGreaterThan(0);
+    expect(edges.length).toBe(2); // Leg 3: edges 1297 and 1302, deck −3.6 m, canal −10.6 m, bed −13.6 m
     const level = riverLevel(grid, water);
     for (const e of edges) {
       const mid = r.heightOn(e, g.edgeLength[e]! / 2);
@@ -166,18 +166,12 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(join(root, 'client/public/
       // the terrain under the middle is the river bed: the deck is what lifts the car
       const a = g.edgeA[e]!, b = g.edgeB[e]!;
       const ground = heightAt(grid, (g.x[a]! + g.x[b]!) / 2, (g.z[a]! + g.z[b]!) / 2);
-      console.log(`Ma Man Kei edge ${e}: deck ${mid.toFixed(2)} m, terrain ${ground.toFixed(2)} m, river ${level.toFixed(2)} m`);
+      console.log(`Sainctelette edge ${e}: deck ${mid.toFixed(2)} m, terrain ${ground.toFixed(2)} m, river ${level.toFixed(2)} m`);
     }
   });
 
-  // Leg 2: two joints are known to step (docs/reports/leg2-tests-workspaces.md): the Rotunda da Amizade viaduct meeting the Ma Man Kei
-  // bridge at the NE border (9.25 m: roads.ts buildDecks gives each differently named bridge its own deck line) and a 0.57 m one on
-  // the Macau viaducts; both are 2+ km from Largo do Senado. Every other joint must stay continuous.
-  // + 0.97 m on the Viaduto da Estrada da Bela Vista fork (1405, −1262) since ground-dem also blurs the streets (leg2-fixes.md item 5:
-  // its two ramps' ends moved apart by 1 m; same buildDecks limit, 1.9 km from the Senado).
-  // TODO(organiser): real deck steps the player can meet on these bridges (and Sai Van, see bridgeAudit KNOWN_MACAO): no route
-  // point or bike route over them (docs/LEG_FORMAT.md, TODO.md).
-  const KNOWN_STEPS = [[2301, -1987], [1597, -213], [1405, -1262]] as const;
+  // Leg 3: no known steps (Leg 2 listed three Macao joints); the check is applied to every car bridge joint.
+  const KNOWN_STEPS: readonly (readonly [number, number])[] = [];
 
   it('every car bridge edge keeps its deck continuous with its neighbours (no step > 0.5 m, but the known joints)', () => {
     let worst = 0, n = 0;

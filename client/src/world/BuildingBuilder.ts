@@ -595,8 +595,8 @@ function curtainCanvas() {
   return c;
 }
 
-/** 4 Macao shops, full band height (4.5 m), ground at the bottom: plaster piers (masked tint), Chinese signboards with
- *  character blocks, lit glass fronts with goods, one rolled-down steel shutter. */
+/** 4 shops, full band height (4.5 m), ground at the bottom: plaster piers (masked tint), signboards with
+ *  lettering bars, lit glass fronts with goods, one rolled-down steel shutter. */
 function shopCanvas() {
   const W = 256;
   const H = 384;
@@ -605,12 +605,12 @@ function shopCanvas() {
   ctx.fillStyle = '#efece6';
   ctx.fillRect(0, 0, 4 * W, H);
   speckle(ctx, 4 * W, H, 500, rand);
-  const boards = ['#b3201c', '#1d4f8c', '#d8a21c', '#1f6b45'];
+  const boards = ['#6b1f1a', '#1d3f5c', '#3a3a3c', '#1f4a36'];
   const letters = ['#f6d36a', '#ffffff', '#8a1a12', '#ffffff'];
   for (let k = 0; k < 4; k++) {
     const x0 = k * W;
     const [fx, fw] = [x0 + W * 0.06, W * 0.88];
-    // signboard with character blocks (3–4 "characters")
+    // signboard with lettering bars (3–4 "letters")
     const [sy, sh] = [H * 0.05, H * 0.2];
     paint(ctx, boards[k]!, A_TRIM, rect(fx, sy, fw, sh));
     const n = 3 + (k % 2);
@@ -618,11 +618,7 @@ function shopCanvas() {
     const gap = (fw - n * cw) / (n + 1);
     for (let i = 0; i < n; i++) {
       const cx = fx + gap + i * (cw + gap);
-      for (let s = 0; s < 5; s++) {
-        const horizontal = rand() < 0.55;
-        const a = rand() * 0.7;
-        paint(ctx, letters[k]!, A_TRIM, horizontal ? rect(cx, sy + sh * 0.18 + a * sh * 0.6, cw * (0.5 + rand() * 0.5), 5) : rect(cx + a * cw * 0.9, sy + sh * 0.18, 5, sh * (0.3 + rand() * 0.34)));
-      }
+      for (let s = 0; s < 2; s++) paint(ctx, letters[k]!, A_TRIM, rect(cx, sy + sh * (0.3 + 0.28 * s), cw, 5)); // lettering stand-in: two bars
     }
     const [oy, oh] = [H * 0.3, H * 0.64];
     if (k === 2) {

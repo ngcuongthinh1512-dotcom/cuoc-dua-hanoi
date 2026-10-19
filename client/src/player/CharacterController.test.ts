@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { latLonToWorld } from '@race/shared';
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { bike as B, bikeTopSpeed, movement, physics, player as P, playerSetup, respawnRules as RR, swim as S, terrain as T } from '../config.ts';
@@ -456,10 +455,10 @@ describe('respawn on land (Phase 5 track C)', () => {
   });
 });
 
-// The real sea (Leg 2; Leg 1: the Seine; client/public/data): climb out at two spots and stand on the Ma Man Kei bridge deck. Skipped without data.
+// The real water (Leg 3: the Bruxelles–Charleroi canal in the NW corner, level −10.6 m, 4 quay flights; Leg 2: the sea; Leg 1: the Seine; client/public/data): climb out at two spots and stand on the Place Sainctelette bridge deck. Skipped without data.
 const data = join(import.meta.dirname, '../../public/data');
 const has = ['water.json', 'elevation.json', 'elevation.bin', 'chunks/index.json'].every((f) => existsSync(join(data, f)));
-describe.skipIf(!has)('real sea', () => {
+describe.skipIf(!has)('real water (canal)', () => {
   const read = (f: string) => readFileSync(join(data, f));
   const grid = has ? parseHeightGrid(JSON.parse(read('elevation.json').toString()), read('elevation.bin')) : undefined!;
   const water = has ? (JSON.parse(readFileSync(join(data, 'water.json'), 'utf8')) as WaterData) : undefined!;
@@ -467,11 +466,11 @@ describe.skipIf(!has)('real sea', () => {
   const env: PlayerEnv = { heightAt: (x, z) => heightAt(grid, x, z), waterLevel: has ? riverLevel(grid, water) : null, water };
   const level = env.waterLevel!;
 
-  it('two climb-out spots (off the Outer Harbour quay, off the Porto Interior quay) and the Ma Man Kei bridge deck', () => {
+  it('two climb-out spots (off flights 1 and 2 of the canal) and the Place Sainctelette bridge deck', () => {
     const world = new RAPIER.World(physics.gravity);
     world.timestep = DT;
     createTerrainCollider(world, grid);
-    const l4 = latLonToWorld(22.211, 113.5626); // the Avenida Doutor Ma Man Kei bridge deck over the sea at the border (Leg 1: L4 = middle of Pont Alexandre III)
+    const l4 = { x: (-414 - 443.3) / 2, z: (-1341.7 - 1355.2) / 2 }; // Leg 3: the primary bridge deck over the canal at Place Sainctelette, 1st of 2 (Leg 1: L4 = middle of Pont Alexandre III)
     for (const key of new Set([chunkKey(l4.x, l4.z), chunkKey(l4.x + 60, l4.z), chunkKey(l4.x - 60, l4.z)])) {
       const file = join(data, `chunks/${key}.json`);
       if (!existsSync(file)) continue;
@@ -482,19 +481,18 @@ describe.skipIf(!has)('real sea', () => {
 
     spawned(world, c, l4.x, l4.z);
     expect(c.state.moveMode).toBe('walk');
-    expect(c.state.position.y).toBeGreaterThan(level + 3); // on the deck, not in the sea 6 m below
+    expect(c.state.position.y).toBeGreaterThan(level + 3); // on the deck, not in the canal below
     run(world, c, 1);
     expect(c.state.grounded).toBe(true);
 
     // Swim toward the bank the point is nearest to (a ray scan picks it), holding Space, until climbOut; then on the quay.
-    // 12 m out (seaward along the flight's normal) from the feet of two quay flights: water.stairs[53] (Outer Harbour, east coast),
-    // [68] (Porto Interior, south-west coast).
+    // 12 m out (waterward along the flight's normal) from the feet of two quay flights: water.stairs[1] and [2] (west bank of the canal).
     const outFrom = (k: number) => {
       const [fx, fz] = [water.stairs![2 * k]!, water.stairs![2 * k + 1]!];
       const q0 = quayStairNear(water, fx, fz)!;
       return { x: fx - q0.nx * 12, z: fz - q0.nz * 12 };
     };
-    for (const w of [outFrom(53), outFrom(68)]) {
+    for (const w of [outFrom(1), outFrom(2)]) {
       expect(env.heightAt(w.x, w.z)).toBeLessThan(level - 1);
       spawned(world, c, w.x, w.z);
       expect(c.state.moveMode).toBe('swim');
@@ -526,13 +524,13 @@ describe.skipIf(!has)('real sea', () => {
   // Leg 2: of the 91 Macao flights 47 stand inside the 5 freguesias (the rest line the Zhuhai bank and the map corners): those must all
   // pass; 8 m off a flight the swimmer is not in the water at flights 27 and 28 (the islet at the south-west tip), so they are
   // counted, not judged; the flights outside the freguesias are counted too (10 of them fail: 6 not swimming, 4 respawn 'safe').
-  it('respawn from the water at every quay flight of the peninsula: onto the coping at its gap, facing inland, standing', () => {
+  it('respawn from the water at every quay flight of the canal: onto the coping at its gap, facing inland, standing', () => {
     const world = new RAPIER.World(physics.gravity);
     world.timestep = DT;
     createTerrainCollider(world, grid);
     const c = new CharacterController(world, env);
     const feet = water.stairs!;
-    expect(feet.length / 2).toBeGreaterThan(50);
+    expect(feet.length / 2).toBe(4); // Leg 3: 4 flights on the canal banks
     const bad: string[] = [];
     const notWater: number[] = [], outside: string[] = [];
     let farthest = 0;
@@ -563,8 +561,8 @@ describe.skipIf(!has)('real sea', () => {
     }
     console.log(`respawn: ${feet.length / 2} flights, farthest landing ${farthest.toFixed(2)} m from the gap, ${bad.length} failed, ${notWater.length} not in water, ${outside.length} outside the freguesias failed`);
     expect(bad).toEqual([]);
-    expect(notWater).toEqual([27, 28]);
-    expect(outside.length).toBeLessThanOrEqual(10);
+    expect(notWater).toEqual([]); // Leg 3: all 4 flights swim 8 m out, all 4 pass
+    expect(outside).toEqual([]);
     world.free();
   });
 });
