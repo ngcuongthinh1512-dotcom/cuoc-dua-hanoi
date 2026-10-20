@@ -39,6 +39,13 @@ const ALLOWED: Record<string, number> = {
   'justus-lipsius: service (inside)': 53,
   'arcades-cinquantenaire: service (inside)': 2,
   'arcades-cinquantenaire: pedestrian (inside)': 2,
+  // Grand-Place: two alley samples graze a guild house outline; Parlement européen: the OSM footways / steps run through the Spinelli / Spaak block (indoor passages)
+  'grand-place: pedestrian Rue Charles Buls - Karel Bulsstraat (inside)': 1,
+  'grand-place: pedestrian (inside)': 1,
+  'parlement-europeen: footway (inside)': 55,
+  'parlement-europeen: pedestrian (inside)': 1,
+  'parlement-europeen: steps (inside)': 16,
+  'choco-story: footway (inside)': 12, // the museum polygon covers an alley of Rue de l'Étuve
 };
 
 type Tri = Float64Array; // ax ay az bx by bz cx cy cz

@@ -14,6 +14,8 @@ import type { BuildCtx, Builder, BuildOut, MaterialId } from '../buildTypes.ts';
 import { mergeBuckets } from '../geom.ts';
 import { details as b } from './b.ts';
 import { details as c } from './c.ts';
+import { details as d } from './d.ts';
+import { details as e } from './e.ts';
 import * as kit from './kit.ts';
 import { parseColour, partHeights, partRings, pickMaterial, recordGround, renderPart, roofShape, Sink } from './parts.ts';
 
@@ -77,7 +79,7 @@ export const helpers = {
 } as const;
 export type Helpers = typeof helpers;
 
-const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...b, ...c };
+const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...b, ...c, ...d, ...e };
 
 export const buildLandmarks: Builder = (chunk, ctx) => {
   const outs: BuildOut[] = [];

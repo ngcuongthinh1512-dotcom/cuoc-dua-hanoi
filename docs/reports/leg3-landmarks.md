@@ -55,3 +55,45 @@ Bộ dựng chung: `facing()` (xoay khung theo hướng mặt tiền: la bàn ho
 - Đầu hồi mạ vàng nhà phường hội quanh Grand-Place: chưa làm (các nhà đó là building thường, không thuộc registry; cần thêm id OSM + nằm ngoài phạm vi file được sửa).
 - Hướng mặt tiền (`az`) chọn bằng mắt từ bản đồ cho các nhà thờ nhỏ, Palais de Justice (30°), Nation (190°), St-Jacques (90°): chưa đối chiếu ảnh thật.
 - Bozar, Palais Royal, Arcades, Hôtel de Ville chưa chỉnh thêm; Bozar vẫn là khối kem phẳng.
+
+## 5. Năm địa danh thêm sau (32 địa danh)
+
+| id | OSM dùng | Dựng (`world/landmarks/d.ts`) |
+|---|---|---|
+| `grand-place` | 26 `way` có viền chạm quảng trường `way/3517898` (Cygne, Louve, Étoile, Ducs de Brabant, Roi d'Espagne, Pigeon, Chaloupe d'Or, Heaume, Paon, Sainte-Barbe…; Hôtel de Ville + Maison du Roi vẫn là địa danh riêng; bỏ `way/1228487152` vì là phần sân trong Hôtel de Ville) | Mỗi nhà vẫn do BuildingBuilder dựng (cửa sổ, cửa hàng) qua chunk một nhà, thêm đầu hồi bậc thang 3–4 bậc có nắp mạ vàng, hai khối cuộn mạ vàng, mũi nhọn vàng ở mặt nhìn ra quảng trường (cạnh gần tâm quảng trường nhất). |
+| `manneken-pis` | `way/586397520` (bể phun amenity=fountain ngay dưới node `n/240866019`) | Bệ đá, lan can sắt, tượng đồng bé trai ≈ 0,65 m, tia nước. Đã xem ảnh cận cảnh Rue de l'Étuve. |
+| `galeries-saint-hubert` | `way/306856680` (Galerie du Roi), `way/306856681` (Galerie de la Reine) | Nhà dựng như building thường (17 m, ước lượng) + mái vòm kính hình ống dọc trục dài của viền, sườn sắt. Vị trí lòng vòm chỉ xấp xỉ (không có tim đường trong DetailFn). |
+| `parlement-europeen` | `way/13550784` (Paul-Henri Spaak, 40 m), `way/236195168` (Altiero Spinelli, 25 m); "Espace Léopold" không có outline riêng | Hai khối do BuildingBuilder (tường kính); mái vòm kính hémicycle trên Paul-Henri Spaak (vị trí xấp xỉ giữa khối). |
+| `colonne-du-congres` | `way/477190248` (bệ 21 × 17 m quanh node `n/475214141`) | Bệ, 4 sư tử đồng, thân cột 16 cạnh, đầu cột, tượng Léopold I đồng; tổng 47 m (Wikipedia); ngọn lửa mạ vàng ở chân (Mộ Chiến sĩ vô danh). Có collider cho bệ + thân. |
+
+Kiểm tra: `tsc` sạch, `vitest` client 729/729, `vitest --dir scripts` 110/110. `paths.test.ts` thêm 5 mục vào `ALLOWED` (2 mẫu hẻm sát nhà ở Grand-Place, các lối đi trong khối Nghị viện: footway 55, steps 16, pedestrian 1). `landmark-audit`: Galeries còn 12 m "xuyên" vào một nhà `retail h10` bên cạnh (dữ liệu OSM chồng nhau, không phải do mái vòm).
+
+Còn yếu: hướng/chiều đầu hồi Grand-Place chọn theo "cạnh gần tâm quảng trường" nên vài nhà góc có thể quay sai mặt; Manneken Pis hướng tượng chưa khớp phố; hémicycle và mái vòm Galeries đặt theo khung viền, không theo vị trí thật.
+
+## 6. Lượt hai trên địa danh cũ (`e.ts`)
+
+- **BOZAR**: trước là khối kem phẳng; nay dựng như building thường (cửa sổ, 20 m) + mái hiên đồng ở cửa vào.
+- **Arcades du Cinquantenaire**: thêm cặp cột đá giữa ba cửa vòm ở hai mặt dài (chưa kiểm ảnh cận).
+- Đã thử mái dốc cho Hôtel de Ville và portico giữa mặt tiền Palais Royal nhưng bỏ: mái không đổi được (OSM part), portico rơi vào đầu hồi nhỏ chứ không ở mặt tiền chính. Hai địa danh này giữ nguyên như ở mục 2.
+- Chưa động tới Tour du Midi, Madou, Justus Lipsius, Botanique, các nhà thờ (đã có chi tiết ở `c.ts`).
+
+## 7. Nhóm chủ đề: sô-cô-la / bia / truyện tranh / khoai chiên (35 địa danh)
+
+| id | OSM | Dựng (`e.ts`) |
+|---|---|---|
+| `choco-story` | `way/1078916006` (tourism=museum, không có building) | Nhà 15 m (ước lượng) + bảng hiệu nâu + quả ca cao mạ vàng trên mái |
+| `belgian-comic-strip-center` | `way/87493075` | Nhà 16 m (ước lượng) + tên lửa Tintin đỏ trắng trên mái |
+| `maison-antoine` | `way/88289893` (quán khoai chiên Place Jourdan, 6 × 11 m) | Quán 4,5 m + phễu khoai chiên khổng lồ trên mái |
+
+Không dựng được: **bia**: Belgian Beer World chỉ là node nằm trong Bourse (không có viền riêng), Bảo tàng Gueuze chỉ là node không có tòa nhà; **bánh quế** (Dandoy…) và **kim cương** không có công trình nào trong cache OSM. Muốn thêm cần chọn tòa nhà cụ thể rồi tra id.
+
+## 8. Nhà thường kiểu Bỉ (BuildingBuilder, config `buildings.macao`)
+
+Các nhà thường trước đó còn mang dáng Macao: tường xám "tenement" có máy lạnh / lồng sắt, mái bằng hoặc mái dốc rất thấp. Đã đổi:
+- `colonialCanvas()` (tường nhà): gạch xếp lớp, đai đá mỗi tầng, cửa sổ cao có khung đá + bậu + mũ cửa (tầng dưới vòm tròn có đá đỉnh, tầng trên lanh-tô phẳng), khung trắng có thanh ngang.
+- `tenementCanvas()`: bỏ máy lạnh và lồng sắt.
+- `config.ts`: `towerHeight` 40–55 m, `tenementShare` 0 (nhà 15–40 m giờ là nhà gạch, chỉ nhà cao hơn mới có lưới bê tông / kính), mái đá phiến dốc (`hip` 90 % số nhà, rise 4,2 m, tới 40 m), bảng màu nghiêng về gạch đỏ / nâu, `roofLift` 3,2.
+Đã xem ảnh phố Rue de l'Étuve và góc nhìn cao quanh Grand-Place. Chưa có: đầu hồi bậc thang cho nhà thường, cửa sổ lồi (oriel), mái mansard có lucarne (mái dùng bản đồ đá phiến PBR nên không có lucarne).
+- Cửa hàng (`shopCanvas`): bỏ các ô hàng hóa nhiều màu ngẫu nhiên và biển có vạch chữ; thay bằng mặt tiền gỗ sơn kiểu Bỉ (xanh chai / đỏ sẫm / xanh navy / đen), tấm biển một dòng chữ vàng, gờ cornice, mái che sọc ở hai cửa hàng, kính có khung gỗ + ô thông gió + cửa lùi, bệ panel phía dưới, chân tường đá; một cửa cuốn sơn tối.
+- Choco-Story (`e.ts`): dựng lại thành sân gạch kín (vòng tường 12 m theo viền OSM `way/1078916006`, không mái / sàn, chỉ tường có collider): gạch có đường vữa, đai đá kem, cửa sổ khung đen chia ô, dải chữ "Chocolate Museum" bằng khối, 3 gian cửa kính tầng trệt, cọc chắn dây. Vị trí lấy từ polygon OSM (gần Manneken Pis, Rue de l'Étuve), chưa đối chiếu ngoài đời.
+- Choco-Story (`e.ts`, lần 2, theo ảnh sân trong + ảnh mặt phố Rue de l'Étuve 41): gạch đỏ Flemish nhiều tông theo hàng (5 tông + mảng lệch màu, chỉ mặt trong sân), tường sau 3 gian đúng tỉ lệ ảnh (cửa sổ cao 1,9 × 3,8 m 3 × 5 ô, 3 cửa sổ nhỏ trên cùng dưới lanh-tô kem, chữ "Chocolate Museum" bằng nét mảnh trắng (font nét tự dựng `GLYPHS`) giữa hai đai kem, tầng trệt 3 ô kính sáng cam có bệ kem, biển EXIT / ENTRANCE), lan can kính trên mái tường sau, mái đá phiến nghiêng trên tường phải, ống máng + đèn tường trên tường trái, sân lát đá (lưới 1,5 m theo địa hình, 4 tông xám), 4 cọc chắn có dây đỏ võng. Mặt phố: tường trát trắng 13,5 m trên dải cạnh gần Rue de l'Étuve (cạnh 28–29 của polygon, rộng 3,7 m), ô cửa đá xám 5 m với lưới sắt chéo, biển "Choco Story" chữ nâu nghiêng, 2 cửa sổ khung đen + ban công sắt, ống máng. Lối đi vào sân nằm trong một nhà OSM thường (BuildingBuilder, có collider) nên cửa chỉ vẽ, chưa đi xuyên được; hai nhà hàng xóm vẫn do BuildingBuilder vẽ (chưa trát trắng). Ảnh: `lm-choco-story-front` (cam -163,14,124,50,-24), `lm-choco-story-yard` (-174,3,133,10,-8), `lm-choco-story-street` (-154.8,0.9,171.1,43,4).

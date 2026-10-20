@@ -264,21 +264,21 @@ export const buildings = {
   // h ≥ towerHeight[1] tower; towerHeight[0]–[1] tower with chance (h − [0]) / ([1] − [0]), else tenement; below: tenement for
   // tenementKinds of h ≥ tenementMin with chance tenementShare, else colonial. Colours are sRGB (vertex colour = linear of it).
   macao: {
-    towerHeight: [25, 35], // m
+    towerHeight: [40, 55], // m (Leg 3: mid-rise housing stays brick townhouse / mansion, only real towers get a grid or curtain wall)
     tenementMin: 15, // m (≈ 5 storeys)
-    tenementShare: 0.75,
+    tenementShare: 0, // Leg 3: the Macao grey tenement look is off
     tenementKinds: ['yes', 'apartments', 'residential', 'dormitory', 'mixed'] as string[],
     curtainShare: 0.4, // towers with a glass curtain wall; the rest get the tenement texture as a concrete grid
     blankKinds: ['roof', 'garage', 'garages', 'shed', 'storage_tank', 'warehouse', 'hut', 'carport', 'service'] as string[], // no windows
     shopMinHeight: 7, // m: buildings at least this tall get the ground-floor shop band (shopfrontHeight) on street faces
-    hip: { chance: 0.6, maxHeight: 20, maxArea: 1500, rise: 1.6, inset: 3.5 }, // colonial low hip roof (m, m², m above / in from the walls)
-    colonial: ['#a8584a', '#b9674f', '#9c4f43', '#c9a27e', '#d9c7a3', '#cdb89a', '#d8cdb4', '#b7a58c', '#8f5a4a', '#e0d3b5'], // Brussels townhouses: red / brown brick, cream and grey stone
+    hip: { chance: 0.9, maxHeight: 40, maxArea: 3000, rise: 4.2, inset: 3.2 }, // colonial low hip roof (m, m², m above / in from the walls)
+    colonial: ['#a8584a', '#b9674f', '#9c4f43', '#a35a45', '#8f5a4a', '#b06a52', '#c9a27e', '#d9c7a3', '#cdb89a', '#d8cdb4', '#9a5444', '#e0d3b5'], // Brussels townhouses: red / brown brick, cream and grey stone
     tenement: ['#b9a79a', '#a99486', '#cfc5b0', '#c0a898', '#b2b0a8', '#9fa3a0', '#d6cfc0', '#bfb39e'],
     concrete: ['#d8ccb2', '#c9c3b8', '#e1d9c9', '#bdb5a5'], // concrete-grid towers
     glass: ['#a9c4dc', '#9fcfcc', '#bcc6ce', '#a8d0dc', '#aab8d0'], // curtain-wall tint
     tileRoof: '#5f6670', // hip roofs (Belgian slate)
     flatRoof: '#b2b8be', // flat roofs (concrete)
-    roofLift: 2.5, // × roof tint over the dark roof_slates_03 diffuse (graphics8c.roofs); 1 with the canvas roof
+    roofLift: 3.2, // × roof tint over the dark roof_slates_03 diffuse (graphics8c.roofs); 1 with the canvas roof
     plantBox: [3, 2.2, 0.4, 7], // tower roof plant box: min side, height (m), side as a share of √(largest roof triangle area), max side
     litShare: 0.35, // share of buildings whose windows are lit in the evening (MeshBucket.lit)
   },

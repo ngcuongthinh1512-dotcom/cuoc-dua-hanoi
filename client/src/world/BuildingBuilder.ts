@@ -467,28 +467,34 @@ function glass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
   paint(ctx, gr, A_GLASS, shape);
 }
 
-/** Colonial (Portuguese) plaster, 2 bays × 2 floors, 256 px per cell, floor level at the bottom of each cell: white cornice
- *  band per floor, tall windows in white surrounds without shutters; lower floor of the tile with a flat cornice head, upper
- *  floor round-arched with a keystone. Wall pixels white (the pastel comes from the masked vertex tint). */
+/** Belgian townhouse brick, 2 bays × 2 floors, 256 px per cell, floor level at the bottom of each cell: brick courses (the
+ *  colour comes from the masked vertex tint), a pale stone string course per floor, tall windows in stone surrounds with a
+ *  sill and a head (lower floor: round-arched with voussoirs and keystone, upper floor: flat lintel), white painted
+ *  casements with a transom and a central mullion. */
 function colonialCanvas() {
   const S = 256;
   const [c, ctx] = canvas(2 * S, 2 * S);
   const rand = rng(11);
   ctx.fillStyle = '#f2efe9';
   ctx.fillRect(0, 0, 2 * S, 2 * S);
-  speckle(ctx, 2 * S, 2 * S, 900, rand);
-  const trim = '#f7f5ef';
+  speckle(ctx, 2 * S, 2 * S, 1400, rand);
+  ctx.fillStyle = 'rgba(70,45,35,0.16)'; // brick courses: a mortar line every 9 px, joints staggered on alternate courses
+  for (let y = 4; y < 2 * S; y += 9) {
+    ctx.fillRect(0, y, 2 * S, 2);
+    for (let x = ((y / 9) % 2) * 9; x < 2 * S; x += 18) ctx.fillRect(x, y, 2, 9);
+  }
+  const stone = '#ece6d6';
+  const frame = '#f6f3ec';
   for (let row = 0; row < 2; row++) {
     const y0 = row * S;
     const arched = row === 0;
-    // floor cornice (bottom of the cell = floor level of the next floor up) + its shadow on the wall above
-    paint(ctx, trim, A_TRIM, rect(0, y0 + S * 0.9, 2 * S, S * 0.1));
-    ctx.fillStyle = 'rgba(70,55,40,0.22)';
-    ctx.fillRect(0, y0 + S * 0.9 - 4, 2 * S, 4);
+    paint(ctx, stone, A_TRIM, rect(0, y0 + S * 0.92, 2 * S, S * 0.08)); // stone string course (floor line)
+    ctx.fillStyle = 'rgba(70,55,40,0.25)';
+    ctx.fillRect(0, y0 + S * 0.92 - 3, 2 * S, 3);
     for (let col = 0; col < 2; col++) {
       const x0 = col * S;
-      const [wx, ww] = [x0 + S * 0.32, S * 0.36];
-      const [wy, wh] = [y0 + S * 0.16, S * 0.62]; // window: v 0.22–0.84 of the cell
+      const [wx, ww] = [x0 + S * 0.3, S * 0.4];
+      const [wy, wh] = [y0 + S * 0.12, S * 0.68];
       const r = ww / 2;
       const arch = (x: number, y: number, w: number, h: number) => (k: CanvasRenderingContext2D) => {
         k.moveTo(x, y + h);
@@ -498,18 +504,16 @@ function colonialCanvas() {
         k.closePath();
       };
       const shape = (x: number, y: number, w: number, h: number) => (arched ? arch(x, y, w, h) : rect(x, y, w, h));
-      // surround, sill, head
-      paint(ctx, trim, A_TRIM, shape(wx - 12, wy - 12, ww + 24, wh + 12));
-      paint(ctx, trim, A_TRIM, rect(wx - 18, wy + wh, ww + 36, 9)); // sill
-      if (arched) paint(ctx, trim, A_TRIM, rect(wx + r - 9, wy - 22, 18, 20)); // keystone
-      else paint(ctx, trim, A_TRIM, rect(wx - 22, wy - 26, ww + 44, 12)); // flat cornice head
+      paint(ctx, stone, A_TRIM, shape(wx - 11, wy - 11, ww + 22, wh + 11)); // stone surround
+      paint(ctx, stone, A_TRIM, rect(wx - 18, wy + wh, ww + 36, 10)); // sill
+      if (arched) paint(ctx, stone, A_TRIM, rect(wx + r - 10, wy - 24, 20, 22)); // keystone
+      else paint(ctx, stone, A_TRIM, rect(wx - 20, wy - 22, ww + 40, 12)); // flat lintel
       ctx.fillStyle = 'rgba(70,55,40,0.3)';
-      ctx.fillRect(wx - 18, wy + wh + 9, ww + 36, 3);
+      ctx.fillRect(wx - 18, wy + wh + 10, ww + 36, 3);
       glass(ctx, wx, wy, ww, wh, rand, [-6, 8, 4], shape(wx, wy, ww, wh));
-      // frame: casement mullion + transom (green-grey paint, a Macao favourite)
-      const frame = rand() < 0.5 ? '#f4f2ea' : '#5f7d6a';
-      paint(ctx, frame, A_TRIM, rect(wx + r - 2, wy + (arched ? r : 0), 4, wh - (arched ? r : 0)));
-      paint(ctx, frame, A_TRIM, rect(wx, wy + (arched ? r : wh * 0.3), ww, 4));
+      paint(ctx, frame, A_TRIM, rect(wx + r - 2, wy + (arched ? r : 0), 4, wh - (arched ? r : 0))); // central mullion
+      paint(ctx, frame, A_TRIM, rect(wx, wy + (arched ? r : wh * 0.3), ww, 4)); // transom
+      paint(ctx, frame, A_TRIM, rect(wx, wy + wh - 4, ww, 4));
     }
   }
   return c;
@@ -526,9 +530,9 @@ function tenementCanvas() {
   speckle(ctx, 2 * S, 2 * S, 1400, rand);
   ctx.fillStyle = 'rgba(0,0,0,0.035)'; // tile grid
   for (let k = 0; k < 2 * S; k += 16) ctx.fillRect(0, k, 2 * S, 1), ctx.fillRect(k, 0, 1, 2 * S);
-  const kinds = [
-    ['cage', 'ac'],
-    ['ac', 'plain'],
+  const kinds = [ // Leg 3: no steel cages / AC units (Macao); plain windows only
+    ['plain', 'plain'],
+    ['plain', 'plain'],
   ];
   for (let row = 0; row < 2; row++) {
     const y0 = row * S;
@@ -595,8 +599,10 @@ function curtainCanvas() {
   return c;
 }
 
-/** 4 shops, full band height (4.5 m), ground at the bottom: plaster piers (masked tint), signboards with
- *  lettering bars, lit glass fronts with goods, one rolled-down steel shutter. */
+/** 4 Belgian shop fronts, full band height (4.5 m), ground at the bottom: stone piers (masked tint) with a plinth, a painted
+ *  wooden fascia with one gilt line of lettering and a cornice, a striped awning on two of them, a glass front in painted
+ *  wooden frames (transom light + vertical mullions, a recessed door) over a low panelled stall-riser; one painted shutter.
+ *  No random coloured goods: the interior is a dim warm gradient with a shelf line. */
 function shopCanvas() {
   const W = 256;
   const H = 384;
@@ -605,41 +611,45 @@ function shopCanvas() {
   ctx.fillStyle = '#efece6';
   ctx.fillRect(0, 0, 4 * W, H);
   speckle(ctx, 4 * W, H, 500, rand);
-  const boards = ['#6b1f1a', '#1d3f5c', '#3a3a3c', '#1f4a36'];
-  const letters = ['#f6d36a', '#ffffff', '#8a1a12', '#ffffff'];
+  const wood = ['#1f4a3a', '#5a1f24', '#1c2f4a', '#2a2623']; // bottle green, ox-blood, navy, black
+  const gilt = '#d6b25a';
   for (let k = 0; k < 4; k++) {
     const x0 = k * W;
-    const [fx, fw] = [x0 + W * 0.06, W * 0.88];
-    // signboard with lettering bars (3–4 "letters")
-    const [sy, sh] = [H * 0.05, H * 0.2];
-    paint(ctx, boards[k]!, A_TRIM, rect(fx, sy, fw, sh));
-    const n = 3 + (k % 2);
-    const cw = sh * 0.62;
-    const gap = (fw - n * cw) / (n + 1);
-    for (let i = 0; i < n; i++) {
-      const cx = fx + gap + i * (cw + gap);
-      for (let s = 0; s < 2; s++) paint(ctx, letters[k]!, A_TRIM, rect(cx, sy + sh * (0.3 + 0.28 * s), cw, 5)); // lettering stand-in: two bars
+    const [fx, fw] = [x0 + W * 0.05, W * 0.9];
+    paint(ctx, wood[k]!, A_TRIM, rect(fx - 6, 0, fw + 12, H * 0.2)); // fascia board
+    paint(ctx, '#e9e0c8', A_TRIM, rect(fx - 10, H * 0.2 - 3, fw + 20, 8)); // cornice below the fascia
+    paint(ctx, gilt, A_TRIM, rect(fx + fw * 0.2, H * 0.085, fw * 0.6, 6)); // one line of gilt lettering
+    paint(ctx, gilt, A_TRIM, rect(fx + fw * 0.3, H * 0.135, fw * 0.4, 4));
+    const [oy, oh] = [H * 0.27, H * 0.62];
+    if (k % 2 === 1) { // striped awning over the glass
+      for (let i = 0; i < 8; i++) paint(ctx, i % 2 ? '#f2eee4' : k === 1 ? '#8a2a2e' : '#2e5f86', A_TRIM, rect(fx + (i * fw) / 8, H * 0.22, fw / 8 + 1, H * 0.07));
     }
-    const [oy, oh] = [H * 0.3, H * 0.64];
-    if (k === 2) {
-      paint(ctx, '#9da2a4', A_TRIM, rect(fx + 6, oy, fw - 12, oh)); // rolled-down shutter
-      for (let y = oy; y < oy + oh; y += 7) paint(ctx, '#7f8486', A_TRIM, rect(fx + 6, y, fw - 12, 2));
+    if (k === 3) { // painted roller shutter
+      paint(ctx, '#3d4448', A_TRIM, rect(fx + 4, oy, fw - 8, oh));
+      for (let y = oy; y < oy + oh; y += 7) paint(ctx, '#2b3135', A_TRIM, rect(fx + 4, y, fw - 8, 2));
       continue;
     }
-    paint(ctx, '#3a3c3e', A_TRIM, rect(fx + 2, oy - 4, fw - 4, oh + 4)); // frame
+    paint(ctx, wood[k]!, A_TRIM, rect(fx, oy - 2, fw, oh + 2)); // painted frame
+    const gx = fx + 10;
+    const gw = fw - 20;
+    const tr = oh * 0.2; // transom light
     const gr = ctx.createLinearGradient(0, oy, 0, oy + oh);
-    gr.addColorStop(0, '#d9c49a');
-    gr.addColorStop(1, '#8a6c45');
-    paint(ctx, gr, A_GLASS, rect(fx + 8, oy + 2, fw - 16, oh - 4)); // warm lit interior
-    for (let i = 0; i < 14; i++) {
-      const col = `hsl(${Math.floor(rand() * 360)},55%,${40 + rand() * 25}%)`; // goods on shelves
-      paint(ctx, col, A_GLASS, rect(fx + 14 + rand() * (fw - 50), oy + oh * (0.25 + rand() * 0.6), 10 + rand() * 24, 8 + rand() * 18));
-    }
-    paint(ctx, '#3a3c3e', A_TRIM, rect(fx + fw * 0.62, oy, 5, oh)); // door post
+    gr.addColorStop(0, '#b9a37a');
+    gr.addColorStop(1, '#5b4a34');
+    paint(ctx, gr, A_GLASS, rect(gx, oy + 6, gw, tr - 8));
+    paint(ctx, gr, A_GLASS, rect(gx, oy + tr + 4, gw * 0.66, oh * 0.62 - 8)); // main pane
+    paint(ctx, gr, A_GLASS, rect(gx + gw * 0.7, oy + tr + 4, gw * 0.3, oh * 0.8)); // door glass, set back
+    paint(ctx, wood[k]!, A_TRIM, rect(gx, oy + tr - 2, gw, 6)); // transom bar
+    paint(ctx, wood[k]!, A_TRIM, rect(gx + gw * 0.675, oy + 4, 8, oh - 6)); // door post
+    for (let i = 1; i < 3; i++) paint(ctx, wood[k]!, A_TRIM, rect(gx + (gw * 0.66 * i) / 3, oy + 6, 5, tr - 8)); // transom mullions
+    paint(ctx, wood[k]!, A_TRIM, rect(gx + gw * 0.33, oy + tr + 4, 5, oh * 0.62 - 8)); // pane mullion
+    paint(ctx, '#e4d7b5', A_GLASS, rect(gx + 4, oy + tr + oh * 0.3, gw * 0.66 - 8, 4)); // a shelf line
+    paint(ctx, wood[k]!, A_TRIM, rect(gx, oy + tr + oh * 0.62 - 4, gw * 0.66, oh * 0.38 - tr + 4)); // panelled stall-riser
+    paint(ctx, '#ffffff', A_TRIM, rect(gx + 8, oy + tr + oh * 0.62 + 6, gw * 0.66 - 16, 3)); // panel moulding
   }
-  ctx.fillStyle = 'rgba(60,50,40,0.45)'; // plinth
-  ctx.fillRect(0, H * 0.95, 4 * W, H * 0.05);
-  ctx.fillStyle = 'rgba(60,50,40,0.35)'; // slab shadow over the band
+  ctx.fillStyle = 'rgba(70,60,50,0.5)'; // stone plinth
+  ctx.fillRect(0, H * 0.94, 4 * W, H * 0.06);
+  ctx.fillStyle = 'rgba(60,50,40,0.3)'; // slab shadow over the band
   ctx.fillRect(0, 0, 4 * W, 6);
   return c;
 }

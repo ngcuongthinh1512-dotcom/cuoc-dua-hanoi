@@ -88,7 +88,7 @@ function gable(buf: Buf, f: Fr, a0: number, a1: number, w0: number, w1: number, 
 }
 
 /** Round tower / pinnacle: rings [radius, y] (n-gon at (a, w)); a last radius 0 closes it with a spire. */
-function lathe(buf: Buf, f: Fr, a: number, w: number, prof: [number, number][], n = 8) {
+export function lathe(buf: Buf, f: Fr, a: number, w: number, prof: [number, number][], n = 8) {
   const rs = prof.filter(([r]) => r > 0.02).map(([r, y]) => ring(f, a, w, r, y, n));
   if (rs.length > 1) loft(buf, rs, 4);
   const last = prof.at(-1)!;
@@ -108,7 +108,7 @@ function plane(buf: Buf, f: Fr, a: number, pts: [number, number][], dir = 1) {
 }
 
 /** Pointed (or round) arch opening on plane a between w0 and w1: straight sides to `spring`, crown at `crown`. */
-function arch(buf: Buf, f: Fr, a: number, w0: number, w1: number, y0: number, spring: number, crown: number, pointed = true, dir = 1) {
+export function arch(buf: Buf, f: Fr, a: number, w0: number, w1: number, y0: number, spring: number, crown: number, pointed = true, dir = 1) {
   const wm = (w0 + w1) / 2;
   const pts: [number, number][] = [[w0, y0], [w1, y0], [w1, spring]];
   const n = 6;
@@ -145,7 +145,7 @@ interface Portico {
   pediment?: number; // peak height above the entablature
 }
 /** Columns + entablature (+ pediment) + two steps; the back wall is the building's. */
-function portico(s: Sink, f: Fr, p: Portico, stone = '#d8cdb4') {
+export function portico(s: Sink, f: Fr, p: Portico, stone = '#d8cdb4') {
   const st = s.buf('masonry');
   st.color = rgb(stone);
   for (let k = 0; k < p.n; k++) column(st, f, p.a, p.w0 + ((p.w1 - p.w0) * k) / (p.n - 1), p.r, p.y0, p.y1);
@@ -159,7 +159,7 @@ const SLATE = '#4f565e';
 const STONE = '#d6cbb1';
 
 /** Render a footprint through the generic S3DB renderer with overridden roof facts. */
-function body(rec: BuildingRec, ctx: LandmarkCtx, h: Helpers, s: Sink, over: Partial<PartRec>) {
+export function body(rec: BuildingRec, ctx: LandmarkCtx, h: Helpers, s: Sink, over: Partial<PartRec>) {
   const o = { ground: ctx.ground, height: ctx.height, fallbackTop: h.outlineTop(rec, ctx.def) };
   h.renderPart({ ...rec, ...over }, o, s);
 }
