@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { decodePose, decodeTick, encodePose, encodeTick, isClientMessage, parseFrame, POSE_LEN, samePose } from './codec.ts';
 import { NET, PROTOCOL_VERSION } from './constants.ts';
-import { avatarOf, type HostMessage, MOVE_MODES, PLAYER_ACTIONS, type PoseSample, type ServerMessage, submitCode, TAG, type TeamInfo, type UndoItem, type ZoneMember } from './types.ts';
+import { compactAnswer } from './answers.ts';
+import { FINISH_PENALTY_REASON, finishPenaltyLine } from './finish.ts';
+import { avatarOf, type FinishResult, type HostMessage, MOVE_MODES, PLAYER_ACTIONS, type PoseSample, type ServerMessage, submitCode, TAG, type TeamInfo, type UndoItem, type ZoneMember } from './types.ts';
 
 const pose: PoseSample = { x: 123.456, y: 1.234, z: -910.117, yaw: 2.5, mode: 'bike', action: 'none' };
 
@@ -177,6 +179,25 @@ describe('frames and JSON messages', () => {
     for (const [m, role] of bad) expect(isClientMessage(m, role), JSON.stringify(m).slice(0, 80)).toBe(false);
   });
 
+  it('Leg 3: host.review ack / score name the answer; score needs its number', () => {
+    const r = { t: 'host.review', team: 't0', step: 'T1' };
+    expect(isClientMessage({ ...r, op: 'ack', id: 1 }, 'host')).toBe(true);
+    expect(isClientMessage({ ...r, op: 'score', id: 1, score: 3 }, 'host')).toBe(true);
+    for (const m of [{ ...r, op: 'ack' }, { ...r, op: 'score', id: 1 }, { ...r, op: 'score', score: 2 }, { ...r, op: 'score', id: 1, score: -1 }])
+      expect(isClientMessage(m, 'host'), JSON.stringify(m)).toBe(false);
+    expect(isClientMessage({ ...r, op: 'ack', id: 1 }, 'team')).toBe(false);
+    expect(compactAnswer('Cu-ba ') === compactAnswer('CU BA') && compactAnswer('Ê-xtô-ni-a') === compactAnswer('extonia')).toBe(true);
+  });
+
+  it('Leg 3: race room {step, branch, done, skipped}: integers 0..20, a boolean skip, team only', () => {
+    const ok = { t: 'race', op: 'room', step: 'D1', branch: 'A', done: 3, skipped: false };
+    expect(isClientMessage(ok, 'team')).toBe(true);
+    expect(isClientMessage({ ...ok, done: 0, skipped: true }, 'team')).toBe(true);
+    for (const m of [{ ...ok, done: 2.5 }, { ...ok, done: -1 }, { ...ok, done: 21 }, { ...ok, done: '3' }, { ...ok, skipped: 1 }, { ...ok, branch: '' }, { t: 'race', op: 'room', step: 'D1', branch: 'A', done: 1 }])
+      expect(isClientMessage(m, 'team'), JSON.stringify(m)).toBe(false);
+    expect(isClientMessage(ok, 'host')).toBe(false);
+  });
+
   it('Phase 10 (v6): host.review undo needs an id, host.flag clear; both from the Host only', () => {
     expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(6);
     const ok: HostMessage[] = [
@@ -203,8 +224,35 @@ describe('frames and JSON messages', () => {
     expect(JSON.parse(JSON.stringify({ zone, undo }))).toEqual({ zone, undo });
   });
 
+  it('Leg 3: host.finishPenalty (Host only, bounded minutes 0..finishPenaltyMax, optional reason); no version bump (new optional fields)', () => {
+    const ok: HostMessage[] = [
+      { t: 'host.finishPenalty', team: 't0', minutes: 20 },
+      { t: 'host.finishPenalty', team: 't0', minutes: 0 },
+      { t: 'host.finishPenalty', team: 't0', minutes: NET.finishPenaltyMax, reason: 'bỏ thử thách ở lựa chọn kép' },
+    ];
+    for (const m of ok) {
+      const back = parseFrame(JSON.stringify(m), NET.maxHostBytes);
+      expect(back).toEqual(m);
+      expect(isClientMessage(back, 'host')).toBe(true);
+      expect(isClientMessage(back, 'team')).toBe(false);
+    }
+    const bad: unknown[] = [
+      { t: 'host.finishPenalty', team: 't0' },
+      { t: 'host.finishPenalty', team: 't0', minutes: -1 },
+      { t: 'host.finishPenalty', team: 't0', minutes: 2.5 },
+      { t: 'host.finishPenalty', team: 't0', minutes: NET.finishPenaltyMax + 1 },
+      { t: 'host.finishPenalty', team: '', minutes: 5 },
+      { t: 'host.finishPenalty', team: 't0', minutes: 5, reason: 'x'.repeat(NET.finishReasonMax + 1) },
+      { t: 'host.finishPenalty', team: 't0', minutes: 5, reason: 7 },
+    ];
+    for (const m of bad) expect(isClientMessage(m, 'host'), JSON.stringify(m)).toBe(false);
+    const result: FinishResult = { rank: 2, total: 5, kind: 'finish', npc: 'a', toast: 'b', card: 'c', finishPenalty: { minutes: 20, reason: FINISH_PENALTY_REASON } };
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    expect(finishPenaltyLine(result.finishPenalty!)).toBe('Bị phạt 20 phút do bỏ thử thách ở lựa chọn kép.');
+  });
+
   it('Leg 2 (v10): avatar from the socket URL, 0 unless exactly 1; TeamInfo / team online carry it through JSON', () => {
-    expect(PROTOCOL_VERSION).toBe(10);
+    expect(PROTOCOL_VERSION).toBe(12);
     expect([avatarOf('1'), avatarOf(1), avatarOf('0'), avatarOf(null), avatarOf('2'), avatarOf('x'), avatarOf(undefined)]).toEqual([1, 1, 0, 0, 0, 0, 0]);
     const info: TeamInfo = { slot: 1, id: 't1', name: 'Đội Đỏ', colour: '#d8342c', online: true, racing: true, avatar: 1 };
     const online: ServerMessage = { t: 'team', slot: 1, online: true, avatar: 1 };

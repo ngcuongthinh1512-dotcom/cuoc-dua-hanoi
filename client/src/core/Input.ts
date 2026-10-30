@@ -129,6 +129,12 @@ export class Input {
     this.held.add(e.code);
   }
 
+  /** Drops every held key (an overlay / iframe took the keyboard: its keyups never arrive here). */
+  release() {
+    this.held.clear();
+    this.pressed.clear();
+  }
+
   /** Pointer lock (canvas click; Phase 5: menu "Tiếp tục", closing the full map). Only inside a user gesture. */
   lock() {
     if (this.locked) return;

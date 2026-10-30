@@ -32,6 +32,8 @@ export class ThirdPersonCamera {
   yaw = 0;
   pitch = C.pitchDeg.initial * DEG;
   mode: CameraMode = C.modes[0];
+  /** Leg 3 rooms (the Louvre room's fix F2 (5)): shoulder offset (m, replaces the mode's) + extra pivot lift (m); null = none. */
+  override: { shoulder: number; lift: number } | null = null;
   /** Current arm length (m) after collision; 0 in first person. */
   arm = 0;
   /** Pivot (smoothed axis + smoothed shoulder offset: above the feet, right of the spine). */
@@ -80,12 +82,12 @@ export class ThirdPersonCamera {
     }
 
     const bike = t.vehicle === 'bike';
-    const lift = arm ? arm.pivot + (bike ? C.bike.pivotAdd : 0) : C.first.eye;
+    const lift = arm ? arm.pivot + (bike ? C.bike.pivotAdd : 0) + (this.override?.lift ?? 0) : C.first.eye;
     goal.set(t.position.x, t.position.y + lift, t.position.z); // on the capsule axis
     const jumped = this.axis.distanceToSquared(goal) > C.snapDistance ** 2;
     if (jumped && this.placed) this.yaw = t.yaw; // teleported (Phase 5 respawn): look along the body again
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw), sp = Math.sin(this.pitch), cp = Math.cos(this.pitch);
-    const shoulder = arm ? arm.shoulder : 0;
+    const shoulder = arm ? (this.override?.shoulder ?? arm.shoulder) : 0;
     // Rubbing along a wall on the right: over the left shoulder instead (GTA), else the back cast starts against that
     // wall and grazes it as soon as the view is a degree off parallel (arm ≈ 0, the lens in the head). Back to the
     // right only once that side has been clear by shoulderSwap.margin for shoulderSwap.hold s (no flip-flop on jogs).

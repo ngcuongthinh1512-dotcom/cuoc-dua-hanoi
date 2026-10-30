@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type AnswerStatus, type ClueCard, type FinishResult, NET, type RaceView, type TaskView, type TeamInfo, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
 import { fmtMinSec } from '../../host/hostView.ts';
-import { bookEntries, cardPanel, COPY_OK, copyBlocked, formatDuration, lockLine, penaltyLine, resultView, StartOrderBanner, statusLine, summarize, transportLabel, ZoneList, zoneLines } from './format.ts';
+import { bookEntries, cardPanel, COPY_OK, copyBlocked, formatDuration, lockLine, penaltyLine, resultKey, resultView, richText, StartOrderBanner, statusLine, summarize, transportLabel, ZoneList, zoneLines } from './format.ts';
 
 const task: TaskView = { title: 'Nhiệm vụ', description: 'Mô tả', media: [], kind: 'answer', verification: 'auto', input: 'text', proofInstruction: '', timeLimitMinutes: 20 };
 const card = (o: Partial<ClueCard>): ClueCard => ({ step: 's', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư', media: [], status: 'done', lockedUntil: null, lockKind: null, answers: [], receivedAt: 1000, completedAt: null, ...o });
@@ -17,7 +17,7 @@ describe('card summary', () => {
   });
   it('challenge: teaser + one task block with place and limit', () => {
     const s = summarize(card({ type: 'challenge', text: 'Gợi ý', task: { ...task, place: 'Sân' } }));
-    expect(s.blocks).toEqual([{ branch: null, title: 'Nhiệm vụ', text: 'Mô tả', place: 'Sân', limit: 'Thời hạn: 20 phút', chosen: false, media: [] }]);
+    expect(s.blocks).toEqual([{ branch: null, title: 'Nhiệm vụ', text: 'Mô tả', after: '', place: 'Sân', limit: 'Thời hạn: 20 phút', chosen: false, media: [] }]);
   });
   it('detour: one block per branch; pit stop gets a default line', () => {
     const b = (id: string) => ({ id, name: `Nhánh ${id}`, summary: `Tóm tắt ${id}`, task });
@@ -26,6 +26,11 @@ describe('card summary', () => {
     expect(s.blocks.map((x) => x.chosen)).toEqual([false, false]);
     expect(summarize(card({ type: 'detour', branch: 'B', branches: [b('A'), b('B')] })).blocks.map((x) => x.chosen)).toEqual([false, true]);
     expect(summarize(card({ type: 'pit_stop', text: '' })).clue).toMatch(/Chặng dừng/);
+  });
+  it('detour: the chosen branch\'s afterChoice is its block\'s `after`; richText splits bullet lines into a list', () => {
+    const b = (id: string, afterChoice?: string) => ({ id, name: id, summary: `Tóm tắt ${id}`, ...(afterChoice ? { afterChoice } : {}) });
+    expect(summarize(card({ type: 'detour', branch: 'B', branches: [b('A'), b('B', 'Đi tới X')] })).blocks.map((x) => x.after)).toEqual(['', 'Đi tới X']);
+    expect(richText('Đi tới X.\n• một\n- hai\n\nPhạt 12 phút.')).toEqual([{ kind: 'p', text: 'Đi tới X.' }, { kind: 'ul', items: ['một', 'hai'] }, { kind: 'p', text: 'Phạt 12 phút.' }]);
   });
 });
 
@@ -72,12 +77,21 @@ describe('Pit Stop lines', () => {
   const view = (o: Partial<RaceView>): RaceView => ({ status: 'running', finishAt: null, penaltyMinutes: 0, card: null, checkinAt: null, result: null, ...o });
   it('SPEC §17.22 / §17.23: the finish announcement is the server\'s text (rank only, no time); an empty text → the generic line, never a place', () => {
     const r: FinishResult = { rank: 3, total: 7, kind: 'finish', npc: 'Đội Xanh về đích thứ 3 tại X!', toast: 'Về đích thứ 3/7', card: 'Thẻ' };
-    expect(resultView(r, 'Đội Xanh')).toEqual({ npc: 'Đội Xanh về đích thứ 3 tại X!', toast: 'Về đích thứ 3/7', card: 'Thẻ', title: 'Về đích thứ 3' });
+    expect(resultView(r, 'Đội Xanh')).toEqual({ npc: 'Đội Xanh về đích thứ 3 tại X!', toast: 'Về đích thứ 3/7', card: 'Thẻ', title: 'Về đích thứ 3', penalty: null });
     expect(resultView({ ...r, npc: '' }, 'Đội Xanh').npc).toBe('Đội Xanh, chúc mừng các bạn đã về đích thứ 3!');
     const out = resultView({ ...r, rank: 7, kind: 'out', card: '' }, 'Đội Đỏ');
     expect(out).toMatchObject({ title: 'BỊ LOẠI', npc: 'Đội Xanh về đích thứ 3 tại X!', card: 'Rất tiếc, Đội Đỏ đã BỊ LOẠI khỏi cuộc đua. Thứ hạng cuối: 7/7.' });
     expect(resultView({ ...r, rank: 1, kind: 'first', toast: '' }, 'Đội Xanh')).toMatchObject({ title: 'Về đích thứ 1', toast: 'Về đích thứ 1 – về nhất!' });
     for (const k of ['npc', 'toast', 'card'] as const) expect(resultView({ ...r, npc: '', toast: '', card: '' }, 'A')[k]).not.toMatch(/\d:\d\d|Thời gian/);
+  });
+  it('Leg 3: a finish-line penalty keeps the normal finish card and adds one line; its change makes the result new', () => {
+    const r: FinishResult = { rank: 2, total: 5, kind: 'finish', npc: '', toast: '', card: '' };
+    const p = resultView({ ...r, finishPenalty: { minutes: 40, reason: 'bỏ thử thách ở lựa chọn kép' } }, 'Đội Xanh');
+    expect(p).toMatchObject({ title: 'Về đích thứ 2', card: 'Chúc mừng Đội Xanh! Các bạn về đích thứ 2 trên 5 đội.', penalty: 'Bị phạt 40 phút do bỏ thử thách ở lựa chọn kép.' });
+    expect(resultView({ ...r, finishPenalty: { minutes: 12, reason: ' ' } }, 'A').penalty).toBe('Bị phạt 12 phút do bỏ thử thách ở lựa chọn kép.');
+    expect(resultView({ ...r, finishPenalty: { minutes: 12, reason: 'đến muộn.' } }, 'A').penalty).toBe('Bị phạt 12 phút do đến muộn.');
+    expect(resultKey(r)).not.toBe(resultKey({ ...r, finishPenalty: { minutes: 12, reason: 'x' } }));
+    expect(resultKey({ ...r, finishPenalty: { minutes: 12, reason: 'x' } })).not.toBe(resultKey({ ...r, finishPenalty: { minutes: 20, reason: 'x' } }));
   });
   it('book "Thời gian làm" reads like the Host step matrix (mm:ss)', () => {
     for (const ms of [1_245_909, 1_245_400, 483_873, 59_500, 3_599_000]) if (ms >= 60_000) expect(formatDuration(ms)).toBe(fmtMinSec(ms));

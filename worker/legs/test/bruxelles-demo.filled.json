@@ -65,9 +65,9 @@
     }
   },
   "start": {
-    "name": "Place Sainte-Catherine",
-    "lat": 50.8511,
-    "lon": 4.3468,
+    "name": "Tháp Rogier",
+    "lat": 50.8558,
+    "lon": 4.3592,
     "yawDeg": 33,
     "spreadMeters": 5
   },

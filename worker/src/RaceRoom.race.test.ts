@@ -195,6 +195,17 @@ describe.concurrent('race engine (workerd)', () => {
     const again = (await login(server, race, { code: teams[0]!.code })).body as unknown as { summary: { step: string } };
     expect(again.summary).toEqual({ reconnects: expect.any(Number), lastSeen: expect.any(Number), step: 'Về đích' }); // "Chào mừng trở lại"
 
+    // Leg 3: the Host's finish-line penalty after A finished: its card updates live (same "Về đích thứ 1" + the penalty),
+    // teams.state written first; B's set before it finished reaches nobody but the Host; both survive the restart below
+    host.send({ t: 'host.finishPenalty', team: teams[0]!.id, minutes: 20 });
+    const pen = (await view(a2, (v) => !!v.result?.finishPenalty)).view;
+    expect(pen.result).toMatchObject({ rank: 1, kind: 'first', finishPenalty: { minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép' } });
+    expect(JSON.parse(((await sqlOf(race).then((q) => q.exec('SELECT state FROM teams WHERE id = ?', teams[0]!.id))) as { state: string }[])[0]!.state)).toMatchObject({ rank: 1, finishPenalty: { minutes: 20 } });
+    host.send({ t: 'host.finishPenalty', team: teams[1]!.id, minutes: 12, reason: 'test' });
+    const hs = (await host.until((m) => m.t === 'host.state' && m.teams.some((t: HostState['teams'][number]) => t.finishPenalty?.minutes === 12))) as unknown as HostState;
+    expect(hs.teams.map((t) => t.finishPenalty?.minutes ?? 0)).toEqual([20, 12]);
+    expect(hs.ranking.map((r) => r.team)).toEqual([teams[0]!.id, teams[1]!.id]); // B has not finished: its penalty moves nothing yet
+
     // B goes on to T1 for the restart test; the Host may not load a leg after the start
     await runTo(b, W(b0!).start!);
     host.send({ t: 'host.leg', id: 'mini' });
@@ -325,7 +336,8 @@ describe('race engine restart', () => {
     expect(book.cards.map((c) => [c.step, c.status])).toEqual([['L1', 'done'], ['T1', 'teaser']]);
     // SPEC §17.22: A's finish rank survives the eviction (teams.state)
     const a = await joinTeam(server, flow.race, flow.codeA);
-    expect(W(a).view!.result).toMatchObject({ rank: 1, total: 2, kind: 'first' });
+    expect(W(a).view!.result).toMatchObject({ rank: 1, total: 2, kind: 'first', finishPenalty: { minutes: 20 } }); // Leg 3: the penalty too
+    expect(W(b).view!.result).toBeNull(); // B's penalty (set before its finish) is not shown before it finishes
     a.close();
     b.close();
   }, 60_000);

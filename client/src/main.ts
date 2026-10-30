@@ -1,8 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { reviewSound, unlockAudio } from './audio/sfx.ts';
-import { NET, type PoseSample } from '@race/shared/protocol';
-import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, ui } from './config.ts';
+import { NET, type PoseSample, type RaceView } from '@race/shared/protocol';
+import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, rooms as roomCfg, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
 import { CHUNK_SIZE, type ChunkIndex, type ChunkKey, type SkylineData, type WaterData } from './geo/chunkData.ts';
@@ -14,11 +14,16 @@ import { graphLines, loadRoadGraph } from './geo/roadGraph.ts';
 import { BikeLink } from './net/bikeLink.ts';
 import { ClueBoxes, parseBoxes } from './net/ClueBoxes.ts';
 import { NetClient } from './net/NetClient.ts';
-import { fakeTeams, fakeTick, parsePeers, RemotePlayers } from './net/RemotePlayers.ts';
+import { fakeTeams, fakeTick, parsePeers, RemotePlayers, underground } from './net/RemotePlayers.ts';
 import { fetchMedia, isOnline, startSession } from './net/session.ts';
 import { PitHost } from './race/PitStop.ts';
 import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
+import { DEMO_ROOM_STATES, demoRoomResult, demoRoomViews, type DemoRoomState } from './rooms/roomDemo.ts';
+import { enterSpot, exitSpot, roomFrame } from './rooms/roomFrame.ts';
+import { ROOM_TEXT, RoomFlow, roomOf, type RoomEvent, type RoomTarget } from './rooms/roomState.ts';
+import type { RoomHandle } from './rooms/types.ts';
+import { hideWorld, showWorld } from './world/hideWorld.ts';
 import { Spectate, TEXT as SP } from './spectate/Spectate.ts';
 import { Npc } from './npc/Npc.ts';
 import type { NpcAnchor } from './npc/types.ts';
@@ -35,7 +40,7 @@ import { netDownText } from './ui/Login.ts';
 import { MapTiles } from './ui/MapTiles.ts';
 import { Menu } from './ui/Menu.ts';
 import { Minimap, setArrowColour } from './ui/Minimap.ts';
-import { notice, penalizedText, toast } from './ui/Toasts.ts';
+import { notice, penalizedText, scoredText, toast } from './ui/Toasts.ts';
 import { type HudFrame, NO_GPS } from './ui/types.ts';
 import { loadBikeAsset } from './vehicle/BikeModel.ts';
 import { groundAt } from './vehicle/Bikes.ts';
@@ -121,8 +126,9 @@ async function start() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(R.fov, 1, R.near, R.far);
   let post = createPost(renderer, scene, camera); // Phase 8C T1: null = plain renderer.render
+  let room: RoomHandle | undefined; // Leg 3: the Lựa chọn kép room the body is in (below)
   const resize = () => {
-    renderer.setPixelRatio(Math.min(devicePixelRatio, R.maxPixelRatio));
+    renderer.setPixelRatio(room ? 1 : Math.min(devicePixelRatio, R.maxPixelRatio)); // Leg 3: minimal graphics inside a room
     renderer.setSize(innerWidth, innerHeight);
     post?.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / innerHeight;
@@ -189,7 +195,11 @@ async function start() {
   fly.setPose(x, y, z, yawDeg, pitchDeg);
   const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water };
   const overrides = parseOverrides(query, !!session);
-  const player = camOk || viewer ? undefined : await Player.create(scene, world, camera, env, overrides, session?.team);
+  // Leg 3 rooms (the Louvre room's critic C2): only the Player gets its OWN env (the room floor, no Seine while inside); `env`
+  // stays the grid for the NPCs, the boxes, the overlays and the remote players' height filter.
+  let roomFloor: number | null = null;
+  const playerEnv = { ...env, heightAt: (x: number, z: number) => roomFloor ?? env.heightAt(x, z), get waterLevel() { return roomFloor != null ? null : env.waterLevel; } };
+  const player = camOk || viewer ? undefined : await Player.create(scene, world, camera, playerEnv, overrides, session?.team);
   // D17: no spawn / clue box on top of a rail viaduct (the Bir-Hakeim metro deck over the leg start)
   const rails = new RailDecks(new Set(hasIndex ? index.keys : []), new URL('data/', location.href).href);
   /** (Re)spawn at the leg start / where the team stood (welcome), DEV ?start=x,z,yawDeg: the same path (p7-start). */
@@ -256,10 +266,105 @@ async function start() {
       )
     : undefined;
   if (import.meta.env.DEV && !session) raceHud?.demo(query);
+  // Leg 3 (rooms/roomState.ts, the Leg 1 Louvre room's way): a Lựa chọn kép branch whose task has `room` = a 3D room
+  // (chocolate workshop / comic gallery) built `rooms.below` m UNDER the branch box in world coordinates (rooms/roomFrame.ts)
+  // once the team opened the box: the room module (dynamic import: its own chunk) puts one group into the game's scene and
+  // its colliders into the game's Rapier world; the game's body walks in it (Player.moveTo in / out: only y changes, no
+  // `respawn`, nothing for the server's speed check to flag), poses keep flowing, so the Host sees the team at the box and
+  // the other teams in the same room see it walk (RemotePlayers' height filter: the street sees nobody underground). The
+  // street world is hidden (world/hideWorld.ts) and its per-frame work paused (chunks, NPCs, sky / water, HUD / minimap).
+  // Graphics inside are minimal (no shadows / post, pixel ratio 1). The cards (Enter / Tab, "Đổi lựa chọn kép") work inside.
+  // The step completing (skip, or the Host's Duyệt) or a branch switch lights the exit ring at the far end; the next card is
+  // HELD (RaceClient.release) until the body walks into it, back in front of the box. A reload inside: welcome.view puts it
+  // back in the room (after a switch: ClueCard.leftRoom, ring lit); the step done meanwhile → the world, the next card pops.
+  // A CHALLENGE card with `room: 'garderobe'` (the museum, garderobe/garderobeRoom.ts) is the same room flow under the box just
+  // opened, but its ring is lit all the time: the team may walk out (roomFlow.leftKey: the unchanged card does not pull it
+  // back) and F at the opened box goes back in (reenterBox); the next card is held only when the step completes INSIDE.
+  const roomFlow = new RoomFlow();
+  let roomBusy = false; // a fade / mount / unmount in flight: no exit check, no __READY__
+  let roomChain: Promise<unknown> = Promise.resolve(); // room events run one after another (a switch right after the enter)
+  let roomQueue = 0; // room events not finished yet (__READY__ / worldReady wait: the event's work starts a tick later)
+  const queueRoom = (f: () => Promise<unknown> | unknown) => { roomQueue++; roomChain = roomChain.then(f).catch((err: unknown) => console.warn('room failed:', err)).finally(() => roomQueue--); };
+  let demoHeld: RaceView | null = null; // DEV: the demo's held view (no RaceClient offline)
+  let demoView: RaceView | null = null; // DEV: the demo's current view (the room's "server")
+  let roomExit: { x: number; z: number; yaw: number } | null = null; // the feet on leaving (in front of the box)
+  const hiddenForRoom = new Set<THREE.Object3D>();
+  const keepInRoom = (o: THREE.Object3D) => o === room?.group || o === player?.model.root || !!remote?.owns(o);
+  const fadeEl = document.body.appendChild(Object.assign(document.createElement('div'), { className: 'room-fade' }));
+  const fadeTo = (on: boolean) => new Promise<void>((r) => (fadeEl.classList.toggle('on', on), setTimeout(r, roomCfg.fadeMs)));
+  const mountRoomFor = async (t: RoomTarget): Promise<RoomHandle> => {
+    const mod = t.room.kind === 'chocolate' ? await import('./choco/chocoRoom.ts') : t.room.kind === 'garderobe' ? await import('./garderobe/garderobeRoom.ts') : await import('./gallery/galleryRoom.ts');
+    const team = session?.team ?? { slot: Number(query.get('team')) || 1, name: playerSetup.teamName, colour: playerSetup.teamColour }; // offline: ?team=<slot>
+    // under the branch box (the one being / just left: opened); a challenge room (GardeRobe): under the box just opened = the
+    // last opened one (the step before); none known (a reload before the box came back) → under the feet
+    const box = (t.room.kind === 'garderobe' ? boxes.boxes.filter((b) => b.opened && !b.kind).at(-1) : boxes.boxes.find((b) => b.step === t.step && (t.branch ? b.branch === t.branch : b.opened && !!b.branch))) ?? { x: player!.position.x, z: player!.position.z, yaw: 0 };
+    const frame = roomFrame(box, env.heightAt(box.x, box.z), mod.DOOR_Z);
+    const r = await mod.mountRoom({
+      renderer, q: query, scene, frame, world, camera, feet: () => ({ x: player!.position.x, z: player!.position.z }), frozen: modal, onClose: relock,
+      team: { ...team, avatar: overrides.avatar },
+      teams: (session?.welcome?.teams ?? []).map(({ slot, name, colour }) => ({ slot, name, colour })),
+      room: t.room,
+      onResult: ({ done, skipped }) => (race && t.branch ? race.room(t.step, t.branch, done, skipped) : demoView && demoRoomView(demoRoomResult(demoView, done, skipped))),
+    });
+    roomFloor = frame.floorY;
+    roomExit = exitSpot(frame);
+    const e = enterSpot(frame);
+    if (player!.active) player!.moveTo(e.x, e.z, e.yaw);
+    else spawnAt(e.x, e.z, e.yaw, e.y); // a reload inside: the body spawns at the door once the world is ready
+    player!.camera.override = roomCfg.camera;
+    const now = roomFlow.target ?? t; // a view may have come while the chunk loaded
+    r.setProgress(now.room.done, now.room.skipped);
+    if (roomFlow.exitReady) r.setExit(true);
+    if (roomFlow.locked) r.setLocked(true);
+    return r;
+  };
+  const leaveRoom = async () => {
+    if (!room || roomBusy) return;
+    roomBusy = true;
+    await fadeTo(true);
+    room.dispose();
+    room = undefined;
+    roomFloor = null;
+    player!.camera.override = null;
+    showWorld(hiddenForRoom);
+    if (roomExit) player!.moveTo(roomExit.x, roomExit.z, roomExit.yaw);
+    resize();
+    roomFlow.left();
+    await fadeTo(false);
+    roomBusy = false;
+    race?.release(); // the next card pops in front of the box
+    if (demoHeld) raceHud?.setView(demoHeld), (demoHeld = null);
+  };
+  const roomEvent = (ev: RoomEvent, t: RoomTarget | null) =>
+    queueRoom(async () => {
+      if (ev === 'enter' && t) {
+        roomBusy = true;
+        await fadeTo(true);
+        room?.dispose();
+        room = await mountRoomFor(t);
+        resize();
+        await fadeTo(false);
+        roomBusy = false;
+      } else if (ev === 'exitReady') room?.setExit(true), toast(t?.room.kind === 'garderobe' ? ROOM_TEXT.exitDoor : ROOM_TEXT.exit);
+      else if (ev === 'switched') room?.setExit(true), room?.setLocked(true), toast(ROOM_TEXT.switched);
+      else if (ev === 'resume') room?.setExit(false), room?.setLocked(false);
+    });
+  /** Every view before the HUD (RaceDeps.view): true = hold it. */
+  const onRoomView = (v: RaceView | null): boolean => {
+    const { event, hold } = roomFlow.onView(v);
+    if (event) roomEvent(event, roomFlow.target);
+    else if (roomFlow.target) room?.setProgress(roomFlow.target.room.done, roomFlow.target.room.skipped);
+    return hold;
+  };
+  /** The opened box in reach while the team stands outside the GardeRobe room it walked out of (its card still active): F goes back in. */
+  const reenterBox = (x: number, z: number) => !room && !roomBusy && roomFlow.leftKey && roomOf(race ? race.view : demoView)?.room.kind === 'garderobe' && boxes.boxes.some((b) => b.opened && !b.kind && Math.hypot(b.x - x, b.z - z) <= b.r);
+  /** DEV offline: a stand-in view through the same gate (held → released by leaveRoom). */
+  const demoRoomView = (v: RaceView) => ((demoView = v), onRoomView(v) ? void (demoHeld = v) : raceHud?.setView(v));
   const race =
     session && player
       ? new RaceClient({
           hud: raceHud,
+          view: onRoomView,
           send: (m) => net?.send(m),
           // D4: the pose first (the gate reset makes it go out now even if unchanged / within 200 ms), then the op
           op: (m) => {
@@ -280,6 +385,8 @@ async function start() {
     // D23: F on foot asks the current box first; offline (DEV ?boxes=) it opens locally (manual tests).
     player.onInteract = () => {
       const [x, z] = [player.position.x, player.position.z];
+      if (room) return room.interact(); // Leg 3: the own table's button / a vitrine close-up (never a box from under the ground)
+      if (reenterBox(x, z)) return (roomFlow.reenter(), onRoomView(race ? race.view : demoView), true); // Leg 3: back into the GardeRobe room
       if (race) return race.interact(boxes.boxes, x, z, performance.now());
       const b = !session && boxInReach(boxes.boxes, x, z);
       return !!b && (boxes.apply({ t: 'box', op: 'reveal', box: { ...b, opened: true } }), true);
@@ -310,6 +417,7 @@ async function start() {
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
         else if (m.t === 'notice') {
           if (m.code === 'penalized') toast(penalizedText(m.score, m.of)); // SPEC §17.31
+          else if (m.code === 'autoCorrect' || m.code === 'autoPenalized' || m.code === 'scoreUpdated') toast(scoredText(m.code, m.score, m.of)); // Leg 3: the number every time
           else notice(m.code);
           if (m.code === 'approved' || m.code === 'penalized') reviewSound(m.code === 'approved'); // SPEC §8.9 (6)
         }
@@ -414,7 +522,7 @@ async function start() {
     resume: () => input.lock(),
     ...(player && { respawn: () => notice(player.controller.respawn() === 'stairs' ? 'respawnStairs' : 'respawn') }),
   });
-  const uiOpen = () => menu.isOpen || !!fullMap?.isOpen || !!raceHud?.open; // the body stops, keys go to the menu / map / Sổ mật thư
+  const uiOpen = () => menu.isOpen || !!fullMap?.isOpen || !!raceHud?.open || !!room?.overlayOpen(); // the body stops, keys go to the menu / map / Sổ mật thư / a room's mini-game
   // SPEC §17.40: while the watch camera follows a team the pointer stays free (the bar is clickable): no lock, no "Nhấp chuột"
   const modal = () => uiOpen() || !!spectate?.following;
   input.canLock = () => !spectate?.following;
@@ -428,6 +536,16 @@ async function start() {
     if (fullMap && query.has('map')) fullMap.open(frame, Number(query.get('map')) || undefined);
     else if (query.has('menu')) menu.open();
     help.hidden = input.locked || modal();
+    // Leg 3 DEV offline: ?roomDemo=chocolate|comic|garderobe&team=<slot>&roomState=in|pending|done|skipped|switch|left (rooms/roomDemo.ts,
+    // p11-room-*): straight into the room with stand-in views; `then` once the room is up; `left` walks out by itself
+    const kind = query.get('roomDemo');
+    if (import.meta.env.DEV && !session && raceHud && (kind === 'chocolate' || kind === 'comic' || kind === 'garderobe')) {
+      const state = (DEMO_ROOM_STATES as readonly string[]).includes(query.get('roomState') ?? '') ? (query.get('roomState') as DemoRoomState) : 'in';
+      const d = demoRoomViews(kind, state);
+      demoRoomView(d.first);
+      if (d.then) queueRoom(() => demoRoomView(d.then!));
+      if (state === 'left' || state === 'switch-left') queueRoom(() => new Promise((r) => setTimeout(r, 100)).then(leaveRoom)); // after the exitReady / switched event queued by `then`
+    }
   };
 
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
@@ -447,7 +565,7 @@ async function start() {
     if (locked) menu.close();
     else {
       unlockedAt = performance.now();
-      if (!fullMap?.isOpen && !raceHud?.open && !spectate?.following) menu.open(); // following: the bar took the pointer, no menu
+      if (!fullMap?.isOpen && !raceHud?.open && !spectate?.following && !room?.overlayOpen()) menu.open(); // following / a room's mini-game: they took the pointer, no menu
     }
     help.hidden = locked || modal();
   };
@@ -495,8 +613,8 @@ async function start() {
   let npcFrames = 0; // frames through npcs.update
   const loop = new GameLoop({
     fixedUpdate: (dt) => {
-      // Before the player (docs/plans/phase4b.md §5.2): cars → pedestrians → car colliders → shove / crash the body.
-      if (npcs?.started) npcs.fixedUpdate(dt, npcAnchor(), player?.active && !flying && !watching ? player.controller : undefined);
+      // Before the player (docs/plans/phase4b.md §5.2): cars → pedestrians → car colliders → shove / crash the body. Leg 3: inside a room the NPCs pause.
+      if (npcs?.started && !room) npcs.fixedUpdate(dt, npcAnchor(), player?.active && !flying && !watching ? player.controller : undefined);
       player?.fixedUpdate(dt, flying || watching); // the body stands frozen while its team watches the others (§17.40)
       world.step();
     },
@@ -549,43 +667,57 @@ async function start() {
       } else if (flying || watching) fly.update(dt, input);
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
       player?.update(dt, bodyCam ? input : null, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
-      if (player?.active) bikeLink?.frame(dt, player.controller);
-      if (net && player?.active && bodyCam) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); a finished team too (§17.39), not while watching
+      // Leg 3: inside a room the game's body walks on the room's colliders; the room draws its prompt / ring and watches the exit
+      // (after the Player placed the camera: the GardeRobe close-up glides it from there)
+      if (room) {
+        room.update(dt);
+        if (!roomBusy && room.exitHit()) void leaveRoom();
+      }
+      if (room && roomFloor != null && bodyCam) camera.position.y = Math.min(camera.position.y, roomFloor + room.ceiling - 0.3); // no ceiling collider: the camera stays under it
+      if (player?.active && !room) bikeLink?.frame(dt, player.controller);
+      if (net && player?.active && bodyCam) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); a finished team too (§17.39), not while watching; in a room too (the Host sees the team at the box, the room's teams see each other)
       if (peers.length && (player ? player.active : worldReady) && localMs() >= nextFakeTick) {
         remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
         nextFakeTick += 1000 / NET.tickHz;
       }
-      remote?.update(dt, net ? net.serverNow() : localMs(), camera.position);
-      boxes.update(camera.position);
-      if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
+      remote?.update(dt, net ? net.serverNow() : localMs(), camera.position, bodyCam ? underground(player.position, env.heightAt) : undefined, env.heightAt); // Leg 3: a team in a room is no ghost on the street and the other way round
+      if (room) hideWorld(scene.children, keepInRoom, hiddenForRoom); // every frame: streamed chunks / NPCs added meanwhile too
+      else {
+        boxes.update(camera.position);
+        if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
+      }
       // No HUD while loading, flying (V) or watching the other teams: hud.css hides every .hud-box / .hud-hand (clock, minimap, toasts).
       document.body.classList.toggle('hud-off', !worldReady || flying || watching);
       if (player && hud && minimap) {
         const s = player.controller.state;
         camera.getWorldDirection(view);
         const [x, z] = [player.position.x, player.position.z];
-        Object.assign(frame, {
-          x, z, heading: Math.atan2(-view.x, -view.z), bodyYaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z),
-          riding: !!player.controller.riding, swimming: s.moveMode === 'swim', time: Math.max(0, player.simTime),
-          street: streets?.at(x, z), district: districtAt(water?.districts, x, z),
-          penaltyMinutes: race?.view?.penaltyMinutes,
-        } satisfies HudFrame);
         const riding = !!player.controller.riding;
-        const inZone = !player.active ? false : race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone : !riding && !!boxInReach(boxes.boxes, x, z);
-        const bike = player.active && bodyCam && !modal() && !race?.view?.result ? player.bikes.prompt(player.controller) : null;
+        // Leg 3: the race HUD (countdowns, cards) runs inside a room too; the box prompt / bike prompt do not
+        const inZone = !player.active ? false : (race ? race.frame(boxes.boxes, x, z, riding, performance.now()).inZone && !room : !room && !riding && !!boxInReach(boxes.boxes, x, z)) || (!riding && !!reenterBox(x, z));
+        const bike = player.active && bodyCam && !modal() && !race?.view?.result && !room ? player.bikes.prompt(player.controller) : null;
         raceHud?.update({ simTime: Math.max(0, player.simTime), serverNow: net ? net.serverNow() : 0, inZone, bike });
-        gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
-        hud.update(frame, dt);
-        minimap.update(frame, gps ?? NO_GPS, dt);
-        if (fullMap?.isOpen) fullMap.update(frame, gps ?? NO_GPS);
+        if (!room) { // Leg 3: the street HUD / minimap / GPS / full map wait while the body is in a room
+          Object.assign(frame, {
+            x, z, heading: Math.atan2(-view.x, -view.z), bodyYaw: s.yaw, speed: Math.hypot(s.velocity.x, s.velocity.z),
+            riding, swimming: s.moveMode === 'swim', time: Math.max(0, player.simTime),
+            street: streets?.at(x, z), district: districtAt(water?.districts, x, z),
+            penaltyMinutes: race?.view?.penaltyMinutes,
+          } satisfies HudFrame);
+          gps?.update(x, z, frame.riding ? 'bike' : 'walk', dt);
+          hud.update(frame, dt);
+          minimap.update(frame, gps ?? NO_GPS, dt);
+          if (fullMap?.isOpen) fullMap.update(frame, gps ?? NO_GPS);
+        }
       }
-      if (npcs?.started) {
+      if (npcs?.started && !room) {
         npcs.update(dt, loop.alpha, camera);
         npcFrames++;
         npcs.zoneRings.visible = debug.visible;
       }
       input.endFrame();
       cardClosed = false;
+      if (room) return; // Leg 3: the world's streaming / sky / water wait (the room has the camera)
       const p = bodyCam ? player.position : camera.position; // streaming + colliders follow the body (watching / flying: the camera)
       sky.update();
       waterObj?.update(dt);
@@ -593,7 +725,8 @@ async function start() {
       edge.hidden = edgeDistance(p.x, p.z) >= bounds.warnDistance;
     },
     render: () => {
-      if (post) post.render();
+      if (room) renderer.render(scene, camera); // Leg 3: plain render inside a room (no post / SMAA / bloom)
+      else if (post) post.render();
       else {
         if (!renderer.info.autoReset) renderer.info.reset(); // post.ts counts its passes by hand
         renderer.render(scene, camera);
@@ -640,10 +773,10 @@ async function start() {
       debug.update({ fps: loop.fps, workMs: loop.workMs, renderer, position: camera.position, speed: fly.speed, chunks: cs, colliders, player: playerLine, bike: bikeLine, npc: npcLine, hud: hudLine, net: netLine || undefined });
       const { calls, triangles } = renderer.info.render;
       const npcStats = { npcCars: ns?.cars ?? 0, npcPeds: ns?.peds ?? 0, npcMs: +(ns?.simMs ?? 0).toFixed(3), npcDrawMs: +(ns?.drawMs ?? 0).toFixed(3) };
-      Object.assign(window, { __STATS__: { calls, triangles, chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries, ...npcStats } });
+      Object.assign(window, { __STATS__: { calls, triangles, frameMs: +loop.workMs.toFixed(2), chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries, ...npcStats } });
       // Signal for scripts/screenshot.ts: every chunk around the camera attached and a few frames drawn.
       if (!worldReady) loading.textContent = cs.pending || welcomed ? `Đang tải bản đồ… còn ${cs.pending} ô` : 'Đang kết nối máy chủ…';
-      if (!worldReady && loop.frames >= 3 && chunks.idle && models.idle && graphLoaded && welcomed) {
+      if (!worldReady && loop.frames >= 3 && chunks.idle && models.idle && graphLoaded && welcomed && !roomQueue) { // Leg 3: a reload inside a room: its colliders first
         worldReady = true;
         loading.hidden = true;
         player?.activate(); // the chunk colliders around the spawn exist now
@@ -654,7 +787,7 @@ async function start() {
         npcReady = true;
       }
       // NPCs: ≥ 2 frames through npcs.update (drawn, and in __STATS__ above) — a viewer waits only for an explicit ?wait= (p9-watch).
-      if (!ready && worldReady && npcReady && (!npcs || npcFrames >= 2) && (player ? player.simTime >= wait : demoClock >= (Number.isFinite(waitArg) ? waitArg : 0))) {
+      if (!ready && worldReady && npcReady && (!npcs || npcFrames >= 2) && !roomQueue && !roomBusy && (!room || room.settled()) && (player ? player.simTime >= wait : demoClock >= (Number.isFinite(waitArg) ? waitArg : 0))) {
         ready = true;
         Object.assign(window, { __READY__: true });
       }

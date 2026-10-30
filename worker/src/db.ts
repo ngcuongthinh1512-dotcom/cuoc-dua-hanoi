@@ -93,6 +93,10 @@ export interface AnswerRec {
   /** SPEC §17.31: a Phạt's "đúng sc/scoreOf" as the Host entered it; sv = told to the team (Phạt ≥ scoreFromMinutes into the task). */
   sc?: number;
   sv?: true;
+  /** Leg 3: graded by the server (task.parts[].answers): `m` = each box right; `k` = the Host acknowledged it ("✓ Đồng ý"). */
+  auto?: true;
+  m?: boolean[];
+  k?: true;
 }
 
 /** step_progress.answers → records ([] for '' / a broken value: never throws in the DO). */

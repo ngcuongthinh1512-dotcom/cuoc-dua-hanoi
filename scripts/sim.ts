@@ -179,12 +179,14 @@ type RaceMsg = Extract<Msg, { t: 'race' }>;
  *  else referenceAnswers[0] (a host_approval task may have only those). Never invents one. */
 export function answersOf(json: string): Map<string, string> {
   const out = new Map<string, string>();
-  type T = { answers?: string[]; referenceAnswers?: string[] };
+  type T = { answers?: string[]; referenceAnswers?: string[]; parts?: { answers?: string[] }[] };
   const leg = JSON.parse(json) as { steps?: { id: string; task?: T; branches?: { id: string; task?: T }[] }[] };
   const first = (t?: T) => t?.answers?.[0] ?? t?.referenceAnswers?.[0];
   for (const st of leg.steps ?? []) {
     const a = first(st.task);
     if (a !== undefined) out.set(st.id, a);
+    // Leg 3: an auto-graded multi-box task: the first spelling of every box, "a | b | c | d" under "<step>#parts"
+    if (st.task?.parts?.every((x) => x.answers?.length)) out.set(`${st.id}#parts`, st.task.parts.map((x) => x.answers![0]).join(' | '));
     for (const b of st.branches ?? []) {
       const x = first(b.task);
       if (x !== undefined) out.set(`${st.id}/${b.id}`, x);
@@ -204,7 +206,7 @@ export function effectiveStatus(card: ClueCard, now: number, slackMs = 1000): Ca
 }
 
 /** What a bot is: its index, whether it switches branch once (right after choosing), and whether it already did. */
-export interface BotRole { i: number; switches: boolean; switched: boolean; /** Phase 11: the challenge step this bot never answers (the Host passes it). */ passAt?: string }
+export interface BotRole { i: number; switches: boolean; switched: boolean; /** Phase 11: the challenge step this bot never answers (the Host passes it). */ passAt?: string; /** Leg 3: this bot presses "Bỏ qua" in every room (2 made → finish-line penalty). */ skipsRoom?: boolean }
 /** One thing to send; `walk` = go to the chosen branch's place first; `switched` = this move is the branch switch. null = wait. */
 export type BotMove = { op: Record<string, unknown>; walk?: true; switched?: true } | null;
 
@@ -226,8 +228,11 @@ export function botMove(card: ClueCard, now: number, bot: BotRole, answers: Map<
     }
     case 'active': {
       const task = card.task ?? card.branches?.find((b) => b.id === card.branch)?.task;
+      // Leg 3: a branch with a room: the bot "made" everything (n/n → the Host bot approves), the skipper gives up at 2 (done at once)
+      if (task?.room && card.branch) return { op: { t: 'race', op: 'room', step, branch: card.branch, done: bot.skipsRoom ? Math.min(2, task.room.total) : task.room.total, skipped: !!bot.skipsRoom } };
       const text = task?.input === 'proof' ? '' : (answers.get(card.branch ? `${step}/${card.branch}` : step) ?? '(bot) trả lời');
-      if (task?.input === 'parts') return { op: { t: 'race', op: 'answer', step, text: '', parts: (task.partLabels ?? []).map((_, k) => `(bot) ô ${k + 1}`) } }; // SPEC §17.44: the Host bot approves
+      // SPEC §17.44: the Host bot approves; Leg 3: an auto-graded one gets the leg's own spellings (the server grades it at once)
+      if (task?.input === 'parts') return { op: { t: 'race', op: 'answer', step, text: '', parts: answers.get(`${step}#parts`)?.split(' | ') ?? (task.partLabels ?? []).map((_, k) => `(bot) ô ${k + 1}`) } };
       return { op: { t: 'race', op: 'answer', step, text } };
     }
     default: return null;
@@ -243,7 +248,8 @@ export function reviewsFor(state: Pick<HostState, 'queue'>, sent: Map<string, nu
     const key = `${q.team}|${q.step}|${q.id}`;
     if (now - (sent.get(key) ?? -Infinity) < retryMs) continue;
     sent.set(key, now);
-    out.push(key === penalizeKey ? { t: 'host.review', team: q.team, step: q.step, id: q.id, op: 'penalize', note: '(bot) thử phạt' } : { t: 'host.review', team: q.team, step: q.step, id: q.id, op: 'approve' });
+    if (q.auto) out.push({ t: 'host.review', team: q.team, step: q.step, id: q.id, op: 'ack' }); // Leg 3: already applied: "✓ Đồng ý"
+    else out.push(key === penalizeKey ? { t: 'host.review', team: q.team, step: q.step, id: q.id, op: 'penalize', note: '(bot) thử phạt' } : { t: 'host.review', team: q.team, step: q.step, id: q.id, op: 'approve' });
   }
   return out;
 }
@@ -309,11 +315,11 @@ export function budgetFor(teams: number, bots: number, minutes: number, c: HostS
 }
 
 /** What the server says happened (host.state.progress): answers by status and branch switches, the numbers of the report. */
-export interface LegStats { answers: number; approved: number; penalized: number; wrong: number; switches: number; /** Right answers the server marked itself (verification auto). */ correct: number }
+export interface LegStats { /** Leg 3: rooms reported (StepProgressView.room): made n/n, skipped. */ roomsDone: number; roomsSkipped: number; answers: number; approved: number; penalized: number; wrong: number; switches: number; /** Right answers the server marked itself (verification auto). */ correct: number }
 export function legStats(progress: StepProgressView[]): LegStats {
   const all = progress.flatMap((p) => p.answers);
   const n = (s: string) => all.filter((a) => a.status === s).length;
-  return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), correct: n('correct'), switches: progress.reduce((t, p) => t + p.branchSwitches, 0) };
+  return { answers: all.length, approved: n('approved'), penalized: n('penalized'), wrong: n('wrong'), correct: n('correct'), switches: progress.reduce((t, p) => t + p.branchSwitches, 0), roomsDone: progress.filter((p) => p.room && !p.room.skipped && p.room.done >= p.room.total).length, roomsSkipped: progress.filter((p) => p.room?.skipped).length };
 }
 
 /** `--leg mini` → the bundled id and its file (for the answers; `bruxelles-demo-filled` = test/bruxelles-demo.filled.json, the id the Host
@@ -347,6 +353,8 @@ export interface PlayOptions {
    *  trusted-point rate) so a red flag is raised for the Host bot to clear. Since SPEC §17.29 (Shift sprint ×2) a plain bot at
    *  --speedup 2 stays under that limit and nobody is flagged by accident any more. */
   speeder?: boolean;
+  /** Leg 3: this bot gives up every room ("Bỏ qua" at 2 made). */
+  skipsRoom?: boolean;
 }
 
 /** One bot plays the whole leg (docs/plans/phase8.md D18): A* walk to each step's zone at 5 Hz × speedup; then, until the
@@ -425,7 +433,7 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
     const short = o.straggler && (st.type === 'pit_stop' || next?.type === 'pit_stop');
     const k = short ? Math.max(0, 1 - (st.r + 15) / Math.max(1, Math.hypot(st.x - x, st.z - z))) : 1;
     if (st.type !== 'detour') await goto(x + (st.x - x) * k, z + (st.z - z) * k); // a detour: the choice needs no place, the branch's place comes after it
-    const role: BotRole = { i: bot.i, switches: !!o.switches, switched: false, passAt: o.passAt };
+    const role: BotRole = { i: bot.i, switches: !!o.switches, switched: false, passAt: o.passAt, skipsRoom: o.skipsRoom };
     let seen = latest();
     let changedAt = Date.now();
     while (!moved(st.id)) {
@@ -590,7 +598,7 @@ export async function runSim(opts: SimOptions): Promise<SimReport> {
       let hostBotOn = true;
       const hostDone = runHostBot(hs, penalizeKey, () => hostBotOn, 150, sc);
       const t0 = Date.now();
-      const play = (b: Bot) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused, switches: b.i === switcher, passAt: b.i === passBot ? firstChallenge : undefined, straggler: b.i === straggler, speeder: opts.full && b.i === 0 });
+      const play = (b: Bot) => playLeg(b, leg, answers, graph, { speedup: opts.speedup, deadline: t0 + (opts.seconds * 1000) / opts.speedup, refused, switches: b.i === switcher, passAt: b.i === passBot ? firstChallenge : undefined, straggler: b.i === straggler, speeder: opts.full && b.i === 0, skipsRoom: b.i === 1 }); // Leg 3: bot 1 skips every room
       try {
         // everybody else finished → the Host ends the race → the straggler (standing on the mat) is out and its playLeg returns
         await Promise.all([Promise.all(bots.filter((b) => b.i !== straggler).map(play)).then(() => sc && hs.send({ t: 'host.race', op: 'finish' })), ...bots.filter((b) => b.i === straggler).map(play)]);
@@ -721,7 +729,7 @@ function print(r: SimReport) {
       : `dòng ghi / đội ${n(r.leg.rowsPerTeam, 1)} (ngân sách ≤ ${r.leg.rowBudget}; không tính ${n(r.leg.sharedRows ?? 0)} dòng vị trí + replay chung cho mọi đội)`;
     console.log(`  Chặng ${r.leg.id} (${r.leg.steps} bước): ${r.leg.finished} / ${r.bots} đội về đích (bị loại: ${r.leg.out}) · xếp hạng ${r.leg.ranked} dòng · ${rows}${legFailed(r) ? ' ← LỖI' : ''}`);
     const s = r.leg.stats;
-    console.log(`  Thử thách: ${s.answers} câu trả lời · Host duyệt ${s.approved}, phạt ${s.penalized}${s.wrong ? `, sai (tự chấm) ${s.wrong}` : ''} · đổi nhánh ${s.switches} lần (phạt rút còn ${SIM_PENALTIES.retryLockMinutes * 60} s / ${SIM_PENALTIES.branchSwitchLockMinutes * 60} s)`);
+    console.log(`  Thử thách: ${s.answers} câu trả lời · Host duyệt ${s.approved}, phạt ${s.penalized}${s.wrong ? `, sai (tự chấm) ${s.wrong}` : ''} · đổi nhánh ${s.switches} lần · phòng Lựa chọn kép: ${s.roomsDone} xong, ${s.roomsSkipped} bỏ qua (phạt rút còn ${SIM_PENALTIES.retryLockMinutes * 60} s / ${SIM_PENALTIES.branchSwitchLockMinutes * 60} s)`);
     if (r.leg.refused.length) console.log(`  Thao tác bị từ chối (thử lại): ${r.leg.refused.length}, ví dụ ${r.leg.refused.slice(0, 3).join('; ')}`);
     const sc = r.leg.scenario;
     if (sc) console.log(`  Kịch bản Host (--full): Hoàn tác ${sc.undone} · Cho qua ${sc.passed} · cờ đỏ ${sc.flagged} lần, Xóa cờ ${sc.cleared} · Kết thúc → đội dang dở BỊ LOẠI: ${sc.ended ? 'đúng' : 'KHÔNG'}${scenarioFailed(sc) ? ' ← LỖI' : ''}`);

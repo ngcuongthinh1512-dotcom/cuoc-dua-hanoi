@@ -5,14 +5,14 @@
 // host.state parts.
 import { branchZone, jsonProblem, parseLeg, r2Names, startSpot, stepZones, type Leg, type LegIssue, type Zone } from '@race/shared/leg';
 import { latLonToWorld } from '@race/shared';
-import { finishTexts, NET, type BoxInfo, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
+import { FINISH_PENALTY_REASON, finishTexts, NET, type BoxInfo, type FinishPenalty, type FinishResult, type HostMessage, type HostState, type PoseSample, type RaceOp, type RaceStatus, type RaceView, type ReviewItem, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome, type ZoneMember } from '@race/shared/protocol';
 import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
 import { ranking } from './ranking.ts';
 import type { BoxSpot } from './BikeService.ts';
 import { partsOf } from './tasks.ts';
-import { advance, boxesOf, cardOf, inside, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
+import { advance, boxesOf, cardOf, type RoomRec, inside, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
 
 /** ponytail: step_progress.answers keeps the newest this many per step (a modified client typing NET.maxRaceOps wrong
  *  `auto` answers a minute for hours would grow one row and every host.state); raise it if a Host needs the whole log. */
@@ -32,9 +32,14 @@ export interface TeamRace {
   rank: number | null;
   /** SPEC §17.23: eliminated: the last team to finish (every other team already had), or unfinished at "Kết thúc". */
   out: boolean;
+  /** Leg 3: the Host's finish-line penalty (host.finishPenalty), null = none. Not a wait at the mat (`penaltyMinutes`):
+   *  the team is told it finished + this line; the Host ranking adds it to finishAt (ranking.ts). */
+  finishPenalty: FinishPenalty | null;
+  /** Leg 3: step id → the team's progress in that detour's room (`race room`); a branch switch drops it. Optional: older rows. */
+  rooms?: Record<string, RoomRec>;
 }
 
-export const NEW_TEAM_RACE: TeamRace = { step: 0, startOrder: null, joinedAt: null, finishAt: null, penaltyMinutes: 0, rank: null, out: false };
+export const NEW_TEAM_RACE: TeamRace = { step: 0, startOrder: null, joinedAt: null, finishAt: null, penaltyMinutes: 0, rank: null, out: false, finishPenalty: null, rooms: {} };
 
 export interface RaceIO {
   sql: SqlStorage;
@@ -68,7 +73,7 @@ export interface RaceIO {
   hideBox(team: string, step: string, branch?: string): void;
 }
 
-export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.leg' | 'host.review' }>;
+export type HostRaceMessage = Extract<HostMessage, { t: 'host.race' | 'host.leg' | 'host.review' | 'host.finishPenalty' }>;
 
 const STATUS_NOTICE = { lobby: 'raceNotOpen', paused: 'racePaused', finished: 'raceOver' } as const;
 /** host.race op → [from statuses, to]. */
@@ -212,6 +217,7 @@ export class RaceEngine {
     if (m.op === 'accept') return this.step(team, { kind: 'accept', step: m.step }, now);
     if (m.op === 'answer') return this.step(team, { kind: 'answer', step: m.step, text: m.text, pose: stand(at), ...(m.parts ? { parts: m.parts } : {}) }, now);
     if (m.op === 'branch') return this.step(team, { kind: 'branch', step: m.step, branch: m.branch }, now);
+    if (m.op === 'room') return this.step(team, { kind: 'room', step: m.step, branch: m.branch, done: m.done, skipped: m.skipped, pose: stand(at) }, now);
     if (!at) return this.io.send(team, { t: 'notice', code: 'boxFar' });
     const riding = at.mode === 'bike';
     const input: RaceInput =
@@ -246,6 +252,20 @@ export class RaceEngine {
       }
       return this.io.changed(now);
     }
+    if (m.t === 'host.finishPenalty') {
+      // Leg 3: Host-entered only (any status, before / after the finish, after "Kết thúc" too: the Host settles results);
+      // the event keeps the old value (`was`), so a mistake is fixed by setting it again / "Xóa" (no 10 s undo needed)
+      const r = this.io.team(m.team);
+      if (!r) return notice('error', 'Không có đội này.');
+      const next: FinishPenalty | null = m.minutes > 0 ? { minutes: m.minutes, reason: m.reason?.trim() || FINISH_PENALTY_REASON, by: 'host' } : null;
+      if (JSON.stringify(next) === JSON.stringify(r.finishPenalty ?? null)) return notice('warning', 'Phạt vạch đích của đội này không đổi.');
+      this.io.transaction(() => {
+        this.io.event(now, m.team, 'host.finishPenalty', { minutes: m.minutes, reason: next?.reason ?? null, was: r.finishPenalty ?? null });
+        this.io.saveTeam(m.team, { ...r, finishPenalty: next });
+      });
+      if (r.rank !== null) this.io.send(m.team, { t: 'race', view: this.view(m.team, now) }); // its finish card updates live
+      return this.io.changed(now);
+    }
     if (m.t === 'host.review') {
       // Phase 8 (D5, D10, D24): any status but finished (paused too); idempotent (a second decision is refused, nothing written)
       if (this.statusV === 'finished') return notice('error', UNDO.over);
@@ -264,7 +284,8 @@ export class RaceEngine {
       const { p, effects } = res.approve
         ? advance(this.legV, this.zones, this.progress(m.team, r), { kind: 'approve', step: m.step, pose: stand(this.io.pose(m.team)) }, now, this.statusV === 'running')
         : { p: this.progress(m.team, r), effects: [] };
-      this.apply(m.team, r, p, [decision, ...effects], now, m.op === 'note' ? undefined : { team: m.team, step: m.step, id: res.id!, op: m.op, at: now, race: raceOf(r) });
+      const undoable = m.op === 'approve' || m.op === 'penalize' ? { team: m.team, step: m.step, id: res.id!, op: m.op, at: now, race: raceOf(r) } : undefined; // not a note / ack / score
+      this.apply(m.team, r, p, [decision, ...effects], now, undoable);
       // N4 "Duyệt" over a "Phạt": the Host's own fix (or a click on a page a second old, review R-11)
       if (m.op === 'approve' && parseAnswers(row).find((a) => a.id === res.id)?.s === 'penalized') notice('warning', OVERRULED);
       return;
@@ -360,17 +381,31 @@ export class RaceEngine {
           submittedAt: row.submitted_at, decidedAt: row.decided_at, rejections: row.rejections, wrongAnswers: row.wrong_answers, branchSwitches: row.branch_switches,
           branchOpenedAt: row.branch_opened_at, lockedUntil: row.locked_until, pending: answers.at(-1)?.s === 'pending', approvalWaitSeconds: row.approval_wait_seconds,
           answers: answers.map((a) => ({ id: a.id, text: a.text, at: a.at, status: a.s, branch: a.b, ...(a.n ? { note: a.n } : {}) })), note: row.host_note,
+          ...roomOf(this.legV, i, r.rooms?.[row.step]),
         });
       }
-      return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, finishAt: r.finishAt, rank: r.rank, out: r.out, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null }];
+      return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, finishAt: r.finishAt, rank: r.rank, out: r.out, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null, finishPenaltyMinutes: r.finishPenalty?.minutes ?? 0 }];
     });
     // D10: every answer waiting for the Host, oldest first (the reference answers are Host-only, like this whole message)
     const queue: ReviewItem[] = [];
     for (const id of this.io.teamIds())
       for (const row of this.teamRows(id).values()) {
-        const a = parseAnswers(row).at(-1);
+        const all = parseAnswers(row);
         const i = leg.steps.findIndex((s) => s.id === row.step);
-        const t = a?.s === 'pending' && i >= 0 && row.completed_at == null ? taskOf(leg.steps[i]!, a.b) : null;
+        if (i < 0) continue;
+        // Leg 3: answers the server graded and applied, until the Host's "✓ Đồng ý" (a Duyệt / "Đúng" over it also clears it)
+        for (const a of all) {
+          const t = a.auto && !a.k && a.m && (a.s === 'correct' || a.s === 'penalized') ? taskOf(leg.steps[i]!, a.b) : null;
+          if (!t) continue;
+          const canApprove = a.s === 'penalized' && a === all.at(-1) && row.completed_at == null;
+          queue.push({
+            team: id, step: row.step, label: leg.steps[i]!.label, branch: a.b, id: a.id, text: a.text, at: a.at, reference: t.referenceAnswers, note: row.host_note,
+            lockMinutes: retryLockMinutes(leg, t), ...(t.parts ? { partLabels: t.parts.map((p) => p.label) } : {}),
+            auto: { verdict: a.s === 'correct' ? 'correct' : 'penalized', marks: a.m!, score: a.sc ?? 0, of: a.m!.length, canApprove },
+          });
+        }
+        const a = all.at(-1);
+        const t = a?.s === 'pending' && row.completed_at == null ? taskOf(leg.steps[i]!, a.b) : null;
         if (!a || !t) continue;
         queue.push({
           team: id, step: row.step, label: leg.steps[i]!.label, branch: a.b, id: a.id, text: a.text, at: a.at,
@@ -438,7 +473,8 @@ export class RaceEngine {
   }
 
   private progress(team: string, r: TeamRace): Progress {
-    return { step: r.step, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes, ...rowFacts(this.teamRows(team).get(this.legV.steps[r.step]?.id ?? '')) };
+    const id = this.legV.steps[r.step]?.id ?? '';
+    return { step: r.step, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes, ...rowFacts(this.teamRows(team).get(id)), room: r.rooms?.[id] ?? null };
   }
 
   /** SPEC §17.22 / §17.23: the team's finish announcement (texts of the leg's pit_stop.announce, else the defaults). */
@@ -447,7 +483,7 @@ export class RaceEngine {
     const kind = r.out ? 'out' : r.rank === 1 ? 'first' : 'finish';
     const total = this.io.teamIds().length;
     const pit = this.legV.steps.at(-1);
-    return { rank: r.rank, total, kind, ...finishTexts(kind, pit?.type === 'pit_stop' ? pit.announce : undefined, r.rank, total, this.io.name(team)) };
+    return { rank: r.rank, total, kind, ...finishTexts(kind, pit?.type === 'pit_stop' ? pit.announce : undefined, r.rank, total, this.io.name(team)), ...(r.finishPenalty ? { finishPenalty: r.finishPenalty } : {}) };
   }
 
   private view(team: string, now: number): RaceView {
@@ -456,7 +492,7 @@ export class RaceEngine {
     const pit = this.legV.steps[r.step]?.type === 'pit_stop';
     return {
       status: this.statusV, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
-      card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now) : null,
+      card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now, r.rooms) : null,
       checkinAt: pit && r.finishAt === null && r.penaltyMinutes > 0 && p.arrivedAt !== null ? p.arrivedAt + r.penaltyMinutes * 60_000 : null,
       result: this.result(team, r),
     };
@@ -464,7 +500,7 @@ export class RaceEngine {
 
   private cards(team: string, r: TeamRace, now: number) {
     const out = [];
-    for (let i = 0; i <= Math.min(r.step, this.legV.steps.length - 1); i++) out.push(cardOf(this.legV, i, this.row(team, i, r), now));
+    for (let i = 0; i <= Math.min(r.step, this.legV.steps.length - 1); i++) out.push(cardOf(this.legV, i, this.row(team, i, r), now, r.rooms));
     return out;
   }
 
@@ -491,11 +527,14 @@ export class RaceEngine {
     const out: ServerMessage[] = [];
     const parks: Extract<RaceEffect, { kind: 'park' }>[] = [];
     let placed: Pick<TeamRace, 'rank' | 'out'> = { rank: r.rank, out: r.out };
+    let rooms = r.rooms;
+    let finishPenalty = r.finishPenalty ?? null;
     const hides: Extract<RaceEffect, { kind: 'hideBox' }>[] = [];
     const notice = (code: ServerNotice) => out.push({ t: 'notice', code });
     // M8: an approval says "Host đã duyệt! Mật thư mới…" once (no clueNew next to it); a note alone changes no card
-    const approved = effects.some((e) => e.kind === 'review' && e.op === 'approve');
-    const quiet = effects.every((e) => e.kind === 'review' && e.op === 'note');
+    // (Leg 3: an auto-graded right answer says "Chính xác!" instead)
+    const approved = effects.some((e) => (e.kind === 'review' && e.op === 'approve') || (e.kind === 'answer' && e.rec.auto && e.verdict === 'correct'));
+    const quiet = effects.every((e) => e.kind === 'review' && (e.op === 'note' || e.op === 'ack'));
     const sid = (i: number) => steps[i]!.id;
     for (const e of effects) {
       if (e.kind === 'refuse') notice(e.code);
@@ -513,9 +552,20 @@ export class RaceEngine {
         row.answers = JSON.stringify([...parseAnswers(row), e.rec].slice(-ANSWERS_KEPT));
         if (e.verdict === 'pending') (row.submitted_at = now), notice('answerSent');
         if (e.verdict === 'wrong') (row.wrong_answers += 1), notice('answerWrong');
+        if (e.rec.auto) {
+          // Leg 3: graded + applied by the server (the Host's queue lists it until "✓ Đồng ý"); a Phạt counts like the Host's
+          Object.assign(row, { submitted_at: now, decided_at: now, decided_by: 'auto' });
+          if (e.verdict === 'penalized') Object.assign(row, { locked_until: e.lockedUntil ?? null, rejections: row.rejections + 1 });
+          events.push(['auto', { step: sid(e.step), id: e.rec.id, score: e.rec.sc, of: e.rec.m?.length }]);
+          out.push({ t: 'notice', code: e.verdict === 'correct' ? 'autoCorrect' : 'autoPenalized', score: e.rec.sc!, of: e.rec.m!.length });
+        }
       } else if (e.kind === 'review') {
         Object.assign(edit(e.step), e.row);
         events.push(['review', { step: sid(e.step), op: e.op, id: e.id, by: 'host' }]);
+        if (e.op === 'score') {
+          const a = parseAnswers(e.row).find((x) => x.id === e.id);
+          out.push({ t: 'notice', code: 'scoreUpdated', ...(a?.sc !== undefined && a.m ? { score: a.sc, of: a.m.length } : {}) });
+        }
         if (e.op === 'approve') notice('approved');
         else if (e.op === 'penalize') {
           // SPEC §17.31: the Phạt's "đúng x/n" rides on the notice (the toast) when the team may see it
@@ -533,7 +583,19 @@ export class RaceEngine {
         const row = edit(e.step);
         Object.assign(row, { branch: e.to, branch_switches: row.branch_switches + 1, branch_opened_at: null, task_started_at: null, arrived_at: null, locked_until: e.lockedUntil });
         events.push(['switch', { step: sid(e.step), from: e.from, to: e.to }]);
+        if (rooms?.[sid(e.step)]) rooms = Object.fromEntries(Object.entries(rooms).filter(([k]) => k !== sid(e.step))); // "tiến độ nhánh cũ mất"
         notice('branchSwitched');
+      } else if (e.kind === 'room') {
+        rooms = { ...rooms, [sid(e.step)]: e.rec };
+        events.push(['room', { step: sid(e.step), branch: e.rec.b, done: e.rec.done, skipped: e.rec.skipped }]);
+        if (e.penalty !== undefined) {
+          // Leg 3: a skipped room's finish-line penalty; a Host-set one is never overwritten (the Host settles results), an
+          // earlier room's adds up. The Host can still change it (host.finishPenalty).
+          const host = finishPenalty !== null && finishPenalty.by !== 'room';
+          const minutes = (finishPenalty?.by === 'room' ? finishPenalty.minutes : 0) + e.penalty;
+          if (!host && minutes > 0) finishPenalty = { minutes, reason: FINISH_PENALTY_REASON, by: 'room' };
+          events.push(['room.finishPenalty', { step: sid(e.step), minutes: e.penalty, kept: host, was: r.finishPenalty ?? null }]);
+        }
       } else if (e.kind === 'openBranch') {
         Object.assign(edit(e.step), { branch_opened_at: now, task_started_at: now });
         events.push(['open', { step: sid(e.step), branch: e.branch }]);
@@ -557,8 +619,8 @@ export class RaceEngine {
         events.push(['finish', { ...placed, total: others.length + 1 }]);
       }
     }
-    const next: TeamRace = { ...r, step: p.step, finishAt: p.finishAt, ...placed };
-    const teamChanged = next.step !== r.step || next.finishAt !== r.finishAt || next.rank !== r.rank;
+    const next: TeamRace = { ...r, step: p.step, finishAt: p.finishAt, ...placed, rooms, finishPenalty };
+    const teamChanged = next.step !== r.step || next.finishAt !== r.finishAt || next.rank !== r.rank || rooms !== r.rooms || finishPenalty !== (r.finishPenalty ?? null);
     let undos: UndoRec[] | undefined;
     if (dirty.size || events.length || teamChanged) {
       this.io.transaction(() => {
@@ -584,7 +646,7 @@ export class RaceEngine {
       // its lists change with a new step, an arrival where it already stands (moveZone sees no move), or a branch switch
       // (the old branch's place is no longer its own: its list there is cleared, review verify-a 4.4)
       if (teamChanged || effects.some((e) => e.kind === 'arrive' || e.kind === 'switch')) this.refreshZones(new Set([this.where.get(team)?.key ?? '']), now);
-    }
+    } else if (teamChanged) this.io.changed(now); // Leg 3: a room report only touches teams.state
   }
 
   // ── Phase 10 (V2, plan §3.2): undo a Host decision within NET.undoMs (records: apply()) ──
@@ -620,7 +682,9 @@ export class RaceEngine {
       }
       this.io.event(now, team, 'host.undo', { step, op: u.op, id });
       this.meta('undo', JSON.stringify(rest));
-      if (JSON.stringify(raceOf(r)) !== JSON.stringify(u.race)) this.io.saveTeam(team, u.race); // last: RaceRoom patches its cache after it
+      // the finish-line penalty is not part of the decision: a Host may have set it within those 10 s (kept as it is now)
+      const back = { ...u.race, finishPenalty: r.finishPenalty ?? null };
+      if (JSON.stringify(raceOf(r)) !== JSON.stringify(back)) this.io.saveTeam(team, back); // last: RaceRoom patches its cache after it
     });
     for (const [sid, row] of Object.entries(u.rows)) (row ? this.teamRows(team).set(sid, row) : this.teamRows(team).delete(sid)); // committed
     this.undoV = rest;
@@ -739,6 +803,13 @@ export class RaceEngine {
 }
 
 const pick = (z: Zone) => ({ name: z.name, x: z.x, z: z.z, r: z.r });
+
+/** Leg 3: StepProgressView.room of step i (the Host's matrix cell / queue detail), {} = none. */
+function roomOf(leg: Leg, i: number, rec: RoomRec | undefined): Pick<StepProgressView, 'room'> {
+  const s = leg.steps[i];
+  const room = rec && s?.type === 'detour' ? taskOf(s, rec.b)?.room : undefined;
+  return room && rec ? { room: { branch: rec.b, kind: room.kind, total: room.total, done: rec.done, skipped: rec.skipped } } : {};
+}
 
 /** A trusted pose as the machine's StandAt (null = none yet). */
 const stand = (p: PoseSample | null): StandAt => p && { x: p.x, z: p.z, riding: p.mode === 'bike' };

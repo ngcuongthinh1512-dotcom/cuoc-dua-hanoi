@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toasts } from '../config.ts';
-import { NOTICES, nextFeed, notice, toast } from './Toasts.ts';
+import { NOTICES, nextFeed, notice, toast, scoredText } from './Toasts.ts';
 import type { NoticeCode } from './types.ts';
 
 const texts = (feed: ReturnType<typeof nextFeed>) => feed.map((t) => t.text);
@@ -44,6 +44,7 @@ describe('notices', () => {
       'raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'clueNew', 'penaltyWait',
       'answerSent', 'answerWrong', 'answerPending', 'answerLocked', 'approved', 'penalized', 'branchChosen', 'branchSwitched', 'branchPending', 'taskNotStarted', // Phase 8
       'reviewUndone', // Phase 10
+      'roomIgnored', 'autoCorrect', 'autoPenalized', 'scoreUpdated', // Leg 3
       'bikeBroken']; // SPEC §17.30 decoy
     expect(Object.keys(NOTICES).sort()).toEqual([...codes].sort());
     expect(new Set(Object.values(NOTICES)).size).toBe(codes.length);
@@ -60,6 +61,13 @@ describe('notices', () => {
   it('one word for the clue box: "hòm (mật thư)", never "hộp" (SPEC §17.15, review visual#6)', () => {
     expect(Object.values(NOTICES).filter((t) => /hộp/i.test(t))).toEqual([]);
     expect(NOTICES.boxFar).toBe('Hãy vào gần hòm mật thư hơn');
+  });
+
+  it('Leg 3 auto-grading: the toast carries the number (score/of) for autoCorrect / autoPenalized / scoreUpdated; the fixed text without one', () => {
+    expect(scoredText('autoCorrect', 4, 4)).toBe('Chính xác! Đúng 4/4');
+    expect(scoredText('autoPenalized', 2, 4)).toBe('Chưa đúng: đúng 2/4. Bị phạt, chờ đếm ngược rồi trả lời lại.');
+    expect(scoredText('scoreUpdated', 3, 4)).toBe('Host cập nhật kết quả: đúng 3/4');
+    expect(scoredText('autoPenalized', undefined, undefined)).toBe(NOTICES.autoPenalized);
   });
 
   it('importing and calling toast / notice in Node (no DOM) is harmless', () => {

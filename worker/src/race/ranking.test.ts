@@ -31,4 +31,15 @@ describe('ranking (SPEC §17.22 / §17.23: real finish order, no team clock)', (
     const racing = ranking([T('A', 0, { step: 4, prevDoneAt: 11 * H }), T('B', 1, { step: 4, prevDoneAt: 10 * H }), T('C', 2, { step: 6, prevDoneAt: 12 * H }), T('D', 3, { step: 4, startOrder: null })]);
     expect(racing.map((r) => r.team)).toEqual(['C', 'B', 'A', 'D']);
   });
+
+  it('Leg 3: a finish-line penalty is added to the finish moment (it was not served on the way); racing teams unaffected', () => {
+    const M = 60_000;
+    const rows = ranking([
+      T('a', 0, { step: 9, finishAt: 10 * M, rank: 1, finishPenaltyMinutes: 20 }), // effectively 30
+      T('b', 1, { step: 9, finishAt: 15 * M, rank: 2 }),
+      T('c', 2, { step: 9, finishAt: 20 * M, rank: 3, finishPenaltyMinutes: 10 }), // 30: same as a → stored rank
+      T('d', 3, { step: 5, finishPenaltyMinutes: 60 }),
+    ]);
+    expect(rows.map((r) => [r.team, r.rank])).toEqual([['b', 1], ['a', 2], ['c', 3], ['d', 4]]);
+  });
 });

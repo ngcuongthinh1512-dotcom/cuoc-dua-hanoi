@@ -1,6 +1,6 @@
 // Phase 7 track C: pure helpers of the race HUD (no DOM, tested in Node). Everything here works only from what the server
 // sent (ClueCard / RaceView / ZoneMember): never answers, destination names or a later step.
-import { type AnswerStatus, type CardStatus, type ClueCard, finishTexts, type FinishResult, type FinishTexts, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
+import { type AnswerStatus, type CardStatus, type ClueCard, finishPenaltyLine, finishTexts, type FinishResult, type FinishTexts, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
 import { raceClient, raceHud as C } from '../../config.ts';
 import { looksLikeIme } from '../../core/Input.ts';
 
@@ -26,7 +26,8 @@ export interface CardSummary {
   label: string;
   clue: string;
   transport: ReturnType<typeof transportLabel>;
-  blocks: { branch: string | null; title: string; text: string; place: string | null; limit: string | null; chosen: boolean; media: MediaItem[] }[];
+  /** `after` (Leg 3): the chosen branch's afterChoice text (the server sends it for that branch only), '' elsewhere. */
+  blocks: { branch: string | null; title: string; text: string; after: string; place: string | null; limit: string | null; chosen: boolean; media: MediaItem[] }[];
   active: boolean;
 }
 
@@ -36,15 +37,37 @@ export function summarize(card: ClueCard): CardSummary {
   const blocks: CardSummary['blocks'] = [];
   if (card.task) {
     const t = card.task;
-    blocks.push({ branch: null, title: t.title, text: t.description, place: t.place ?? null, limit: limitText(t.timeLimitMinutes), chosen: false, media: mediaViews(t.media) });
+    blocks.push({ branch: null, title: t.title, text: t.description, after: '', place: t.place ?? null, limit: limitText(t.timeLimitMinutes), chosen: false, media: mediaViews(t.media) });
   }
   for (const b of card.branches ?? []) {
     const t = b.task; // Phase 8: only the chosen branch's, once its box is opened (its description replaces the summary)
     const chosen = b.id === card.branch;
-    blocks.push({ branch: b.id, title: b.name, text: chosen && t ? t.description : b.summary || (t?.description ?? ''), place: t?.place ?? null, limit: limitText(t?.timeLimitMinutes ?? null), chosen, media: mediaViews(t?.media) });
+    blocks.push({ branch: b.id, title: b.name, text: chosen && t ? t.description : b.summary || (t?.description ?? ''), after: chosen ? (b.afterChoice ?? '') : '', place: t?.place ?? null, limit: limitText(t?.timeLimitMinutes ?? null), chosen, media: mediaViews(t?.media) });
   }
   const clue = card.text || (card.type === 'pit_stop' ? 'Hãy về Chặng dừng và đứng trên thảm để về đích.' : '');
   return { type: card.type, label: card.label, clue, transport: transportLabel(card.transport), blocks, active: card.status !== 'done' }; // Phase 8: every state but done is "Đang làm"
+}
+
+/** A leg text split into paragraphs and bullet lists: consecutive lines starting with "• " / "- " / "* " become one `ul`
+ *  (the marker dropped); other non-empty lines are paragraphs. Pure: RaceHud draws it. */
+export type RichBlock = { kind: 'p'; text: string } | { kind: 'ul'; items: string[] };
+/** Leg 3: a clue's last line starting "Lưu ý:" (e.g. the switch penalty under the Lựa chọn kép intro) → drawn as its own note. */
+export function splitNote(s: string): { text: string; note: string | null } {
+  const m = /\n\s*(Lưu ý:[^\n]*)\s*$/u.exec(s.normalize('NFC'));
+  return m ? { text: s.normalize('NFC').slice(0, m.index).trimEnd(), note: m[1]!.trim() } : { text: s, note: null };
+}
+
+export function richText(s: string): RichBlock[] {
+  const out: RichBlock[] = [];
+  for (const raw of s.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = /^[•\-*]\s+(.*)$/.exec(line);
+    const last = out.at(-1);
+    if (m) last?.kind === 'ul' ? last.items.push(m[1]!) : out.push({ kind: 'ul', items: [m[1]!] });
+    else out.push({ kind: 'p', text: line });
+  }
+  return out;
 }
 
 /** Duration rounded to the second like the Host page (hostView fmtDuration / fmtMinSec): 125000 → "02:05", past an hour "1:02:05". */
@@ -107,11 +130,17 @@ export class StartOrderBanner {
 }
 
 /** SPEC §17.22 / §17.23: the finish announcement as shown (the server's texts; an empty one → the generic line, no place
- *  name) + the card's title. */
-export function resultView(r: FinishResult, team: string): FinishTexts & { title: string } {
+ *  name) + the card's title; Leg 3: `penalty` = the finish-line penalty line ("Bị phạt 20 phút do …."), null = none. */
+export function resultView(r: FinishResult, team: string): FinishTexts & { title: string; penalty: string | null } {
   const own = { npc: r.npc, toast: r.toast, card: r.card };
-  return { ...finishTexts(r.kind, r.kind === 'finish' ? own : { [r.kind]: own }, r.rank, r.total, team), title: r.kind === 'out' ? 'BỊ LOẠI' : `Về đích thứ ${r.rank}` };
+  return {
+    ...finishTexts(r.kind, r.kind === 'finish' ? own : { [r.kind]: own }, r.rank, r.total, team), title: r.kind === 'out' ? 'BỊ LOẠI' : `Về đích thứ ${r.rank}`,
+    penalty: r.finishPenalty && r.finishPenalty.minutes > 0 ? finishPenaltyLine(r.finishPenalty) : null,
+  };
 }
+
+/** Leg 3: what makes a finish announcement "new" (shown again live, and again after a reload): place + finish-line penalty. */
+export const resultKey = (r: FinishResult): string => `${r.kind}:${r.rank}/${r.total}${r.finishPenalty ? `+${r.finishPenalty.minutes}:${r.finishPenalty.reason}` : ''}`;
 
 /** SPEC §17.21: clue cards and the Sổ mật thư may not be selected / copied (copy, cut, drag, right-click, selection start
  *  are cancelled inside them); only the photo task's submission code and the typed answer box may. `target` = an event
@@ -234,7 +263,7 @@ export function statusLine(card: ClueCard, now: number): { kind: 'wait' | 'lock'
 
 /** "Đổi lựa chọn kép" confirm: names the penalty and what is lost (SPEC §17.16). */
 export const branchConfirmText = (card: ClueCard, to: string) =>
-  `Đổi sang nhánh ${branchName(card, to)}? Đội bị phạt ${fmtMin(card.switchPenaltyMinutes ?? 0)} phút (đếm ngược trên màn hình), mất tiến độ nhánh ${branchName(card, card.branch)}, hòm nhánh ${branchName(card, to)} chỉ hiện khi hết đếm ngược.`;
+  `Đổi sang nhánh ${branchName(card, to)}? Mỗi lần đổi bị phạt ${fmtMin(card.switchPenaltyMinutes ?? 0)} phút (đồng hồ đếm ngược), tiến độ nhánh hiện tại sẽ mất. Hòm nhánh ${branchName(card, to)} chỉ hiện khi hết đếm ngược.`;
 
 const ANSWER_LABEL: Record<AnswerStatus, string> = { pending: 'Chờ Host duyệt', approved: 'Đã duyệt', penalized: 'Bị phạt', wrong: 'Chưa đúng', correct: 'Đúng' };
 export interface AnswerLine {

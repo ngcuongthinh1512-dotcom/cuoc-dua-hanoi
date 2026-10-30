@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Tempering Challenge B</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:none}
+  :root{--cocoa:#2a1810;--cocoa2:#3d2418;--caramel:#d98c3f;--cream:#f7e8d6;--muted:#b08b6e;--ok:#7be0a0;--warn:#f5c84f;--bad:#ff5a47}
+  html,body{height:100%}
+  body{margin:0;overflow:hidden;color:var(--cream);font:16px ui-rounded,"SF Pro Rounded",system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;height:100dvh;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 0%,#5a3a26 0%,transparent 70%),
+      radial-gradient(ellipse 120% 80% at 50% 110%,#120a06 0%,transparent 60%),
+      linear-gradient(#2e1c13,#1a100b)}
+  header{padding:10px 16px 6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  h1{font-size:19px;margin:0;letter-spacing:.3px;background:linear-gradient(90deg,#ffd9a6,#f0a35a);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none}
+  .lv{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .lv button{background:#3a2419cc;color:var(--cream);border:1px solid #6a4530;border-radius:999px;padding:6px 11px;font:600 13px inherit;font-family:inherit;transition:all .15s;white-space:nowrap}
+  .lv button:disabled{opacity:.4}
+  .lv button.on{background:linear-gradient(#f2b76a,#d98c3f);color:#2a1810;border-color:#ffd9a6;box-shadow:0 2px 10px #d98c3f66}
+  @media(max-width:420px){.lv button{font-size:11.5px;padding:5px 8px}}
+  #hud{margin:4px 16px 0;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;font-variant-numeric:tabular-nums;
+    background:linear-gradient(#4a2f21cc,#33201588);border:1px solid #ffffff14;border-radius:16px;box-shadow:0 4px 18px #0006,inset 0 1px 0 #ffffff14}
+  #temp{font-size:36px;font-weight:800;line-height:1;letter-spacing:-.5px;transition:color .25s;text-shadow:0 0 18px currentColor;white-space:nowrap}
+  #temp span{transition:color .25s;text-shadow:0 0 18px currentColor}
+  #temp .sep{opacity:.35;font-size:.6em;margin:0 6px;text-shadow:none}
+  body.duo #temp{font-size:28px}
+  #info{font-size:13px;color:var(--muted);text-align:right;line-height:1.3}
+  #bar{margin:6px 16px 0;height:7px;background:#00000055;border-radius:4px;overflow:hidden;box-shadow:inset 0 1px 2px #0008;display:flex;justify-content:space-between}
+  #bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff8c5a,#ff3b2f);box-shadow:0 0 8px #ff3b2f;transition:width .1s linear}
+  #bar i+i{display:none;background:linear-gradient(270deg,#ff8c5a,#ff3b2f)}
+  body.duo #bar i{max-width:49%}body.duo #bar i+i{display:block}
+  #pot{flex:none;height:clamp(150px,30vh,260px);margin:6px 12px 0;border-radius:18px;box-shadow:0 10px 30px #0008,inset 0 0 0 1px #ffffff12}
+  canvas{flex:1;min-height:0;width:100%}
+  #pot,#c{width:auto}
+  #c{margin:6px 12px 0;border-radius:14px;background:#1d110bcc;box-shadow:inset 0 0 0 1px #ffffff0e}
+  #btns{display:flex;gap:10px;margin:10px 16px 14px}
+  #btns button{flex:1;min-width:0;padding:18px 8px;border:0;border-radius:18px;font:800 19px inherit;font-family:inherit;letter-spacing:.5px;color:#ffe9d0;cursor:pointer;
+    background:linear-gradient(#6b4631,#4a2f21);box-shadow:0 6px 0 #2a1810,0 10px 24px #0007,inset 0 1px 0 #ffffff22;transition:transform .08s,box-shadow .08s,background .15s}
+  #btns button.on{background:linear-gradient(#ffa64d,#e8651f);color:#fff;transform:translateY(4px);box-shadow:0 2px 0 #8a3a10,0 0 36px #ff8a2acc,inset 0 1px 0 #ffffff55}
+  #heat2{display:none}body.duo #heat2{display:block}body.duo #btns button{font-size:16px}
+  #vig{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 50%,#ff2a1a 130%)}
+  #msg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#160c08cc;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  #fx{position:absolute;inset:0;width:100%;height:100%}
+  #card{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:28px 26px;margin:20px;max-width:360px;border-radius:24px;
+    background:linear-gradient(160deg,#5a3a26,#2e1c13);border:1px solid #ffd9a633;box-shadow:0 24px 60px #000a,inset 0 1px 0 #ffffff22}
+  #prize{display:flex;gap:12px}#prize:empty{display:none}
+  #prize i{display:block;width:72px;height:44px;border-radius:6px;box-shadow:0 6px 14px #0007,inset 0 2px 0 #ffffff55,inset 0 -2px 0 #0005;
+    background-image:linear-gradient(90deg,#0004 1px,transparent 1px),linear-gradient(#0004 1px,transparent 1px),linear-gradient(135deg,#ffffff33,transparent 60%);background-size:18px 22px,18px 22px,100% 100%}
+  #mt{font-size:20px;font-weight:700}
+  #mc{font-size:40px;letter-spacing:3px;font-weight:900;background:linear-gradient(90deg,#ffe9b0,#f2a75a,#ffe9b0);-webkit-background-clip:text;background-clip:text;color:transparent}
+  #mc:empty{display:none}
+  #ms{color:var(--muted);font-size:14px}
+  #msg button{margin-top:6px;padding:13px 30px;border-radius:999px;border:0;font:800 17px inherit;font-family:inherit;background:linear-gradient(#f2b76a,#d98c3f);color:#2a1810;box-shadow:0 4px 0 #8a5020,0 8px 20px #0006;cursor:pointer}
+  #msg button:active{transform:translateY(3px);box-shadow:0 1px 0 #8a5020}
+</style>
+<header>
+  <h1>🍫 Tempering Challenge</h1>
+  <div class="lv" id="lv"></div>
+</header>
+<div id="hud"><span id="temp">--</span><span id="info"></span></div>
+<div id="bar"><i></i><i></i></div>
+<canvas id="pot"></canvas>
+<canvas id="c"></canvas>
+<div id="btns"><button id="heat">🔥 GIỮ ĐỂ BẬT BẾP (Space)</button><button id="heat2">🔥 PHẢI (Enter)</button></div>
+<div id="vig"></div>
+<div id="msg"><canvas id="fx"></canvas><div id="card"><div id="mt"></div><b id="mc"></b><div id="prize"></div><div id="ms"></div><button id="again">Thử lại</button></div></div>
+<script>
+// each level = one or two pots; a pot has its own target curve, tolerance, heater delay (dl), stove flicker, draught and chocolate kind
+const LV={
+  dark :{n:'Lv1 · Dark', code:'COCOA-31',pots:[{pts:[[0,45],[15,45],[25,27],[40,27],[46,31],[60,31]],tol:.85,dl:1,  flick:0,  draft:0, choc:'dark'}]},
+  milk :{n:'Lv2 · Milk', code:'MILK-29', pots:[{pts:[[0,45],[12,45],[22,26],[36,26],[42,29],[60,29]],tol:.7, dl:1.1,flick:.25,draft:0, choc:'milk'}]},
+  white:{n:'Lv3 · White',code:'IVORY-28',pots:[{pts:[[0,40],[10,40],[18,25],[32,25],[37,28],[60,28]],tol:.6, dl:1.2,flick:.3, draft:.6,choc:'white'}]},
+  ruby :{n:'Lv4 · Dâu', code:'DAU-29', pots:[{pts:[[0,40],[7,40],[17,25],[24,25],[30,32],[38,32],[45,26],[52,26],[56,29],[60,29]],tol:.6,dl:1.2,flick:.3,draft:.3,choc:'ruby'}]},
+  duo  :{n:'Lv5 · Mix',  code:'MIX-31', end:20, ax:60,  pots:[{pts:[[0,40],[10,40],[22,25],[36,25],[41,28],[60,28]], tol:.7,dl:1,flick:0,draft:0,choc:'white'},
+                                              {pts:[[0,45],[13,45],[26,27],[40,27],[46,31],[60,31]],tol:.7,dl:1,flick:0,draft:0,choc:'dark'}]}
+};
+let END=60, AX=60; // END = seconds to survive (LV[k].end), AX = chart time span (LV[k].ax); Duo: chart shows 60 s but reaching the 20 s line wins
+const AMB=20, L=0.15, G=8, GRACE=2, TMIN=15, TMAX=50, BADMAX=2;
+const ORDER=Object.keys(LV);
+// Xưởng sô-cô-la (client/choco.html) embeds this page as <iframe src="/games/temper.html?team=<n>">: progress is kept per team
+// and every finished batch is reported to the parent (type 'choco-result': done = chocolate types won so far, penaltyMinutes =
+// 20 min per type still missing; the Host applies it by hand). Esc is forwarded so the room can close the overlay.
+const TEAM=new URLSearchParams(location.search).get('team')||''; let SKEY='temper2'+TEAM;
+let unlocked=0, won=new Set(); try{unlocked=Math.min(ORDER.length-1,+localStorage[SKEY]||0); won=new Set(JSON.parse(localStorage[SKEY+'won']||'[]'))}catch(e){}
+addEventListener('keydown',e=>{if(e.key==='Escape')parent.postMessage({type:'choco-exit'},'*')});
+// The race (client/src/choco/chocoRoom.ts): the server's tally is the truth — 'room-init' {done, key} replaces whatever this
+// browser stored (a branch switch reset it; another device): the first `done` types count as won, stored under the race key.
+addEventListener('message',e=>{const d=e.data;if(!d||d.type!=='room-init')return;SKEY='temper2'+(d.key||TEAM);const n=Math.max(0,Math.min(ORDER.length,d.done|0));
+  won=new Set(ORDER.slice(0,n));unlocked=Math.min(ORDER.length-1,n);try{localStorage[SKEY]=unlocked;localStorage[SKEY+'won']=JSON.stringify([...won])}catch(x){}
+  pickLevel(ORDER[unlocked])});
+let lv='dark', s, held=[false,false], attempts=0;
+
+const target=(p,t)=>{ for(let i=1;i<p.length;i++) if(t<=p[i][0]){const[a,b]=p[i-1],[c,d]=p[i];return b+(d-b)*(t-a)/(c-a)} return p.at(-1)[1] };
+
+function reset(){
+  END=LV[lv].end||60; AX=LV[lv].ax||END;
+  s={t:0,started:false,done:false,pots:LV[lv].pots.map(c=>{const T=c.pts[0][1], eq=Math.min(1,L*(T-AMB)/G);return{c,T,q:[[-c.dl-1,eq],[0,eq]],hist:[],bad:0}})};
+}
+
+// one physics step per pot: heater input delayed by dl, then heats pot; pot loses heat to ambient
+function step(dt){
+  const now=s.t;
+  s.pots.forEach((p,i)=>{
+    const c=p.c;
+    p.q.push([now,held[i]?1:0]);
+    while(p.q.length>1 && p.q[1][0]<=now-c.dl) p.q.shift();
+    const h=p.q[0][1];
+    const gain=G*(1+c.flick*Math.sin(now*5.3)*Math.sin(now*1.7));        // flickering stove
+    const loss=L*(1+c.draft*Math.max(0,Math.sin(now*.7)*Math.sin(now*.31+1))); // draught
+    p.T+=(gain*h-loss*(p.T-AMB))*dt;
+  });
+  s.t+=dt;
+  s.pots.forEach(p=>{
+    p.hist.push([s.t,p.T]);
+    const err=Math.abs(p.T-target(p.c.pts,s.t));
+    if(s.t>GRACE && err>p.c.tol) p.bad+=dt; else p.bad=0;
+  });
+  if(s.pots.some(p=>p.bad>=BADMAX)) end(false); else if(s.t>=END) end(true);
+}
+
+function end(win){
+  s.done=true; attempts++;
+  const c=LV[lv];
+  const nx=ORDER[ORDER.indexOf(lv)+1];
+  if(win&&nx){unlocked=Math.max(unlocked,ORDER.indexOf(nx));try{localStorage[SKEY]=unlocked}catch(e){}}
+  if(win){won.add(lv);try{localStorage[SKEY+'won']=JSON.stringify([...won])}catch(e){}}
+  parent.postMessage({type:'choco-result',team:TEAM,done:won.size,total:ORDER.length,level:lv,win,skipped:false,penaltyMinutes:(ORDER.length-won.size)*20},'*');
+  mt.textContent=win?'Hoàn hảo! Chocolate bóng loáng ✨':'Bloom! Vân trắng rồi 😭';
+  mc.textContent=win?c.code:'';
+  ms.textContent=win?'Báo mã này cho host · '+attempts+' lần thử':'Lần thử #'+attempts;
+  again.textContent=win&&nx?'Sang '+LV[nx].n+' →':win?'Chơi lại':'Làm mẻ mới'; again.dataset.next=win&&nx?nx:'';
+  msg.style.display='flex';
+  boom(win); // visual only
+}
+
+// input: pot 0 = Space / left button, pot 1 = Enter / right button (multi-touch: one pointer per button)
+const press=(i,v)=>{held[i]=v; (i?heat2:heat).classList.toggle('on',v); if(!s.started&&v&&!s.done&&i<s.pots.length) s.started=true};
+const KEY={Space:0,Enter:1};
+addEventListener('keydown',e=>{if(e.code in KEY&&!e.repeat){e.preventDefault();press(KEY[e.code],true)}});
+addEventListener('keyup',e=>{if(e.code in KEY)press(KEY[e.code],false)});
+const ptr=new Map(), down=i=>e=>{e.preventDefault();ptr.set(e.pointerId,i);press(i,true)}, up=e=>{const i=ptr.get(e.pointerId);ptr.delete(e.pointerId);if(i!=null)press(i,false);else if(!ptr.size)press(0,false)};
+heat.onpointerdown=down(0); heat2.onpointerdown=down(1); c.onpointerdown=heat.onpointerdown;
+addEventListener('pointerup',up); addEventListener('pointercancel',up);
+again.onclick=()=>{msg.style.display='none';again.dataset.next?pickLevel(again.dataset.next):reset()};
+function pickLevel(k){lv=k;attempts=0;msg.style.display='none';reset();document.body.classList.toggle('duo',s.pots.length>1);heat.textContent=s.pots.length>1?'🔥 TRÁI (Space)':'🔥 GIỮ ĐỂ BẬT BẾP (Space)';
+  [...lvEl.children].forEach((b,i)=>{b.classList.toggle('on',b.dataset.k===k);b.disabled=i>unlocked;b.textContent=(i>unlocked?'🔒 ':'')+LV[b.dataset.k].n})}
+const lvEl=document.getElementById('lv');
+for(const k in LV){const b=document.createElement('button');b.dataset.k=k;b.onclick=()=>pickLevel(k);lvEl.append(b)}
+
+// ---------- render helpers ----------
+const fit=(cv,g)=>{const dpr=devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr}g.setTransform(dpr,0,0,dpr,0,0);return[W,H]};
+const rr=(g,x,y,w,h,r)=>{g.beginPath();g.roundRect(x,y,w,h,r)};
+const lg=(g,x0,y0,x1,y1,stops)=>{const q=g.createLinearGradient(x0,y0,x1,y1);stops.forEach(([o,c])=>q.addColorStop(o,c));return q};
+const rg=(g,x,y,r0,r1,stops)=>{const q=g.createRadialGradient(x,y,r0,x,y,r1);stops.forEach(([o,c])=>q.addColorStop(o,c));return q};
+const COL=e=>e<=.5?'#7be0a0':e<=1?'#f5c84f':'#ff5a47';
+const PC=[{tr:['#ffd27a','#ff8c3c'],glow:'#ff9a3c33',band:'#4fd18a2e',bs:'#7be0a055',tl:'#9fe8b8'},{tr:['#cfe9ff','#4aa8ff'],glow:'#4aa8ff33',band:'#4aa8ff22',bs:'#8fd3ff55',tl:'#bfe3ff'}];
+const phase=(p,t)=>{if(p.length===6)return t<p[2][0]?'NUNG':t<p[4][0]?'HẠ':'NÂNG';for(let i=1;i<p.length;i++)if(t<=p[i][0]){const d=p[i][1]-p[i-1][1];return d>0?'NÂNG':d<0?'HẠ':'GIỮ'}return 'GIỮ'};
+const maxBad=()=>Math.max(...s.pots.map(p=>p.bad));
+
+// ---------- chart ----------
+const ctx=c.getContext('2d');
+function draw(){
+  const [W,H]=fit(c,ctx); ctx.clearRect(0,0,W,H);
+  const pl=38,pr=14,pt=14,pb=20, X=t=>pl+(W-pl-pr)*t/AX, Y=v=>pt+(H-pt-pb)*(TMAX-v)/(TMAX-TMIN);
+  ctx.font='600 10px ui-rounded,system-ui';ctx.fillStyle='#8a6e5a';ctx.strokeStyle='#ffffff0c';ctx.lineWidth=1;
+  for(let v=15;v<=50;v+=5){ctx.beginPath();ctx.moveTo(pl,Y(v));ctx.lineTo(W-pr,Y(v));ctx.stroke();ctx.fillText(v+'°',6,Y(v)+3)}
+  for(let t=0;t<=AX;t+=10)ctx.fillText(t+'s',X(t)-7,H-6);
+  if(AX>END){ // finish line
+    ctx.save();ctx.setLineDash([6,4]);ctx.strokeStyle='#ffd27a';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(X(END),pt);ctx.lineTo(X(END),H-pb);ctx.stroke();ctx.restore();
+    ctx.fillStyle='#ffd27a';ctx.font='700 11px ui-rounded,system-ui';ctx.fillText('🏁 ĐÍCH '+END+'s',X(END)+6,pt+10);
+  }
+  ctx.fillStyle='#ffffff33';ctx.font='700 10px ui-rounded,system-ui';
+  if(s.pots.length===1){const p=s.pots[0].c.pts;if(p.length===6)[['NUNG',0,p[1][0]],['HẠ',p[2][0],p[3][0]],['NÂNG',p[4][0],p[5][0]]].forEach(([n,a,b])=>ctx.fillText(n,(X(a)+X(b))/2-12,pt-3))}
+  else{ctx.fillStyle=PC[0].tr[0];ctx.fillText('● TRÁI (Space)',pl+4,pt-3);ctx.fillStyle=PC[1].tr[1];ctx.fillText('● PHẢI (Enter)',pl+100,pt-3)}
+  ctx.lineJoin='round';ctx.lineCap='round';
+  s.pots.forEach((pot,i)=>{
+    const p=pot.c.pts, TOL=pot.c.tol, k=PC[i];
+    const band=()=>{ctx.beginPath();p.forEach(([t,v],i)=>i?ctx.lineTo(X(t),Y(v+TOL)):ctx.moveTo(X(t),Y(v+TOL)));[...p].reverse().forEach(([t,v])=>ctx.lineTo(X(t),Y(v-TOL)));ctx.closePath()};
+    band();ctx.fillStyle=k.band;ctx.fill();
+    band();ctx.strokeStyle=k.bs;ctx.lineWidth=1;ctx.stroke();
+    ctx.setLineDash([5,4]);ctx.strokeStyle=k.tl;ctx.lineWidth=1.5;ctx.beginPath();p.forEach(([t,v],i)=>ctx[i?'lineTo':'moveTo'](X(t),Y(v)));ctx.stroke();ctx.setLineDash([]);
+  });
+  s.pots.forEach((pot,i)=>{
+    const p=pot.c.pts, TOL=pot.c.tol, k=PC[i];
+    const tr=()=>{ctx.beginPath();pot.hist.forEach(([t,v],i)=>ctx[i?'lineTo':'moveTo'](X(t),Y(v)));if(!pot.hist.length)ctx.moveTo(X(0),Y(pot.T))};
+    tr();ctx.strokeStyle=k.glow;ctx.lineWidth=9;ctx.stroke();
+    tr();ctx.strokeStyle=lg(ctx,pl,0,W-pr,0,[[0,k.tr[0]],[1,k.tr[1]]]);ctx.lineWidth=2.5;ctx.stroke();
+    const err=Math.abs(pot.T-target(p,s.t)), col=COL(err/TOL), x=X(s.t), y=Y(pot.T), pulse=1+.25*Math.sin(performance.now()/180);
+    ctx.fillStyle=col+'44';ctx.beginPath();ctx.arc(x,y,10*pulse,0,7);ctx.fill();
+    ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,5,0,7);ctx.fill();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x-1.5,y-1.5,1.6,0,7);ctx.fill();
+  });
+  // HUD
+  const cols=s.pots.map(p=>s.started?COL(Math.abs(p.T-target(p.c.pts,s.t))/p.c.tol):'#f7e8d6');
+  if(s.pots.length===1){temp.textContent=s.pots[0].T.toFixed(1)+'°C';temp.style.color=cols[0];
+    const p=s.pots[0].c.pts, tg=target(p,s.t);
+    info.textContent=s.started?`${phase(p,s.t)} · mục tiêu ${tg.toFixed(1)}° · ${s.t.toFixed(0)}/${END}s`:'Bấm giữ để bắt đầu'}
+  else{temp.style.color='';temp.innerHTML=s.pots.map((p,i)=>`<span style="color:${cols[i]}">${p.T.toFixed(1)}°</span>`).join('<span class="sep">|</span>');
+    info.textContent=s.started?`mục tiêu ${s.pots.map(p=>target(p.c.pts,s.t).toFixed(1)+'°').join(' | ')} · ${s.t.toFixed(0)}/${END}s`:'Space = trái · Enter = phải'}
+  [...bar.children].forEach((b,i)=>b.style.width=(s.pots[i]?Math.min(100,s.pots[i].bad/BADMAX*100):0)+'%');
+  vig.style.opacity=Math.max(0,maxBad()/BADMAX-.5)*1.4;
+}
+
+pickLevel('dark');
+
+// ---------- pot scene ----------
+const px=pot.getContext('2d'), CHOC={dark:[59,31,18],milk:[122,74,42],white:[239,226,196],ruby:[214,110,132]};
+const bg=document.createElement('canvas'), bgx=bg.getContext('2d');
+let K={W:0,H:0,n:0}; // cached geometry + gradients, rebuilt on resize / pot count change
+function build(W,H,n){
+  const pw=n>1?Math.min(W*.27,160):Math.min(W*.5,230), stove=H*.88, bot=H*.72, ph=Math.min(H*.48,pw*.6), top=bot-ph, ry=pw*.09;
+  const pots=n>1?[{cx:W*.24-14},{cx:W*.72-14}]:[{cx:W/2-24}];
+  pots.forEach(p=>{p.tx=p.cx+pw/2+(n>1?24:40)});
+  K={W,H,n,pw,stove,bot,ph,top,ry,pots};
+  bg.width=W*(devicePixelRatio||1);bg.height=H*(devicePixelRatio||1);bgx.setTransform(devicePixelRatio||1,0,0,devicePixelRatio||1,0,0);
+  const g=bgx, cy=H*.62;
+  g.fillStyle=lg(g,0,0,0,cy,[[0,'#6a4631'],[1,'#4b3022']]);g.fillRect(0,0,W,cy);
+  g.strokeStyle='#ffffff10';g.lineWidth=2;const ts=Math.max(26,W/14);
+  for(let y=ts;y<cy;y+=ts){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
+  for(let r=0,y=0;y<cy;y+=ts,r++)for(let x=(r%2)*ts/2;x<W;x+=ts){g.beginPath();g.moveTo(x,y);g.lineTo(x,Math.min(cy,y+ts));g.stroke()}
+  g.fillStyle=rg(g,W/2,H*.5,0,W*.6,[[0,'#ffb86b22'],[1,'#00000000']]);g.fillRect(0,0,W,cy); // warm wall light
+  g.fillStyle=lg(g,0,cy,0,H,[[0,'#a0683a'],[.08,'#8c5a30'],[1,'#5e3a1d']]);g.fillRect(0,cy,W,H-cy);
+  g.strokeStyle='#00000022';g.lineWidth=1;for(let i=0;i<9;i++){const y=cy+8+i*(H-cy)/9+Math.sin(i*3)*3;g.beginPath();g.moveTo(0,y);g.bezierCurveTo(W*.3,y+3,W*.6,y-3,W,y+2);g.stroke()}
+  g.fillStyle='#ffffff22';g.fillRect(0,cy,W,2);
+  pots.forEach(({cx})=>{
+    g.fillStyle='#0003';g.beginPath();g.ellipse(cx,stove+4,pw*.95,H*.07,0,0,7);g.fill(); // burner shadow
+    g.fillStyle=lg(g,0,stove-6,0,H,[[0,'#3a3a40'],[1,'#1c1c20']]);rr(g,cx-pw*.65,stove-6,pw*1.3,H-stove+20,10);g.fill();
+    g.fillStyle='#55555c';rr(g,cx-pw*.65,stove-6,pw*1.3,3,2);g.fill();
+    g.fillStyle='#111';g.beginPath();g.ellipse(cx,stove,pw*.45,6,0,0,7);g.fill();
+    g.strokeStyle='#2c2c30';g.lineWidth=3;g.beginPath();g.ellipse(cx,stove,pw*.38,4,0,0,7);g.stroke();
+  });
+  K.steel=pots.map(({cx})=>lg(px,cx-pw/2,0,cx+pw/2,0,[[0,'#5f6166'],[.18,'#9ea1a7'],[.4,'#eef0f3'],[.55,'#c3c6cb'],[.8,'#7d8085'],[1,'#4e5055']]));
+  K.rim=pots.map(({cx})=>lg(px,cx-pw/2,0,cx+pw/2,0,[[0,'#8d9095'],[.5,'#ffffff'],[1,'#7c7f84']]));
+  K.flame=lg(px,0,0,0,-1,[[0,'#4a8dff'],[.18,'#ffe07a'],[.45,'#ffa229'],[.85,'#ff5a1c'],[1,'#ff5a1c00']]);
+  K.glow=rg(px,0,0,0,1,[[0,'#ff9a3aaa'],[.5,'#ff6a2a33'],[1,'#ff5a1c00']]);
+  K.puff=rg(px,0,0,0,1,[[0,'#ffffffcc'],[.5,'#ffffff55'],[1,'#ffffff00']]);
+  K.y0=H*.08;K.y1=H*.78;K.Yt=v=>K.y1-(K.y1-K.y0)*(v-TMIN)/(TMAX-TMIN);
+}
+const SEED=[...Array(14)].map((_,i)=>[Math.sin(i*12.9898)*.5+.5,Math.sin(i*78.233)*.5+.5,Math.sin(i*37.7)*.5+.5]);
+function drawOnePot(pot,i,now){
+  const {W,H,pw,stove,bot,ph,top,ry}=K, {cx,tx}=K.pots[i], h=pot.q[0][1], T=pot.T, c=pot.c;
+  // flame glow + tongues (flame follows the DELAYED heater: what really heats the pot)
+  if(h>.02){
+    px.save();px.translate(cx,stove);px.scale(pw*.7,H*.16);px.globalAlpha=h;px.fillStyle=K.glow;px.fillRect(-1,-1,2,2);px.restore();
+    px.fillStyle='#ff8c3a';px.globalAlpha=h*.35;px.beginPath();px.ellipse(cx,bot,pw*.6,H*.09,0,0,7);px.fill();px.globalAlpha=1;
+    px.fillStyle=K.flame;
+    for(let k=0;k<9;k++){
+      const x=cx-pw*.32+k*pw*.08, fh=h*(H*.19+H*.05*Math.sin(now*14+k*2.1)+H*.02*Math.sin(now*23+k))+3, w=Math.min(7,pw*.04)+Math.sin(now*9+k)*1.5;
+      px.save();px.translate(x,stove-2);px.scale(1,fh);px.beginPath();px.moveTo(-w,0);px.quadraticCurveTo(-w*.6,-.55,0,-1);px.quadraticCurveTo(w*.6,-.55,w,0);px.fill();px.restore();
+    }
+    px.fillStyle='#ffffff99';for(let k=0;k<9;k++){const x=cx-pw*.32+k*pw*.08;px.beginPath();px.ellipse(x,stove-6,2,h*4,0,0,7);px.fill()}
+  }
+  // pot
+  const hw=Math.min(38,pw*.18);
+  px.fillStyle='#0005';px.beginPath();px.ellipse(cx,bot+2,pw*.52,ry*.9,0,0,7);px.fill();
+  px.fillStyle='#4a4c51';rr(px,cx-pw/2-hw+4,top+ph*.22,hw,11,6);px.fill();px.fillStyle='#8d9095';rr(px,cx-pw/2-hw+4,top+ph*.22,hw,4,[6,6,0,0]);px.fill();
+  px.fillStyle='#4a4c51';rr(px,cx+pw/2-4,top+ph*.22,hw,11,6);px.fill();px.fillStyle='#8d9095';rr(px,cx+pw/2-4,top+ph*.22,hw,4,[6,6,0,0]);px.fill();
+  px.fillStyle=K.steel[i];rr(px,cx-pw/2,top,pw,ph,[0,0,22,22]);px.fill();
+  if(h>.05){px.fillStyle=lg(px,0,bot,0,bot-ph*.5,[[0,'#ff7a2a'+Math.round(h*110).toString(16).padStart(2,'0')],[1,'#ff7a2a00']]);rr(px,cx-pw/2,top,pw,ph,[0,0,22,22]);px.fill()}
+  px.fillStyle='#ffffff22';px.fillRect(cx-pw*.42,top+6,pw*.06,ph-16);
+  px.fillStyle=K.rim[i];px.beginPath();px.ellipse(cx,top,pw/2,ry,0,0,7);px.fill();
+  px.fillStyle='#55585d';px.beginPath();px.ellipse(cx,top+1.5,pw/2-5,ry-2.5,0,0,7);px.fill();
+  // chocolate surface (glossy, swirling, blooms with bad)
+  const m=Math.min(1,pot.bad/BADMAX)*.75, c0=CHOC[c.choc], cc=c0.map((v,k)=>Math.round(v+([205,198,190][k]-v)*m));
+  const lite=cc.map(v=>Math.min(255,v+45)), dark=cc.map(v=>Math.round(v*.6));
+  const rx=pw/2-7, cry=ry-3.5, sy=top+2;
+  px.save();px.beginPath();px.ellipse(cx,sy,rx,cry,0,0,7);px.clip();
+  px.fillStyle=rg(px,cx-rx*.3,sy-cry*.4,0,rx*1.3,[[0,'rgb('+lite+')'],[.45,'rgb('+cc+')'],[1,'rgb('+dark+')']]);px.fillRect(cx-rx,sy-cry,rx*2,cry*2);
+  px.strokeStyle='rgba(255,255,255,'+(.14*(1-m))+')';px.lineWidth=3;px.lineCap='round';
+  for(let k=0;k<3;k++){px.beginPath();for(let a=0;a<=6.3;a+=.25){const r=(a/6.3)*rx*.85,an=a*1.2+now*.6+k*2.1;const X=cx+Math.cos(an)*r,Yv=sy+Math.sin(an)*r*(cry/rx);a?px.lineTo(X,Yv):px.moveTo(X,Yv)}px.stroke()}
+  px.fillStyle='rgba(255,255,255,'+(.3*(1-m))+')';px.beginPath();px.ellipse(cx-rx*.35,sy-cry*.35,rx*.28,cry*.25,-.3,0,7);px.fill();
+  if(m>0){px.strokeStyle='rgba(235,228,222,'+m*.6+')';px.lineWidth=1.5;SEED.forEach(([a,b,d])=>{const X=cx+(a-.5)*rx*1.7,Yv=sy+(b-.5)*cry*1.6;px.beginPath();px.moveTo(X-10-d*12,Yv+2);px.quadraticCurveTo(X,Yv-3-d*5,X+10+d*12,Yv+1);px.stroke()});
+    px.fillStyle='rgba(240,235,230,'+m*.18+')';SEED.slice(0,8).forEach(([a,b,d])=>{px.beginPath();px.ellipse(cx+(b-.5)*rx*1.6,sy+(d-.5)*cry*1.6,8+a*10,2+d*2,a*3,0,7);px.fill()})}
+  if(h>.4){px.fillStyle='rgba(255,255,255,.22)';for(let k=0;k<7;k++){const f=(now*1.2+k*.37)%1,bx=cx+(k-3)*rx*.28+Math.sin(k*7)*8,by=sy+Math.sin(k*5)*cry*.5;px.beginPath();px.arc(bx,by,1+4*f,0,7);px.fill();if(f>.85){px.strokeStyle='rgba(255,255,255,.3)';px.lineWidth=1;px.beginPath();px.arc(bx,by,5+8*(f-.85)*6,0,7);px.stroke()}}}
+  px.restore();
+  // wooden spoon stirring
+  const sa=now*.6+i*2, spx=cx+Math.cos(sa)*rx*.45, spy=sy+Math.sin(sa)*cry*.45;
+  px.strokeStyle='#8a5a2b';px.lineWidth=7;px.lineCap='round';px.beginPath();px.moveTo(spx,spy);px.lineTo(spx+pw*.28,top-ph*.75);px.stroke();
+  px.strokeStyle='#c98a4a';px.lineWidth=2.5;px.beginPath();px.moveTo(spx+4,spy-4);px.lineTo(spx+pw*.28+2,top-ph*.75-2);px.stroke();
+  px.fillStyle='rgb('+dark+')';px.beginPath();px.ellipse(spx,spy+1,7,3,0,0,7);px.fill();
+  // steam puffs
+  const st=Math.max(0,Math.min(1,(T-30)/20));
+  if(st>0){for(let k=0;k<7;k++){const f=(now*.35+k*.143)%1, x=cx+(k-3)*pw*.1+Math.sin(now*1.3+k*1.7)*12*f, y=top-ry-f*H*.55, r=10+f*22;
+    px.save();px.translate(x,y);px.scale(r,r*.8);px.globalAlpha=st*.45*Math.sin(f*Math.PI);px.fillStyle=K.puff;px.fillRect(-1,-1,2,2);px.restore()}}
+  // glass thermometer: mercury = pot temp, green band = target ±tol
+  const {y0,y1,Yt}=K, tg=target(c.pts,s.t), tol=c.tol;
+  px.fillStyle='#0004';rr(px,tx-9,y0-6,18,y1-y0+22,9);px.fill();
+  px.fillStyle=lg(px,tx-8,0,tx+8,0,[[0,'#ffffff55'],[.3,'#ffffffcc'],[.6,'#ffffff99'],[1,'#ffffff33']]);rr(px,tx-8,y0-6,16,y1-y0+12,8);px.fill();
+  px.fillStyle='#ffffffdd';rr(px,tx-4,y0,8,y1-y0,4);px.fill();
+  px.fillStyle='#6fd18a66';px.fillRect(tx-7,Yt(tg+tol),14,Yt(tg-tol)-Yt(tg+tol));
+  px.fillStyle='#2fbf6a';px.fillRect(tx-13,Yt(tg)-1,26,2);
+  px.fillStyle=lg(px,tx-4,0,tx+4,0,[[0,'#b91f16'],[.4,'#ff5a47'],[1,'#a51a12']]);rr(px,tx-3,Yt(T),6,y1-Yt(T)+4,3);px.fill();
+  px.fillStyle=rg(px,tx-3,y1+8,0,13,[[0,'#ff7a6a'],[.6,'#e5352a'],[1,'#8f150f']]);px.beginPath();px.arc(tx,y1+10,12,0,7);px.fill();
+  px.fillStyle='#ffffff77';px.beginPath();px.ellipse(tx-4,y1+5,3,2,-.6,0,7);px.fill();
+  px.fillStyle='#f7e8d6';px.font='600 9px ui-rounded,system-ui';px.strokeStyle='#5a3a26';px.lineWidth=1;
+  for(let v=15;v<=50;v+=5){const y=Yt(v);px.beginPath();px.moveTo(tx+6,y);px.lineTo(tx+(v%10?9:12),y);px.stroke();if(!(v%10))px.fillText(v+'°',tx+15,y+3)}
+  px.fillStyle='#ffffff55';px.fillRect(tx-6,y0+2,2,y1-y0-4);
+  if(K.n>1){px.fillStyle='#ffffff66';px.font='700 11px ui-rounded,system-ui';px.textAlign='center';px.fillText(i?'PHẢI · Enter':'TRÁI · Space',cx,H-8);px.textAlign='left'}
+}
+function drawPot(){
+  const [W,H]=fit(pot,px); if(K.W!==W||K.H!==H||K.n!==s.pots.length)build(W,H,s.pots.length);
+  const now=performance.now()/1000;
+  px.save();
+  const shake=Math.max(0,maxBad()-.8*BADMAX)*8; if(shake)px.translate(Math.sin(now*60)*shake,Math.cos(now*47)*shake);
+  px.drawImage(bg,0,0,W,H);
+  s.pots.forEach((p,i)=>drawOnePot(p,i,now));
+  px.restore();
+}
+
+function mixBar(){ // Mix prize: ONE bar, dark + white squares in a checkerboard
+  const cols=[CHOC.dark,CHOC.white].map(c=>`rgb(${c})`); let q='';
+  for(let r=0;r<3;r++)for(let c=0;c<4;c++){const x=6+c*38,y=6+r*34,k=(r+c)%2;
+    q+=`<rect x="${x}" y="${y}" width="34" height="30" rx="4" fill="${cols[k]}"/><rect x="${x}" y="${y}" width="34" height="30" rx="4" fill="url(#mxg)"/><path d="M${x+4} ${y+5}h14" stroke="#fff" stroke-opacity="${k?'.7':'.3'}" stroke-width="3" stroke-linecap="round"/>`}
+  return `<svg viewBox="0 0 164 118" width="190" style="transform:rotate(-4deg);filter:drop-shadow(0 8px 10px #0008)"><defs><linearGradient id="mxg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs><rect x="1" y="1" width="162" height="116" rx="8" fill="#2a1810"/>${q}<text x="82" y="114" text-anchor="middle" font-size="9" font-weight="800" fill="#f3d9b0" font-family="system-ui" letter-spacing="2">MIX</text></svg>`}
+// ---------- win/lose particles + prize bars ----------
+const fxx=fx.getContext('2d'); let parts=[];
+function boom(win){
+  parts=[];const n=win?140:0;
+  prize.innerHTML=!win?'':s.pots.length>1?mixBar():s.pots.map(p=>`<i style="background-color:rgb(${CHOC[p.c.choc]})"></i>`).join('');
+  for(let i=0;i<n;i++)parts.push({x:Math.random(),y:-.1-Math.random()*.4,vx:(Math.random()-.5)*.25,vy:.15+Math.random()*.3,r:Math.random()*6.3,vr:(Math.random()-.5)*8,sz:5+Math.random()*7,c:['#ffd27a','#f2a75a','#7be0a0','#ff8c5a','#fff2dc','#c98a4a'][i%6],s:Math.random()<.3});
+}
+function drawFx(dt){
+  if(msg.style.display!=='flex'){return}
+  const [W,H]=fit(fx,fxx);fxx.clearRect(0,0,W,H);
+  const now=performance.now()/1000;
+  if(!parts.length){ // lose: slow white streaks drifting down
+    fxx.strokeStyle='#ffffff10';fxx.lineWidth=2;for(let i=0;i<12;i++){const y=((now*.05+i*.083)%1)*H;fxx.beginPath();fxx.moveTo(0,y);fxx.bezierCurveTo(W*.3,y+20,W*.7,y-20,W,y+10);fxx.stroke()}return}
+  parts.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=.15*dt;p.r+=p.vr*dt;p.vx*=.995;if(p.y>1.1){p.y=-.1;p.x=Math.random();p.vy=.15+Math.random()*.3}
+    fxx.save();fxx.translate(p.x*W,p.y*H);fxx.rotate(p.r);fxx.fillStyle=p.c;
+    if(p.s){fxx.beginPath();for(let k=0;k<10;k++){const a=k*Math.PI/5,r=k%2?p.sz*.4:p.sz;fxx.lineTo(Math.cos(a)*r,Math.sin(a)*r)}fxx.fill()}
+    else fxx.fillRect(-p.sz/2,-p.sz/3,p.sz,p.sz*.66);
+    fxx.restore()});
+}
+
+let last=performance.now();
+(function loop(now){
+  let dt=Math.min(.1,(now-last)/1000); last=now;
+  const fdt=dt;
+  if(s.started&&!s.done) for(;dt>0&&!s.done;dt-=.02) step(Math.min(.02,dt)); // fixed-ish 20ms steps
+  draw(); drawPot(); drawFx(fdt); requestAnimationFrame(loop);
+})(last);
+</script>

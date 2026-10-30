@@ -132,11 +132,26 @@ export interface TaskView {
   timeLimitMinutes: number | null;
   /** Task somewhere else (leg task.location.name); absent = at the point just reached. */
   place?: string;
+  /** Leg 3: the chosen + opened detour branch is a 3D room (leg task.room) + this team's progress in it (server-kept, reset by a
+   *  branch switch). The client reports `race room {step, branch, done, skipped}`. */
+  room?: RoomView;
+}
+/** Leg 3: a Lựa chọn kép room as its team sees it: `done` of `total` made, `skipped` = "Bỏ qua" pressed (the step is done,
+ *  (total − done) × penaltyMinutesEach at the finish line). */
+export interface RoomView {
+  /** 'garderobe' = the GardeRobe MannekenPis museum room of a CHALLENGE step (leg step `room`; no tally: total 0). */
+  kind: 'chocolate' | 'comic' | 'garderobe';
+  total: number;
+  penaltyMinutesEach: number;
+  done: number;
+  skipped: boolean;
 }
 export interface BranchView {
   id: string;
   name: string;
   summary: string;
+  /** Leg 3: the text that drops open under the branch the team picked (leg `branches[].afterChoice`); ONLY on the chosen branch. */
+  afterChoice?: string;
   /** Phase 8 (§17.16): ONLY for the chosen branch once its box is opened (the task is inside the box). */
   task?: TaskView;
 }
@@ -170,6 +185,12 @@ export interface ClueCard {
   branchOpened?: boolean;
   /** detour: how many times the team switched branch (each switch = a branchSwitchLockMinutes countdown). */
   switches?: number;
+  /** Leg 3: while switchLocked, the room of the branch just left (its box was opened): the team is still standing in it until it
+   *  walks into the exit ring (a reload puts it back there, ring lit). */
+  leftRoom?: RoomView['kind'];
+  /** Leg 3 (v12): a challenge played inside a 3D room (leg step `room: 'garderobe'`): the team enters it when this card
+   *  arrives (the previous box opened) and may walk out / back in at will; absent once the step is done. */
+  room?: 'garderobe';
   /** detour: minutes of one switch (the confirm text of "Đổi lựa chọn kép"). */
   switchPenaltyMinutes?: number;
   /** challenge / branch: minutes of the Host's "Phạt" (task.retryLockMinutes ?? penalties.retryLockMinutes; may be 0.1 in
@@ -205,6 +226,17 @@ export interface FinishResult extends FinishTexts {
   rank: number;
   total: number;
   kind: FinishKind;
+  /** Leg 3: the Host's finish-line penalty of this team (host.finishPenalty; e.g. a Lựa chọn kép room given up), absent =
+   *  none. The card stays "Về đích thứ n" and adds one line "Bị phạt {minutes} phút do {reason}." Only the team's own. */
+  finishPenalty?: FinishPenalty;
+}
+/** Leg 3: minutes added at the finish line (not served at the mat: the team is told it finished) + why (Vietnamese). */
+export interface FinishPenalty {
+  minutes: number;
+  reason: string;
+  /** Who set it: the Host (host.finishPenalty; absent in older rows = the Host) or the server from a skipped room (`race room
+   *  skipped`). A room never overwrites a Host-set penalty. */
+  by?: 'host' | 'room';
 }
 /** "Tại điểm này" (SPEC §7): another online team inside the same point's zone and what it visibly does. */
 export interface ZoneMember {
@@ -250,6 +282,8 @@ export interface StepProgressView {
   answers: (AnswerView & { branch: string | null; note?: string })[];
   /** The Host's note on this step ("Lưu ghi chú"); never sent to the team. */
   note: string;
+  /** Leg 3: detour with a room: the team's progress in the current branch's room (absent = none reported). */
+  room?: { branch: string; kind: RoomView['kind']; total: number; done: number; skipped: boolean };
 }
 /** Phase 8 (D10 / D16): one answer waiting for the Host (HostState.queue, oldest first). */
 export interface ReviewItem {
@@ -274,6 +308,11 @@ export interface ReviewItem {
   scoreFrom?: number;
   /** SPEC §17.44: a multi-box task: its box labels ('' = numbered); `text` holds the N strings joined " | " (the page lists them). */
   partLabels?: string[];
+  /** Leg 3: an answer the SERVER graded (task.parts[].answers) and already applied (all right → done, else Phạt + "đúng x/N"):
+   *  the item only waits for the Host's look ("✓ Đồng ý" = host.review ack). `marks[k]` = box k right (Host only); `score` =
+   *  what the team is told now (the Host may change it: host.review score); `canApprove` = "Đúng" still applies (the answer is
+   *  the team's last, penalized, its step not done: host.review approve with this id lifts the lock and completes it). */
+  auto?: { verdict: 'correct' | 'penalized'; marks: boolean[]; score: number; of: number; canApprove: boolean };
 }
 
 /** Phase 8 (SPEC §8.9 (2), docs/plans/phase8.md §12 q16): the code a team pastes with its photo on Messenger and the Host
@@ -324,6 +363,8 @@ export type RaceOp =
   | { t: 'race'; op: 'accept'; step: string }
   | { t: 'race'; op: 'answer'; step: string; text: string; /** SPEC §17.44: a multi-box task: one string per box (text ''; stored "a | b | c"). */ parts?: string[] }
   | { t: 'race'; op: 'branch'; step: string; branch: string }
+  /** Leg 3: progress in the chosen + opened branch's room (TaskView.room): done only grows (0..total), skipped = "Bỏ qua" (final). */
+  | { t: 'race'; op: 'room'; step: string; branch: string; done: number; skipped: boolean }
   | { t: 'race'; op: 'checkin' }
   | { t: 'race'; op: 'book' };
 
@@ -338,7 +379,9 @@ export interface HostReview {
   t: 'host.review';
   team: string;
   step: string;
-  op: 'approve' | 'penalize' | 'note' | 'undo';
+  op: 'approve' | 'penalize' | 'note' | 'undo' | 'ack' | 'score';
+  /** Leg 3 (an auto-graded answer, ReviewItem.auto): `ack` = "✓ Đồng ý" (the item leaves the queue, the team sees nothing);
+   *  `score` = "Cập nhật" the "đúng x/N" the team sees (`score` required; the lock stays). Both need `id`. */
   id?: number;
   /** ≤ NET.noteMax; stored with the decision (never sent to the team). */
   note?: string;
@@ -378,7 +421,11 @@ export type HostMessage =
   /** Phase 10 (V3): clear a team's red flag (event host.unflag; the server flags again on new evidence, plan M5). */
   | { t: 'host.flag'; op: 'clear'; team: string }
   /** SPEC §17.40: a new spectator code (the old one's tokens die, its open spectator sockets are closed 4401). */
-  | { t: 'host.spectator'; op: 'rotate' };
+  | { t: 'host.spectator'; op: 'rotate' }
+  /** Leg 3: set (minutes 1..FINISH_PENALTY_MAX) or clear (minutes 0) a team's finish-line penalty, before or after it
+   *  finished, also after "Kết thúc"; `reason` '' / absent = FINISH_PENALTY_REASON. Host-entered only: a team never
+   *  reports its own penalty (client untrusted). Event host.finishPenalty {minutes, reason, was}. */
+  | { t: 'host.finishPenalty'; team: string; minutes: number; reason?: string };
 
 // ── server → client ──
 export type ServerNotice =
@@ -389,7 +436,12 @@ export type ServerNotice =
   | 'answerSent' | 'answerWrong' | 'answerPending' | 'answerLocked' | 'approved' | 'penalized'
   | 'branchChosen' | 'branchSwitched' | 'branchPending' | 'taskNotStarted'
   // Phase 10 (V2): the Host undid its last decision on this team; the `race` view before it restores the card
-  | 'reviewUndone';
+  | 'reviewUndone'
+  // Leg 3: a `race room` report that does not apply (not the chosen + opened room branch, done went down, already skipped…)
+  | 'roomIgnored'
+  // Leg 3: an auto-graded multi-box answer: all right (the step is done) / not all (Phạt countdown; "đúng x/N" on the card,
+  // also in `score` / `of`) / the Host changed that number
+  | 'autoCorrect' | 'autoPenalized' | 'scoreUpdated';
 /** 'full' (SPEC §17.40): NET.maxSpectators spectator sockets are already open (CLOSE.full). */
 export type KickReason = 'badToken' | 'otherDevice' | 'raceClosed' | 'protocol' | 'full';
 
@@ -469,6 +521,8 @@ export interface HostState {
     startOrder: number | null; step: number; finishAt: number | null; penaltyMinutes: number;
     /** server ms of the team's first entry into the game. */
     joinedAt: number | null;
+    /** Leg 3: the Host's finish-line penalty (host.finishPenalty), null = none. Optional: absent in older demo states. */
+    finishPenalty?: FinishPenalty | null;
   })[];
   counters: QuotaCounters;
   bikes: BikeInfo[];

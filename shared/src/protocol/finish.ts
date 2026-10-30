@@ -44,3 +44,10 @@ export function finishTexts(kind: FinishKind, leg: Partial<FinishTexts> & { firs
     (kind === 'out' ? leg?.out?.[k] : kind === 'first' ? (leg?.first?.[k] || leg?.[k]) : leg?.[k]) || FINISH_DEFAULTS[kind][k];
   return { npc: fillFinish(pick('npc'), n, total, team), toast: fillFinish(pick('toast'), n, total, team), card: fillFinish(pick('card'), n, total, team) };
 }
+
+/** Leg 3: the reason of a finish-line penalty when the Host gives none (a Lựa chọn kép room given up with "Bỏ qua"). */
+export const FINISH_PENALTY_REASON = 'bỏ thử thách ở lựa chọn kép';
+
+/** Leg 3: the finish card's extra line, "Bị phạt 20 phút do bỏ thử thách ở lựa chọn kép." (reason without a final dot). */
+export const finishPenaltyLine = (p: { minutes: number; reason: string }): string =>
+  `Bị phạt ${p.minutes} phút do ${(p.reason.trim() || FINISH_PENALTY_REASON).replace(/[.\s]+$/, '')}.`;

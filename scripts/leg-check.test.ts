@@ -177,6 +177,9 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const secrets = secretStrings(leg.leg);
     expect(secrets).toContain(miniJson().steps[0].clue);
     expect(secrets.some((s) => s === '42')).toBe(false);
+    // Leg 3: an auto-graded box's spellings are secrets too (long ones are searched in the static assets)
+    const demo = parseLeg(JSON.parse(readFileSync(join(import.meta.dirname, '../worker/legs/bruxelles-demo.json'), 'utf8')));
+    expect(demo.ok && secretStrings(demo.leg)).toContain('U-dơ-bê-ki-xtan');
     const dir = mkdtempSync(join(tmpdir(), 'legleak-'));
     expect(scanLeaks([dir], secrets, dir)).toEqual([]);
     writeFileSync(join(dir, 'app.js'), `var x="${secrets[0]!.replace(/"/g, '\\"')}";`);
@@ -344,7 +347,7 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     const demo = run(legs('bruxelles-demo.json'));
     expect(lvl(demo, 'error')).toEqual([]);
     expect(lvl(demo, 'warning')).toEqual([]);
-    expect(lvl(demo, 'blank').length).toBeGreaterThan(10);
+    expect(lvl(demo, 'blank').length).toBeGreaterThan(5); // Leg 3: D1 is filled (Chocolate / Truyện Tranh), T1 / T2 and the mini-game texts still open
   });
 
   it('host_approval + a typed answer needs no proofInstruction (not a blank); a photo task (free) without one is a blank', () => {

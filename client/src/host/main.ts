@@ -6,7 +6,7 @@ import graphUrl from '@race/shared/data/roadgraph.json?url';
 import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, type ExportFormat, type ExportResult } from './hostView.ts';
+import { withAutoDemo, checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, finishPenaltyMessage, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, type ExportFormat, type ExportResult } from './hostView.ts';
 import type { HostMap } from './hostMap.ts';
 import { demoTick, withMapDemo } from './hostMapData.ts';
 
@@ -322,17 +322,28 @@ function drawStart(s: State) {
   const rows = startRows(s);
   once('start', JSON.stringify(rows), () => {
     // short columns first (review: Host tables at 1024 px); SPEC §17.23: no start-time input (no team clock any more)
-    const tbl = rows.map((r) =>
-      el('tr', {},
+    const tbl = rows.map((r) => {
+      // Leg 3: "Phạt vạch đích" (host.finishPenalty): minutes + reason, Lưu / Xóa; the team sees it on its finish card
+      const min = el('input', { type: 'number', min: '0', max: String(NET.finishPenaltyMax), step: '1', value: r.fpMinutes ? String(r.fpMinutes) : '', placeholder: 'phút', className: 'fp-min', title: 'Số phút phạt tại vạch đích' });
+      const why = el('input', { value: r.fpReason, maxLength: NET.finishReasonMax, className: 'fp-why', title: 'Lý do (đội thấy: "Bị phạt n phút do <lý do>.")' });
+      const save = (clear: boolean) => {
+        const m = finishPenaltyMessage(r.id, clear ? '0' : min.value, why.value);
+        if (typeof m === 'string') return addNotice('error', m);
+        if (clear && !confirm(`Xóa phạt vạch đích của ${r.name}?`)) return;
+        if (!send(m)) addNotice('error', 'Đang mất kết nối, chưa gửi được.');
+      };
+      return el('tr', {},
         el('td', {}, el('span', { className: 'dot', style: `background:${r.colour}` }), r.name),
         el('td', {}, r.stepLabel),
         el('td', {}, r.penalty),
+        el('td', { className: 'fp' }, min, ' ', why, ' ', el('button', { className: 'small', onclick: () => save(false) }, 'Lưu'), ...(r.fpMinutes ? [' ', el('button', { className: 'small danger', onclick: () => save(true) }, 'Xóa')] : [])),
         el('td', {}, r.startOrder),
         el('td', {}, r.joined),
-      ));
+      );
+    });
     startBox.replaceChildren(
       el('p', { className: 'note' }, 'Thứ tự đội vào game lần đầu (thông báo "Xuất phát ở vị trí thứ n"). Không có giờ xuất phát riêng: xếp hạng theo thứ tự về đích.'),
-      tbl.length ? el('div', { className: 'scroll' }, el('table', { className: 'pin' }, el('tr', {}, ...['Đội', 'Bước hiện tại', 'Phạt', 'Thứ tự vào', 'Vào game lúc'].map((t) => el('th', {}, t))), ...tbl)) : 'Chưa có đội nào.',
+      tbl.length ? el('div', { className: 'scroll' }, el('table', { className: 'pin' }, el('tr', {}, ...['Đội', 'Bước hiện tại', 'Phạt', 'Phạt vạch đích (phút · lý do)', 'Thứ tự vào', 'Vào game lúc'].map((t) => el('th', {}, t))), ...tbl)) : 'Chưa có đội nào.',
     );
   });
 }
@@ -360,7 +371,7 @@ function drawMatrix(s: State, now: number) {
     // scrolling sideways. A rebuild (any new answer) must not throw the Host back to the top left of a wide table.
     const old = matrixBox.querySelector('.matrix-wrap');
     const wrap = el('div', { className: 'scroll matrix-wrap' }, el('table', { className: 'matrix pin' },
-      el('thead', {}, el('tr', {}, th('Đội'), th('Hạng', 'Thứ tự về đích thực (SPEC §17.22); BỊ LOẠI: đội về cuối cùng, hoặc chưa về khi Host bấm Kết thúc'), th('Phạt'), th('Về đích'), ...head.map((h) => th(h.label, h.title)))),
+      el('thead', {}, el('tr', {}, th('Đội'), th('Hạng', 'Thứ tự về đích thực (SPEC §17.22) + phạt vạch đích (giờ về đích + số phút phạt); BỊ LOẠI: đội về cuối cùng, hoặc chưa về khi Host bấm Kết thúc'), th('Phạt'), th('Về đích'), ...head.map((h) => th(h.label, h.title)))),
       el('tbody', {}, ...rows.map((r) => {
         const texts: HTMLElement[] = [];
         cellTexts.push(texts);
@@ -477,7 +488,8 @@ function drawQueue(s: State, now: number): number {
       const answer = r.text
         ? el('div', { className: 'rv-answer' },
           el('div', { className: 'rv-label' }, chip('team', 'ĐỘI TRẢ LỜI'), r.attempt > 1 ? el('span', { className: 'rv-nth' }, `Lần gửi thứ ${r.attempt}`) : '', badge),
-          r.parts ? el('ol', { className: 'rv-parts' }, ...r.parts.map((p) => el('li', {}, el('span', { className: 'rv-part-label' }, p.label), el('span', { className: 'rv-text' }, p.text)))) : el('div', { className: 'rv-text' }, r.text), ...previous) // SPEC §17.44: the N strings numbered
+          r.parts ? el('ol', { className: 'rv-parts' }, ...r.parts.map((p) => el('li', p.ok === undefined ? {} : { className: p.ok ? 'ok' : 'bad' }, el('span', { className: 'rv-part-label' }, p.label), el('span', { className: 'rv-text' }, p.text), p.ok === undefined ? '' : el('b', { className: 'rv-mark' }, p.ok ? '✓' : '✗')))) : el('div', { className: 'rv-text' }, r.text), ...previous, // SPEC §17.44: the N strings numbered (Leg 3: ✓ / ✗ per box, Host only)
+          r.auto ? el('div', { className: `rv-auto ${r.auto.verdict}` }, r.auto.line) : '')
         : el('div', { className: 'rv-answer' },
           el('div', { className: 'rv-label' }, chip('team', 'ĐỘI BÁO ĐÃ GỬI BÀI QUA MESSENGER'), r.attempt > 1 ? el('span', { className: 'rv-nth' }, `Lần gửi thứ ${r.attempt}`) : ''),
           el('div', { className: 'rv-text' }, 'Mã bài nộp: ', el('code', { className: 'rv-bigcode' }, r.code), copy()),
@@ -489,7 +501,7 @@ function drawQueue(s: State, now: number): number {
           wait, r.text ? el('span', { className: 'rv-code' }, 'mã bài nộp ', el('code', { className: 'code' }, r.code), copy()) : ''),
         answer,
         r.reference.length ? el('div', { className: 'rv-ref' }, chip('ref', '🔒 ĐÁP ÁN ĐÚNG – chỉ Host thấy', 'Đáp án tham khảo của chặng: đội không bao giờ thấy phần này'), ...r.reference.map((x) => el('span', { className: 'rv-refchip' }, x))) : '',
-        el('div', { className: 'rv-actions' }, note, btn('Duyệt', 'ok big', 'approve'),
+        r.auto ? autoActions(r, group) : el('div', { className: 'rv-actions' }, note, btn('Duyệt', 'ok big', 'approve'),
           ...(score && r.score ? [el('label', { className: 'score-box', title: 'Gửi kèm Phạt (SPEC §17.31); để trống = không báo số' }, 'Đúng ', score, `/${r.score.scoreOf}`), el('small', { className: 'score-hint' }, `gửi kèm Phạt · ${r.score.scoreHint}`)] : []),
           btn(`Phạt ${String(r.lockMinutes).replace('.', ',')} phút`, 'danger big', 'penalize'), btn('Lưu ghi chú', 'small', 'note')),
       );
@@ -502,6 +514,28 @@ function drawQueue(s: State, now: number): number {
     w.classList.toggle('slow', r.waitMs >= hostPage.queueSlowSeconds * 1000);
   }
   return rows.length;
+}
+
+/** Leg 3: the actions of an answer the server already graded + applied: "✓ Đồng ý" (it leaves the queue), "Đúng x/N" + "Cập nhật"
+ *  (the number the team sees; the countdown stays), "Đúng – cho qua" (a Phạt overruled: lock lifted, the step done; only while
+ *  it is the team's last answer on an unfinished step). */
+function autoActions(r: ReturnType<typeof queueRows>[number], group: HTMLButtonElement[]): HTMLElement {
+  const a = r.auto!;
+  const b = (label: string, className: string, title: string, msg: () => ReturnType<typeof reviewMessage> | null) => {
+    const x = el('button', { className, title, onclick: () => { const m = msg(); if (m) fire(m, group); } }, label);
+    group.push(x);
+    return x;
+  };
+  const input = el('input', { type: 'number', min: 0, max: a.of, step: 1, className: 'score', value: String(a.score), title: `Số ô đúng đội thấy (0–${a.of})` });
+  const score = () => {
+    const n = Number(input.value);
+    return Number.isInteger(n) && n >= 0 && n <= a.of && n !== a.score ? reviewMessage(r.team, r.step, 'score', r.id, '', n) : null;
+  };
+  return el('div', { className: 'rv-actions' },
+    b('✓ Đồng ý', 'ok big', 'Đồng ý với máy chấm: bỏ khỏi hàng chờ, đội không thấy gì thêm', () => reviewMessage(r.team, r.step, 'ack', r.id, '')),
+    ...(a.verdict === 'penalized' ? [el('label', { className: 'score-box', title: 'Sửa số ô đúng đội thấy (đếm ngược phạt giữ nguyên)' }, 'Đúng ', input, `/${a.of}`), b('Cập nhật', 'small', 'Gửi số ô đúng mới cho đội', score)] : []),
+    ...(a.canApprove ? [b('Đúng – cho qua', 'big', 'Không đồng ý phạt: gỡ đếm ngược, đội nhận mật thư kế (như Duyệt)', () => reviewMessage(r.team, r.step, 'approve', r.id, ''))] : []),
+  );
 }
 
 const undoButtons = new Map<string, HTMLButtonElement>(); // undo key → its "Hoàn tác (còn n s)" (ticks every refresh)
@@ -681,7 +715,7 @@ function render(s: State) {
 setInterval(() => state && teamsBox.isConnected && render(state), hostPage.refreshMs);
 
 if (q.has('demo')) {
-  state = withMapDemo(demoState(Date.now())); // + 2 teams on the move (§17.41)
+  state = withAutoDemo(withMapDemo(demoState(Date.now()))); // + 2 teams on the move (§17.41) + Leg 3 auto-graded answers
   receivedAt = Date.now();
   soundNewQueue(state); // the baseline: the demo queue is not "new"
   mediaStat.set('test-gia.jpg', { s: 'ok', size: 245_760 }); // canned (no server): one image uploaded, one missing

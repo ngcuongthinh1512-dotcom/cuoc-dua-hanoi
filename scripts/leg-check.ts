@@ -210,8 +210,8 @@ export function secretStrings(leg: Leg, min = 12): string[] {
   for (const s of leg.steps) {
     if (s.type === 'route_info' || s.type === 'detour') out.add(s.clue);
     if (s.type === 'challenge') out.add(s.teaser);
-    const tasks = s.type === 'detour' ? s.branches.map((b) => (out.add(b.summary), b.task)) : s.type === 'challenge' ? [s.task] : [];
-    for (const t of tasks) [t.title, t.description, t.proofInstruction, ...t.answers, ...t.referenceAnswers].forEach((x) => out.add(x)); // Phase 8: reference answers are Host-only
+    const tasks = s.type === 'detour' ? s.branches.map((b) => (out.add(b.summary), out.add(b.afterChoice), b.task)) : s.type === 'challenge' ? [s.task] : [];
+    for (const t of tasks) [t.title, t.description, t.proofInstruction, ...t.answers, ...t.referenceAnswers, ...(t.parts ?? []).flatMap((x) => x.answers ?? [])].forEach((x) => out.add(x)); // Phase 8: reference answers are Host-only
     // SPEC §17.22: the finish texts name the finish place: server-only until the team finishes
     if (s.type === 'pit_stop' && s.announce) for (const t of [s.announce, s.announce.first, s.announce.out]) [t?.npc, t?.toast, t?.card].forEach((x) => x && out.add(x));
   }
@@ -221,7 +221,7 @@ export function secretStrings(leg: Leg, min = 12): string[] {
 /** The answers among the secrets: short place names / street signs, so they may legitimately also be in the map data. */
 export function answerStrings(leg: Leg, min = 12): Set<string> {
   const out = new Set<string>();
-  for (const s of leg.steps) for (const t of s.type === 'detour' ? s.branches.map((b) => b.task) : s.type === 'challenge' ? [s.task] : []) [...t.answers, ...t.referenceAnswers].forEach((x) => x.trim().length >= min && out.add(x.trim()));
+  for (const s of leg.steps) for (const t of s.type === 'detour' ? s.branches.map((b) => b.task) : s.type === 'challenge' ? [s.task] : []) [...t.answers, ...t.referenceAnswers, ...(t.parts ?? []).flatMap((x) => x.answers ?? [])].forEach((x) => x.trim().length >= min && out.add(x.trim()));
   return out;
 }
 

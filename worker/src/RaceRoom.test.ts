@@ -43,7 +43,7 @@ describe('RaceRoom', () => {
     expect(w.movement).toEqual({ footSpeed: 4, bikeSpeedMultiplier: 1.3 });
     const first = await s.next<HostState>(); // pushed on connect
     expect(first).toMatchObject({ t: 'host.state', teams: [] });
-    expect(first.steps?.map((p) => p.id)).toEqual(['start', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'PS']);
+    expect(first.steps?.map((p) => p.id)).toEqual(['start', 'L1', 'L2', 'L3', 'L3B', 'L4', 'L5', 'L6', 'PS']);
     s.send({ t: 'host.createTeams', teams: [{ name: 'Đội Xanh', colour: '#2c6bd8', player: 'An' }, { name: 'Đội Đỏ', colour: '#d8342c' }] });
     const st = await s.next<HostState>();
     expect(st.t).toBe('host.state');
@@ -81,7 +81,9 @@ describe('RaceRoom', () => {
     first.send(encodePose({ x: st.x + 3, y: 0.5, z: st.z - 2, yaw: 1, mode: 'walk', action: 'none' }));
     first.send({ t: 'gesture', g: 'wave' });
     const second = await openSocket(server, RACE, t.body.token!, '&avatar=1'); // Leg 2: "Nhân vật: Nữ"
-    expect(await first.next()).toMatchObject({ t: 'kick', reason: 'otherDevice' });
+    let m = await first.next<{ t?: string }>();
+    while (m.t === 'race' || m.t === 'zone') m = await first.next(); // the first clue box is at the start: its reveal / zone arrive first
+    expect(m).toMatchObject({ t: 'kick', reason: 'otherDevice' });
     expect(await first.next()).toMatchObject({ closed: CLOSE.otherDevice });
     const w2 = await second.next<Welcome>();
     expect(w2.pose).toMatchObject({ x: expect.closeTo(st.x + 3, 1), z: expect.closeTo(st.z - 2, 1), mode: 'walk', bikeId: null });

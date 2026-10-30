@@ -80,13 +80,18 @@ export const taskSchema = z.strictObject({
    *  the client numbers it). The team sends N strings (stored "a | b | c | d", one answer in the Host's queue); Duyệt = all right,
    *  Phạt + "đúng x/N" = §17.31 (scoreOf defaults to parts.length, told from scoreFromMinutes on). Requires verification
    *  'host_approval' + kind 'answer' (checkLeg); no answers in the leg at all for such a task. */
-  parts: z.array(z.strictObject({ label: text().default('') })).min(2).max(8).optional(),
+  parts: z.array(z.strictObject({ label: text().default(''), /** Leg 3: accepted spellings of THIS box (server only); every box
+   *  with answers = the server grades x/N itself (all right → done; else Phạt + "đúng x/N"), the Host reviews afterwards. */ answers: z.array(z.string().max(200)).min(1).optional() })).min(2).max(8).optional(),
   proofInstruction: text().default(''),
   timeLimitMinutes: z.number().positive().nullable().default(null),
   /** Mini-game parameters of kinds other than answer / free (object positions, target photo + heading, gates…: SPEC
    *  §11). Phase 7 stores them unchecked so a real leg can be written now; Phase 8 validates them per kind and decides
    *  what reaches the team (never sent in Phase 7: cardOf leaves them out, like `answers`). */
   params: z.record(z.string(), z.unknown()).optional(),
+  /** Leg 3: a Lựa chọn kép branch played in a 3D room (chocolate workshop / comic gallery): the client reports `race room
+   *  {done, skipped}`; done = total → the Host's queue, "Bỏ qua" → next clue + (total − done) × penaltyMinutesEach at the
+   *  finish line. Detour branches with host_approval only (checkLeg). No answers in it: sent to the team as is. */
+  room: z.strictObject({ kind: z.enum(['chocolate', 'comic']), total: z.number().int().min(1).max(20), penaltyMinutesEach: z.number().min(0).max(120) }).optional(),
 });
 
 const routeInfo = z.strictObject({
@@ -99,7 +104,9 @@ const routeInfo = z.strictObject({
   /** Phase 8 (gap 5 / 14): links and images of the clue. */
   media: media(),
 });
-const branchSchema = z.strictObject({ id: stepId, name: text().default(''), summary: text().default(''), task: taskSchema.prefault({}) });
+/** `afterChoice` (Leg 3): the text that "drops open" under the chosen branch once the team picked it (where to go, the Host's
+ *  manual penalties…); sent only with the CHOSEN branch (steps.ts cardOf), scanned for leaks like `summary`. */
+const branchSchema = z.strictObject({ id: stepId, name: text().default(''), summary: text().default(''), afterChoice: text().default(''), task: taskSchema.prefault({}) });
 const detour = z.strictObject({
   id: stepId,
   type: z.literal('detour'),
@@ -115,6 +122,9 @@ const challenge = z.strictObject({
   /** SPEC §8.8: optional hint shown before "Nhận thử thách" (Phase 8 gates the task behind it). */
   teaser: text().default(''),
   task: taskSchema.prefault({}),
+  /** Leg 3: the challenge is played inside a 3D room built under the box just opened (the previous step's): the GardeRobe
+   *  MannekenPis museum (4 vitrines with the costume photos). No tally / penalty: the card itself is the challenge. */
+  room: z.enum(['garderobe']).optional(),
 });
 /** SPEC §17.22 / §17.23: what a team reads when it finishes (host NPC line, toast, finish card); each field optional
  *  (missing → the generic FINISH_DEFAULTS, protocol/finish.ts). `first` = the winner's, `out` = "BỊ LOẠI" (the last team
@@ -194,6 +204,8 @@ export type Destination = z.output<typeof destinationSchema>;
 export type Task = z.output<typeof taskSchema>;
 /** SPEC §17.44: one box of a `parts` task. */
 export type TaskPart = NonNullable<Task['parts']>[number];
+/** Leg 3: a detour branch's 3D room. */
+export type TaskRoom = NonNullable<Task['room']>;
 export type Branch = DetourStep['branches'][number];
 export type Transport = z.output<typeof transportSchema>;
 /** A parsed media item: {url: "https://…" | "r2:<name>", label}. */

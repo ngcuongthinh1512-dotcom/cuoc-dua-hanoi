@@ -4,5 +4,6 @@ export * from './codec.ts';
 export * from './constants.ts';
 export * from './finish.ts';
 export * from './reveal.ts';
+export * from './rooms.ts';
 export * from './speed.ts';
 export * from './types.ts';

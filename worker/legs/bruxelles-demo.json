@@ -65,9 +65,9 @@
     }
   },
   "start": {
-    "name": "Place Sainte-Catherine",
-    "lat": 50.8511,
-    "lon": 4.3468,
+    "name": "Tháp Rogier",
+    "lat": 50.8558,
+    "lon": 4.3592,
     "yawDeg": 33,
     "spreadMeters": 5
   },
@@ -81,9 +81,9 @@
         "allowed": "any"
       },
       "destination": {
-        "name": "Mont des Arts – chân bậc thang",
-        "lat": 50.8437,
-        "lon": 4.3568,
+        "name": "Tháp Rogier",
+        "lat": 50.8558,
+        "lon": 4.3592,
         "radius": 30
       }
     },
@@ -91,70 +91,116 @@
       "id": "L2",
       "type": "route_info",
       "label": "Lộ trình 2",
-      "clue": "(GIẢ) Lời dẫn của Lộ trình 2 (bản thử, không nêu tên điểm đến).",
+      "clue": "Đội chơi tìm đường đến nơi kết hợp giữa di sản tôn giáo với các hoạt động nhân quyền, triển lãm nghệ thuật đương đại và không gian hỗ trợ các nhóm người dễ bị tổn thương cách đó khoảng 1 cây số.",
       "transport": {
         "allowed": "any"
       },
       "destination": {
-        "name": "Place de la Monnaie",
-        "lat": 50.84851,
-        "lon": 4.35346,
+        "name": "Nhà thờ Saint-Jean-Baptiste-au-Béguinage",
+        "lat": 50.85279,
+        "lon": 4.35024,
         "radius": 35
       }
-    },
-    {
-      "id": "D1",
-      "type": "detour",
-      "label": "Lựa chọn kép",
-      "clue": "",
-      "branches": [
-        {
-          "id": "A",
-          "name": "",
-          "summary": "",
-          "task": {
-            "title": "",
-            "description": "",
-            "media": [],
-            "location": null,
-            "kind": "answer",
-            "verification": "auto",
-            "answers": [],
-            "proofInstruction": "",
-            "timeLimitMinutes": null
-          }
-        },
-        {
-          "id": "B",
-          "name": "",
-          "summary": "",
-          "task": {
-            "title": "",
-            "description": "",
-            "media": [],
-            "location": null,
-            "kind": "free",
-            "verification": "host_approval",
-            "answers": [],
-            "proofInstruction": "",
-            "timeLimitMinutes": null
-          }
-        }
-      ]
     },
     {
       "id": "L3",
       "type": "route_info",
       "label": "Lộ trình 3",
-      "clue": "(GIẢ) Lời dẫn của Lộ trình 3 (bản thử, không nêu tên điểm đến).",
+      "clue": "Tìm tới địa điểm được gợi ý trong hình để nhận mật thư tiếp theo.",
       "transport": {
         "mandatory": "walk"
       },
       "destination": {
-        "name": "Place Royale",
-        "lat": 50.84211,
-        "lon": 4.36237,
-        "radius": 40
+        "name": "The Big Game Brussels Sports Bar",
+        "lat": 50.84795,
+        "lon": 4.34963,
+        "radius": 30
+      },
+      "media": [
+        {
+          "url": "https://example.com/CHUA-NHAP-link-trang-goi-y",
+          "label": "Mở hình gợi ý"
+        }
+      ]
+    },
+    {
+      "id": "D1",
+      "type": "detour",
+      "label": "Lựa chọn kép",
+      "clue": "Bỉ nổi tiếng thế giới với sô-cô-la thượng hạng, nơi chiếc bánh praline đầu tiên ra đời tại Brussels năm 1912 cùng các thương hiệu danh tiếng như Neuhaus, Godiva hay Leonidas. Đất nước này còn là “vương quốc” của truyện tranh, quê hương của những nhân vật kinh điển như Tintin, Xì Trum và Lucky Luke.\nLưu ý: Mỗi lần đổi Lựa chọn kép, đội chơi sẽ bị phạt 10 phút.",
+      "branches": [
+        {
+          "id": "A",
+          "name": "Chocolate",
+          "summary": "Hoàn thành thử thách để tạo ra các loại sô-cô-la khác nhau, rồi nhận mật thư để đi tiếp.",
+          "afterChoice": "Đội chơi di chuyển tới bảo tàng Chocolate nổi tiếng nhất nước Bỉ: Choco-Story Brussels để hoàn thành thử thách. Hoàn thành đủ 5 loại Chocolate, đội chơi sẽ nhận được mật thư để đi tiếp. Với mỗi 1 loại Chocolate đội chơi không hoàn thành được, đội chơi sẽ bị phạt 20 phút tại vạch đích.",
+          "task": {
+            "title": "Chocolate",
+            "description": "[CHƯA NHẬP đề bài mini-game Chocolate]",
+            "media": [],
+            "location": {
+              "name": "Choco-Story Brussels",
+              "lat": 50.84546,
+              "lon": 4.35054,
+              "radius": 20,
+              "yawDeg": -135
+            },
+            "kind": "free",
+            "verification": "host_approval",
+            "answers": [],
+            "proofInstruction": "[CHƯA NHẬP hướng dẫn gửi bài]",
+            "timeLimitMinutes": null,
+            "room": {
+              "kind": "chocolate",
+              "total": 5,
+              "penaltyMinutesEach": 20
+            }
+          }
+        },
+        {
+          "id": "B",
+          "name": "Truyện Tranh",
+          "summary": "Phác hoạ lại các nhân vật trong một bộ truyện tranh nổi tiếng, đủ số lượng bức tranh sẽ nhận được mật thư để đi tiếp.",
+          "afterChoice": "Đội chơi di chuyển tới La Boutique Tintin, sau đó phác hoạ lại 9 bức tranh được yêu cầu với độ chính xác ≥ 85%, tính theo công thức = độ đủ nét × độ đúng nét (× hệ số chống vẽ thừa).\n• Độ đủ nét: tỉ lệ hình mẫu được nét của đội phủ trong bán kính cho phép và cùng hướng, chi tiết nhỏ tính nửa trọng số.\n• Độ đúng nét: tỉ lệ mực của đội nằm đúng trên đường mẫu.\n• Chống vẽ thừa: chỉ trừ điểm khi mực dài hơn hai lần hình mẫu.\nVới mỗi hình vẽ đội chơi không hoàn thành được, đội chơi sẽ bị phạt 12 phút.",
+          "task": {
+            "title": "Truyện Tranh",
+            "description": "[CHƯA NHẬP đề bài mini-game Truyện Tranh]",
+            "media": [],
+            "location": {
+              "name": "La Boutique Tintin",
+              "lat": 50.84667,
+              "lon": 4.353609,
+              "radius": 15,
+              "yawDeg": 180
+            },
+            "kind": "free",
+            "verification": "host_approval",
+            "answers": [],
+            "proofInstruction": "[CHƯA NHẬP hướng dẫn gửi bài]",
+            "timeLimitMinutes": null,
+            "room": {
+              "kind": "comic",
+              "total": 9,
+              "penaltyMinutesEach": 12
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "L3B",
+      "type": "route_info",
+      "label": "Lộ trình 4",
+      "clue": "Đội chơi tìm đường đến \"tủ quần áo\" của bé trai trong bài thơ để nhận mật thư đi tiếp.",
+      "transport": {
+        "allowed": "any"
+      },
+      "destination": {
+        "name": "GardeRobe MannekenPis",
+        "lat": 50.8442,
+        "lon": 4.35104,
+        "radius": 25,
+        "yawDeg": -20
       }
     },
     {
@@ -163,36 +209,86 @@
       "label": "Thử thách 1",
       "teaser": "",
       "task": {
-        "title": "",
-        "description": "",
-        "media": [],
+        "title": "Tủ đồ",
+        "description": "Trước mặt đội chơi là 4 bộ quần áo đã được quyên góp từ các đại diện từ 4 đất nước trên thế giới (trừ Bỉ). Đội chơi trả lời đúng nguồn gốc (đất nước) của 4 bộ quần áo này để nhận mật thư đi tiếp. Đội chơi có thể sử dụng link phía dưới để tra cứu các bộ quần áo tại bảo tàng này.",
+        "media": [
+          {
+            "url": "https://www.mannekenpis.brussels/en/more-than-1000-costumes",
+            "label": "Tra cứu các bộ quần áo tại bảo tàng"
+          }
+        ],
         "location": null,
         "kind": "answer",
-        "verification": "auto",
-        "answers": [],
+        "verification": "host_approval",
+        "parts": [
+          {
+            "label": "Bộ quần áo 1",
+            "answers": [
+              "Cuba",
+              "Cu-ba",
+              "Cu Ba"
+            ]
+          },
+          {
+            "label": "Bộ quần áo 2",
+            "answers": [
+              "Singapore",
+              "Xin-ga-po",
+              "Xinh-ga-po",
+              "Singapo"
+            ]
+          },
+          {
+            "label": "Bộ quần áo 3",
+            "answers": [
+              "Uzbekistan",
+              "Ubekistan",
+              "U-dơ-bê-ki-xtan",
+              "Udobekixtan"
+            ]
+          },
+          {
+            "label": "Bộ quần áo 4",
+            "answers": [
+              "Estonia",
+              "Estônia",
+              "Ê-xtô-ni-a",
+              "Extonia"
+            ]
+          }
+        ],
+        "referenceAnswers": [
+          "Cuba",
+          "Singapore",
+          "Uzbekistan",
+          "Estonia"
+        ],
         "proofInstruction": "",
-        "timeLimitMinutes": null
-      }
+        "timeLimitMinutes": null,
+        "retryLockMinutes": 2,
+        "scoreFromMinutes": 0
+      },
+      "room": "garderobe"
     },
     {
       "id": "L4",
       "type": "route_info",
-      "label": "Lộ trình 4",
-      "clue": "(GIẢ) Lời dẫn của Lộ trình 4 (bản thử, không nêu tên điểm đến).",
+      "label": "Lộ trình 5",
+      "clue": "Đội chơi tìm đường tới trung tâm nghệ thuật đa ngành hàng đầu của Bỉ, nơi hòa quyện triển lãm lớn, hòa nhạc cổ điển, chiếu phim và biểu diễn đương đại.",
       "transport": {
         "allowed": "any"
       },
       "destination": {
-        "name": "Place du Grand Sablon",
-        "lat": 50.8405,
-        "lon": 4.3555,
-        "radius": 30
+        "name": "BOZAR – Cung điện Mỹ thuật Bruxelles",
+        "lat": 50.84361,
+        "lon": 4.36046,
+        "radius": 40
       }
     },
     {
       "id": "L5",
       "type": "route_info",
-      "label": "Lộ trình 5",
+      "label": "Lộ trình 6",
       "clue": "(GIẢ) Lời dẫn của Lộ trình 5 (bản thử, không nêu tên điểm đến).",
       "transport": {
         "allowed": "any"
@@ -224,7 +320,7 @@
     {
       "id": "L6",
       "type": "route_info",
-      "label": "Lộ trình 6",
+      "label": "Lộ trình 7",
       "clue": "Chặng dừng! (GIẢ) Trở về quảng trường có đài phun nước, đối diện tòa thị chính cũ có mặt tiền trắng. Người dẫn chương trình đang chờ bạn. Bắt buộc: đi bộ.",
       "transport": {
         "mandatory": "walk"

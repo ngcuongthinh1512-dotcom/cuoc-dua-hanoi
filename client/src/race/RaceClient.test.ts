@@ -143,3 +143,56 @@ describe('Phase 8 ops (D7, D8, D9)', () => {
     expect(ops).toEqual([]);
   });
 });
+
+// Leg 3 rooms (rooms/roomState.ts): the held view, the `race room` report gate, the Phạt re-send
+describe('Leg 3 rooms', () => {
+  const roomCard = (done: number, status: 'active' | 'pending' | 'locked' = 'active', lockedUntil: number | null = null): RaceView['card'] => ({
+    ...pit().card!, step: 'D1', type: 'detour', branch: 'A', branchOpened: true, status, lockedUntil, lockKind: status === 'locked' ? 'retry' : null,
+    branches: [{ id: 'A', name: 'a', summary: '', task: { title: '', description: '', media: [], kind: 'free', verification: 'host_approval', input: 'proof', proofInstruction: '', timeLimitMinutes: null, room: { kind: 'chocolate', total: 5, penaltyMinutesEach: 20, done, skipped: false } } }, { id: 'B', name: 'b', summary: '' }],
+  });
+
+  it('deps.view sees every view first; true holds it from the HUD until release() (the latest held view wins)', () => {
+    const seen: (string | undefined)[] = [];
+    let hold = false;
+    const hud = { setView: (v: RaceView | null) => seen.push(v?.card?.step) } as unknown as RaceHud;
+    const c = new RaceClient({ hud, send: () => {}, serverNow: () => 0, view: () => hold });
+    c.message({ t: 'race', view: view({ card: roomCard(1) }) });
+    expect(seen).toEqual(['D1']);
+    hold = true;
+    c.message({ t: 'race', view: pit() });
+    c.message({ t: 'race', view: view({ card: { ...pit().card!, step: 'L2' } }) });
+    expect(seen).toEqual(['D1']);
+    expect(c.view?.card?.step).toBe('L2'); // the client's own view moves on
+    c.release();
+    c.release(); // idempotent
+    expect(seen).toEqual(['D1', 'L2']);
+    hold = false;
+    c.message({ t: 'race', view: pit() });
+    expect(seen).toEqual(['D1', 'L2', 'PS']);
+  });
+
+  it('room(): done only grows per branch, a skip always goes out, force re-sends; a switch away and back starts over', () => {
+    const { c, sent } = client();
+    c.room('D1', 'A', 0, false);
+    c.room('D1', 'A', 2, false);
+    c.room('D1', 'A', 2, false); // the same again: nothing
+    c.room('D1', 'A', 1, false); // down: nothing (the server would refuse it)
+    c.room('D1', 'B', 1, false); // the other branch: its own count
+    c.room('D1', 'A', 0, false); // back on A: the server reset it → 0 is new
+    c.room('D1', 'A', 0, false, true); // forced
+    c.room('D1', 'A', 3, true); // a skip (final)
+    expect(sent.map((m) => (!Array.isArray(m) && m.t === 'race' && m.op === 'room' ? `${m.branch}:${m.done}${m.skipped ? 's' : ''}` : '?'))).toEqual(['A:0', 'A:2', 'B:1', 'A:0', 'A:0', 'A:3s']);
+  });
+
+  it('a Phạt countdown on a finished room (n/n) ends: the n/n report goes out again (the server queues it for the Host once more)', () => {
+    let now = 100_000;
+    const sent: ClientMessage[] = [];
+    const cl = new RaceClient({ hud: undefined, send: (m) => sent.push(m), serverNow: () => now, pose: () => {} });
+    cl.message({ t: 'race', view: view({ card: roomCard(5, 'locked', 110_000) }) });
+    for (; now < 110_000 + raceClient.lockEndSlackMs + 2000; now += 500) cl.frame([], 0, 0, false, now);
+    expect(sent).toEqual([{ t: 'race', op: 'room', step: 'D1', branch: 'A', done: 5, skipped: false }]);
+    cl.message({ t: 'race', view: view({ card: roomCard(3, 'locked', now + 5000) }) }); // 3/5 locked (the Host penalized an earlier n/n after an undo…): nothing to re-send
+    for (const end = now + 8000; now < end; now += 500) cl.frame([], 0, 0, false, now);
+    expect(sent.length).toBe(1);
+  });
+});

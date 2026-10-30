@@ -4,7 +4,7 @@
 // the previous point) is injected by the CLI through `LegGeo`; the Durable Object never has those files.
 import { RACE_BBOX } from '../constants.ts';
 import { latLonToWorld } from '../projection.ts';
-import { normalizeAnswer } from '../protocol/answers.ts';
+import { compactAnswer, normalizeAnswer } from '../protocol/answers.ts';
 import { MEDIA } from '../protocol/constants.ts';
 import { FINISH_HOLDERS } from '../protocol/finish.ts';
 import { LEG_LIMITS, type Leg, legSchema, type MediaItem, STEP_TYPES, type Task } from './schema.ts';
@@ -37,11 +37,11 @@ const FIELD: Record<string, string> = {
   transport: 'phương tiện', destination: 'điểm đến', name: 'tên', lat: 'vĩ độ (lat)', lon: 'kinh độ (lon)', radius: 'bán kính',
   bikeParking: 'bãi xe', branches: 'nhánh', task: 'nhiệm vụ', description: 'mô tả', media: 'hình / liên kết', location: 'nơi làm nhiệm vụ',
   kind: 'kiểu nhiệm vụ', verification: 'cách xác nhận', answers: 'đáp án', proofInstruction: 'hướng dẫn gửi bài',
-  timeLimitMinutes: 'giới hạn thời gian (phút)', params: 'tham số mini-game', teaser: 'câu gợi ý', summary: 'mô tả ngắn', yawDeg: 'hướng nhìn (độ)',
+  timeLimitMinutes: 'giới hạn thời gian (phút)', params: 'tham số mini-game', teaser: 'câu gợi ý', summary: 'mô tả ngắn', afterChoice: 'lời sau khi chọn', yawDeg: 'hướng nhìn (độ)',
   spreadMeters: 'khoảng rải đội (m)',
   // Phase 8 (docs/plans/phase8.md D2)
   referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
-  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
+  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', room: 'phòng (room)', total: 'tổng số món', penaltyMinutesEach: 'phút phạt mỗi món chưa xong', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
   walkOnlyViolationMinutes: 'phút phạt đi xe ở lộ trình đi bộ', quitTaskMinutes: 'phút phạt bỏ thử thách',
   // SPEC §17.22 / §17.23
   announce: 'thông báo về đích', npc: 'lời NPC dẫn chương trình', toast: 'thông báo nhanh', card: 'thẻ về đích', first: 'bản về nhất', out: 'bản bị loại',
@@ -186,6 +186,12 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
     else labels.set(s.label, i);
     if (s.type === 'route_info') blank(s.clue, ['steps', i, 'clue'], 'mật thư');
     if (s.type === 'detour') blank(s.clue, ['steps', i, 'clue'], 'lời dẫn Lựa chọn kép');
+    // Leg 3: a challenge in the GardeRobe room: the room is built under the box of the step before (its destination), so
+    // the task has no place of its own and a step with a destination must precede it
+    if (s.type === 'challenge' && s.room) {
+      if (s.task.location) add('error', ['steps', i, 'task', 'location'], 'thử thách trong phòng (room) không có nơi riêng: phòng dựng dưới hòm của bước trước; bỏ "location"');
+      if (i === 0 || steps[i - 1]!.type === 'challenge') add('error', ['steps', i, 'room'], 'thử thách trong phòng (room) phải đứng ngay sau một bước có hòm (lộ trình / Lựa chọn kép)');
+    }
     const tasks = s.type === 'detour' ? s.branches.map((b, k) => [b.task, ['steps', i, 'branches', k, 'task']] as const) : s.type === 'challenge' ? [[s.task, ['steps', i, 'task']] as const] : [];
     if (s.type === 'detour') s.branches.forEach((b, k) => (blank(b.name, ['steps', i, 'branches', k, 'name'], 'tên nhánh'), blank(b.summary, ['steps', i, 'branches', k, 'summary'], 'mô tả ngắn của nhánh')));
     for (const [t, p] of tasks) {
@@ -195,7 +201,17 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
         // SPEC §17.44: a multi-box task is reviewed by the Host (no answers in the leg: nothing to grade with)
         if (t.verification !== 'host_approval') add('error', [...p, 'verification'], 'thử thách nhiều ô (parts) do Host duyệt: phải dùng cách xác nhận "host_approval" (máy chủ không có đáp án để tự chấm)');
         if (t.kind !== 'answer') add('error', [...p, 'kind'], `thử thách nhiều ô (parts) chỉ dùng với kiểu "answer" (đang là "${t.kind}")`);
+        // Leg 3: per-box answers = auto-graded (all boxes or none: a half-graded task has no meaning)
+        const graded = t.parts.filter((x) => x.answers).length;
+        if (graded && graded < t.parts.length) add('error', [...p, 'parts'], `chỉ ${graded}/${t.parts.length} ô có đáp án (answers): máy chủ tự chấm khi MỌI ô có đáp án; thêm đáp án cho các ô còn lại hoặc bỏ hết`);
+        t.parts.forEach((x, k) => x.answers?.forEach((a, j) => !held(a) && compactAnswer(a) === '' && add('error', [...p, 'parts', k, 'answers', j], 'đáp án rỗng sau khi bỏ dấu / khoảng trắng')));
         if (t.scoreOf !== undefined && t.scoreOf !== t.parts.length) add('warning', [...p, 'scoreOf'], `scoreOf (${t.scoreOf}) khác số ô (${t.parts.length}): bỏ scoreOf đi, "đúng x/n" lấy n = số ô`);
+      }
+      if (t.room) {
+        // Leg 3: a room's completion goes to the Host's queue (the client is never trusted to finish a step by itself)
+        if (s.type !== 'detour') add('error', [...p, 'room'], 'phòng (room) chỉ dùng cho nhánh của Lựa chọn kép (detour)');
+        if (t.verification !== 'host_approval') add('error', [...p, 'verification'], 'nhánh có phòng (room) do Host duyệt khi đội báo xong: phải dùng cách xác nhận "host_approval"');
+        if (t.parts) add('error', [...p, 'room'], 'không dùng phòng (room) cùng thử thách nhiều ô (parts)');
       }
       if (t.verification === 'auto' && t.kind !== 'free') blank(t.answers, [...p, 'answers'], 'đáp án (cách xác nhận "auto")');
       if (t.verification === 'auto' && t.kind === 'free') add('warning', [...p, 'kind'], 'nhiệm vụ "free" không tự chấm được: nên dùng cách xác nhận "host_approval"');
@@ -252,7 +268,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
     if (s.type === 'challenge') (out.push([s.teaser, ['steps', i, 'teaser']]), task(s.task, ['steps', i, 'task']));
     if (s.type === 'detour')
       s.branches.forEach((b, k) => {
-        out.push([b.name, ['steps', i, 'branches', k, 'name']], [b.summary, ['steps', i, 'branches', k, 'summary']]);
+        out.push([b.name, ['steps', i, 'branches', k, 'name']], [b.summary, ['steps', i, 'branches', k, 'summary']], [b.afterChoice, ['steps', i, 'branches', k, 'afterChoice']]); // afterChoice: read right after choosing, before any box
         task(b.task, ['steps', i, 'branches', k, 'task']);
       });
     return out;
@@ -262,7 +278,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
     if (!tasks.length) return;
     const texts = [...new Map(steps.slice(0, i + 1).flatMap((_, j) => textsOf(j)).map((x) => [x[1].join('/'), x] as const)).values()]; // the shared button label once
     for (const [t, branch] of tasks)
-      for (const [list, what] of [[t.answers, 'đáp án'], [t.referenceAnswers, 'đáp án tham khảo']] as [readonly string[], string][])
+      for (const [list, what] of [[t.answers, 'đáp án'], [t.referenceAnswers, 'đáp án tham khảo'], [(t.parts ?? []).flatMap((x) => x.answers ?? []), 'đáp án ô']] as [readonly string[], string][])
         for (const a of list.filter((x) => !held(x)).map(normalizeAnswer).filter((a) => a.length >= 3))
           for (const [x, p] of texts) if (normalizeAnswer(x).includes(a)) add('warning', p, `chứa ${what} "${a}" của bước ${i + 1} (${s.id}${branch ? `, nhánh ${branch}` : ''}): đội đọc được trước khi giải`);
   });

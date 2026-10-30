@@ -312,3 +312,114 @@ describe('Phase 8 after an eviction (D25)', () => {
     for (const s of [a2!, b2!, h2, host]) s.close();
   }, 90_000);
 });
+
+describe('Leg 3 rooms (workerd)', () => {
+  it('race room: progress in teams.state before the team hears, kept across an eviction (welcome.view carries it); skip → L3 + finish-line penalty', async () => {
+    const race = 'l3-room';
+    const steps = nearLeg().steps as any[];
+    steps[3].branches[1].task.room = { kind: 'comic', total: 9, penaltyMinutesEach: 12 }; // B = the photo task (host_approval)
+    const { host, teams, socks: [a] } = await newRace(race, 1, { steps });
+    const id = teams[0]!.id;
+    let p = await toD1(a!, host, id, await toT1(a!));
+    a!.send({ t: 'race', op: 'branch', step: 'D1', branch: 'B' });
+    await notice(a!, 'branchChosen');
+    p = await walkTo(a!, p, P[5]!);
+    a!.send({ t: 'race', op: 'room', step: 'D1', branch: 'B', done: 1, skipped: false }); // box not opened yet
+    await notice(a!, 'roomIgnored');
+    a!.send({ t: 'race', op: 'open', step: 'D1', branch: 'B' });
+    await card(a!, (c) => !!c.branchOpened);
+    a!.send({ t: 'race', op: 'room', step: 'D1', branch: 'B', done: 4, skipped: false });
+    const c = await card(a!, (x) => x.branches?.[1]?.task?.room?.done === 4);
+    expect(c.branches![1]!.task!.room).toEqual({ kind: 'comic', total: 9, penaltyMinutesEach: 12, done: 4, skipped: false });
+    const stateOf = async () => JSON.parse((((await (await sqlOf(race)).exec('SELECT state FROM teams WHERE id = ?', id)) as Record<string, unknown>[])[0]!.state as string));
+    expect((await stateOf()).rooms).toEqual({ D1: { b: 'B', done: 4, skipped: false } });
+    await server.getWorker().evictDurableObject('RaceRoom', { name: race, webSockets: 'close' });
+    const a2 = await joinTeam(server, race, teams[0]!.code);
+    expect(W(a2).view!.card!.branches![1]!.task!.room).toMatchObject({ done: 4, skipped: false });
+    a2.send({ t: 'race', op: 'room', step: 'D1', branch: 'B', done: 4, skipped: true });
+    await step(a2, 'L3');
+    expect((await stateOf()).finishPenalty).toEqual({ minutes: 60, reason: 'bỏ thử thách ở lựa chọn kép', by: 'room' });
+    for (const s of [a2, host]) s.close();
+  }, 90_000);
+});
+
+// Leg 3 (protocol v11): after "Đổi lựa chọn kép" the card names the room the team is still standing in (leftRoom) until it walks
+// out through the exit ring; a team's view never carries another team's room progress (cardOf is per team: welcome.teams has no
+// progress at all).
+describe('Leg 3 leftRoom (workerd)', () => {
+  it('switchLocked card → leftRoom = the opened branch\'s room kind; the other team sees no progress', async () => {
+    const race = 'l3-leftroom';
+    const steps = nearLeg().steps as any[];
+    steps[3].branches[1].task.room = { kind: 'comic', total: 9, penaltyMinutesEach: 12 };
+    const { host, teams, socks: [a, b] } = await newRace(race, 2, { steps });
+    const id = teams[0]!.id;
+    let p = await toD1(a!, host, id, await toT1(a!));
+    a!.send({ t: 'race', op: 'branch', step: 'D1', branch: 'B' });
+    await notice(a!, 'branchChosen');
+    p = await walkTo(a!, p, P[5]!);
+    a!.send({ t: 'race', op: 'open', step: 'D1', branch: 'B' });
+    await card(a!, (c) => !!c.branchOpened);
+    a!.send({ t: 'race', op: 'room', step: 'D1', branch: 'B', done: 3, skipped: false });
+    await card(a!, (c) => c.branches?.[1]?.task?.room?.done === 3);
+    const b2 = await joinTeam(server, race, teams[1]!.code);
+    expect(JSON.stringify(W(b2).teams)).not.toMatch(/done|skipped|total/);
+    expect(JSON.stringify(W(b2).view)).not.toMatch(/"room"/);
+    a!.send({ t: 'race', op: 'branch', step: 'D1', branch: 'A' });
+    const sw = await card(a!, (c) => c.status === 'switchLocked');
+    expect(sw.leftRoom).toBe('comic');
+    expect(sw.branchOpened).toBe(false);
+    for (const s of [a!, b!, b2, host]) s.close();
+  }, 60_000);
+});
+
+// Leg 3 (protocol v12): a challenge step with `room: 'garderobe'` → its card carries `room` over the wire (teaser, active, locked),
+// gone once the step is done; the welcome view after a reconnect carries it too (the client re-enters the museum room).
+describe('Leg 3 ClueCard.room (workerd)', () => {
+  it('T1 with room → card.room = garderobe through welcome / race views; absent on the next card', async () => {
+    const race = 'l3-garderobe';
+    const steps = nearLeg().steps as any[];
+    steps[1].room = 'garderobe';
+    steps[1].task.location = null; // the room stands under L1's box: no place of its own (check.ts)
+    const { host, teams, socks: [a] } = await newRace(race, 1, { steps });
+    await walkTo(a!, W(a!).start!, P[1]!);
+    a!.send({ t: 'race', op: 'open', step: 'L1' });
+    expect((await step(a!, 'T1')).room).toBe('garderobe');
+    a!.send({ t: 'race', op: 'accept', step: 'T1' });
+    expect((await card(a!, (c) => c.status === 'active')).room).toBe('garderobe');
+    const a2 = await joinTeam(server, race, teams[0]!.code); // a reload inside: the welcome view enters again
+    expect(W(a2).view?.card).toMatchObject({ step: 'T1', room: 'garderobe' });
+    answer(a2, 'T1', '42');
+    await card(a2, (c) => c.status === 'pending');
+    review(host, teams[0]!.id, 'T1', 'approve');
+    const next = await step(a2, 'L2');
+    expect(next.room).toBeUndefined();
+    for (const s of [a!, a2, host]) s.close();
+  }, 60_000);
+});
+
+describe('Leg 3 auto-graded parts (workerd)', () => {
+  it('2/4 → locked + "đúng 2/4" in SQLite before the team hears; kept across an eviction (welcome + the Host queue); ack clears it', async () => {
+    const race = 'l3-auto';
+    const steps = nearLeg().steps as any[];
+    Object.assign(steps[1].task, { answers: [], parts: [['Cuba', 'Cu-ba'], ['Singapore'], ['Uzbekistan'], ['Estonia']].map((answers, k) => ({ label: `Bộ ${k + 1}`, answers })), retryLockMinutes: 2 });
+    const { host, hostToken, teams, socks: [a] } = await newRace(race, 1, { steps });
+    const id = teams[0]!.id;
+    await toT1(a!);
+    a!.send({ t: 'race', op: 'answer', step: 'T1', text: '', parts: ['cu ba', 'Singapore', 'x', 'y'] });
+    expect(await notice(a!, 'autoPenalized')).toMatchObject({ score: 2, of: 4 });
+    const locked = await card(a!, (c) => c.status === 'locked');
+    expect(locked.answers).toEqual([expect.objectContaining({ status: 'penalized', score: 2, of: 4 })]);
+    const row = await rowOf(race, id, 'T1');
+    expect(row).toMatchObject({ locked_until: locked.lockedUntil, rejections: 1, decided_by: 'auto' });
+    expect(JSON.parse(row.answers as string)[0]).toMatchObject({ auto: true, m: [true, true, false, false], sc: 2 });
+    await server.getWorker().evictDurableObject('RaceRoom', { name: race, webSockets: 'close' });
+    const h2 = await openSocket(server, race, hostToken);
+    const st = (await h2.until((m) => m.t === 'host.state')) as unknown as HostState;
+    expect(st.queue).toEqual([expect.objectContaining({ team: id, step: 'T1', id: 1, auto: { verdict: 'penalized', marks: [true, true, false, false], score: 2, of: 4, canApprove: true } })]);
+    const a2 = await joinTeam(server, race, teams[0]!.code);
+    expect(W(a2).view!.card).toMatchObject({ step: 'T1', status: 'locked', lockedUntil: locked.lockedUntil, answers: [{ score: 2, of: 4 }] });
+    review(h2, id, 'T1', 'ack' as any, 1);
+    await h2.until((m) => m.t === 'host.state' && m.queue.length === 0);
+    for (const s of [a2, h2, host]) s.close();
+  }, 90_000);
+});

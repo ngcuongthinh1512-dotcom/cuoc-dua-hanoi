@@ -315,7 +315,7 @@ if (existsSync(join(dataDir, 'index.json'))) {
     }
   }
   for (const d of LANDMARKS) {
-    const [az, dist] = d.view;
+    const [az, dist, eye] = d.view;
     const [dx, dz] = [Math.sin((az * Math.PI) / 180), -Math.cos((az * Math.PI) / 180)];
     const t = targets.get(d.id);
     if (d.at) {
@@ -324,8 +324,9 @@ if (existsSync(join(dataDir, 'index.json'))) {
       PRESETS[`lm-${d.id}`] = worldCam(x, ground(x, z) + 60, z, p.x, ground(x, z) + 60 + (d.height ?? 50) / 2, p.z);
     } else if (t) {
       const [tx, tz] = [t.x / t.w, t.z / t.w];
-      const ty = ground(tx, tz) + Math.min(t.top, 120) * 0.4;
-      PRESETS[`lm-${d.id}`] = worldCam(tx + dx * dist, ty + Math.max(45, dist * 0.8), tz + dz * dist, tx, ty, tz);
+      const ty = ground(tx, tz) + Math.min(t.top, 120) * (eye === undefined ? 0.4 : 0.3);
+      const [x, z] = [tx + dx * dist, tz + dz * dist];
+      PRESETS[`lm-${d.id}`] = worldCam(x, eye === undefined ? ty + Math.max(45, dist * 0.8) : ground(x, z) + eye, z, tx, ty, tz); // eye: street level
     }
   }
   // Street level at the demo leg destinations (eye 1.7 m), facing the landmark of that step (L3 / T / PS: no registered landmark, no preset).
@@ -366,9 +367,14 @@ Object.assign(PRESETS, {
       'p8-card-media': 'card=media&full', // R2 image (stand-in data: URI) + https links
       'p8-book-media': 'book=media', // Sổ mật thư: images / links, submission code, no answer history
       'p8-card-answer-small': 'card=answer&full', // 1024 × 640
+      // Leg 3: the wide "mở ngang" detour card on a small (1024 × 640) and a full-HD window
+      'p8-card-detour-choose-small': 'card=detour-choose&full',
+      'p8-card-detour-chosen-small': 'card=detour-chosen&full',
+      'p8-card-detour-locked-1080': 'card=detour-locked&lock=540&full',
     }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
   ),
 });
+Object.assign(VIEWPORT, { 'p8-card-detour-choose-small': { width: 1024, height: 640 }, 'p8-card-detour-chosen-small': { width: 1024, height: 640 }, 'p8-card-detour-locked-1080': { width: 1920, height: 1080 } });
 Object.assign(VIEWPORT, { 'p8-card-answer-small': { width: 1024, height: 640 } });
 // Phase 8C (docs/plans/phase8c-graphics.md §6–7): p8c-* presets (`npm run screenshot -- p8c`; not in the default run). The
 // foundation fixed the NAMES with stand-in views; each track only changes the values on its own lines. ?quality=low|high
@@ -422,6 +428,69 @@ Object.assign(VIEWPORT, { 'p10-review': { width: 1280, height: 1600 }, 'p10-revi
 Object.assign(PRESETS, {
   'p9-watch': `/?spectate=1&npc=0&wait=2&peers=${PEERS}`,
 });
+// Leg 3 finish-line penalty (host.finishPenalty): the normal "Về đích thứ 2" card + "Bị phạt 40 phút do bỏ thử thách ở lựa chọn kép."
+Object.assign(PRESETS, { 'p8-card-finish-penalty': '/?player&npc=0&wait=1&card=pit&finish=2&finishPenalty=40' });
+// Leg 3 rooms in the REAL client (main.ts `?roomDemo=`, rooms/roomDemo.ts; `npm run screenshot -- p11`; not in the default
+// run): the body in front of the demo leg's branch box (Choco-Story / La Boutique Tintin), then inside the room with stand-in
+// views; `wait=0`: the world clock stops inside a room (the room's own frames gate __READY__).
+const ROOM_BOX = (lat: number, lon: number, kind: string, slot: number) => {
+  const p = latLonToWorld(lat, lon);
+  return `/?player=${p.x.toFixed(1)},${(p.z + 2.2).toFixed(1)},0&boxes=D1|${kind === 'chocolate' ? 'A' : 'B'},${p.x.toFixed(1)},${p.z.toFixed(1)},opened,180&npc=0&wait=0&roomDemo=${kind}&team=${slot}`;
+};
+const CHOCO_ROOM = ROOM_BOX(50.84546, 4.35054, 'chocolate', 3), COMIC_ROOM = ROOM_BOX(50.84667, 4.353609, 'comic', 7);
+Object.assign(PRESETS, {
+  'p11-room-choco': CHOCO_ROOM, // at the own table (3), 2/5 on the placard, the card inside the room on Enter
+  'p11-room-choco-pending': `${CHOCO_ROOM}&roomState=pending`, // 5/5, waiting for the Host
+  'p11-room-choco-exit': `${CHOCO_ROOM}&roomState=done`, // the Host approved: the exit ring at the far end, the next card held
+  'p11-room-comic': COMIC_ROOM,
+  'p11-room-comic-exit': `${COMIC_ROOM}&roomState=skipped`, // "Bỏ qua": the ring at once
+  'p11-room-switch-wait': `${COMIC_ROOM}&roomState=switch`, // "Đổi lựa chọn kép" inside: the ring lights, the own desk locks (grey prompt), the countdown runs on the card
+  'p11-room-switch-left': `${COMIC_ROOM}&roomState=switch-left`, // …walked into the ring: back in front of the old box, the countdown goes on
+  'p11-room-left': `${CHOCO_ROOM}&roomState=left`, // walked into the ring: back at the box, the next card pops
+});
+// Leg 3: the GardeRobe MannekenPis room of challenge T1 (garderobe/garderobeRoom.ts) under the L3B box on the pavement in front
+// of the museum (the demo leg's point, yaw −20): the four vitrines from the door with the exit ring beside it, vitrine 2's
+// close-up (F), T1 just completed (the next card held: toast), walked out through the ring (the world, the next card).
+const GARDEROBE_ROOM = (() => { const p = latLonToWorld(50.8442, 4.35104); return `/?player=${p.x.toFixed(1)},${(p.z + 2.2).toFixed(1)},0&boxes=L3B,${p.x.toFixed(1)},${p.z.toFixed(1)},opened,-20&npc=0&wait=0&roomDemo=garderobe&team=3`; })();
+Object.assign(PRESETS, {
+  'p11-room-garderobe': GARDEROBE_ROOM,
+  'p11-room-garderobe-close': `${GARDEROBE_ROOM}&close=2`,
+  'p11-room-garderobe-exit': `${GARDEROBE_ROOM}&roomState=done`,
+  'p11-room-garderobe-left': `${GARDEROBE_ROOM}&roomState=left`,
+});
+// Leg 3 dev room "Xưởng sô-cô-la" (client/choco.html, src/choco/choco.ts; `npm run screenshot -- choco`; not in the default run):
+// the workshop down the aisle, team 3's table from behind, the plan, the challenge overlay, the "Bỏ qua" confirm (3/5 done).
+Object.assign(PRESETS, {
+  'choco-overview': '/choco.html?view=overview',
+  'choco-table': '/choco.html?team=3&view=table',
+  'choco-plan': '/choco.html?view=plan',
+  'choco-game': '/choco.html?team=3&open=1',
+  'choco-skip': '/choco.html?team=3&skip=1&done=3',
+  'choco-walk': '/choco.html?team=3', // the avatar at its table from behind, "Bấm F để bắt đầu" (rooms/roomPlayer.ts); minimal graphics
+  'choco-walk-hq': '/choco.html?team=3&hq=1', // the full look: shadows, bloom, steam, every lamp
+});
+// Leg 3 dev room "Phòng tranh truyện tranh" (client/gallery.html, src/gallery/gallery.ts; `npm run screenshot -- gallery`; not in the
+// default run): the hall from the entrance, team 1's desk, the plan, the Ligne Claire overlay (drawing 1 open, 2–10 locked), the
+// "Bỏ qua" confirm with 6/9 done (?done= seeds the team's localStorage progress, dev only).
+Object.assign(PRESETS, {
+  'gallery-overview': '/gallery.html?view=overview',
+  'gallery-desk': '/gallery.html?team=1&view=desk',
+  'gallery-plan': '/gallery.html?view=plan',
+  'gallery-game': '/gallery.html?team=1&open=1',
+  'gallery-skip': '/gallery.html?team=1&open=1&skip=1&done=6',
+  'gallery-walk': '/gallery.html?team=7', // the avatar at its desk from behind, "Bấm F để bắt đầu" (rooms/roomPlayer.ts); minimal graphics
+  'gallery-walk-hq': '/gallery.html?team=7&hq=1', // the full look: shadows, bloom, every light
+});
+// Leg 3 dev room "Phòng trưng bày GardeRobe MannekenPis" (client/garderobe.html, src/garderobe/garderobe.ts; `npm run screenshot -- garderobe`;
+// not in the default run): the room from the door, the four photo vitrines up close (whole photo on screen), the plan.
+Object.assign(PRESETS, {
+  'garderobe-overview': '/garderobe.html?view=overview',
+  'garderobe-close1': '/garderobe.html?n=1',
+  'garderobe-close2': '/garderobe.html?n=2',
+  'garderobe-close3': '/garderobe.html?n=3',
+  'garderobe-close4': '/garderobe.html?n=4',
+  'garderobe-plan': '/garderobe.html?view=plan',
+});
 const BENCH_MS = 15_000;
 /** In the page: frame intervals over `ms` of requestAnimationFrame → { avg, p5 } FPS (p5 = the slowest 5 % of frames). A
  *  string, not a function: tsx's keepNames would put an undefined `__name` helper into the page. */
@@ -455,7 +524,7 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c|p9|p10)-/.test(k))); // landmark / player / online / Phase 8 / 8C / 9 / 10 views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c|p9|p10|p11|choco|gallery|garderobe)-/.test(k))); // landmark / player / online / Phase 8 / 8C / 9 / 10 / 11 (rooms) / choco / gallery / garderobe room views by name
 
 const outDir = join(root, 'screenshots', opt.out ?? '');
 const errors: string[] = [];

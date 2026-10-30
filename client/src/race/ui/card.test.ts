@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { NET, submitCode, type AnswerStatus, type AnswerView, type BranchView, type ClueCard, type RaceView, type TaskView } from '@race/shared/protocol';
 import { raceClient as C } from '../../config.ts';
-import { answerLines, branchConfirmText, cardPanel, formatTimeOfDay, hudKey, liveStatus, lockLine, mediaViews, pendingLine, statusLine, summarize, timerLine } from './format.ts';
+import { answerLines, branchConfirmText, splitNote, cardPanel, formatTimeOfDay, hudKey, liveStatus, lockLine, mediaViews, pendingLine, statusLine, summarize, timerLine } from './format.ts';
 
 const textTask: TaskView = { title: 'Phép tính', description: 'Tính đi', media: [], kind: 'answer', verification: 'host_approval', input: 'text', proofInstruction: '', timeLimitMinutes: null };
 const proofTask: TaskView = { ...textTask, title: 'Ảnh', description: 'Chụp ảnh', kind: 'free', input: 'proof', proofInstruction: 'Gửi ảnh' };
@@ -116,15 +116,26 @@ describe('answer history', () => {
   });
 });
 
+describe('Leg 3: an auto-graded multi-box answer on the card', () => {
+  it('"Bị phạt 2 phút · đúng 2/4" / "Đúng · đúng 4/4" (the number only, never which boxes)', () => {
+    const c = challenge({ retryPenaltyMinutes: 2, answers: [{ ...ans(1, 'penalized', 1000, 'a | b | c | d'), score: 2, of: 4 }, { ...ans(2, 'correct', 2000, 'a | b | c | d'), score: 4, of: 4 }] });
+    expect(answerLines(c).map((l) => l.label)).toEqual(['Đúng · đúng 4/4', 'Bị phạt 2 phút · đúng 2/4']);
+  });
+});
+
 describe('Đổi lựa chọn kép confirm', () => {
   it('names the penalty minutes, what is lost and where the box shows', () => {
     const c = detour({ status: 'goToBranch', branch: 'A' });
     const t = branchConfirmText(c, 'B');
     expect(t).toContain('10 phút');
     expect(t).toContain('Đổi sang nhánh Nước?');
-    expect(t).toContain('mất tiến độ nhánh Lửa');
-    expect(t).toContain('hòm nhánh Nước chỉ hiện khi hết đếm ngược');
+    expect(t).toContain('Mỗi lần đổi bị phạt 10 phút (đồng hồ đếm ngược), tiến độ nhánh hiện tại sẽ mất.');
+    expect(t).toContain('Hòm nhánh Nước chỉ hiện khi hết đếm ngược');
     expect(branchConfirmText({ ...c, switchPenaltyMinutes: 0.2 }, 'B')).toContain('0,2 phút');
+  });
+  it('a clue\'s closing "Lưu ý:" line is split off as its own note', () => {
+    expect(splitNote('Lời dẫn.\nLưu ý: Mỗi lần đổi Lựa chọn kép, đội chơi sẽ bị phạt 10 phút.')).toEqual({ text: 'Lời dẫn.', note: 'Lưu ý: Mỗi lần đổi Lựa chọn kép, đội chơi sẽ bị phạt 10 phút.' });
+    expect(splitNote('Không có ghi chú.')).toEqual({ text: 'Không có ghi chú.', note: null });
   });
 });
 

@@ -129,6 +129,59 @@ describe('leg schema', () => {
     expect(parseLeg(j).ok).toBe(false);
   });
 
+  it('Leg 3: parts[].answers = auto-graded: every box or none, leaks of a box answer found', () => {
+    const parts = [{ label: 'Bộ 1', answers: ['Cuba', 'Cu-ba'] }, { label: 'Bộ 2', answers: ['Singapore'] }];
+    const j = mini() as Mini;
+    Object.assign(j.steps[1]!, { task: { title: 't', description: 'Nhìn bộ quần áo', verification: 'host_approval', parts } });
+    const r = parseLeg(j);
+    expect(r.ok && r.leg.steps[1]!.type === 'challenge' && r.leg.steps[1].task.parts![0]!.answers).toEqual(['Cuba', 'Cu-ba']);
+    expect(errors(j)).toEqual([]);
+    Object.assign(j.steps[1]!, { task: { title: 't', description: 'd', verification: 'host_approval', parts: [parts[0], { label: 'Bộ 2' }] } });
+    expect(errors(j)).toEqual(['Bước 2 (T1) › nhiệm vụ › các ô (thử thách nhiều ô): chỉ 1/2 ô có đáp án (answers): máy chủ tự chấm khi MỌI ô có đáp án; thêm đáp án cho các ô còn lại hoặc bỏ hết']);
+    Object.assign(j.steps[1]!, { task: { title: 't', description: 'd', verification: 'host_approval', parts: [{ label: 'a', answers: ['- -'] }, parts[1]] } });
+    expect(errors(j)).toEqual(['Bước 2 (T1) › nhiệm vụ › các ô (thử thách nhiều ô) › mục 1 › đáp án › mục 1: đáp án rỗng sau khi bỏ dấu / khoảng trắng']);
+    Object.assign(j.steps[1]!, { task: { title: 't', description: 'd', verification: 'host_approval', parts: [{ label: 'a', answers: [] }, parts[1]] } });
+    expect(parseLeg(j).ok).toBe(false); // an empty list: zod
+    // the leak scan: a box answer in a text the team reads first (its own task, an earlier clue)
+    Object.assign(j.steps[1]!, { task: { title: 't', description: 'Bộ thứ nhất đến từ CUBA', media: [{ url: 'https://example.org/x', label: 'Ảnh singapore' }], verification: 'host_approval', parts } });
+    const leaks = parseLeg(j).issues.filter((i) => i.level === 'warning' && i.message.includes('đáp án ô')).map((i) => i.where);
+    expect(leaks).toEqual(['Bước 2 (T1) › nhiệm vụ › mô tả', 'Bước 2 (T1) › nhiệm vụ › hình / liên kết › mục 1 › nhãn liên kết']);
+  });
+
+  it('Leg 3: task.room {kind, total 1–20, penaltyMinutesEach 0–120} only on a host_approval detour branch', () => {
+    const room = { kind: 'chocolate', total: 5, penaltyMinutesEach: 20 };
+    const j = mini() as Mini;
+    Object.assign(j.steps[2]!.branches![1]!.task, { room });
+    const r = parseLeg(j);
+    expect(r.ok && r.leg.steps[2]!.type === 'detour' && r.leg.steps[2].branches[1].task.room).toEqual(room);
+    expect(errors(j)).toEqual([]);
+    const A = mini() as Mini;
+    Object.assign(A.steps[2]!.branches![0]!.task, { room }); // A is auto
+    expect(errors(A)).toEqual(['Bước 3 (D1) › nhánh A › nhiệm vụ › cách xác nhận: nhánh có phòng (room) do Host duyệt khi đội báo xong: phải dùng cách xác nhận "host_approval"']);
+    const T = mini() as Mini;
+    Object.assign(T.steps[1]!, { task: { title: 't', description: 'd', verification: 'host_approval', room } });
+    expect(errors(T)).toEqual(['Bước 2 (T1) › nhiệm vụ › phòng (room): phòng (room) chỉ dùng cho nhánh của Lựa chọn kép (detour)']);
+    for (const bad of [{ ...room, total: 0 }, { ...room, total: 21 }, { ...room, total: 2.5 }, { ...room, penaltyMinutesEach: 121 }, { ...room, kind: 'pizza' }, { ...room, answers: ['x'] }]) {
+      const k = mini() as Mini;
+      Object.assign(k.steps[2]!.branches![1]!.task, { room: bad });
+      expect(parseLeg(k).ok, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it('Leg 3: a challenge step `room: "garderobe"` (the museum room): no task.location, right after a step with a box', () => {
+    const j = mini() as Mini;
+    Object.assign(j.steps[1]!, { room: 'garderobe' });
+    const r = parseLeg(j);
+    expect(r.ok && r.leg.steps[1]!.type === 'challenge' && r.leg.steps[1].room).toBe('garderobe');
+    expect(errors(j)).toEqual([]);
+    const k = mini() as Mini;
+    Object.assign(k.steps[1]!, { room: 'garderobe', task: { ...k.steps[1]!.task, location: { name: 'x', lat: 50.8442, lon: 4.35104, radius: 20 } } });
+    expect(errors(k)).toEqual(['Bước 2 (T1) › nhiệm vụ › nơi làm nhiệm vụ: thử thách trong phòng (room) không có nơi riêng: phòng dựng dưới hòm của bước trước; bỏ "location"']);
+    const bad = mini() as Mini;
+    Object.assign(bad.steps[1]!, { room: 'pizza' });
+    expect(parseLeg(bad).ok).toBe(false);
+  });
+
   it('lists blanks the Host must still fill (a draft loads) and answers leaking into texts', () => {
     const j = mini() as Mini;
     Object.assign(j.steps[1]!, { task: { title: '', description: '', answers: [] } });
@@ -282,6 +335,9 @@ describe('Phase 8 leg fields and rules (docs/plans/phase8.md D2)', () => {
     const d = j();
     d.steps[2].branches[1].summary = 'Không phải xanh lá'; // both summaries are on the card
     expect(lines(d)).toEqual(['warning Bước 3 (D1) › nhánh B › mô tả ngắn: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải']);
+    const a = j();
+    a.steps[2].branches[1].afterChoice = 'Đáp án bên kia là xanh lá'; // Leg 3: read after choosing B, before any box: a team may switch to A
+    expect(lines(a)).toEqual(['warning Bước 3 (D1) › nhánh B › lời sau khi chọn: chứa đáp án "xanh la" của bước 3 (D1, nhánh A): đội đọc được trước khi giải']);
   });
 
   it('a detour answer in the OTHER branch\'s task text leaks too (a team may open that box, read it, switch branch and answer)', () => {

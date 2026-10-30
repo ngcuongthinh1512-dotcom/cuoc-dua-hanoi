@@ -397,6 +397,189 @@ describe('RaceEngine', () => {
     expect(solo.f.teams.get('t0')).toMatchObject({ rank: 1, out: false });
   });
 
+  it('Leg 3 finish-line penalty (host.finishPenalty): set before / after the finish, the card stays "Về đích thứ n" + the penalty, live; ranking adds it; clear', () => {
+    const MIN = 60_000;
+    const { f, e, to } = racing({ t0: 4, t1: 4, t2: 1 });
+    const host: ServerMessage[] = [];
+    const fp = (team: string, minutes: number, now: number, reason?: string) => e.onHost({ t: 'host.finishPenalty', team, minutes, ...(reason !== undefined ? { reason } : {}) }, (m) => host.push(m), now);
+    const result = (team: string) => (to(team).filter((m) => (m as { t: string }).t === 'race').at(-1) as { view: RaceView } | undefined)?.view.result;
+    // before the finish: written (event + teams.state, one transaction), nothing sent (no finish card yet)
+    fp('t0', 20, 50);
+    expect(f.log).toEqual(['event host.finishPenalty', 'saveTeam']);
+    expect(f.txs).toHaveLength(1);
+    expect(f.events.at(-1)).toEqual(['host.finishPenalty', { minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép', was: null }]);
+    expect(f.teams.get('t0')!.finishPenalty).toEqual({ minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép', by: 'host' });
+    expect(f.sent).toEqual([]);
+    // t0 touches the mat first: told it finished FIRST (real order, SPEC §17.22) + its penalty line; no wait at the mat
+    e.onPose('t0', at(4), 100);
+    expect(result('t0')).toMatchObject({ rank: 1, kind: 'first', finishPenalty: { minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép' } });
+    e.onPose('t1', at(4), 100 + 5 * MIN);
+    expect(result('t1')).toMatchObject({ rank: 2, kind: 'finish' });
+    expect(result('t1')).not.toHaveProperty('finishPenalty');
+    // the Host ranking: finishAt + penalty → t1 (5 min) ahead of t0 (0 + 20 min); the stored ranks told to the teams stay
+    expect(e.hostView(200).ranking.map((r) => [r.team, r.rank])).toEqual([['t1', 1], ['t0', 2], ['t2', 3]]);
+    expect([f.teams.get('t0')!.rank, f.teams.get('t1')!.rank]).toEqual([1, 2]);
+    // after the finish: the card updates live, written first
+    f.log.length = f.txs.length = 0;
+    fp('t1', 30, 300, '  đến muộn ');
+    expect(f.log).toEqual(['event host.finishPenalty', 'saveTeam', 'send race']);
+    writesFirst(f);
+    expect(result('t1')).toMatchObject({ rank: 2, finishPenalty: { minutes: 30, reason: 'đến muộn' } });
+    expect(e.hostView(400).ranking.map((r) => r.team)).toEqual(['t0', 't1', 't2']); // 20 min < 5 + 30 min
+    // the same value again / an unknown team: refused, nothing written
+    f.log.length = 0;
+    fp('t1', 30, 500, 'đến muộn');
+    fp('nobody', 5, 500);
+    expect(f.log).toEqual([]);
+    expect(host).toEqual([{ t: 'host.notice', level: 'warning', message: 'Phạt vạch đích của đội này không đổi.' }, { t: 'host.notice', level: 'error', message: 'Không có đội này.' }]);
+    // clear (0): the card has no penalty line any more; the event keeps what it was
+    fp('t0', 0, 600);
+    expect(f.teams.get('t0')!.finishPenalty).toBeNull();
+    expect(f.events.at(-1)).toEqual(['host.finishPenalty', { minutes: 0, reason: null, was: { minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép', by: 'host' } }]);
+    expect(result('t0')).not.toHaveProperty('finishPenalty');
+    // teams never hear of another team's penalty
+    expect(to('t2')).toEqual([]);
+    expect(JSON.stringify(to('t0'))).not.toContain('đến muộn');
+    // after the Host's "Kết thúc" the Host still settles it
+    e.onHost({ t: 'host.race', op: 'finish' }, () => {}, 700);
+    fp('t0', 12, 800);
+    expect(result('t0')).toMatchObject({ finishPenalty: { minutes: 12 } });
+  });
+
+  describe('Leg 3: auto-graded Thử thách 1 (bruxelles-demo T1: 4 boxes with answers)', () => {
+    const bx = bundledLeg('bruxelles-demo')!;
+    const T = bx.steps.findIndex((s) => s.id === 'T1');
+    const RIGHT = ['Cuba', 'Singapore', 'Uzbekistan', 'Estonia'];
+    const ans = (parts: string[]): RaceOp => ({ t: 'race', op: 'answer', step: 'T1', text: '', parts });
+
+    it('4/4: written, then "Chính xác!" + the next clue at once; the Host queue shows it until "✓ Đồng ý"', () => {
+      const { f, e, op, to, card, review, host } = racing({ t0: T }, 'bruxelles-demo');
+      op('t0', ans(['cu-ba', 'XIN-GA-PO', 'udobekixtan', 'Ê-xtô-ni-a']), 10);
+      writesFirst(f);
+      expect(to('t0').filter((m) => (m as { t: string }).t === 'notice')).toEqual([{ t: 'notice', code: 'autoCorrect', score: 4, of: 4 }]); // no extra clueNew
+      expect(card('t0')!.step).toBe(bx.steps[T + 1]!.id);
+      expect(f.events.find(([t]) => t === 'auto')).toEqual(['auto', { step: 'T1', id: 1, score: 4, of: 4 }]);
+      const q = e.hostView(11).queue;
+      expect(q).toEqual([expect.objectContaining({ team: 't0', step: 'T1', id: 1, reference: RIGHT, auto: { verdict: 'correct', marks: [true, true, true, true], score: 4, of: 4, canApprove: false } })]);
+      expect(e.hostView(11).undo).toEqual([]); // nothing for the Host to undo
+      review('t0', 'T1', 'approve', 12, { id: 1 }); // "Đúng" on a done step
+      expect(host.at(-1)).toMatchObject({ level: 'warning' });
+      f.log.length = 0;
+      review('t0', 'T1', 'ack', 13, { id: 1 });
+      expect(f.log).toEqual(['sql INSERT INTO step_progress', 'event review']); // quiet for the team
+      expect(e.hostView(14).queue).toEqual([]);
+    });
+
+    it('2/4: Phạt at once (2 min) + "đúng 2/4"; the queue never blocks the team; Host score → live; "Đúng" lifts the lock + next clue', () => {
+      const { f, e, op, to, card, review } = racing({ t0: T }, 'bruxelles-demo');
+      op('t0', ans(['Cuba', 'Singapore', 'Latvia', 'Peru']), 10);
+      expect(to('t0').filter((m) => (m as { t: string }).t === 'notice')).toEqual([{ t: 'notice', code: 'autoPenalized', score: 2, of: 4 }]);
+      expect(card('t0')).toMatchObject({ step: 'T1', status: 'locked', lockKind: 'retry', lockedUntil: 10 + 2 * 60_000, answers: [{ id: 1, status: 'penalized', score: 2, of: 4 }] });
+      expect(e.hostView(11).progress.find((p) => p.step === 'T1')).toMatchObject({ pending: false, rejections: 1, lockedUntil: 10 + 2 * 60_000 });
+      expect(e.hostView(11).queue[0]!.auto).toEqual({ verdict: 'penalized', marks: [true, true, false, false], score: 2, of: 4, canApprove: true });
+      review('t0', 'T1', 'score', 20, { id: 1, score: 3 });
+      expect(to('t0').slice(-2)).toEqual([{ t: 'notice', code: 'scoreUpdated', score: 3, of: 4 }, expect.objectContaining({ t: 'race' })]);
+      expect(card('t0')).toMatchObject({ status: 'locked', lockedUntil: 10 + 2 * 60_000, answers: [{ score: 3, of: 4 }] }); // the countdown unchanged
+      review('t0', 'T1', 'approve', 30, { id: 1 }); // "Đúng – cho qua"
+      expect(card('t0')!.step).toBe(bx.steps[T + 1]!.id);
+      expect(e.hostView(31).queue).toEqual([]);
+      expect(e.hostView(31).undo).toEqual([expect.objectContaining({ team: 't0', step: 'T1', id: 1, op: 'approve' })]); // the 10 s undo as before
+      expect(f.teams.get('t0')!.step).toBe(T + 1);
+    });
+  });
+
+  describe('Leg 3: Lựa chọn kép rooms (race room, bruxelles-demo D1: A chocolate 5 × 20 min, B comic 9 × 12 min)', () => {
+    const bx = bundledLeg('bruxelles-demo')!;
+    const BZ = stepZones(bx);
+    const D = bx.steps.findIndex((s) => s.id === 'D1');
+    const stand = (b: string): PoseSample => {
+      const z = branchZone(bx, BZ, D, b)!;
+      return { x: z.x, y: 0, z: z.z, yaw: 0, mode: 'walk', action: 'none' };
+    };
+    const room = (b: string, done: number, skipped = false): RaceOp => ({ t: 'race', op: 'room', step: 'D1', branch: b, done, skipped });
+    /** t0 on D1, branch `b` chosen and its box opened. */
+    const inRoom = (b = 'A') => {
+      const h = racing({ t0: D, t1: D }, 'bruxelles-demo');
+      h.op('t0', { t: 'race', op: 'branch', step: 'D1', branch: b }, 5);
+      h.op('t0', { t: 'race', op: 'open', step: 'D1', branch: b }, 6, stand(b));
+      h.f.log.length = h.f.txs.length = 0;
+      h.f.sent.length = 0;
+      return h;
+    };
+
+    it('progress is written (teams.state + event) before the team hears; the card + Host matrix carry it; refused reports write nothing', () => {
+      const { f, e, op, to, card } = inRoom();
+      op('t0', room('A', 2), 10);
+      expect(f.log).toEqual(['event room', 'saveTeam', 'send race']);
+      writesFirst(f);
+      expect(f.teams.get('t0')!.rooms).toEqual({ D1: { b: 'A', done: 2, skipped: false } });
+      expect(card('t0')!.branches![0]!.task!.room).toEqual({ kind: 'chocolate', total: 5, penaltyMinutesEach: 20, done: 2, skipped: false });
+      expect(e.hostView(11).progress.find((p) => p.team === 't0' && p.step === 'D1')!.room).toEqual({ branch: 'A', kind: 'chocolate', total: 5, done: 2, skipped: false });
+      f.log.length = 0;
+      op('t0', room('A', 1), 12); // down
+      op('t0', room('B', 1), 12); // not the chosen branch
+      op('t0', room('A', 6), 12); // over total
+      op('t1', room('A', 1), 12); // t1 chose nothing
+      expect(f.log).toEqual(['send notice', 'send notice', 'send notice', 'send notice']);
+      expect(to('t0').slice(-1)).toEqual([{ t: 'notice', code: 'roomIgnored' }]);
+    });
+
+    it('done = total → a Host queue item "Hoàn thành phòng sô-cô-la: 5/5"; Duyệt advances; never completes by itself', () => {
+      const { e, op, review, card } = inRoom();
+      op('t0', room('A', 5), 10);
+      expect(card('t0')).toMatchObject({ step: 'D1', status: 'pending' });
+      expect(e.hostView(11).queue).toEqual([expect.objectContaining({ team: 't0', step: 'D1', branch: 'A', id: 1, text: 'Hoàn thành phòng sô-cô-la: 5/5' })]);
+      review('t0', 'D1', 'approve', 20, { id: 1 });
+      expect(card('t0')!.step).not.toBe('D1');
+      expect(e.hostView(21).queue).toEqual([]);
+    });
+
+    it('skip → the next clue at once + (total − done) × each at the finish line (by room); a later Host value is the Host\'s', () => {
+      const { f, e, op, card } = inRoom();
+      op('t0', room('A', 3), 10);
+      op('t0', room('A', 3, true), 11);
+      expect(card('t0')!.step).toBe(bx.steps[D + 1]!.id);
+      expect(f.teams.get('t0')!.finishPenalty).toEqual({ minutes: 40, reason: 'bỏ thử thách ở lựa chọn kép', by: 'room' });
+      expect(f.events.filter(([t]) => t === 'room.finishPenalty')).toEqual([['room.finishPenalty', { step: 'D1', minutes: 40, kept: false, was: null }]]);
+      expect(e.hostView(12).progress.find((p) => p.team === 't0' && p.step === 'D1')!.room).toMatchObject({ done: 3, skipped: true });
+      e.onHost({ t: 'host.finishPenalty', team: 't0', minutes: 30 }, () => {}, 13);
+      expect(f.teams.get('t0')!.finishPenalty).toMatchObject({ minutes: 30, by: 'host' });
+      f.log.length = 0;
+      op('t0', room('A', 4), 14); // a done step: ignored
+      expect(f.log).toEqual(['send notice']);
+    });
+
+    it('a Host-set finish-line penalty is never overwritten by a skipped room', () => {
+      const { f, e, op } = inRoom('B');
+      e.onHost({ t: 'host.finishPenalty', team: 't0', minutes: 7, reason: 'khác' }, () => {}, 8);
+      op('t0', room('B', 4, true), 10);
+      expect(f.teams.get('t0')!.finishPenalty).toEqual({ minutes: 7, reason: 'khác', by: 'host' });
+      expect(f.events.at(-2)).toEqual(['room.finishPenalty', { step: 'D1', minutes: 60, kept: true, was: { minutes: 7, reason: 'khác', by: 'host' } }]);
+    });
+
+    it('a switch drops the room progress; back to A after both countdowns starts A from 0', () => {
+      const { f, op, card } = inRoom();
+      op('t0', room('A', 3), 10);
+      op('t0', { t: 'race', op: 'branch', step: 'D1', branch: 'B' }, 20);
+      expect(f.teams.get('t0')!.rooms).toEqual({});
+      const t1 = 20 + 10 * 60_000;
+      op('t0', { t: 'race', op: 'branch', step: 'D1', branch: 'A' }, t1);
+      expect(card('t0')).toMatchObject({ status: 'switchLocked', branch: 'A', switches: 2 });
+      op('t0', { t: 'race', op: 'open', step: 'D1', branch: 'A' }, t1 + 10 * 60_000, stand('A'));
+      expect(card('t0')!.branches![0]!.task!.room).toMatchObject({ done: 0, skipped: false });
+      op('t0', room('A', 1), t1 + 10 * 60_000 + 1); // 1 < the old 3: accepted, it starts again
+      expect(f.teams.get('t0')!.rooms).toEqual({ D1: { b: 'A', done: 1, skipped: false } });
+    });
+  });
+
+  it('Leg 3: a finish-line penalty set within an undo window survives the undo of that Duyệt', () => {
+    const { f, e, review } = pendingT1();
+    review('t0', 'T1', 'approve', 20_000, { id: 1 });
+    e.onHost({ t: 'host.finishPenalty', team: 't0', minutes: 20 }, () => {}, 21_000);
+    review('t0', 'T1', 'undo', 22_000, { id: 1 });
+    expect(f.teams.get('t0')).toMatchObject({ step: 1, finishPenalty: { minutes: 20 } });
+  });
+
   it('SPEC §17.23 (Chốt): "Kết thúc" with teams still racing: each is out, ranked after the finished ones (furthest step first), written with the status, then told', () => {
     const { f, e, to } = racing({ t0: 4, t1: 1, t2: 3 });
     e.onPose('t0', at(4), 100);

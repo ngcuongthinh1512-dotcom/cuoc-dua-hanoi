@@ -4,7 +4,9 @@
 import { onPitMat } from '@race/shared';
 import type { BoxInfo, ClientMessage, RaceOp, RaceView, ServerMessage, TeamInfo, TickArray, Welcome } from '@race/shared/protocol';
 import { raceClient as C } from '../config.ts';
+import { roomOf } from '../rooms/roomState.ts';
 import type { RaceHud } from './ui/RaceHud.ts';
+import { resultKey } from './ui/format.ts';
 
 export interface RaceDeps {
   hud: RaceHud | undefined;
@@ -17,6 +19,9 @@ export interface RaceDeps {
   serverNow(): number;
   /** The check-in landed (`fresh`: just now → celebrate first) or the team was already finished at (re-)entry. */
   finished?(fresh: boolean): void;
+  /** Leg 3 rooms (rooms/roomState.ts): every view BEFORE the HUD sees it; true = hold it (the step completed inside a room:
+   *  the next card waits until release(), when the body walked into the exit ring). */
+  view?(v: RaceView | null): boolean;
 }
 
 /** The current, unopened clue box whose zone holds (x, z): F opens it (D23). Mats are not opened. */
@@ -32,8 +37,27 @@ export class RaceClient {
   private teams: TeamInfo[] = [];
   private opAt = -Infinity; // ms (performance clock) of the last F / check-in op
   private lockDone: number | null = null; // the card.lockedUntil whose end already re-sent the pose (D9)
+  private held: { v: RaceView | null } | null = null; // Leg 3: the view the HUD has not seen yet (deps.view asked to hold it)
+  private roomSent: { key: string; done: number } | null = null; // the last `race room` report (done only grows per branch)
 
   constructor(readonly deps: RaceDeps) {}
+
+  /** Leg 3: the held view (the next card) goes to the HUD now: the body left the room. */
+  release() {
+    const h = this.held;
+    this.held = null;
+    if (h) this.deps.hud?.setView(h.v);
+  }
+
+  /** Leg 3: progress in the chosen + opened branch's room (`race room`): sent when `done` grew (or first for this branch),
+   *  `skipped` once (final); `force` = re-send (a Phạt countdown ended: the server wants the n/n report again). */
+  room(step: string, branch: string, done: number, skipped: boolean, force = false) {
+    const key = `${step}|${branch}`;
+    const last = this.roomSent?.key === key ? this.roomSent.done : -1;
+    if (!force && !skipped && done <= last) return;
+    this.roomSent = { key, done: Math.max(done, last) };
+    this.deps.send({ t: 'race', op: 'room', step, branch, done, skipped });
+  }
 
   /** Every welcome (also after a reconnect). `simTime` = Player.simTime (the start-order banner clock). */
   welcome(w: Welcome, simTime: number) {
@@ -51,7 +75,8 @@ export class RaceClient {
       const was = this.view;
       const fresh = was?.finishAt == null && m.view.finishAt != null;
       this.setView(m.view);
-      if (m.view.result && !was?.result) this.deps.hud?.result(m.view.result, true); // "Về đích thứ n" / "BỊ LOẠI" at once
+      // "Về đích thứ n" / "BỊ LOẠI" at once; Leg 3: again when the Host sets / changes / clears the finish-line penalty
+      if (m.view.result && (!was?.result || resultKey(was.result) !== resultKey(m.view.result))) this.deps.hud?.result(m.view.result, true);
       if (fresh) this.deps.finished?.(true);
       else if (was?.status !== 'finished' && m.view.status === 'finished' && m.view.finishAt == null) this.deps.finished?.(false); // Host "Kết thúc": read-only
       return true;
@@ -78,7 +103,13 @@ export class RaceClient {
     const due = v && v.status === 'running' && v.finishAt == null && v.card?.type === 'pit_stop' && (v.checkinAt ?? 0) <= this.deps.serverNow();
     if (due && !riding && matAt(boxes, x, z) && now - this.opAt >= C.checkinEveryMs) this.sendOp({ t: 'race', op: 'checkin' }, now);
     const until = v?.card?.lockedUntil;
-    if (until != null && until !== this.lockDone && this.deps.serverNow() >= until + C.lockEndSlackMs) (this.lockDone = until), this.deps.pose?.();
+    if (until != null && until !== this.lockDone && this.deps.serverNow() >= until + C.lockEndSlackMs) {
+      this.lockDone = until;
+      this.deps.pose?.();
+      // Leg 3: a Phạt on a finished room (n/n) ran out: the server wants the report again to queue it for the Host once more
+      const t = roomOf(v), r = t?.room;
+      if (t && t.branch && r && v?.card?.lockKind === 'retry' && !r.skipped && r.done >= r.total) this.room(t.step, t.branch, r.done, false, true);
+    }
     return { inZone: !riding && !!boxInReach(boxes, x, z) };
   }
 
@@ -107,6 +138,8 @@ export class RaceClient {
 
   private setView(v: RaceView | null) {
     this.view = v;
+    if (this.deps.view?.(v)) return void (this.held = { v }); // Leg 3: held until release() (the latest view wins)
+    this.held = null;
     this.deps.hud?.setView(v);
   }
 }

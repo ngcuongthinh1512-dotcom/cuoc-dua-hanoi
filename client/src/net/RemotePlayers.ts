@@ -2,7 +2,7 @@
 // slot interpolated remote.interpolationMs behind the server clock, drawn with CharacterModel + CharacterAnimator (team
 // shirt, name tag) and a BikeModel while riding; ghosts (no Rapier body), hidden beyond presence.renderRadius.
 import { type Avatar, MOVE_MODES, PLAYER_ACTIONS, type GestureKind, type MoveMode, type PlayerAction, type PoseSample, type TeamInfo, type TickEntry } from '@race/shared/protocol';
-import { MathUtils, type Scene, Vector3 } from 'three';
+import { MathUtils, type Object3D, type Scene, Vector3 } from 'three';
 import { bell } from '../audio/sfx.ts';
 import { bike as B, bikeTopSpeed, movement, playerSetup, remote as R } from '../config.ts';
 import { CharacterAnimator } from '../player/Animation.ts';
@@ -126,6 +126,12 @@ export class RemotePlayers {
     public renderRadius: number,
   ) {}
 
+  /** `o` is one of the remote characters / their bikes (kept drawn inside a Leg 3 room: main.ts, world/hideWorld.ts). */
+  owns(o: Object3D): boolean {
+    for (const r of this.slots.values()) if (r.model.root === o || r.bike?.model.root === o) return true;
+    return false;
+  }
+
   /** Welcome.teams: names, colours, slots, avatars (also after a reconnect). */
   setTeams(teams: readonly TeamInfo[]) {
     this.teams = new Map(teams.map((t) => [t.slot, t]));
@@ -176,14 +182,16 @@ export class RemotePlayers {
 
   /** Every frame: interpolate, animate, cull by distance from `viewer`. Animation time follows the render clock (≤ the
    *  frame time): gestures replay on the sender's timeline, also when the clock is simulated (DEV ?peers). */
-  update(frameDt: number, serverNow: number, viewer: Vector3) {
+  /** Leg 3 (from the Louvre room): `under` = the local feet are underground (in a room; undefined = spectator / free-fly: no
+   *  height cull), `heightAt` the shared terrain grid (inView). */
+  update(frameDt: number, serverNow: number, viewer: Vector3, under?: boolean, heightAt?: (x: number, z: number) => number) {
     this.viewer.copy(viewer);
     const t = serverNow - R.interpolationMs;
     const dt = Number.isNaN(this.lastT) ? 0 : MathUtils.clamp((t - this.lastT) / 1000, 0, frameDt);
     this.lastT = t;
     this.drawn = 0;
     for (const r of this.slots.values()) {
-      const shown = r.live && r.track.sample(t, pose) && inView(pose, viewer, this.renderRadius);
+      const shown = r.live && r.track.sample(t, pose) && inView(pose, viewer, this.renderRadius, under, heightAt);
       r.model.root.visible = shown;
       if (r.bike) r.bike.model.root.visible = shown && pose.mode === 'bike';
       if (!shown) continue;
@@ -275,7 +283,14 @@ export interface FakePeer {
 }
 
 /** Drawn: within `radius` m (x, z) of the viewer. */
-export const inView = (p: { x: number; z: number }, viewer: { x: number; z: number }, radius: number) => Math.hypot(p.x - viewer.x, p.z - viewer.z) <= radius;
+/** Leg 3: feet more than remote.hideDy under the terrain grid = underground (a Lựa chọn kép room, rooms.below m under its box). */
+export const underground = (p: { x: number; y: number; z: number }, heightAt: (x: number, z: number) => number) => p.y < heightAt(p.x, p.z) - R.hideDy;
+
+/** Drawn: within `radius` m (x, z) of the viewer and (Leg 3, from the Louvre room) on the same side of the ground: a team in a
+ *  room is no ghost for a team on the street and the other way round, while slopes hide nobody. `viewerUnder` undefined
+ *  (spectator) = distance only. */
+export const inView = (p: { x: number; y: number; z: number }, viewer: { x: number; z: number }, radius: number, viewerUnder?: boolean, heightAt?: (x: number, z: number) => number) =>
+  Math.hypot(p.x - viewer.x, p.z - viewer.z) <= radius && (viewerUnder === undefined || !heightAt || underground(p, heightAt) === viewerUnder);
 
 /** "0,10,-5,90,walk;1,…,bike;2,…,walk,wave" → peers (invalid groups dropped). */
 

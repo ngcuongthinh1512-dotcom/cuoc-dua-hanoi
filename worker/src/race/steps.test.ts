@@ -12,7 +12,7 @@ import { verifyAuto } from './tasks.ts';
 
 const mini = bundledLeg('mini')!;
 const Z = stepZones(mini);
-const P = (step: number, more: Partial<Progress> = {}): Progress => ({ step, arrivedAt: null, startedAt: null, branch: null, finishAt: null, penaltyMinutes: 0, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, ...more });
+const P = (step: number, more: Partial<Progress> = {}): Progress => ({ step, arrivedAt: null, startedAt: null, branch: null, finishAt: null, penaltyMinutes: 0, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, room: null, ...more });
 const ZA = branchZone(mini, Z, 3, 'A')!;
 const ZB = branchZone(mini, Z, 3, 'B')!;
 const at = (z: Zone, dx = 0) => ({ x: z.x + dx, z: z.z });
@@ -220,6 +220,151 @@ describe('advance: a detour (D6)', () => {
     // after a switch to B (arrivedAt cleared): B's place is the team's now
     const sw = run(P(3, { branch: 'A', arrivedAt: 1 }), branch('B')).p;
     expect(run(sw, pose(ZB)).effects).toEqual([{ kind: 'arrive', step: 3 }, park(ZB)]);
+  });
+});
+
+describe('Leg 3: Lựa chọn kép rooms (race room)', () => {
+  // A = a chocolate room of 5 (host_approval), B = a comic room of 9
+  const leg = variant((s) => {
+    Object.assign(s[3].branches[0].task, { verification: 'host_approval', room: { kind: 'chocolate', total: 5, penaltyMinutesEach: 20 } });
+    s[3].branches[1].task.room = { kind: 'comic', total: 9, penaltyMinutesEach: 12 };
+  });
+  const room = (done: number, skipped = false, b = 'A'): RaceInput => ({ kind: 'room', step: 'D1', branch: b, done, skipped, pose: null });
+  const openA = P(3, { branch: 'A', arrivedAt: 5, branchOpenedAt: 5, startedAt: 5 });
+  const ignored = [{ kind: 'refuse', code: 'roomIgnored' }];
+  const branch = (b: string): RaceInput => ({ kind: 'branch', step: 'D1', branch: b });
+  const go = (p: Progress, i: RaceInput, now = 1000) => run(p, i, now, leg);
+
+  it('only the chosen + opened branch with a room, done within 0..total, never down, nothing after a skip', () => {
+    expect(go(P(3), room(1)).effects).toEqual(ignored); // no branch chosen
+    expect(go(P(3, { branch: 'A' }), room(1)).effects).toEqual(ignored); // box not opened
+    expect(go(openA, room(1, false, 'B')).effects).toEqual(ignored); // not the chosen branch
+    expect(go(openA, room(6)).effects).toEqual(ignored); // > total
+    expect(run(openA, room(1)).effects).toEqual(ignored); // plain mini: A has no room
+    expect(go(P(2), room(1)).effects).toEqual([]); // a later step: never confirmed
+    expect(go(P(4), room(1)).effects).toEqual(ignored); // a done step
+    const r1 = go(openA, room(2));
+    expect(r1).toEqual({ p: { ...openA, room: { b: 'A', done: 2, skipped: false } }, effects: [{ kind: 'room', step: 3, rec: { b: 'A', done: 2, skipped: false } }] });
+    expect(go(r1.p, room(2)).effects).toEqual([]); // same count: nothing written
+    expect(go(r1.p, room(1)).effects).toEqual(ignored); // monotonic
+    expect(go({ ...r1.p, room: { b: 'A', done: 2, skipped: true } }, room(3)).effects).toEqual(ignored); // a skip is final
+  });
+
+  it('done = total → ONE pending answer for the Host (not trusted); Duyệt then advances; after a Phạt the client re-sends it', () => {
+    const full = go(openA, room(5), 3000);
+    expect(full.effects).toEqual([
+      { kind: 'room', step: 3, rec: { b: 'A', done: 5, skipped: false } },
+      { kind: 'answer', step: 3, rec: { id: 1, b: 'A', text: 'Hoàn thành phòng sô-cô-la: 5/5', at: 3000, s: 'pending' }, verdict: 'pending' },
+    ]);
+    expect(full.p).toMatchObject({ step: 3, pendingId: 1, lastAnswerId: 1 });
+    expect(go(full.p, room(5)).effects).toEqual([]); // still pending: no second item
+    expect(go(full.p, { kind: 'approve', step: 'D1', pose: null }).effects).toEqual([{ kind: 'complete', step: 3 }]);
+    const after = { ...full.p, pendingId: null, lockedUntil: 9000 };
+    expect(go(after, room(5), 5000).effects).toEqual([]); // the Phạt countdown
+    expect(go(after, room(5), 9000).effects).toMatchObject([{ kind: 'answer', rec: { id: 2, s: 'pending' } }]);
+  });
+
+  it('skip → the step completes at once + (total − done) × penaltyMinutesEach finish-line minutes', () => {
+    const p = { ...openA, room: { b: 'A', done: 3, skipped: false } };
+    const sk = go(p, room(3, true));
+    expect(sk.effects).toEqual([{ kind: 'room', step: 3, rec: { b: 'A', done: 3, skipped: true }, penalty: 40 }, { kind: 'complete', step: 3 }]);
+    expect(sk.p).toMatchObject({ step: 4, room: null, branch: null });
+    const b = go(P(3, { branch: 'B', branchOpenedAt: 5, startedAt: 5 }), room(0, true, 'B'));
+    expect(b.effects[0]).toEqual({ kind: 'room', step: 3, rec: { b: 'B', done: 0, skipped: true }, penalty: 108 });
+  });
+
+  it('a switch drops the room progress; A → B → A after each countdown; the abandoned branch\'s reports are ignored', () => {
+    const withRoom = { ...openA, room: { b: 'A', done: 3, skipped: false } };
+    const sw = go(withRoom, branch('B'), 1000);
+    expect(sw.p).toMatchObject({ branch: 'B', room: null, lockedUntil: 1000 + 10 * MIN });
+    expect(go(sw.p, room(4)).effects).toEqual(ignored); // A is no longer the team's branch
+    const back = go(sw.p, branch('A'), 1000 + 10 * MIN); // the countdown over: back to A, a new countdown
+    expect(back.effects[0]).toEqual({ kind: 'switch', step: 3, from: 'B', to: 'A', lockedUntil: 1000 + 20 * MIN });
+    expect(back.p.room).toBeNull();
+    // A opened again: its room starts from 0 (the old 3 is gone)
+    expect(go({ ...back.p, branchOpenedAt: 9, lockedUntil: null }, room(1)).effects).toEqual([{ kind: 'room', step: 3, rec: { b: 'A', done: 1, skipped: false } }]);
+  });
+
+  it('cardOf (v12): a challenge step with room carries ClueCard.room while not done (teaser too); other challenges never', () => {
+    const l = { ...leg, steps: leg.steps.map((s) => (s.id === 'T1' ? { ...s, room: 'garderobe' as const } : s)) };
+    const r = (more: Partial<StepProgressRow>) => ({ ...emptyProgress('t', 'T1'), clue_opened_at: 1, ...more });
+    expect(cardOf(l, 1, r({}), 1000).room).toBe('garderobe');
+    expect(cardOf(l, 1, r({ task_started_at: 5 }), 1000).room).toBe('garderobe');
+    expect(cardOf(l, 1, r({ task_started_at: 5, completed_at: 900 }), 1000).room).toBeUndefined();
+    expect(cardOf(leg, 1, r({}), 1000).room).toBeUndefined();
+  });
+
+  it('cardOf: the opened branch\'s task carries room {kind, total, penaltyMinutesEach, done, skipped}; never before it is opened', () => {
+    const r = (more: Partial<StepProgressRow>) => ({ ...emptyProgress('t', 'D1'), clue_opened_at: 1, branch: 'A', ...more });
+    const rooms = { D1: { b: 'A', done: 2, skipped: false } };
+    expect(cardOf(leg, 3, r({ branch_opened_at: 5 }), 1000, rooms).branches![0]!.task!.room).toEqual({ kind: 'chocolate', total: 5, penaltyMinutesEach: 20, done: 2, skipped: false });
+    expect(cardOf(leg, 3, r({ branch_opened_at: 5 }), 1000).branches![0]!.task!.room).toMatchObject({ done: 0, skipped: false });
+    expect(cardOf(leg, 3, r({}), 1000, rooms).branches!.every((b) => !b.task)).toBe(true);
+    expect(cardOf(leg, 3, r({ branch: 'B', branch_opened_at: 5 }), 1000, rooms).branches![1]!.task!.room).toMatchObject({ kind: 'comic', done: 0 }); // A's record is not B's
+    // Leg 3: after a switch (switchLocked, branch_switches > 0) the card names the room the team is still standing in (the other branch's)
+    const sw = cardOf(leg, 3, r({ branch: 'B', branch_switches: 1, locked_until: 5000 }), 1000, rooms);
+    expect(sw.status).toBe('switchLocked');
+    expect(sw.leftRoom).toBe('chocolate');
+    expect(cardOf(leg, 3, r({ branch: 'A', branch_switches: 1, locked_until: 5000 }), 1000, rooms).leftRoom).toBe('comic');
+    expect(cardOf(leg, 3, r({ branch: 'A' }), 1000, rooms).leftRoom).toBeUndefined(); // no switch: nothing left
+  });
+});
+
+describe('Leg 3: an auto-graded multi-box task (parts[].answers)', () => {
+  const PARTS = [['Cuba', 'Cu-ba', 'Cu Ba'], ['Singapore', 'Xin-ga-po'], ['Uzbekistan'], ['Estonia', 'Estônia']].map((answers, k) => ({ label: `Bộ ${k + 1}`, answers }));
+  const leg = variant((s) => Object.assign(s[1].task, { answers: [], parts: PARTS, retryLockMinutes: 2 }));
+  const started = P(1, { startedAt: 5 });
+  const send = (parts: string[], p = started, now = 1000) => run(p, { kind: 'answer', step: 'T1', text: '', parts, pose: null }, now, leg);
+
+  it('all right (any spelling: case, diacritics, hyphens, spaces) → the step is done AT ONCE, recorded as auto 4/4', () => {
+    const r = send(['cuba', 'XIN GA PO', ' uzbekistan ', 'Estonia']);
+    expect(r.effects.slice(0, 2)).toEqual([
+      { kind: 'answer', step: 1, rec: { id: 1, b: null, text: 'cuba | XIN GA PO | uzbekistan | Estonia', at: 1000, s: 'correct', sc: 4, sv: true, auto: true, m: [true, true, true, true] }, verdict: 'correct' },
+      { kind: 'complete', step: 1 },
+    ]); // (+ the walk-only L2's park)
+    expect(r.p.step).toBe(2);
+    expect(send(['Cu-Ba', 'singapore', 'UZBEKISTAN', 'estônia']).p.step).toBe(2);
+  });
+
+  it('not all right → Phạt at once (retryLockMinutes), told x/N, never which boxes; box order matters', () => {
+    const r = send(['Singapore', 'Cuba', 'Uzbekistan', 'Estonia']); // boxes 1 and 2 swapped
+    expect(r.effects).toEqual([{ kind: 'answer', step: 1, rec: expect.objectContaining({ s: 'penalized', sc: 2, sv: true, auto: true, m: [false, false, true, true] }), verdict: 'penalized', lockedUntil: 1000 + 2 * MIN }]);
+    expect(r.p).toMatchObject({ step: 1, lockedUntil: 1000 + 2 * MIN, pendingId: null, lastAnswerId: 1 });
+    expect(send(['Cuba', 'x', 'y', 'z'], r.p, 2000).effects).toEqual([{ kind: 'refuse', code: 'answerLocked' }]);
+    expect(send(['Cuba', 'Singapore', 'Uzbekistan', 'Estonia'], r.p, 1000 + 2 * MIN).p.step).toBe(2); // after the countdown
+    // the card: "đúng 2/4" on the history line, no marks, the task never carries the answers
+    const row = { ...emptyProgress('t', 'T1'), clue_opened_at: 1, task_started_at: 5, locked_until: 1000 + 2 * MIN, answers: JSON.stringify([r.effects[0]!.kind === 'answer' && r.effects[0].rec]) };
+    const c = cardOf(leg, 1, row, 1500);
+    expect(c).toMatchObject({ status: 'locked', answers: [{ id: 1, status: 'penalized', score: 2, of: 4 }] });
+    expect(JSON.stringify(c)).not.toMatch(/"m"|"auto"|Cu-ba|Xin-ga-po|Estônia/); // only its own typed text, never the leg's answers / marks
+  });
+
+  it('plain parts tasks (no answers) still go to the Host as one pending answer', () => {
+    const plain = variant((s) => Object.assign(s[1].task, { parts: [{ label: 'a' }, { label: 'b' }] }));
+    expect(run(started, { kind: 'answer', step: 'T1', text: '', parts: ['x', 'y'], pose: null }, 1000, plain).effects).toEqual([{ kind: 'answer', step: 1, rec: { id: 1, b: null, text: 'x | y', at: 1000, s: 'pending' }, verdict: 'pending' }]);
+  });
+
+  it('review: ack (once), score (penalized only, 0..N), "Đúng" = approve the penalized answer (lock lifted)', () => {
+    const rec = { id: 1, b: null, text: 'a | b | c | d', at: 1000, s: 'penalized', sc: 2, sv: true, auto: true, m: [true, true, false, false] };
+    const row: StepProgressRow = { ...emptyProgress('t', 'T1'), clue_opened_at: 1, task_started_at: 5, locked_until: 1000 + 2 * MIN, rejections: 1, answers: JSON.stringify([rec]) };
+    const rv = (m: Partial<HostReview>, r: StepProgressRow = row) => review(leg, 1, r, { t: 'host.review', team: 't', step: 'T1', op: 'ack', id: 1, ...m } as HostReview, 2000);
+    const ack = rv({});
+    expect(ack).toMatchObject({ approve: false, id: 1 });
+    expect('row' in ack && parseAnswers(ack.row)[0]).toMatchObject({ k: true, s: 'penalized' });
+    expect('row' in ack && ack.row.locked_until).toBe(1000 + 2 * MIN); // nothing else changes
+    expect(rv({}, 'row' in ack ? ack.row : row)).toEqual({ refuse: 'Bài này đã được xử lý.' });
+    const sc = rv({ op: 'score', score: 3 });
+    expect('row' in sc && parseAnswers(sc.row)[0]).toMatchObject({ sc: 3, sv: true, s: 'penalized' });
+    expect(rv({ op: 'score', score: 5 })).toMatchObject({ refuse: expect.stringContaining('0 đến 4') });
+    expect(rv({ op: 'ack', id: 9 })).toMatchObject({ refuse: expect.any(String) });
+    const ok = rv({ op: 'approve' });
+    expect(ok).toMatchObject({ approve: true, id: 1, row: { locked_until: null } });
+    expect('row' in ok && parseAnswers(ok.row)[0]).toMatchObject({ s: 'approved' });
+    // an auto 4/4 (row done): "Đúng" refused, ack still fine, score refused
+    const done: StepProgressRow = { ...row, completed_at: 3000, locked_until: null, answers: JSON.stringify([{ ...rec, s: 'correct', sc: 4, m: [true, true, true, true] }]) };
+    expect(rv({ op: 'approve' }, done)).toEqual({ refuse: 'Bài này đã được xử lý.' });
+    expect(rv({}, done)).toMatchObject({ approve: false });
+    expect(rv({ op: 'score', score: 1 }, done)).toMatchObject({ refuse: expect.any(String) });
   });
 });
 
@@ -447,6 +592,9 @@ describe('boxesOf / cardOf', () => {
     expect(c.branches![1]!.task).toBeUndefined();
     expect(c.answers.map((a) => a.text)).toEqual(recs.slice(-NET.answerHistory).map((r) => r.text));
     expect(cardOf(mini, 3, row({ branch: 'B', branch_opened_at: 200 }), 1000).branches![1]!.task).toMatchObject({ input: 'proof', place: 'Place du Petit Sablon' });
+    // Leg 3: the chosen branch's afterChoice from the moment it is chosen (box still shut), never the other branch's
+    const after = (b: string, opened = false) => cardOf({ ...mini, steps: mini.steps.map((s) => (s.type === 'detour' ? { ...s, branches: s.branches.map((x) => ({ ...x, afterChoice: `sau ${x.id}` })) } : s)) }, 3, row({ branch: b, ...(opened ? { branch_opened_at: 200 } : {}) }), 1000).branches!.map((x) => x.afterChoice);
+    expect([after('A'), after('B', true), cardOf(mini, 3, row(), 1000).branches!.map((x) => x.afterChoice)]).toEqual([['sau A', undefined], [undefined, 'sau B'], [undefined, undefined]]);
     expect(cardOf(mini, 3, row({ branch: 'A', branch_opened_at: 200, locked_until: 900 }), 1000)).toMatchObject({ status: 'active', lockedUntil: null, lockKind: null });
   });
 

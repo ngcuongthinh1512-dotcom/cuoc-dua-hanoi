@@ -13,10 +13,10 @@
 //  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box).
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
-import { finishTexts, NET, type ClueCard, type FinishResult, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
+import { FINISH_PENALTY_REASON, finishTexts, NET, type ClueCard, type FinishResult, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
 import { toast } from '../../ui/Toasts.ts';
-import { bookEntries, type BookEntry, branchConfirmText, cardPanel, copyBlocked, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultView, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
+import { bookEntries, type BookEntry, branchConfirmText, type CardPanel, cardPanel, copyBlocked, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultKey, resultView, richText, splitNote, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
 import './race.css';
 
 export interface RaceHudActions {
@@ -55,6 +55,21 @@ const ICONS = {
   finish: '<path d="M5 21V3M5 4h14v10H5M10 4v10M15 4v10M5 9h14"/>',
   bike: '<circle cx="5.5" cy="16" r="3.5"/><circle cx="18.5" cy="16" r="3.5"/><path d="M5.5 16l4-8h6l3 8M9.5 8L12 16M8 6h3"/>',
   walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="M11 21l2-6-3-3 1-4 4 1 2 3M10 12l-3 1"/>',
+};
+/** Leg 3 detour halves: inline line art, currentColor strokes (chocolate: bar + praline + cocoa pod; comic: three panels, a
+ *  speech bubble, motion lines). Generic shapes only. */
+const ART = {
+  choco: `<svg viewBox="0 0 240 90" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<g transform="translate(12 14) rotate(-8)"><rect x="0" y="0" width="86" height="58" rx="5" fill="rgba(0,0,0,.25)"/>${[0, 1, 2].flatMap((r) => [0, 1, 2, 3].map((c) => `<rect x="${5 + c * 20}" y="${5 + r * 17}" width="16" height="13" rx="2.5" fill="rgba(255,255,255,.08)"/>`)).join('')}<path d="M86 14l6 4-6 10" fill="rgba(0,0,0,.3)"/></g>
+<g transform="translate(126 50)"><path d="M-22 18c-6-18 4-34 22-34s28 16 22 34z" fill="rgba(0,0,0,.25)"/><path d="M-18 18h36M-8-8c6 8 10 8 16 0" /><path d="M0-30c6-4 10-6 14-6" stroke-width="2.2"/><circle cx="2" cy="-22" r="3.5" fill="currentColor" stroke="none"/></g>
+<g transform="translate(196 44) rotate(28)"><path d="M0-30c14 0 22 14 22 30S14 30 0 30-22 16-22 0-14-30 0-30z" fill="rgba(0,0,0,.25)"/><path d="M0-30V30M-12-14c8 4 16 4 24 0M-12 14c8-4 16-4 24 0"/></g>
+</svg>`,
+  comic: `<svg viewBox="0 0 240 90" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+<rect x="6" y="8" width="66" height="74" fill="#fff"/><rect x="80" y="8" width="88" height="74" fill="#fff"/><rect x="176" y="8" width="58" height="74" fill="#fff"/>
+<path d="M16 72c10-24 18-30 28-30s12 12 18 30" fill="#5fb3e5"/><circle cx="36" cy="30" r="9" fill="#f6c28b"/><path d="M27 27c4-7 14-7 18 0" fill="#1b1b1f" stroke="none"/>
+<path d="M92 26h44a6 6 0 0 1 6 6v20a6 6 0 0 1-6 6h-14l-10 10 2-10h-22a6 6 0 0 1-6-6V32a6 6 0 0 1 6-6z" fill="#fff"/><path d="M100 36h30M100 46h22" stroke-width="2"/>
+<path d="M186 60l26-26M190 70l34-34M184 48l16-16" stroke-width="2"/><circle cx="212" cy="30" r="8" fill="#f08a24"/><path d="M212 20v-6M212 46v6M202 30h-6M228 30h-6" stroke-width="2"/>
+</svg>`,
 };
 const icon = (k: keyof typeof ICONS, size = 18) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
@@ -127,6 +142,8 @@ export class RaceHud {
   // by itself never takes it (review R-10: a held W / the Space that closes cards would type into it); Esc leaves the box
   // (false: the next Esc closes the card).
   private focusBox = false;
+  private envelope = false; // the full card being drawn came with the envelope animation (the detour pair unfolds after it)
+  private afterKey = ''; // "<step>:<branch>" whose afterChoice drop already played
   private resolver: (name: string) => Promise<string | null> = (n) => this.actions.resolveMedia?.(n) ?? Promise.resolve(null);
   private readonly urls = new Map<string, string>(); // r2 name → blob URL once fetched (a redraw must not flash the placeholder)
   private readonly fetching = new Map<string, Promise<string | null>>();
@@ -251,7 +268,7 @@ export class RaceHud {
    *  happened (always shown); a welcome's (`fresh` false) only if this browser has not shown that result yet (a team offline
    *  when the Host ended the race still reads "BỊ LOẠI"). */
   result(r: FinishResult, fresh: boolean): void {
-    const key = `${r.kind}:${r.rank}/${r.total}`;
+    const key = resultKey(r);
     if (!fresh && store.get(RESULT_KEY) === key) return;
     store.set(key, RESULT_KEY);
     const t = resultView(r, this.teamName || this.demoTeam);
@@ -263,7 +280,7 @@ export class RaceHud {
     this.fullCard = null;
     this.resetControls();
     this.resultOpen = true;
-    const box = el('div', `rc-full rc-result ${r.kind}`, undefined, el('h2', 'rc-result-title', t.title), el('p', 'rc-text', t.card), el('div', 'rc-actions', undefined, this.closeButton('Đóng (Tab)')));
+    const box = el('div', `rc-full rc-result ${r.kind}`, undefined, el('h2', 'rc-result-title', t.title), el('p', 'rc-text', t.card), ...(t.penalty ? [el('p', 'rc-result-penalty', t.penalty)] : []), el('div', 'rc-actions', undefined, this.closeButton('Đóng (Tab)')));
     box.style.width = `min(${C.fullWidth}px, 100%)`;
     this.overlay.replaceChildren(box);
     this.overlay.hidden = false;
@@ -313,7 +330,7 @@ export class RaceHud {
 
   /** DEV, offline only (p7-* / p8-* presets): stand-in data from the URL (?card=route|detour|challenge|pit|teaser|answer|
    *  answer-pending|answer-locked|detour-choose|detour-chosen|detour-locked|branch-task|proof|media|media-off, ?full, ?book[=media],
-   *  ?lock=<s left of a countdown>, ?startOrder=n, ?finish[=first|out|<n>] (the finish announcement, generic texts), ?zone (two teams here + one that left 2 min 10 s ago),
+   *  ?lock=<s left of a countdown>, ?startOrder=n, ?finish[=first|out|<n>] (the finish announcement, generic texts; &finishPenalty=<min> its finish-line penalty line), ?zone (two teams here + one that left 2 min 10 s ago),
    *  ?checkin=<s of penalty wait left>). The penalty row: ui/HUD.ts (?penalty). */
   demo(q: URLSearchParams): void {
     const kind = q.get('card') ?? (q.has('full') || q.has('book') ? 'route' : null);
@@ -333,7 +350,8 @@ export class RaceHud {
     if (q.has('finish')) {
       const f = q.get('finish');
       const [kind, rank] = f === 'out' ? (['out', 5] as const) : f === 'first' ? (['first', 1] as const) : (['finish', Number(f) || 2] as const);
-      this.result({ rank, total: 5, kind, ...finishTexts(kind, undefined, rank, 5, 'Đội Xanh') }, true);
+      const pen = Number(q.get('finishPenalty') ?? 0); // Leg 3: ?finishPenalty=<min> adds the finish-line penalty line
+      this.result({ rank, total: 5, kind, ...finishTexts(kind, undefined, rank, 5, 'Đội Xanh'), ...(pen > 0 ? { finishPenalty: { minutes: pen, reason: FINISH_PENALTY_REASON } } : {}) }, true);
     }
     if (q.has('zone')) {
       const teams = DEMO_TEAMS;
@@ -410,10 +428,12 @@ export class RaceHud {
     const card = this.fullCard!;
     const top = keepScroll ? (this.overlay.querySelector('.rc-full')?.scrollTop ?? 0) : 0;
     this.resetControls();
-    const box = el('div', `rc-full${animate ? '' : ' quick'}`);
-    box.style.width = `min(${C.fullWidth}px, 100%)`;
+    const wide = card.type === 'detour' && !!card.branches?.length;
+    const box = el('div', `rc-full${animate ? '' : ' quick'}${wide ? ' rc-wide' : ''}`);
+    box.style.width = `min(${wide ? C.detourWidth : C.fullWidth}px, 100%)`;
     const env = animate ? el('div', 'rc-env', undefined, el('div', 'rc-flap')) : null;
     env?.style.setProperty('--c', TYPE_STYLE[card.type].colour);
+    this.envelope = animate;
     box.append(this.detail(card, null), el('div', 'rc-actions', undefined, this.closeButton('Đóng (Tab)')));
     this.overlay.replaceChildren(...(env ? [env, box] : [box]));
     this.overlay.hidden = false;
@@ -454,7 +474,8 @@ export class RaceHud {
     const st = TYPE_STYLE[card.type];
     const p = cardPanel(card, { now: this.now, teamName: this.teamName || this.demoTeam, mode: entry ? 'book' : 'card', live: this.view?.status !== 'finished' }); // finished: the Host ended the race, read-only (SPEC §8.10)
     if (!entry) this.shown = p.status;
-    const root = el('section', `rc-detail${entry?.pinned ? ' pinned' : ''}`);
+    const pair = card.type === 'detour' && p.blocks.some((b) => b.branch != null); // Leg 3: the two halves side by side
+    const root = el('section', `rc-detail${entry?.pinned ? ' pinned' : ''}${pair ? ' rc-detour' : ''}`);
     root.style.setProperty('--c', st.colour);
     root.append(
       el('div', 'rc-head', undefined, html('span', 'rc-icon', icon(st.icon, 22)), el('span', 'rc-label', s.label), entry && el('span', `rc-status ${s.active ? 'active' : 'done'}`, entry.pinned && s.active ? 'Hiện tại · Đang làm' : entry.status)),
@@ -464,11 +485,17 @@ export class RaceHud {
       t.append(el('span', '', s.transport.text));
       root.append(t);
     }
-    if (p.clue) root.append(el('p', 'rc-text', p.clue));
+    const clue = splitNote(p.clue);
+    if (clue.text) root.append(el('p', 'rc-text', clue.text));
+    if (clue.note) root.append(el('p', 'rc-text rc-clue-note', clue.note));
     const media = this.mediaBox(p.media);
     if (media) root.append(media);
     const other: HTMLElement[] = []; // the branch not taken: dimmed, after the controls of the taken one, next to "Đổi lựa chọn kép"
-    for (const b of p.blocks) {
+    // the detour's state line + countdown go ABOVE the two halves (they are what the team must see; the halves may scroll)
+    const note = p.note ? el('div', 'rc-timer info', p.note) : null; // the step's main instruction: framed like the countdown (visual#5)
+    if (p.line) setTime((this.timerEl = el('div', `rc-timer ${p.line.kind}`)), p.line.text);
+    if (pair) root.append(...[note, this.timerEl, this.detourPair(card, p, !!entry)].filter((n) => n != null));
+    else for (const b of p.blocks) {
       const dim = card.branch != null && b.branch != null && !b.chosen;
       const blk = el('div', `rc-task${dim ? ' dim' : ''}`, undefined, el('div', 'rc-task-title', b.title, b.chosen ? el('span', 'rc-chosen', 'Đội đã chọn') : null), b.text ? el('div', 'rc-task-text', b.text) : null, b.place ? el('div', 'rc-task-meta', `Địa điểm: ${b.place}`) : null, b.limit ? el('div', 'rc-task-meta', b.limit) : null, this.mediaBox(b.media));
       const n = p.choose.indexOf(b.branch ?? '');
@@ -476,11 +503,7 @@ export class RaceHud {
       if (dim) other.push(blk);
       else root.append(blk);
     }
-    if (p.note) root.append(el('div', 'rc-timer info', p.note)); // the step's main instruction: framed like the countdown (visual#5)
-    if (p.line) {
-      root.append((this.timerEl = el('div', `rc-timer ${p.line.kind}`)));
-      setTime(this.timerEl, p.line.text);
-    }
+    if (!pair) root.append(...[note, this.timerEl].filter((n) => n != null));
     if (p.accept) root.append((this.hot.primary = this.act('Nhận thử thách [Enter]', () => ((this.focusBox = true), this.actions.accept(card.step))))); // asked for the task: its answer box takes the keys
     if (p.answerBox) root.append(this.answerRow(card));
     if (p.parts) root.append(this.partsRows(card, p.parts));
@@ -497,6 +520,37 @@ export class RaceHud {
       root.append(el('div', 'rc-meta', meta));
     }
     return root;
+  }
+
+  /** Leg 3 "Mật thư mở ngang": the two branches as two halves of one wide card (left = branch A, chocolate; right = branch B,
+   *  comic strip), each a big click target while the team may choose (the [1] / [2] button inside is the real control:
+   *  hot.choose, act's lock). Once chosen, the picked half widens and its afterChoice text drops open under the summary
+   *  ("sổ ra"), the other half dims. In the Sổ (`book`) the halves stack, nothing animates. */
+  private detourPair(card: ClueCard, p: CardPanel, book: boolean): HTMLElement {
+    const pair = el('div', `rc-pair${book ? ' book' : ''}${card.branch ? ' picked' : ''}${this.envelope && !book ? ' unfold' : ''}`);
+    p.blocks.forEach((b, i) => {
+      const dim = card.branch != null && !b.chosen;
+      const half = el('div', `rc-half rc-half-${i ? 'b' : 'a'}${b.chosen ? ' chosen' : dim ? ' dim' : ''}`);
+      half.append(html('div', 'rc-half-art', ART[i ? 'comic' : 'choco']), el('div', 'rc-half-name', b.title, b.chosen ? el('span', 'rc-chosen', 'Đội đã chọn') : null), ...(b.text ? [el('div', 'rc-half-sum', b.text)] : []));
+      if (b.after) {
+        // the drop plays once per chosen branch (a countdown flip redraws the card: no replay)
+        const key = `${card.step}:${card.branch}`;
+        const after = el('div', `rc-after${!book && this.afterKey !== key ? ' drop' : ''}`);
+        if (!book) this.afterKey = key;
+        for (const r of richText(b.after)) after.append(r.kind === 'p' ? el('p', '', r.text) : el('ul', '', undefined, ...r.items.map((t) => el('li', '', t))));
+        half.append(after);
+      }
+      for (const n of [b.place && el('div', 'rc-task-meta', `Địa điểm: ${b.place}`), b.limit && el('div', 'rc-task-meta', b.limit), this.mediaBox(b.media)]) if (n) half.append(n);
+      const n = p.choose.indexOf(b.branch ?? '');
+      if (n >= 0) {
+        const btn = (this.hot.choose[n] = this.act(`Chọn ${b.title} [${n + 1}]`, () => this.actions.branch(card.step, b.branch!), half));
+        half.classList.add('pick');
+        half.addEventListener('click', (e) => void (!btn.contains(e.target as Node) && btn.click())); // the whole half is the button
+      }
+      if (i) pair.append(el('div', 'rc-fold'));
+      pair.append(half);
+    });
+    return pair;
   }
 
   /** A button that asks the server for something: disabled raceHud.taskLockSeconds after a click (the answer comes back as a new
@@ -644,11 +698,17 @@ const MEDIA_SET = [
 const A = (id: number, text: string, status: ClueCard['answers'][number]['status'], agoS: number) => ({ id, text, status, at: DEMO_NOW - agoS * 1000 });
 /** Phase 8 card fields every stand-in shares (no media, no countdown, no answers yet). */
 const NEW = { media: [], lockedUntil: null, lockKind: null, answers: [] } satisfies Partial<ClueCard>;
-const branches = (taskA?: TaskView, taskB?: TaskView) => [
-  { id: 'A', name: 'Tính', summary: 'Một phép tính nhanh gọn, trả lời ngay trong game.', ...(taskA ? { task: taskA } : {}) },
-  { id: 'B', name: 'Ảnh', summary: 'Chụp ảnh gửi cho Host, làm ở một nơi khác.', ...(taskB ? { task: taskB } : {}) },
+// Leg 3 stand-ins (invented UI text, never the leg's: leg:check scans client/dist for it): a chocolate branch (left) and a
+// comic-strip branch (right); `after` = the chosen branch's afterChoice text
+const AFTER = {
+  A: 'Đội chơi di chuyển tới bảo tàng sô-cô-la minh họa để hoàn thành thử thách. Hoàn thành đủ 5 loại, đội nhận mật thư để đi tiếp.\nVới mỗi loại không hoàn thành, đội bị phạt 20 phút tại vạch đích.',
+  B: 'Đội chơi di chuyển tới cửa hàng truyện tranh minh họa, rồi phác hoạ lại 9 bức tranh với độ chính xác ≥ 85%, tính theo công thức = độ đủ nét × độ đúng nét.\n• Độ đủ nét: tỉ lệ hình mẫu được nét của đội phủ trong bán kính cho phép.\n• Độ đúng nét: tỉ lệ mực của đội nằm đúng trên đường mẫu.\n• Chống vẽ thừa: chỉ trừ điểm khi mực dài hơn hai lần hình mẫu.\nVới mỗi hình không hoàn thành, đội bị phạt 12 phút.',
+};
+const branches = (taskA?: TaskView, taskB?: TaskView, after?: 'A' | 'B') => [
+  { id: 'A', name: 'Sô-cô-la', summary: 'Làm thử vài loại kẹo sô-cô-la minh họa, xong thì nhận mật thư kế.', ...(after === 'A' ? { afterChoice: AFTER.A } : {}), ...(taskA ? { task: taskA } : {}) },
+  { id: 'B', name: 'Vẽ truyện tranh', summary: 'Vẽ lại vài bức tranh minh họa theo mẫu, đủ số bức thì nhận mật thư kế.', ...(after === 'B' ? { afterChoice: AFTER.B } : {}), ...(taskB ? { task: taskB } : {}) },
 ];
-const detour = { ...NEW, step: 'D2', type: 'detour', label: 'Lựa chọn kép', text: 'Hai con đường, một phải chọn. Hãy chọn nhánh hợp với đội.', receivedAt: T0, completedAt: null, switchPenaltyMinutes: 10, retryPenaltyMinutes: 3 } satisfies Partial<ClueCard>;
+const detour = { ...NEW, step: 'D2', type: 'detour', label: 'Lựa chọn kép', text: 'Lời dẫn minh họa: xứ này nổi tiếng vì kẹo sô-cô-la thượng hạng và cũng là “vương quốc” của truyện tranh. Hãy chọn một trong hai con đường.\nLưu ý: Mỗi lần đổi Lựa chọn kép, đội chơi sẽ bị phạt 10 phút.', receivedAt: T0, completedAt: null, switchPenaltyMinutes: 10, retryPenaltyMinutes: 3 } satisfies Partial<ClueCard>;
 const DEMO_CARDS: Record<string, ClueCard> = {
   route: { ...NEW, step: 'D1', type: 'route_info', label: 'Lộ trình 1', text: 'Nội dung mật thư minh họa: hãy đi tới nơi có thể nhìn thấy ngọn tháp cao nhất thành phố rồi tìm hòm mật thư ở chân nó.', transport: { allowed: 'any' }, status: 'active', receivedAt: T0, completedAt: null },
   walk: { ...NEW, step: 'D1', type: 'route_info', label: 'Lộ trình 2', text: 'Mật thư minh họa, lộ trình bắt buộc đi bộ.', transport: { mandatory: 'walk' }, status: 'active', receivedAt: T0, completedAt: null },
@@ -662,10 +722,10 @@ const DEMO_CARDS: Record<string, ClueCard> = {
   // SPEC §17.44: a multi-box task (4 fake places, Host-reviewed): a Phạt before minute 30 (no count) and one after ("đúng 2/4")
   parts: { ...NEW, step: 'T1', type: 'challenge', label: 'Thử thách 1', text: 'Gợi ý minh họa: xem kỹ đoạn phim rồi kể tên các nơi xuất hiện.', status: 'active', retryPenaltyMinutes: 3, task: { ...textTask, title: 'Bốn địa điểm minh họa', description: 'Kể tên 4 địa điểm xuất hiện trong đoạn phim minh họa. Điền mỗi nơi một ô, thứ tự tùy ý.', input: 'parts', partLabels: ['Địa điểm 1', 'Địa điểm 2', 'Địa điểm 3', 'Địa điểm 4'] }, answers: [{ ...A(1, 'nơi một | nơi hai | nơi ba | nơi bốn', 'penalized', 1500) }, { ...A(2, 'nơi một | nơi hai | nơi năm | nơi sáu', 'penalized', 300), score: 2, of: 4 }], receivedAt: T0, completedAt: null },
   'detour-choose': { ...detour, status: 'choose', branch: null, branches: branches(), switches: 0 },
-  'detour-chosen': { ...detour, status: 'goToBranch', branch: 'A', branchOpened: false, branches: branches(), switches: 1 },
-  'detour-locked': { ...detour, status: 'switchLocked', branch: 'B', branchOpened: false, branches: branches(), switches: 1, lockedUntil: DEMO_NOW + 540_000, lockKind: 'switch' },
-  'branch-task': { ...detour, status: 'active', branch: 'A', branchOpened: true, branches: branches({ ...textTask, title: 'Phép tính minh họa', description: 'Hãy tính tổng số tầng của công trình trước mặt rồi gõ kết quả.', place: 'Chân tháp minh họa' }), switches: 0, answers: [A(1, 'đáp án thử một', 'penalized', 130)] },
-  proof: { ...detour, status: 'active', branch: 'B', branchOpened: true, branches: branches(undefined, proofTask), switches: 1 },
+  'detour-chosen': { ...detour, status: 'goToBranch', branch: 'A', branchOpened: false, branches: branches(undefined, undefined, 'A'), switches: 1 },
+  'detour-locked': { ...detour, status: 'switchLocked', branch: 'B', branchOpened: false, branches: branches(undefined, undefined, 'B'), switches: 1, lockedUntil: DEMO_NOW + 540_000, lockKind: 'switch' },
+  'branch-task': { ...detour, status: 'active', branch: 'A', branchOpened: true, branches: branches({ ...textTask, title: 'Sô-cô-la', description: 'Hãy đếm số loại sô-cô-la trong tủ kính trước mặt rồi gõ kết quả.', place: 'Bảo tàng sô-cô-la minh họa' }, undefined, 'A'), switches: 0, answers: [A(1, 'đáp án thử một', 'penalized', 130)] },
+  proof: { ...detour, status: 'active', branch: 'B', branchOpened: true, branches: branches(undefined, proofTask, 'B'), switches: 1 },
   media: { ...NEW, step: 'L1', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư minh họa kèm hình và liên kết: xem ảnh rồi đi tới nơi trong ảnh.', transport: { allowed: 'any' }, media: MEDIA_SET, status: 'active', receivedAt: T0, completedAt: null },
   // p8-media-offline: the demo resolver has no demo-off.jpg (offline: "Hình chỉ tải được trong cuộc đua")
   'media-off': { ...NEW, step: 'L1', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư minh họa kèm hình: ngoài cuộc đua hình không tải được.', transport: { allowed: 'any' }, media: [{ url: 'r2:demo-off.jpg', label: 'Ảnh gợi ý', kind: 'image' }], status: 'active', receivedAt: T0, completedAt: null },

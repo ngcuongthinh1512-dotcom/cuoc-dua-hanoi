@@ -1,7 +1,7 @@
 // Minimal Host page, pure part (docs/plans/phase6.md §3.19): host.state → table rows / counter lines. No DOM, so it is
 // testable in Node. Phase 10 replaces the page with SPEC §13; keep the page thin.
 import { latLonToWorld, worldToLatLon } from '@race/shared';
-import { MEDIA, NET, normalizeAnswer, submitCode, type AnswerStatus, type FlagWhy, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type ReviewItem, type StepProgressView, type UndoItem } from '@race/shared/protocol';
+import { FINISH_PENALTY_REASON, MEDIA, NET, normalizeAnswer, submitCode, type AnswerStatus, type ClientMessage, type FlagWhy, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type ReviewItem, type StepProgressView, type UndoItem } from '@race/shared/protocol';
 
 /** Durable Object requests as Cloudflare bills them (same formula as worker/src/counters.ts, docs/plans/phase6.md §3.7). */
 export const billableRequests = (c: QuotaCounters) => c.http + c.alarms + Math.ceil(c.wsIn / 20);
@@ -186,7 +186,11 @@ export function legIssueLines(issues: LegIssueView[]): { level: LegIssueView['le
   return [...issues].sort((a, b) => rank[a.level] - rank[b.level]).map((i) => ({ level: i.level, text: `${i.where}: ${i.message}` }));
 }
 
-export interface StartRow { id: string; name: string; colour: string; startOrder: string; joined: string; stepLabel: string; penalty: string }
+export interface StartRow {
+  id: string; name: string; colour: string; startOrder: string; joined: string; stepLabel: string; penalty: string;
+  /** Leg 3: the finish-line penalty in the "Phạt vạch đích" inputs (0 = none) and its reason (the default when none). */
+  fpMinutes: number; fpReason: string;
+}
 /** One row of the "Thứ tự vào game" table (SPEC §17.12 order; §17.23: no start-time input); times in the leg's zone. */
 export function startRows(state: HostState): StartRow[] {
   const tz = legZone(state);
@@ -196,7 +200,17 @@ export function startRows(state: HostState): StartRow[] {
     joined: r.joinedAt === null ? '—' : fmtTimeOfDay(r.joinedAt, tz),
     stepLabel: r.stepLabel,
     penalty: r.penaltyMinutes ? `+${r.penaltyMinutes} phút` : '—',
+    fpMinutes: state.teams.find((t) => t.id === r.id)?.finishPenalty?.minutes ?? 0,
+    fpReason: state.teams.find((t) => t.id === r.id)?.finishPenalty?.reason ?? FINISH_PENALTY_REASON,
   }));
+}
+
+/** Leg 3: the "Phạt vạch đích" inputs → host.finishPenalty (minutes '' / 0 = clear), or a Vietnamese error. */
+export function finishPenaltyMessage(team: string, minutes: string, reason: string): Extract<ClientMessage, { t: 'host.finishPenalty' }> | string {
+  const m = minutes.trim() === '' ? 0 : Number(minutes);
+  if (!Number.isInteger(m) || m < 0 || m > NET.finishPenaltyMax) return `Số phút phạt vạch đích phải là số nguyên 0–${NET.finishPenaltyMax}.`;
+  const why = reason.trim().slice(0, NET.finishReasonMax);
+  return { t: 'host.finishPenalty', team, minutes: m, ...(m && why ? { reason: why } : {}) };
 }
 
 /** A button inside a matrix cell: host.review on `team` / `step` (`id` absent = approve a photo task before "Tôi đã gửi bài", or
@@ -207,6 +221,9 @@ export interface Cell { state: 'todo' | 'active' | 'done' | 'pending' | 'locked'
  *  flag (Phase 10: the matrix marks the name, the reason and "Xóa cờ" are in "Các đội"). */
 export interface ProgressRow { team: string; name: string; colour: string; rank: string; out: boolean; flagged: boolean; cells: Cell[]; penalty: string; finish: string }
 
+/** Leg 3: a detour room's progress for the Host ("Phòng sô-cô-la (nhánh A): đã xong 3/5 · BỎ QUA"). */
+export const roomLine = (r: NonNullable<StepProgressView['room']>) =>
+  `Phòng ${r.kind === 'chocolate' ? 'sô-cô-la' : 'truyện tranh'} (nhánh ${r.branch}): đã xong ${r.done}/${r.total}${r.skipped ? ' · BỎ QUA (phạt vạch đích)' : ''}`;
 const ANSWER_LABEL: Record<AnswerStatus, string> = { pending: 'chờ duyệt', approved: 'đã duyệt', penalized: 'bị phạt', wrong: 'chưa đúng', correct: 'đúng' };
 /** 0.1 → "0,1" (Vietnamese decimal comma; Number.toLocaleString depends on the Node / browser ICU). */
 const fmtNum = (n: number) => String(n).replace('.', ',');
@@ -238,11 +255,12 @@ export function progressTable(state: HostState, now: number): { head: { label: s
         doneAt != null && `Xong: ${when(doneAt)}`,
         p?.branch && `Nhánh: ${branchTag(state, s.id, p.branch)}`,
         ...(p?.answers ?? []).map((a) => `${a.branch ? `[${a.branch}] ` : ''}${a.text ? `«${a.text}»` : '(đã gửi bài)'} · ${when(a.at)} · ${ANSWER_LABEL[a.status]}${a.note ? ` · ghi chú: ${a.note}` : ''}`),
+        p?.room && roomLine(p.room),
         p?.note && `Ghi chú Host: ${p.note}`,
         p?.approvalWaitSeconds && `Đã chờ duyệt: ${fmtMinSec(p.approvalWaitSeconds * 1000)}`,
       ].filter(Boolean).join('\n');
       const branch = p?.branch ? ` · ${branchTag(state, s.id, p.branch)}${p.branchSwitches ? ` ↺${p.branchSwitches}` : ''}` : ''; // the team's name for it (visual#3)
-      const tags = `${branch}${p?.rejections ? ` ✗${p.rejections}` : ''}`;
+      const tags = `${branch}${p?.rejections ? ` ✗${p.rejections}` : ''}${p?.room ? ` ▣${p.room.done}/${p.room.total}${p.room.skipped ? ' bỏ' : ''}` : ''}`;
       if (doneAt !== null) return { state: 'done', text: `${when(doneAt)}${tags}`, title, buttons: [] };
       if (i !== t.step || t.finishAt !== null) return { state: 'todo', text: '', title, buttons: [] };
       // the team is at this step. A photo task it has started (a detour: its branch box opened) may be approved at once.
@@ -277,7 +295,8 @@ export function progressTable(state: HostState, now: number): { head: { label: s
       out: !!r?.out,
       flagged: t.flagged,
       cells,
-      penalty: t.penaltyMinutes ? `+${t.penaltyMinutes} phút` : '—',
+      // Leg 3: the finish-line penalty (added to the ranking) before the Pit Stop wait (always 0 in this leg)
+      penalty: t.finishPenalty ? `+${t.finishPenalty.minutes} phút vạch đích` : t.penaltyMinutes ? `+${t.penaltyMinutes} phút` : '—',
       finish: when(t.finishAt),
     };
   });
@@ -289,7 +308,7 @@ export function progressTable(state: HostState, now: number): { head: { label: s
 /** host.review of a cell / queue button. `note` '' = none (op 'note' sends '' to clear the Host note); never longer than NET.noteMax. */
 export function reviewMessage(team: string, step: string, op: HostReview['op'], id: number | undefined, note: string, score?: number): HostReview {
   const n = note.trim().slice(0, NET.noteMax);
-  return { t: 'host.review', team, step, op, ...(id !== undefined ? { id } : {}), ...(op === 'note' || n ? { note: n } : {}), ...(op === 'penalize' && score !== undefined ? { score } : {}) };
+  return { t: 'host.review', team, step, op, ...(id !== undefined ? { id } : {}), ...(op === 'note' || n ? { note: n } : {}), ...((op === 'penalize' || op === 'score') && score !== undefined ? { score } : {}) };
 }
 
 /** SPEC §17.31: the "Đúng ?/n" box next to Phạt: `scoreOf` = n (undefined = no box), `scoreHint` = whether the team would be told
@@ -340,7 +359,7 @@ export interface QueueRow {
   /** SPEC §17.42: answerMatch of `text` against `reference` (null on a multi-box task: nothing to match). */
   match: 'yes' | 'no' | null;
   /** SPEC §17.44: a multi-box task: `text` split into its N strings, with the box labels ("Ô n" when the leg gives none). */
-  parts: { label: string; text: string }[] | null;
+  parts: { label: string; text: string; /** Leg 3: an auto-graded box: right / wrong. */ ok?: boolean }[] | null;
   /** 1-based: which submission of this team on this task (same branch) the waiting answer is; `previous` = the earlier ones
    *  as lines ("Lần 1: «41» · bị phạt · 14:02:10 · ghi chú: …"), oldest first. */
   attempt: number;
@@ -349,7 +368,14 @@ export interface QueueRow {
   lockMinutes: number;
   /** SPEC §17.31: task.scoreOf → the "Đúng ?/n" box next to Phạt. */
   score?: { scoreOf: number; scoreHint: string };
+  /** Leg 3: graded + applied by the server (ReviewItem.auto): the verdict line, "đúng x/N" the team sees now, whether "Đúng" still
+   *  applies; `parts[k].ok` = box k right (✓ / ✗, Host only). Actions: "✓ Đồng ý" (ack), "Cập nhật" x/N (score), "Đúng" (approve). */
+  auto?: { verdict: 'correct' | 'penalized'; score: number; of: number; canApprove: boolean; line: string };
 }
+
+/** Leg 3: "Máy tự chấm: đúng 2/4 · đã phạt 2 phút" / "… 4/4 · đã cho qua". */
+export const autoLine = (a: NonNullable<ReviewItem['auto']>, lockMinutes: number): string =>
+  `Máy tự chấm: đúng ${a.score}/${a.of} · ${a.verdict === 'correct' ? 'đã cho qua (đội nhận mật thư kế)' : `đã phạt ${fmtNum(lockMinutes)} phút`}`;
 /** The review queue ("Chờ duyệt"), oldest answer first. `now` = the server's clock estimated at drawing. */
 export function queueRows(state: HostState, now: number): QueueRow[] {
   const teams = new Map(state.teams.map((t) => [t.id, t]));
@@ -366,13 +392,14 @@ export function queueRows(state: HostState, now: number): QueueRow[] {
       stepName: state.leg?.steps.find((s) => s.id === q.step)?.name ?? '',
       branch: q.branch, branchName: q.branch ? branchTag(state, q.step, q.branch) : '', id: q.id, code: submitCode(name, q.step, q.branch), text: q.text,
       waiting: fmtMinSec(now - q.at), waitMs: now - q.at, reference: q.reference, match: q.partLabels ? null : answerMatch(q.text, q.reference), attempt: before.length + 1, previous,
-      parts: q.partLabels ? partsOf(q.text, q.partLabels) : null,
+      parts: q.partLabels ? partsOf(q.text, q.partLabels).map((p, k) => (q.auto ? { ...p, ok: !!q.auto.marks[k] } : p)) : null,
       note: q.note, lockMinutes: q.lockMinutes, ...(q.scoreOf ? { score: scoreBox(q, now) } : {}),
+      ...(q.auto ? { auto: { verdict: q.auto.verdict, score: q.auto.score, of: q.auto.of, canApprove: q.auto.canApprove, line: autoLine(q.auto, q.lockMinutes) } } : {}),
     };
   });
 }
 /** The queue only rebuilds (so a note box keeps its focus) when this changes: who, which step, which answer, when. */
-export const queueSig = (state: HostState): string => JSON.stringify(state.queue.map((q) => [q.id, q.team, q.step, q.at]));
+export const queueSig = (state: HostState): string => JSON.stringify(state.queue.map((q) => [q.id, q.team, q.step, q.at, q.auto?.score, q.auto?.canApprove]));
 /** Items of `rows` not seen before (`seen` is updated). `silent` = the first state of a page load: nothing is new then. */
 export function freshQueue(seen: Set<string>, rows: QueueRow[], silent: boolean): QueueRow[] {
   const fresh = rows.filter((r) => !seen.has(r.key));
@@ -556,7 +583,7 @@ export function demoState(now = 1_000_000): HostState {
     serverMs: now,
     status: 'running',
     teams: [
-      team(0, 'Đội Xanh', '#2c6bd8', 'K7M3QX', 'An', true, 0, 1, pose(120, -310), { startOrder: 1, joinedAt: t0 + 2 * min, step: 6, finishAt: now - 4 * min }),
+      team(0, 'Đội Xanh', '#2c6bd8', 'K7M3QX', 'An', true, 0, 1, pose(120, -310), { startOrder: 1, joinedAt: t0 + 2 * min, step: 6, finishAt: now - 4 * min, finishPenalty: { minutes: 20, reason: FINISH_PENALTY_REASON } }), // Leg 3: gave up a chocolate
       team(1, 'Đội Đỏ', '#d8342c', 'W9HT4B', 'Bình', true, 0, 0, pose(-80, 40), { startOrder: 2, joinedAt: t0 + 9 * min, step: 3, penaltyMinutes: 2 }, true),
       // Đội Vàng: two reasons for its flag (Phase 10 V3, the p10 picture)
       team(2, 'Đội Vàng', '#e0b020', 'R2NZ8P', 'Chi', false, 95_000, 3, pose(400, -520), { startOrder: 3, joinedAt: t0 + 6 * min, step: 3, flagged: true, flagWhy: ['jump', 'respawn'], flagAt: now - 2 * min }),
@@ -624,4 +651,16 @@ export function demoState(now = 1_000_000): HostState {
     // keeps it that much longer, for screenshots)
     undo: [{ team: 't0', step: 'T1', id: 2, op: 'approve', at: now - 3_000, until: now - 3_000 + NET.undoMs }],
   };
+}
+
+/** Leg 3 (the `?demo=1` page only): two answers the server graded itself (4 boxes; fake content) on top of demoState: Đội Tím 2/4 →
+ *  its countdown runs, "Đúng – cho qua" still applies; Đội Đỏ 4/4 → went on. */
+export function withAutoDemo(s: HostState, now = s.serverMs): HostState {
+  const t0 = now - 50 * 60_000;
+  const min = 60_000;
+  return { ...s, queue: [
+      { team: 't4', step: 'T1', label: 'Thử thách 1', branch: null, id: 2, text: 'nước một | nước hai | nước năm | nước sáu', at: now - 70_000, reference: ['Nước Một', 'Nước Hai', 'Nước Ba', 'Nước Bốn'], note: '', lockMinutes: 2, partLabels: ['Bộ 1', 'Bộ 2', 'Bộ 3', 'Bộ 4'], auto: { verdict: 'penalized', marks: [true, true, false, false], score: 2, of: 4, canApprove: true } },
+      { team: 't1', step: 'T1', label: 'Thử thách 1', branch: null, id: 1, text: 'Nuoc Mot | nước hai | Nước-Ba | nuoc bon', at: t0 + 34 * min, reference: ['Nước Một', 'Nước Hai', 'Nước Ba', 'Nước Bốn'], note: '', lockMinutes: 2, partLabels: ['Bộ 1', 'Bộ 2', 'Bộ 3', 'Bộ 4'], auto: { verdict: 'correct', marks: [true, true, true, true], score: 4, of: 4, canApprove: false } },
+    ...s.queue,
+  ] };
 }

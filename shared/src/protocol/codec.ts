@@ -122,15 +122,22 @@ export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator')
           return text(o.text, NET.answerMax) && (o.parts === undefined || (Array.isArray(o.parts) && o.parts.length >= 2 && o.parts.length <= 8 && o.parts.every((p: unknown) => text(p, NET.answerMax))));
         case 'branch':
           return str(o.branch, 16);
+        case 'room':
+          // Leg 3: integers only; the server checks done ≤ the room's total (leg schema: total ≤ 20)
+          return str(o.branch, 16) && isInt(o.done, 0, 20) && typeof o.skipped === 'boolean';
         default:
           return false;
       }
     case 'host.review':
       // Phase 10 (V2): undo names the answer (`id` required); the rest as before
-      return role === 'host' && str(o.team) && str(o.step, 16) && (o.op === 'approve' || o.op === 'penalize' || o.op === 'note' || o.op === 'undo') &&
-        (o.id === undefined ? o.op !== 'undo' : isInt(o.id, 1, 10_000)) && (o.note === undefined || text(o.note, NET.noteMax)) && (o.score === undefined || isInt(o.score, 0, 1000));
+      // Leg 3: ack / score (an auto-graded answer) name the answer too; score needs its number
+      return role === 'host' && str(o.team) && str(o.step, 16) && ['approve', 'penalize', 'note', 'undo', 'ack', 'score'].includes(o.op as string) &&
+        (o.id === undefined ? o.op !== 'undo' && o.op !== 'ack' && o.op !== 'score' : isInt(o.id, 1, 10_000)) && (o.note === undefined || text(o.note, NET.noteMax)) &&
+        (o.score === undefined ? o.op !== 'score' : isInt(o.score, 0, 1000));
     case 'host.flag':
       return role === 'host' && o.op === 'clear' && str(o.team);
+    case 'host.finishPenalty':
+      return role === 'host' && str(o.team) && isInt(o.minutes, 0, NET.finishPenaltyMax) && (o.reason === undefined || text(o.reason, NET.finishReasonMax));
     case 'host.race':
       return role === 'host' && (o.op === 'start' || o.op === 'pause' || o.op === 'resume' || o.op === 'finish');
     case 'host.leg':

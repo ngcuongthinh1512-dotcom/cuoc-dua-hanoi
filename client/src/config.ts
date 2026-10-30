@@ -1076,6 +1076,7 @@ export const remote = {
   bufferSamples: 10, // ticks kept per remote player (2 s at 5 Hz)
   clockSlewMs: 1, // ms the server-clock offset estimate sinks per tick (≈ 5 ms/s): drift and one lucky fast tick wear off
   renderRadius: 300, // m: until welcome.presence.renderRadius arrives (DEV ?peers stand-ins)
+  hideDy: 8, // m: a remote body this far under the terrain grid is in a Lựa chọn kép room (drawn only for a viewer in one too); Brussels slopes stay well under it
   bellRadius: 60, // m: another team's bell (R) is heard this close
   leanSmoothing: 0.15, // s: a remote rider's lean (derived from the turn rate, not on the wire) follows with this lag
 };
@@ -1150,6 +1151,17 @@ export const raceClient = {
   host: { shirt: '#23262d', tag: '#ffd75e', tagDistance: 12, name: 'Người dẫn chương trình', offset: [PIT_MAT.width / 2 + 1.4, 1.5], scale: 1.12, waveEveryS: 6, waveRadius: 25 },
 };
 
+// ── Leg 3 · the Lựa chọn kép rooms (rooms/roomState.ts, main.ts: chocolate workshop / comic gallery over the world) ──
+export const rooms = {
+  fadeMs: 450, // ms of the black fade when the body goes into / out of a room (race.css .room-fade transition matches)
+  below: 30, // m: the room floor = heightAt(box x, z) − this (under the street: no road / NPC / bike there; the Louvre room's value)
+  minFloorY: -35, // m: the floor never lower (player.respawnBelow −40 would fire; codec MIN_Y is −100)
+  enterInset: 2.2, // m: entering, the feet land this far inside the door (room enough behind the body for the camera arm); leaving, exitInset m in front of the box: x, z move ≤ 2.2 m, only y changes much (no `respawn`; the server's trusted point banks 400 m of jumps a minute: nothing to flag)
+  exitInset: 1.8,
+  camera: { shoulder: 0.65, lift: 0.35 }, // ThirdPersonCamera.override inside (the Louvre room's: further over the shoulder, higher)
+  maxPeers: 10, // remote bodies drawn inside a room at most (the nearest first; RemotePlayers' own cap otherwise)
+};
+
 // ── C · race HUD widgets (race/ui/*: clue card, Sổ mật thư, start-order banner, Pit Stop line, zone panel; ui/HUD.ts clock) ──
 export const raceHud = {
   startOrderSeconds: 15, // SPEC §17.12: "Xuất phát ở vị trí thứ n" stays this long (sim clock), then fades (hudWidgets.streetFade)
@@ -1157,6 +1169,7 @@ export const raceHud = {
   cardWidth: 330, // px, top-left mission card (the full card and the book use fullWidth)
   clueLines: 5, // lines of clue text kept on the compact card (the full card / book show everything)
   fullWidth: 520, // px, full card popup + Sổ mật thư
+  detourWidth: 940, // px, the Lựa chọn kép card (two halves side by side; the Sổ keeps fullWidth and stacks them)
   finishSeconds: 14, // s (sim clock) the host NPC's finish line stays on screen
   taskLockSeconds: 2, // s the card's server buttons (Nhận thử thách, Chọn / Đổi nhánh, Gửi) stay disabled after a click (the answer comes back as a new `race` view)
   // Phase 8 (docs/plans/phase8.md D9 / D15). Typed-answer / history limits are NET.answerMax / NET.answerHistory (shared: the server cuts at the same numbers).

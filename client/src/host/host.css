@@ -82,6 +82,11 @@ button.ok { background: #2c9a4a; }
 /* SPEC §17.44: a multi-box answer, one numbered line per box */
 .rv-parts { margin: 4px 0 0; padding-left: 24px; display: grid; gap: 4px; }
 .rv-parts li { font-size: 20px; }
+.rv-parts li.ok .rv-mark { color: #8fe3a8; margin-left: 10px; }
+.rv-parts li.bad .rv-mark { color: #ff8a7a; margin-left: 10px; }
+.rv-parts li.bad .rv-text { text-decoration: underline wavy #ff8a7a; }
+.rv-auto { margin-top: 8px; padding: 4px 10px; border-left: 4px solid #8fe3a8; font-weight: 600; }
+.rv-auto.penalized { border-color: #ff8a7a; }
 .rv-parts .rv-part-label { display: inline-block; min-width: 110px; margin-right: 8px; font-size: 13px; font-weight: 600; color: #9fb0c8; }
 .rv-prev { margin-top: 3px; font-size: 13px; font-weight: 400; color: #b7c6e6; }
 .rv-ref { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin-top: 10px; padding: 6px 12px; border-radius: 8px; background: #0f2a1a; border: 1px dashed #2c9a4a; font-size: 13px; color: #c9f0d4; }
@@ -131,3 +136,8 @@ td.flag { white-space: normal; min-width: 13em; }
 .map-tip { position: absolute; z-index: 1; max-width: 300px; max-height: 90%; overflow: hidden; pointer-events: none; white-space: pre-line; font-size: 12px; line-height: 1.4; background: rgba(11, 15, 22, 0.94); border: 1px solid #34405a; border-radius: 6px; padding: 4px 8px; }
 .map-legend { font-size: 11px; color: #8d99b0; margin-top: 4px; max-width: min(380px, calc(100vw - 56px)); }
 .map-panel.big .map-legend { max-width: none; }
+
+/* Leg 3: "Phạt vạch đích" inputs in the entry-order table */
+.fp { white-space: nowrap; }
+.fp .fp-min { width: 5em; }
+.fp .fp-why { width: 16em; }

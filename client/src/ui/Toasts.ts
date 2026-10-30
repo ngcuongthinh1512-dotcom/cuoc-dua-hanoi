@@ -42,6 +42,11 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   taskNotStarted: 'Bấm "Nhận thử thách" trước',
   // Phase 10 (V2, docs/plans/phase10.md §3.1): the Host undid its Duyệt / Phạt within 10 s
   reviewUndone: 'Host đã rút lại quyết định vừa rồi. Thẻ mật thư trở lại như trước.',
+  roomIgnored: 'Kết quả phòng không được ghi nhận (không phải nhánh đang làm, hoặc đã bỏ qua).',
+  // Leg 3: a multi-box task graded by the server (the "đúng x/N" is on the card's history line)
+  autoCorrect: 'Chính xác! Mật thư mới đã vào Sổ mật thư.',
+  autoPenalized: 'Chưa đúng hết (xem số ô đúng trên thẻ): chờ hết đếm ngược rồi trả lời lại',
+  scoreUpdated: 'Host đã sửa số ô đúng của câu trả lời: xem trên thẻ',
 };
 
 export interface Toast {
@@ -100,6 +105,13 @@ export function toast(text: string): void {
 /** SPEC §17.31: `penalized` with the Host's count ("đúng 2/4") when the server sent one; else the fixed text. */
 export const penalizedText = (score: number | undefined, of: number | undefined): string =>
   score !== undefined && of ? `Host chưa duyệt: đúng ${score}/${of}. Chờ hết đếm ngược rồi trả lời lại` : NOTICES.penalized;
+/** Leg 3 auto-grading: the team hears its number every time (`autoCorrect` / `autoPenalized` / `scoreUpdated` carry score + of);
+ *  without a number (never the case from the server) the fixed text. */
+export const scoredText = (code: 'autoCorrect' | 'autoPenalized' | 'scoreUpdated', score: number | undefined, of: number | undefined): string => {
+  if (score === undefined || !of) return NOTICES[code];
+  const n = `đúng ${score}/${of}`;
+  return code === 'autoCorrect' ? `Chính xác! Đúng ${score}/${of}` : code === 'autoPenalized' ? `Chưa đúng: ${n}. Bị phạt, chờ đếm ngược rồi trả lời lại.` : `Host cập nhật kết quả: ${n}`;
+};
 
 /** A fixed game message (its Vietnamese text lives here). */
 export function notice(code: NoticeCode): void {

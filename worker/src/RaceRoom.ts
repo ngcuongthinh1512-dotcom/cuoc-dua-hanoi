@@ -480,12 +480,13 @@ export class RaceRoom extends DurableObject<Env> {
         // runs every 2 s, critic S4; not open either: F pressed again and again at a box while the race is not open yet
         // (lobby / paused) or out of reach writes nothing, and a box opens once — a branch box again only after a counted
         // branch switch (review R-7))
-        if ((m.op === 'answer' || m.op === 'accept' || m.op === 'branch') && this.count(a.team, 'race', now) > NET.maxRaceOps) return this.close(ws, CLOSE.tooFast, 'too many race ops');
+        if ((m.op === 'answer' || m.op === 'accept' || m.op === 'branch' || m.op === 'room') && this.count(a.team, 'race', now) > NET.maxRaceOps) return this.close(ws, CLOSE.tooFast, 'too many race ops');
         // D4: judged at the trusted pose (the client sends its pose right before the op, on the same socket)
         return this.engine.onOp(a.team, m, this.live.get(a.team)?.valid ?? null, now);
       case 'host.race':
       case 'host.leg':
       case 'host.review': // isClientMessage: Host sockets only
+      case 'host.finishPenalty':
         this.engine.onHost(m, (r) => this.send(ws, r), now);
         return this.soon(now);
       case 'host.flag': {
@@ -686,8 +687,8 @@ export class RaceRoom extends DurableObject<Env> {
     const online = this.online();
     const teams = this.teams().map((t) => {
       const s = this.teamState(t);
-      const { startOrder, step, finishAt, penaltyMinutes, joinedAt } = s;
-      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, flagWhy: s.flagWhy, flagAt: s.flagAt, startOrder, step, finishAt, penaltyMinutes, joinedAt };
+      const { startOrder, step, finishAt, penaltyMinutes, joinedAt, finishPenalty } = s;
+      return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, flagWhy: s.flagWhy, flagAt: s.flagAt, startOrder, step, finishAt, penaltyMinutes, joinedAt, finishPenalty };
     });
     const race = this.engine.hostView(now);
     // ponytail: `steps` (Phase 6 corridor points: start + route / Pit Stop zones) stays until the Host page reads `leg`

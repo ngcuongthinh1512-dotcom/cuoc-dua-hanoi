@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isClientMessage, MEDIA, NET, type HostState } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, answerMatch, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings } from './hostView.ts';
+import { ago, answerMatch, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, finishPenaltyMessage, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, withAutoDemo, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -91,8 +91,16 @@ describe('Host view', () => {
   it('"Thứ tự vào game" rows: entry order + first entry in the leg zone; no start-time input (SPEC §17.23)', () => {
     const s = demoState(Date.UTC(2026, 9, 3, 8, 0, 0));
     const r = startRows(s)[0]!;
-    expect(r).toEqual({ id: 't0', name: 'Đội Xanh', colour: '#2c6bd8', startOrder: '1', joined: '14:12:00', stepLabel: 'Đã về đích', penalty: '—' }); // 08:00 UTC − 48 min = 07:12 UTC = 14:12 ICT
-    expect(startRows(s)[3]).toMatchObject({ joined: '—', startOrder: '—' });
+    expect(r).toEqual({ id: 't0', name: 'Đội Xanh', colour: '#2c6bd8', startOrder: '1', joined: '14:12:00', stepLabel: 'Đã về đích', penalty: '—', fpMinutes: 20, fpReason: 'bỏ thử thách ở lựa chọn kép' }); // 08:00 UTC − 48 min = 07:12 UTC = 14:12 ICT
+    expect(startRows(s)[3]).toMatchObject({ joined: '—', startOrder: '—', fpMinutes: 0, fpReason: 'bỏ thử thách ở lựa chọn kép' });
+  });
+
+  it('Leg 3 "Phạt vạch đích" inputs → host.finishPenalty (0 / empty = clear), bad minutes refused on the page', () => {
+    expect(finishPenaltyMessage('t0', '40', '  bỏ thử thách ở lựa chọn kép ')).toEqual({ t: 'host.finishPenalty', team: 't0', minutes: 40, reason: 'bỏ thử thách ở lựa chọn kép' });
+    expect(finishPenaltyMessage('t0', '', 'x')).toEqual({ t: 'host.finishPenalty', team: 't0', minutes: 0 });
+    expect(finishPenaltyMessage('t0', '12', '')).toEqual({ t: 'host.finishPenalty', team: 't0', minutes: 12 });
+    for (const bad of ['-1', '2.5', 'abc', '601']) expect(typeof finishPenaltyMessage('t0', bad, '')).toBe('string');
+    expect(progressTable(demoState(1e9), 1e9).rows[0]!.penalty).toBe('+20 phút vạch đích');
   });
 
   it('step_progress matrix: done / active / todo cells, rows in finish order, BỊ LOẠI marked; no official time / T+ (SPEC §17.23)', () => {
@@ -137,6 +145,23 @@ type Row = HostState['progress'][number];
 const withRow = (s: HostState, team: string, step: string, more: Partial<Row>): HostState => ({ ...s, progress: s.progress.map((p) => (p.team === team && p.step === step ? { ...p, ...more } : p)) });
 const withTeam = (s: HostState, id: string, more: Partial<HostState['teams'][number]>): HostState => ({ ...s, teams: s.teams.map((t) => (t.id === id ? { ...t, ...more } : t)) });
 const rowOf = (s: HostState, name: string, now = NOW) => progressTable(s, now).rows.find((r) => r.name === name)!;
+
+describe('Leg 3: auto-graded answers in the queue', () => {
+  it('✓ / ✗ per box, the verdict line, "Đúng – cho qua" only while it applies; ack / score messages pass the codec', () => {
+    const s = withAutoDemo(demoState(1_000_000));
+    const rows = queueRows(s, 1_000_000);
+    const tim = rows.find((r) => r.team === 't4')!;
+    expect(tim.parts!.map((p) => p.ok)).toEqual([true, true, false, false]);
+    expect(tim.auto).toEqual({ verdict: 'penalized', score: 2, of: 4, canApprove: true, line: 'Máy tự chấm: đúng 2/4 · đã phạt 2 phút' });
+    expect(rows.find((r) => r.team === 't1')!.auto).toMatchObject({ verdict: 'correct', canApprove: false, line: 'Máy tự chấm: đúng 4/4 · đã cho qua (đội nhận mật thư kế)' });
+    expect(rows.find((r) => r.team === 't6')!.auto).toBeUndefined(); // a Host-reviewed answer as before
+    expect(queueSig({ ...s, queue: s.queue.map((q) => (q.auto ? { ...q, auto: { ...q.auto, score: 3 } } : q)) })).not.toBe(queueSig(s)); // "Cập nhật" redraws
+    const ack = reviewMessage('t4', 'T1', 'ack', 2, '');
+    const sc = reviewMessage('t4', 'T1', 'score', 2, '', 3);
+    expect([ack, sc]).toEqual([{ t: 'host.review', team: 't4', step: 'T1', op: 'ack', id: 2 }, { t: 'host.review', team: 't4', step: 'T1', op: 'score', id: 2, score: 3 }]);
+    expect(isClientMessage(ack, 'host') && isClientMessage(sc, 'host')).toBe(true);
+  });
+});
 
 describe('review queue (D16 (1))', () => {
   const s = demoState(NOW);

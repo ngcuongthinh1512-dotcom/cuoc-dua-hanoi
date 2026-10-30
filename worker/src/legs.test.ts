@@ -14,14 +14,14 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
     const r = parseLeg(leg);
     expect(r.ok).toBe(true);
     expect(new Set(r.issues.map((i) => i.level))).toEqual(new Set(['blank']));
-    expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 3 (D1)', 'Bước 5 (T1)', 'Bước 8 (T2)']));
+    expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 4 (D1)', 'Bước 9 (T2)']));
     expect(r.issues.filter((i) => i.where.startsWith('Host duyệt'))).toEqual([]); // SPEC §17.17: no Host Facebook link to fill
     for (const id of ['bruxelles-demo-filled', 'mini']) expect(parseLeg(bundledLeg(id)).issues).toEqual([]);
   });
 
-  it('starts at the Place Sainte-Catherine (Leg 3 start; SPEC §17.12 = one agreed start): every bundled leg, within 25 m', () => {
-    // Leg 1 (Paris) was the Pont de Bir-Hakeim; Leg 3 (Brussels): the Place Sainte-Catherine, north-west of the Grand-Place
-    const start = latLonToWorld(50.8511, 4.3468);
+  it('starts at the Tháp Rogier (Leg 3 start; SPEC §17.12 = one agreed start): every bundled leg, within 25 m', () => {
+    // Leg 1 (Paris) was the Pont de Bir-Hakeim; Leg 3 (Brussels): the Rogier Tower, north of the Botanique
+    const start = latLonToWorld(50.8558, 4.3592);
     for (const id of BUNDLED_LEGS) {
       const s = bundledLeg(id)!.start;
       const p = latLonToWorld(s.lat, s.lon);
@@ -35,14 +35,15 @@ describe('legs/bruxelles-demo.json', () => {
   const steps = leg.steps;
   const count = (type: string) => steps.filter((s) => s.type === type).length;
 
-  it('has the 10 steps in order', () => {
-    expect(steps.map((s) => s.id)).toEqual(['L1', 'L2', 'D1', 'L3', 'T1', 'L4', 'L5', 'T2', 'L6', 'PS']);
-    expect([count('route_info'), count('detour'), count('challenge'), count('pit_stop')]).toEqual([6, 1, 2, 1]);
+  it('has the 11 steps in order', () => {
+    // Leg 3: the box at L3's destination opens the detour; L3B (GardeRobe MannekenPis) opens T1
+    expect(steps.map((s) => s.id)).toEqual(['L1', 'L2', 'L3', 'D1', 'L3B', 'T1', 'L4', 'L5', 'T2', 'L6', 'PS']);
+    expect([count('route_info'), count('detour'), count('challenge'), count('pit_stop')]).toEqual([7, 1, 2, 1]);
   });
 
   it('keeps every destination and the start inside RACE_BBOX', () => {
     const points = [leg.start, ...steps.map((s) => s.destination).filter((d) => d !== undefined)];
-    expect(points).toHaveLength(8); // start + 6 route_info + pit_stop
+    expect(points).toHaveLength(9); // start + 7 route_info + pit_stop
     for (const p of points) {
       expect(p.lat).toBeGreaterThan(RACE_BBOX.south);
       expect(p.lat).toBeLessThan(RACE_BBOX.north);
@@ -67,17 +68,15 @@ describe('legs/bruxelles-demo.json', () => {
     }
   });
 
-  it('leaves the Detour and both Challenges empty for the Host', () => {
+  it('Leg 3 Detour: Chocolate (Choco-Story) / Truyện Tranh (La Boutique Tintin), each with its own place, afterChoice and a placeholder task; T2 empty for the Host', () => {
     const d1 = steps.find((s) => s.id === 'D1');
-    expect(d1?.clue).toBe('');
+    expect(d1?.clue).toMatch(/praline/);
     const branches = d1?.branches ?? [];
-    for (const b of branches) expect([b.name, b.summary]).toEqual(['', '']);
-    const tasks = [...branches.map((b) => b.task), ...steps.map((s) => s.task).filter((t) => t !== undefined)];
-    expect(tasks).toHaveLength(4);
-    for (const t of tasks) {
-      expect([t.title, t.description, t.proofInstruction]).toEqual(['', '', '']);
-      expect([t.media, t.answers]).toEqual([[], []]);
-    }
-    for (const id of ['T1', 'T2']) expect(steps.find((s) => s.id === id)).toHaveProperty('teaser', '');
+    expect(branches.map((b) => [b.id, b.name, b.task.location?.name, b.task.kind, b.task.verification])).toEqual([['A', 'Chocolate', 'Choco-Story Brussels', 'free', 'host_approval'], ['B', 'Truyện Tranh', 'La Boutique Tintin', 'free', 'host_approval']]);
+    expect(branches.map((b) => /^Đội chơi di chuyển tới/.test(b.afterChoice ?? ''))).toEqual([true, true]);
+    expect(branches[1]!.afterChoice).toMatch(/\n• Độ đủ nét/); // bullet lines → a list on the card
+    for (const b of branches) expect([b.summary.length > 0, b.task.description.startsWith('[CHƯA NHẬP'), b.task.proofInstruction.startsWith('[CHƯA NHẬP'), b.task.media, b.task.answers]).toEqual([true, true, true, [], []]);
+    const t2 = steps.find((s) => s.id === 'T2')!;
+    expect([t2.teaser, t2.task?.title, t2.task?.description, t2.task?.proofInstruction]).toEqual(['', '', '', '']);
   });
 });

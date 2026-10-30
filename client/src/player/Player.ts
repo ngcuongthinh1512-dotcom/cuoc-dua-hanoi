@@ -123,6 +123,7 @@ export class Player {
   /** Phase 7 (D23): F on foot asks this first (main.ts: RaceClient.interact, the current box in reach → `race open`);
    *  true = handled (the openBox gesture plays, no bike), false = F goes to the bikes as before. */
   onInteract?: () => boolean;
+  private quiet = false; // moveTo(): the placement it waits for is no respawn (Leg 3 room in / out: no `respawn` sent)
 
   private constructor(
     readonly model: CharacterModel,
@@ -179,6 +180,15 @@ export class Player {
     this.position.copy(this.controller.state.position);
   }
 
+  /** Leg 3 rooms (from the Leg 1 Louvre room): the feet put somewhere else at once (into the room under the box / back in
+   *  front of it): only y changes, so no `respawn` is sent (5 in / out a minute would flag the team: NET.maxRespawns). */
+  moveTo(x: number, z: number, yaw: number) {
+    this.quiet = true;
+    this.controller.spawn(x, z, yaw);
+    this.camera.yaw = yaw;
+    this.position.copy(this.controller.state.position);
+  }
+
   private get spawnPoint() {
     return this.o.spawn ?? playerSetup.spawn;
   }
@@ -206,7 +216,8 @@ export class Player {
     this.stepping = true;
     this.controller.fixedUpdate(dt, this.intent);
     this.stepping = false;
-    if (!placed && this.controller.placed) this.onRespawn?.('safe'); // spawn() found its ground (Phase 6: legit jump)
+    if (!placed && this.controller.placed && !this.quiet) this.onRespawn?.('safe'); // spawn() found its ground (Phase 6: legit jump)
+    if (this.controller.placed) this.quiet = false;
     this.simTime += dt;
   }
 

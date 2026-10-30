@@ -16,7 +16,7 @@
 // 9 = Leg 2 (Macao): everything 4 added (the Louvre room) removed.
 // 10 = Leg 2 player avatars: the socket URL carries `avatar` (0 = Nam, 1 = Nữ, once per connection), TeamInfo.avatar,
 //      `team` online {avatar}. No per-tick byte.
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 12; // Leg 3: ClueCard.leftRoom (v11), ClueCard.room = a challenge played in the GardeRobe room (v12)
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */
@@ -61,6 +61,10 @@ export const NET = {
   answerHistory: 20,
   /** Phase 8: longest Host note on a review. */
   noteMax: 500,
+  /** Leg 3 (host.finishPenalty): most minutes of one finish-line penalty (the chocolate room's 5 × 20 = 100, the comic
+   *  gallery's 10 × 12 = 120, with room for a Host's own addition) and longest reason. */
+  finishPenaltyMax: 600,
+  finishReasonMax: 120,
   /** Phase 10 (M1): a Host Duyệt / Phạt / Cho qua may be undone this long after the server handled it (server clock);
    *  HostState.undo lists what still can be. */
   undoMs: 10_000,

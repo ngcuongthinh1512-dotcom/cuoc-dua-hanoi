@@ -140,6 +140,19 @@
 .rc-overlay[hidden] {
   display: none !important;
 }
+/* Leg 3 rooms (main.ts): the black fade into / out of a Lựa chọn kép room, over everything but the login / net banner */
+.room-fade {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s ease; /* config rooms.fadeMs */
+}
+.room-fade.on {
+  opacity: 1;
+}
 .rc-full,
 .rc-book {
   pointer-events: auto;
@@ -215,6 +228,14 @@
 .rc-text {
   margin: 8px 0 0;
   white-space: pre-wrap;
+}
+/* Leg 3: a clue's closing "Lưu ý:" line (splitNote), e.g. the Lựa chọn kép switch penalty */
+.rc-text.rc-clue-note {
+  padding: 4px 10px;
+  border-left: 4px solid #ffb830;
+  background: rgba(255, 184, 48, 0.12);
+  color: #ffd37a;
+  font-weight: 600;
 }
 .rc-task {
   margin-top: 10px;
@@ -368,6 +389,243 @@
 .rc-switch {
   margin-top: 10px;
   border-color: rgba(255, 140, 120, 0.7);
+}
+
+/* ── Leg 3: Lựa chọn kép "mở ngang" — one wide card, two halves (A = chocolate, B = comic strip) with a fold between ──
+   The card rises out of the envelope as a narrow strip, then unfolds sideways (clip-path from the centre). Reopened with
+   Enter (.quick) or redrawn in place: no unfold. */
+.rc-full.rc-wide {
+  padding: 14px 18px 16px;
+}
+.rc-full.rc-wide:not(.quick) {
+  animation: rc-rise 0.55s 0.3s both ease-out, rc-unfold 0.8s 0.9s both cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+.rc-full.rc-wide .rc-detail {
+  border-left: 0;
+  padding: 4px 6px 6px;
+  background: none;
+}
+.rc-detour .rc-head {
+  font-size: 17px;
+  letter-spacing: 0.08em;
+}
+.rc-detour > .rc-timer { margin-top: 10px; }
+.rc-detour > .rc-timer + .rc-pair { margin-top: 10px; }
+.rc-detour > .rc-text {
+  font-size: 16px;
+  line-height: 1.55;
+  margin-top: 6px;
+}
+.rc-pair {
+  display: grid;
+  grid-template-columns: 1fr 18px 1fr;
+  align-items: stretch;
+  margin-top: 14px;
+  transition: grid-template-columns 0.5s ease;
+}
+.rc-pair.picked {
+  grid-template-columns: 1.4fr 18px 1fr;
+  align-items: start; /* the dimmed half keeps its own height, the fold spans the row */
+}
+.rc-pair.picked .rc-fold { align-self: stretch; }
+.rc-pair.picked .rc-half-art { height: 64px; }
+.rc-pair.picked:has(.rc-half-b.chosen) {
+  grid-template-columns: 1fr 18px 1.4fr;
+}
+.rc-pair.unfold .rc-half-a { animation: rc-slide-l 0.8s 0.9s both cubic-bezier(0.2, 0.75, 0.25, 1); }
+.rc-pair.unfold .rc-half-b { animation: rc-slide-r 0.8s 0.9s both cubic-bezier(0.2, 0.75, 0.25, 1); }
+/* the crease between the two halves */
+.rc-fold {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.55), rgba(255, 255, 255, 0.16) 50%, rgba(0, 0, 0, 0.55));
+  border-radius: 2px;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6);
+}
+.rc-half {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border-radius: 8px;
+  transition: opacity 0.4s, filter 0.4s;
+}
+.rc-half.pick {
+  cursor: pointer;
+}
+.rc-half.pick:hover {
+  filter: brightness(1.08);
+}
+.rc-half.dim {
+  opacity: 0.42;
+  filter: grayscale(0.7);
+}
+.rc-half.dim .rc-half-art { opacity: 0.5; }
+.rc-half-art {
+  display: block;
+  height: 78px;
+  margin: -2px 0 2px;
+}
+.rc-half-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.rc-half-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+}
+.rc-half-sum {
+  font-size: 16px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.rc-half .rc-task-btn {
+  margin-top: auto;
+  align-self: flex-start;
+  font-size: 15px;
+  padding: 8px 16px;
+}
+.rc-half .rc-chosen {
+  margin-left: 2px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+/* the afterChoice text "sổ ra" under the chosen half's summary */
+.rc-after {
+  margin-top: 2px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 6px;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+.rc-after.drop {
+  animation: rc-drop 0.55s 0.1s both cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+.rc-after p { margin: 0; }
+.rc-after p + p, .rc-after ul + p, .rc-after p + ul { margin-top: 6px; }
+.rc-after ul { margin: 0; padding-left: 20px; }
+.rc-after li { margin-top: 2px; }
+
+/* A · chocolate: rich brown, gold rule and type */
+.rc-half-a {
+  --ink: #f4dcb0;
+  color: #fbeedb;
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(230, 170, 70, 0.22), transparent 55%),
+    linear-gradient(165deg, #5a3419, #3a2010 55%, #2a160a);
+  border: 1.5px solid #c9933f;
+  box-shadow: inset 0 0 0 4px #3a2010, inset 0 0 0 5px rgba(217, 164, 65, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.rc-half-a .rc-half-art { color: #e2b45c; }
+.rc-half-a .rc-half-name { color: #f2c86a; font-family: Georgia, 'Times New Roman', serif; font-style: italic; letter-spacing: 0.01em; }
+.rc-half-a .rc-half-name::after { content: ''; flex-basis: 100%; height: 2px; margin-top: 2px; background: linear-gradient(90deg, #d9a441, transparent); }
+.rc-half-a .rc-task-btn { background: #e3b25a; color: #2a160a; }
+.rc-half-a .rc-task-btn:hover { background: #f2c86a; }
+.rc-half-a .rc-chosen { background: #e3b25a; color: #2a160a; }
+.rc-half-a .rc-after { background: rgba(0, 0, 0, 0.32); border-left: 3px solid #d9a441; }
+.rc-half-a .rc-task-meta { color: #e9cfa0; }
+
+/* B · comic strip: cream paper, halftone dots, ink border, speech-bubble summary */
+.rc-half-b {
+  color: #15161a;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(27, 42, 74, 0.16) 1.2px, transparent 1.6px) 0 0 / 9px 9px,
+    linear-gradient(180deg, #fbf4e1, #f3e8cd);
+  border: 3px solid #15161a;
+  border-radius: 4px;
+  box-shadow: 5px 5px 0 #15161a, 0 6px 18px rgba(0, 0, 0, 0.35);
+  text-shadow: none;
+}
+.rc-half-b .rc-half-art { color: #15161a; }
+.rc-half-b .rc-half-name {
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: #d8342c;
+  -webkit-text-stroke: 0.6px #15161a;
+  text-shadow: 2px 2px 0 #15161a, 3px 3px 0 #f6c28b;
+}
+.rc-half-b .rc-half-sum {
+  position: relative;
+  padding: 10px 14px;
+  border: 2.5px solid #15161a;
+  border-radius: 14px;
+  background: #fff;
+  font-weight: 500;
+}
+.rc-half-b .rc-half-sum::after {
+  content: '';
+  position: absolute;
+  left: 26px;
+  bottom: -11px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-right: 2.5px solid #15161a;
+  border-bottom: 2.5px solid #15161a;
+  transform: skewX(-20deg) rotate(45deg);
+}
+.rc-half-b .rc-task-btn { background: #f08a24; color: #15161a; border: 2.5px solid #15161a; box-shadow: 3px 3px 0 #15161a; }
+.rc-half-b .rc-task-btn:hover { background: #ffa040; }
+.rc-half-b .rc-task-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #15161a; }
+.rc-half-b .rc-chosen { background: #5fb3e5; color: #15161a; border: 2px solid #15161a; text-transform: none; font-weight: 700; letter-spacing: 0.02em; -webkit-text-stroke: 0; text-shadow: none; }
+.rc-half-b .rc-after { margin-top: 10px; background: #fff; border: 2.5px solid #15161a; box-shadow: 3px 3px 0 #15161a; }
+.rc-half-b .rc-task-meta { color: #3a3d45; }
+.rc-half-b .rc-link { color: #1b4d8a; border-color: #1b4d8a; }
+.rc-half-b .rc-ph { color: #3a3d45; border-color: #3a3d45; }
+
+/* In the Sổ mật thư (fullWidth): the halves stack, the fold becomes a horizontal crease, nothing animates. */
+.rc-pair.book,
+.rc-pair.book.picked,
+.rc-pair.book.picked:has(.rc-half-b.chosen) {
+  grid-template-columns: 1fr;
+  margin-top: 10px;
+}
+.rc-pair.book .rc-fold {
+  height: 10px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(255, 255, 255, 0.16) 50%, rgba(0, 0, 0, 0.55));
+}
+.rc-pair.book .rc-half-art { height: 56px; }
+.rc-pair.book .rc-half-name { font-size: 20px; }
+.rc-pair.book .rc-half-sum, .rc-pair.book .rc-after { font-size: 14px; }
+.rc-pair.book .rc-half-b { box-shadow: 3px 3px 0 #15161a; }
+
+@keyframes rc-unfold {
+  from { clip-path: inset(0 36% 0 36% round 6px); }
+  to { clip-path: inset(0 0 0 0 round 6px); }
+}
+@keyframes rc-slide-l {
+  from { transform: translateX(45%); opacity: 0.2; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes rc-slide-r {
+  from { transform: translateX(-45%); opacity: 0.2; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes rc-drop {
+  from { clip-path: inset(0 0 100% 0); transform: translateY(-14px); opacity: 0; }
+  to { clip-path: inset(0 0 0 0); transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-full, .rc-full.rc-wide:not(.quick), .rc-env, .rc-flap, .rc-pair.unfold .rc-half-a, .rc-pair.unfold .rc-half-b, .rc-after.drop {
+    animation: none;
+  }
+  .rc-pair, .rc-half { transition: none; }
+}
+/* 1024 px: tighter halves */
+@media (max-width: 1100px) {
+  .rc-half { padding: 12px 12px 14px; }
+  .rc-half-name { font-size: 22px; }
+  .rc-half-sum, .rc-detour > .rc-text { font-size: 15px; }
 }
 
 /* SPEC §17.44: multi-box task */
@@ -582,4 +840,16 @@
 }
 .rc-result .rc-actions {
   justify-content: center;
+}
+/* Leg 3: the finish-line penalty under the normal finish text (host.finishPenalty). */
+.rc-result-penalty {
+  margin: 10px auto 2px;
+  padding: 8px 12px;
+  border-left: 4px solid #d8342c;
+  background: rgba(216, 52, 44, 0.16);
+  color: #ffb3ab;
+  font-weight: 700;
+  text-align: left;
+  width: fit-content;
+  max-width: 100%;
 }

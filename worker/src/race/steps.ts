@@ -8,7 +8,7 @@ import { onPitMat } from '@race/shared';
 import { branchZone, type Leg, type MediaItem, type Step, type Task, type Zone } from '@race/shared/leg';
 import { MEDIA, NET, type AnswerView, type BoxInfo, type CardStatus, type ClueCard, type HostReview, type MediaView, type ServerNotice, type TaskView } from '@race/shared/protocol';
 import { parseAnswers, type AnswerRec, type StepProgressRow } from '../db.ts';
-import { PARTS_SEP, partsOf, verifyAuto } from './tasks.ts';
+import { gradeParts, PARTS_SEP, partsOf, verifyAuto } from './tasks.ts';
 
 /** What the machine needs about one team (teams.state + the current step's step_progress row). */
 export interface Progress {
@@ -30,7 +30,20 @@ export interface Progress {
   pendingId: number | null;
   /** id of the step's last answer (0 = none): the next answer gets + 1. */
   lastAnswerId: number;
+  /** Leg 3: the current detour step's room progress (TeamRace.rooms), null / absent = none reported. */
+  room?: RoomRec | null;
 }
+
+/** Leg 3: a team's progress in a detour branch's room (teams.state `rooms[stepId]`; dropped by a branch switch). */
+export interface RoomRec {
+  /** The branch it was reported for. */
+  b: string;
+  done: number;
+  skipped: boolean;
+}
+
+/** Leg 3: the room's name in the Host's queue item "Hoàn thành phòng sô-cô-la: 5/5". */
+export const ROOM_NAME = { chocolate: 'sô-cô-la', comic: 'truyện tranh' } as const;
 
 /** The team's trusted pose handed to an input judged from anywhere (bike rack rule, critic S3), null = none yet. */
 export type StandAt = { x: number; z: number; riding: boolean } | null;
@@ -49,6 +62,9 @@ export type RaceInput =
   | { kind: 'answer'; step: string; text: string; pose: StandAt; /** SPEC §17.44: a multi-box task's N strings (text ''). */ parts?: string[] }
   /** Choose a detour branch (no lock), or switch to the other one (branchSwitchLockMinutes lock; refused while pending). */
   | { kind: 'branch'; step: string; branch: string }
+  /** Leg 3 (`race room`, from anywhere): progress in the chosen + opened branch's room; done = total → a pending answer for the
+   *  Host; skipped → the step completes, (total − done) × penaltyMinutesEach at the finish line. `pose` as for `answer`. */
+  | { kind: 'room'; step: string; branch: string; done: number; skipped: boolean; pose: StandAt }
   /** The Host approved step's answer: complete + settle like `open` (critic S3); `pose` = the team's trusted pose now: its
    *  bike goes to the rack only if it stands in the place on foot (S3 coverage). */
   | { kind: 'approve'; step: string; pose: StandAt }
@@ -74,7 +90,7 @@ export type RaceEffect =
   | { kind: 'accept'; step: number }
   /** rec = the answer appended to step_progress.answers; verdict pending → submitted_at (the Host's queue); wrong →
    *  wrong_answers + 1; correct → a `complete` follows. */
-  | { kind: 'answer'; step: number; rec: AnswerRec; verdict: 'pending' | 'correct' | 'wrong' }
+  | { kind: 'answer'; step: number; rec: AnswerRec; verdict: 'pending' | 'correct' | 'wrong' | 'penalized'; /** Leg 3: an auto-graded Phạt's countdown end. */ lockedUntil?: number | null }
   /** A Host decision (review()): the step's row as edited; approve → a `complete` follows (advance approve). */
   | { kind: 'review'; step: number; row: StepProgressRow; op: HostReview['op']; id: number | null }
   | { kind: 'branch'; step: number; branch: string }
@@ -82,7 +98,9 @@ export type RaceEffect =
   | { kind: 'switch'; step: number; from: string; to: string; lockedUntil: number }
   | { kind: 'openBranch'; step: number; branch: string }
   /** The switched-away branch's box: RaceIO.hideBox (socket attachments cleared, then {t:'box', op:'remove'}). */
-  | { kind: 'hideBox'; step: number; branch: string };
+  | { kind: 'hideBox'; step: number; branch: string }
+  /** Leg 3: TeamRace.rooms[step] = rec; `penalty` = finish-line minutes of a skip (the engine keeps a Host-set one). */
+  | { kind: 'room'; step: number; rec: RoomRec; penalty?: number };
 
 /** (x, z) is in zone `zn` (+ slack m): within r — the Pit Stop's: ON the mat (SPEC §17.38, PIT_MAT's own slack). */
 export const inside = (zn: Zone, x: number, z: number, slack: number) => (zn.mat ? onPitMat(x, z, zn) : Math.hypot(x - zn.x, z - zn.z) <= zn.r + slack);
@@ -159,7 +177,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   const complete = (i: number, at: Zone) => {
     fx.push({ kind: 'complete', step: i });
     if (parksOnReceive(leg, i)) fx.push({ kind: 'park', rack: at.rack });
-    p = { ...p, step: i + 1, arrivedAt: null, startedAt: null, branch: null, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0 };
+    p = { ...p, step: i + 1, arrivedAt: null, startedAt: null, branch: null, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, room: null };
   };
   /** A trusted position: arrivals, then whatever completes by standing there (route → onto the Pit Stop mat, check-in). */
   const settle = (x: number, z: number, riding: boolean) => {
@@ -220,6 +238,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     settle(input.x, input.z, input.riding); // the next step may be done right here (a task at the point)
     return { p, effects: fx };
   }
+  if (input.kind === 'room') return roomReport(leg, zones, p, i, input, now, running);
   if (i < p.step) return silent; // a done step: nothing more to do there
   /** Step i's task is done (an approval / a right auto answer, from anywhere): complete where it is done, then the pose
    *  settles the next step (a task right there…). */
@@ -252,7 +271,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     if (p.branchOpenedAt === null && (p.lockedUntil ?? 0) > now) return silent;
     const from = p.branch;
     const lockedUntil = now + leg.penalties.branchSwitchLockMinutes * 60_000;
-    p = { ...p, branch: input.branch, branchOpenedAt: null, startedAt: null, arrivedAt: null, lockedUntil };
+    p = { ...p, branch: input.branch, branchOpenedAt: null, startedAt: null, arrivedAt: null, lockedUntil, room: null }; // the old branch's room progress is lost too
     return { p, effects: [{ kind: 'switch', step: i, from, to: input.branch, lockedUntil }, { kind: 'hideBox', step: i, branch: from }] };
   }
   // answer
@@ -270,6 +289,20 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   if (t.kind !== 'free' && text.trim() === '') return silent; // the client never sends an empty typed answer
   const rec: AnswerRec = { id: p.lastAnswerId + 1, b: s.type === 'detour' ? p.branch : null, text, at: now, s: 'pending' };
   p.lastAnswerId = rec.id;
+  // Leg 3: every box has answers → graded here, applied at once (the Host only looks afterwards: ReviewItem.auto)
+  const marks = texts ? gradeParts(t, texts) : null;
+  if (marks) {
+    const sc = marks.filter(Boolean).length;
+    const a: AnswerRec = { ...rec, s: sc === marks.length ? 'correct' : 'penalized', sc, sv: true, auto: true, m: marks };
+    if (a.s === 'correct') {
+      fx.push({ kind: 'answer', step: i, rec: a, verdict: 'correct' });
+      done(input.pose);
+      return { p, effects: fx };
+    }
+    const lock = retryLockMinutes(leg, t);
+    p.lockedUntil = lock > 0 ? now + lock * 60_000 : null;
+    return { p, effects: [{ kind: 'answer', step: i, rec: a, verdict: 'penalized', lockedUntil: p.lockedUntil }] };
+  }
   if (t.verification === 'host_approval') {
     p.pendingId = rec.id;
     return { p, effects: [{ kind: 'answer', step: i, rec, verdict: 'pending' }] };
@@ -277,6 +310,37 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   const verdict = verifyAuto(t, input.text);
   fx.push({ kind: 'answer', step: i, rec: { ...rec, s: verdict }, verdict });
   if (verdict === 'correct') done(input.pose);
+  return { p, effects: fx };
+}
+
+/** Leg 3: a `race room` report (advance's room input). Only the current step, a detour, the CHOSEN branch, its box opened, a
+ *  task with `room`; done never goes down, nothing after a skip (else roomIgnored, nothing written). A switch dropped the old
+ *  branch's record (engine), so a report for an abandoned branch is refused as "not the chosen one". */
+function roomReport(leg: Leg, zones: readonly Zone[], p0: Progress, i: number, input: Extract<RaceInput, { kind: 'room' }>, now: number, running: boolean): { p: Progress; effects: RaceEffect[] } {
+  const s = leg.steps[i]!;
+  const refuse = { p: p0, effects: [{ kind: 'refuse', code: 'roomIgnored' }] as RaceEffect[] };
+  const room = i === p0.step && s.type === 'detour' && input.branch === p0.branch && p0.branchOpenedAt !== null ? taskOf(s, p0.branch)?.room : undefined;
+  const cur = p0.room?.b === input.branch ? p0.room : null;
+  if (!room || input.done > room.total || cur?.skipped || input.done < (cur?.done ?? 0)) return refuse;
+  let p: Progress = { ...p0 };
+  const fx: RaceEffect[] = [];
+  const rec: RoomRec = { b: input.branch, done: input.done, skipped: input.skipped };
+  if (input.skipped) {
+    // "Bỏ qua": the clue comes now (like an approved branch task), the rest becomes finish-line minutes
+    fx.push({ kind: 'room', step: i, rec, penalty: (room.total - input.done) * room.penaltyMinutesEach });
+    const r = advance(leg, zones, { ...p, room: rec }, { kind: 'approve', step: s.id, pose: input.pose }, now, running);
+    return { p: r.p, effects: [...fx, ...r.effects] };
+  }
+  if (input.done !== (cur?.done ?? 0)) {
+    fx.push({ kind: 'room', step: i, rec });
+    p.room = rec;
+  }
+  // every item made: the Host's queue (never trusted from the client); again after a Phạt countdown (the client re-sends it)
+  if (input.done === room.total && stateOf(leg, i, p, now) === 'active') {
+    const a: AnswerRec = { id: p.lastAnswerId + 1, b: input.branch, text: `Hoàn thành phòng ${ROOM_NAME[room.kind]}: ${input.done}/${room.total}`, at: now, s: 'pending' };
+    p = { ...p, lastAnswerId: a.id, pendingId: a.id };
+    fx.push({ kind: 'answer', step: i, rec: a, verdict: 'pending' });
+  }
   return { p, effects: fx };
 }
 
@@ -308,11 +372,12 @@ export function taskState(leg: Leg, i: number, row: StepProgressRow | undefined,
 const mediaView = (m: MediaItem): MediaView => ({ url: m.url, label: m.label, kind: m.url.startsWith(MEDIA.prefix) ? 'image' : 'link' });
 
 /** SPEC §10.1 task minus `answers` / `referenceAnswers` / `params`; its location only by name. */
-const taskView = (t: Task): TaskView => ({
+const taskView = (t: Task, room?: RoomRec | null): TaskView => ({
   title: t.title, description: t.description, media: t.media.map(mediaView), kind: t.kind, verification: t.verification,
   input: t.kind === 'free' ? 'proof' : t.parts ? 'parts' : 'text', proofInstruction: t.proofInstruction,
   timeLimitMinutes: t.timeLimitMinutes, ...(t.location ? { place: t.location.name } : {}),
   ...(t.parts ? { partLabels: t.parts.map((p) => p.label) } : {}), // SPEC §17.44
+  ...(t.room ? { room: { ...t.room, done: room?.done ?? 0, skipped: room?.skipped ?? false } } : {}), // Leg 3: the 3D room + progress
 });
 
 /** Minutes of the Host's "Phạt" on this task. */
@@ -332,7 +397,7 @@ export const scoreFrom = (t: Task, row: StepProgressRow | undefined): number | n
 /** The card of step `index` as the team sees it (never answers / reference answers / Host notes / a destination name / a
  *  later step / an unopened branch's task), from its progress row (`clue_opened_at` = received; the engine fills step
  *  1's from the start time) + now (card state, docs/plans/phase8.md D3). The ONLY card builder. */
-export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined, now: number): ClueCard {
+export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined, now: number, rooms?: Readonly<Record<string, RoomRec>>): ClueCard {
   const s = leg.steps[index]!;
   const status = taskState(leg, index, row, now);
   const lockedUntil = status === 'locked' || status === 'switchLocked' ? row!.locked_until : null;
@@ -346,12 +411,15 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
     case 'detour': {
       const branch = row?.branch ?? null;
       const b = s.branches.find((x) => x.id === branch);
-      // the chosen branch's task is in its box: on the card once opened (or the step done: the branch the team did)
+      // the chosen branch's task is in its box: on the card once opened (or the step done: the branch the team did);
+      // its afterChoice text from the moment it is chosen (never the other branch's)
       const opened = !!b && (row?.branch_opened_at != null || row?.completed_at != null);
       return {
         ...base, text: s.clue, media: s.media.map(mediaView),
-        branches: s.branches.map((x) => ({ id: x.id, name: x.name, summary: x.summary, ...(opened && x === b ? { task: taskView(x.task) } : {}) })),
+        branches: s.branches.map((x) => ({ id: x.id, name: x.name, summary: x.summary, ...(x === b ? { afterChoice: x.afterChoice } : {}), ...(opened && x === b ? { task: taskView(x.task, rooms?.[s.id]?.b === x.id ? rooms[s.id] : null) } : {}) })),
         branch, branchOpened: opened, switches: row?.branch_switches ?? 0, switchPenaltyMinutes: leg.penalties.branchSwitchLockMinutes,
+        // Leg 3: after a switch the team stands in the OTHER branch's room (its box was opened) until it walks into the exit ring
+        ...(status === 'switchLocked' && row?.branch_switches && s.branches.find((x) => x !== b)?.task.room ? { leftRoom: s.branches.find((x) => x !== b)!.task.room!.kind } : {}),
         ...(b ? { retryPenaltyMinutes: retryLockMinutes(leg, b.task), answers: answerViews(row, branch, partsOf(b.task)) } : {}),
       };
     }
@@ -359,6 +427,7 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
       return {
         ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null, partsOf(s.task)),
         ...(status === 'teaser' ? {} : { task: taskView(s.task) }),
+        ...(s.room && status !== 'done' ? { room: s.room } : {}), // Leg 3 (v12): played inside the GardeRobe room
       };
     case 'pit_stop':
       return { ...base, text: '' };
@@ -379,6 +448,17 @@ export function review(leg: Leg, i: number, row: StepProgressRow, m: HostReview,
   const s = leg.steps[i]!;
   if (m.op === 'note') return { row: { ...row, host_note: m.note ?? '' }, approve: false, id: null };
   if (m.op === 'undo') return { refuse: 'Hoàn tác không đi qua review().' }; // Phase 10: the engine handles undo before calling here
+  if (m.op === 'ack' || m.op === 'score') {
+    // Leg 3: the Host's look at an answer the server graded (already applied): "✓ Đồng ý" / a new "đúng x/N" for the team
+    const answers = parseAnswers(row);
+    const a = answers.find((x) => x.id === m.id);
+    if (!a?.auto || !a.m) return { refuse: 'Không có câu trả lời tự chấm này.' };
+    if (m.op === 'ack' && a.k) return { refuse: HANDLED };
+    if (m.op === 'score' && a.s !== 'penalized') return { refuse: 'Chỉ sửa được số ô đúng của câu bị phạt (câu đã đúng / đã được Duyệt thì thôi).' };
+    if (m.op === 'score' && (m.score ?? -1) > a.m.length) return { refuse: `Số ô đúng phải từ 0 đến ${a.m.length}.` };
+    const rec: AnswerRec = m.op === 'ack' ? { ...a, k: true } : { ...a, sc: m.score!, sv: true };
+    return { row: { ...row, answers: JSON.stringify(answers.map((x) => (x === a ? rec : x))) }, approve: false, id: a.id };
+  }
   if (s.type !== 'challenge' && s.type !== 'detour') return { refuse: 'Bước này không có thử thách để duyệt.' };
   if (row.completed_at != null) return { refuse: HANDLED };
   const t = taskOf(s, row.branch);

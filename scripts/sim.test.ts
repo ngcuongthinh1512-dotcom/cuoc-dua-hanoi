@@ -95,6 +95,12 @@ describe('bot moves (docs/plans/phase8.md D18, pure)', () => {
     expect(botMove(inA, 0, role(0), ANS)!.op).toMatchObject({ op: 'answer', text: '7' });
     const inB = card({ status: 'active', branch: 'B', branches: [branches[0]!, { ...branches[1]!, task: taskOf('proof') }], branchOpened: true });
     expect(botMove(inB, 0, role(1), ANS)!.op).toMatchObject({ op: 'answer', text: '' }); // the reference text of B is for the Host, never typed
+    // Leg 3: a branch with a room → `race room` n/n (the Host bot approves the queued "Hoàn thành phòng"); the skipper gives up at 2
+    const room = { kind: 'chocolate' as const, total: 5, penaltyMinutesEach: 20, done: 0, skipped: false };
+    const inRoom = card({ status: 'active', branch: 'A', branches: [{ ...branches[0]!, task: { ...taskOf('proof'), room } }, branches[1]!], branchOpened: true });
+    expect(botMove(inRoom, 0, role(0), ANS)!.op).toEqual({ t: 'race', op: 'room', step: 'D1', branch: 'A', done: 5, skipped: false });
+    expect(botMove(inRoom, 0, { ...role(1), skipsRoom: true }, ANS)!.op).toEqual({ t: 'race', op: 'room', step: 'D1', branch: 'A', done: 2, skipped: true });
+    expect(botMove(card({ ...inRoom, status: 'pending' }), 0, role(0), ANS)).toBeNull(); // n/n sent: waits for the Host
   });
 
   it('goToBranch: the one switcher switches ONCE to the other branch, everybody else (and the switcher after) walks there and opens', () => {
@@ -135,6 +141,18 @@ describe('Host bot (D18, pure)', () => {
     expect(reviewsFor({ queue: [] }, sent, null, 1e9)).toEqual([]);
   });
 
+  it('Leg 3: an auto-graded item is acknowledged ("✓ Đồng ý"), never approved; the bots type the leg\'s box answers', async () => {
+    const auto = { ...q('t0', 'T1', 1), auto: { verdict: 'correct' as const, marks: [true, true], score: 2, of: 2, canApprove: false } };
+    const ack = reviewsFor({ queue: [auto] }, new Map(), null, 0);
+    expect(ack).toEqual([{ t: 'host.review', team: 't0', step: 'T1', id: 1, op: 'ack' }]);
+    const { isClientMessage } = await import('@race/shared/protocol');
+    expect(isClientMessage(ack[0], 'host')).toBe(true);
+    const answers = answersOf(readFileSync(join(import.meta.dirname, '../worker/legs/bruxelles-demo.json'), 'utf8'));
+    expect(answers.get('T1#parts')).toBe('Cuba | Singapore | Uzbekistan | Estonia');
+    const card = { step: 'T1', type: 'challenge', status: 'active', lockedUntil: null, task: { input: 'parts', partLabels: ['a', 'b', 'c', 'd'] } } as unknown as ClueCard;
+    expect(botMove(card, 0, { i: 0, switches: false, switched: false }, answers)).toEqual({ op: { t: 'race', op: 'answer', step: 'T1', text: '', parts: ['Cuba', 'Singapore', 'Uzbekistan', 'Estonia'] } });
+  });
+
   it('every message it makes passes the server codec', async () => {
     const { isClientMessage } = await import('@race/shared/protocol');
     for (const m of reviewsFor({ queue: [q('t0', 'T1', 1), q('t1', 'D1', 2)] }, new Map(), 't1|D1|2', 0)) expect(isClientMessage(m, 'host')).toBe(true);
@@ -149,8 +167,8 @@ describe('sim report numbers (D18)', () => {
 
   it('answers, approvals, penalties and switches are read from host.state.progress', () => {
     const progress = [row('t0', 'T1', [a(1, 'approved')]), row('t1', 'T1', [a(1, 'penalized'), a(2, 'approved')]), row('t2', 'D1', [a(1, 'correct'), a(2, 'wrong')], 1), row('t1', 'D1', [], 2)];
-    expect(legStats(progress)).toEqual({ answers: 5, approved: 2, penalized: 1, wrong: 1, correct: 1, switches: 3 });
-    expect(legStats([])).toEqual({ answers: 0, approved: 0, penalized: 0, wrong: 0, correct: 0, switches: 0 });
+    expect(legStats(progress)).toEqual({ answers: 5, approved: 2, penalized: 1, wrong: 1, correct: 1, switches: 3, roomsDone: 0, roomsSkipped: 0 });
+    expect(legStats([])).toEqual({ answers: 0, approved: 0, penalized: 0, wrong: 0, correct: 0, switches: 0, roomsDone: 0, roomsSkipped: 0 });
   });
 
   it('the row budget is 16 per step (a 10-step leg: 160), never fewer than 10 steps', () => {
