@@ -91,7 +91,7 @@
       "id": "L2",
       "type": "route_info",
       "label": "Lộ trình 2",
-      "clue": "Đội chơi tìm đường đến nơi kết hợp giữa di sản tôn giáo với các hoạt động nhân quyền, triển lãm nghệ thuật đương đại và không gian hỗ trợ các nhóm người dễ bị tổn thương cách đó khoảng 1 cây số.",
+      "clue": "Đội chơi được di chuyển từ Atomium và đang đứng tại Rogier Tower. Tại đây, đội chơi tìm đường đến nơi kết hợp giữa di sản tôn giáo với các hoạt động nhân quyền, triển lãm nghệ thuật đương đại và không gian hỗ trợ các nhóm người dễ bị tổn thương cách đó khoảng 1 cây số.",
       "transport": {
         "allowed": "any"
       },
