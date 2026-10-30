@@ -113,6 +113,7 @@ const FALLBACK_COLOUR: Record<MaterialId, number> = {
   waterJet: 0xe8f2f8,
   neon: 0xffffff, // × vertex colour
   neonSign: 0xff2f78,
+  mural: 0xffffff, // × the chunk's atlas
   stairGlow: 0xffe0a8,
 };
 

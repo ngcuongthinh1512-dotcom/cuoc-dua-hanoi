@@ -16,6 +16,15 @@ import { details as b } from './b.ts';
 import { details as c } from './c.ts';
 import { details as d } from './d.ts';
 import { details as e } from './e.ts';
+import { details as f } from './f.ts';
+import { details as g } from './g.ts';
+import { details as h2 } from './h.ts';
+import { details as i } from './i.ts';
+import { details as j } from './j.ts';
+import { details as k } from './k.ts';
+import { details as l } from './l.ts';
+import { details as m } from './m.ts';
+import { details as n } from './n.ts';
 import * as kit from './kit.ts';
 import { parseColour, partHeights, partRings, pickMaterial, recordGround, renderPart, roofShape, Sink } from './parts.ts';
 
@@ -79,7 +88,7 @@ export const helpers = {
 } as const;
 export type Helpers = typeof helpers;
 
-const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...b, ...c, ...d, ...e };
+const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...b, ...c, ...d, ...e, ...f, ...g, ...h2, ...i, ...j, ...k, ...l, ...m, ...n };
 
 export const buildLandmarks: Builder = (chunk, ctx) => {
   const outs: BuildOut[] = [];

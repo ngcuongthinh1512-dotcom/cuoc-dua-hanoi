@@ -8,7 +8,7 @@ import type { BuildOut } from '../buildTypes.ts';
 import type { V3 } from '../geom.ts';
 import { cap, fbox, type Fr, P, rgb, ring, spire, UP, withExtras } from './b.ts';
 import type { DetailFn, LandmarkCtx } from './index.ts';
-import { footprintFrame, loft, quadOut } from './kit.ts';
+import { footprintFrame, loft, quadOut, triOut } from './kit.ts';
 import { Sink } from './parts.ts';
 
 type Buf = Parameters<typeof loft>[0];
@@ -25,7 +25,7 @@ const solid = (s: Sink, f: Fr, hs: number, y0: number, y1: number) =>
 const join = (base: BuildOut, s: Sink): BuildOut => withExtras(base, s);
 
 /** Lathe of n-gon rings [r, y] at (a, w); a last r = 0 closes with a spire. */
-function lathe(buf: Buf, f: Fr, a: number, w: number, prof: [number, number][], n = 8) {
+export function lathe(buf: Buf, f: Fr, a: number, w: number, prof: [number, number][], n = 8) {
   const rs = prof.filter(([r]) => r > 0.02).map(([r, y]) => ring(f, a, w, r, y, n));
   if (rs.length > 1) loft(buf, rs, 4);
   const last = prof.at(-1)!;
@@ -33,7 +33,7 @@ function lathe(buf: Buf, f: Fr, a: number, w: number, prof: [number, number][], 
   else cap(buf, rs.at(-1)!, UP);
 }
 
-const hash = (n: number) => {
+export const hash = (n: number) => {
   const x = Math.sin(n * 12.9898) * 43758.5453;
   return x - Math.floor(x);
 };
@@ -86,39 +86,204 @@ const guildHouse: DetailFn = (rec, _parts, ctx) => {
   return join(base, s);
 };
 
-// ── Manneken Pis: stone pedestal, iron railing, bronze boy, water jet ──
+// ── Manneken Pis (rebuilt after a frontal photo, 2026-10-26): a cream limestone backing wall flush against the house in the
+// notch between Rue de l'Étuve and Rue du Chêne, a scallop-shell niche with pilasters + disc entablature + moulded arch rim,
+// the bronze boy (≈ 0.55 m) on a round pedestal over a ribbed lead tulip bowl, a mascaron and a satyr face spouting water
+// down into the low lead basin, stone volutes either side, a curved wrought-iron railing in front. Everything faces WEST
+// (−X): the real niche looks at the street corner. Sizes read off the photo with the statue (0.55 m) as the scale. ──
+
+/** n points around (a, w) at height y, radius r modulated by k ribs of amplitude amp (petals / scallop flutes). */
+export const rring = (f: Fr, a: number, w: number, r: number, y: number, n: number, amp = 0, k = 0): V3[] =>
+  Array.from({ length: n }, (_, i) => {
+    const t = (2 * Math.PI * i) / n;
+    const rr = r * (1 + amp * Math.cos(k * t));
+    return P(f, a + rr * Math.cos(t), y, w + rr * Math.sin(t));
+  });
+/** Lathe of ribbed rings (see rring), capped on top. */
+export function rlathe(buf: Buf, f: Fr, a: number, w: number, prof: [number, number][], n: number, amp = 0, k = 0) {
+  const rs = prof.map(([r, y]) => rring(f, a, w, r, y, n, amp, k));
+  loft(buf, rs, 4);
+  cap(buf, rs.at(-1)!, UP);
+}
+/** Horizontal cylinder along w (axis at (a, y)), w0 → w1: a disc / knob / scroll seen face-on from the street. */
+export function hcyl(buf: Buf, f: Fr, a: number, y: number, r: number, w0: number, w1: number, n = 10) {
+  const pt = (i: number, w: number): V3 => P(f, a + r * Math.cos((2 * Math.PI * i) / n), y + r * Math.sin((2 * Math.PI * i) / n), w);
+  for (let i = 0; i < n; i++) {
+    const [p0, p1] = [pt(i, w0), pt(i + 1, w0)];
+    const mid: V3 = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2];
+    const ax = P(f, a, y, w0);
+    quadOut(buf, p0, p1, pt(i + 1, w1), pt(i, w1), [mid[0] - ax[0], mid[1] - ax[1], mid[2] - ax[2]]);
+    triOut(buf, P(f, a, y, w1), pt(i, w1), pt(i + 1, w1), [-f.uz, 0, f.ux]);
+  }
+}
+/** Thin square bar (side t) from p to q, any direction (railing rails and scrolls). */
+export function bar(buf: Buf, p: V3, q: V3, t: number) {
+  const d: V3 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+  const l = Math.hypot(...d) || 1;
+  const u: V3 = Math.abs(d[1]) / l > 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const n1 = ((): V3 => { const c: V3 = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]]; const m = Math.hypot(...c) || 1; return [c[0] / m * t / 2, c[1] / m * t / 2, c[2] / m * t / 2]; })();
+  const n2: V3 = [(d[1] * n1[2] - d[2] * n1[1]) / l, (d[2] * n1[0] - d[0] * n1[2]) / l, (d[0] * n1[1] - d[1] * n1[0]) / l];
+  const corner = (b: V3, s1: number, s2: number): V3 => [b[0] + s1 * n1[0] + s2 * n2[0], b[1] + s1 * n1[1] + s2 * n2[1], b[2] + s1 * n1[2] + s2 * n2[2]];
+  const S: [number, number][] = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
+  for (let i = 0; i < 4; i++) {
+    const [s, e] = [S[i]!, S[(i + 1) % 4]!];
+    const out: V3 = [(s[0] + e[0]) * n1[0] + (s[1] + e[1]) * n2[0], (s[0] + e[0]) * n1[1] + (s[1] + e[1]) * n2[1], (s[0] + e[0]) * n1[2] + (s[1] + e[1]) * n2[2]];
+    quadOut(buf, corner(p, ...s), corner(p, ...e), corner(q, ...e), corner(q, ...s), out);
+  }
+}
 
 const mannekenPis: DetailFn = (rec, _parts, ctx) => {
-  const f = footprintFrame(rec.outer);
+  const o = rec.outer;
+  let [mx, zs] = [-Infinity, 0];
+  for (let i = 0; i < o.length; i += 2) { mx = Math.max(mx, o[i]!); zs += o[i + 1]!; }
+  // frame: a along the house wall (+Z, south), w towards the street (−X, west); cx = the house wall line (0.5 m behind the OSM basin)
+  const f = { cx: mx + 0.5, cz: zs / (o.length / 2), ux: 0, uz: 1, a: 1, b: 1, area: 0 } as Fr;
   const g = ctx.minGround;
   const s = new Sink();
   const st = s.buf('masonry');
-  st.color = rgb('#9c9a92');
-  fbox(st, f, -0.9, 0.9, -0.9, 0.9, g - 0.2, g + 0.5); // basin kerb block
-  fbox(st, f, -0.6, 0.6, -0.5, 0.5, g + 0.5, g + 2.2); // niche pedestal
-  st.color = rgb('#807d76');
-  fbox(st, f, -0.75, 0.75, -0.65, 0.65, g + 2.2, g + 2.35);
-  solid(s, f, 0.6, g - 0.2, g + 2.4);
-  const iron = s.buf('metal');
-  iron.color = rgb('#25282b');
-  for (const [a, w] of [[-1.1, -1.1], [1.1, -1.1], [1.1, 1.1], [-1.1, 1.1], [0, -1.1], [0, 1.1], [-1.1, 0], [1.1, 0]] as const)
-    lathe(iron, f, a, w, [[0.04, g], [0.04, g + 1.1], [0, g + 1.25]], 4);
-  for (const y of [g + 0.35, g + 1.0]) {
-    fbox(iron, f, -1.12, 1.12, -1.14, -1.06, y, y + 0.04);
-    fbox(iron, f, -1.12, 1.12, 1.06, 1.14, y, y + 0.04);
-    fbox(iron, f, -1.14, -1.06, -1.1, 1.1, y, y + 0.04);
-    fbox(iron, f, 1.06, 1.14, -1.1, 1.1, y, y + 0.04);
+  const near = s.buf('masonry', 'near');
+  // backing wall: 0.9 m slab (mortar tone) + limestone blocks in several cream tones, skipped where the niche opens
+  st.color = rgb('#bfb496');
+  fbox(st, f, -2.0, 2.0, 0, 0.9, g - 0.3, g + 8);
+  const tones = ['#e6ddc4', '#d9cfae', '#d0c39b', '#ebe3cd', '#cdc4a4', '#e0d5b8'];
+  for (let row = 0, y = g - 0.3; y < g + 8; row++, y += 0.34) {
+    const y1 = Math.min(y + 0.32, g + 8);
+    for (let a0 = -2.0 - (row % 2) * 0.34, k = 0; a0 < 2.0; a0 += 0.68, k++) {
+      const [b0, b1] = [Math.max(a0, -2.0), Math.min(a0 + 0.66, 2.0)];
+      if (b1 - b0 < 0.1 || (b1 > -0.8 && b0 < 0.8 && y1 > g + 1.95 && y < g + 3.85)) continue;
+      near.color = rgb(tones[Math.floor(hash(row * 7.3 + k * 1.7 + f.cx) * tones.length)]!);
+      fbox(near, f, b0, b1, 0.9, 0.93, y, y1);
+    }
   }
-  const b = s.buf('bronze');
-  const y0 = g + 2.35;
-  fbox(b, f, -0.07, 0.07, -0.16, -0.04, y0, y0 + 0.2); // legs
-  fbox(b, f, -0.07, 0.07, 0.04, 0.16, y0, y0 + 0.2);
-  fbox(b, f, -0.1, 0.1, -0.2, 0.2, y0 + 0.2, y0 + 0.42); // body
-  lathe(b, f, 0, 0, [[0.12, y0 + 0.42], [0.13, y0 + 0.55], [0.08, y0 + 0.62], [0, y0 + 0.65]], 8); // head
-  fbox(b, f, 0.1, 0.2, -0.02, 0.02, y0 + 0.28, y0 + 0.31); // the member
+  // niche: half-cylinder recess + ribbed scallop quarter-dome (14 flutes), normals inward; arch rim, pilasters, entablature
+  const [R, yc, yf, W] = [0.55, g + 3.05, g + 2.45, 0.9];
+  const C = P(f, 0, yc, W);
+  const inw = (p: V3): V3 => [C[0] - p[0], 0, C[2] - p[2]];
+  const n = 28;
+  const half = (y: number, phi: number) => Array.from({ length: n + 1 }, (_, i): V3 => {
+    const t = (Math.PI * i) / n;
+    const rr = R * (1 + 0.08 * Math.cos(14 * t) * Math.sin(phi)) * Math.cos(phi);
+    return P(f, rr * Math.cos(t), y + R * Math.sin(phi), W - rr * Math.sin(t));
+  });
+  st.color = rgb('#efe7d2');
+  const lo = half(yf, 0), hi = half(yc, 0);
+  for (let i = 0; i < n; i++) quadOut(st, lo[i]!, lo[i + 1]!, hi[i + 1]!, hi[i]!, inw(lo[i]!));
+  const m = 6;
+  for (let j = 0; j < m; j++) {
+    const [r0, r1] = [half(yc, (Math.PI / 2) * (j / m)), half(yc, (Math.PI / 2) * ((j + 1) / m))];
+    for (let i = 0; i < n; i++) {
+      const out: V3 = [C[0] - r0[i]![0], C[1] - r0[i]![1], C[2] - r0[i]![2]];
+      if (j + 1 < m) quadOut(st, r0[i]!, r0[i + 1]!, r1[i + 1]!, r1[i]!, out);
+      else triOut(st, r0[i]!, r0[i + 1]!, P(f, 0, yc + R, W), out);
+    }
+  }
+  st.color = rgb('#d6cbae');
+  const [r2, wf] = [0.74, 1.12];
+  for (let i = 0; i < 20; i++) { // moulded rim: front annulus + outer band + inner reveal
+    const [t0, t1] = [(Math.PI * i) / 20, (Math.PI * (i + 1)) / 20];
+    const at = (r: number, t: number, w: number) => P(f, r * Math.cos(t), yc + r * Math.sin(t), w);
+    quadOut(st, at(R, t0, wf), at(R, t1, wf), at(r2, t1, wf), at(r2, t0, wf), [-f.uz, 0, f.ux]);
+    const mid = at(r2, (t0 + t1) / 2, W);
+    quadOut(st, at(r2, t0, W), at(r2, t1, W), at(r2, t1, wf), at(r2, t0, wf), [mid[0] - C[0], mid[1] - C[1], mid[2] - C[2]]);
+    quadOut(st, at(R, t0, W), at(R, t1, W), at(R, t1, wf), at(R, t0, wf), inw(at(R, (t0 + t1) / 2, W)));
+  }
+  for (const sg of [-1, 1]) { // pilasters with base + capital, volutes with the round scroll + knob below
+    fbox(st, f, sg * 0.6, sg * 0.88, W, 1.2, g + 2.0, g + 2.75);
+    fbox(st, f, sg * 0.56, sg * 0.92, W, 1.25, g + 2.75, g + 2.85);
+    fbox(st, f, sg * 0.56, sg * 0.92, W, 1.25, g + 1.9, g + 2.0);
+    st.color = rgb('#ddd3b8');
+    fbox(st, f, sg * 1.15, sg * 1.55, W, 1.3, g + 1.3, g + 1.55);
+    hcyl(st, f, sg * 1.35, g + 1.76, 0.2, W, 1.28, 12);
+    hcyl(st, f, sg * 1.35, g + 1.76, 0.1, 1.3, 1.36, 8);
+    hcyl(st, f, sg * 1.4, g + 1.1, 0.08, W, 1.12, 8);
+    st.color = rgb('#d6cbae');
+  }
+  for (const sg of [-1, 1]) { // entablature + cornice beside the opening only (the niche runs down to the bowl)
+    fbox(st, f, sg * 0.55, sg * 1.0, W, 1.25, g + 2.85, g + 2.97);
+    fbox(st, f, sg * 0.55, sg * 1.05, W, 1.32, g + 2.97, g + 3.07);
+  }
+  st.color = rgb('#ece4cf');
+  for (const a of [-0.92, -0.76, -0.6, 0.6, 0.76, 0.92]) hcyl(st, f, a, g + 2.91, 0.045, 1.25, 1.29, 8); // row of discs…
+  for (let i = 1; i < 10; i++) { // …continuing around the back of the niche
+    const t = (Math.PI * i) / 10;
+    rlathe(st, f, 0.95 * R * Math.cos(t), W - 0.95 * R * Math.sin(t), [[0.04, g + 2.86], [0.04, g + 2.95]], 6);
+  }
+  // lower basin (lead), stone foot flaring up to the stem, ribbed tulip bowl, round pedestal
+  const wc = 1.0; // axis of the bowls, just off the wall
+  const lead = s.buf('metal');
+  lead.color = rgb('#4e555d');
+  rlathe(lead, f, 0, wc, [[0.5, g + 0.45], [0.82, g + 0.8], [0.96, g + 1.15], [1.0, g + 1.38], [0.94, g + 1.48], [0.76, g + 1.48], [0.7, g + 1.42]], 24);
+  lead.color = rgb('#3a4650');
+  rlathe(lead, f, 0, wc, [[0.72, g + 1.4], [0.72, g + 1.41]], 24); // water in the basin
+  st.color = rgb('#787d7e');
+  rlathe(st, f, 0, wc, [[0.9, g + 1.48], [0.56, g + 1.6], [0.4, g + 1.8], [0.33, g + 2.05], [0.28, g + 2.14]], 24); // trumpet foot
+  lead.color = rgb('#454c55');
+  rlathe(lead, f, 0, wc, [[0.27, g + 2.12], [0.36, g + 2.25], [0.44, g + 2.45], [0.49, g + 2.56], [0.42, g + 2.58]], 28, 0.06, 14); // tulip bowl, 14 petals
+  lead.color = rgb('#3a4650');
+  rlathe(lead, f, 0, wc, [[0.36, g + 2.5], [0.36, g + 2.51]], 28); // water in the bowl
+  lead.color = rgb('#4e555d');
+  rlathe(lead, f, 0, wc, [[0.22, g + 2.5], [0.26, g + 2.56], [0.26, g + 2.62]], 16); // the statue's round pedestal
+  // mascaron on the foot (spouting) and the satyr with grapes on the basin rim; two water jets
+  lead.color = rgb('#5d646c');
+  fbox(lead, f, -0.13, 0.13, 1.28, 1.42, g + 1.92, g + 2.18); // mascaron face, mid-foot
+  fbox(lead, f, -0.035, 0.035, 1.42, 1.47, g + 2.03, g + 2.09); // nose
+  lead.color = rgb('#262a2e');
+  for (const sg of [-1, 1]) fbox(lead, f, sg * 0.05 - 0.025, sg * 0.05 + 0.025, 1.42, 1.435, g + 2.1, g + 2.13);
+  fbox(lead, f, -0.035, 0.035, 1.42, 1.435, g + 1.96, g + 1.98); // mouth
+  st.color = rgb('#d8cfb4');
+  fbox(st, f, -0.16, 0.16, 1.5, 1.68, g + 1.42, g + 1.72); // satyr face at the foot of the trumpet, over the basin
+  fbox(st, f, -0.045, 0.045, 1.68, 1.73, g + 1.53, g + 1.61);
+  st.color = rgb('#c7bc9e');
+  for (let k = 0; k < 7; k++) rlathe(st, f, -0.12 + 0.04 * k, 1.6 + (k % 2) * 0.05, [[0.035, g + 1.7], [0.035, g + 1.78]], 6); // grapes
+  st.color = rgb('#3a3630');
+  for (const sg of [-1, 1]) fbox(st, f, sg * 0.055 - 0.025, sg * 0.055 + 0.025, 1.68, 1.69, g + 1.62, g + 1.65);
+  fbox(st, f, -0.045, 0.045, 1.68, 1.69, g + 1.47, g + 1.495);
   const jet = s.buf('waterJet');
-  for (let k = 0; k < 6; k++) fbox(jet, f, 0.2 + 0.07 * k, 0.24 + 0.07 * k, -0.015, 0.015, y0 + 0.31 - 0.012 * k * k, y0 + 0.32 - 0.012 * k * k);
-  fbox(jet, f, 0.62, 0.7, -0.03, 0.03, g + 0.5, y0 + 0.2); // thin stream falling into the basin
+  fbox(jet, f, -0.012, 0.012, 1.44, 1.465, g + 1.74, g + 1.97); // mascaron → the satyr's head
+  // the boy (dark bronze): legs, torso, head with curls, right hand on the hip, left arm hanging; facing the street
+  const b = s.buf('metal');
+  b.color = rgb('#3d372d');
+  const y0 = g + 2.62;
+  const bw = wc;
+  for (const sg of [-1, 1]) rlathe(b, f, sg * 0.05, bw, [[0.042, y0], [0.038, y0 + 0.22]], 8);
+  rlathe(b, f, 0, bw, [[0.095, y0 + 0.2], [0.105, y0 + 0.3], [0.11, y0 + 0.4], [0.075, y0 + 0.44], [0.035, y0 + 0.47]], 10); // body + neck
+  rlathe(b, f, 0, bw, [[0.045, y0 + 0.46], [0.07, y0 + 0.5], [0.075, y0 + 0.55], [0.05, y0 + 0.59]], 10); // head
+  for (let k = 0; k < 6; k++) rlathe(b, f, 0.06 * Math.cos(k), bw + 0.06 * Math.sin(k), [[0.025, y0 + 0.56], [0.02, y0 + 0.6]], 6); // curls
+  fbox(b, f, -0.13, -0.09, bw - 0.02, bw + 0.02, y0 + 0.32, y0 + 0.43); // right upper arm (viewer's left)
+  fbox(b, f, -0.13, -0.08, bw - 0.02, bw + 0.02, y0 + 0.29, y0 + 0.33); // forearm to the hip
+  fbox(b, f, 0.09, 0.13, bw - 0.02, bw + 0.02, y0 + 0.22, y0 + 0.43); // left arm hanging
+  fbox(b, f, -0.012, 0.012, bw + 0.09, bw + 0.13, y0 + 0.22, y0 + 0.245); // the member
+  for (let k = 0; k < 4; k++) fbox(jet, f, -0.01, 0.01, bw + 0.13 + 0.03 * k, bw + 0.15 + 0.03 * k, y0 + 0.225 - 0.012 * k * k, y0 + 0.24 - 0.012 * k * k);
+  fbox(jet, f, -0.01, 0.01, bw + 0.23, bw + 0.25, g + 2.52, y0 + 0.12); // falling straight into the bowl
+  // wrought-iron fleur-de-lis bracket high on the left (north) of the niche
+  const iron = s.buf('metal');
+  iron.color = rgb('#1f2224');
+  fbox(iron, f, -1.62, -1.58, 0.93, 0.98, g + 4.3, g + 5.6);
+  fbox(iron, f, -1.62, -1.58, 0.93, 0.98, g + 5.6, g + 6.0);
+  for (const sg of [-1, 1]) { fbox(iron, f, -1.6 + sg * 0.1 - 0.02, -1.6 + sg * 0.1 + 0.02, 0.93, 0.98, g + 5.35, g + 5.7); hcyl(iron, f, -1.6 + sg * 0.14, g + 5.3, 0.06, 0.93, 0.98, 8); }
+  // curved wrought-iron railing: posts on an arc, two rails, scroll curls under the top rail
+  const rail = (phi: number, y: number) => P(f, 2.1 * Math.sin(phi), y, wc + 2.1 * Math.cos(phi));
+  const N = 22, span = (Math.PI * 76) / 180;
+  for (let i = 0; i <= N; i++) {
+    const phi = -span + (2 * span * i) / N;
+    bar(iron, rail(phi, g), rail(phi, g + 1.05), 0.035);
+    if (i < N) {
+      const phi1 = -span + (2 * span * (i + 1)) / N;
+      bar(iron, rail(phi, g + 1.05), rail(phi1, g + 1.05), 0.05);
+      bar(iron, rail(phi, g + 0.55), rail(phi1, g + 0.55), 0.035);
+      const pm = (phi + phi1) / 2;
+      const [cx, cy] = [pm, g + 0.82];
+      let prev = rail(cx, cy + 0.11);
+      for (let k = 1; k <= 8; k++) { // an octagonal curl between the posts
+        const t = (2 * Math.PI * k) / 8;
+        const q = rail(cx + (0.11 * Math.sin(t)) / 2.1, cy + 0.11 * Math.cos(t));
+        bar(iron, prev, q, 0.02);
+        prev = q;
+      }
+    }
+  }
+  // collider: the wall slab + the basin block (details are never solid, SPEC §5.9)
+  s.prism([[[-2, 0], [2, 0], [2, 0.95], [1.0, 2.0], [-1.0, 2.0], [-2, 0.95]].flatMap(([a, w]) => { const p = P(f, a!, 0, w!); return [p[0], p[2]]; })], g - 0.3, g + 3.0);
   return s.out();
 };
 

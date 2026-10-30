@@ -34,6 +34,7 @@ export type MaterialId =
   | 'waterJet'
   | 'neon'
   | 'neonSign'
+  | 'mural' // painted wall / lettering: white, textured per chunk through BuildOut.textures (landmarks/m.ts)
   | 'stairGlow'; // night nosing strips on stair flights (world/stairs.ts createStairMaterials: hidden by day)
 
 /** Buckets of these materials MUST carry a `color` attribute (linear RGB: per-building tint, park green) and their

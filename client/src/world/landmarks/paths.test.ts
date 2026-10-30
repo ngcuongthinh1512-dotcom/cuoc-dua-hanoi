@@ -46,6 +46,8 @@ const ALLOWED: Record<string, number> = {
   'parlement-europeen: pedestrian (inside)': 1,
   'parlement-europeen: steps (inside)': 16,
   'choco-story: footway (inside)': 12, // the museum polygon covers an alley of Rue de l'Étuve
+  // OSM maps a footway THROUGH the ground storey of the south Cinquantenaire colonnade (the solid plinth of i.ts, radius r + 4 m along the whole arc)
+  'cinquantenaire-aile-sud: footway (inside)': 41,
 };
 
 type Tri = Float64Array; // ax ay az bx by bz cx cy cz

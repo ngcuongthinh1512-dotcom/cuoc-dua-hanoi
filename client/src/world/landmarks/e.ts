@@ -3,7 +3,7 @@
 import type { LandmarkId } from '../../geo/chunkData.ts';
 import { buildBuildings } from '../BuildingBuilder.ts';
 import type { ChunkData } from '../../geo/chunkData.ts';
-import { fbox, rgb, withExtras } from './b.ts';
+import { fbox, rgb, UP, withExtras } from './b.ts';
 import { details as b } from './b.ts';
 import { arch, body, facing, frontAt } from './c.ts';
 import { town } from './d.ts';
@@ -416,10 +416,54 @@ const maisonAntoine: DetailFn = (rec, _parts, ctx) => {
   return withExtras(base, s);
 };
 
+// Parc de Bruxelles: stone coping round the central basin, a gilded jet, and every statue / sculpture / bust / fountain node of the park
+// (OSM points attached by build-chunks, near 130 m): a stone plinth + bronze figure, or a water jet.
+const parc: DetailFn = (rec, _parts, ctx, h) => {
+  const s = new Sink();
+  const f = footprintFrame(rec.outer);
+  const g = ctx.height(f.cx, f.cz);
+  const st = s.buf('masonry');
+  st.color = rgb('#b8b2a4');
+  const o = rec.outer;
+  const n = o.length / 2;
+  for (let i = 0; i < n; i++) { // coping: a 0.5 m double-sided wall along the basin outline
+    const [ax, az, bx, bz] = [o[2 * i]!, o[2 * i + 1]!, o[2 * ((i + 1) % n)]!, o[2 * ((i + 1) % n) + 1]!];
+    const y0 = ctx.height(ax, az) - 0.1;
+    const y1 = ctx.height(bx, bz) - 0.1;
+    const top = Math.max(y0, y1) + 0.55;
+    for (const sg of [1, -1]) quadOut(st, [ax, y0, az], [bx, y1, bz], [bx, top, bz], [ax, top, az], [(bz - az) * sg, 0, -(bx - ax) * sg]);
+    quadOut(st, [ax, top, az], [bx, top, bz], [bx + (bz - az) * 0.05, top, bz - (bx - ax) * 0.05], [ax + (bz - az) * 0.05, top, az - (bx - ax) * 0.05], UP);
+  }
+  const jet = s.buf('waterJet');
+  lathe(jet, f, 0, 0, [[0.5, g], [0.2, g + 1.8], [0.05, g + 3.4], [0, g + 3.8]], 8);
+  for (const p of rec.points ?? []) {
+    const gy = ctx.height(p.x, p.z);
+    const pf = { ...f, cx: p.x, cz: p.z };
+    if (p.kind === 'fountain') {
+      lathe(jet, pf, 0, 0, [[0.18, gy], [0.08, gy + 1.2], [0, gy + 1.7]], 6);
+      continue;
+    }
+    if (p.kind !== 'artwork') continue;
+    const ph = p.sub === 'bust' ? 1.0 : 1.5;
+    st.color = rgb('#aaa597');
+    fbox(st, pf, -0.55, 0.55, -0.55, 0.55, gy - 0.2, gy + ph);
+    fbox(st, pf, -0.7, 0.7, -0.7, 0.7, gy - 0.2, gy + 0.25);
+    const br = s.buf('bronze');
+    if (p.sub === 'bust') lathe(br, pf, 0, 0, [[0.25, gy + ph], [0.28, gy + ph + 0.4], [0.2, gy + ph + 0.7], [0, gy + ph + 0.8]], 8);
+    else {
+      fbox(br, pf, -0.25, 0.25, -0.2, 0.2, gy + ph, gy + ph + 1.1); // torso
+      lathe(br, pf, 0, 0, [[0.18, gy + ph + 1.1], [0.2, gy + ph + 1.3], [0.12, gy + ph + 1.5], [0, gy + ph + 1.6]], 8); // head
+    }
+  }
+  void h;
+  return s.out();
+};
+
 export const details: Partial<Record<LandmarkId, DetailFn>> = {
   'arcades-cinquantenaire': arcades,
   bozar,
   'choco-story': chocoStory,
+  'parc-de-bruxelles': parc,
   'belgian-comic-strip-center': comicCenter,
   'maison-antoine': maisonAntoine,
 };
