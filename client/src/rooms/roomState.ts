@@ -17,6 +17,9 @@ export interface RoomTarget {
 }
 export type RoomEvent = 'enter' | 'exitReady' | 'switched' | 'resume' | null;
 
+/** Rooms of a plain card (no tally, no table): the ring is always lit and the team may walk out and back in (GardeRobe, BOZAR hall). */
+export const isFreeRoom = (kind: RoomView['kind'] | undefined) => kind === 'garderobe' || kind === 'hall';
+
 export const ROOM_TEXT = {
   exit: 'Lối ra đã mở: đi tới vòng sáng ở cuối phòng để nhận mật thư kế',
   exitDoor: 'Đã xong: đi tới vòng sáng cạnh cửa để ra ngoài nhận mật thư kế',
@@ -28,7 +31,7 @@ export const ROOM_TEXT = {
 export function roomOf(v: RaceView | null | undefined): RoomTarget | null {
   const c = v?.card, k = roomKindOf(c);
   if (!c || !k) return null;
-  if (k.exiting || k.kind === 'garderobe') return { step: c.step, branch: null, room: { kind: k.kind, total: 0, penaltyMinutesEach: 0, done: 0, skipped: false }, exiting: k.exiting };
+  if (k.exiting || isFreeRoom(k.kind)) return { step: c.step, branch: null, room: { kind: k.kind, total: 0, penaltyMinutesEach: 0, done: 0, skipped: false }, exiting: k.exiting };
   const room = c.branches?.find((b) => b.id === c.branch)?.task?.room!;
   return { step: c.step, branch: c.branch!, room, exiting: false };
 }

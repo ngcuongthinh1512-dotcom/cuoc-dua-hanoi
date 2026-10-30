@@ -290,7 +290,8 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   const rec: AnswerRec = { id: p.lastAnswerId + 1, b: s.type === 'detour' ? p.branch : null, text, at: now, s: 'pending' };
   p.lastAnswerId = rec.id;
   // Leg 3: every box has answers → graded here, applied at once (the Host only looks afterwards: ReviewItem.auto)
-  const marks = texts ? gradeParts(t, texts) : null;
+  // a picked seat is one box graded the same way (wrong = Phạt: retryLockMinutes)
+  const marks = texts ? gradeParts(t, texts) : t.pick ? [verifyAuto(t, input.text) === 'correct'] : null;
   if (marks) {
     const sc = marks.filter(Boolean).length;
     const a: AnswerRec = { ...rec, s: sc === marks.length ? 'correct' : 'penalized', sc, sv: true, auto: true, m: marks };
@@ -374,7 +375,7 @@ const mediaView = (m: MediaItem): MediaView => ({ url: m.url, label: m.label, ki
 /** SPEC §10.1 task minus `answers` / `referenceAnswers` / `params`; its location only by name. */
 const taskView = (t: Task, room?: RoomRec | null): TaskView => ({
   title: t.title, description: t.description, media: t.media.map(mediaView), kind: t.kind, verification: t.verification,
-  input: t.kind === 'free' ? 'proof' : t.parts ? 'parts' : 'text', proofInstruction: t.proofInstruction,
+  input: t.kind === 'free' ? 'proof' : t.parts ? 'parts' : t.pick ? 'seat' : 'text', proofInstruction: t.proofInstruction,
   timeLimitMinutes: t.timeLimitMinutes, ...(t.location ? { place: t.location.name } : {}),
   ...(t.parts ? { partLabels: t.parts.map((p) => p.label) } : {}), // SPEC §17.44
   ...(t.room ? { room: { ...t.room, done: room?.done ?? 0, skipped: room?.skipped ?? false } } : {}), // Leg 3: the 3D room + progress
@@ -407,7 +408,7 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
   };
   switch (s.type) {
     case 'route_info':
-      return { ...base, text: s.clue, transport: s.transport, media: s.media.map(mediaView) };
+      return { ...base, text: s.clue, transport: s.transport, media: s.media.map(mediaView), ...(s.room && status !== 'done' ? { room: s.room } : {}) }; // Leg 3 (v13): the BOZAR hall
     case 'detour': {
       const branch = row?.branch ?? null;
       const b = s.branches.find((x) => x.id === branch);

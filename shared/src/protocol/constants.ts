@@ -16,7 +16,7 @@
 // 9 = Leg 2 (Macao): everything 4 added (the Louvre room) removed.
 // 10 = Leg 2 player avatars: the socket URL carries `avatar` (0 = Nam, 1 = Nữ, once per connection), TeamInfo.avatar,
 //      `team` online {avatar}. No per-tick byte.
-export const PROTOCOL_VERSION = 12; // Leg 3: ClueCard.leftRoom (v11), ClueCard.room = a challenge played in the GardeRobe room (v12)
+export const PROTOCOL_VERSION = 13; // Leg 3: ClueCard.leftRoom (v11), ClueCard.room = a challenge played in the GardeRobe room (v12), + a route_info card in the BOZAR hall (v13)
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */

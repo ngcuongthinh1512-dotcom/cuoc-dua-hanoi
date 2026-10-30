@@ -109,6 +109,7 @@ export const penalizedText = (score: number | undefined, of: number | undefined)
  *  without a number (never the case from the server) the fixed text. */
 export const scoredText = (code: 'autoCorrect' | 'autoPenalized' | 'scoreUpdated', score: number | undefined, of: number | undefined): string => {
   if (score === undefined || !of) return NOTICES[code];
+  if (of === 1) return code === 'autoCorrect' ? 'Chính xác! Đúng ghế rồi' : code === 'autoPenalized' ? 'Chưa đúng ghế. Bị phạt, chờ hết đếm ngược rồi chọn lại.' : `Host cập nhật kết quả: ${score}/1`;
   const n = `đúng ${score}/${of}`;
   return code === 'autoCorrect' ? `Chính xác! Đúng ${score}/${of}` : code === 'autoPenalized' ? `Chưa đúng: ${n}. Bị phạt, chờ đếm ngược rồi trả lời lại.` : `Host cập nhật kết quả: ${n}`;
 };

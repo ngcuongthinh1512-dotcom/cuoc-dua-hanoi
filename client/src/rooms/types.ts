@@ -37,6 +37,8 @@ export interface RoomMountOptions {
   frozen?: () => boolean;
   /** The race: a result from the mini-game (done grew / "Bỏ qua") → `race room`. Absent = localStorage (dev pages). */
   onResult?: (r: { done: number; skipped: boolean }) => void;
+  /** The race: F on a seat in the BOZAR hall (T2 `pick: 'seat'`) → its label ("J-14", hallBuild seatLabel) as the answer; the server grades it. Absent = the dev page (a toast only). */
+  onSeat?: (label: string) => void;
   /** The overlay closed (the race re-takes the pointer lock inside this user gesture). */
   onClose?: () => void;
 }

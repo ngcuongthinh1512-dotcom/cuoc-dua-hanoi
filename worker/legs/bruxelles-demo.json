@@ -286,6 +286,29 @@
       }
     },
     {
+      "id": "T2",
+      "type": "challenge",
+      "label": "Thử thách 2",
+      "room": "hall",
+      "teaser": "",
+      "task": {
+        "title": "Ai hay đi nhà hát",
+        "description": "Đội chơi đang đứng tại Henry Le Bœuf; phòng hòa nhạc lớn và quan trọng nhất nằm bên trong Trung tâm Nghệ thuật Đẹp BOZAR. Với sức chứa hơn 2.100 chỗ ngồi và sở hữu chất lượng âm thanh xuất sắc hàng đầu châu Âu, tại phòng đại sảnh này thường xuyên bán vẽ diễn ra các sự kiện nghệ thuật cao cấp bao gồm: hòa nhạc cổ điển quy mô lớn; Vòng chung kết Cuộc thi Âm nhạc Queen Elisabeth; Các đêm nhạc Jazz và World Music; Chiếu phim kết hợp hòa nhạc sống; Các sự kiện văn hóa nghệ thuật và gala lớn;...\n\nTrong số hơn 1000 ghế ngồi tại tầng trệt tại nhà hát, đội chơi phải tìm đúng chiếc ghế mà mật thư yêu cầu. Gợi ý: Chiếc ghế cần tìm có liên quan đặc biệt với tên của 1 nhóm nhạc nổi tiếng hàng đầu tại Bỉ mà vẫn còn đang hoạt động cho tới bây giờ. Lựa chọn đúng chiếc ghế, đội chơi sẽ nhận được mật thư để đi tiếp. Chọn sai ghế, đội chơi sẽ bị phạt 1 phút trước khi được chọn lại.",
+        "media": [],
+        "location": null,
+        "kind": "answer",
+        "verification": "auto",
+        "pick": "seat",
+        "answers": [
+          "K-3"
+        ],
+        "referenceAnswers": [],
+        "proofInstruction": "",
+        "timeLimitMinutes": null,
+        "retryLockMinutes": 1
+      }
+    },
+    {
       "id": "L5",
       "type": "route_info",
       "label": "Lộ trình 6",
@@ -298,23 +321,6 @@
         "lat": 50.83624,
         "lon": 4.34685,
         "radius": 35
-      }
-    },
-    {
-      "id": "T2",
-      "type": "challenge",
-      "label": "Thử thách 2",
-      "teaser": "",
-      "task": {
-        "title": "",
-        "description": "",
-        "media": [],
-        "location": null,
-        "kind": "free",
-        "verification": "host_approval",
-        "answers": [],
-        "proofInstruction": "",
-        "timeLimitMinutes": null
       }
     },
     {

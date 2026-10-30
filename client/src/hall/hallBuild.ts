@@ -152,9 +152,10 @@ export function bar(p: THREE.Vector3, q: THREE.Vector3, w: number, h = w): THREE
 
 export function v3(x: number, y: number, z: number): THREE.Vector3 { return new THREE.Vector3(x, y, z); }
 
-/** Column shaft with 24 flutes, capital (echinus + abacus) and base; foot at y 0, facing any way. */
-export function flutedColumn(r: number, h: number): THREE.BufferGeometry {
-  const shaft = new THREE.CylinderGeometry(r, r * 1.06, h - 0.9, 72, 1, true).translate(0, 0.3 + (h - 0.9) / 2, 0);
+/** Column shaft with 24 flutes, capital (echinus + abacus) and base; foot at y 0, facing any way. `seg` = shaft segments
+ *  (72 shows the flutes; the race room's 16 keeps the silhouette only). */
+export function flutedColumn(r: number, h: number, seg = 72): THREE.BufferGeometry {
+  const shaft = new THREE.CylinderGeometry(r, r * 1.06, h - 0.9, seg, 1, true).translate(0, 0.3 + (h - 0.9) / 2, 0);
   const p = shaft.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), f = 1 - 0.07 * (0.5 + 0.5 * Math.cos(24 * a));
@@ -171,8 +172,18 @@ export function flutedColumn(r: number, h: number): THREE.BufferGeometry {
   return mergeGeometries(parts, false)!;
 }
 
-/** Theatre seat facing −Z, feet at y 0: { fabric, wood } for two instanced meshes sharing one matrix set. */
-export function seatGeometry(): { fabric: THREE.BufferGeometry; wood: THREE.BufferGeometry } {
+/** Theatre seat facing −Z, feet at y 0: { fabric, wood } for two instanced meshes sharing one matrix set. `low` (the race
+ *  room, 1 600 seats): open planes instead of boxes, 10 triangles a seat (DoubleSide materials). */
+export function seatGeometry(low = false): { fabric: THREE.BufferGeometry; wood: THREE.BufferGeometry } {
+  if (low) {
+    const fabric = mergeGeometries([
+      new THREE.PlaneGeometry(0.5, 0.62).rotateX(0.14).translate(0, 0.78, 0.2), // back
+      new THREE.PlaneGeometry(0.5, 0.46).rotateX(-Math.PI / 2).translate(0, 0.51, 0.02), // cushion top
+      new THREE.PlaneGeometry(0.5, 0.12).translate(0, 0.45, 0.25), // cushion front
+    ], false)!;
+    const wood = mergeGeometries([-1, 1].map((s) => new THREE.PlaneGeometry(0.5, 0.66).rotateY(Math.PI / 2).translate(s * 0.275, 0.42, 0.02)), false)!;
+    return { fabric, wood };
+  }
   const back = new THREE.BoxGeometry(0.5, 0.62, 0.09).rotateX(0.14).translate(0, 0.78, 0.24);
   const fabric = mergeGeometries([new THREE.BoxGeometry(0.5, 0.12, 0.46).translate(0, 0.45, 0.02), back], false)!;
   const side = (s: number) => new THREE.BoxGeometry(0.06, 0.66, 0.5).translate(s * 0.275, 0.42, 0.02);

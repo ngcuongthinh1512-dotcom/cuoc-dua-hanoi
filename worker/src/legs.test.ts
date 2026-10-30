@@ -14,7 +14,7 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
     const r = parseLeg(leg);
     expect(r.ok).toBe(true);
     expect(new Set(r.issues.map((i) => i.level))).toEqual(new Set(['blank']));
-    expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 4 (D1)', 'Bước 9 (T2)']));
+    expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 4 (D1)']));
     expect(r.issues.filter((i) => i.where.startsWith('Host duyệt'))).toEqual([]); // SPEC §17.17: no Host Facebook link to fill
     for (const id of ['bruxelles-demo-filled', 'mini']) expect(parseLeg(bundledLeg(id)).issues).toEqual([]);
   });
@@ -37,7 +37,7 @@ describe('legs/bruxelles-demo.json', () => {
 
   it('has the 11 steps in order', () => {
     // Leg 3: the box at L3's destination opens the detour; L3B (GardeRobe MannekenPis) opens T1
-    expect(steps.map((s) => s.id)).toEqual(['L1', 'L2', 'L3', 'D1', 'L3B', 'T1', 'L4', 'L5', 'T2', 'L6', 'PS']);
+    expect(steps.map((s) => s.id)).toEqual(['L1', 'L2', 'L3', 'D1', 'L3B', 'T1', 'L4', 'T2', 'L5', 'L6', 'PS']);
     expect([count('route_info'), count('detour'), count('challenge'), count('pit_stop')]).toEqual([7, 1, 2, 1]);
   });
 
@@ -68,7 +68,7 @@ describe('legs/bruxelles-demo.json', () => {
     }
   });
 
-  it('Leg 3 Detour: Chocolate (Choco-Story) / Truyện Tranh (La Boutique Tintin), each with its own place, afterChoice and a placeholder task; T2 empty for the Host', () => {
+  it('Leg 3 Detour: Chocolate (Choco-Story) / Truyện Tranh (La Boutique Tintin), each with its own place, afterChoice and a placeholder task; T2 = the BOZAR seat pick', () => {
     const d1 = steps.find((s) => s.id === 'D1');
     expect(d1?.clue).toMatch(/praline/);
     const branches = d1?.branches ?? [];
@@ -77,6 +77,9 @@ describe('legs/bruxelles-demo.json', () => {
     expect(branches[1]!.afterChoice).toMatch(/\n• Độ đủ nét/); // bullet lines → a list on the card
     for (const b of branches) expect([b.summary.length > 0, b.task.description.startsWith('[CHƯA NHẬP'), b.task.proofInstruction.startsWith('[CHƯA NHẬP'), b.task.media, b.task.answers]).toEqual([true, true, true, [], []]);
     const t2 = steps.find((s) => s.id === 'T2')!;
-    expect([t2.teaser, t2.task?.title, t2.task?.description, t2.task?.proofInstruction]).toEqual(['', '', '', '']);
+    // Leg 3: T2 "Ai hay đi nhà hát" is played in the BOZAR hall (room 'hall') right after L4's box: pick the seat, server-graded
+    expect([t2.room, t2.task?.title, t2.task?.pick, t2.task?.verification, t2.task?.answers, t2.task?.retryLockMinutes]).toEqual(['hall', 'Ai hay đi nhà hát', 'seat', 'auto', ['K-3'], 1]);
+    expect(t2.task?.description).toMatch(/^Đội chơi đang đứng tại Henry Le Bœuf/);
+    expect(t2.task?.description).not.toMatch(/mũi tên|bấm F/i); // the mechanism is not part of the clue
   });
 });

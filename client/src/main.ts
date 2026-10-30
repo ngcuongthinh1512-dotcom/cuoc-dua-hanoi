@@ -21,7 +21,7 @@ import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
 import { DEMO_ROOM_STATES, demoRoomResult, demoRoomViews, type DemoRoomState } from './rooms/roomDemo.ts';
 import { enterSpot, exitSpot, roomFrame } from './rooms/roomFrame.ts';
-import { ROOM_TEXT, RoomFlow, roomOf, type RoomEvent, type RoomTarget } from './rooms/roomState.ts';
+import { ROOM_TEXT, RoomFlow, isFreeRoom, roomOf, type RoomEvent, type RoomTarget } from './rooms/roomState.ts';
 import type { RoomHandle } from './rooms/types.ts';
 import { hideWorld, showWorld } from './world/hideWorld.ts';
 import { Spectate, TEXT as SP } from './spectate/Spectate.ts';
@@ -293,17 +293,18 @@ async function start() {
   const fadeEl = document.body.appendChild(Object.assign(document.createElement('div'), { className: 'room-fade' }));
   const fadeTo = (on: boolean) => new Promise<void>((r) => (fadeEl.classList.toggle('on', on), setTimeout(r, roomCfg.fadeMs)));
   const mountRoomFor = async (t: RoomTarget): Promise<RoomHandle> => {
-    const mod = t.room.kind === 'chocolate' ? await import('./choco/chocoRoom.ts') : t.room.kind === 'garderobe' ? await import('./garderobe/garderobeRoom.ts') : await import('./gallery/galleryRoom.ts');
+    const mod = t.room.kind === 'chocolate' ? await import('./choco/chocoRoom.ts') : t.room.kind === 'garderobe' ? await import('./garderobe/garderobeRoom.ts') : t.room.kind === 'hall' ? await import('./hall/hallRoom.ts') : await import('./gallery/galleryRoom.ts');
     const team = session?.team ?? { slot: Number(query.get('team')) || 1, name: playerSetup.teamName, colour: playerSetup.teamColour }; // offline: ?team=<slot>
     // under the branch box (the one being / just left: opened); a challenge room (GardeRobe): under the box just opened = the
     // last opened one (the step before); none known (a reload before the box came back) → under the feet
-    const box = (t.room.kind === 'garderobe' ? boxes.boxes.filter((b) => b.opened && !b.kind).at(-1) : boxes.boxes.find((b) => b.step === t.step && (t.branch ? b.branch === t.branch : b.opened && !!b.branch))) ?? { x: player!.position.x, z: player!.position.z, yaw: 0 };
+    const box = (isFreeRoom(t.room.kind) ? boxes.boxes.filter((b) => b.opened && !b.kind).at(-1) : boxes.boxes.find((b) => b.step === t.step && (t.branch ? b.branch === t.branch : b.opened && !!b.branch))) ?? { x: player!.position.x, z: player!.position.z, yaw: 0 };
     const frame = roomFrame(box, env.heightAt(box.x, box.z), mod.DOOR_Z);
     const r = await mod.mountRoom({
       renderer, q: query, scene, frame, world, camera, feet: () => ({ x: player!.position.x, z: player!.position.z }), frozen: modal, onClose: relock,
       team: { ...team, avatar: overrides.avatar },
       teams: (session?.welcome?.teams ?? []).map(({ slot, name, colour }) => ({ slot, name, colour })),
       room: t.room,
+      onSeat: (label) => (race ? race.answer(t.step, label) : demoSeat(label)),
       onResult: ({ done, skipped }) => (race && t.branch ? race.room(t.step, t.branch, done, skipped) : demoView && demoRoomView(demoRoomResult(demoView, done, skipped))),
     });
     roomFloor = frame.floorY;
@@ -345,7 +346,7 @@ async function start() {
         resize();
         await fadeTo(false);
         roomBusy = false;
-      } else if (ev === 'exitReady') room?.setExit(true), toast(t?.room.kind === 'garderobe' ? ROOM_TEXT.exitDoor : ROOM_TEXT.exit);
+      } else if (ev === 'exitReady') room?.setExit(true), toast(isFreeRoom(t?.room.kind) ? ROOM_TEXT.exitDoor : ROOM_TEXT.exit);
       else if (ev === 'switched') room?.setExit(true), room?.setLocked(true), toast(ROOM_TEXT.switched);
       else if (ev === 'resume') room?.setExit(false), room?.setLocked(false);
     });
@@ -357,7 +358,8 @@ async function start() {
     return hold;
   };
   /** The opened box in reach while the team stands outside the GardeRobe room it walked out of (its card still active): F goes back in. */
-  const reenterBox = (x: number, z: number) => !room && !roomBusy && roomFlow.leftKey && roomOf(race ? race.view : demoView)?.room.kind === 'garderobe' && boxes.boxes.some((b) => b.opened && !b.kind && Math.hypot(b.x - x, b.z - z) <= b.r);
+  const reenterBox = (x: number, z: number) => !room && !roomBusy && roomFlow.leftKey && isFreeRoom(roomOf(race ? race.view : demoView)?.room.kind) && boxes.boxes.some((b) => b.opened && !b.kind && Math.hypot(b.x - x, b.z - z) <= b.r);
+  const demoSeat = (label: string) => toast(`(demo) đã chọn ghế ${label}`); // DEV offline: no server grades it
   /** DEV offline: a stand-in view through the same gate (held → released by leaveRoom). */
   const demoRoomView = (v: RaceView) => ((demoView = v), onRoomView(v) ? void (demoHeld = v) : raceHud?.setView(v));
   const race =
@@ -536,10 +538,10 @@ async function start() {
     if (fullMap && query.has('map')) fullMap.open(frame, Number(query.get('map')) || undefined);
     else if (query.has('menu')) menu.open();
     help.hidden = input.locked || modal();
-    // Leg 3 DEV offline: ?roomDemo=chocolate|comic|garderobe&team=<slot>&roomState=in|pending|done|skipped|switch|left (rooms/roomDemo.ts,
+    // Leg 3 DEV offline: ?roomDemo=chocolate|comic|garderobe|hall&team=<slot>&roomState=in|pending|done|skipped|switch|left (rooms/roomDemo.ts,
     // p11-room-*): straight into the room with stand-in views; `then` once the room is up; `left` walks out by itself
     const kind = query.get('roomDemo');
-    if (import.meta.env.DEV && !session && raceHud && (kind === 'chocolate' || kind === 'comic' || kind === 'garderobe')) {
+    if (import.meta.env.DEV && !session && raceHud && (kind === 'chocolate' || kind === 'comic' || kind === 'garderobe' || kind === 'hall')) {
       const state = (DEMO_ROOM_STATES as readonly string[]).includes(query.get('roomState') ?? '') ? (query.get('roomState') as DemoRoomState) : 'in';
       const d = demoRoomViews(kind, state);
       demoRoomView(d.first);

@@ -491,6 +491,17 @@ Object.assign(PRESETS, {
   'garderobe-close4': '/garderobe.html?n=4',
   'garderobe-plan': '/garderobe.html?view=plan',
 });
+// Leg 3 race room "Phòng hoà nhạc Henry Le Bœuf" (client/hallroom.html, src/hall/hallRoom.ts; `npm run screenshot -- hallroom`;
+// not in the default run): the avatar at the entrance behind the last row (minimal graphics / the hq look), the hall from
+// the middle of the stalls, the exit ring beside the entrance, the plan.
+Object.assign(PRESETS, {
+  'hallroom-entrance': '/hallroom.html',
+  'hallroom-entrance-hq': '/hallroom.html?hq=1',
+  'hallroom-seat': '/hallroom.html?spawn=-0.4,20.4,-35', // the seat-pick arrow + "Hàng G2 · Ghế 1 — Bấm F để chọn" beside the rear centre aisle
+  'hallroom-stalls': '/hallroom.html?view=stalls',
+  'hallroom-exit': '/hallroom.html?view=exit',
+  'hallroom-plan': '/hallroom.html?view=plan',
+});
 const BENCH_MS = 15_000;
 /** In the page: frame intervals over `ms` of requestAnimationFrame → { avg, p5 } FPS (p5 = the slowest 5 % of frames). A
  *  string, not a function: tsx's keepNames would put an undefined `__name` helper into the page. */
@@ -524,7 +535,7 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c|p9|p10|p11|choco|gallery|garderobe)-/.test(k))); // landmark / player / online / Phase 8 / 8C / 9 / 10 / 11 (rooms) / choco / gallery / garderobe room views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c|p9|p10|p11|choco|gallery|garderobe|hallroom)-/.test(k))); // landmark / player / online / Phase 8 / 8C / 9 / 10 / 11 (rooms) / choco / gallery / garderobe / hallroom room views by name
 
 const outDir = join(root, 'screenshots', opt.out ?? '');
 const errors: string[] = [];

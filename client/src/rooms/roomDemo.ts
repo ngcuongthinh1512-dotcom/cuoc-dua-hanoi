@@ -6,6 +6,7 @@
 //  switch   = then "Đổi lựa chọn kép": switchLocked + leftRoom: the ring lights, the table locks, the team walks out by itself
 //  switch-left = `switch`, then the body walks into the ring: the world in front of the old box, the countdown running
 //  left     = `done`, then the body walks into the ring: back in the world, the next card pops
+// kind hall (the BOZAR concert hall, challenge T2 with `room` + `pick: 'seat'`): same states as garderobe (ring always lit).
 // kind garderobe (the GardeRobe challenge room, card T1 with `room`): in = answering inside (ring always lit) · done = T1
 // completed (4/4): the next card held · left = then walked out through the ring. (`?close=n` = vitrine n's close-up: the room.)
 import type { ClueCard, RaceView, RoomView, TaskView } from '@race/shared/protocol';
@@ -44,11 +45,17 @@ export const GARDEROBE_CARD: ClueCard = {
   step: 'T1', type: 'challenge', label: 'Thử thách 1', text: '', media: [], room: 'garderobe', status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: T0, completedAt: null, retryPenaltyMinutes: 2,
   task: { title: 'Tủ đồ', description: 'Trước mặt đội là 4 bộ trang phục minh họa: ghi nước gốc của từng bộ vào 4 ô.', media: [], kind: 'answer', verification: 'host_approval', input: 'parts', partLabels: ['Bộ 1', 'Bộ 2', 'Bộ 3', 'Bộ 4'], proofInstruction: '', timeLimitMinutes: null },
 };
+/** The BOZAR hall card (invented text): challenge T2 "pick the seat", played inside the concert hall (no input box: F on a seat). */
+export const HALL_CARD: ClueCard = {
+  step: 'T2', type: 'challenge', label: 'Thử thách 2', text: '', media: [], room: 'hall', status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: T0, completedAt: null, retryPenaltyMinutes: 1,
+  task: { title: 'Ai hay đi nhà hát', description: 'Tìm đúng chiếc ghế mà mật thư yêu cầu (minh họa).', media: [], kind: 'answer', verification: 'auto', input: 'seat', proofInstruction: '', timeLimitMinutes: null },
+};
 /** The card after the detour step: the next route (invented text). */
 export const NEXT_CARD: ClueCard = { step: 'L2', type: 'route_info', label: 'Lộ trình 2', text: 'Mật thư minh họa: đội tìm đường tới điểm kế tiếp để nhận mật thư đi tiếp.', transport: { allowed: 'any' }, media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: NOW, completedAt: null };
 
 /** The views of a demo: `first` right away, `then` once the room is up (the server's next message). */
 export function demoRoomViews(kind: RoomView['kind'], state: DemoRoomState): { first: RaceView; then: RaceView | null } {
+  if (kind === 'hall') return { first: view(HALL_CARD), then: state === 'done' || state === 'left' ? view(NEXT_CARD) : null };
   if (kind === 'garderobe') return { first: view(GARDEROBE_CARD), then: state === 'done' || state === 'left' ? view(NEXT_CARD) : null };
   const total = ROOMS[kind].total;
   switch (state) {

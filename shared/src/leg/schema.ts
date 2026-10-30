@@ -82,6 +82,9 @@ export const taskSchema = z.strictObject({
    *  'host_approval' + kind 'answer' (checkLeg); no answers in the leg at all for such a task. */
   parts: z.array(z.strictObject({ label: text().default(''), /** Leg 3: accepted spellings of THIS box (server only); every box
    *  with answers = the server grades x/N itself (all right → done; else Phạt + "đúng x/N"), the Host reviews afterwards. */ answers: z.array(z.string().max(200)).min(1).optional() })).min(2).max(8).optional(),
+  /** Leg 3: the answer is picked in a 3D room instead of typed: `"seat"` = a stalls seat of the BOZAR hall (F on it sends its
+   *  label "J-14" as the answer; `answers` = the right seat(s), server only). verification 'auto'; wrong = Phạt (retryLockMinutes). */
+  pick: z.enum(['seat']).optional(),
   proofInstruction: text().default(''),
   timeLimitMinutes: z.number().positive().nullable().default(null),
   /** Mini-game parameters of kinds other than answer / free (object positions, target photo + heading, gates…: SPEC
@@ -103,6 +106,9 @@ const routeInfo = z.strictObject({
   destination: destinationSchema,
   /** Phase 8 (gap 5 / 14): links and images of the clue. */
   media: media(),
+  /** Leg 3: the team walks into a 3D room built under the box just opened (the previous step's) while this clue is its card:
+   *  `"hall"` = the BOZAR concert hall (Salle Henry Le Bœuf). Nothing to answer: the card is the route; the ring is always lit. */
+  room: z.enum(['garderobe', 'hall']).optional(),
 });
 /** `afterChoice` (Leg 3): the text that "drops open" under the chosen branch once the team picked it (where to go, the Host's
  *  manual penalties…); sent only with the CHOSEN branch (steps.ts cardOf), scanned for leaks like `summary`. */
@@ -124,7 +130,7 @@ const challenge = z.strictObject({
   task: taskSchema.prefault({}),
   /** Leg 3: the challenge is played inside a 3D room built under the box just opened (the previous step's): the GardeRobe
    *  MannekenPis museum (4 vitrines with the costume photos). No tally / penalty: the card itself is the challenge. */
-  room: z.enum(['garderobe']).optional(),
+  room: z.enum(['garderobe', 'hall']).optional(),
 });
 /** SPEC §17.22 / §17.23: what a team reads when it finishes (host NPC line, toast, finish card); each field optional
  *  (missing → the generic FINISH_DEFAULTS, protocol/finish.ts). `first` = the winner's, `out` = "BỊ LOẠI" (the last team

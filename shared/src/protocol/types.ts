@@ -122,10 +122,10 @@ export interface TaskView {
   media: MediaView[];
   kind: TaskKind;
   verification: Verification;
-  /** Phase 8: 'text' = an input box (answer typed in game); 'proof' = a photo the team sends on Messenger, opened outside the
+  /** Phase 8: 'text' = an input box (answer typed in game); 'seat' = Leg 3: the answer is a seat picked in the BOZAR hall (F on it; no input box); 'proof' = a photo the team sends on Messenger, opened outside the
    *  game (kind free, SPEC §17.17: no contact button): the card shows proofInstruction, the submission code and
    *  "Tôi đã gửi bài – chờ Host duyệt" (answer ''). */
-  input: 'text' | 'proof' | 'parts';
+  input: 'text' | 'proof' | 'parts' | 'seat';
   /** SPEC §17.44: input 'parts' — one box per part, in leg order ('' = the client numbers it); the N strings go to the Host. */
   partLabels?: string[];
   proofInstruction: string;
@@ -139,8 +139,9 @@ export interface TaskView {
 /** Leg 3: a Lựa chọn kép room as its team sees it: `done` of `total` made, `skipped` = "Bỏ qua" pressed (the step is done,
  *  (total − done) × penaltyMinutesEach at the finish line). */
 export interface RoomView {
-  /** 'garderobe' = the GardeRobe MannekenPis museum room of a CHALLENGE step (leg step `room`; no tally: total 0). */
-  kind: 'chocolate' | 'comic' | 'garderobe';
+  /** 'garderobe' = the GardeRobe MannekenPis museum room of a CHALLENGE step, 'hall' = the BOZAR concert hall of a route_info
+   *  step (leg step `room`; no tally: total 0). */
+  kind: 'chocolate' | 'comic' | 'garderobe' | 'hall';
   total: number;
   penaltyMinutesEach: number;
   done: number;
@@ -190,7 +191,7 @@ export interface ClueCard {
   leftRoom?: RoomView['kind'];
   /** Leg 3 (v12): a challenge played inside a 3D room (leg step `room: 'garderobe'`): the team enters it when this card
    *  arrives (the previous box opened) and may walk out / back in at will; absent once the step is done. */
-  room?: 'garderobe';
+  room?: 'garderobe' | 'hall';
   /** detour: minutes of one switch (the confirm text of "Đổi lựa chọn kép"). */
   switchPenaltyMinutes?: number;
   /** challenge / branch: minutes of the Host's "Phạt" (task.retryLockMinutes ?? penalties.retryLockMinutes; may be 0.1 in

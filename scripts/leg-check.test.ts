@@ -347,7 +347,7 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     const demo = run(legs('bruxelles-demo.json'));
     expect(lvl(demo, 'error')).toEqual([]);
     expect(lvl(demo, 'warning')).toEqual([]);
-    expect(lvl(demo, 'blank').length).toBeGreaterThan(5); // Leg 3: D1 is filled (Chocolate / Truyện Tranh), T1 / T2 and the mini-game texts still open
+    expect(lvl(demo, 'blank').length).toBeGreaterThan(0); // Leg 3: D1 is filled (Chocolate / Truyện Tranh), T1 / T2 and the mini-game texts still open
   });
 
   it('host_approval + a typed answer needs no proofInstruction (not a blank); a photo task (free) without one is a blank', () => {

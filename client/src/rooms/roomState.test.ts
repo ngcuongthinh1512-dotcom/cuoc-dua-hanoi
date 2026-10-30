@@ -1,6 +1,6 @@
 import type { RaceView } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { demoRoomResult, demoRoomViews, GARDEROBE_CARD, NEXT_CARD, roomCard } from './roomDemo.ts';
+import { demoRoomResult, demoRoomViews, GARDEROBE_CARD, HALL_CARD, NEXT_CARD, roomCard } from './roomDemo.ts';
 import { rooms } from '../config.ts';
 import { devFrame, enterSpot, exitSpot, roomFrame, toLocal, toWorld } from './roomFrame.ts';
 import { RoomFlow, roomOf } from './roomState.ts';
@@ -119,6 +119,17 @@ describe('the GardeRobe challenge room (ClueCard.room): enter, walk out at will,
     g.left();
     expect(g.onView(view(NEXT_CARD))).toEqual({ event: null, hold: false });
     expect(g.onView(view(GARDEROBE_CARD))).toEqual({ event: null, hold: false }); // a Host undo while outside: still outside (F re-enters)
+  });
+  it('the BOZAR hall (T2 challenge card with room): a free room like the museum; none once done', () => {
+    expect(roomOf(view(HALL_CARD))).toMatchObject({ step: 'T2', branch: null, exiting: false, room: { kind: 'hall', total: 0 } });
+    expect(roomOf(view({ ...HALL_CARD, status: 'done' }))).toBeNull();
+    expect(roomOf(view({ ...HALL_CARD, room: undefined }))).toBeNull();
+    const f = new RoomFlow();
+    expect(f.onView(view(HALL_CARD))).toEqual({ event: 'enter', hold: false });
+    f.left();
+    expect(f.onView(view(HALL_CARD))).toEqual({ event: null, hold: false }); // walked out: the same card does not pull it back
+    expect(demoRoomViews('hall', 'in')).toEqual({ first: expect.objectContaining({ card: HALL_CARD }), then: null });
+    expect(demoRoomViews('hall', 'left').then?.card?.step).toBe('L2');
   });
   it('demo: in / done / left views', () => {
     expect(demoRoomViews('garderobe', 'in')).toEqual({ first: expect.objectContaining({ card: GARDEROBE_CARD }), then: null });

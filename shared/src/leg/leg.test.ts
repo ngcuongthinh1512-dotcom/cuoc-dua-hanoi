@@ -182,6 +182,20 @@ describe('leg schema', () => {
     expect(parseLeg(bad).ok).toBe(false);
   });
 
+  it('Leg 3: a route_info step `room: "hall"` (the BOZAR concert hall): right after a step with a box (not first, not after a challenge)', () => {
+    const j = mini() as Mini;
+    Object.assign(j.steps[3]!, { room: 'hall' }); // L2 right after the detour D1
+    const r = parseLeg(j);
+    expect(r.ok && r.leg.steps[3]!.type === 'route_info' && r.leg.steps[3].room).toBe('hall');
+    expect(errors(j)).toEqual([]);
+    const first = mini() as Mini;
+    Object.assign(first.steps[0]!, { room: 'hall' });
+    expect(errors(first)).toEqual(['Bước 1 (L1) › phòng (room): lộ trình có phòng (room) phải đứng ngay sau một bước có hòm (lộ trình / Lựa chọn kép): phòng dựng dưới hòm vừa mở']);
+    const bad = mini() as Mini;
+    Object.assign(bad.steps[3]!, { room: 'pizza' });
+    expect(parseLeg(bad).ok).toBe(false);
+  });
+
   it('lists blanks the Host must still fill (a draft loads) and answers leaking into texts', () => {
     const j = mini() as Mini;
     Object.assign(j.steps[1]!, { task: { title: '', description: '', answers: [] } });

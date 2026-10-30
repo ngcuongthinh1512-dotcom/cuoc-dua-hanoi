@@ -123,6 +123,17 @@ describe('advance: a challenge (D5, D8, D21, D22)', () => {
     expect(Z[1]!.rack).not.toBe(Z[2]!.rack);
   });
 
+  it('pick seat (Leg 3, T2): a wrong seat = auto Phạt (lock retryLockMinutes, 0/1), the right one (spelling free) = done', () => {
+    const leg = variant((s) => Object.assign(s[1], { teaser: '', room: 'hall' }, { task: { ...s[1].task, location: null, verification: 'auto', pick: 'seat', answers: ['J-14'], retryLockMinutes: 1 } }));
+    const p = P(1, { lastAnswerId: 3 });
+    const w = run(p, answer('J-15'), 1000, leg);
+    expect(w.effects).toEqual([{ kind: 'answer', step: 1, rec: { id: 4, b: null, text: 'J-15', at: 1000, s: 'penalized', sc: 0, sv: true, auto: true, m: [false] }, verdict: 'penalized', lockedUntil: 61_000 }]);
+    expect(w.p.lockedUntil).toBe(61_000);
+    const r = run(p, answer('j-14'), 1000, leg);
+    expect(r.effects[0]).toMatchObject({ kind: 'answer', verdict: 'correct' });
+    expect(r.p).toEqual(P(2));
+  });
+
   // SPEC §17.44: a multi-box task (labels only, Host-reviewed)
   const PARTS = [{ label: 'Địa điểm 1' }, { label: 'Địa điểm 2' }, { label: '' }, { label: '' }];
   const partsLeg = () => variant((s) => Object.assign(s[1], { teaser: '' }, { task: { ...s[1].task, verification: 'host_approval', parts: PARTS } }));
@@ -292,6 +303,14 @@ describe('Leg 3: Lựa chọn kép rooms (race room)', () => {
     expect(cardOf(l, 1, r({ task_started_at: 5 }), 1000).room).toBe('garderobe');
     expect(cardOf(l, 1, r({ task_started_at: 5, completed_at: 900 }), 1000).room).toBeUndefined();
     expect(cardOf(leg, 1, r({}), 1000).room).toBeUndefined();
+  });
+
+  it('cardOf (v13): a route_info step with room carries ClueCard.room until done (the BOZAR hall)', () => {
+    const l = { ...leg, steps: leg.steps.map((s) => (s.id === 'L1' ? { ...s, room: 'hall' as const } : s)) };
+    const r = (more: Partial<StepProgressRow>) => ({ ...emptyProgress('t', 'L1'), clue_opened_at: 1, ...more });
+    expect(cardOf(l, 0, r({}), 1000).room).toBe('hall');
+    expect(cardOf(l, 0, r({ completed_at: 900 }), 1000).room).toBeUndefined();
+    expect(cardOf(leg, 0, r({}), 1000).room).toBeUndefined();
   });
 
   it('cardOf: the opened branch\'s task carries room {kind, total, penaltyMinutesEach, done, skipped}; never before it is opened', () => {

@@ -97,6 +97,7 @@ Mỗi bước có `id` (tên ngắn, chữ + số, gạch ngang / dưới, ≤ 1
 | `transport` | không | `{"allowed": "any"}` | `{"allowed": "any"}` tự chọn đi bộ / xe; `{"mandatory": "walk"}` **bắt buộc đi bộ** trên lộ trình này (không nhận được xe) |
 | `destination` | có | | Điểm đến, mục 7 |
 | `media` | không | `[]` | Hình / liên kết kèm mật thư (mục 7.2) |
+| `room` | không | không có | **Phòng 3D đi kèm mật thư** (Leg 3): `"hall"` = phòng hoà nhạc Henry Le Bœuf của BOZAR. Mở hòm của bước TRƯỚC (F) = nhận mật thư này **và** vào phòng (dựng dưới hòm đó); không có gì phải trả lời, đội đi lại xem phòng, **ra lúc nào cũng được** qua vòng sáng "Ra khỏi phòng" cạnh cửa (vào lại bằng F tại hòm). `"garderobe"` cũng dùng được ở đây như ở thử thách. Phải đứng ngay sau một bước có hòm (lộ trình / Lựa chọn kép), sai thì **LỖI** |
 
 ### 5.2 `challenge`: Thử thách
 
@@ -108,7 +109,7 @@ Mỗi bước có `id` (tên ngắn, chữ + số, gạch ngang / dưới, ≤ 1
 |---|---|---|---|
 | `teaser` | không | `""` | Câu gợi ý ngắn đội đọc **trước khi nhận** thử thách: thẻ chỉ hiện câu này + nút **"Nhận thử thách"**; đề bài (và hình của nhiệm vụ) chỉ hiện sau khi đội bấm. `""` = đề bài hiện ngay |
 | `task` | không (trống = CÒN TRỐNG) | nhiệm vụ trống | Nhiệm vụ, mục 7.1 |
-| `room` | không | không có | **Thử thách chơi trong phòng 3D** (Leg 3): `"garderobe"` = phòng trưng bày GardeRobe MannekenPis (4 tủ kính với 4 ảnh trang phục). Mở hòm của bước TRƯỚC (F) = nhận thẻ thử thách này **và** vào phòng (dựng dưới hòm đó); đội trả lời trên thẻ như thường (Enter mở thẻ, F cạnh tủ kính = xem gần, Esc / F quay lại), **ra khỏi phòng lúc nào cũng được** qua vòng sáng "Ra khỏi phòng" cạnh cửa và vào lại bằng F tại hòm; xong bước khi đang ở trong phòng thì mật thư kế chờ tới lúc đội đi ra. Không có tiến độ / phạt phòng. Thử thách này không có `task.location` và phải đứng ngay sau một bước có hòm, sai thì **LỖI** |
+| `room` | không | không có | **Thử thách chơi trong phòng 3D** (Leg 3): `"hall"` = phòng hoà nhạc BOZAR (như mục 5.1); `"garderobe"` = phòng trưng bày GardeRobe MannekenPis (4 tủ kính với 4 ảnh trang phục). Mở hòm của bước TRƯỚC (F) = nhận thẻ thử thách này **và** vào phòng (dựng dưới hòm đó); đội trả lời trên thẻ như thường (Enter mở thẻ, F cạnh tủ kính = xem gần, Esc / F quay lại), **ra khỏi phòng lúc nào cũng được** qua vòng sáng "Ra khỏi phòng" cạnh cửa và vào lại bằng F tại hòm; xong bước khi đang ở trong phòng thì mật thư kế chờ tới lúc đội đi ra. Không có tiến độ / phạt phòng. Thử thách này không có `task.location` và phải đứng ngay sau một bước có hòm, sai thì **LỖI** |
 
 ### 5.3 `detour`: Lựa chọn kép
 

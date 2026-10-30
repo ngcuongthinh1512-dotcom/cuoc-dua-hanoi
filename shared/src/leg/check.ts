@@ -41,7 +41,7 @@ const FIELD: Record<string, string> = {
   spreadMeters: 'khoảng rải đội (m)',
   // Phase 8 (docs/plans/phase8.md D2)
   referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
-  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', room: 'phòng (room)', total: 'tổng số món', penaltyMinutesEach: 'phút phạt mỗi món chưa xong', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
+  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', pick: 'cách chọn đáp án (chọn ghế)', room: 'phòng (room)', total: 'tổng số món', penaltyMinutesEach: 'phút phạt mỗi món chưa xong', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
   walkOnlyViolationMinutes: 'phút phạt đi xe ở lộ trình đi bộ', quitTaskMinutes: 'phút phạt bỏ thử thách',
   // SPEC §17.22 / §17.23
   announce: 'thông báo về đích', npc: 'lời NPC dẫn chương trình', toast: 'thông báo nhanh', card: 'thẻ về đích', first: 'bản về nhất', out: 'bản bị loại',
@@ -192,11 +192,16 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
       if (s.task.location) add('error', ['steps', i, 'task', 'location'], 'thử thách trong phòng (room) không có nơi riêng: phòng dựng dưới hòm của bước trước; bỏ "location"');
       if (i === 0 || steps[i - 1]!.type === 'challenge') add('error', ['steps', i, 'room'], 'thử thách trong phòng (room) phải đứng ngay sau một bước có hòm (lộ trình / Lựa chọn kép)');
     }
+    if (s.type === 'route_info' && s.room && (i === 0 || steps[i - 1]!.type === 'challenge')) add('error', ['steps', i, 'room'], 'lộ trình có phòng (room) phải đứng ngay sau một bước có hòm (lộ trình / Lựa chọn kép): phòng dựng dưới hòm vừa mở');
     const tasks = s.type === 'detour' ? s.branches.map((b, k) => [b.task, ['steps', i, 'branches', k, 'task']] as const) : s.type === 'challenge' ? [[s.task, ['steps', i, 'task']] as const] : [];
     if (s.type === 'detour') s.branches.forEach((b, k) => (blank(b.name, ['steps', i, 'branches', k, 'name'], 'tên nhánh'), blank(b.summary, ['steps', i, 'branches', k, 'summary'], 'mô tả ngắn của nhánh')));
     for (const [t, p] of tasks) {
       blank(t.title, [...p, 'title'], 'tiêu đề nhiệm vụ');
       blank(t.description, [...p, 'description'], 'mô tả nhiệm vụ');
+      if (t.pick) {
+        if (t.verification !== 'auto' || t.kind !== 'answer' || t.parts) add('error', [...p, 'pick'], 'thử thách chọn ghế (pick) do máy chủ tự chấm: dùng kiểu "answer", cách xác nhận "auto", không dùng nhiều ô (parts)');
+        if (s.type !== 'challenge' || !s.room) add('error', [...p, 'pick'], 'thử thách chọn ghế (pick) phải nằm trong phòng (room "hall") của một thử thách');
+      }
       if (t.parts) {
         // SPEC §17.44: a multi-box task is reviewed by the Host (no answers in the leg: nothing to grade with)
         if (t.verification !== 'host_approval') add('error', [...p, 'verification'], 'thử thách nhiều ô (parts) do Host duyệt: phải dùng cách xác nhận "host_approval" (máy chủ không có đáp án để tự chấm)');
