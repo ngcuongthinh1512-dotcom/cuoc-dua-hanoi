@@ -254,6 +254,8 @@ addEventListener('message',e=>{const d=e.data;if(!d||d.type!=='room-init')return
   prog={st:LV.map((_,i)=>i<n?'pass':''),best:LV.map((_,i)=>i<n?1:0),skipped:!!d.skipped};save();wipeStrokes();pickLevel(firstOpen());if(prog.skipped)showEnd()});
 let prog={st:LV.map(()=>''),best:LV.map(()=>0),skipped:false};
 try{const j=JSON.parse(localStorage.getItem(KEY)||'null');if(j&&Array.isArray(j.st)&&j.st.length===LV.length)prog={...prog,...j}}catch(e){}
+// DEV / test page only: ?pass=3 opens the page with the first 3 drawings already passed (the race never uses it: its iframe URL is fixed and room-init sets the tally)
+{const pn=new URLSearchParams(location.search).get('pass');if(pn!==null){const n=Math.max(0,Math.min(LV.length,pn|0));prog={st:LV.map((_,i)=>i<n?'pass':''),best:LV.map((_,i)=>i<n?1:0),skipped:false}}}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(prog))}catch(e){}};
 // ---------- the drawing in progress survives leaving (Thoát / Esc / the overlay closed / reload / tab closed): the current
 // drawing's strokes under KEY:strokes:<level> (coordinates rounded to 1e-4 of the paper: the score stays the same), saved

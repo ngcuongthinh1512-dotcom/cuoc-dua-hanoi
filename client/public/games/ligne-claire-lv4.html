@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nét Mực Ligne Claire</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  :root{--ink:#15131a;--cream:#f4ead2;--paper:#f7efdc;--sepia:#6b4a2a;--wood:#5a3a22;--red:#d8352a;--blue:#2f5fa8;--gold:#e0b25a;--comic:"Marker Felt","Chalkboard SE","Comic Sans MS",ui-rounded,sans-serif}
+  html,body{height:100%}
+  body{margin:0;overflow:hidden;color:#f7efdc;font:15px ui-rounded,"SF Pro Rounded",system-ui,-apple-system,sans-serif;height:100vh;
+    background:
+      repeating-linear-gradient(92deg,#00000018 0 2px,transparent 2px 11px),
+      repeating-linear-gradient(88deg,#ffffff07 0 1px,transparent 1px 23px,#00000012 23px 26px,transparent 26px 57px),
+      linear-gradient(90deg,#4e3119,#6a4426 30%,#73492a 55%,#5e3b20)}
+  #lamp{position:fixed;inset:0;pointer-events:none;background:
+      radial-gradient(ellipse 48% 60% at 58% 38%,#ffd89a3a 0%,#ffbf6a14 45%,transparent 72%),
+      radial-gradient(ellipse 90% 85% at 50% 50%,transparent 45%,#120803b8 100%);animation:flicker 9s infinite}
+  @keyframes flicker{0%,100%{opacity:1}37%{opacity:.93}41%{opacity:1}68%{opacity:.96}71%{opacity:1}}
+  #desk{position:relative;height:100%;display:grid;grid-template-columns:172px 1fr 318px;grid-template-rows:54px 1fr;gap:10px 18px;padding:8px 20px 76px}
+  #plate{grid-column:1/4;display:flex;align-items:center;gap:16px;padding:0 6px}
+  #plate h1{margin:0;font:800 24px var(--comic);letter-spacing:.5px;color:#f7e6c4;text-shadow:0 2px 0 #2a1608,0 0 18px #ffd89a44}
+  #plate .brass{padding:4px 12px;border-radius:6px;font:700 12px var(--comic);letter-spacing:2px;color:#3a2410;background:linear-gradient(#f3d58a,#c99a3c);box-shadow:0 2px 0 #7a5a18,inset 0 1px 0 #fff8;border:1px solid #8a6a22}
+  #plate .sub{font-size:12px;color:#d9c3a0;opacity:.85}
+  /* corkboard level selector */
+  #cork{position:relative;border-radius:10px;padding:12px 10px 10px;background:
+      radial-gradient(circle at 30% 20%,#d4a473 0 1px,transparent 2px),radial-gradient(circle at 70% 60%,#9a6a3c 0 1px,transparent 2px),
+      repeating-radial-gradient(circle at 50% 50%,#c69560 0 3px,#b8864f 3px 6px);background-size:11px 11px,13px 13px,100% 100%;
+      box-shadow:inset 0 0 0 6px #4a2c14,inset 0 0 18px #0008,0 10px 24px #0007}
+  #cork .ct{font:700 13px var(--comic);color:#3a2410;text-align:center;margin:2px 0 8px;letter-spacing:1px}
+  #lv{display:flex;flex-direction:column;gap:4px}
+  #lv button{position:relative;display:flex;align-items:center;gap:8px;padding:3px 6px 3px 8px;border:0;border-radius:4px;background:#fffbe9;color:#3a2410;font:800 13px var(--comic);cursor:pointer;box-shadow:0 3px 6px #0006;transform:rotate(-1.2deg);transition:transform .15s}
+  #lv button:nth-child(even){transform:rotate(1deg)}
+  #lv button canvas{width:40px;height:40px;border:1px solid #c9b58f;background:#fff}
+  #lv button .n{display:inline-block;min-width:22px;padding:2px 4px;border-radius:50%;border:2px solid var(--red);color:var(--red);font-size:11px;text-align:center;transform:rotate(-8deg)}
+  #lv button.on{transform:rotate(0) scale(1.05);box-shadow:0 0 0 2px var(--gold),0 6px 12px #0007;z-index:1}
+  #lv button.on::before{content:'';position:absolute;top:-6px;left:50%;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ff8a7a,#b01f12);box-shadow:0 2px 3px #0008;transform:translateX(-50%)}
+  #lv button:disabled{background:#3a2616;color:#b89a7a;cursor:not-allowed;box-shadow:0 2px 4px #0006}
+  #lv button:disabled canvas{filter:brightness(.32) contrast(1.3) sepia(.4);border-color:#1a0e06}
+  #lv button:disabled .n{border-color:#8a6a4a;color:#c8a888}
+  #lv button .lock{display:inline-block;width:40px;height:40px;line-height:40px;text-align:center;font-size:20px;background:#1a0e06;border:1px solid #1a0e06}
+  #lv button.pass::after{content:'✓';margin-left:auto;color:#1f8a4c;font-size:16px}
+  .sticky{background:linear-gradient(#fff39a,#f5e06a);color:#4a3a10;font:700 12px var(--comic);padding:9px 10px;border-radius:2px;box-shadow:0 6px 10px #0006;line-height:1.35}
+  #note{margin-top:12px;transform:rotate(2deg)}
+  /* sheet */
+  #sheetWrap{position:relative;min-width:0;min-height:0}
+  #c{width:100%;height:100%;display:block;border-radius:3px;cursor:crosshair;box-shadow:0 22px 46px #0009,0 4px 10px #0006,0 1px 0 #fff4 inset}
+  #c.hand{cursor:grab}#c.hand:active{cursor:grabbing}
+  #sheetWrap.rustle{animation:rustle .45s ease-out}
+  @keyframes rustle{0%{transform:rotate(-1.2deg) translateY(-6px)}60%{transform:rotate(.5deg) translateY(2px)}100%{transform:none}}
+  .tape{position:absolute;width:84px;height:22px;pointer-events:none;background:repeating-linear-gradient(135deg,#f2d8a6cc 0 6px,#e7c48fcc 6px 12px);opacity:.9;box-shadow:0 2px 4px #0005}
+  .tape.tl{left:-24px;top:10px;transform:rotate(-40deg)}.tape.tr{right:-24px;top:10px;transform:rotate(40deg)}.tape.bl{left:-24px;bottom:12px;transform:rotate(40deg)}.tape.br{right:-24px;bottom:12px;transform:rotate(-40deg)}
+  /* right column: reference card + tools */
+  #side{display:flex;flex-direction:column;gap:12px;min-height:0}
+  #refCard{position:relative;align-self:center;padding:10px 10px 26px;background:#fffbe9;box-shadow:0 10px 22px #0008;transform:rotate(2.5deg)}
+  #refCard canvas{display:block;border:1px solid #d9c9a8}
+  #refCard .cap{position:absolute;left:0;right:0;bottom:6px;text-align:center;font:700 12px var(--comic);color:var(--sepia)}
+  #refCard .pin{position:absolute;top:-7px;left:50%;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#8fd3ff,#1d4a8a);box-shadow:0 3px 4px #0008;transform:translateX(-50%)}
+  #tools{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .tool{padding:9px 4px;border:2px solid #2a1608;border-radius:8px;background:linear-gradient(#9a6a3a,#5a3a1a);color:#f7e6c4;font:800 13px var(--comic);cursor:pointer;box-shadow:0 4px 0 #2a1608,0 6px 12px #0007,inset 0 1px 0 #fff5;transition:transform .08s,box-shadow .08s}
+  .tool:active{transform:translateY(3px);box-shadow:0 1px 0 #2a1608}
+  #hand{grid-column:span 4}#hand.on{background:linear-gradient(#8fd3ff,#2f5fa8);color:#fff;border-color:#1d3a6a}
+  #zl{grid-column:span 4;text-align:center;font:700 12px var(--comic);color:#d9c3a0;margin-top:-2px}
+  #submit{align-self:center;padding:12px 28px;border:4px double var(--red);border-radius:10px;background:#fff6;color:var(--red);font:900 22px var(--comic);letter-spacing:3px;cursor:pointer;transform:rotate(-3deg);box-shadow:0 8px 16px #0006;text-shadow:0 0 1px #d8352a;transition:transform .1s}
+  #submit:hover{transform:rotate(-3deg) scale(1.05)}#submit:active{transform:rotate(-3deg) scale(.97)}
+  #hint{font-size:11px;transform:rotate(-1.5deg);margin-top:auto}
+  /* desk props */
+  .prop{position:fixed;pointer-events:none;filter:drop-shadow(0 6px 5px #0007)}
+  /* overlays */
+  #msg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#1a0e06b0;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:10}
+  #fx{position:absolute;inset:0;width:100%;height:100%}
+  #card{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:30px 28px 26px;max-width:460px;background:linear-gradient(#fffbe9,#f4e8cc);color:#3a2410;box-shadow:0 30px 60px #000b;transform:rotate(-1deg)}
+  #card::before{content:'';position:absolute;top:-12px;left:50%;width:110px;height:26px;transform:translateX(-50%) rotate(-2deg);background:repeating-linear-gradient(135deg,#f2d8a6cc 0 6px,#e7c48fcc 6px 12px);box-shadow:0 2px 4px #0005}
+  #stamp{position:absolute;z-index:2;top:18px;right:-14px;padding:6px 14px;border:4px double currentColor;border-radius:8px;font:900 26px var(--comic);letter-spacing:3px;transform:rotate(12deg);opacity:.85;mix-blend-mode:multiply}
+  #stamp.ok{color:#1f8a4c}#stamp.no{color:var(--red)}
+  #prize{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  #mt{font:800 20px var(--comic)}
+  #mc{font-size:32px;letter-spacing:2px;font-weight:900;color:var(--red);font-family:var(--comic)}
+  #mc:empty{display:none}
+  #ms{color:#6b4a2a;font-size:14px;line-height:1.45}
+  #again{margin-top:6px;padding:12px 30px;border:3px solid #2a1608;border-radius:10px;font:900 17px var(--comic);background:linear-gradient(#f3d58a,#c99a3c);color:#2a1608;box-shadow:0 5px 0 #7a5a18,0 8px 20px #0006;cursor:pointer}
+  #again:active{transform:translateY(3px);box-shadow:0 2px 0 #7a5a18}
+  /* desktop-only gate */
+  #block{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:20;background:#1a0e06d0}
+  #block .note{max-width:520px;margin:20px;padding:34px 30px;background:linear-gradient(#fffbe9,#f4e8cc);color:#3a2410;text-align:center;transform:rotate(-1.5deg);box-shadow:0 30px 60px #000c;font:700 18px var(--comic);line-height:1.5}
+  #block .note b{display:block;font-size:40px;margin-bottom:8px}
+</style>
+<div id="lamp"></div>
+<svg class="prop" style="left:215px;bottom:-30px;width:230px;height:120px" viewBox="0 0 230 120"><g stroke="#15131a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+  <path d="M20 95 L185 42 L197 48 L32 101 Z" fill="#f2b63a"/><path d="M185 42 L197 48 L212 44 L200 36 Z" fill="#f6dcb0"/><path d="M212 44 L217 42 L205 35 L200 36Z" fill="#15131a"/><path d="M26 98 L30 90" stroke="#15131a"/><rect x="12" y="92" width="14" height="10" rx="2" transform="rotate(-18 19 97)" fill="#f29a8a"/>
+  <path d="M40 112 L205 76 L214 84 L48 118 Z" fill="#2f5fa8"/><path d="M205 76 L214 84 L226 82 L216 72 Z" fill="#f6dcb0"/><path d="M226 82 L230 81 L220 71 L216 72Z" fill="#15131a"/><rect x="34" y="106" width="14" height="10" rx="2" transform="rotate(-12 41 111)" fill="#f29a8a"/>
+</g></svg>
+<svg class="prop" style="right:24px;bottom:-34px;width:200px;height:130px" viewBox="0 0 200 130"><g stroke="#15131a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+  <ellipse cx="60" cy="112" rx="40" ry="10" fill="#0003" stroke="none"/><path d="M28 70 q-6 40 32 42 q38-2 32-42 q-4-14-32-14 q-28 0-32 14z" fill="#1d2b55"/><rect x="42" y="42" width="36" height="18" rx="3" fill="#15131a"/><rect x="38" y="56" width="44" height="10" rx="2" fill="#8a5a2b"/><path d="M36 84 q24 10 48 0" stroke="#ffffff66" fill="none"/><text x="60" y="98" text-anchor="middle" font-size="9" font-weight="800" fill="#f7e6c4" font-family="Marker Felt,Chalkboard SE,Comic Sans MS,sans-serif" stroke="none">ENCRE</text>
+  <path d="M120 100 L186 34 l8 8 L128 108 Z" fill="#1f2a44"/><path d="M120 100 L128 108 L112 116 Z" fill="#ddd8cb"/><path d="M182 38 l8 8" stroke="#e2b24a" stroke-width="5"/><path d="M116 112 l4 -4" stroke="#15131a"/>
+</g></svg>
+<svg class="prop" style="left:52%;bottom:-6px;width:96px;height:80px" viewBox="0 0 96 80"><g stroke="#15131a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+  <ellipse cx="44" cy="66" rx="34" ry="8" fill="#0003" stroke="none"/><path d="M14 30 q0 36 30 36 q30 0 30-36z" fill="#fffbe9"/><ellipse cx="44" cy="30" rx="30" ry="9" fill="#5a3a1a"/><ellipse cx="44" cy="30" rx="30" ry="9" fill="none"/><path d="M74 36 q16 2 14 14 q-2 10-14 10" fill="none"/><path d="M34 6 q4 8 0 16 M46 2 q4 8 0 16 M58 6 q4 8 0 16" stroke="#ffffff88" fill="none"/>
+</g></svg>
+<div id="desk">
+  <header id="plate"><h1>🖋️ Nét Mực Ligne Claire</h1><span class="brass">ATELIER BD · BRUXELLES</span><span class="sub">Nhìn hình mẫu, vẽ lại lên giấy, rồi đóng dấu Nộp bài</span></header>
+  <aside id="cork"><div class="ct">★ NHÂN VẬT ★</div><div id="lv"></div><div id="note" class="sticky"></div></aside>
+  <main id="sheetWrap"><canvas id="c"></canvas><div class="tape tl"></div><div class="tape tr"></div><div class="tape bl"></div><div class="tape br"></div></main>
+  <aside id="side">
+    <div id="refCard"><div class="pin"></div><canvas id="ref"></canvas><div class="cap">Hình mẫu · nhìn kỹ rồi vẽ lại</div></div>
+    <div id="tools"><button id="hand" class="tool">✋ Kéo</button><button id="zout" class="tool">🔍−</button><button id="zin" class="tool">🔍+</button><button id="zreset" class="tool">1:1</button><span id="zl">×1.0</span></div>
+    <button id="submit">NỘP BÀI</button>
+    <div id="hint" class="sticky"></div>
+  </aside>
+</div>
+<div id="msg"><canvas id="fx"></canvas><div id="card"><div id="stamp"></div><div id="prize"></div><div id="mt"></div><b id="mc"></b><div id="ms"></div><button id="again">Vẽ lại</button></div></div>
+<div id="block"><div class="note"><b>💻</b><span id="blockMsg"></span></div></div>
+<script>
+// ---------- tuning (all per-level arrays are index 0..9 = Lv1..Lv10) ----------
+const PASS=[.85,.85,.85,.85,.85,.85,.85,.85,.85], DS=.005, INK=.012, PAD=14; // PASS: similarity needed per level
+const ZOOM_MAX=4, ZOOM_STEP=1.5; // view zoom range 1..ZOOM_MAX; button step
+const TOL=[.09,.086,.082,.078,.074,.07,.066,.062,.058];                                      // shape dilation radius (box units): how far a line may sit from the reference and still count
+const DETAIL_W=.5, DETAIL_FROM=5, DET_R=.5; // tiny details weigh DETAIL_W everywhere; from Lv6 they must also be within DET_R x TOL (bonus, but sloppy ones do not count)
+const PREC_F=.9, LEN_F=2, COS=Math.cos(50*Math.PI/180), DIR_W=6; // DIR_W: direction measured over +-DIR_W samples (~0.03 box) so hand jitter does not flip it // stray-ink radius = PREC_F x TOL; ink longer than LEN_F x the reference is penalised (anti-scribble); lines must also run within 50 deg of the reference line to match
+const THUMB=[.40,.38,.36,.34,.32,.31,.30,.29,.28,.27];                                       // reference thumbnail size, fraction of min(canvas W,H) (always visible)
+const REV_W=.2, OCC=48, CAP=.06; // alignment cost = mean ink->reference distance (capped at CAP so stray strokes cannot steer the fit) + REV_W x fraction of reference cells (OCC grid) with no ink nearby
+// ---------- shape helpers (0..1 box, y down; [x,y,1] = sharp corner; raw = plain polyline, else Catmull-Rom) ----------
+const C_=(pts,closed=true,raw=false)=>({pts,closed,raw});
+const L_=pts=>C_(pts,false,true), O_=pts=>C_(pts,false);
+const d_=p=>(p.w=DETAIL_W,p), D=a=>(a.forEach(d_),a); // tag tiny details (hatching, pupils, strands, stitches...) for lower scoring weight
+const circ_=(cx,cy,r,n=12)=>C_([...Array(n)].map((_,i)=>[cx+r*Math.cos(i/n*6.2832),cy+r*Math.sin(i/n*6.2832)]),true,true);
+const dot=(cx,cy,r=.015)=>circ_(cx,cy,r,8);
+const rect=(x,y,w,h)=>C_([[x,y],[x+w,y],[x+w,y+h],[x,y+h]],true,true);
+const hatch=(x,y,dx,dy,n,lx,ly)=>D([...Array(n)].map((_,i)=>L_([[x+dx*i,y+dy*i],[x+dx*i+lx,y+dy*i+ly]])));
+const cobbles=(x0,y,cols,w,h,rows)=>{const o=[];for(let r=0;r<rows;r++)for(let i=0;i<cols;i++){const x=x0+i*w+(r%2)*w/2;o.push(O_([[x,y+r*h],[x+w/2,y+r*h-h*.8],[x+w,y+r*h]]))}return D(o)};
+function moon(){const out=[],n=10;for(let k=0;k<=n;k++){const a=Math.PI*.4+Math.PI*1.2*k/n;out.push([.5+.5*Math.cos(a),.5+.5*Math.sin(a)])}
+  for(let k=n;k>=0;k--){const a=Math.PI*.45+Math.PI*1.1*k/n;out.push([.7+.42*Math.cos(a),.5+.42*Math.sin(a)])}return C_(out,true,true)}
+const wheel=(cx,cy,r)=>[circ_(cx,cy,r,16),circ_(cx,cy,r*.25,8),...D([...Array(8)].map((_,i)=>{const a=i*Math.PI/4;return L_([[cx+r*.25*Math.cos(a),cy+r*.25*Math.sin(a)],[cx+r*1.25*Math.cos(a),cy+r*1.25*Math.sin(a)]])}))];
+const tr=(paths,sc,tx,ty)=>paths.map(p=>{const q=C_(p.pts.map(q=>[q[0]*sc+tx,q[1]*sc+ty,q[2]]),p.closed,p.raw);if(p.w)q.w=p.w;return q});
+const xf=(pts,sc,tx,ty)=>pts.map(q=>[q[0]*sc+tx,q[1]*sc+ty]);
+// ---------- characters (local 0..1 box). Core paths come FIRST (prize fills index them), details after ----------
+const MILOU=()=>[
+  C_([[.16,.42,1],[.20,.34],[.28,.28],[.30,.22,1],[.34,.18,1],[.37,.23,1],[.40,.24,1],[.48,.24],[.54,.30],[.60,.42],[.66,.56],[.70,.66],[.78,.58],[.86,.52],[.88,.60],[.80,.70],[.76,.78],[.66,.90,1],[.52,.90,1],[.48,.84],[.42,.86,1],[.42,.92,1],[.26,.92,1],[.26,.86],[.30,.74],[.28,.60],[.24,.52,1],[.18,.52,1],[.14,.48,1]]),
+  dot(.34,.32,.018),dot(.17,.41,.022),O_([[.30,.58],[.40,.58],[.50,.50],[.56,.40]]),
+  C_([[.04,.88],[.08,.86],[.11,.89],[.15,.89],[.18,.86],[.22,.88],[.22,.93],[.18,.95],[.15,.92],[.11,.92],[.08,.95],[.04,.93]]),
+  d_(dot(.345,.325,.006)),O_([[.19,.46],[.23,.48],[.27,.46]]),d_(O_([[.32,.21],[.34,.26],[.37,.24]])),d_(O_([[.31,.61],[.41,.61],[.51,.53]])),dot(.46,.57,.016),
+  ...D([L_([[.28,.62],[.24,.66]]),L_([[.29,.68],[.25,.71]]),L_([[.57,.36],[.62,.34]]),L_([[.62,.46],[.67,.44]]),O_([[.60,.72],[.56,.80],[.58,.88]]),L_([[.36,.74],[.36,.90]])]),
+  L_([[.02,.96],[.98,.96]]),...D([O_([[.70,.96],[.72,.90],[.74,.96]]),O_([[.84,.96],[.87,.89],[.90,.96]])]),...hatch(.30,.945,.08,0,5,.03,-.03)];
+const SMURF=()=>[
+  C_([[.34,.36,1],[.34,.22],[.42,.12],[.52,.08],[.62,.06],[.72,.10,1],[.64,.14],[.60,.22],[.64,.30],[.66,.36,1]]),
+  O_([[.34,.36],[.30,.46],[.36,.58],[.50,.62],[.64,.58],[.70,.46],[.66,.36]]),circ_(.50,.47,.045,10),dot(.41,.41,.016),dot(.59,.41,.016),O_([[.40,.54],[.50,.58],[.60,.54]]),
+  O_([[.42,.62],[.34,.66],[.28,.58],[.24,.48,1],[.18,.50,1],[.22,.60],[.28,.70],[.34,.78],[.34,.90,1],[.40,.96,1],[.46,.96,1],[.48,.88],[.52,.88],[.54,.96,1],[.60,.96,1],[.66,.90,1],[.66,.78],[.70,.72],[.80,.70,1],[.80,.64,1],[.70,.66],[.60,.64]]),
+  L_([[.34,.78],[.66,.78]]),C_([[.02,.78,1],[.04,.68],[.12,.62],[.22,.66],[.26,.78,1]]),L_([[.08,.78],[.08,.94],[.20,.94],[.20,.78]]),
+  ...D([O_([[.46,.14],[.50,.20],[.48,.28]]),O_([[.56,.12],[.58,.18]]),O_([[.38,.37],[.42,.35],[.45,.37]]),O_([[.55,.37],[.58,.35],[.62,.37]]),L_([[.44,.56],[.56,.56]]),dot(.415,.405,.006),dot(.585,.405,.006),
+  L_([[.18,.50],[.14,.46]]),L_([[.17,.52],[.12,.52]]),L_([[.19,.54],[.15,.57]]),L_([[.80,.66],[.86,.64]]),L_([[.80,.68],[.86,.70]]),dot(.50,.72,.008),dot(.68,.84,.025),O_([[.36,.80],[.40,.86],[.38,.92]]),
+  dot(.08,.69,.018),dot(.17,.66,.015),dot(.13,.74,.012)]),...hatch(.09,.80,.04,0,3,0,.04),L_([[.02,.96],[.98,.96]]),...D([O_([[.86,.96],[.89,.89],[.92,.96]]),O_([[.28,.96],[.30,.91],[.32,.96]])]),...hatch(.36,.30,.04,0,3,.02,-.04)];
+const TINTIN=()=>[
+  C_([[.50,.64],[.40,.60],[.34,.50],[.34,.38],[.38,.28],[.42,.20],[.48,.14],[.42,.10],[.34,.04,1],[.46,.08],[.56,.10],[.64,.16],[.68,.28],[.68,.42],[.70,.48],[.66,.56],[.60,.62]]),
+  O_([[.36,.32],[.44,.26],[.54,.24],[.62,.28],[.66,.36]]),dot(.44,.40,.016),dot(.58,.40,.016),O_([[.50,.42],[.47,.50],[.52,.52]]),L_([[.46,.57],[.54,.57]]),
+  O_([[.12,.96],[.16,.80],[.30,.72],[.42,.66,1],[.50,.78,1],[.58,.66,1],[.70,.72],[.84,.80],[.88,.96]]),
+  ...D([O_([[.44,.12],[.40,.09],[.36,.06]]),O_([[.46,.17],[.42,.14]]),O_([[.50,.12],[.54,.14],[.58,.18]])]),O_([[.68,.42],[.72,.44],[.70,.50]]),...D([O_([[.69,.45],[.70,.48]]),
+  O_([[.41,.36],[.44,.35],[.47,.36]]),O_([[.55,.36],[.58,.35],[.61,.36]]),dot(.445,.405,.006),dot(.585,.405,.006),O_([[.38,.52],[.40,.56]]),
+  L_([[.45,.64],[.46,.72]]),L_([[.55,.64],[.54,.72]]),O_([[.42,.66],[.38,.70],[.44,.72]]),O_([[.58,.66],[.62,.70],[.56,.72]])]),...hatch(.30,.90,.04,0,8,0,.05),...D([O_([[.20,.80],[.24,.86],[.22,.92]]),O_([[.80,.80],[.76,.86],[.78,.92]])]),
+  C_([[.72,.10],[.80,.06],[.88,.08],[.94,.14],[.92,.22],[.84,.26],[.76,.24],[.70,.18]]),L_([[.76,.24],[.72,.30]]),L_([[.82,.11],[.82,.18]]),dot(.82,.215,.008)];
+const MARSU=()=>[
+  C_([[.08,.40,1],[.12,.32],[.20,.26],[.28,.16],[.38,.12],[.48,.16],[.54,.26],[.56,.40],[.58,.56],[.56,.66,1],[.50,.74],[.52,.88,1],[.40,.92,1],[.42,.80],[.34,.76],[.30,.86,1],[.20,.90,1],[.24,.78],[.20,.64],[.14,.52],[.08,.46]]),
+  O_([[.56,.66],[.64,.62],[.74,.50],[.80,.36],[.86,.24],[.92,.16],[.96,.26],[.90,.38],[.80,.46],[.72,.60],[.70,.74],[.76,.86],[.86,.90],[.94,.82],[.92,.70]]),
+  circ_(.40,.36,.035,10),circ_(.48,.50,.03,10),circ_(.34,.58,.028,10),circ_(.24,.30,.025,10),circ_(.36,.24,.025,10),circ_(.10,.38,.03,10),O_([[.12,.48],[.20,.52],[.28,.48]]),
+  O_([[.30,.16],[.28,.08],[.34,.12]]),O_([[.42,.13],[.44,.05],[.48,.12]]),...D([dot(.245,.305,.008),dot(.365,.245,.008),L_([[.20,.25],[.26,.23]]),L_([[.33,.20],[.39,.19]]),O_([[.16,.52],[.20,.56],[.24,.52]])]),
+  circ_(.30,.44,.02,8),circ_(.44,.64,.025,8),circ_(.52,.30,.02,8),...D([dot(.78,.42,.012),dot(.90,.24,.012),dot(.74,.66,.012),dot(.84,.88,.012),dot(.66,.60,.01),
+  L_([[.92,.70],[.96,.64]]),L_([[.92,.70],[.98,.70]]),L_([[.92,.70],[.96,.76]]),L_([[.42,.92],[.42,.96]]),L_([[.46,.92],[.46,.96]]),L_([[.50,.92],[.50,.96]]),L_([[.22,.90],[.22,.94]]),L_([[.26,.90],[.26,.94]])]),
+  C_([[.02,.76,1],[.08,.70],[.16,.74],[.10,.84],[.04,.82]]),d_(L_([[.03,.78],[.14,.75]])),C_([[.04,.14,1],[.10,.06],[.18,.10],[.14,.20],[.06,.20]]),d_(L_([[.05,.18],[.16,.11]])),L_([[.02,.96],[.98,.96]])];
+const LUCKY=()=>[
+  C_([[.08,.38,1],[.20,.34],[.32,.30],[.34,.14],[.40,.08],[.52,.10],[.62,.08],[.68,.14],[.70,.30],[.82,.34],[.92,.38,1],[.80,.42],[.50,.44],[.20,.42]]),
+  O_([[.36,.42],[.34,.52],[.36,.64],[.44,.74],[.52,.75],[.62,.68],[.66,.54],[.64,.42]]),dot(.44,.52,.014),dot(.58,.52,.014),O_([[.50,.52],[.47,.60],[.53,.62]]),L_([[.45,.67],[.55,.67]]),L_([[.54,.67],[.72,.76]]),
+  C_([[.40,.76],[.50,.80],[.60,.76],[.66,.82],[.60,.88],[.50,.84],[.40,.88],[.34,.82]]),O_([[.24,.96],[.26,.84],[.36,.78]]),O_([[.64,.78],[.76,.84],[.80,.96]]),
+  C_([[.02,.80],[.20,.80],[.20,.85],[.10,.85],[.09,.95],[.02,.95]],true,true),
+  ...D([L_([[.34,.24],[.68,.24]]),L_([[.34,.27],[.69,.27]]),O_([[.46,.10],[.50,.16],[.54,.10]])]),...hatch(.37,.44,0,.03,3,.03,0),...D([L_([[.41,.48],[.47,.47]]),L_([[.55,.47],[.61,.48]]),dot(.445,.525,.005),dot(.585,.525,.005),
+  O_([[.72,.74],[.76,.68],[.72,.62],[.76,.56]]),L_([[.36,.78],[.40,.86]]),L_([[.64,.78],[.60,.86]]),L_([[.42,.84],[.40,.96]]),L_([[.58,.84],[.60,.96]]),L_([[.44,.80],[.50,.84]]),L_([[.56,.80],[.50,.84]])]),
+  circ_(.14,.825,.018,8),d_(O_([[.10,.85],[.11,.89],[.14,.86]])),...hatch(.03,.88,0,.025,3,.05,0),
+  C_([[.88,.96,1],[.88,.70],[.91,.64],[.94,.70],[.94,.96,1]],true,true),O_([[.88,.78],[.84,.76],[.84,.70]]),O_([[.94,.74],[.97,.72],[.97,.66]]),
+  circ_(.12,.12,.06,10),...D([L_([[.12,.02],[.12,.05]]),L_([[.02,.12],[.05,.12]]),L_([[.19,.12],[.22,.12]]),L_([[.12,.19],[.12,.22]]),L_([[.02,.60],[.22,.60]]),L_([[.78,.60],[.86,.60]])])];
+const SPIROU=()=>[
+  C_([[.36,.30],[.36,.18],[.50,.16],[.52,.08],[.66,.10],[.66,.30]],true,true),L_([[.36,.25],[.66,.25]]),
+  O_([[.36,.30],[.32,.40],[.36,.54],[.46,.62],[.56,.62],[.66,.54],[.70,.40],[.66,.30]]),dot(.30,.45,.02),dot(.72,.45,.02),dot(.44,.42),dot(.58,.42),O_([[.50,.44],[.49,.52],[.53,.52]]),O_([[.44,.56],[.51,.59],[.58,.56]]),
+  O_([[.10,.96],[.14,.78],[.28,.68],[.44,.64,1],[.50,.72,1],[.56,.64,1],[.70,.68],[.84,.78],[.88,.96]]),L_([[.50,.72],[.50,.96]]),d_(dot(.42,.80,.011)),d_(dot(.42,.88,.011)),d_(dot(.58,.80,.011)),d_(dot(.58,.88,.011)),
+  C_([[.76,.54],[.82,.48],[.88,.50],[.90,.58],[.84,.62],[.78,.60]]),O_([[.88,.54],[.94,.44],[.92,.34],[.86,.32]]),dot(.84,.52,.01),
+  ...D([L_([[.44,.18],[.44,.25]]),L_([[.58,.12],[.58,.25]]),O_([[.34,.30],[.30,.28],[.28,.32]]),O_([[.68,.30],[.72,.27],[.74,.31]]),L_([[.41,.38],[.47,.37]]),L_([[.55,.37],[.61,.38]]),dot(.445,.425,.005),dot(.585,.425,.005),
+  O_([[.44,.64],[.40,.70],[.46,.74]]),O_([[.56,.64],[.60,.70],[.54,.74]])]),rect(.30,.82,.08,.06),rect(.62,.82,.08,.06),...D([L_([[.12,.90],[.20,.92]]),L_([[.80,.92],[.88,.90]]),L_([[.20,.74],[.22,.96]]),L_([[.80,.74],[.78,.96]]),
+  L_([[.24,.70],[.36,.66]]),L_([[.64,.66],[.76,.70]]),dot(.42,.94,.011),dot(.58,.94,.011),dot(.84,.46,.01),L_([[.90,.44],[.94,.46]]),L_([[.90,.38],[.94,.40]]),L_([[.79,.60],[.79,.64]]),L_([[.85,.62],[.85,.66]])]),
+  C_([[.06,.22,1],[.08,.14],[.14,.10],[.20,.14],[.22,.22,1]]),rect(.04,.22,.20,.03),dot(.14,.09,.012),...D([L_([[.02,.10],[.05,.13]]),L_([[.26,.10],[.23,.13]])])];
+const GASTON=()=>[
+  O_([[.32,.32],[.27,.24,1],[.33,.26,1],[.32,.16,1],[.38,.22,1],[.39,.08,1],[.45,.19,1],[.50,.04,1],[.55,.19,1],[.61,.08,1],[.62,.20,1],[.68,.14,1],[.66,.26,1],[.73,.22,1],[.68,.32]]),
+  O_([[.32,.32],[.30,.46],[.34,.60],[.44,.68],[.56,.68],[.66,.60],[.70,.46],[.68,.32]]),O_([[.50,.42],[.46,.56],[.54,.58]]),dot(.43,.42,.014),dot(.58,.42,.014),O_([[.45,.63],[.50,.65],[.55,.63]]),dot(.29,.48,.02),dot(.71,.48,.02),
+  O_([[.26,.96],[.24,.82],[.30,.74],[.40,.68,1],[.50,.82,1],[.60,.68,1],[.72,.72],[.86,.80],[.90,.96]]),
+  rect(.02,.76,.20,.04),rect(.04,.80,.20,.04),rect(.02,.84,.20,.04),rect(.04,.88,.20,.04),rect(.02,.92,.20,.04),
+  ...D([L_([[.40,.24],[.42,.30]]),L_([[.48,.20],[.49,.28]]),L_([[.56,.20],[.55,.28]]),L_([[.63,.26],[.62,.32]]),O_([[.39,.38],[.43,.36],[.47,.38]]),O_([[.54,.38],[.58,.36],[.62,.38]]),O_([[.40,.46],[.43,.48],[.46,.46]]),O_([[.55,.46],[.58,.48],[.61,.46]])]),
+  ...hatch(.52,.50,0,.03,2,.03,0),...D([O_([[.30,.80],[.33,.88],[.30,.96]]),O_([[.84,.82],[.80,.90],[.84,.96]]),L_([[.36,.74],[.34,.96]]),L_([[.76,.76],[.78,.96]])]),...hatch(.40,.92,.05,0,5,0,.04),
+  ...D([.78,.82,.86,.90,.94].map((y,i)=>L_([[.05+(i%2)*.02,y],[.15+(i%2)*.02,y]]))),
+  C_([[.04,.72,1],[.04,.62],[.08,.56],[.10,.52,1],[.12,.56],[.16,.56],[.18,.52,1],[.20,.56],[.22,.64],[.22,.72,1]]),...D([dot(.10,.60,.008),dot(.16,.60,.008),L_([[.06,.64],[.02,.63]]),L_([[.20,.64],[.24,.63]])]),O_([[.20,.70],[.23,.66],[.21,.60]]),
+  rect(.90,.86,.07,.08),O_([[.97,.88],[.99,.90],[.97,.92]]),d_(O_([[.92,.84],[.94,.80],[.92,.76]]))];
+const DUP=()=>[ // one Thom(p)son, local box 0..0.5 wide
+  C_([[.04,.30,1],[.10,.28],[.14,.16],[.23,.12],[.32,.16],[.36,.28],[.42,.30,1],[.36,.34],[.23,.35],[.10,.34]]),
+  O_([[.10,.34],[.09,.44],[.13,.55],[.23,.60],[.33,.55],[.37,.44],[.36,.34]]),
+  C_([[.15,.50],[.23,.48],[.31,.50],[.28,.54],[.23,.52],[.18,.54]]),dot(.19,.43,.012),dot(.27,.43,.012),
+  O_([[.02,.88],[.04,.78],[.12,.66],[.23,.62],[.34,.66],[.42,.78],[.44,.88]]),L_([[.40,.74],[.44,.70],[.48,.74],[.48,.96]]),
+  d_(L_([[.11,.30],[.35,.30]])),O_([[.23,.44],[.21,.49],[.25,.49]]),...D([L_([[.16,.40],[.21,.39]]),L_([[.25,.39],[.30,.40]]),O_([[.17,.64],[.21,.72],[.23,.66]]),O_([[.29,.64],[.25,.72],[.23,.66]]),
+  dot(.23,.76,.009),dot(.23,.81,.009),dot(.23,.86,.009)]),L_([[.12,.88],[.12,.96]]),L_([[.34,.88],[.34,.96]]),...D([O_([[.07,.96],[.12,.94],[.15,.96]]),O_([[.31,.96],[.34,.94],[.39,.96]]),L_([[.02,.88],[.44,.88]])])];
+const TOURNESOL=()=>[
+  C_([[.22,.28,1],[.28,.26],[.34,.12],[.50,.10],[.66,.12],[.72,.26],[.78,.28,1],[.72,.32],[.50,.33],[.28,.32]]),
+  O_([[.30,.32],[.28,.44],[.32,.56],[.42,.64],[.50,.66],[.58,.64],[.68,.56],[.72,.44],[.70,.32]]),circ_(.42,.45,.045,12),circ_(.58,.45,.045,12),L_([[.465,.45],[.535,.45]]),O_([[.50,.47],[.48,.55],[.53,.56]]),L_([[.46,.61],[.54,.61]]),
+  C_([[.43,.66],[.50,.64],[.57,.66],[.53,.78],[.47,.78]]),O_([[.28,.46],[.22,.48],[.16,.54],[.14,.60,1],[.20,.60]]),
+  O_([[.14,.96],[.18,.80],[.28,.72],[.42,.68],[.50,.72],[.58,.68],[.70,.72],[.78,.80],[.80,.96]]),L_([[.90,.56],[.90,.82]]),C_([[.85,.82],[.95,.82],[.90,.94]],true,true),
+  ...D([L_([[.30,.26],[.70,.26]]),O_([[.28,.36],[.24,.34],[.22,.38]]),O_([[.72,.36],[.76,.34],[.78,.38]]),dot(.42,.45,.006),dot(.58,.45,.006),L_([[.38,.40],[.46,.40]]),L_([[.54,.40],[.62,.40]])]),...hatch(.46,.70,.02,0,4,0,.05),
+  d_(L_([[.60,.45],[.70,.44]])),O_([[.86,.52],[.90,.50],[.94,.52]]),...D([L_([[.24,.72],[.26,.96]]),L_([[.74,.74],[.72,.96]]),O_([[.42,.72],[.44,.80],[.42,.88]]),O_([[.58,.72],[.56,.80],[.58,.88]]),dot(.50,.80,.009),dot(.50,.88,.009),L_([[.20,.66],[.26,.62]])])];
+const HADDOCK=()=>[
+  C_([[.28,.30,1],[.30,.18],[.38,.10],[.50,.08],[.62,.10],[.70,.18],[.72,.30,1],[.80,.32],[.84,.36,1],[.70,.38],[.50,.36],[.30,.34]]),L_([[.50,.14],[.50,.24]]),O_([[.44,.20],[.50,.25],[.56,.20]]),dot(.50,.125,.012),
+  O_([[.30,.34],[.28,.44],[.32,.54]]),O_([[.70,.38],[.72,.46],[.68,.54]]),
+  C_([[.32,.54],[.26,.62],[.28,.72],[.36,.80],[.50,.84],[.64,.80],[.72,.72],[.74,.62],[.68,.54],[.62,.58],[.50,.60],[.38,.58]]),
+  dot(.42,.43),dot(.58,.43),L_([[.36,.38],[.45,.37]]),L_([[.55,.37],[.64,.38]]),O_([[.50,.44],[.46,.54],[.54,.56]]),
+  L_([[.58,.60],[.72,.66]]),C_([[.70,.63],[.78,.61],[.80,.72],[.72,.74]],true,true),O_([[.78,.58],[.82,.52],[.78,.46],[.82,.40]]),
+  O_([[.06,.96],[.10,.84],[.22,.78],[.32,.78],[.50,.90],[.68,.78],[.78,.78],[.90,.84],[.94,.96]]),
+  ...D([L_([[.30,.28],[.70,.28]]),L_([[.44,.30],[.56,.30]]),O_([[.36,.64],[.38,.72]]),O_([[.44,.68],[.46,.78]]),O_([[.56,.68],[.54,.78]]),O_([[.64,.64],[.62,.72]]),L_([[.36,.46],[.39,.47]]),L_([[.64,.46],[.61,.47]])]),
+  ...hatch(.16,.90,.06,0,12,0,.05),...D([O_([[.34,.80],[.40,.86],[.50,.88]]),O_([[.66,.80],[.60,.86],[.50,.88]]),L_([[.14,.82],[.16,.96]]),L_([[.86,.82],[.84,.96]]),dot(.76,.64,.006)])];
+// ---------- scenes ----------
+function scene(parts){const paths=[],idx={};for(const [k,p] of parts){idx[k]=paths.length;paths.push(...p)}return{paths,idx}}
+const STREET=()=>scene([['a',tr(DUP(),.7,.05,.28)],['b',tr(DUP(),.7,.42,.28)],
+  ['lamp',[L_([[.86,.95],[.86,.30]]),C_([[.82,.30,1],[.84,.20],[.88,.20],[.90,.30,1]],true,true),dot(.86,.18,.012),rect(.83,.92,.06,.03),...D([L_([[.86,.34],[.80,.34]]),L_([[.83,.24],[.89,.24]])])]],
+  ['bld',[L_([[.02,.34],[.02,.14],[.08,.14],[.08,.08],[.18,.08],[.18,.14],[.24,.14],[.24,.34]]),rect(.06,.18,.05,.07),rect(.15,.18,.05,.07),rect(.06,.27,.05,.06),rect(.15,.27,.05,.06),
+    L_([[.30,.34],[.30,.12],[.46,.06],[.62,.12],[.62,.34]]),rect(.36,.16,.06,.08),rect(.50,.16,.06,.08),...D([L_([[.39,.16],[.39,.24]]),L_([[.53,.16],[.53,.24]])]),O_([[.43,.34],[.43,.26],[.46,.23],[.49,.26],[.49,.34]]),d_(dot(.47,.30,.006)),L_([[.66,.34],[.66,.22],[.78,.22],[.78,.34]]),rect(.69,.25,.06,.05)]],
+  ['cloud',[C_([[.70,.12],[.76,.06],[.84,.06],[.90,.10],[.94,.16],[.88,.20],[.78,.20],[.70,.18]])]],
+  ['ground',[L_([[.02,.95],[.98,.95]]),...cobbles(.02,.985,10,.096,.025,2)]]]);
+const LAB=()=>scene([['t',tr(TOURNESOL(),.62,0,.12)],['m',tr(MILOU(),.28,.02,.70)],
+  ['table',[L_([[.34,.72],[.98,.72]]),L_([[.36,.72],[.36,.96]]),L_([[.94,.72],[.94,.96]]),d_(L_([[.34,.75],[.98,.75]]))]],
+  ['flask',[C_([[.76,.52,1],[.76,.60],[.70,.68],[.70,.72,1],[.88,.72,1],[.88,.68],[.82,.60],[.82,.52,1]],true,true),...D([L_([[.73,.66],[.85,.66]]),dot(.77,.68,.008),dot(.81,.70,.006),dot(.79,.63,.006),O_([[.78,.50],[.80,.46],[.78,.42]])])]],
+  ['rack',[rect(.90,.62,.08,.025),...D([L_([[.91,.62],[.91,.70],[.93,.70],[.93,.62]]),L_([[.95,.62],[.95,.70],[.97,.70],[.97,.62]])])]],
+  ['box',[rect(.70,.80,.22,.14),circ_(.81,.87,.045,10),...D([L_([[.81,.87],[.84,.84]]),dot(.74,.90,.012),dot(.88,.90,.012),L_([[.72,.82],[.76,.82]])])]],
+  ['shelf',[rect(.66,.04,.32,.26),L_([[.66,.17],[.98,.17]]),...hatch(.69,.05,.05,0,6,0,.11),...hatch(.70,.18,.055,0,5,0,.11)]],
+  ['clock',[circ_(.56,.12,.06,12),...D([L_([[.56,.12],[.56,.08]]),L_([[.56,.12],[.59,.12]]),dot(.56,.12,.005)])]],
+  ['floor',[L_([[.34,.96],[.98,.96]])]]]);
+// ---------- levels ----------
+const LV=[
+  {name:'Milou',code:'MILOU-1',bubble:'Wooah !',paths:MILOU()},
+  {name:'Xì Trum',code:'SCHTROUMPF-2',bubble:'Schtroumpf !',paths:SMURF()},
+  {name:'Tintin',code:'TINTIN-3',bubble:'Sapristi !',paths:TINTIN()},
+  {name:'Marsupilami',code:'MARSU-4',bubble:'Houba !',paths:MARSU()},
+  {name:'Lucky Luke',code:'LUCKY-5',bubble:'Yee-haw !',paths:LUCKY()},
+  {name:'Spirou',code:'SPIROU-6',bubble:'Allons-y !',paths:SPIROU()},
+  {name:'Gaston',code:'GASTON-7',bubble:"M'enfin !",paths:GASTON()},
+  {name:'Dupond & Dupont',code:'DUPONT-8',bubble:'Je dirais même plus !',...STREET()},
+  {name:'Giáo sư Tournesol',code:'TOURNESOL-9',bubble:"À l'ouest !",...LAB()}
+]; // 9 drawings (the 10th, Haddock & Tintin on deck, was dropped: the team needs 1 → 9)
+// ---------- per-team progress (gallery room: ?team=<n>; key ligne:<team>) ----------
+// st[i] = '' (open / locked) | 'pass' (>= PASS); drawings are done IN ORDER: i is playable only when i-1 passed. A team may
+// give up the rest with the overlay's global "Bỏ qua" (parent posts gallery-skip): skipped = true, the rest stay locked.
+const TEAM=new URLSearchParams(location.search).get('team')||'dev'; let KEY='ligne4:'+TEAM;
+// The race (client/src/gallery/galleryRoom.ts): the server's tally is the truth — 'room-init' {done, skipped, key} replaces
+// whatever this browser stored (a branch switch reset it; another device): the first `done` drawings count as passed.
+addEventListener('message',e=>{const d=e.data;if(!d||d.type!=='room-init')return;wipeStrokes();KEY='ligne4:'+(d.key||TEAM);const n=Math.max(0,Math.min(LV.length,d.done|0));
+  prog={st:LV.map((_,i)=>i<n?'pass':''),best:LV.map((_,i)=>i<n?1:0),skipped:!!d.skipped};save();wipeStrokes();pickLevel(firstOpen());if(prog.skipped)showEnd()});
+let prog={st:LV.map(()=>''),best:LV.map(()=>0),skipped:false};
+try{const j=JSON.parse(localStorage.getItem(KEY)||'null');if(j&&Array.isArray(j.st)&&j.st.length===LV.length)prog={...prog,...j}}catch(e){}
+// Test page (copy of ligne-claire.html): opens with the first 3 drawings already passed (?pass=N for another number); its own storage key (ligne4:)
+{const pn=new URLSearchParams(location.search).get('pass')??'3';{const n=Math.max(0,Math.min(LV.length,pn|0));prog={st:LV.map((_,i)=>i<n?'pass':''),best:LV.map((_,i)=>i<n?1:0),skipped:false}}}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(prog))}catch(e){}};
+// ---------- the drawing in progress survives leaving (Thoát / Esc / the overlay closed / reload / tab closed): the current
+// drawing's strokes under KEY:strokes:<level> (coordinates rounded to 1e-4 of the paper: the score stays the same), saved
+// 300 ms after every stroke end and on pagehide / hidden; restored by pickLevel; cleared when that drawing passes, on "Vẽ lại",
+// a skip, and a room-init (the server reset the progress). Only the CURRENT drawing: nothing of a locked one is written. ----------
+const SK=k=>KEY+':strokes:'+k;
+let saveT=0;
+const flushStrokes=()=>{clearTimeout(saveT);saveT=0;try{if(s&&!s.done&&s.strokes.length)localStorage.setItem(SK(lv),JSON.stringify(s.strokes.map(st=>st.map(([x,y])=>[Math.round(x*1e4)/1e4,Math.round(y*1e4)/1e4]))));else localStorage.removeItem(SK(lv))}catch(e){}};
+const scheduleSave=()=>{clearTimeout(saveT);saveT=setTimeout(flushStrokes,300)};
+const clearStrokes=k=>{clearTimeout(saveT);saveT=0;try{localStorage.removeItem(SK(k))}catch(e){}};
+const wipeStrokes=()=>{clearTimeout(saveT);saveT=0;try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(KEY+':strokes:'))localStorage.removeItem(k)}}catch(e){}};
+const loadStrokes=k=>{try{const j=JSON.parse(localStorage.getItem(SK(k))||'null');return Array.isArray(j)&&j.every(st=>Array.isArray(st)&&st.length&&st.every(q=>Array.isArray(q)&&q.length===2&&q.every(Number.isFinite)))?j:null}catch(e){return null}};
+addEventListener('pagehide',flushStrokes);addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushStrokes()});
+const doneN=()=>prog.st.filter(v=>v==='pass').length;
+const playable=i=>i===0||prog.st[i-1]==='pass'; // after a skip the current drawing stays viewable but not drawable (s.done), the rest locked
+const firstOpen=()=>{let i=0;while(i<LV.length&&prog.st[i]==='pass')i++;return Math.min(i,LV.length-1)};
+function post(){const done=doneN(),rem=LV.length-done;parent.postMessage({type:'gallery-result',team:TEAM,done,total:LV.length,skipped:prog.skipped,penaltyMinutes:prog.skipped?rem*12:0,scores:prog.best.map(v=>Math.round(v*100)),status:prog.st},'*')}
+addEventListener('message',e=>{if(e.data&&e.data.type==='gallery-skip'&&!prog.skipped&&doneN()<LV.length){prog.skipped=true;save();wipeStrokes();post();showEnd()}});
+addEventListener('keydown',e=>{if(e.key==='Escape')parent.postMessage({type:'gallery-close'},'*')});
+let lv=0, s, L, attempts=0;
+
+// ---------- geometry ----------
+function build(c){ // control points -> sampled polyline with arc length
+  const q=[]; c.pts.forEach(p=>{q.push(p);if(p[2]&&!c.raw)q.push(p)}); // duplicated point = Catmull-Rom cusp (sharp corner)
+  let out=q;
+  if(!c.raw){ out=[]; const n=q.length,g=i=>q[c.closed?(i+n)%n:Math.max(0,Math.min(n-1,i))];
+    for(let i=0;i<(c.closed?n:n-1);i++){const p0=g(i-1),p1=g(i),p2=g(i+1),p3=g(i+2); if(p1[0]===p2[0]&&p1[1]===p2[1])continue;
+      for(let k=0;k<8;k++){const t=k/8,t2=t*t,t3=t2*t;out.push([0,1].map(j=>.5*(2*p1[j]+(-p0[j]+p2[j])*t+(2*p0[j]-5*p1[j]+4*p2[j]-p3[j])*t2+(-p0[j]+3*p1[j]-3*p2[j]+p3[j])*t3)))}}
+    if(!c.closed)out.push([...q[n-1]]) }
+  if(c.closed)out=[...out,[...out[0]]];
+  const cum=[0]; for(let i=1;i<out.length;i++)cum.push(cum[i-1]+Math.hypot(out[i][0]-out[i-1][0],out[i][1]-out[i-1][1]));
+  return {p:out,cum,len:cum.at(-1),closed:c.closed,w:c.w||1};
+}
+const at=(P,d)=>{if(d<=0)return P.p[0];if(d>=P.len)return P.p.at(-1);let i=1;while(P.cum[i]<d)i++;const a=P.p[i-1],b=P.p[i],f=(d-P.cum[i-1])/(P.cum[i]-P.cum[i-1]||1);return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f]};
+const bbox=a=>{let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;a.forEach(p=>{if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]});return{w:x1-x0,h:y1-y0,cx:(x0+x1)/2,cy:(y0+y1)/2}};
+LV.forEach((l,k)=>{l.tol=TOL[k];l.subs=l.paths.map(build);l.samp=[];l.sampW=[];l.sampS=[];l.sampT=[];l.subN=[];l.subW=[];
+  l.detR=k>=DETAIL_FROM?DET_R:1;
+  l.subs.forEach((P,si)=>{const w=P.w;l.subW.push(w);let n=0;for(let d=0;d<P.len;d+=DS){const lo=Math.max(0,d-DIR_W*DS),hi=Math.min(P.len,d+DIR_W*DS),a=at(P,lo),b=at(P,hi),dx=b[0]-a[0],dy=b[1]-a[1],m=Math.hypot(dx,dy),ok=m>=.6*(hi-lo);
+    l.samp.push(at(P,d));l.sampT.push(ok?[dx/m,dy/m]:[0,0]);l.sampW.push(w);l.sampS.push(si);n++}l.subN.push(n)});l.bb=bbox(l.samp);l.len=l.subs.reduce((a,P)=>a+P.len,0)});
+
+// ---------- state + scoring (on submit: align the player's ink to the reference, then coverage x precision) ----------
+function reset(){ s={strokes:[],px:-1,py:-1,down:false,done:false,win:false,res:null,hand:false,pan:false}; drops=[]; hand.classList.remove('on'); c.classList.remove('hand') }
+function distGrid(l){ // coarse distance field to the reference, used only by the alignment search
+  if(l.grid)return l.grid; const G=120,lo=-.25,span=1.5,g=new Float32Array(G*G),sm=l.samp;
+  for(let j=0;j<G;j++)for(let i=0;i<G;i++){const x=lo+(i+.5)*span/G,y=lo+(j+.5)*span/G;let m=1e9;for(let k=0;k<sm.length;k++){const dx=sm[k][0]-x,dy=sm[k][1]-y,d=dx*dx+dy*dy;if(d<m)m=d}g[j*G+i]=Math.sqrt(m)}
+  return l.grid={g,G,lo,span};
+}
+const gd=(gr,x,y)=>{const i=Math.max(0,Math.min(gr.G-1,Math.floor((x-gr.lo)/gr.span*gr.G))),j=Math.max(0,Math.min(gr.G-1,Math.floor((y-gr.lo)/gr.span*gr.G)));return gr.g[j*gr.G+i]};
+function inkSamples(strokes){const out=[];strokes.forEach(st=>{if(st.length===1){out.push([st[0][0],st[0][1],0,0,0]);return} // [x,y,ds,ux,uy]; a dot has no direction
+  const q=[];for(let i=1;i<st.length;i++){const a=st[i-1],b=st[i],d=Math.hypot(b[0]-a[0],b[1]-a[1]),n=Math.max(1,Math.ceil(d/DS));for(let k=1;k<=n;k++)q.push([a[0]+(b[0]-a[0])*k/n,a[1]+(b[1]-a[1])*k/n,d/n])}
+  q.forEach((p,i)=>{const ia=Math.max(0,i-DIR_W),ib=Math.min(q.length-1,i+DIR_W),a=q[ia],b=q[ib],dx=b[0]-a[0],dy=b[1]-a[1],m=Math.hypot(dx,dy),ok=m>=.6*(ib-ia)*DS;out.push([p[0],p[1],p[2],ok?dx/m:0,ok?dy/m:0])})});return out}
+const dirOK=(p,t)=>(p[3]===0&&p[4]===0)||(t[0]===0&&t[1]===0)||Math.abs(p[3]*t[0]+p[4]*t[1])>=COS; // tight curves (dots, small circles) are undirected and match on distance alone
+function robustBox(pts){ // length-weighted 3rd..97th percentile extent, so a stray line or blot cannot dictate the fit
+  const q=ax=>{const a=pts.map(p=>[p[ax],p[2]||DS]).sort((u,v)=>u[0]-v[0]),tot=a.reduce((s,u)=>s+u[1],0);let acc=0,lo=a[0][0],hi=a.at(-1)[0],gl=false;
+    for(const [v,w] of a){acc+=w;if(!gl&&acc>=tot*.03){lo=v;gl=true}if(acc>=tot*.97){hi=v;break}}return[lo,hi]};
+  const [x0,x1]=q(0),[y0,y1]=q(1);return{w:x1-x0,h:y1-y0,cx:(x0+x1)/2,cy:(y0+y1)/2};
+}
+function align(pts){ // coarse-to-fine search over scale (0.4-2.5x the box fit), translation (+-15%) and +-12% stretch, minimising forward chamfer + reverse miss
+  const ib=robustBox(pts),rb=L.bb; if(ib.w<.02&&ib.h<.02)return null;
+  const s0=Math.min(rb.w/Math.max(ib.w,1e-3),rb.h/Math.max(ib.h,1e-3)),gr=distGrid(L);
+  const sub=pts.filter((_,i)=>i%Math.max(1,Math.ceil(pts.length/450))===0),ref=L.samp.filter((_,i)=>i%Math.max(1,Math.ceil(L.samp.length/400))===0),occ=new Uint8Array(OCC*OCC);
+  const cost=(k,sx,sy,dx,dy)=>{let sum=0;occ.fill(0);
+    for(const p of sub){const x=rb.cx+(p[0]-ib.cx)*k*sx+dx,y=rb.cy+(p[1]-ib.cy)*k*sy+dy;sum+=Math.min(CAP,gd(gr,x,y));const i=Math.floor(x*OCC),j=Math.floor(y*OCC);if(i>=0&&i<OCC&&j>=0&&j<OCC)occ[j*OCC+i]=1}
+    let miss=0;for(const r of ref){const i=Math.floor(r[0]*OCC),j=Math.floor(r[1]*OCC);let hit=false;for(let a=-1;a<=1&&!hit;a++)for(let b=-1;b<=1;b++){const ii=i+a,jj=j+b;if(ii>=0&&ii<OCC&&jj>=0&&jj<OCC&&occ[jj*OCC+ii]){hit=true;break}}if(!hit)miss++}
+    return sum/sub.length+REV_W*miss/ref.length};
+  let best={c:1e9};const tryT=(k,sx,sy,dx,dy)=>{const c=cost(k,sx,sy,dx,dy);if(c<best.c)best={c,k,sx,sy,dx,dy}};
+  for(let i=0;i<20;i++){const k=s0*.3*Math.pow(3.3/.3,i/19);for(let dx=-.3;dx<=.301;dx+=.05)for(let dy=-.3;dy<=.301;dy+=.05)tryT(k,1,1,dx,dy)}
+  const b0=best;for(let i=-2;i<=2;i++){const k=b0.k*Math.pow(1.134,i);for(let dx=-.25;dx<=.251;dx+=.05)for(let dy=-.25;dy<=.251;dy+=.05)tryT(k,1,1,b0.dx+dx,b0.dy+dy)} // re-centred pass: offsets beyond the first window stay reachable
+  const b=best;for(const f of [.88,.94,1,1.06,1.12])for(const sx of [.88,1,1.12])for(const sy of [.88,1,1.12])for(let dx=-.04;dx<=.041;dx+=.02)for(let dy=-.04;dy<=.041;dy+=.02)tryT(b.k*f,sx,sy,b.dx+dx,b.dy+dy);
+  return {...best,ib,rb};
+}
+function evaluate(strokes){
+  const pts=inkSamples(strokes), none={c:0,p:0,g:1,sc:0,pts:[],cov:new Uint8Array(L.samp.length),bad:[]};
+  if(!pts.length)return none;
+  const best=align(pts); if(!best)return none;
+  const {ib,rb}=best, A=p=>[rb.cx+(p[0]-ib.cx)*best.k*best.sx+best.dx,rb.cy+(p[1]-ib.cy)*best.k*best.sy+best.dy], ks=best.k*(best.sx+best.sy)/2, tp=pts.map(p=>[...A(p),p[2]*ks,p[3],p[4]]); // ds scaled with the alignment so length ratios compare like with like
+  // coverage: each sub-path's covered fraction (a reference point counts when ink runs nearby in a similar direction), averaged with its weight
+  const t2=L.tol*L.tol,d2=t2*L.detR*L.detR,sm=L.samp,st=L.sampT,cov=new Uint8Array(sm.length),hitN=new Float64Array(L.subs.length);
+  for(let i=0;i<sm.length;i++){const x=sm[i][0],y=sm[i][1],t=st[i],r2=L.sampW[i]<1?d2:t2;for(let j=0;j<tp.length;j++){const dx=tp[j][0]-x,dy=tp[j][1]-y;if(dx*dx+dy*dy<=r2&&dirOK(tp[j],t)){cov[i]=1;hitN[L.sampS[i]]++;break}}}
+  let cw=0,tw=0; L.subs.forEach((P,si)=>{tw+=L.subW[si];cw+=L.subW[si]*hitN[si]/L.subN[si]});
+  let il=0,inl=0; const bad=[],q2=t2*PREC_F*PREC_F;
+  for(const p of tp){il+=p[2];let hit=false;for(let i=0;i<sm.length;i++){const dx=sm[i][0]-p[0],dy=sm[i][1]-p[1];if(dx*dx+dy*dy<=q2&&dirOK(p,st[i])){hit=true;break}}if(hit)inl+=p[2];else bad.push(p)}
+  const c=cw/tw,p=il?inl/il:0,g=Math.min(1,LEN_F*L.len/il); return {c,p,g,il,sc:c*p*g,pts:tp,cov,bad,T:best,strokesT:strokes.map(st=>st.map(A))};
+}
+function end(){
+  const r=s.res=evaluate(s.strokes), {c,p,g,sc}=r, need=PASS[lv], win=sc>=need, nx=lv+1<LV.length?lv+1:null, pc=v=>Math.round(v*100)+'%';
+  s.done=true;s.win=win;attempts++;
+  if(win){prog.st[lv]='pass';prog.best[lv]=Math.max(prog.best[lv],sc);save();clearStrokes(lv);post()}
+  mt.textContent=win?`Magnifique ! Giống hình ${pc(sc)} (cần ${need*100}%) ✨`:`Chưa đạt: giống hình ${pc(sc)} (cần ${need*100}%)`;
+  mc.textContent=win?L.code:'';
+  const why=g<.95?`Vẽ thừa quá nhiều nét – mực dài gấp ${(r.il/L.len).toFixed(1)} lần hình mẫu`:c<p?`Thiếu bộ phận – mới có ${pc(c)} hình mẫu`:`Vẽ thừa / lệch hình – ${pc(1-p)} mực nằm ngoài hình mẫu`;
+  ms.innerHTML=win?`Báo mã này cho host · ${attempts} lần thử<br>đủ bộ phận ${pc(c)} · đúng hình ${pc(p)}`:`${why}<br>đủ bộ phận ${pc(c)} × đúng hình ${pc(p)}${g<1?' × thừa nét '+pc(g):''} · lần thử #${attempts}`;
+  again.textContent=win&&nx!==null?'Sang màn '+(nx+1)+' →':win?`Hoàn thành ${LV.length}/${LV.length} ✓`:'Vẽ lại'; again.dataset.next=win&&nx!==null?nx:win?'end':'';
+  prize.innerHTML=win?panelSVG(lv):compareSVG(r)+refSVG();
+  stamp.textContent=win?'APPROUVÉ':'À REFAIRE'; stamp.className=win?'ok':'no'; card.className=win?'win':'lose';
+  msg.style.display='flex'; boom(win);
+}
+
+
+// ---------- desktop-only gate ----------
+function gate(){
+  const ua=navigator.userAgent||'', touchPrimary=matchMedia('(hover: none) and (pointer: coarse)').matches;
+  const mobile=(navigator.userAgentData&&navigator.userAgentData.mobile)||/mobile|android|iphone|ipad|ipod/i.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1);
+  const why=(touchPrimary||mobile)?'Game này chỉ chơi trên laptop/máy tính 💻 — hãy mở bằng laptop có chuột hoặc trackpad':innerWidth<900?'Mở rộng cửa sổ trình duyệt (tối thiểu 900px) để chơi 🖥️':'';
+  block.style.display=why?'flex':'none'; blockMsg.textContent=why; return !why;
+}
+addEventListener('resize',gate);
+// ---------- input (mouse / trackpad only). view transform: screen = page*V.z + V.x/y; page = unzoomed canvas px; box units stay the storage unit ----------
+const V={z:1,x:0,y:0};
+const toPage=e=>{const r=c.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]};
+const pos=e=>{const [sx,sy]=toPage(e);return[((sx-V.x)/V.z-K.ox)/K.S,((sy-V.y)/V.z-K.oy)/K.S]};
+const clampView=()=>{V.z=Math.max(1,Math.min(ZOOM_MAX,V.z));V.x=Math.min(0,Math.max(K.W-K.W*V.z,V.x));V.y=Math.min(0,Math.max(K.H-K.H*V.z,V.y));zl.textContent='×'+V.z.toFixed(1)+(V.z>1?' · lăn chuột / Space+kéo':'')};
+const zoomAt=(sx,sy,nz)=>{nz=Math.max(1,Math.min(ZOOM_MAX,nz));const px=(sx-V.x)/V.z,py=(sy-V.y)/V.z;V.z=nz;V.x=sx-px*nz;V.y=sy-py*nz;clampView()};
+let spaceHeld=false, lastScreen=null, activeId=null;
+const panMode=e=>s.hand||spaceHeld||e.button===1;
+c.onpointerdown=e=>{if(activeId!==null)return;e.preventDefault();c.setPointerCapture(e.pointerId);activeId=e.pointerId;lastScreen=toPage(e);if(s.done)return;
+  [s.px,s.py]=pos(e); if(panMode(e)){s.pan=true;return}
+  s.down=true;s.strokes.push([[s.px,s.py]])};
+c.onpointermove=e=>{const sc=toPage(e);
+  if(s.pan&&e.pointerId===activeId){V.x+=sc[0]-lastScreen[0];V.y+=sc[1]-lastScreen[1];clampView();lastScreen=sc;return}
+  lastScreen=sc;[s.px,s.py]=pos(e);
+  if(s.down&&!s.done&&e.pointerId===activeId)s.strokes.at(-1).push([s.px,s.py])};
+const up=e=>{if(e.pointerId!==undefined&&e.pointerId!==activeId)return;activeId=null;s.pan=false;if(s.down)scheduleSave();s.down=false};
+addEventListener('pointerup',up);addEventListener('pointercancel',up);
+c.onwheel=e=>{e.preventDefault();const [sx,sy]=toPage(e);zoomAt(sx,sy,V.z*Math.exp(-e.deltaY*(e.ctrlKey?.01:.002)))}; // trackpad pinch arrives as ctrl+wheel
+const zoomBtn=f=>{const sx=lastScreen?lastScreen[0]:K.W/2,sy=lastScreen?lastScreen[1]:K.H/2;zoomAt(sx,sy,V.z*f)};
+zin.onclick=()=>zoomBtn(ZOOM_STEP);zout.onclick=()=>zoomBtn(1/ZOOM_STEP);zreset.onclick=()=>{V.z=1;V.x=V.y=0;clampView()};
+const toggleHand=()=>{if(s.done)return;s.hand=!s.hand;hand.classList.toggle('on',s.hand);c.classList.toggle('hand',s.hand)};hand.onclick=toggleHand;
+addEventListener('keydown',e=>{if(e.target.tagName==='BUTTON')return;if(e.key===' '){spaceHeld=true;e.preventDefault()}else if(e.key==='+'||e.key==='=')zoomBtn(ZOOM_STEP);else if(e.key==='-')zoomBtn(1/ZOOM_STEP);else if(e.key==='0')zreset.onclick()});
+addEventListener('keyup',e=>{if(e.key===' ')spaceHeld=false});
+submit.onclick=()=>{if(!s.done&&s.strokes.length)end()};
+again.onclick=()=>{msg.style.display='none';const n=again.dataset.next;n==='end'?showEnd():n!==''?pickLevel(+n):(clearStrokes(lv),reset())};
+function showEnd(){const done=doneN(),rem=LV.length-done;stamp.textContent=prog.skipped?'BỎ QUA':'TERMINÉ';stamp.className=prog.skipped?'no':'ok';prize.innerHTML='';mc.textContent='';
+  mt.textContent=prog.skipped?`Đã bỏ qua · ${done}/${LV.length} bức hoàn thành`:`Hoàn thành cả ${LV.length} bức tranh! ✨`;
+  ms.innerHTML=prog.skipped?`Còn ${rem} bức chưa vẽ → phạt ${rem*12} phút tại vạch đích (Host áp dụng)`:'Báo cho Host · không bị phạt';again.textContent='Đóng';again.dataset.next='';again.onclick=()=>{msg.style.display='none';parent.postMessage({type:'gallery-close'},'*')};msg.style.display='flex';boom(!prog.skipped);renderLv()}
+function pickLevel(k){if(!playable(k))return;lv=k;L=LV[k];attempts=0;msg.style.display='none';K.W=0;reset();if(prog.skipped)s.done=true;else{const st=loadStrokes(k);if(st)s.strokes=st}V.z=1;V.x=V.y=0;zl.textContent='×1.0';
+  note.innerHTML=`<b>Planche ${k+1} · ${L.name}</b><br>objectif ${PASS[k]*100}% · ${L.subs.length} nét mẫu`;
+  hint.textContent=`Nhìn hình mẫu bên phải, vẽ lại lên giấy (vị trí & cỡ không quan trọng), rồi đóng dấu NỘP BÀI · cần ${PASS[k]*100}% giống hình`+' · không có tẩy – vẽ cẩn thận! · zoom 🔍: lăn chuột / chụm trackpad, Space+kéo để dời';
+  renderLv();
+  refCanvas(); sheetWrap.classList.remove('rustle'); void sheetWrap.offsetWidth; sheetWrap.classList.add('rustle');
+}
+const lvEl=document.getElementById('lv'), sheetWrap=document.getElementById('sheetWrap');
+LV.forEach((l,i)=>{const b=document.createElement('button');b.onclick=()=>pickLevel(i);lvEl.append(b)});
+function renderLv(){ // a locked drawing gets NO thumbnail (nothing of its reference reaches the DOM), only a lock + its number
+  [...lvEl.children].forEach((b,i)=>{const ok=playable(i);b.classList.toggle('on',i===lv);b.disabled=!ok;b.title=ok?`Màn ${i+1} · ${LV[i].name}`:'🔒 Chưa mở';
+    if(ok&&!b.querySelector('canvas')){b.replaceChildren();const cv=document.createElement('canvas');drawLines(cv,LV[i],96,'#15131a','#fffbe9',1.2);const n=document.createElement('span');n.className='n';n.textContent=i+1;b.append(cv,n)}
+    else if(!ok){b.replaceChildren();const k=document.createElement('span');k.className='lock';k.textContent='🔒';const n=document.createElement('span');n.className='n';n.textContent=i+1;b.append(k,n)}
+    b.classList.toggle('pass',prog.st[i]==='pass')})}
+
+// ---------- render ----------
+const fit=(cv,g)=>{const dpr=devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr}g.setTransform(dpr,0,0,dpr,0,0);return[W,H]};
+function drawLines(cv,l,size,col,bgc,lw){ // reference line art into a square canvas (selector thumbs, reference card)
+  const dpr=devicePixelRatio||1;cv.width=size*dpr;cv.height=size*dpr;const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
+  g.fillStyle=bgc;g.fillRect(0,0,size,size);const pad=size*.07,S=size-2*pad;
+  g.strokeStyle=col;g.lineWidth=lw;g.lineCap=g.lineJoin='round';g.beginPath();l.subs.forEach(P=>P.p.forEach((p,i)=>g[i?'lineTo':'moveTo'](pad+p[0]*S,pad+p[1]*S)));g.stroke();
+}
+function refCanvas(){const size=Math.round(THUMB[lv]*640);ref.style.width=ref.style.height=size+'px';drawLines(ref,L,size,'#15131a','#fffbe9',Math.max(1,size*.007))}
+const COMIC='"Marker Felt","Chalkboard SE","Comic Sans MS",ui-rounded,sans-serif';
+const ctx=c.getContext('2d'), bg=document.createElement('canvas'), bgx=bg.getContext('2d');
+let K={W:0,H:0}, drops=[];
+const SEED=[...Array(40)].map((_,i)=>[Math.sin(i*12.9898)*.5+.5,Math.sin(i*78.233)*.5+.5,Math.sin(i*37.7)*.5+.5]);
+function buildBg(W,H){ // sketch paper: grain, blue margin + crop marks + faint construction lines, hand-lettered title (static -> cached)
+  const dpr=devicePixelRatio||1; bg.width=W*dpr;bg.height=H*dpr;bgx.setTransform(dpr,0,0,dpr,0,0);
+  const m=Math.round(Math.min(W,H)*.06), S=Math.min(W-2*m,H-2*m-26); K={W,H,S,ox:(W-S)/2,oy:m+26+(H-2*m-26-S)/2};
+  const g=bgx; g.fillStyle='#f6ecd4';g.fillRect(0,0,W,H);
+  g.fillStyle='#ffffff1c';SEED.slice(0,10).forEach(([a,b,d])=>{g.beginPath();g.ellipse(a*W,b*H,120+d*220,70+d*120,a*3,0,7);g.fill()});
+  g.strokeStyle='#c9b58f0e';g.lineWidth=1;for(let y=3;y<H;y+=4){g.beginPath();g.moveTo(0,y+Math.sin(y)*.5);g.lineTo(W,y);g.stroke()}
+  g.fillStyle='#b8a07a2a';for(let i=0;i<900;i++){const a=SEED[i%40],b=SEED[(i*7+3)%40];g.fillRect(((a[0]*997+i*53)%W),((b[1]*991+i*37)%H),1.2,1.2)}
+  g.fillStyle='#d8c6a3';g.fillRect(0,0,W,3);g.fillStyle='#fff';g.fillRect(0,0,W,1);
+  // non-photo blue margin, crop marks and construction lines
+  g.strokeStyle='#8fb8e8';g.lineWidth=1;g.setLineDash([]);g.strokeRect(m,m+26,W-2*m,H-2*m-26);
+  g.strokeStyle='#8fb8e8aa';[[m,m+26],[W-m,m+26],[m,H-m],[W-m,H-m]].forEach(([x,y])=>{g.beginPath();g.moveTo(x-18,y);g.lineTo(x-6,y);g.moveTo(x+6,y);g.lineTo(x+18,y);g.moveTo(x,y-18);g.lineTo(x,y-6);g.moveTo(x,y+6);g.lineTo(x,y+18);g.stroke()});
+  g.strokeStyle='#8fb8e855';g.setLineDash([3,5]);g.beginPath();g.moveTo(m,H-m);g.lineTo(W-m,m+26);g.moveTo(W/2,m+26);g.lineTo(W/2,H-m);g.stroke();g.beginPath();g.arc(W/2,(H+26)/2,Math.min(W,H)*.2,0,7);g.stroke();g.setLineDash([]);
+  g.strokeStyle='#8fb8e8';for(let x=m;x<W-m;x+=Math.max(20,(W-2*m)/12)){g.beginPath();g.moveTo(x,m+20);g.lineTo(x,m+26);g.stroke()}
+  // hand-lettered title + level stamp
+  g.font='800 17px '+'"Marker Felt","Chalkboard SE","Comic Sans MS",ui-rounded,sans-serif';g.fillStyle='#6b4a2a';g.fillText(`Planche ${lv+1} · ${L.name}`,m+4,m+18);
+  g.strokeStyle='#6b4a2a';g.lineWidth=1.5;g.beginPath();g.moveTo(m+2,m+22);g.quadraticCurveTo(m+60,m+26,m+180,m+21);g.stroke();
+  g.save();g.translate(W-m-70,m+12);g.rotate(-.12);g.strokeStyle='#d8352a99';g.lineWidth=2;g.strokeRect(-46,-12,92,24);g.fillStyle='#d8352a99';g.font='800 12px "Marker Felt","Chalkboard SE","Comic Sans MS",sans-serif';g.textAlign='center';g.fillText(`OBJECTIF ${PASS[lv]*100}%`,0,5);g.restore();
+  g.fillStyle='#6b4a2a77';g.font='700 10px "Marker Felt","Chalkboard SE","Comic Sans MS",sans-serif';g.textAlign='right';g.fillText('Atelier BD · Bruxelles · N°'+(lv+1),W-m,H-m+16);g.textAlign='left';
+}
+function nib(x,y,on){
+  ctx.save();ctx.translate(x,y);ctx.rotate(-Math.PI/4);ctx.lineCap='round';
+  ctx.strokeStyle='#1f2a44';ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(70,0);ctx.stroke();
+  ctx.strokeStyle='#e2b24a';ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(23,0);ctx.stroke();
+  ctx.strokeStyle='#d8352a';ctx.beginPath();ctx.moveTo(60,0);ctx.lineTo(70,0);ctx.stroke();
+  ctx.strokeStyle='#ffffff55';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(25,-2.5);ctx.lineTo(57,-2.5);ctx.stroke();
+  ctx.fillStyle='#ddd8cb';ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(16,-5.5);ctx.lineTo(19,0);ctx.lineTo(16,5.5);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.strokeStyle='#555';ctx.beginPath();ctx.moveTo(2,0);ctx.lineTo(11,0);ctx.stroke();ctx.fillStyle='#555';ctx.beginPath();ctx.arc(11,0,1.3,0,7);ctx.fill();
+  if(on){ctx.fillStyle='#15131a';ctx.beginPath();ctx.arc(1,0,2.4,0,7);ctx.fill()}
+  ctx.restore();
+}
+const WB=[.72,.9,1.08,1.26]; // ink line-weight buckets (x base width): fast strokes thin out, slow strokes swell
+function drawInk(X,Y,w){
+  const paths=WB.map(()=>new Path2D());
+  s.strokes.forEach(st=>{if(st.length===1){paths[2].moveTo(X(st[0][0])+.01,Y(st[0][1]));paths[2].lineTo(X(st[0][0]),Y(st[0][1]));return}
+    for(let i=1;i<st.length;i++){const a=st[i-1],b=st[i],d=Math.hypot(b[0]-a[0],b[1]-a[1]),f=Math.max(0,Math.min(3,Math.round(3-d*160)));paths[f].moveTo(X(a[0]),Y(a[1]));paths[f].lineTo(X(b[0]),Y(b[1]))}});
+  ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#15131a';
+  paths.forEach((p,i)=>{ctx.lineWidth=w*WB[i];ctx.stroke(p)});
+  ctx.strokeStyle='#8a8fb0';ctx.globalAlpha=.22;paths.forEach((p,i)=>{ctx.lineWidth=w*WB[i]*.3;ctx.stroke(p)});ctx.globalAlpha=1; // soft ink gloss
+}
+function draw(dt){
+  const [W,H]=fit(c,ctx); if(W<2||H<2)return; if(K.W!==W||K.H!==H){buildBg(W,H);clampView()}
+  const dpr=devicePixelRatio||1,{S,ox,oy}=K, X=x=>ox+x*S, Y=y=>oy+y*S, w=INK*S;
+  ctx.setTransform(dpr*V.z,0,0,dpr*V.z,V.x*dpr,V.y*dpr);
+  ctx.drawImage(bg,0,0,W,H);
+  drawInk(X,Y,w);
+  if(s.down&&!s.done&&Math.random()<.5)drops.push({x:X(s.px),y:Y(s.py),vx:(Math.random()-.5)*60,vy:-20-Math.random()*50,a:.5});
+  ctx.fillStyle='#15131a';drops=drops.filter(p=>p.a>0);drops.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=260*dt;p.a-=dt;ctx.globalAlpha=Math.max(0,p.a*1.6);ctx.beginPath();ctx.arc(p.x,p.y,1.6/V.z,0,7);ctx.fill()});ctx.globalAlpha=1;
+  const hasP=s.px>=0||s.py>=0;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const sx=X(s.px)*V.z+V.x, sy=Y(s.py)*V.z+V.y;
+  if(hasP&&!s.hand)nib(sx,sy,s.down&&!s.done);
+  if(!s.strokes.length){ctx.textAlign='center';ctx.font='700 15px "Marker Felt","Chalkboard SE","Comic Sans MS",sans-serif';ctx.fillStyle='#6b4a2a88';ctx.fillText('Vẽ lại hình mẫu ở đây, rồi đóng dấu NỘP BÀI',W/2,H-18)}
+}
+
+// ---------- overlays: prize comic panel (win) / aligned comparison + full reference (fail) ----------
+const T=v=>(16+v*168).toFixed(1), SP=pts=>pts.map(([x,y])=>T(x)+','+T(y)).join(' ');
+const poly=(pts,f,extra='')=>`<polygon points="${SP(pts)}" fill="${f}" ${extra}/>`, circ=(x,y,r,f,extra='')=>`<circle cx="${T(x)}" cy="${T(y)}" r="${(r*168).toFixed(1)}" fill="${f}" ${extra}/>`;
+const strk=(pts,col,wd)=>`<polyline points="${SP(pts)}" fill="none" stroke="${col}" stroke-width="${wd}" stroke-linecap="round" stroke-linejoin="round"/>`;
+const bgc=f=>`<rect x="2" y="2" width="196" height="196" fill="${f}"/>`, ground=(y,f)=>`<rect x="2" y="${T(y)}" width="196" height="${200-T(y)}" fill="${f}"/>`;
+const SKIN='#f6c9a0', P=(S,i)=>S[i].p;
+const TINHAIR=[[.34,.38],[.38,.28],[.42,.20],[.48,.14],[.42,.10],[.34,.04],[.46,.08],[.56,.10],[.64,.16],[.68,.28],[.66,.36],[.62,.28],[.54,.24],[.44,.26],[.36,.32]];
+const milouArt=(S,o,sc=1,tx=0,ty=0)=>poly(P(S,o),'#fff')+poly(P(S,o+4),'#f6e7c1')+circ(.17*sc+tx,.41*sc+ty,.022*sc,'#15131a')+strk(P(S,o+3),'#e63b2e',4*sc);
+const tintinArt=(S,o,sc=1,tx=0,ty=0)=>poly(P(S,o+6),'#3a7bd5')+poly(xf([[.42,.66],[.50,.78],[.58,.66],[.56,.62],[.44,.62]],sc,tx,ty),'#fff')+poly(P(S,o),SKIN)+poly(xf(TINHAIR,sc,tx,ty),'#f0a53a')+poly(P(S,o+31),'#fff');
+const HADFACE=[[.30,.34],[.70,.38],[.72,.46],[.68,.54],[.32,.54],[.28,.44]], HADPEAK=[[.72,.30],[.80,.32],[.84,.36],[.70,.38]];
+const haddockArt=(S,o,sc=1,tx=0,ty=0)=>poly(P(S,o+15),'#3a7bd5')+poly(xf(HADFACE,sc,tx,ty),SKIN)+poly(P(S,o+6),'#15131a')+poly(P(S,o),'#1d2b55')+poly(xf(HADPEAK,sc,tx,ty),'#15131a')+poly(P(S,o+13),'#8a5a2b');
+const dupArt=(S,o)=>poly(P(S,o+5),'#15131a')+poly(P(S,o+1),SKIN)+poly(P(S,o),'#15131a')+poly(P(S,o+2),'#15131a');
+const ART=[
+  S=>bgc('#7cc24a')+ground(.9,'#5a9a36')+milouArt(S,0),
+  S=>bgc('#bfe3f7')+ground(.95,'#7cc24a')+poly(P(S,6),'#4fa3e0')+poly([[.34,.78],[.66,.78],[.66,.90],[.60,.96],[.54,.96],[.52,.88],[.48,.88],[.46,.96],[.40,.96],[.34,.90]],'#fff')+poly(P(S,1),'#4fa3e0')+poly(P(S,0),'#fff')+circ(.50,.47,.045,'#4fa3e0')+poly(P(S,8),'#e63b2e')+circ(.08,.69,.018,'#fff')+circ(.17,.66,.015,'#fff')+poly([[.08,.78],[.20,.78],[.20,.94],[.08,.94]],'#f6e7c1'),
+  S=>bgc('#f2c14e')+tintinArt(S,0),
+  S=>bgc('#bfe3f7')+ground(.9,'#2f8f4e')+strk(P(S,1),'#f2c14e',8)+poly(P(S,0),'#f2c14e')+circ(.40,.36,.035,'#15131a')+circ(.48,.50,.03,'#15131a')+circ(.34,.58,.028,'#15131a')+circ(.24,.30,.025,'#fff')+circ(.36,.24,.025,'#fff')+circ(.10,.38,.03,'#15131a')+poly(P(S,32),'#2f8f4e')+poly(P(S,34),'#2f8f4e'),
+  S=>bgc('#f29a3e')+ground(.96,'#c98a4a')+poly([[.24,.96],[.26,.84],[.36,.78],[.64,.78],[.76,.84],[.80,.96]],'#f2c14e')+poly(P(S,1),SKIN)+poly(P(S,7),'#e63b2e')+poly(P(S,0),'#fffbe9')+poly(P(S,10),'#6e7383')+strk(P(S,6),'#c9a24a',2)+circ(.12,.12,.06,'#ffe66d')+poly(P(S,33),'#2f8f4e'),
+  S=>bgc('#bfe3f7')+poly(P(S,9),'#e63b2e')+poly(P(S,2),SKIN)+poly(P(S,0),'#e63b2e')+poly([[.36,.23],[.66,.23],[.66,.27],[.36,.27]],'#15131a')+poly(P(S,15),'#b5651d')+strk(P(S,16),'#b5651d',5)+[[.42,.80],[.42,.88],[.58,.80],[.58,.88],[.42,.94],[.58,.94]].map(p=>circ(p[0],p[1],.012,'#f2c14e')).join('')+poly(P(S,43),'#f2c14e'),
+  S=>bgc('#8fd3ff')+poly(P(S,8),'#2f8f4e')+poly(P(S,1),SKIN)+poly(P(S,0),'#15131a')+[9,10,11,12,13].map(i=>poly(P(S,i),'#fff')).join('')+poly(P(S,38),'#f0a53a'),
+  (S,I)=>bgc('#e9c982')+ground(.95,'#9a9a8a')+poly(P(S,I.cloud),'#fff')+poly([[.02,.34],[.02,.14],[.08,.14],[.08,.08],[.18,.08],[.18,.14],[.24,.14],[.24,.34]],'#c9a24a')+poly([[.30,.34],[.30,.12],[.46,.06],[.62,.12],[.62,.34]],'#e63b2e')+dupArt(S,I.a)+dupArt(S,I.b)+poly(P(S,I.lamp+1),'#f2c14e'),
+  (S,I)=>bgc('#bfe3f7')+ground(.96,'#9a9a8a')+poly(P(S,I.t+9),'#2f8f4e')+poly(P(S,I.t+1),SKIN)+poly(P(S,I.t+7),'#8a5a2b')+poly(P(S,I.t),'#2f8f4e')+poly(P(S,I.t+11),'#f2c14e')+poly(P(S,I.flask),'#8fd3ff')+poly(P(S,I.box),'#6e7383')+poly(P(S,I.shelf),'#8a5a2b')+milouArt(S,I.m,.28,.02,.70),
+  (S,I)=>bgc('#1d2b55')+ground(.66,'#8a5a2b')+poly(P(S,I.sky),'#f2c14e')+haddockArt(S,I.h,.5,0,.14)+tintinArt(S,I.t,.42,.55,.22)+milouArt(S,I.m,.26,.04,.66)
+];
+const frame=(inner,wd=230,rot=-3)=>`<svg viewBox="0 0 200 200" width="${wd}" style="transform:rotate(${rot}deg);filter:drop-shadow(0 8px 10px #0008)"><defs><pattern id="ht" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.3" fill="#000" opacity=".1"/></pattern></defs><rect x="2" y="2" width="196" height="196" fill="#f6ecd4"/>${inner}<rect x="2" y="2" width="196" height="196" fill="none" stroke="#15131a" stroke-width="4"/></svg>`;
+const outline=(subs,col,wd,extra='')=>subs.map(P=>`<${P.closed?'polygon':'polyline'} points="${SP(P.p)}" fill="none" stroke="${col}" stroke-width="${wd}" stroke-linejoin="round" stroke-linecap="round" ${extra}/>`).join('');
+const label=t=>`<rect x="4" y="178" width="192" height="18" fill="#fffbe9" stroke="#15131a" stroke-width="2"/><text x="100" y="191" text-anchor="middle" font-size="10" font-weight="700" fill="#15131a" font-family='${COMIC}'>${t}</text>`;
+function panelSVG(k){
+  const c=LV[k], fs=c.bubble.length>13?10:13;
+  return frame(`${ART[k](c.subs,c.idx)}<rect x="2" y="2" width="196" height="196" fill="url(#ht)"/>${outline(c.subs,'#15131a',[7,8,9].includes(k)?1.6:2.2)}
+  <ellipse cx="148" cy="26" rx="46" ry="18" fill="#fff" stroke="#15131a" stroke-width="2.5"/><polygon points="128,38 116,54 140,40" fill="#fff" stroke="#15131a" stroke-width="2.5" stroke-linejoin="round"/><rect x="126" y="34" width="16" height="7" fill="#fff"/>
+  <text x="148" y="30" text-anchor="middle" font-size="${fs}" font-weight="800" fill="#15131a" font-family='${COMIC}'>${c.bubble}</text>
+  <rect x="4" y="178" width="${c.name.length*7+14}" height="18" fill="#fffbe9" stroke="#15131a" stroke-width="2"/><text x="11" y="191" font-size="11" font-weight="700" fill="#15131a" font-family='${COMIC}'>${c.name}</text>`);
+}
+function compareSVG(r){ // reference (blue) vs the player's ALIGNED ink (black); red = missed reference, orange = stray ink
+  let q=outline(L.subs,'#4f7fc4',1);
+  L.samp.forEach((p,i)=>{if(!r.cov[i]){const d=L.sampW[i]<1;q+=`<circle cx="${T(p[0])}" cy="${T(p[1])}" r="${d?1:1.6}" fill="#e63b2e" opacity="${d?.45:1}"/>`}});
+  (r.strokesT||[]).forEach(st=>{q+=st.length>1?`<polyline points="${SP(st)}" fill="none" stroke="#15131a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>`:circ(st[0][0],st[0][1],.005,'#15131a')});
+  r.bad.forEach((p,i)=>{if(i%3===0)q+=`<circle cx="${T(p[0])}" cy="${T(p[1])}" r="1.4" fill="#ff8c1a"/>`});
+  return frame(q+label('🔴 thiếu · 🟠 lệch · đen = nét của bạn'),160,-2);
+}
+const refSVG=()=>frame(outline(L.subs,'#15131a',1.2)+label('Hình mẫu – nhìn kỹ rồi vẽ lại'),160,2);
+
+// ---------- win/lose particles ----------
+const fxx=fx.getContext('2d'); let parts=[];
+function boom(win){
+  parts=[];const n=win?140:0;
+  for(let i=0;i<n;i++)parts.push({x:Math.random(),y:-.1-Math.random()*.4,vx:(Math.random()-.5)*.25,vy:.15+Math.random()*.3,r:Math.random()*6.3,vr:(Math.random()-.5)*8,sz:5+Math.random()*7,c:['#e63b2e','#f2c14e','#3a7bd5','#fff3d0','#7cc24a','#8fd3ff'][i%6],s:Math.random()<.3});
+}
+function drawFx(dt){
+  if(msg.style.display!=='flex')return;
+  const [W,H]=fit(fx,fxx);fxx.clearRect(0,0,W,H);
+  const now=performance.now()/1000;
+  if(!parts.length){ // fail: ink drips sliding down
+    fxx.strokeStyle='#00000040';fxx.lineWidth=5;fxx.lineCap='round';for(let i=0;i<10;i++){const x=(i+.5)*W/10+Math.sin(i*7)*12,y=((now*.08+i*.1)%1)*H;fxx.beginPath();fxx.moveTo(x,y-40);fxx.lineTo(x,y);fxx.stroke()}return}
+  parts.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=.15*dt;p.r+=p.vr*dt;p.vx*=.995;if(p.y>1.1){p.y=-.1;p.x=Math.random();p.vy=.15+Math.random()*.3}
+    fxx.save();fxx.translate(p.x*W,p.y*H);fxx.rotate(p.r);fxx.fillStyle=p.c;
+    if(p.s){fxx.beginPath();for(let k=0;k<10;k++){const a=k*Math.PI/5,r=k%2?p.sz*.4:p.sz;fxx.lineTo(Math.cos(a)*r,Math.sin(a)*r)}fxx.fill()}
+    else fxx.fillRect(-p.sz/2,-p.sz/3,p.sz,p.sz*.66);
+    fxx.restore()});
+}
+
+
+gate(); pickLevel(firstOpen()); post(); if(prog.skipped||doneN()===LV.length)showEnd();
+// test hook (scripts/ligne-check.ts): the strokes / score of the drawing in progress; perfect() traces the reference (a pass)
+window.__LIGNE__={lv:()=>lv,strokes:()=>s.strokes.map(st=>st.map(q=>q.slice(0,2))),score:()=>evaluate(s.strokes).sc,saved:()=>localStorage.getItem(SK(lv)),key:()=>KEY,
+  perfect:()=>{s.strokes=L.subs.map((_,si)=>L.samp.filter((_,i)=>L.sampS[i]===si).map(q=>[q[0],q[1]]));end()}};
+
+let last=performance.now();
+(function loop(now){
+  const dt=Math.min(.1,(now-last)/1000); last=now;
+  draw(dt); drawFx(dt); requestAnimationFrame(loop);
+})(last);
+</script>
