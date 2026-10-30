@@ -24,7 +24,7 @@ export const NET = {
   /** Server broadcast rate: one tick message per client per 200 ms, skipped when nobody moved. */
   tickHz: 5,
   /** Players this far (m) from a client are not in its ticks (SPEC §7: interest radius; also hides the route). */
-  interestRadius: 500,
+  interestRadius: 50, // Leg 3: teams see each other only within 50 m (was 500)
   /** Last poses of ALL teams = one upserted SQLite row this often (SPEC §3); also at once on a disconnect (§8.10). */
   snapshotMs: 2_000,
   /** Replay log: one row this often. */

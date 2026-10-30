@@ -5,7 +5,7 @@
   "eliminationLeg": false,
   "mapLabels": "streets-only",
   "presence": {
-    "renderRadius": 300,
+    "renderRadius": 50,
     "showOthersOnMinimap": false
   },
   "boxReveal": {
