@@ -599,11 +599,15 @@ export class RaceHud {
     this.partInputs = p.labels.map((label, k) => {
       const input = Object.assign(document.createElement('input'), { type: 'text', className: 'rc-input', maxLength: NET.answerMax, placeholder: 'Nhập…', autocomplete: 'off', spellcheck: false, enterKeyHint: k === p.labels.length - 1 ? 'send' : 'next', value: this.drafts[k] ?? '', disabled: !p.enabled });
       input.setAttribute('aria-label', label);
-      input.addEventListener('input', () => ((this.drafts[k] = input.value), check()));
+      input.addEventListener('input', () => ((this.drafts[k] = input.value), input.classList.remove('ok', 'bad'), check()));
       input.addEventListener('focus', () => (this.focusBox = true));
       box.append(el('label', 'rc-part', undefined, el('span', 'rc-part-label', label), input));
       return input;
     });
+    // task.showMarks: the boxes still holding what the last answer said are painted right (green) / wrong (red)
+    const last = [...card.answers].reverse().find((a) => a.marks);
+    const sent = last?.text.split(' | ').map((x) => x.trim());
+    if (last?.marks && sent) this.partInputs.forEach((input, k) => input.value.trim() === sent[k] && input.classList.add(last.marks![k] ? 'ok' : 'bad'));
     box.append(el('div', 'rc-parts-foot', undefined, el('span', 'rc-parts-hint', p.enabled ? 'Điền đủ các ô rồi gửi Host duyệt · thứ tự không quan trọng' : card.status === 'pending' ? 'Đang chờ Host duyệt' : 'Đang bị phạt: sửa lại khi hết đếm ngược'), send));
     check();
     return box;

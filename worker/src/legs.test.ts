@@ -35,10 +35,10 @@ describe('legs/bruxelles-demo.json', () => {
   const steps = leg.steps;
   const count = (type: string) => steps.filter((s) => s.type === type).length;
 
-  it('has the 11 steps in order', () => {
+  it('has the 12 steps in order', () => {
     // Leg 3: the box at L3's destination opens the detour; L3B (GardeRobe MannekenPis) opens T1
-    expect(steps.map((s) => s.id)).toEqual(['L1', 'L2', 'L3', 'D1', 'L3B', 'T1', 'L4', 'T2', 'L5', 'L6', 'PS']);
-    expect([count('route_info'), count('detour'), count('challenge'), count('pit_stop')]).toEqual([7, 1, 2, 1]);
+    expect(steps.map((s) => s.id)).toEqual(['L1', 'L2', 'L3', 'D1', 'L3B', 'T1', 'L4', 'T2', 'T3', 'L5', 'L6', 'PS']);
+    expect([count('route_info'), count('detour'), count('challenge'), count('pit_stop')]).toEqual([7, 1, 3, 1]);
   });
 
   it('keeps every destination and the start inside RACE_BBOX', () => {
@@ -81,5 +81,9 @@ describe('legs/bruxelles-demo.json', () => {
     expect([t2.room, t2.task?.title, t2.task?.pick, t2.task?.verification, t2.task?.answers, t2.task?.retryLockMinutes]).toEqual(['hall', 'Ai hay đi nhà hát', 'seat', 'auto', ['K-3'], 1]);
     expect(t2.task?.description).toMatch(/^Đội chơi đang đứng tại Henry Le Bœuf/);
     expect(t2.task?.description).not.toMatch(/mũi tên|bấm F/i); // the mechanism is not part of the clue
+    // T3 (Queen Elisabeth): held at the stage until F (pickup), 4 boxes (2 pieces × song + performer), wrong = Phạt 3 min with x/4 at once
+    const t3 = steps.find((s) => s.id === 'T3')!;
+    expect([t3.room, t3.pickup?.prompt, t3.task?.parts?.length, t3.task?.retryLockMinutes, t3.task?.scoreFromMinutes, t3.task?.showMarks]).toEqual(['hall', 'Bấm F để nhận mật thư thử thách 3', 4, 3, 40, true]); // the hidden hint: from minute 40 the boxes turn green / red
+    expect(t3.pickup?.clue).toBe('Đội chơi đi lại gần sân khấu để nhận mật thư tiếp theo');
   });
 });

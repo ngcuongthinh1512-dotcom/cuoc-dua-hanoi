@@ -218,7 +218,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   const TOTAL = o.room?.total ?? TOTAL_DEFAULT, PEN = o.room?.penaltyMinutesEach ?? PEN_DEFAULT;
   const teamOf = (slot: number): Team => {
     const t = o.team?.slot === slot ? o.team : o.teams?.find((x) => x.slot === slot);
-    return t ? { slot, name: t.name, color: t.colour } : RACE ? { slot, name: `Đội ${slot}`, color: '#8a7a68' } : TEAMS[slot - 1]!;
+    return t ? { slot, name: t.name, color: t.colour } : TEAMS[slot - 1]!; // a team not in the list yet: its desk keeps its own colour (the 11 fixed ones)
   };
   const teams = TEAMS.map((t) => teamOf(t.slot));
   const was = { exposure: renderer.toneMappingExposure, background: scene.background, fog: scene.fog, environment: scene.environment, envIntensity: scene.environmentIntensity, pixelRatio: renderer.getPixelRatio() };

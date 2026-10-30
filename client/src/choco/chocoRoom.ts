@@ -273,7 +273,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   /** The 11 placards: the race's real teams (TeamInfo), the own team first; the dev page's hard-coded list. */
   const teamOf = (slot: number): Team => {
     const t = o.team?.slot === slot ? o.team : o.teams?.find((x) => x.slot === slot);
-    return t ? { slot, name: t.name, color: t.colour } : RACE ? { slot, name: `Đội ${slot}`, color: '#9a8a7a' } : TEAMS[slot - 1]!;
+    return t ? { slot, name: t.name, color: t.colour } : TEAMS[slot - 1]!; // a team not in the list yet: its table keeps its own colour (the 11 fixed ones)
   };
   const teams = TEAMS.map((t) => teamOf(t.slot));
   // the scene's look while the room is up (restored on dispose): warm haze down the long room, the room's own environment map

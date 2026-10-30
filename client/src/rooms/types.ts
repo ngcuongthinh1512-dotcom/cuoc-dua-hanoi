@@ -39,6 +39,8 @@ export interface RoomMountOptions {
   onResult?: (r: { done: number; skipped: boolean }) => void;
   /** The race: F on a seat in the BOZAR hall (T2 `pick: 'seat'`) → its label ("J-14", hallBuild seatLabel) as the answer; the server grades it. Absent = the dev page (a toast only). */
   onSeat?: (label: string) => void;
+  /** The race: F at the clue pick-up spot by the stage (BOZAR hall, after T2: `setPickup` lit it) → the held next card is released. Absent = the dev page (a toast). */
+  onPickup?: () => void;
   /** The overlay closed (the race re-takes the pointer lock inside this user gesture). */
   onClose?: () => void;
 }
@@ -59,6 +61,8 @@ export interface RoomHandle {
   resize?(): void;
   /** The server's tally for this team's table (the race: the view's room.done / skipped); the dev page: localStorage. */
   setProgress(done: number, skipped: boolean): void;
+  /** The BOZAR hall (T3 `pickup`): light a pick-up spot at the front of the stalls by the stage with this prompt ("Bấm F để nhận mật thư thử thách 3"; F in reach → `onPickup`, `interact()` true); null = off. Other rooms: absent. */
+  setPickup?(prompt: string | null): void;
   /** The exit ring at the far end: on = the body may leave (the step is done, or the team switched branch). */
   setExit(on: boolean): void;
   /** "Đổi lựa chọn kép" happened: the own button is off (grey prompt), the overlay closed; only the ring is left. */

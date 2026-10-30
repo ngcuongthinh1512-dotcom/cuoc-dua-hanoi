@@ -21,7 +21,7 @@ import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
 import { DEMO_ROOM_STATES, demoRoomResult, demoRoomViews, type DemoRoomState } from './rooms/roomDemo.ts';
 import { enterSpot, exitSpot, roomFrame } from './rooms/roomFrame.ts';
-import { ROOM_TEXT, RoomFlow, isFreeRoom, roomOf, type RoomEvent, type RoomTarget } from './rooms/roomState.ts';
+import { ROOM_TEXT, RoomFlow, isFreeRoom, pickupView, roomOf, type RoomEvent, type RoomTarget } from './rooms/roomState.ts';
 import type { RoomHandle } from './rooms/types.ts';
 import { hideWorld, showWorld } from './world/hideWorld.ts';
 import { Spectate, TEXT as SP } from './spectate/Spectate.ts';
@@ -304,6 +304,11 @@ async function start() {
       team: { ...team, avatar: overrides.avatar },
       teams: (session?.welcome?.teams ?? []).map(({ slot, name, colour }) => ({ slot, name, colour })),
       room: t.room,
+      onPickup: () => {
+        if (!roomFlow.pickedUp()) return;
+        room?.setPickup?.(null);
+        race ? race.release() : demoHeld && (raceHud?.setView(demoHeld), (demoHeld = null)); // the held card is the team's now
+      },
       onSeat: (label) => (race ? race.answer(t.step, label) : demoSeat(label)),
       onResult: ({ done, skipped }) => (race && t.branch ? race.room(t.step, t.branch, done, skipped) : demoView && demoRoomView(demoRoomResult(demoView, done, skipped))),
     });
@@ -347,12 +352,15 @@ async function start() {
         await fadeTo(false);
         roomBusy = false;
       } else if (ev === 'exitReady') room?.setExit(true), toast(isFreeRoom(t?.room.kind) ? ROOM_TEXT.exitDoor : ROOM_TEXT.exit);
+      else if (ev === 'pickup' && roomFlow.pickup?.pickup && pickupHeld) room?.setPickup?.(roomFlow.pickup.pickup.prompt), raceHud?.setView(pickupView(pickupHeld, roomFlow.pickup.pickup)); // T2 done: the stand-in card, the next one waits for F at the stage
       else if (ev === 'switched') room?.setExit(true), room?.setLocked(true), toast(ROOM_TEXT.switched);
       else if (ev === 'resume') room?.setExit(false), room?.setLocked(false);
     });
   /** Every view before the HUD (RaceDeps.view): true = hold it. */
+  let pickupHeld: RaceView | null = null; // the held view whose stand-in card shows (pickupView)
   const onRoomView = (v: RaceView | null): boolean => {
     const { event, hold } = roomFlow.onView(v);
+    if (event === 'pickup') pickupHeld = v;
     if (event) roomEvent(event, roomFlow.target);
     else if (roomFlow.target) room?.setProgress(roomFlow.target.room.done, roomFlow.target.room.skipped);
     return hold;

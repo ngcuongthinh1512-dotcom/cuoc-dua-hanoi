@@ -401,7 +401,7 @@ describe('Leg 3 auto-graded parts (workerd)', () => {
   it('2/4 → locked + "đúng 2/4" in SQLite before the team hears; kept across an eviction (welcome + the Host queue); ack clears it', async () => {
     const race = 'l3-auto';
     const steps = nearLeg().steps as any[];
-    Object.assign(steps[1].task, { answers: [], parts: [['Cuba', 'Cu-ba'], ['Singapore'], ['Uzbekistan'], ['Estonia']].map((answers, k) => ({ label: `Bộ ${k + 1}`, answers })), retryLockMinutes: 2 });
+    Object.assign(steps[1].task, { answers: [], parts: [['Cuba', 'Cu-ba'], ['Singapore'], ['Uzbekistan'], ['Estonia']].map((answers, k) => ({ label: `Bộ ${k + 1}`, answers })), scoreFromMinutes: 0, retryLockMinutes: 2 });
     const { host, hostToken, teams, socks: [a] } = await newRace(race, 1, { steps });
     const id = teams[0]!.id;
     await toT1(a!);

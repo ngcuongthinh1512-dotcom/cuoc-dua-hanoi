@@ -12,6 +12,9 @@
 // first; every one of the 988 stalls seats counts, grey unsold ones too — the wheelchair squares are no seats) floats a small
 // bobbing arrow over it + the prompt "Hàng J · Ghế 14 — Bấm F để chọn"; F (`interact()`) → `o.onSeat(label)` with hallBuild's
 // `seatLabel` ("J-14", rear section "A2-12") and true. Right / wrong is the server's business (nothing changes in here).
+// Clue pick-up (T3): main.ts `setPickup(prompt)` lights a gold ring + beam at PICKUP (the flat floor in front of row A,
+// mid-hall); feet within PICKUP.r → the prompt, F → `o.onPickup()` and true (before any seat: row A is right there);
+// `setPickup(null)` = off. Dev `?pickup=1` lights it; F without `onPickup` → a toast and off.
 // Dev params (hallRoomDev.ts): walk mode by default (WASD, F = choose the seat: a toast when `onSeat` is absent) ·
 // spawn=x,z,yawDeg · view=stalls|stage|exit|plan / cam=x,y,z,yawDeg,pitchDeg = free camera · hq=1 · avatar=0|1,
 // autoMove=walk|sprint. The race reads none of them.
@@ -39,6 +42,30 @@ export const DOOR_Z = H.zArc + H.rear + 0.5;
 export const EXIT = { x: -5.4, z: 26.6, r: 0.9 };
 const HF = { cell: 0.5, x0: -H.halfW - 1, x1: H.halfW + 1, z0: H.zFront - 1, z1: H.zArc + H.rear + 1 };
 export const SEAT_REACH = 2.0, PROMPT = 'Bấm F để chọn';
+/** The clue pick-up spot (T3, `setPickup`): on the flat floor in front of row A, mid-hall (reached down the diagonal aisles or
+ *  the wall corridor); warm gold, not the exit ring's cyan. */
+export const PICKUP = { x: 0, z: -6.8, r: 2.5 };
+/** A lit gold ring + light beam on the floor (the exit ring's language in another colour, no label). Hidden until `set`. */
+function makePickupRing(parent: THREE.Object3D, x: number, z: number, h = 3.5, colour = '#ffc23c') {
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
+  g.visible = false;
+  const mat = (opacity: number, extra: THREE.MeshBasicMaterialParameters = {}) => new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, ...extra });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 40).rotateX(-Math.PI / 2).translate(0, 0.03, 0), mat(0.95));
+  const disc = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.7, 40).rotateX(-Math.PI / 2).translate(0, 0.025, 0), mat(0.4));
+  const beamG = new THREE.CylinderGeometry(0.45, 0.9, h, 20, 1, true).translate(0, h / 2, 0), pos = beamG.getAttribute('position');
+  beamG.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: pos.count }, (_, i) => [1, 1, 1, 0.8 * (1 - pos.getY(i) / h)]).flat(), 4));
+  const beam = new THREE.Mesh(beamG, mat(1, { vertexColors: true }));
+  const light = new THREE.PointLight(colour, 12, 8, 2);
+  light.position.y = 1.2;
+  g.add(ring, disc, beam, light);
+  parent.add(g);
+  return {
+    set: (on: boolean) => { g.visible = on; },
+    get on() { return g.visible; },
+    update(t: number) { const k = 1 + 0.06 * Math.sin(t * 3); ring.scale.set(k, 1, k); (ring.material as THREE.MeshBasicMaterial).opacity = 0.7 + 0.3 * Math.sin(t * 3); },
+  };
+}
 export const seatPrompt = (s: StallSeat): string => `Hàng ${s.row}${s.rear ? '2' : ''} · Ghế ${s.num} — ${PROMPT}`;
 /** The seat to pick from (px, pz): the nearest within `r`, those in front (fx, fz = the look direction) before those behind. */
 export function nearestSeat(px: number, pz: number, fx: number, fz: number, seats: readonly StallSeat[], r = SEAT_REACH): StallSeat | null {
@@ -136,6 +163,11 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   g.add(exitG);
   const exit = makeExitRing(exitG, EXIT.x, EXIT.z, 3.2, EXIT.r);
   exit.set(true);
+  // the clue pick-up spot by the stage (main.ts `setPickup(prompt)` lights it after T2; dev `?pickup=1`)
+  const pickup = makePickupRing(g, PICKUP.x, PICKUP.z);
+  let pickupPrompt: string | null = null;
+  const setPickup = (prompt: string | null) => { pickupPrompt = prompt; pickup.set(prompt !== null); };
+  if (q.get('pickup') === '1') setPickup('Bấm F để nhận mật thư thử thách 3');
 
   // ---- colliders: the race → the game's world at the frame; the dev page → the RoomPlayer's own world ------------------
   const boxes = hallBoxes();
@@ -162,13 +194,20 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   const feet = () => (walk ? { x: walk.position.x, z: walk.position.z } : toLocal(frame, o.feet!().x, o.feet!().z));
   const fwd = new THREE.Vector3();
   /** The seat in reach this frame (none while flying / frozen): nearest, the look direction (camera, room-local) first. */
+  /** The pick-up spot is lit and the feet are within its reach (none while flying / frozen). */
+  const atPickup = (): boolean => { if (pickupPrompt === null || walk?.flying || frozen()) return false; const f = feet(); return Math.hypot(f.x - PICKUP.x, f.z - PICKUP.z) <= PICKUP.r; };
   const near = (): StallSeat | null => {
-    if (walk?.flying || frozen()) return null;
+    if (walk?.flying || frozen() || atPickup()) return null; // the pick-up spot wins over row A's seats beside it
     const f = feet();
     fwd.set(0, 0, -1).applyQuaternion(camera.quaternion).applyAxisAngle(new THREE.Vector3(0, 1, 0), -frame.yaw);
     return nearestSeat(f.x, f.z, fwd.x, fwd.z, stalls.seats);
   };
   function interact(): boolean {
+    if (atPickup()) {
+      if (o.onPickup) o.onPickup();
+      else if (!RACE) { toast('Đã nhận mật thư (dev)'); setPickup(null); }
+      return true;
+    }
     const s = near();
     if (!s) return false;
     const label = seatLabel(s);
@@ -251,11 +290,13 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       clock.getDelta();
       const t = clock.elapsedTime;
       exit.update(t);
-      const s = near();
+      pickup.update(t);
+      const s = near(), pick = atPickup();
       arrow.visible = !!s;
       if (s) arrow.position.set(s.x, s.y + 1.45 + 0.08 * Math.sin(t * 4), s.z);
-      promptEl.hidden = !s;
-      if (s) promptEl.textContent = seatPrompt(s);
+      promptEl.hidden = !s && !pick;
+      if (pick) promptEl.textContent = pickupPrompt!;
+      else if (s) promptEl.textContent = seatPrompt(s);
       if (!toastEl.hidden && performance.now() - toastAt > 2200) { toastEl.style.opacity = '0'; if (performance.now() - toastAt > 2700) toastEl.hidden = true; }
       frames++;
     },
@@ -273,6 +314,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     setProgress: () => {}, // no tally in this room
     setExit: () => {}, // the ring is always lit
     setLocked: () => {},
+    setPickup,
     exitHit: () => { const f = feet(); return exit.hit(f.x, f.z); },
     overlayOpen: () => false,
     settled: () => frames >= 3 && (!walk || walk.flying || walk.controller.placed),

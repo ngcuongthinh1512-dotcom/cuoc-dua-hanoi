@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Đề nghe: hai đoạn ghi âm</title>
+<style>
+  :root {
+    --bg: #1b0f0c; --panel: #2a1713; --panel-2: #34201a; --line: #4a2f26;
+    --fg: #f3e7d6; --muted: #b9a28a; --gold: #d9a441; --gold-2: #f0c46a; --red: #a23a2e;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh; background: radial-gradient(1200px 600px at 50% -10%, #3a1d16 0%, var(--bg) 60%);
+    color: var(--fg); font: 16px/1.55 Georgia, 'Times New Roman', serif;
+    padding: 32px max(16px, env(safe-area-inset-left, 0px)) 48px max(16px, env(safe-area-inset-right, 0px));
+  }
+  main { max-width: 640px; margin: 0 auto; display: grid; gap: 22px; }
+  header { text-align: center; padding-bottom: 6px; }
+  .kicker { letter-spacing: .28em; text-transform: uppercase; font-size: 12px; color: var(--gold); }
+  h1 { margin: 6px 0 4px; font-size: clamp(30px, 8vw, 44px); font-weight: 700; letter-spacing: .01em; text-wrap: balance; }
+  .rule { width: 120px; height: 2px; margin: 12px auto 10px; background: linear-gradient(90deg, transparent, var(--gold), transparent); border: 0; }
+  header p { margin: 0; color: var(--muted); font-size: 15px; text-wrap: balance; }
+  .card { background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--line); border-radius: 16px; padding: 20px 20px 18px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .num { font-size: 13px; letter-spacing: .2em; text-transform: uppercase; color: var(--gold); }
+  .head h2 { margin: 0; font-size: 22px; }
+  .ask { margin: 2px 0 14px; color: var(--muted); font-size: 15px; }
+  .player { display: grid; grid-template-columns: auto 1fr; gap: 12px 14px; align-items: center; }
+  .play { width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer; background: linear-gradient(180deg, var(--gold-2), var(--gold)); color: #2a1408; display: grid; place-items: center; box-shadow: 0 4px 14px rgba(217,164,65,.35); }
+  .play:active { transform: scale(.96); }
+  .play svg { width: 24px; height: 24px; fill: currentColor; }
+  .play .pause { display: none; }
+  .playing .play .pause { display: block; }
+  .playing .play .tri { display: none; }
+  .track { display: grid; gap: 6px; min-width: 0; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; cursor: pointer; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--gold) var(--p, 0%), #4a352c var(--p, 0%)); }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: #4a352c; }
+  input[type=range]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--gold); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--gold-2); border: 2px solid #2a1408; margin-top: -6px; }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--gold-2); border: 2px solid #2a1408; }
+  .times { display: flex; justify-content: space-between; font: 13px/1 ui-monospace, Menlo, monospace; color: var(--muted); }
+  .hint { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 12px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .hint b { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+  .hint span { color: var(--fg); font-style: italic; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--gold-2); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Queen Elisabeth Competition · Chung kết</div>
+    <h1>Hai đoạn ghi âm</h1>
+    <hr class="rule">
+    <p>Hai đoạn trích từ vòng Chung kết năm ngoái. Nghe, tua lại, dừng bao nhiêu lần tuỳ ý.</p>
+  </header>
+
+  <section class="card" data-src="de-voice/cau-1.mp3">
+    <div class="head"><span class="num">Câu 1</span><h2>Màn trình diễn thứ nhất</h2></div>
+    <p class="ask">Tên bài hát và thí sinh biểu diễn?</p>
+    <div class="player">
+      <button class="play" type="button" aria-label="Phát / dừng">
+        <svg class="tri" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>
+        <svg class="pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+      </button>
+      <div class="track">
+        <input class="seek" type="range" min="0" max="1000" value="0" aria-label="Tua đoạn nghe">
+        <div class="times"><span class="cur">0:00</span><span class="dur">--:--</span></div>
+      </div>
+    </div>
+    <div class="hint"><b>Gợi ý</b><span>Đoạn đầu tiên của phần 3</span></div>
+  </section>
+
+  <section class="card" data-src="de-voice/cau-2.mp3">
+    <div class="head"><span class="num">Câu 2</span><h2>Màn trình diễn thứ hai</h2></div>
+    <p class="ask">Tên bài hát và thí sinh biểu diễn?</p>
+    <div class="player">
+      <button class="play" type="button" aria-label="Phát / dừng">
+        <svg class="tri" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>
+        <svg class="pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+      </button>
+      <div class="track">
+        <input class="seek" type="range" min="0" max="1000" value="0" aria-label="Tua đoạn nghe">
+        <div class="times"><span class="cur">0:00</span><span class="dur">--:--</span></div>
+      </div>
+    </div>
+    <div class="hint"><b>Gợi ý</b><span>Đoạn đầu của màn trình diễn</span></div>
+  </section>
+
+  <footer>Trả lời trong game: tên bài hát và thí sinh của từng câu.</footer>
+</main>
+
+<script>
+(() => {
+  const fmt = (s) => (isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '--:--');
+  const cards = [...document.querySelectorAll('.card')];
+  const audios = [];
+  for (const card of cards) {
+    const a = new Audio(card.dataset.src);
+    a.preload = 'metadata';
+    audios.push(a);
+    const seek = card.querySelector('.seek'), cur = card.querySelector('.cur'), dur = card.querySelector('.dur');
+    let dragging = false;
+    const paint = () => {
+      const p = a.duration ? (a.currentTime / a.duration) * 100 : 0;
+      seek.style.setProperty('--p', p + '%');
+      if (!dragging) seek.value = String(a.duration ? Math.round((a.currentTime / a.duration) * 1000) : 0);
+      cur.textContent = fmt(a.currentTime);
+    };
+    a.addEventListener('loadedmetadata', () => { dur.textContent = fmt(a.duration); paint(); });
+    a.addEventListener('timeupdate', paint);
+    a.addEventListener('play', () => card.classList.add('playing'));
+    a.addEventListener('pause', () => card.classList.remove('playing'));
+    a.addEventListener('ended', () => { card.classList.remove('playing'); a.currentTime = 0; });
+    card.querySelector('.play').addEventListener('click', () => {
+      if (a.paused) { audios.forEach((o) => o !== a && o.pause()); a.play(); } else a.pause(); // one clip at a time
+    });
+    seek.addEventListener('input', () => { dragging = true; cur.textContent = fmt((seek.value / 1000) * (a.duration || 0)); seek.style.setProperty('--p', seek.value / 10 + '%'); });
+    seek.addEventListener('change', () => { if (a.duration) a.currentTime = (seek.value / 1000) * a.duration; dragging = false; });
+  }
+})();
+</script>
+</body>
+</html>

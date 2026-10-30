@@ -196,6 +196,17 @@ describe('leg schema', () => {
     expect(parseLeg(bad).ok).toBe(false);
   });
 
+  it('Leg 3: a challenge `pickup` (the BOZAR hall T3): needs `room`, a challenge of the same room right before; T2 → T3 in one room is allowed', () => {
+    const j = mini() as Mini;
+    j.steps.splice(2, 0, { id: 'T2', type: 'challenge', label: 'Thử thách 2', room: 'hall', task: { title: 'x', description: 'y', answers: ['K-3'] } } as never);
+    Object.assign(j.steps[1]!, { room: 'hall' });
+    Object.assign(j.steps[2]!, { room: 'hall', pickup: { clue: 'Đi gần sân khấu', prompt: 'Bấm F' } });
+    expect(errors(j)).toEqual([]);
+    const k = mini() as Mini;
+    Object.assign(k.steps[1]!, { pickup: { clue: 'a', prompt: 'b' } }); // no room
+    expect(errors(k)).toEqual(['Bước 2 (T1) › pickup: điểm nhận mật thư (pickup) chỉ dùng trong phòng: thêm "room"']);
+  });
+
   it('lists blanks the Host must still fill (a draft loads) and answers leaking into texts', () => {
     const j = mini() as Mini;
     Object.assign(j.steps[1]!, { task: { title: '', description: '', answers: [] } });

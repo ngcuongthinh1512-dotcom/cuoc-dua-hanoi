@@ -41,7 +41,7 @@ const FIELD: Record<string, string> = {
   spreadMeters: 'khoảng rải đội (m)',
   // Phase 8 (docs/plans/phase8.md D2)
   referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
-  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', pick: 'cách chọn đáp án (chọn ghế)', room: 'phòng (room)', total: 'tổng số món', penaltyMinutesEach: 'phút phạt mỗi món chưa xong', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
+  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', pick: 'cách chọn đáp án (chọn ghế)', showMarks: 'tô xanh / đỏ từng ô', room: 'phòng (room)', total: 'tổng số món', penaltyMinutesEach: 'phút phạt mỗi món chưa xong', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
   walkOnlyViolationMinutes: 'phút phạt đi xe ở lộ trình đi bộ', quitTaskMinutes: 'phút phạt bỏ thử thách',
   // SPEC §17.22 / §17.23
   announce: 'thông báo về đích', npc: 'lời NPC dẫn chương trình', toast: 'thông báo nhanh', card: 'thẻ về đích', first: 'bản về nhất', out: 'bản bị loại',
@@ -190,7 +190,16 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
     // the task has no place of its own and a step with a destination must precede it
     if (s.type === 'challenge' && s.room) {
       if (s.task.location) add('error', ['steps', i, 'task', 'location'], 'thử thách trong phòng (room) không có nơi riêng: phòng dựng dưới hòm của bước trước; bỏ "location"');
-      if (i === 0 || steps[i - 1]!.type === 'challenge') add('error', ['steps', i, 'room'], 'thử thách trong phòng (room) phải đứng ngay sau một bước có hòm (lộ trình / Lựa chọn kép)');
+      const prev = steps[i - 1];
+      const sameRoom = prev?.type === 'challenge' && prev.room === s.room; // T2 → T3 in the BOZAR hall: the team is already inside
+      if (i === 0 || (prev!.type === 'challenge' && !sameRoom)) add('error', ['steps', i, 'room'], 'thử thách trong phòng (room) phải đứng ngay sau một bước có hòm (lộ trình / Lựa chọn kép), hoặc sau thử thách cùng phòng');
+    }
+    if (s.type === 'challenge' && s.pickup) {
+      const prev = steps[i - 1];
+      if (!s.room) add('error', ['steps', i, 'pickup'], 'điểm nhận mật thư (pickup) chỉ dùng trong phòng: thêm "room"');
+      else if (prev?.type !== 'challenge' || prev.room !== s.room) add('error', ['steps', i, 'pickup'], 'điểm nhận mật thư (pickup) đứng sau một thử thách cùng phòng (đội đang ở trong phòng)');
+      blank(s.pickup.clue, ['steps', i, 'pickup', 'clue'], 'mật thư nhận ở sân khấu');
+      blank(s.pickup.prompt, ['steps', i, 'pickup', 'prompt'], 'dòng nhắc "Bấm F…"');
     }
     if (s.type === 'route_info' && s.room && (i === 0 || steps[i - 1]!.type === 'challenge')) add('error', ['steps', i, 'room'], 'lộ trình có phòng (room) phải đứng ngay sau một bước có hòm (lộ trình / Lựa chọn kép): phòng dựng dưới hòm vừa mở');
     const tasks = s.type === 'detour' ? s.branches.map((b, k) => [b.task, ['steps', i, 'branches', k, 'task']] as const) : s.type === 'challenge' ? [[s.task, ['steps', i, 'task']] as const] : [];
@@ -198,6 +207,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
     for (const [t, p] of tasks) {
       blank(t.title, [...p, 'title'], 'tiêu đề nhiệm vụ');
       blank(t.description, [...p, 'description'], 'mô tả nhiệm vụ');
+      if (t.showMarks && !(t.parts && t.parts.every((x) => x.answers))) add('error', [...p, 'showMarks'], 'tô xanh / đỏ từng ô (showMarks) cần thử thách nhiều ô mà MỌI ô có đáp án (máy chủ tự chấm)');
       if (t.pick) {
         if (t.verification !== 'auto' || t.kind !== 'answer' || t.parts) add('error', [...p, 'pick'], 'thử thách chọn ghế (pick) do máy chủ tự chấm: dùng kiểu "answer", cách xác nhận "auto", không dùng nhiều ô (parts)');
         if (s.type !== 'challenge' || !s.room) add('error', [...p, 'pick'], 'thử thách chọn ghế (pick) phải nằm trong phòng (room "hall") của một thử thách');

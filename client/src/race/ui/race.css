@@ -853,3 +853,7 @@
   width: fit-content;
   max-width: 100%;
 }
+
+/* Leg 3 (task.showMarks, BOZAR T3): from minute 40 the boxes of the last answer are painted right / wrong (green / red) until edited */
+.rc-part .rc-input.ok { border-color: #3fb26a; background: rgba(63, 178, 106, 0.16); }
+.rc-part .rc-input.bad { border-color: #e0524a; background: rgba(224, 82, 74, 0.16); }

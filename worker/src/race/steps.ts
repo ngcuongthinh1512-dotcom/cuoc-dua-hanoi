@@ -294,7 +294,10 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   const marks = texts ? gradeParts(t, texts) : t.pick ? [verifyAuto(t, input.text) === 'correct'] : null;
   if (marks) {
     const sc = marks.filter(Boolean).length;
-    const a: AnswerRec = { ...rec, s: sc === marks.length ? 'correct' : 'penalized', sc, sv: true, auto: true, m: marks };
+    // told to the team from scoreFromMinutes into the task on (a picked seat: always); before it only "chưa đúng" + the Phạt
+    const from = p.startedAt != null ? p.startedAt + t.scoreFromMinutes * 60_000 : null;
+    const visible = t.pick || (from === null ? t.scoreFromMinutes === 0 : now >= from);
+    const a: AnswerRec = { ...rec, s: sc === marks.length ? 'correct' : 'penalized', sc, ...(visible ? { sv: true as const } : {}), auto: true, m: marks };
     if (a.s === 'correct') {
       fx.push({ kind: 'answer', step: i, rec: a, verdict: 'correct' });
       done(input.pose);
@@ -385,9 +388,11 @@ const taskView = (t: Task, room?: RoomRec | null): TaskView => ({
 export const retryLockMinutes = (leg: Leg, t: Task) => t.retryLockMinutes ?? leg.penalties.retryLockMinutes;
 
 /** The team's own answers on its card: this branch only (null = a challenge), newest NET.answerHistory, never a note. */
-const answerViews = (row: StepProgressRow | undefined, branch: string | null, of?: number): AnswerView[] =>
+const answerViews = (row: StepProgressRow | undefined, branch: string | null, of?: number, marks?: boolean): AnswerView[] =>
   parseAnswers(row).filter((a) => a.b === branch).slice(-NET.answerHistory).map((a) => ({
     id: a.id, text: a.text, at: a.at, status: a.s, ...(scoreOf(a, of) ?? {}),
+    // task.showMarks: the per-box right / wrong, only while it still agrees with the count (the Host may have edited x/N since)
+    ...(marks && a.sv && a.m && a.m.filter(Boolean).length === a.sc ? { marks: a.m } : {}),
   }));
 
 /** SPEC §17.31: the "đúng x/n" of a Phạt the team may see (review() set `sv`), undefined = none. */
@@ -421,14 +426,15 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
         branch, branchOpened: opened, switches: row?.branch_switches ?? 0, switchPenaltyMinutes: leg.penalties.branchSwitchLockMinutes,
         // Leg 3: after a switch the team stands in the OTHER branch's room (its box was opened) until it walks into the exit ring
         ...(status === 'switchLocked' && row?.branch_switches && s.branches.find((x) => x !== b)?.task.room ? { leftRoom: s.branches.find((x) => x !== b)!.task.room!.kind } : {}),
-        ...(b ? { retryPenaltyMinutes: retryLockMinutes(leg, b.task), answers: answerViews(row, branch, partsOf(b.task)) } : {}),
+        ...(b ? { retryPenaltyMinutes: retryLockMinutes(leg, b.task), answers: answerViews(row, branch, partsOf(b.task), b.task.showMarks) } : {}),
       };
     }
     case 'challenge':
       return {
-        ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null, partsOf(s.task)),
+        ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null, partsOf(s.task), s.task.showMarks),
         ...(status === 'teaser' ? {} : { task: taskView(s.task) }),
         ...(s.room && status !== 'done' ? { room: s.room } : {}), // Leg 3 (v12): played inside the GardeRobe room
+        ...(s.pickup && status !== 'done' ? { pickup: s.pickup } : {}), // Leg 3 (v14): held in the room until F at the stage
       };
     case 'pit_stop':
       return { ...base, text: '' };

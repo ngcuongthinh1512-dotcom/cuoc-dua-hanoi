@@ -557,7 +557,7 @@ export class RaceEngine {
           Object.assign(row, { submitted_at: now, decided_at: now, decided_by: 'auto' });
           if (e.verdict === 'penalized') Object.assign(row, { locked_until: e.lockedUntil ?? null, rejections: row.rejections + 1 });
           events.push(['auto', { step: sid(e.step), id: e.rec.id, score: e.rec.sc, of: e.rec.m?.length }]);
-          out.push({ t: 'notice', code: e.verdict === 'correct' ? 'autoCorrect' : 'autoPenalized', score: e.rec.sc!, of: e.rec.m!.length });
+          out.push({ t: 'notice', code: e.verdict === 'correct' ? 'autoCorrect' : 'autoPenalized', ...(e.rec.sv || e.verdict === 'correct' ? { score: e.rec.sc!, of: e.rec.m!.length } : {}) }); // the number only once told (scoreFromMinutes)
         }
       } else if (e.kind === 'review') {
         Object.assign(edit(e.step), e.row);

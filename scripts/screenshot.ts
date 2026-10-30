@@ -498,6 +498,7 @@ Object.assign(PRESETS, {
   'hallroom-entrance': '/hallroom.html',
   'hallroom-entrance-hq': '/hallroom.html?hq=1',
   'hallroom-seat': '/hallroom.html?spawn=-0.4,20.4,-35', // the seat-pick arrow + "Hàng G2 · Ghế 1 — Bấm F để chọn" beside the rear centre aisle
+  'hallroom-pickup': '/hallroom.html?pickup=1&spawn=1.4,-6.3,40', // the gold pick-up ring by the stage + "Bấm F để nhận mật thư thử thách 3"
   'hallroom-stalls': '/hallroom.html?view=stalls',
   'hallroom-exit': '/hallroom.html?view=exit',
   'hallroom-plan': '/hallroom.html?view=plan',

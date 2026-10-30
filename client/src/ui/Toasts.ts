@@ -45,7 +45,7 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   roomIgnored: 'Kết quả phòng không được ghi nhận (không phải nhánh đang làm, hoặc đã bỏ qua).',
   // Leg 3: a multi-box task graded by the server (the "đúng x/N" is on the card's history line)
   autoCorrect: 'Chính xác! Mật thư mới đã vào Sổ mật thư.',
-  autoPenalized: 'Chưa đúng hết (xem số ô đúng trên thẻ): chờ hết đếm ngược rồi trả lời lại',
+  autoPenalized: 'Chưa đúng hết: bị phạt, chờ hết đếm ngược rồi trả lời lại',
   scoreUpdated: 'Host đã sửa số ô đúng của câu trả lời: xem trên thẻ',
 };
 

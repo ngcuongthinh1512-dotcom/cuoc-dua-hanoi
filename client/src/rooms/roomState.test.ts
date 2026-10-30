@@ -1,9 +1,9 @@
 import type { RaceView } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { demoRoomResult, demoRoomViews, GARDEROBE_CARD, HALL_CARD, NEXT_CARD, roomCard } from './roomDemo.ts';
+import { demoRoomResult, demoRoomViews, GARDEROBE_CARD, HALL_CARD, HALL_T3_CARD, NEXT_CARD, roomCard } from './roomDemo.ts';
 import { rooms } from '../config.ts';
 import { devFrame, enterSpot, exitSpot, roomFrame, toLocal, toWorld } from './roomFrame.ts';
-import { RoomFlow, roomOf } from './roomState.ts';
+import { RoomFlow, pickupView, roomOf } from './roomState.ts';
 
 const view = (card: RaceView['card']): RaceView => ({ status: 'running', finishAt: null, penaltyMinutes: 0, card, checkinAt: null, result: null });
 
@@ -129,7 +129,25 @@ describe('the GardeRobe challenge room (ClueCard.room): enter, walk out at will,
     f.left();
     expect(f.onView(view(HALL_CARD))).toEqual({ event: null, hold: false }); // walked out: the same card does not pull it back
     expect(demoRoomViews('hall', 'in')).toEqual({ first: expect.objectContaining({ card: HALL_CARD }), then: null });
-    expect(demoRoomViews('hall', 'left').then?.card?.step).toBe('L2');
+    expect(demoRoomViews('hall', 'left').then?.card?.step).toBe('T3');
+  });
+  it('hall T2 → T3: the next card (ClueCard.pickup) is held at the stage until F (pickedUp); a stand-in card shows the clue; leaving drops it', () => {
+    const f = new RoomFlow();
+    expect(f.onView(view(HALL_CARD)).event).toBe('enter');
+    expect(f.onView(view(HALL_T3_CARD))).toEqual({ event: 'pickup', hold: true });
+    expect(f.pickup).toMatchObject({ step: 'T3', pickup: { prompt: 'Bấm F để nhận mật thư thử thách 3' } });
+    expect(f.onView(view({ ...HALL_T3_CARD, retryPenaltyMinutes: 4 }))).toEqual({ event: null, hold: true }); // still held, no second event
+    const stand = pickupView(view(HALL_T3_CARD), HALL_T3_CARD.pickup!).card!;
+    expect([stand.type, stand.text, stand.room, stand.task, stand.pickup]).toEqual(['route_info', HALL_T3_CARD.pickup!.clue, undefined, undefined, undefined]);
+    expect(f.pickedUp()).toBe(true);
+    expect(f.pickedUp()).toBe(false);
+    expect(f.onView(view(HALL_T3_CARD))).toEqual({ event: null, hold: false }); // T3 is the room's card now
+    expect(f.onView(view(NEXT_CARD))).toEqual({ event: 'exitReady', hold: true }); // T3 done: the ring as usual
+    const g = new RoomFlow();
+    g.onView(view(HALL_CARD));
+    g.onView(view(HALL_T3_CARD));
+    g.left(); // walked out before F: nothing held any more
+    expect(g.pickup).toBeNull();
   });
   it('demo: in / done / left views', () => {
     expect(demoRoomViews('garderobe', 'in')).toEqual({ first: expect.objectContaining({ card: GARDEROBE_CARD }), then: null });

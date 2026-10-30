@@ -76,6 +76,9 @@ export const taskSchema = z.strictObject({
    *  "đúng x/n" only for a Phạt made ≥ scoreFromMinutes after the task started (earlier ones never show a number). */
   scoreOf: z.number().int().min(1).optional(),
   scoreFromMinutes: z.number().min(0).default(30),
+  /** Leg 3: an auto-graded `parts` task also tells the team WHICH boxes were right (green) / wrong (red), from scoreFromMinutes into the
+   *  task on (before it: only "chưa đúng" + the Phạt; the hidden hint of BOZAR T3, minute 40). */
+  showMarks: z.boolean().default(false),
   /** SPEC §17.44: a task with N boxes (T1: 4 places of a video) that the HOST reviews: `parts[k].label` = the box's label ('' =
    *  the client numbers it). The team sends N strings (stored "a | b | c | d", one answer in the Host's queue); Duyệt = all right,
    *  Phạt + "đúng x/N" = §17.31 (scoreOf defaults to parts.length, told from scoreFromMinutes on). Requires verification
@@ -131,6 +134,10 @@ const challenge = z.strictObject({
   /** Leg 3: the challenge is played inside a 3D room built under the box just opened (the previous step's): the GardeRobe
    *  MannekenPis museum (4 vitrines with the costume photos). No tally / penalty: the card itself is the challenge. */
   room: z.enum(['garderobe', 'hall']).optional(),
+  /** Leg 3: the previous challenge ended in the same room (BOZAR hall: T2 → T3): this card is HELD until the team walks to the
+   *  pick-up spot by the stage (`prompt` = "Bấm F để nhận mật thư thử thách 3"); meanwhile a stand-in card shows `clue`
+   *  ("Đội chơi đi lại gần sân khấu để nhận mật thư tiếp theo"). Needs `room`. */
+  pickup: z.strictObject({ clue: text(), prompt: text() }).optional(),
 });
 /** SPEC §17.22 / §17.23: what a team reads when it finishes (host NPC line, toast, finish card); each field optional
  *  (missing → the generic FINISH_DEFAULTS, protocol/finish.ts). `first` = the winner's, `out` = "BỊ LOẠI" (the last team

@@ -309,6 +309,62 @@
       }
     },
     {
+      "id": "T3",
+      "type": "challenge",
+      "label": "Thử thách 3",
+      "room": "hall",
+      "pickup": {
+        "clue": "Đội chơi đi lại gần sân khấu để nhận mật thư tiếp theo",
+        "prompt": "Bấm F để nhận mật thư thử thách 3"
+      },
+      "teaser": "",
+      "task": {
+        "title": "Tai ai thính nhất?",
+        "description": "Henry Le Bœuf thường xuyên diễn ra Cuộc thi Âm nhạc Queen Elisabeth - một trong những cuộc thi âm nhạc cổ điển danh giá và khốc liệt nhất thế giới. Cuộc thi diễn ra theo chu kỳ 4 năm luân phiên cho các bộ môn: Violon; Piano; Thanh nhạc / Voice; Cello.\n\nĐội chơi sẽ được nghe 2 đoạn voice được cắt từ màn biểu diễn tại vòng Chung Kết năm ngoái. Trả lời đúng tên bài hát và thí sinh biểu diễn của 2 màn trình diễn trong đoạn voice trên. Đội chơi sẽ tìm được mật thư để đi tiếp. Trả lời sai sẽ bị phạt 3 phút trước khi được trả lời lại.",
+        "media": [
+          {
+            "url": "https://example.com/CHUA-NHAP-ten-mien-game/tai-ai-thinh.html",
+            "label": "Mở đề: 2 đoạn voice và gợi ý"
+          }
+        ],
+        "location": null,
+        "kind": "answer",
+        "verification": "host_approval",
+        "parts": [
+          {
+            "label": "Bài 1 · Tên bài hát",
+            "answers": [
+              "[CHƯA NHẬP đáp án: Bài 1 · Tên bài hát]"
+            ]
+          },
+          {
+            "label": "Bài 1 · Thí sinh",
+            "answers": [
+              "[CHƯA NHẬP đáp án: Bài 1 · Thí sinh]"
+            ]
+          },
+          {
+            "label": "Bài 2 · Tên bài hát",
+            "answers": [
+              "[CHƯA NHẬP đáp án: Bài 2 · Tên bài hát]"
+            ]
+          },
+          {
+            "label": "Bài 2 · Thí sinh",
+            "answers": [
+              "[CHƯA NHẬP đáp án: Bài 2 · Thí sinh]"
+            ]
+          }
+        ],
+        "referenceAnswers": [],
+        "proofInstruction": "",
+        "timeLimitMinutes": null,
+        "retryLockMinutes": 3,
+        "scoreFromMinutes": 40,
+        "showMarks": true
+      }
+    },
+    {
       "id": "L5",
       "type": "route_info",
       "label": "Lộ trình 6",

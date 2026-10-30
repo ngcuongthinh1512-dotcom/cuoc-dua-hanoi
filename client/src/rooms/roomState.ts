@@ -6,7 +6,7 @@
 // view passes through (the countdown shows), the team walks out by itself. A CHALLENGE card with `room` (the GardeRobe museum):
 // the same, but the team may walk out through the always-lit ring whenever it likes (`left()` remembers the room so the
 // unchanged card does not pull it back in) and re-enter with F at the box (`reenter()`). Drawing / physics: main.ts.
-import { type RaceView, type RoomView, roomKindOf } from '@race/shared/protocol';
+import { type ClueCard, type RaceView, type RoomView, roomKindOf } from '@race/shared/protocol';
 
 export interface RoomTarget {
   step: string;
@@ -14,8 +14,10 @@ export interface RoomTarget {
   branch: string | null;
   room: RoomView;
   exiting: boolean;
+  /** The card is held until F at the stage pick-up spot (ClueCard.pickup, BOZAR hall T3). */
+  pickup?: NonNullable<ClueCard['pickup']>;
 }
-export type RoomEvent = 'enter' | 'exitReady' | 'switched' | 'resume' | null;
+export type RoomEvent = 'enter' | 'exitReady' | 'switched' | 'resume' | 'pickup' | null;
 
 /** Rooms of a plain card (no tally, no table): the ring is always lit and the team may walk out and back in (GardeRobe, BOZAR hall). */
 export const isFreeRoom = (kind: RoomView['kind'] | undefined) => kind === 'garderobe' || kind === 'hall';
@@ -31,7 +33,7 @@ export const ROOM_TEXT = {
 export function roomOf(v: RaceView | null | undefined): RoomTarget | null {
   const c = v?.card, k = roomKindOf(c);
   if (!c || !k) return null;
-  if (k.exiting || isFreeRoom(k.kind)) return { step: c.step, branch: null, room: { kind: k.kind, total: 0, penaltyMinutesEach: 0, done: 0, skipped: false }, exiting: k.exiting };
+  if (k.exiting || isFreeRoom(k.kind)) return { step: c.step, branch: null, room: { kind: k.kind, total: 0, penaltyMinutesEach: 0, done: 0, skipped: false }, exiting: k.exiting, ...(c.pickup ? { pickup: c.pickup } : {}) };
   const room = c.branches?.find((b) => b.id === c.branch)?.task?.room!;
   return { step: c.step, branch: c.branch!, room, exiting: false };
 }
@@ -44,6 +46,8 @@ export class RoomFlow {
   /** The team switched: its table button is off until it is out. */
   locked = false;
   target: RoomTarget | null = null;
+  /** The next card waits for F at the stage (set with the 'pickup' event; cleared by pickedUp() / left()). */
+  pickup: RoomTarget | null = null;
   /** The room key the body walked out of while its card stayed (the GardeRobe): the same view does not re-enter it. */
   leftKey: string | null = null;
 
@@ -71,12 +75,28 @@ export class RoomFlow {
       this.exitReady = this.locked = true;
       return { event: first ? 'switched' : null, hold: false };
     }
+    if (t?.pickup && !t.exiting && this.target && t.room.kind === this.target.room.kind) { // T2 → T3 in the same room: F at the stage first
+      const first = this.pickup?.step !== t.step;
+      this.pickup = t;
+      return { event: first ? 'pickup' : null, hold: true };
+    }
     this.exitReady = true; // the step completed (skip, or the Host's Duyệt): walk to the ring first
     return { event: 'exitReady', hold: true };
   }
 
+  /** F at the pick-up spot: the held card is the room's now (the next onView of it is no event); true = there was one. */
+  pickedUp(): boolean {
+    const t = this.pickup;
+    if (!t) return false;
+    this.key = `${t.step}|${t.branch ?? '~'}`;
+    this.target = t;
+    this.pickup = null;
+    return true;
+  }
+
   /** The body walked into the ring: back in the world. */
   left() {
+    this.pickup = null;
     this.leftKey = this.key;
     this.key = null;
     this.target = null;
@@ -87,4 +107,10 @@ export class RoomFlow {
   reenter() {
     this.leftKey = null;
   }
+}
+
+/** The stand-in card shown while the real next card is held at the stage ("Đội chơi đi lại gần sân khấu để nhận mật thư tiếp theo"). */
+export function pickupView(v: RaceView, pickup: NonNullable<ClueCard['pickup']>): RaceView {
+  const c = v.card!;
+  return { ...v, card: { ...c, type: 'route_info', label: 'Mật thư', text: pickup.clue, media: [], transport: { allowed: 'any' }, task: undefined, branches: undefined, room: undefined, pickup: undefined, status: 'active', lockedUntil: null, lockKind: null, answers: [] } };
 }

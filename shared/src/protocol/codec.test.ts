@@ -252,7 +252,7 @@ describe('frames and JSON messages', () => {
   });
 
   it('Leg 2 (v10): avatar from the socket URL, 0 unless exactly 1; TeamInfo / team online carry it through JSON', () => {
-    expect(PROTOCOL_VERSION).toBe(13);
+    expect(PROTOCOL_VERSION).toBe(14);
     expect([avatarOf('1'), avatarOf(1), avatarOf('0'), avatarOf(null), avatarOf('2'), avatarOf('x'), avatarOf(undefined)]).toEqual([1, 1, 0, 0, 0, 0, 0]);
     const info: TeamInfo = { slot: 1, id: 't1', name: 'Đội Đỏ', colour: '#d8342c', online: true, racing: true, avatar: 1 };
     const online: ServerMessage = { t: 'team', slot: 1, online: true, avatar: 1 };

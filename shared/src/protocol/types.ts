@@ -113,6 +113,8 @@ export interface AnswerView {
    *  multi-box task's of = its box count). */
   score?: number;
   of?: number;
+  /** Leg 3: an auto-graded multi-box answer, which boxes were right (task.showMarks, from scoreFromMinutes on; same order as the boxes). */
+  marks?: boolean[];
 }
 
 /** A task as the team sees it (SPEC §10.1 task fields minus `answers` / `referenceAnswers` / `params`; location → only its name). */
@@ -192,6 +194,8 @@ export interface ClueCard {
   /** Leg 3 (v12): a challenge played inside a 3D room (leg step `room: 'garderobe'`): the team enters it when this card
    *  arrives (the previous box opened) and may walk out / back in at will; absent once the step is done. */
   room?: 'garderobe' | 'hall';
+  /** Leg 3 (v14): this card is held in the room until F at the stage pick-up spot (leg step `pickup`): the stand-in card's text + the prompt. */
+  pickup?: { clue: string; prompt: string };
   /** detour: minutes of one switch (the confirm text of "Đổi lựa chọn kép"). */
   switchPenaltyMinutes?: number;
   /** challenge / branch: minutes of the Host's "Phạt" (task.retryLockMinutes ?? penalties.retryLockMinutes; may be 0.1 in

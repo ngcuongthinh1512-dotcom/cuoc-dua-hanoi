@@ -331,7 +331,7 @@ describe('Leg 3: Lựa chọn kép rooms (race room)', () => {
 
 describe('Leg 3: an auto-graded multi-box task (parts[].answers)', () => {
   const PARTS = [['Cuba', 'Cu-ba', 'Cu Ba'], ['Singapore', 'Xin-ga-po'], ['Uzbekistan'], ['Estonia', 'Estônia']].map((answers, k) => ({ label: `Bộ ${k + 1}`, answers }));
-  const leg = variant((s) => Object.assign(s[1].task, { answers: [], parts: PARTS, retryLockMinutes: 2 }));
+  const leg = variant((s) => Object.assign(s[1].task, { answers: [], parts: PARTS, retryLockMinutes: 2, scoreFromMinutes: 0 }));
   const started = P(1, { startedAt: 5 });
   const send = (parts: string[], p = started, now = 1000) => run(p, { kind: 'answer', step: 'T1', text: '', parts, pose: null }, now, leg);
 
@@ -356,6 +356,19 @@ describe('Leg 3: an auto-graded multi-box task (parts[].answers)', () => {
     const c = cardOf(leg, 1, row, 1500);
     expect(c).toMatchObject({ status: 'locked', answers: [{ id: 1, status: 'penalized', score: 2, of: 4 }] });
     expect(JSON.stringify(c)).not.toMatch(/"m"|"auto"|Cu-ba|Xin-ga-po|Estônia/); // only its own typed text, never the leg's answers / marks
+  });
+
+  it('scoreFromMinutes 40 + showMarks (BOZAR T3): before minute 40 only the Phạt; from minute 40 x/N + each box green / red on the card', () => {
+    const hid = variant((s) => Object.assign(s[1].task, { answers: [], parts: PARTS, retryLockMinutes: 3, scoreFromMinutes: 40, showMarks: true }));
+    const go = (now: number) => run(started, { kind: 'answer', step: 'T1', text: '', parts: ['Singapore', 'Cuba', 'Uzbekistan', 'Estonia'], pose: null }, now, hid);
+    const early = go(1000).effects[0]!;
+    expect(early).toMatchObject({ verdict: 'penalized', rec: { sc: 2, m: [false, false, true, true] } });
+    expect(early.kind === 'answer' && early.rec.sv).toBeUndefined(); // told to nobody
+    const late = go(5 + 40 * MIN).effects[0]!;
+    expect(late.kind === 'answer' && late.rec.sv).toBe(true);
+    const card = (rec: unknown, now: number) => cardOf(hid, 1, { ...emptyProgress('t', 'T1'), clue_opened_at: 1, task_started_at: 5, answers: JSON.stringify([rec]) }, now);
+    expect(card(early.kind === 'answer' && early.rec, 2000).answers[0]).toEqual({ id: 1, text: 'Singapore | Cuba | Uzbekistan | Estonia', at: 1000, status: 'penalized' });
+    expect(card(late.kind === 'answer' && late.rec, 5 + 40 * MIN + 1).answers[0]).toMatchObject({ score: 2, of: 4, marks: [false, false, true, true] });
   });
 
   it('plain parts tasks (no answers) still go to the Host as one pending answer', () => {
