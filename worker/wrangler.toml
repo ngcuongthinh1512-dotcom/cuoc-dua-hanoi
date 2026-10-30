@@ -2,6 +2,9 @@ name = "cuoc-dua-bi"
 main = "src/index.ts"
 compatibility_date = "2026-09-25"
 
+# Leg 3: the game's own domain (Custom Domain on the zone ceticeti.com, also attached in the dashboard).
+routes = [{ pattern = "cuocduabrussels.ceticeti.com", custom_domain = true }]
+
 # Client build (Vite) served by Workers Static Assets; unmatched paths fall through to the Worker.
 [assets]
 directory = "../client/dist"

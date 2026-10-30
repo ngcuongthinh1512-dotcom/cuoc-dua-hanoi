@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gợi ý</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Lora:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #130b06;
+    --wood: #2a150a;
+    --amber: #f3a82a;
+    --amber-deep: #c2690f;
+    --foam: #fff6dd;
+    --ink: #fdf3dc;
+    --glow: rgba(243, 168, 42, .35);
+    --screen-glow: rgba(90, 200, 255, .35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    overflow-x: hidden;
+    background:
+      radial-gradient(ellipse 80% 45% at 50% 55%, rgba(243,168,42,.14), transparent 70%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.015) 0 2px, transparent 2px 9px),
+      linear-gradient(180deg, #0c0704 0%, var(--wood) 55%, #170c05 100%);
+    color: var(--ink);
+    font-family: "Lora", Georgia, "Times New Roman", serif;
+  }
+
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-areas: "wall" "poem" "shelf";
+    gap: 22px;
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 24px 16px 0;
+  }
+
+  /* ---------- TV wall ---------- */
+  .wall {
+    grid-area: wall;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 14px 18px;
+  }
+  .side { display: none; }
+
+  .tv {
+    --w: 160px;
+    width: var(--w);
+    aspect-ratio: 16 / 10;
+    position: relative;
+    padding: 6px;
+    background: linear-gradient(160deg, #3c3c40, #121214 60%);
+    border-radius: 6px;
+    box-shadow: 0 0 0 1px #000, 0 14px 30px -10px #000, 0 0 40px -6px var(--screen-glow);
+    flex: 0 0 auto;
+  }
+  .tv::after { /* wall bracket */
+    content: ""; position: absolute; left: 50%; bottom: -10px; width: 26px; height: 10px;
+    transform: translateX(-50%); background: #0a0a0a; border-radius: 0 0 4px 4px;
+  }
+  .tv.lg { --w: 240px; }
+  .tv.sm { --w: 120px; }
+  @media (max-width: 600px) {
+    .wall { gap: 12px 14px; }
+    .tv { --w: 118px; }
+    .tv.lg { --w: 176px; }
+    .tv.sm { --w: 96px; }
+    .poem { padding: 28px 18px 26px; }
+  }
+  .tv .scr {
+    position: absolute; inset: 6px; overflow: hidden; border-radius: 3px; background: #06101a;
+    display: grid; place-items: center;
+  }
+  .tv .scr::before { /* scanlines + glass */
+    content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background:
+      linear-gradient(115deg, rgba(255,255,255,.14), transparent 40%),
+      repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 3px);
+  }
+  .tv .scr > svg { width: 100%; height: 100%; display: block; }
+
+  /* individual screen art */
+  .tv .pitch { background: linear-gradient(90deg, #1f7a2e 0 12.5%, #25923a 12.5% 25%, #1f7a2e 25% 37.5%, #25923a 37.5% 50%, #1f7a2e 50% 62.5%, #25923a 62.5% 75%, #1f7a2e 75% 87.5%, #25923a 87.5%); }
+  .tv .static {
+    background:
+      repeating-radial-gradient(circle at 30% 40%, #777 0 1px, #222 1px 2px, #ccc 2px 3px),
+      repeating-radial-gradient(circle at 70% 60%, #999 0 1px, #111 1px 3px);
+    background-blend-mode: difference;
+    animation: snow .25s steps(4) infinite;
+  }
+  @keyframes snow { to { background-position: 7px 11px, -9px 5px; } }
+  .tv .bars { background: linear-gradient(90deg, #c0c0c0 0 14.3%, #c0c000 14.3% 28.6%, #00c0c0 28.6% 42.9%, #00c000 42.9% 57.2%, #c000c0 57.2% 71.5%, #c00000 71.5% 85.8%, #0000c0 85.8%); }
+  .tv .score { background: radial-gradient(circle at 50% 40%, #16304f, #060c16 80%); }
+  .glow-red { --screen-glow: rgba(255, 90, 70, .35); }
+  .glow-amber { --screen-glow: rgba(243,168,42,.4); }
+  .glow-green { --screen-glow: rgba(70, 230, 120, .35); }
+
+  .blink { animation: blink 1.2s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .15; } }
+  .ball { animation: ball 3.4s ease-in-out infinite alternate; }
+  @keyframes ball { to { transform: translate(60px, -14px); } }
+
+  /* ---------- Poem ---------- */
+  .poem {
+    grid-area: poem;
+    justify-self: center;
+    width: min(100%, 640px);
+    position: relative;
+    padding: 36px 28px 32px;
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(255,214,140,.07), rgba(0,0,0,0) 30%),
+      rgba(12, 6, 3, .82);
+    border: 1px solid rgba(243,168,42,.45);
+    box-shadow:
+      inset 0 0 0 1px rgba(0,0,0,.6),
+      inset 0 0 60px rgba(243,168,42,.08),
+      0 30px 60px -20px #000,
+      0 0 80px -20px var(--glow);
+    text-align: center;
+    backdrop-filter: blur(6px);
+  }
+  .poem::before, .poem::after { /* corner ornaments */
+    content: ""; position: absolute; width: 18px; height: 18px;
+    border: 2px solid var(--amber); opacity: .8;
+  }
+  .poem::before { top: 10px; left: 10px; border-right: 0; border-bottom: 0; }
+  .poem::after { bottom: 10px; right: 10px; border-left: 0; border-top: 0; }
+
+  .poem h1 {
+    margin: 0 0 6px;
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 900;
+    font-size: clamp(30px, 4.2vw, 46px);
+    letter-spacing: .06em;
+    color: var(--amber);
+    text-shadow: 0 0 18px var(--glow), 0 2px 0 #4a2a06;
+  }
+  .rule {
+    width: 120px; height: 2px; margin: 0 auto 22px;
+    background: linear-gradient(90deg, transparent, var(--amber), transparent);
+  }
+  .poem p {
+    margin: 0 0 18px;
+    font-size: clamp(16px, 2.1vw, 23px);
+    line-height: 1.55;
+    font-weight: 500;
+  }
+  .poem p:last-of-type { margin-bottom: 0; }
+  .poem p span { display: block; }
+
+  /* ---------- Shelf of glasses ---------- */
+  .shelf {
+    grid-area: shelf;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: clamp(6px, 3vw, 36px);
+    padding: 18px 10px 0;
+    position: relative;
+  }
+  .shelf::after { /* wooden bar top */
+    content: ""; position: absolute; left: -16px; right: -16px; bottom: -14px; height: 14px;
+    background: linear-gradient(180deg, #6b3a16, #3a1d09 60%, #1a0c04);
+    box-shadow: 0 -6px 20px -6px rgba(243,168,42,.35);
+  }
+  .shelf svg { height: clamp(110px, 18vw, 190px); width: auto; filter: drop-shadow(0 8px 10px rgba(0,0,0,.6)); flex: 0 1 auto; max-width: 20%; }
+  .bubble { animation: rise 3.2s linear infinite; }
+  @keyframes rise { to { transform: translateY(-120px); opacity: 0; } }
+
+  .foot {
+    margin: 30px auto 0; padding: 0 16px 24px;
+    text-align: center; font-size: 13px; letter-spacing: .25em; text-transform: uppercase; color: rgba(243,168,42,.55);
+  }
+
+  /* ---------- wide: screens flank the poem too ---------- */
+  @media (min-width: 1100px) {
+    .stage {
+      grid-template-columns: 1fr minmax(0, 660px) 1fr;
+      grid-template-areas: "wall wall wall" "left poem right" "shelf shelf shelf";
+      gap: 28px 32px;
+      padding-top: 32px;
+    }
+    .side { display: flex; flex-direction: column; gap: 26px; align-items: center; justify-content: center; }
+    .side.l { grid-area: left; }
+    .side.r { grid-area: right; }
+    .tv { --w: 200px; }
+    .tv.lg { --w: 300px; }
+    .tv.sm { --w: 150px; }
+    .poem { padding: 44px 48px 40px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .static, .blink, .ball, .bubble { animation: none; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="beer" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffcf5a"/><stop offset=".6" stop-color="#f3a82a"/><stop offset="1" stop-color="#b85d0c"/>
+    </linearGradient>
+    <linearGradient id="dark" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#7a3a16"/><stop offset="1" stop-color="#2c1206"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" x2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".25" stop-color="#fff" stop-opacity=".05"/>
+      <stop offset=".8" stop-color="#fff" stop-opacity=".02"/><stop offset="1" stop-color="#fff" stop-opacity=".3"/>
+    </linearGradient>
+    <linearGradient id="bottle" x1="0" x2="1">
+      <stop offset="0" stop-color="#8a4a1a"/><stop offset=".4" stop-color="#4a2208"/><stop offset="1" stop-color="#2a1004"/>
+    </linearGradient>
+    <g id="bubbles" fill="#fff" fill-opacity=".55">
+      <circle class="bubble" cx="0" cy="0" r="2" style="animation-delay:0s"/>
+      <circle class="bubble" cx="12" cy="30" r="1.5" style="animation-delay:-1s"/>
+      <circle class="bubble" cx="-10" cy="50" r="2.4" style="animation-delay:-2s"/>
+      <circle class="bubble" cx="6" cy="70" r="1.2" style="animation-delay:-.5s"/>
+      <circle class="bubble" cx="-4" cy="15" r="1.6" style="animation-delay:-2.5s"/>
+    </g>
+  </defs>
+</svg>
+
+<main class="stage">
+
+  <!-- ===== TV wall ===== -->
+  <div class="wall" aria-hidden="true">
+    <div class="tv sm glow-red"><div class="scr score">
+      <svg viewBox="0 0 160 100"><text x="80" y="42" text-anchor="middle" font-family="Arial Black, Arial" font-weight="900" font-size="30" fill="#fff">2 – 1</text>
+      <rect x="55" y="58" width="50" height="16" rx="3" fill="#e0392b" class="blink"/><text x="80" y="70" text-anchor="middle" font-family="Arial" font-size="11" fill="#fff" font-weight="700">LIVE</text></svg>
+    </div></div>
+    <div class="tv lg glow-green"><div class="scr pitch">
+      <svg viewBox="0 0 160 100"><g fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.5">
+        <rect x="8" y="8" width="144" height="84"/><line x1="80" y1="8" x2="80" y2="92"/><circle cx="80" cy="50" r="12"/>
+        <rect x="8" y="30" width="22" height="40"/><rect x="130" y="30" width="22" height="40"/></g>
+        <circle class="ball" cx="52" cy="60" r="3.5" fill="#fff"/>
+        <g fill="#e63946"><circle cx="40" cy="40" r="3"/><circle cx="95" cy="70" r="3"/><circle cx="120" cy="35" r="3"/></g>
+        <g fill="#3a86ff"><circle cx="66" cy="34" r="3"/><circle cx="105" cy="48" r="3"/><circle cx="30" cy="75" r="3"/></g></svg>
+    </div></div>
+    <div class="tv"><div class="scr static"><svg viewBox="0 0 160 100"><rect x="38" y="40" width="84" height="22" rx="3" fill="#000" fill-opacity=".75"/><text x="80" y="56" text-anchor="middle" font-family="monospace" font-size="14" fill="#fff" fill-opacity=".9" class="blink">NO SIGNAL</text></svg></div></div>
+    <div class="tv glow-amber"><div class="scr" style="background:radial-gradient(circle at 50% 30%,#4a2a06,#120803 70%)">
+      <svg viewBox="0 0 160 100"><text x="80" y="40" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="20" fill="#f3a82a">Happy Hour</text>
+      <text x="80" y="66" text-anchor="middle" font-family="Arial" font-size="12" letter-spacing="3" fill="#ffe3ad">17:00 – 19:00</text></svg>
+    </div></div>
+    <div class="tv sm"><div class="scr bars"></div></div>
+  </div>
+
+  <!-- ===== side screens (wide only) ===== -->
+  <div class="side l" aria-hidden="true">
+    <div class="tv glow-green"><div class="scr pitch">
+      <svg viewBox="0 0 160 100"><g fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.5"><rect x="8" y="8" width="144" height="84"/><line x1="80" y1="8" x2="80" y2="92"/><circle cx="80" cy="50" r="12"/></g>
+      <circle class="ball" cx="40" cy="70" r="3.5" fill="#fff"/><g fill="#ffd166"><circle cx="60" cy="30" r="3"/><circle cx="110" cy="60" r="3"/></g><g fill="#8338ec"><circle cx="90" cy="40" r="3"/><circle cx="130" cy="75" r="3"/></g></svg>
+    </div></div>
+    <div class="tv sm glow-red"><div class="scr score">
+      <svg viewBox="0 0 160 100"><text x="80" y="44" text-anchor="middle" font-family="Arial Black, Arial" font-weight="900" font-size="30" fill="#fff">0 – 0</text>
+      <text x="80" y="70" text-anchor="middle" font-family="Arial" font-size="12" fill="#f3a82a" font-weight="700">HT</text></svg>
+    </div></div>
+  </div>
+  <div class="side r" aria-hidden="true">
+    <div class="tv sm"><div class="scr static"></div></div>
+    <div class="tv glow-amber"><div class="scr" style="background:#1a0e05">
+      <svg viewBox="0 0 160 100">
+        <g transform="translate(80 50) scale(.9)">
+          <path d="M-20 -32 h40 l-5 64 h-30 z" fill="url(#beer)"/>
+          <ellipse cx="0" cy="-32" rx="22" ry="8" fill="#fff6dd"/>
+          <path d="M20 -18 h10 a8 8 0 0 1 0 28 h-10" fill="none" stroke="#fff6dd" stroke-width="4"/>
+          <path d="M-20 -32 h40 l-5 64 h-30 z" fill="url(#glass)"/>
+        </g>
+        <text x="80" y="92" text-anchor="middle" font-family="Arial" font-size="9" letter-spacing="3" fill="#f3a82a">CHEERS</text></svg>
+    </div></div>
+  </div>
+
+  <!-- ===== Poem ===== -->
+  <section class="poem">
+    <h1>Gợi ý</h1>
+    <div class="rule"></div>
+    <p><span>Cậu bé đứng tự bao giờ,</span><span>Bốn trăm năm vẫn ngây thơ giữa đường.</span></p>
+    <p><span>Cô bé ngồi góc phố phường,</span><span>Chú cẩu cạnh cột, coi thường người qua.</span></p>
+    <p><span>Ba bạn ba thuở cách xa,</span><span>Chung một thói quen, thật là hồn nhiên.</span></p>
+    <p><span>Tìm nơi đứng giữa cho yên,</span><span>Đường chim tới cả ba miền bằng nhau.</span></p>
+    <p><span>Có nơi náo nhiệt đêm thâu,</span><span>Ba bạn việc "nhỏ", nơi nào "trận to"?</span></p>
+  </section>
+
+  <!-- ===== Shelf ===== -->
+  <div class="shelf" aria-hidden="true">
+    <!-- tulip -->
+    <svg viewBox="0 0 90 180">
+      <defs><clipPath id="cTulip"><path d="M20 20 C18 60 12 80 30 100 C40 112 44 118 44 130 h2 C46 118 50 112 60 100 C78 80 72 60 70 20 Z"/></clipPath></defs>
+      <path d="M45 130 v28 M20 165 h50" stroke="#dfe9f3" stroke-opacity=".7" stroke-width="5" stroke-linecap="round"/>
+      <g clip-path="url(#cTulip)"><rect x="10" y="38" width="70" height="100" fill="url(#beer)"/><use href="#bubbles" x="45" y="130"/><use href="#bubbles" x="32" y="150"/></g>
+      <path d="M20 20 C18 60 12 80 30 100 C40 112 44 118 44 130 h2 C46 118 50 112 60 100 C78 80 72 60 70 20 Z" fill="url(#glass)" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"/>
+      <path d="M18 30 C30 44 60 44 72 30 C66 20 24 20 18 30 Z" fill="#fff6dd"/><circle cx="26" cy="24" r="5" fill="#fff6dd"/><circle cx="64" cy="23" r="6" fill="#fff6dd"/>
+    </svg>
+    <!-- mug with handle -->
+    <svg viewBox="0 0 120 180">
+      <defs><clipPath id="cMug"><rect x="18" y="40" width="64" height="118" rx="5"/></clipPath></defs>
+      <g clip-path="url(#cMug)"><rect x="18" y="48" width="64" height="120" fill="url(#beer)"/><use href="#bubbles" x="50" y="150"/><use href="#bubbles" x="30" y="165"/><use href="#bubbles" x="70" y="160"/></g>
+      <path d="M82 70 h12 a14 14 0 0 1 14 14 v30 a14 14 0 0 1 -14 14 h-12" fill="none" stroke="#dfe9f3" stroke-opacity=".75" stroke-width="9" stroke-linejoin="round"/>
+      <rect x="18" y="40" width="64" height="118" rx="5" fill="url(#glass)" stroke="#fff" stroke-opacity=".55" stroke-width="2"/>
+      <g stroke="#fff" stroke-opacity=".18" stroke-width="2"><line x1="34" y1="60" x2="34" y2="150"/><line x1="50" y1="60" x2="50" y2="150"/><line x1="66" y1="60" x2="66" y2="150"/></g>
+      <path d="M16 46 C30 58 70 58 84 46 C84 32 16 32 16 46 Z" fill="#fff6dd"/><circle cx="24" cy="36" r="7" fill="#fff6dd"/><circle cx="74" cy="34" r="8" fill="#fff6dd"/><circle cx="48" cy="30" r="9" fill="#fff6dd"/>
+    </svg>
+    <!-- chalice -->
+    <svg viewBox="0 0 110 180">
+      <defs><clipPath id="cChal"><path d="M15 30 C15 80 30 100 50 108 h10 C80 100 95 80 95 30 Z"/></clipPath></defs>
+      <path d="M55 108 v30" stroke="#dfe9f3" stroke-opacity=".7" stroke-width="12" stroke-linecap="round"/>
+      <path d="M22 165 C30 150 80 150 88 165 Z" fill="#dfe9f3" fill-opacity=".7"/>
+      <g clip-path="url(#cChal)"><rect x="10" y="42" width="90" height="80" fill="url(#beer)"/><use href="#bubbles" x="55" y="110"/><use href="#bubbles" x="35" y="120"/><use href="#bubbles" x="75" y="125"/></g>
+      <path d="M15 30 C15 80 30 100 50 108 h10 C80 100 95 80 95 30 Z" fill="url(#glass)" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"/>
+      <path d="M13 36 C30 50 80 50 97 36 C97 24 13 24 13 36 Z" fill="#fff6dd"/><circle cx="26" cy="28" r="7" fill="#fff6dd"/><circle cx="84" cy="27" r="8" fill="#fff6dd"/>
+      <rect x="47" y="112" width="16" height="8" rx="2" fill="#f3a82a"/>
+    </svg>
+    <!-- bottle -->
+    <svg viewBox="0 0 70 180">
+      <path d="M26 8 h18 v40 c0 6 10 10 10 20 v100 a6 6 0 0 1 -6 6 h-26 a6 6 0 0 1 -6 -6 v-100 c0 -10 10 -14 10 -20 Z" fill="url(#bottle)" stroke="#000" stroke-opacity=".4"/>
+      <rect x="24" y="4" width="22" height="9" rx="2" fill="#d4a017"/>
+      <rect x="16" y="92" width="38" height="46" rx="3" fill="#fdf3dc"/>
+      <rect x="16" y="92" width="38" height="8" fill="#b8341f"/><rect x="16" y="130" width="38" height="8" fill="#b8341f"/>
+      <circle cx="35" cy="115" r="9" fill="none" stroke="#b8341f" stroke-width="2"/><circle cx="35" cy="115" r="4" fill="#f3a82a"/>
+      <path d="M20 60 v100" stroke="#fff" stroke-opacity=".2" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    <!-- tall pint / stange -->
+    <svg viewBox="0 0 80 180">
+      <defs><clipPath id="cPint"><path d="M14 20 h52 l-6 148 h-40 Z"/></clipPath></defs>
+      <g clip-path="url(#cPint)"><rect x="10" y="34" width="60" height="140" fill="url(#beer)"/><use href="#bubbles" x="40" y="160"/><use href="#bubbles" x="24" y="172"/><use href="#bubbles" x="58" y="166"/></g>
+      <path d="M14 20 h52 l-6 148 h-40 Z" fill="url(#glass)" stroke="#fff" stroke-opacity=".55" stroke-width="2"/>
+      <path d="M12 26 C24 38 56 38 68 26 C68 14 12 14 12 26 Z" fill="#fff6dd"/><circle cx="22" cy="18" r="6" fill="#fff6dd"/><circle cx="58" cy="17" r="7" fill="#fff6dd"/><circle cx="40" cy="14" r="7" fill="#fff6dd"/>
+    </svg>
+  </div>
+</main>
+</body>
+</html>
