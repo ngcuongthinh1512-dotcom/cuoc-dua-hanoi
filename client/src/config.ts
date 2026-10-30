@@ -1111,6 +1111,13 @@ export const hostPage = {
   refreshMs: 1000, // how often the DOM table is rewritten from host.state (SPEC §13: ≤ 1 s)
   reconnectMs: 2000, // Host socket: wait before reconnecting (the token stays valid 24 h)
   colours: ['#2c6bd8', '#d8342c', '#e0b020', '#2c9a4a', '#8a3fc4', '#e07a20', '#20a8b8', '#c0408a'], // team shirt colours, round-robin
+  // The fixed cast (Leg 3: the 11 teams of the race, same names + colours as the room tables, choco/chocoBuild.ts TEAMS): "Tạo 11 đội cố định"
+  // creates these in order (a name already in the race is skipped); the Host only generates the codes. Same button as Leg 2 (Macao).
+  fixedTeams: [
+    { name: 'Hai Long', colour: '#b6e08a' }, { name: 'Chị 6', colour: '#8eead8' }, { name: 'WindyPhon', colour: '#d6249f' }, { name: 'V.Hy', colour: '#1a1a1a' },
+    { name: 'Chú Hiệp', colour: '#a31621' }, { name: 'Đạt 0️⃣9️⃣', colour: '#e0a800' }, { name: 'Nhật Nhật', colour: '#1e56d6' }, { name: '🌽 Hiếu', colour: '#f7a8c4' },
+    { name: 'Mạnh Ka', colour: '#eadcb8' }, { name: 'Dừa L', colour: '#6b4a37' }, { name: 'Như Chấn', colour: '#6a2fb0' },
+  ] as readonly { name: string; colour: string }[],
   noticeMs: 15_000, // how long a host.notice (a refused / warned Host op) stays on the page
   maxLegBytes: 256 * 1024, // leg file the Host may send (host.leg json; the server refuses more)
   addBikeOffset: 3, // m east of the team: "Thêm xe" in the team table puts a shared bike this close to the team's last pose

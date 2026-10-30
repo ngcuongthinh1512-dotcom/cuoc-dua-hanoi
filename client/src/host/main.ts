@@ -6,7 +6,7 @@ import graphUrl from '@race/shared/data/roadgraph.json?url';
 import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { withAutoDemo, checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, finishPenaltyMessage, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, type ExportFormat, type ExportResult } from './hostView.ts';
+import { withAutoDemo, missingFixedTeams, checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, finishPenaltyMessage, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, type ExportFormat, type ExportResult } from './hostView.ts';
 import type { HostMap } from './hostMap.ts';
 import { demoTick, withMapDemo } from './hostMapData.ts';
 
@@ -146,7 +146,7 @@ function mainView() {
     el('h2', {}, 'Chặng'), legBox,
     el('h2', {}, 'Hình mật thư (R2)'), mediaBox,
     el('h2', {}, 'Tạo đội'),
-    el('section', {}, create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
+    el('section', {}, el('button', { onclick: createFixedTeams, title: 'Tên và màu đã cố định (Hai Long, Chị 6, WindyPhon…): chỉ sinh mã đội' }, `Tạo ${hostPage.fixedTeams.length} đội cố định & sinh mã`), create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
     el('h2', {}, 'Thứ tự vào game'), startBox,
     el('h2', {}, 'Tiến trình & xếp hạng (theo thứ tự về đích)'), matrixBox,
     el('h2', {}, 'Các đội'), teamsBox,
@@ -161,6 +161,14 @@ function mainView() {
 }
 
 /** A bad line or a down socket must not eat what the Host typed: the textarea stays until host.state shows the new teams. */
+/** The fixed cast: every name not in the race yet, with its colour; the server only makes the codes. */
+function createFixedTeams() {
+  const teams = missingFixedTeams(hostPage.fixedTeams, state?.teams ?? []);
+  if (!teams.length) return void (err.textContent = `Đủ ${hostPage.fixedTeams.length} đội cố định rồi, không có đội nào để thêm.`);
+  if (!send({ t: 'host.createTeams', teams })) return void (err.textContent = 'Đang mất kết nối, chưa gửi được.');
+  err.textContent = '';
+}
+
 function createTeams() {
   const { teams, error } = parseTeamLines(create.value, hostPage.colours, state?.teams.length ?? 0);
   if (error) return void (err.textContent = error);

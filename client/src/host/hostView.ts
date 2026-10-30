@@ -186,6 +186,12 @@ export function legIssueLines(issues: LegIssueView[]): { level: LegIssueView['le
   return [...issues].sort((a, b) => rank[a.level] - rank[b.level]).map((i) => ({ level: i.level, text: `${i.where}: ${i.message}` }));
 }
 
+/** The fixed cast (config hostPage.fixedTeams) minus the names already in the race (case-insensitive): what "Tạo 11 đội cố định" sends. */
+export function missingFixedTeams(fixed: readonly { name: string; colour: string }[], existing: readonly { name: string }[]): { name: string; colour: string }[] {
+  const have = new Set(existing.map((t) => t.name.trim().toLowerCase()));
+  return fixed.filter((t) => !have.has(t.name.trim().toLowerCase())).map((t) => ({ ...t }));
+}
+
 export interface StartRow {
   id: string; name: string; colour: string; startOrder: string; joined: string; stepLabel: string; penalty: string;
   /** Leg 3: the finish-line penalty in the "Phạt vạch đích" inputs (0 = none) and its reason (the default when none). */
