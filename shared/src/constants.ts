@@ -11,7 +11,7 @@ export const RACE_BBOX = { south: 50.83, west: 4.335, north: 50.86, east: 4.398 
 
 /** SPEC §17.38: the Pit Stop mat, m — the client draws it (raceClient.mat), the server counts a team as "at the Pit Stop"
  *  only ON it (`slack` m beyond its edges: network latency). Centre = the pit_stop zone centre, long axis along its yaw. */
-export const PIT_MAT = { width: 16, length: 32, slack: 0.5 } as const;
+export const PIT_MAT = { width: 3.2, length: 6.4, slack: 0.5 } as const;
 
 /** Is (x, z) on the Pit Stop mat centred at `at` (zone / BoxInfo: yaw rad, 0 = north, + = west; the mat's long axis)? */
 export function onPitMat(x: number, z: number, at: { x: number; z: number; yaw?: number }, slack: number = PIT_MAT.slack): boolean {

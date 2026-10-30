@@ -3,7 +3,7 @@ import { parseLeg } from '@race/shared/leg';
 import { describe, expect, it } from 'vitest';
 import leg from '../legs/bruxelles-demo.json';
 import { BUNDLED_LEGS, bundledLeg } from './race/leg.ts';
-
+import { gradeParts } from './race/tasks.ts';
 describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
   it('every bundled leg parses with no error', () => {
     expect(BUNDLED_LEGS).toEqual(['bruxelles-demo', 'bruxelles-demo-filled', 'mini']);
@@ -35,15 +35,15 @@ describe('legs/bruxelles-demo.json', () => {
   const steps = leg.steps;
   const count = (type: string) => steps.filter((s) => s.type === type).length;
 
-  it('has the 12 steps in order', () => {
+  it('has the 11 steps in order', () => {
     // Leg 3: the box at L3's destination opens the detour; L3B (GardeRobe MannekenPis) opens T1
-    expect(steps.map((s) => s.id)).toEqual(['L1', 'L2', 'L3', 'D1', 'L3B', 'T1', 'L4', 'T2', 'T3', 'L5', 'L6', 'PS']);
-    expect([count('route_info'), count('detour'), count('challenge'), count('pit_stop')]).toEqual([7, 1, 3, 1]);
+    expect(steps.map((s) => s.id)).toEqual(['L1', 'L2', 'L3', 'D1', 'L3B', 'T1', 'L4', 'T2', 'T3', 'L5', 'PS']);
+    expect([count('route_info'), count('detour'), count('challenge'), count('pit_stop')]).toEqual([6, 1, 3, 1]);
   });
 
   it('keeps every destination and the start inside RACE_BBOX', () => {
     const points = [leg.start, ...steps.map((s) => s.destination).filter((d) => d !== undefined)];
-    expect(points).toHaveLength(9); // start + 7 route_info + pit_stop
+    expect(points).toHaveLength(8); // start + 6 route_info + pit_stop
     for (const p of points) {
       expect(p.lat).toBeGreaterThan(RACE_BBOX.south);
       expect(p.lat).toBeLessThan(RACE_BBOX.north);
@@ -75,7 +75,7 @@ describe('legs/bruxelles-demo.json', () => {
     expect(branches.map((b) => [b.id, b.name, b.task.location?.name, b.task.kind, b.task.verification])).toEqual([['A', 'Chocolate', 'Choco-Story Brussels', 'free', 'host_approval'], ['B', 'Truyện Tranh', 'La Boutique Tintin', 'free', 'host_approval']]);
     expect(branches.map((b) => /^Đội chơi di chuyển tới/.test(b.afterChoice ?? ''))).toEqual([true, true]);
     expect(branches[1]!.afterChoice).toMatch(/\n• Độ đủ nét/); // bullet lines → a list on the card
-    for (const b of branches) expect([b.summary.length > 0, b.task.description.startsWith('[CHƯA NHẬP'), b.task.proofInstruction.startsWith('[CHƯA NHẬP'), b.task.media, b.task.answers]).toEqual([true, true, true, [], []]);
+    for (const b of branches) expect([b.summary.length > 0, b.task.description.length > 40 && !b.task.description.startsWith('[CHƯA NHẬP'), !b.task.proofInstruction.startsWith('[CHƯA NHẬP'), b.task.media, b.task.answers]).toEqual([true, true, true, [], []]);
     const t2 = steps.find((s) => s.id === 'T2')!;
     // Leg 3: T2 "Ai hay đi nhà hát" is played in the BOZAR hall (room 'hall') right after L4's box: pick the seat, server-graded
     expect([t2.room, t2.task?.title, t2.task?.pick, t2.task?.verification, t2.task?.answers, t2.task?.retryLockMinutes]).toEqual(['hall', 'Ai hay đi nhà hát', 'seat', 'auto', ['K-3'], 1]);
@@ -85,5 +85,9 @@ describe('legs/bruxelles-demo.json', () => {
     const t3 = steps.find((s) => s.id === 'T3')!;
     expect([t3.room, t3.pickup?.prompt, t3.task?.parts?.length, t3.task?.retryLockMinutes, t3.task?.scoreFromMinutes, t3.task?.showMarks]).toEqual(['hall', 'Bấm F để nhận mật thư thử thách 3', 4, 3, 40, true]); // the hidden hint: from minute 40 the boxes turn green / red
     expect(t3.pickup?.clue).toBe('Đội chơi đi lại gần sân khấu để nhận mật thư tiếp theo');
+    // the answers: Câu 1 = piece + performer, Câu 2 = piece + performer (spellings free: case, diacritics, punctuation, order of names)
+    expect(t3.task!.parts!.map((x) => x.label)).toEqual(['Câu 1 · Tiết mục', 'Câu 1 · Thí sinh', 'Câu 2 · Tiết mục', 'Câu 2 · Thí sinh']);
+    expect(gradeParts(t3.task as never, ['prokofiev concerto no 3 in c major op 26', 'YOSHIMI yuki', 'Kris Defoort - Music for the Heart', 'masaya kamei'])).toEqual([true, true, true, true]);
+    expect(gradeParts(t3.task as never, ['Prokofiev Piano Concerto No. 2', 'Yuki Yoshimi', 'Music for the Heart', 'Kamei'])).toEqual([false, true, true, false]);
   });
 });

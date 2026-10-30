@@ -133,6 +133,13 @@ export class StartOrderBanner {
  *  name) + the card's title; Leg 3: `penalty` = the finish-line penalty line ("Bị phạt 20 phút do …."), null = none. */
 export function resultView(r: FinishResult, team: string): FinishTexts & { title: string; penalty: string | null } {
   const own = { npc: r.npc, toast: r.toast, card: r.card };
+  if (r.waitUntil !== undefined) { // Leg 3: finished, but the finish-line penalty is not served yet: no place told (the server tells it, and pushes it, later)
+    return {
+      npc: `${team}, các bạn đã về đích! Hết phạt rồi sẽ công bố thứ hạng.`, toast: 'Về đích! Chờ hết phạt để biết thứ hạng', title: 'Về đích',
+      card: `Chúc mừng ${team}! Các bạn đã về đích. Đội cần chờ hết phạt để biết thứ hạng của mình trong cuộc đua. Đội nào về đích xong sớm hơn (đã tính cả phạt) sẽ xếp trước đội đang chờ.`,
+      penalty: r.finishPenalty && r.finishPenalty.minutes > 0 ? finishPenaltyLine(r.finishPenalty) : null,
+    };
+  }
   return {
     ...finishTexts(r.kind, r.kind === 'finish' ? own : { [r.kind]: own }, r.rank, r.total, team), title: r.kind === 'out' ? 'BỊ LOẠI' : `Về đích thứ ${r.rank}`,
     penalty: r.finishPenalty && r.finishPenalty.minutes > 0 ? finishPenaltyLine(r.finishPenalty) : null,
@@ -140,7 +147,7 @@ export function resultView(r: FinishResult, team: string): FinishTexts & { title
 }
 
 /** Leg 3: what makes a finish announcement "new" (shown again live, and again after a reload): place + finish-line penalty. */
-export const resultKey = (r: FinishResult): string => `${r.kind}:${r.rank}/${r.total}${r.finishPenalty ? `+${r.finishPenalty.minutes}:${r.finishPenalty.reason}` : ''}`;
+export const resultKey = (r: FinishResult): string => `${r.waitUntil !== undefined ? 'wait' : r.kind}:${r.rank}/${r.total}${r.finishPenalty ? `+${r.finishPenalty.minutes}:${r.finishPenalty.reason}` : ''}`;
 
 /** SPEC §17.21: clue cards and the Sổ mật thư may not be selected / copied (copy, cut, drag, right-click, selection start
  *  are cancelled inside them); only the photo task's submission code and the typed answer box may. `target` = an event

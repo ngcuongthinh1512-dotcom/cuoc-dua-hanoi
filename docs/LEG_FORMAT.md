@@ -133,7 +133,7 @@ Mỗi bước có `id` (tên ngắn, chữ + số, gạch ngang / dưới, ≤ 1
 
 ### 5.4 `pit_stop`: Chặng dừng (về đích)
 
-Có **đúng một** và **phải là bước cuối cùng**. Đội **dẫm lên thảm đỏ** thì về đích (SPEC §17.38): vùng check-in là **hình chữ nhật của thảm** (`PIT_MAT` trong `shared/src/constants.ts`, hiện 16 × 32 m, tâm tại `lat`, `lon`, trục dài theo `yawDeg` của `destination`, dung sai 0,5 m), **không phải** vòng tròn `radius`; đứng cạnh thảm chưa tính. `radius` vẫn phải ghi (15–40 m; file cũ đọc được như trước) nhưng chỉ còn dùng cho các kiểm tra vị trí / khoảng cách của `leg:check` (ngoài nhà, tới được, bãi xe) và vùng cấm NPC. Có `destination` (mục 7) và khối tùy chọn `announce` dưới đây.
+Có **đúng một** và **phải là bước cuối cùng**. Đội **dẫm lên thảm đỏ** thì về đích (SPEC §17.38): vùng check-in là **hình chữ nhật của thảm** (`PIT_MAT` trong `shared/src/constants.ts`, hiện 3,2 × 6,4 m, tâm tại `lat`, `lon`, trục dài theo `yawDeg` của `destination`, dung sai 0,5 m), **không phải** vòng tròn `radius`; đứng cạnh thảm chưa tính. `radius` vẫn phải ghi (15–40 m; file cũ đọc được như trước) nhưng chỉ còn dùng cho các kiểm tra vị trí / khoảng cách của `leg:check` (ngoài nhà, tới được, bãi xe) và vùng cấm NPC. Có `destination` (mục 7) và khối tùy chọn `announce` dưới đây.
 
 **Thông báo về đích (`announce`, tùy chọn; SPEC §17.22, §17.23).** Ngay khi đội chạm thảm, máy chủ gửi cho **riêng đội đó** thứ hạng **"Về đích thứ n"** (thứ tự chạm thảm thật, cố định) ở ba chỗ: lời **NPC dẫn chương trình** trên thảm, **thông báo nhanh** (toast) và **thẻ về đích** giữa màn hình. Đội **về nhất** có bản riêng. Đội **về cuối cùng** (mọi đội khác đã về đích) và mọi đội **chưa về khi Host bấm "Kết thúc"** nhận bản **"BỊ LOẠI"** kèm thứ hạng cuối. Chữ thật thường nhắc tên nơi về đích nên nằm trong file chặng (chỉ máy chủ có), không nằm trong game.
 
@@ -183,14 +183,14 @@ Chỗ giữ được thay khi gửi: `{n}` = thứ hạng, `{tổng}` = số đ�
 |---|---|---|
 | `name` | có | Tên chỗ. Của `destination`: **chỉ Host thấy**, không bao giờ hiện cho đội (không phải đáp án của mật thư). Của `task.location`: **hiện cho đội** trên thẻ nhiệm vụ ("Địa điểm: …") để đội biết đi đâu làm. `"Sân trước Palais de Chaillot"` |
 | `lat`, `lon` | có | Tọa độ tâm (dùng dấu chấm). **Hộp mật thư (vật thể trong game) đứng đúng tại đây**; thảm Chặng dừng cũng vậy |
-| `radius` | có | **Bán kính vùng, 15–40 m.** Đứng trong vòng tròn này = "đã tới điểm" (mở được hộp). Riêng Chặng dừng: về đích khi **đứng trên thảm** 16 × 32 m (mục 5.4), không theo bán kính |
+| `radius` | có | **Bán kính vùng, 15–40 m.** Đứng trong vòng tròn này = "đã tới điểm" (mở được hộp). Riêng Chặng dừng: về đích khi **đứng trên thảm** 3,2 × 6,4 m (mục 5.4), không theo bán kính |
 | `bikeParking` | không | `{ "lat": ..., "lon": ... }`: bãi xe đạp **cạnh điểm** (mục dưới) |
 | `yawDeg` | không (mặc định `0`) | Hướng **mặt trước** của hộp / hòm mật thư (phía đội đứng đọc), cùng quy ước với `start.yawDeg` (mục 4): `0` = bắc, `90` = tây, `180` = nam, `-90` = đông (`yawDeg` = − hướng la bàn). Áp dụng cho cả hòm nhánh (`task.location` của nhánh) |
 
 **Đặt tâm ở đâu:** vỉa hè, quảng trường, bờ sông, giữa cầu (lối đi bộ); **không bao giờ trong nhà** (LỖI; `leg:check` gợi ý sẵn "điểm ngoài nhà gần nhất"), **không giữa lòng đường xe chạy** (cảnh báo: hộp sẽ đứng giữa dòng xe NPC), không giữa sông / bể nước, không trên nóc cầu cạn metro. Phải có đường đi bộ gần để đội đi tới (không thì LỖI "không đi bộ tới được").
 
 **Gần địa danh Ma Cao (chặng 2):** đặt điểm ở sân / vỉa hè **trước mặt** địa danh, không trên bệ, bậc hay trong tường của nó. Game dựng chi tiết nhiều địa danh (bệ + 68 bậc Ruínas de São Paulo, sân thượng Fortaleza do Monte, các tầng đá chùa A-Ma, bệ nhà thờ, tường vườn): `leg:check` cảnh báo khi điểm nằm trong / sát (≤ 1,5 m) đường viền địa danh, nhưng **không thấy** phần dựng vượt ra ngoài đường viền (bậc lớn Ruínas dài 60 m về phía nam): luôn xem ảnh ("Xem") của điểm gần địa danh. Ví dụ điểm tốt: chân bậc Ruínas (22.19689, 113.54086), giữa Largo do Senado (22.19384, 113.54002, Chặng dừng `"yawDeg": -40` theo chiều dài quảng trường), chân tường phía đông Monte (22.19714, 113.54266).
-**Thảm Chặng dừng 16 × 32 m** cần chỗ trống đủ rộng: `leg:check` cảnh báo khi thảm (cạnh dài theo `yawDeg`) chồng lên nhà hơn 5 % diện tích.
+**Thảm Chặng dừng 3,2 × 6,4 m** cần chỗ trống đủ rộng: `leg:check` cảnh báo khi thảm (cạnh dài theo `yawDeg`) chồng lên nhà hơn 5 % diện tích.
 **Cầu không đặt điểm (chặng 2):** Ponte de Sai Van (đầu cầu sát Macau Tower), Ponte da Amizade, cầu cạn Rotunda da Amizade / cầu Ma Man Kei, 昌盛大桥 và nhánh rẽ Viaduto da Estrada da Bela Vista có **bậc thật** giữa các đoạn mặt cầu (0,5–18 m): người / xe đạp có thể rơi hoặc kẹt. Không đặt điểm, bãi xe hay lộ trình xe đạp bắt buộc qua đó (TODO.md).
 
 **Chọn bán kính:**
@@ -310,7 +310,7 @@ Muốn Host có đáp án tham khảo cạnh bài: thêm `referenceAnswers` như
 - **"Gợi ý: nhiệm vụ Host duyệt … chưa có `referenceAnswers`":** một dòng nhắc (không phải cảnh báo): thêm đáp án tham khảo cho Host nếu có.
 - **Link `Bản đồ:`** mở OpenStreetMap (bản đồ vẽ) có ghim đúng điểm.
 - **Link `Vệ tinh:`** mở Google Maps **ảnh vệ tinh** có ghim đúng điểm: thấy ngay điểm nằm trên mái nhà, trong sân, trên vỉa hè hay giữa đường.
-- **Dòng `Xem:`** là lệnh sẵn: copy, dán vào Terminal, chạy (≈ 1 phút) → ảnh `screenshots/leg-<mã bước>.png` chụp **thế giới 3D của game** xiên từ trên cao, nhìn về hướng bắc, khung ≈ 160 × 105 m, **điểm nằm giữa ảnh**, đánh dấu bằng tấm thảm đỏ viền vàng của Chặng dừng (16 × 32 m) đặt đúng tâm. Ảnh **chưa vẽ vòng bán kính**; điểm dưới mái / dưới cầu cạn thì thảm bị che (vẫn ở giữa ảnh).
+- **Dòng `Xem:`** là lệnh sẵn: copy, dán vào Terminal, chạy (≈ 1 phút) → ảnh `screenshots/leg-<mã bước>.png` chụp **thế giới 3D của game** xiên từ trên cao, nhìn về hướng bắc, khung ≈ 160 × 105 m, **điểm nằm giữa ảnh**, đánh dấu bằng tấm thảm đỏ viền vàng của Chặng dừng (3,2 × 6,4 m) đặt đúng tâm. Ảnh **chưa vẽ vòng bán kính**; điểm dưới mái / dưới cầu cạn thì thảm bị che (vẫn ở giữa ảnh).
 - **Link `Trong game:`** để **đứng thử tại điểm**: mở một Terminal khác, chạy `npm run dev` (giữ chạy), rồi mở link trong Chrome. Bạn xuất hiện cách tâm 12 m trên đường đi bộ từ điểm trước, nhìn thẳng về hòm mật thư ở tâm (quay mặt trước đúng `yawDeg` của điểm; Chặng dừng: thảm đỏ; điểm trùng điểm trước: 12 m về phía nam, nhìn về bắc). Điểm xuất phát: đúng chỗ và hướng nhìn của đội đầu tiên vào game. Đây là thế giới thử, không cần cuộc đua, không cần mật khẩu: đi lại bằng `W` `A` `S` `D` để xem đáp án có nhìn thấy được không. Tắt bằng `Ctrl`+`C` trong Terminal đang chạy `npm run dev`.
 - "đi bộ ≈ N m": quãng đường đi bộ thật theo đồ thị đường. Quá dài so với dự kiến = điểm sai chỗ. "KHÔNG đi bộ tới được" = LỖI.
 

@@ -9,7 +9,7 @@ import { FINISH_PENALTY_REASON, finishTexts, NET, type BoxInfo, type FinishPenal
 import type { QuotaCounters } from '../counters.ts';
 import { emptyProgress, getMeta, parseAnswers, readProgress, setMeta, writeProgress, type StepProgressRow } from '../db.ts';
 import { BUNDLED_LEGS, bundledLeg, DEFAULT_LEG_ID, legRules } from './leg.ts';
-import { ranking } from './ranking.ts';
+import { ranking, type RankInput } from './ranking.ts';
 import type { BoxSpot } from './BikeService.ts';
 import { partsOf } from './tasks.ts';
 import { advance, boxesOf, cardOf, type RoomRec, inside, mediaAllowed, retryLockMinutes, review, rowFacts, scoreFrom, scoreOf, taskOf, type Progress, type RaceEffect, type RaceInput, type StandAt } from './steps.ts';
@@ -48,6 +48,8 @@ export interface RaceIO {
   transaction<T>(fn: () => T): T;
   /** To every socket of that team. */
   send(team: string, m: ServerMessage): void;
+  /** Leg 3: wake the object at `at` (ms) — the end of a finish-line penalty (absent in unit tests: no alarm). */
+  setAlarm?(at: number): void;
   /** Something the Host shows changed: host.state goes out within NET.slowTickMs. */
   changed(now: number): void;
   /** race_events row, written at once (2 rows). */
@@ -264,6 +266,8 @@ export class RaceEngine {
         this.io.saveTeam(m.team, { ...r, finishPenalty: next });
       });
       if (r.rank !== null) this.io.send(m.team, { t: 'race', view: this.view(m.team, now) }); // its finish card updates live
+      this.served.delete(m.team);
+      this.armServed(now);
       return this.io.changed(now);
     }
     if (m.t === 'host.review') {
@@ -384,7 +388,7 @@ export class RaceEngine {
           ...roomOf(this.legV, i, r.rooms?.[row.step]),
         });
       }
-      return [{ team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, finishAt: r.finishAt, rank: r.rank, out: r.out, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null, finishPenaltyMinutes: r.finishPenalty?.minutes ?? 0 }];
+      return [this.rankIn(id, r)];
     });
     // D10: every answer waiting for the Host, oldest first (the reference answers are Host-only, like this whole message)
     const queue: ReviewItem[] = [];
@@ -477,13 +481,54 @@ export class RaceEngine {
     return { step: r.step, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes, ...rowFacts(this.teamRows(team).get(id)), room: r.rooms?.[id] ?? null };
   }
 
-  /** SPEC §17.22 / §17.23: the team's finish announcement (texts of the leg's pit_stop.announce, else the defaults). */
-  private result(team: string, r: TeamRace): FinishResult | null {
+  private rankIn(id: string, r: TeamRace): RankInput {
+    return { team: id, slot: this.io.slot(id), startOrder: r.startOrder, step: r.step, finishAt: r.finishAt, rank: r.rank, out: r.out, prevDoneAt: this.row(id, r.step - 1, r)?.completed_at ?? null, finishPenaltyMinutes: r.finishPenalty?.minutes ?? 0 };
+  }
+
+  /** Leg 3: when a finished team's finish-line penalty is served (finish + minutes), null = none / not finished / out. */
+  private serveAt(r: TeamRace): number | null {
+    const pen = r.finishPenalty?.minutes ?? 0;
+    return r.finishAt !== null && !r.out && pen > 0 ? r.finishAt + pen * 60_000 : null;
+  }
+
+  /** SPEC §17.22 / §17.23: the team's finish announcement (texts of the leg's pit_stop.announce, else the defaults). Leg 3: the place
+   *  is the live order by finish + finish-line penalty (ranking.ts) and a penalised team is told only "Về đích" until its penalty is
+   *  served (`waitUntil`, no place yet): a team that finishes meanwhile with an earlier total ranks before it. */
+  private result(team: string, r: TeamRace, now: number): FinishResult | null {
     if (r.rank === null) return null;
-    const kind = r.out ? 'out' : r.rank === 1 ? 'first' : 'finish';
     const total = this.io.teamIds().length;
+    const pen = r.finishPenalty ? { finishPenalty: r.finishPenalty } : {};
+    const until = this.serveAt(r);
+    if (until !== null && now < until) return { rank: 0, total, kind: 'finish', npc: '', toast: '', card: '', waitUntil: until, ...pen };
+    const rank = r.finishAt !== null && !r.out ? ranking(this.io.teamIds().map((id) => this.rankIn(id, this.io.team(id)!))).find((x) => x.team === team)?.rank ?? r.rank : r.rank;
+    const kind = r.out ? 'out' : rank === 1 ? 'first' : 'finish';
     const pit = this.legV.steps.at(-1);
-    return { rank: r.rank, total, kind, ...finishTexts(kind, pit?.type === 'pit_stop' ? pit.announce : undefined, r.rank, total, this.io.name(team)), ...(r.finishPenalty ? { finishPenalty: r.finishPenalty } : {}) };
+    return { rank, total, kind, ...finishTexts(kind, pit?.type === 'pit_stop' ? pit.announce : undefined, rank, total, this.io.name(team)), ...pen };
+  }
+
+  /** Leg 3: ms of the next finish-line penalty that ends after `now` (the alarm that pushes that team its place), null = none. */
+  nextServed(now: number): number | null {
+    let next: number | null = null;
+    for (const id of this.io.teamIds()) {
+      const at = this.serveAt(this.io.team(id)!);
+      if (at !== null && at > now && (next === null || at < next)) next = at;
+    }
+    return next;
+  }
+
+  /** Leg 3: the teams whose penalty ended since the last call get their view again (now with the place), then the next alarm is armed. */
+  private served = new Set<string>();
+  revealDue(now: number) {
+    for (const id of this.io.teamIds()) {
+      const r = this.io.team(id)!;
+      const at = this.serveAt(r);
+      if (at !== null && at <= now && !this.served.has(id)) (this.served.add(id), this.io.send(id, { t: 'race', view: this.view(id, now) }));
+    }
+    this.armServed(now);
+  }
+  armServed(now: number) {
+    const at = this.nextServed(now);
+    if (at !== null) this.io.setAlarm?.(at + 50);
   }
 
   private view(team: string, now: number): RaceView {
@@ -494,7 +539,7 @@ export class RaceEngine {
       status: this.statusV, finishAt: r.finishAt, penaltyMinutes: r.penaltyMinutes,
       card: this.legV.steps[r.step] ? cardOf(this.legV, r.step, this.row(team, r.step, r), now, r.rooms) : null,
       checkinAt: pit && r.finishAt === null && r.penaltyMinutes > 0 && p.arrivedAt !== null ? p.arrivedAt + r.penaltyMinutes * 60_000 : null,
-      result: this.result(team, r),
+      result: this.result(team, r, now),
     };
   }
 
@@ -641,6 +686,7 @@ export class RaceEngine {
     for (const h of hides) this.io.hideBox(team, sid(h.step), h.branch); // before the card that says "switched"
     for (const k of parks) this.io.park(team, k.rack, now, this.boxAt(k.rack));
     for (const m of out) this.io.send(team, m);
+    if (teamChanged) this.armServed(now); // Leg 3: a finish with a penalty / a room's skip: the alarm that tells the place once it is served
     if (dirty.size) {
       this.io.changed(now);
       // its lists change with a new step, an arrival where it already stands (moveZone sees no move), or a branch switch

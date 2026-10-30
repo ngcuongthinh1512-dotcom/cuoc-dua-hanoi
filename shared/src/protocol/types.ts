@@ -234,6 +234,9 @@ export interface FinishResult extends FinishTexts {
   /** Leg 3: the Host's finish-line penalty of this team (host.finishPenalty; e.g. a Lựa chọn kép room given up), absent =
    *  none. The card stays "Về đích thứ n" and adds one line "Bị phạt {minutes} phút do {reason}." Only the team's own. */
   finishPenalty?: FinishPenalty;
+  /** Leg 3: server ms when that penalty is served; until then `rank` is 0 and the texts are empty (the card reads "Về đích" + the penalty +
+   *  a countdown; the place is told, and pushed, once it ends). Absent = the place is final. */
+  waitUntil?: number;
 }
 /** Leg 3: minutes added at the finish line (not served at the mat: the team is told it finished) + why (Vietnamese). */
 export interface FinishPenalty {

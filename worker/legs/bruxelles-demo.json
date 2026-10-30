@@ -136,7 +136,7 @@
           "afterChoice": "Đội chơi di chuyển tới bảo tàng Chocolate nổi tiếng nhất nước Bỉ: Choco-Story Brussels để hoàn thành thử thách. Hoàn thành đủ 5 loại Chocolate, đội chơi sẽ nhận được mật thư để đi tiếp. Với mỗi 1 loại Chocolate đội chơi không hoàn thành được, đội chơi sẽ bị phạt 20 phút tại vạch đích.",
           "task": {
             "title": "Chocolate",
-            "description": "[CHƯA NHẬP đề bài mini-game Chocolate]",
+            "description": "Tại phòng socola, đội chơi phải sử dụng phím Space (và Enter ở lv5) căn chỉnh nhiệt độ để hoàn thành 5 thanh socola. Hoàn thành 5 thanh socola, đội chơi sẽ nhận được mật thư để đi tiếp. Lựa chọn kép này sẽ không có gợi ý/giảm yêu cầu của thử thách, với mỗi thanh socola/level đội chơi không hoàn thành được, đội chơi được quyền bỏ thử thách và chịu phạt 20p cho mỗi thanh socola không hoàn thành được.",
             "media": [],
             "location": {
               "name": "Choco-Story Brussels",
@@ -148,7 +148,7 @@
             "kind": "free",
             "verification": "host_approval",
             "answers": [],
-            "proofInstruction": "[CHƯA NHẬP hướng dẫn gửi bài]",
+            "proofInstruction": "Hoàn thành ngay trong phòng: kết quả được ghi tự động, không cần gửi ảnh.",
             "timeLimitMinutes": null,
             "room": {
               "kind": "chocolate",
@@ -164,7 +164,7 @@
           "afterChoice": "Đội chơi di chuyển tới La Boutique Tintin, sau đó phác hoạ lại 9 bức tranh được yêu cầu với độ chính xác ≥ 85%, tính theo công thức = độ đủ nét × độ đúng nét (× hệ số chống vẽ thừa).\n• Độ đủ nét: tỉ lệ hình mẫu được nét của đội phủ trong bán kính cho phép và cùng hướng, chi tiết nhỏ tính nửa trọng số.\n• Độ đúng nét: tỉ lệ mực của đội nằm đúng trên đường mẫu.\n• Chống vẽ thừa: chỉ trừ điểm khi mực dài hơn hai lần hình mẫu.\nVới mỗi hình vẽ đội chơi không hoàn thành được, đội chơi sẽ bị phạt 12 phút.",
           "task": {
             "title": "Truyện Tranh",
-            "description": "[CHƯA NHẬP đề bài mini-game Truyện Tranh]",
+            "description": "Tại phòng truyện tranh, đội chơi tới bàn vẽ của đội và bấm F để bắt đầu. 9 bức tranh được mở lần lượt: đạt từ 85% trở lên mới sang bức kế tiếp. Hoàn thành 9 bức, đội chơi sẽ nhận được mật thư để đi tiếp. Với mỗi bức đội chơi không hoàn thành được, đội chơi được quyền bỏ thử thách và chịu phạt 12 phút cho mỗi bức không hoàn thành được.",
             "media": [],
             "location": {
               "name": "La Boutique Tintin",
@@ -176,7 +176,7 @@
             "kind": "free",
             "verification": "host_approval",
             "answers": [],
-            "proofInstruction": "[CHƯA NHẬP hướng dẫn gửi bài]",
+            "proofInstruction": "Hoàn thành ngay trong phòng: kết quả được ghi tự động, không cần gửi ảnh.",
             "timeLimitMinutes": null,
             "room": {
               "kind": "comic",
@@ -332,27 +332,47 @@
         "verification": "host_approval",
         "parts": [
           {
-            "label": "Bài 1 · Tên bài hát",
+            "label": "Câu 1 · Tiết mục",
             "answers": [
-              "[CHƯA NHẬP đáp án: Bài 1 · Tên bài hát]"
+              "Prokofiev Concerto n. 3 in C major op. 26",
+              "Prokofiev Concerto No. 3 in C major, Op. 26",
+              "Prokofiev Piano Concerto No. 3 in C major, Op. 26",
+              "Prokofiev Piano Concerto No. 3",
+              "Prokofiev Piano Concerto 3",
+              "Prokofiev Concerto No. 3",
+              "Prokofiev Concerto 3",
+              "Prokofiev Concerto n. 3",
+              "Piano Concerto No. 3 in C major, Op. 26",
+              "Piano Concerto No. 3",
+              "Concerto No. 3 in C major, Op. 26",
+              "Prokofiev Concerto số 3",
+              "Prokofiev Concerto n. 3 in C major"
             ]
           },
           {
-            "label": "Bài 1 · Thí sinh",
+            "label": "Câu 1 · Thí sinh",
             "answers": [
-              "[CHƯA NHẬP đáp án: Bài 1 · Thí sinh]"
+              "Yuki Yoshimi",
+              "Yoshimi Yuki"
             ]
           },
           {
-            "label": "Bài 2 · Tên bài hát",
+            "label": "Câu 2 · Tiết mục",
             "answers": [
-              "[CHƯA NHẬP đáp án: Bài 2 · Tên bài hát]"
+              "Kris Defoort Music for the Heart",
+              "Kris Defoort - Music for the Heart",
+              "Kris Defoort, Music for the Heart",
+              "Music for the Heart Kris Defoort",
+              "Music for the Heart",
+              "Defoort Music for the Heart",
+              "Music for the Heart - Kris Defoort"
             ]
           },
           {
-            "label": "Bài 2 · Thí sinh",
+            "label": "Câu 2 · Thí sinh",
             "answers": [
-              "[CHƯA NHẬP đáp án: Bài 2 · Thí sinh]"
+              "Masaya Kamei",
+              "Kamei Masaya"
             ]
           }
         ],
@@ -368,29 +388,14 @@
       "id": "L5",
       "type": "route_info",
       "label": "Lộ trình 6",
-      "clue": "(GIẢ) Lời dẫn của Lộ trình 5 (bản thử, không nêu tên điểm đến).",
+      "clue": "Đội chơi tìm đường về đích tại nơi được miêu tả trong gợi ý: \"Trên đỉnh vươn cao là nhóm tượng bằng đồng màu xanh đồng, cỗ xe bốn ngựa do nữ thần tay giương cao lá cờ tổ quốc\"",
       "transport": {
         "allowed": "any"
       },
       "destination": {
-        "name": "Place Poelaert – trước Cung điện Tư pháp",
-        "lat": 50.83624,
-        "lon": 4.34685,
-        "radius": 35
-      }
-    },
-    {
-      "id": "L6",
-      "type": "route_info",
-      "label": "Lộ trình 7",
-      "clue": "Chặng dừng! (GIẢ) Trở về quảng trường có đài phun nước, đối diện tòa thị chính cũ có mặt tiền trắng. Người dẫn chương trình đang chờ bạn. Bắt buộc: đi bộ.",
-      "transport": {
-        "mandatory": "walk"
-      },
-      "destination": {
-        "name": "Grand-Place",
-        "lat": 50.84675,
-        "lon": 4.35247,
+        "name": "Khải hoàn môn Cinquantenaire",
+        "lat": 50.84048,
+        "lon": 4.3933,
         "radius": 20
       }
     },
@@ -399,11 +404,11 @@
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Grand-Place",
-        "lat": 50.84675,
-        "lon": 4.35247,
+        "name": "Khải hoàn môn Cinquantenaire",
+        "lat": 50.84048,
+        "lon": 4.3933,
         "radius": 20,
-        "yawDeg": -40
+        "yawDeg": 0
       }
     }
   ]

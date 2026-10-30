@@ -857,3 +857,10 @@
 /* Leg 3 (task.showMarks, BOZAR T3): from minute 40 the boxes of the last answer are painted right / wrong (green / red) until edited */
 .rc-part .rc-input.ok { border-color: #3fb26a; background: rgba(63, 178, 106, 0.16); }
 .rc-part .rc-input.bad { border-color: #e0524a; background: rgba(224, 82, 74, 0.16); }
+
+/* a heading over the boxes of one question ("Câu 1 · Tiết mục" + "Câu 1 · Thí sinh"): the boxes are indented under it */
+.rc-part-group { margin: 10px 0 2px; font-weight: 700; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--rc-accent, #e0a347); }
+.rc-part-group:first-child { margin-top: 0; }
+.rc-part-in { margin-left: 10px; }
+
+.rc-result-wait { margin: 10px 0 0; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--rc-accent, #e0a347); }

@@ -16,7 +16,7 @@
 import { FINISH_PENALTY_REASON, finishTexts, NET, type ClueCard, type FinishResult, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
 import { toast } from '../../ui/Toasts.ts';
-import { bookEntries, type BookEntry, branchConfirmText, type CardPanel, cardPanel, copyBlocked, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultKey, resultView, richText, splitNote, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
+import { bookEntries, formatDuration, type BookEntry, branchConfirmText, type CardPanel, cardPanel, copyBlocked, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultKey, resultView, richText, splitNote, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
 import './race.css';
 
 export interface RaceHudActions {
@@ -119,6 +119,8 @@ export class RaceHud {
   private sim = 0;
   /** ms, server clock estimate of the last frame (+ clockOffset): countdowns, pending stopwatch, history times. */
   private now = Date.now();
+  private waitUntil: number | null = null;
+  private waitEl: HTMLElement | null = null;
   private clockOffset = 0; // DEV demo only: stand-in cards carry real-looking times while the offline clock stays at 0
   private demoTeam = ''; // DEV demo only: offline there is no team name for the submission code
   private readonly banner = new StartOrderBanner();
@@ -272,6 +274,8 @@ export class RaceHud {
     if (!fresh && store.get(RESULT_KEY) === key) return;
     store.set(key, RESULT_KEY);
     const t = resultView(r, this.teamName || this.demoTeam);
+    this.waitUntil = r.waitUntil ?? null; // Leg 3: the countdown to the place (update() keeps it moving; the server pushes the place at 0)
+    this.waitEl = r.waitUntil !== undefined ? el('p', 'rc-result-wait', '') : null;
     setText(this.npcEl, t.npc);
     this.npcEl.classList.toggle('out', r.kind === 'out');
     this.finishSince = this.sim;
@@ -280,7 +284,7 @@ export class RaceHud {
     this.fullCard = null;
     this.resetControls();
     this.resultOpen = true;
-    const box = el('div', `rc-full rc-result ${r.kind}`, undefined, el('h2', 'rc-result-title', t.title), el('p', 'rc-text', t.card), ...(t.penalty ? [el('p', 'rc-result-penalty', t.penalty)] : []), el('div', 'rc-actions', undefined, this.closeButton('Đóng (Tab)')));
+    const box = el('div', `rc-full rc-result ${r.kind}`, undefined, el('h2', 'rc-result-title', t.title), el('p', 'rc-text', t.card), ...(t.penalty ? [el('p', 'rc-result-penalty', t.penalty)] : []), ...(this.waitEl ? [this.waitEl] : []), el('div', 'rc-actions', undefined, this.closeButton('Đóng (Tab)')));
     box.style.width = `min(${C.fullWidth}px, 100%)`;
     this.overlay.replaceChildren(box);
     this.overlay.hidden = false;
@@ -305,6 +309,7 @@ export class RaceHud {
   update(f: RaceHudFrame): void {
     this.sim = f.simTime;
     this.now = f.serverNow + this.clockOffset;
+    if (this.waitEl && this.waitUntil !== null) setTime(this.waitEl, this.now < this.waitUntil ? `Còn ${formatDuration(Math.ceil((this.waitUntil - this.now) / 1000) * 1000)} để biết thứ hạng` : 'Đang cập nhật thứ hạng…');
     if (this.zoneList.ticking) this.drawZone(); // a gone team's "n phút trước" moves with the clock (and expires), nothing else does
     this.bannerEl.classList.toggle('on', this.banner.text !== '' && this.banner.visible(f.simTime));
     const lock = lockLine(this.view, this.now);
@@ -596,19 +601,24 @@ export class RaceHud {
     const box = el('div', 'rc-parts');
     const send = this.act('Gửi đáp án [Enter]', () => this.submitParts(card));
     const check = () => void (send.disabled = !p.enabled || this.partInputs.some((i) => !i.value.trim()));
+    let shownGroup: string | null = null;
     this.partInputs = p.labels.map((label, k) => {
       const input = Object.assign(document.createElement('input'), { type: 'text', className: 'rc-input', maxLength: NET.answerMax, placeholder: 'Nhập…', autocomplete: 'off', spellcheck: false, enterKeyHint: k === p.labels.length - 1 ? 'send' : 'next', value: this.drafts[k] ?? '', disabled: !p.enabled });
       input.setAttribute('aria-label', label);
       input.addEventListener('input', () => ((this.drafts[k] = input.value), input.classList.remove('ok', 'bad'), check()));
       input.addEventListener('focus', () => (this.focusBox = true));
-      box.append(el('label', 'rc-part', undefined, el('span', 'rc-part-label', label), input));
+      // labels "Câu 1 · Tiết mục": consecutive boxes of one group sit under one "Câu 1" heading (Leg 3 T3: 2 questions × 2 boxes)
+      const [group, rest] = label.includes(' · ') ? (label.split(' · ', 2) as [string, string]) : [null, label];
+      if (group && group !== shownGroup) box.append(el('div', 'rc-part-group', group));
+      shownGroup = group;
+      box.append(el('label', group ? 'rc-part rc-part-in' : 'rc-part', undefined, el('span', 'rc-part-label', rest), input));
       return input;
     });
     // task.showMarks: the boxes still holding what the last answer said are painted right (green) / wrong (red)
     const last = [...card.answers].reverse().find((a) => a.marks);
     const sent = last?.text.split(' | ').map((x) => x.trim());
     if (last?.marks && sent) this.partInputs.forEach((input, k) => input.value.trim() === sent[k] && input.classList.add(last.marks![k] ? 'ok' : 'bad'));
-    box.append(el('div', 'rc-parts-foot', undefined, el('span', 'rc-parts-hint', p.enabled ? 'Điền đủ các ô rồi gửi Host duyệt · thứ tự không quan trọng' : card.status === 'pending' ? 'Đang chờ Host duyệt' : 'Đang bị phạt: sửa lại khi hết đếm ngược'), send));
+    box.append(el('div', 'rc-parts-foot', undefined, el('span', 'rc-parts-hint', p.enabled ? 'Điền đủ các ô rồi gửi · mỗi ô là một đáp án riêng' : card.status === 'pending' ? 'Đang chờ Host duyệt' : 'Đang bị phạt: sửa lại khi hết đếm ngược'), send));
     check();
     return box;
   }

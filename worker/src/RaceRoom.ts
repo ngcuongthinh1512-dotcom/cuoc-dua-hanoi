@@ -137,6 +137,7 @@ export class RaceRoom extends DurableObject<Env> {
       counters: this.counters,
       transaction: (fn) => this.ctx.storage.transactionSync(fn),
       send: (team, m) => this.sockets(team).forEach((ws) => this.send(ws, m)),
+      setAlarm: (at) => this.setAlarm(at),
       changed: (now) => {
         // SPEC §17.40: after the transaction committed, everyone (spectators too) learns who stopped racing
         for (const m of this.teamNews.splice(0)) this.broadcast(m);
@@ -331,6 +332,7 @@ export class RaceRoom extends DurableObject<Env> {
     const now = Date.now();
     this.closeDead(now); // the tick loop may be asleep (nobody moving) while a socket died silently
     this.bikes.alarm(this.players(), now);
+    this.engine.revealDue(now); // Leg 3: finish-line penalties that ended: those teams hear their place now
   }
 
   // ── handlers ──
@@ -734,8 +736,9 @@ export class RaceRoom extends DurableObject<Env> {
     this.counters.rows += 2;
   }
 
+  /** Arms the alarm; an earlier one already armed (bike spawning, a finish-line penalty's end) stays: alarm() runs both jobs. */
   private setAlarm(at: number) {
-    void this.ctx.storage.setAlarm(at);
+    void this.ctx.storage.getAlarm().then((cur) => (cur === null || at < cur ? this.ctx.storage.setAlarm(at) : undefined));
     this.counters.rows += 1;
   }
 

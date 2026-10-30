@@ -84,7 +84,7 @@ const real = RoadGraph.decode(JSON.parse(readFileSync(FILE, 'utf8')) as RoadGrap
 const leg = JSON.parse(readFileSync(new URL('../worker/legs/bruxelles-demo.json', import.meta.url), 'utf8')) as {
   steps: { id: string; destination?: { lat: number; lon: number } }[];
 };
-const L = leg.steps.filter((s) => /^L[1-6]$/.test(s.id) && s.destination).map((s) => ({ id: s.id, ...latLonToWorld(s.destination!.lat, s.destination!.lon) }));
+const L = leg.steps.filter((s) => /^L[1-5]$/.test(s.id) && s.destination).map((s) => ({ id: s.id, ...latLonToWorld(s.destination!.lat, s.destination!.lon) }));
 const snap = (x: number, z: number) => real.nearestNode(x, z, 'walk', 80);
 const crow = (p: number, q: number) => Math.hypot(real.x[p]! - real.x[q]!, real.z[p]! - real.z[q]!);
 const route = (p: number, q: number) => shortestPath(real, p, q, 'walk');
@@ -100,8 +100,8 @@ describe('roadgraph.json (real data)', () => {
     expect(real.component.filter((c) => c === real.main).length / real.nodeCount).toBeGreaterThan(0.9);
   });
 
-  it('L1–L6 and the spawn are all walk-connected, paths ≤ 1.7 × straight line (Leg 3: the medieval centre, measured 1.61)', () => {
-    expect(L.length).toBe(6);
+  it('L1–L5 and the spawn are all walk-connected, paths ≤ 1.7 × straight line (Leg 3: the medieval centre, measured 1.61)', () => {
+    expect(L.length).toBe(5); // Leg 3: the last route (L5) ends at the Pit Stop, so there is no L6
     const ns = [...L.map((p) => snap(p.x, p.z)), snap(playerSetup.spawn.x, playerSetup.spawn.z)];
     expect(ns.every((n) => n >= 0)).toBe(true);
     for (let i = 0; i < ns.length; i++) {
@@ -113,13 +113,13 @@ describe('roadgraph.json (real data)', () => {
     }
   });
 
-  it('A* L1 → L6 under 30 ms; the canal is crossed by walkable bridges', () => {
-    const [p1, p6] = [snap(L[0]!.x, L[0]!.z), snap(L[5]!.x, L[5]!.z)];
+  it('A* L1 → L5 under 30 ms; the canal is crossed by walkable bridges', () => {
+    const [p1, p6] = [snap(L[0]!.x, L[0]!.z), snap(L[4]!.x, L[4]!.z)];
     route(p1, p6); // warm-up (JIT)
     const t0 = performance.now();
     route(p1, p6);
     const ms = performance.now() - t0;
-    console.log(`A* L1 → L6: ${ms.toFixed(1)} ms`);
+    console.log(`A* L1 → L5: ${ms.toFixed(1)} ms`);
     expect(ms).toBeLessThan(30);
     // Leg 3: Brussels has no river inside the box, only the canal (NW edge): its crossings are walkable bridge edges that tie both banks
     // into the one walk component.

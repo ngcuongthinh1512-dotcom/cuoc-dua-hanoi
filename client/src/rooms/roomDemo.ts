@@ -55,7 +55,7 @@ export const HALL_CARD: ClueCard = {
 export const HALL_T3_CARD: ClueCard = {
   step: 'T3', type: 'challenge', label: 'Thử thách 3', text: '', media: [], room: 'hall', status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: T0, completedAt: null, retryPenaltyMinutes: 3,
   pickup: { clue: 'Đội chơi đi lại gần sân khấu để nhận mật thư tiếp theo (minh họa).', prompt: 'Bấm F để nhận mật thư thử thách 3' },
-  task: { title: 'Queen Elisabeth', description: 'Nghe 2 đoạn voice rồi điền tên bài hát và thí sinh (minh họa).', media: [], kind: 'answer', verification: 'host_approval', input: 'parts', partLabels: ['Bài 1 · Tên bài hát', 'Bài 1 · Thí sinh', 'Bài 2 · Tên bài hát', 'Bài 2 · Thí sinh'], proofInstruction: '', timeLimitMinutes: null },
+  task: { title: 'Queen Elisabeth', description: 'Nghe 2 đoạn voice rồi điền tên bài hát và thí sinh (minh họa).', media: [], kind: 'answer', verification: 'host_approval', input: 'parts', partLabels: ['Câu 1 · Tiết mục', 'Câu 1 · Thí sinh', 'Câu 2 · Tiết mục', 'Câu 2 · Thí sinh'], proofInstruction: '', timeLimitMinutes: null },
 };
 /** The card after the detour step: the next route (invented text). */
 export const NEXT_CARD: ClueCard = { step: 'L2', type: 'route_info', label: 'Lộ trình 2', text: 'Mật thư minh họa: đội tìm đường tới điểm kế tiếp để nhận mật thư đi tiếp.', transport: { allowed: 'any' }, media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: NOW, completedAt: null };

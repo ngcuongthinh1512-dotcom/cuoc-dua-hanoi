@@ -151,7 +151,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const warn = runT('lm.json', j).issues.filter((i) => i.level === 'warning').map((i) => i.message);
     expect(warn.some((m) => m.includes('khuôn viên địa danh Nhà thờ lớn Thánh Michel và Gudule'))).toBe(true);
     expect(warn.some((m) => m.includes('khuôn viên địa danh Nhà Vua (Maison du Roi)'))).toBe(true);
-    expect(warn.some((m) => m.startsWith('thảm Chặng dừng 16 × 32 m'))).toBe(true);
+    expect(warn.some((m) => /^thảm Chặng dừng [\d.]+ × [\d.]+ m/.test(m))).toBe(true);
   });
 
   it('a point in the middle of the river (Leg 3: the canal, a `river: true` polygon) is a warning; a bad timezone is an error (the server refuses the leg)', () => {
