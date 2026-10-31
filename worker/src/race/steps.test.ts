@@ -261,18 +261,14 @@ describe('Leg 3: Lựa chọn kép rooms (race room)', () => {
     expect(go({ ...r1.p, room: { b: 'A', done: 2, skipped: true } }, room(3)).effects).toEqual(ignored); // a skip is final
   });
 
-  it('done = total → ONE pending answer for the Host (not trusted); Duyệt then advances; after a Phạt the client re-sends it', () => {
+  it('done = total → a correct answer and the step completes at once (no Host approval)', () => {
     const full = go(openA, room(5), 3000);
     expect(full.effects).toEqual([
       { kind: 'room', step: 3, rec: { b: 'A', done: 5, skipped: false } },
-      { kind: 'answer', step: 3, rec: { id: 1, b: 'A', text: 'Hoàn thành phòng sô-cô-la: 5/5', at: 3000, s: 'pending' }, verdict: 'pending' },
+      { kind: 'answer', step: 3, rec: { id: 1, b: 'A', text: 'Hoàn thành phòng sô-cô-la: 5/5', at: 3000, s: 'correct' }, verdict: 'correct' },
+      { kind: 'complete', step: 3 },
     ]);
-    expect(full.p).toMatchObject({ step: 3, pendingId: 1, lastAnswerId: 1 });
-    expect(go(full.p, room(5)).effects).toEqual([]); // still pending: no second item
-    expect(go(full.p, { kind: 'approve', step: 'D1', pose: null }).effects).toEqual([{ kind: 'complete', step: 3 }]);
-    const after = { ...full.p, pendingId: null, lockedUntil: 9000 };
-    expect(go(after, room(5), 5000).effects).toEqual([]); // the Phạt countdown
-    expect(go(after, room(5), 9000).effects).toMatchObject([{ kind: 'answer', rec: { id: 2, s: 'pending' } }]);
+    expect(full.p).toMatchObject({ step: 4, pendingId: null });
   });
 
   it('skip → the step completes at once + (total − done) × penaltyMinutesEach finish-line minutes', () => {
@@ -544,21 +540,21 @@ describe('advance: route to the Pit Stop + check-in', () => {
     expect(run(r.p, { kind: 'checkin', ...at(Z[5]!) }, 1500).effects).toEqual([{ kind: 'finish' }]);
   });
 
-  it('SPEC §17.38: only ON the 16 × 32 m mat (turned to the zone yaw), not anywhere within the radius', () => {
+  it('SPEC §17.38: only ON the 3,2 × 6,4 m mat (turned to the zone yaw), not anywhere within the radius', () => {
     const on = (dx: number, dz: number, riding = false): RaceInput => ({ kind: 'pose', x: Z[5]!.x + dx, z: Z[5]!.z + dz, riding });
     expect(Z[5]!.mat && Z[4]!.mat).toBe(true);
     expect(Z[0]!.mat).toBeUndefined();
-    // mini's PS: yawDeg 0 → long axis north-south (z); r = 25: 10 m beside the mat / 17 m past its end used to count
-    expect([run(P(4), on(10, 0)).effects, run(P(4), on(0, 17)).effects, run(P(4), on(8.6, 0)).effects]).toEqual([[], [], []]);
-    expect(run(P(4), on(7.9, 15.9)).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']); // a corner
-    expect(run(P(4), on(-8.4, -16.4)).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']); // the 0.5 m slack
-    expect(run(P(5), { kind: 'checkin', x: Z[5]!.x + 9, z: Z[5]!.z }).effects).toEqual([{ kind: 'refuse', code: 'boxFar' }]); // the geofence slack does not widen it
-    expect(run(P(5), { kind: 'checkin', x: Z[5]!.x, z: Z[5]!.z - 15 }).effects).toEqual([{ kind: 'arrive', step: 5 }, { kind: 'finish' }]);
+    // mini's PS: yawDeg 0 → long axis north-south (z); r = 25: 10 m beside the mat / 17 m past its end
+    expect([run(P(4), on(10, 0)).effects, run(P(4), on(0, 17)).effects, run(P(4), on(2.2, 0)).effects]).toEqual([[], [], []]);
+    expect(run(P(4), on(1.5, 3.1)).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']); // a corner
+    expect(run(P(4), on(-2, -3.6)).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']); // the 0.5 m slack
+    expect(run(P(5), { kind: 'checkin', x: Z[5]!.x + 3, z: Z[5]!.z }).effects).toEqual([{ kind: 'refuse', code: 'boxFar' }]); // the geofence slack does not widen it
+    expect(run(P(5), { kind: 'checkin', x: Z[5]!.x, z: Z[5]!.z - 3 }).effects).toEqual([{ kind: 'arrive', step: 5 }, { kind: 'finish' }]);
     // the zone yaw turns the rectangle: yawDeg 90 → long axis east-west
     const turned = variant((s) => (s[5].destination.yawDeg = 90));
     const tz = stepZones(turned)[5]!;
-    expect(run(P(4), { kind: 'pose', x: tz.x + 15, z: tz.z, riding: false }, 1000, turned).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']);
-    expect(run(P(4), { kind: 'pose', x: tz.x, z: tz.z + 10, riding: false }, 1000, turned).effects).toEqual([]);
+    expect(run(P(4), { kind: 'pose', x: tz.x + 3, z: tz.z, riding: false }, 1000, turned).effects.map((e) => e.kind)).toEqual(['arrive', 'complete', 'arrive', 'finish']);
+    expect(run(P(4), { kind: 'pose', x: tz.x, z: tz.z + 3, riding: false }, 1000, turned).effects).toEqual([]);
   });
 
   it('with a penalty: check-in refused until the wait is over', () => {

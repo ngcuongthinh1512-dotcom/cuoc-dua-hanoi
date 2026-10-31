@@ -410,21 +410,21 @@ describe('RaceEngine', () => {
     expect(f.events.at(-1)).toEqual(['host.finishPenalty', { minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép', was: null }]);
     expect(f.teams.get('t0')!.finishPenalty).toEqual({ minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép', by: 'host' });
     expect(f.sent).toEqual([]);
-    // t0 touches the mat first: told it finished FIRST (real order, SPEC §17.22) + its penalty line; no wait at the mat
+    // t0 touches the mat first: told only "finished" + its penalty line + the wait (no rank until the penalty is served)
     e.onPose('t0', at(4), 100);
-    expect(result('t0')).toMatchObject({ rank: 1, kind: 'first', finishPenalty: { minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép' } });
+    expect(result('t0')).toMatchObject({ rank: 0, finishPenalty: { minutes: 20, reason: 'bỏ thử thách ở lựa chọn kép' }, waitUntil: 100 + 20 * MIN });
+    // t1 finishes meanwhile with an earlier total (5 min < 20 min): ranked ahead of the waiting t0
     e.onPose('t1', at(4), 100 + 5 * MIN);
-    expect(result('t1')).toMatchObject({ rank: 2, kind: 'finish' });
+    expect(result('t1')).toMatchObject({ rank: 1, kind: 'first' });
     expect(result('t1')).not.toHaveProperty('finishPenalty');
     // the Host ranking: finishAt + penalty → t1 (5 min) ahead of t0 (0 + 20 min); the stored ranks told to the teams stay
     expect(e.hostView(200).ranking.map((r) => [r.team, r.rank])).toEqual([['t1', 1], ['t0', 2], ['t2', 3]]);
-    expect([f.teams.get('t0')!.rank, f.teams.get('t1')!.rank]).toEqual([1, 2]);
     // after the finish: the card updates live, written first
     f.log.length = f.txs.length = 0;
     fp('t1', 30, 300, '  đến muộn ');
     expect(f.log).toEqual(['event host.finishPenalty', 'saveTeam', 'send race']);
     writesFirst(f);
-    expect(result('t1')).toMatchObject({ rank: 2, finishPenalty: { minutes: 30, reason: 'đến muộn' } });
+    expect(result('t1')).toMatchObject({ rank: 0, finishPenalty: { minutes: 30, reason: 'đến muộn' } }); // now waits too (5 + 30 min)
     expect(e.hostView(400).ranking.map((r) => r.team)).toEqual(['t0', 't1', 't2']); // 20 min < 5 + 30 min
     // the same value again / an unknown team: refused, nothing written
     f.log.length = 0;
@@ -524,14 +524,11 @@ describe('RaceEngine', () => {
       expect(to('t0').slice(-1)).toEqual([{ t: 'notice', code: 'roomIgnored' }]);
     });
 
-    it('done = total → a Host queue item "Hoàn thành phòng sô-cô-la: 5/5"; Duyệt advances; never completes by itself', () => {
-      const { e, op, review, card } = inRoom();
+    it('done = total → passes at once (a correct "Hoàn thành phòng sô-cô-la: 5/5"), no Host queue item', () => {
+      const { e, op, card } = inRoom();
       op('t0', room('A', 5), 10);
-      expect(card('t0')).toMatchObject({ step: 'D1', status: 'pending' });
-      expect(e.hostView(11).queue).toEqual([expect.objectContaining({ team: 't0', step: 'D1', branch: 'A', id: 1, text: 'Hoàn thành phòng sô-cô-la: 5/5' })]);
-      review('t0', 'D1', 'approve', 20, { id: 1 });
       expect(card('t0')!.step).not.toBe('D1');
-      expect(e.hostView(21).queue).toEqual([]);
+      expect(e.hostView(11).queue).toEqual([]);
     });
 
     it('skip → the next clue at once + (total − done) × each at the finish line (by room); a later Host value is the Host\'s', () => {

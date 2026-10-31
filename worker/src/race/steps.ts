@@ -341,7 +341,7 @@ function roomReport(leg: Leg, zones: readonly Zone[], p0: Progress, i: number, i
   }
   // every item made: passes at once, no Host approval (the Host sees it in the matrix and in the answer log; Phạt / undo as usual)
   if (input.done === room.total && stateOf(leg, i, p, now) === 'active') {
-    const a: AnswerRec = { id: p.lastAnswerId + 1, b: input.branch, text: `Hoàn thành phòng ${ROOM_NAME[room.kind]}: ${input.done}/${room.total}`, at: now, s: 'correct', auto: true };
+    const a: AnswerRec = { id: p.lastAnswerId + 1, b: input.branch, text: `Hoàn thành phòng ${ROOM_NAME[room.kind]}: ${input.done}/${room.total}`, at: now, s: 'correct' };
     p = { ...p, lastAnswerId: a.id };
     fx.push({ kind: 'answer', step: i, rec: a, verdict: 'correct' });
     const r = advance(leg, zones, p, { kind: 'approve', step: s.id, pose: input.pose }, now, running);

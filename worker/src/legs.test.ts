@@ -10,13 +10,12 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
     for (const id of BUNDLED_LEGS) expect(bundledLeg(id)?.id).toBe(id);
   });
 
-  it('the demo leg is a draft: only the Host blanks of SPEC §10.1 are open; the filled test copy has none', () => {
-    const r = parseLeg(leg);
-    expect(r.ok).toBe(true);
-    expect(new Set(r.issues.map((i) => i.level))).toEqual(new Set(['blank']));
-    expect(r.issues.map((i) => i.where.split(' ›')[0])).toEqual(expect.arrayContaining(['Bước 4 (D1)']));
-    expect(r.issues.filter((i) => i.where.startsWith('Host duyệt'))).toEqual([]); // SPEC §17.17: no Host Facebook link to fill
-    for (const id of ['bruxelles-demo-filled', 'mini']) expect(parseLeg(bundledLeg(id)).issues).toEqual([]);
+  it('every bundled leg is filled: no blank left (the real texts are in)', () => {
+    for (const id of BUNDLED_LEGS) {
+      const r = parseLeg(bundledLeg(id));
+      expect(r.ok).toBe(true);
+      expect(r.issues).toEqual([]);
+    }
   });
 
   it('starts at the Tháp Rogier (Leg 3 start; SPEC §17.12 = one agreed start): every bundled leg, within 25 m', () => {

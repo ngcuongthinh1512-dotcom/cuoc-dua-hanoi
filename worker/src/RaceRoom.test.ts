@@ -43,7 +43,7 @@ describe('RaceRoom', () => {
     expect(w.movement).toEqual({ footSpeed: 4, bikeSpeedMultiplier: 1.3 });
     const first = await s.next<HostState>(); // pushed on connect
     expect(first).toMatchObject({ t: 'host.state', teams: [] });
-    expect(first.steps?.map((p) => p.id)).toEqual(['start', 'L1', 'L2', 'L3', 'L3B', 'L4', 'L5', 'L6', 'PS']);
+    expect(first.steps?.map((p) => p.id)).toEqual(['start', 'L1', 'L2', 'L3', 'L3B', 'L4', 'L5', 'PS']);
     s.send({ t: 'host.createTeams', teams: [{ name: 'Đội Xanh', colour: '#2c6bd8', player: 'An' }, { name: 'Đội Đỏ', colour: '#d8342c' }] });
     const st = await s.next<HostState>();
     expect(st.t).toBe('host.state');

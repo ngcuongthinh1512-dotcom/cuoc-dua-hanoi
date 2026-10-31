@@ -59,19 +59,19 @@ let boxTeam: Sock | null = null;
 let boxAt = { x: 0, z: 0 };
 
 describe.concurrent('RaceRoom live', () => {
-  it('ticks: teams within 500 m only, never itself; the Host gets all; nothing when nobody moves', async () => {
+  it('ticks: teams within 50 m only, never itself; the Host gets all; nothing when nobody moves', async () => {
     const race = 'live-ticks';
     const { host, teams } = await setupRace(server, race, 3);
     const [a, b, c] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));
     const [sa, sb, sc] = teams.map((t) => t.slot) as [number, number, number];
     a!.send(pose(0, 0));
-    b!.send(pose(300, 0));
-    c!.send(pose(900, 0)); // 900 m from A, 600 m from B
+    b!.send(pose(30, 0));
+    c!.send(pose(90, 0)); // 90 m from A, 60 m from B (radius 50 m)
     const [ma, mb, mc, mh] = await Promise.all([a!.drain(600), b!.drain(600), c!.drain(600), host.drain(600)]);
     expect(slotsOf(ma)).toEqual([sb]);
     expect(slotsOf(mb)).toEqual([sa]);
     // C's own radius is measured from its trusted point (D4, review fix: no remote scan), still at the start after a
-    // first pose 900 m away; B's and C's own poses are what the others see
+    // first pose 90 m away; B's and C's own poses are what the others see
     expect(slotsOf(mc)).toEqual([sa, sb]);
     expect(slotsOf(mh)).toEqual([sa, sb, sc]);
     // nobody moves → no tick at all
