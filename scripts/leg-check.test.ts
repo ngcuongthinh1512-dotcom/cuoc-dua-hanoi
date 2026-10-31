@@ -45,7 +45,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const r = run(legs('bruxelles-demo.json'));
     expect(r.ok).toBe(true);
     expect(r.issues.filter((i) => i.level === 'error')).toEqual([]);
-    expect(r.issues.some((i) => i.level === 'blank')).toBe(true);
+    expect(r.issues.some((i) => i.level === 'blank')).toBe(false); // the real texts are in
     // Leg 2: no warning at all (Paris had one for L6, the SPEC §17.4 point on the Bir-Hakeim walkway: a bridge over land)
     expect(r.issues.filter((i) => i.level === 'warning').map((i) => i.where)).toEqual([]);
   });
@@ -347,7 +347,7 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     const demo = run(legs('bruxelles-demo.json'));
     expect(lvl(demo, 'error')).toEqual([]);
     expect(lvl(demo, 'warning')).toEqual([]);
-    expect(lvl(demo, 'blank').length).toBeGreaterThan(0); // Leg 3: D1 is filled (Chocolate / Truyện Tranh), T1 / T2 and the mini-game texts still open
+    expect(lvl(demo, 'blank')).toEqual([]); // Leg 3: D1 is filled (Chocolate / Truyện Tranh), T1 / T2 and the mini-game texts still open
   });
 
   it('host_approval + a typed answer needs no proofInstruction (not a blank); a photo task (free) without one is a blank', () => {

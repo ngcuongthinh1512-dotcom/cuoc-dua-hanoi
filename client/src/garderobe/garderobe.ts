@@ -20,5 +20,5 @@ renderer.setAnimationLoop(() => {
   room.update(Math.min(clock.getDelta(), 0.1));
   room.render!();
   if (!room.settled() || (window as { __READY__?: boolean }).__READY__) return;
-  Object.assign(window, { __STATS__: { ...room.stats(), vitrines: 4 }, __READY__: true });
+  Object.assign(window, { __STATS__: { ...room.stats(), vitrines: 3 }, __READY__: true });
 });

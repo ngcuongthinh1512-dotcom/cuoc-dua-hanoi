@@ -446,21 +446,21 @@ describe('RaceEngine', () => {
     expect(result('t0')).toMatchObject({ finishPenalty: { minutes: 12 } });
   });
 
-  describe('Leg 3: auto-graded Thử thách 1 (bruxelles-demo T1: 4 boxes with answers)', () => {
+  describe('Leg 3: auto-graded Thử thách 1 (bruxelles-demo T1: 3 boxes with answers)', () => {
     const bx = bundledLeg('bruxelles-demo')!;
     const T = bx.steps.findIndex((s) => s.id === 'T1');
-    const RIGHT = ['Cuba', 'Singapore', 'Uzbekistan', 'Estonia'];
+    const RIGHT = ['Cuba', 'Singapore', 'Uzbekistan'];
     const ans = (parts: string[]): RaceOp => ({ t: 'race', op: 'answer', step: 'T1', text: '', parts });
 
-    it('4/4: written, then "Chính xác!" + the next clue at once; the Host queue shows it until "✓ Đồng ý"', () => {
+    it('3/3: written, then "Chính xác!" + the next clue at once; the Host queue shows it until "✓ Đồng ý"', () => {
       const { f, e, op, to, card, review, host } = racing({ t0: T }, 'bruxelles-demo');
-      op('t0', ans(['cu-ba', 'XIN-GA-PO', 'udobekixtan', 'Ê-xtô-ni-a']), 10);
+      op('t0', ans(['cu-ba', 'XIN-GA-PO', 'udobekixtan']), 10);
       writesFirst(f);
-      expect(to('t0').filter((m) => (m as { t: string }).t === 'notice')).toEqual([{ t: 'notice', code: 'autoCorrect', score: 4, of: 4 }]); // no extra clueNew
+      expect(to('t0').filter((m) => (m as { t: string }).t === 'notice')).toEqual([{ t: 'notice', code: 'autoCorrect', score: 3, of: 3 }]); // no extra clueNew
       expect(card('t0')!.step).toBe(bx.steps[T + 1]!.id);
-      expect(f.events.find(([t]) => t === 'auto')).toEqual(['auto', { step: 'T1', id: 1, score: 4, of: 4 }]);
+      expect(f.events.find(([t]) => t === 'auto')).toEqual(['auto', { step: 'T1', id: 1, score: 3, of: 3 }]);
       const q = e.hostView(11).queue;
-      expect(q).toEqual([expect.objectContaining({ team: 't0', step: 'T1', id: 1, reference: RIGHT, auto: { verdict: 'correct', marks: [true, true, true, true], score: 4, of: 4, canApprove: false } })]);
+      expect(q).toEqual([expect.objectContaining({ team: 't0', step: 'T1', id: 1, reference: RIGHT, auto: { verdict: 'correct', marks: [true, true, true], score: 3, of: 3, canApprove: false } })]);
       expect(e.hostView(11).undo).toEqual([]); // nothing for the Host to undo
       review('t0', 'T1', 'approve', 12, { id: 1 }); // "Đúng" on a done step
       expect(host.at(-1)).toMatchObject({ level: 'warning' });
@@ -470,16 +470,16 @@ describe('RaceEngine', () => {
       expect(e.hostView(14).queue).toEqual([]);
     });
 
-    it('2/4: Phạt at once (2 min) + "đúng 2/4"; the queue never blocks the team; Host score → live; "Đúng" lifts the lock + next clue', () => {
+    it('1/3: Phạt at once (2 min) + "đúng 1/3"; the queue never blocks the team; Host score → live; "Đúng" lifts the lock + next clue', () => {
       const { f, e, op, to, card, review } = racing({ t0: T }, 'bruxelles-demo');
-      op('t0', ans(['Cuba', 'Singapore', 'Latvia', 'Peru']), 10);
-      expect(to('t0').filter((m) => (m as { t: string }).t === 'notice')).toEqual([{ t: 'notice', code: 'autoPenalized', score: 2, of: 4 }]);
-      expect(card('t0')).toMatchObject({ step: 'T1', status: 'locked', lockKind: 'retry', lockedUntil: 10 + 2 * 60_000, answers: [{ id: 1, status: 'penalized', score: 2, of: 4 }] });
+      op('t0', ans(['Cuba', 'Latvia', 'Peru']), 10);
+      expect(to('t0').filter((m) => (m as { t: string }).t === 'notice')).toEqual([{ t: 'notice', code: 'autoPenalized', score: 1, of: 3 }]);
+      expect(card('t0')).toMatchObject({ step: 'T1', status: 'locked', lockKind: 'retry', lockedUntil: 10 + 2 * 60_000, answers: [{ id: 1, status: 'penalized', score: 1, of: 3 }] });
       expect(e.hostView(11).progress.find((p) => p.step === 'T1')).toMatchObject({ pending: false, rejections: 1, lockedUntil: 10 + 2 * 60_000 });
-      expect(e.hostView(11).queue[0]!.auto).toEqual({ verdict: 'penalized', marks: [true, true, false, false], score: 2, of: 4, canApprove: true });
-      review('t0', 'T1', 'score', 20, { id: 1, score: 3 });
-      expect(to('t0').slice(-2)).toEqual([{ t: 'notice', code: 'scoreUpdated', score: 3, of: 4 }, expect.objectContaining({ t: 'race' })]);
-      expect(card('t0')).toMatchObject({ status: 'locked', lockedUntil: 10 + 2 * 60_000, answers: [{ score: 3, of: 4 }] }); // the countdown unchanged
+      expect(e.hostView(11).queue[0]!.auto).toEqual({ verdict: 'penalized', marks: [true, false, false], score: 1, of: 3, canApprove: true });
+      review('t0', 'T1', 'score', 20, { id: 1, score: 2 });
+      expect(to('t0').slice(-2)).toEqual([{ t: 'notice', code: 'scoreUpdated', score: 2, of: 3 }, expect.objectContaining({ t: 'race' })]);
+      expect(card('t0')).toMatchObject({ status: 'locked', lockedUntil: 10 + 2 * 60_000, answers: [{ score: 2, of: 3 }] }); // the countdown unchanged
       review('t0', 'T1', 'approve', 30, { id: 1 }); // "Đúng – cho qua"
       expect(card('t0')!.step).toBe(bx.steps[T + 1]!.id);
       expect(e.hostView(31).queue).toEqual([]);

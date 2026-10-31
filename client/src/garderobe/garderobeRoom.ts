@@ -1,16 +1,16 @@
 // "Phòng trưng bày GardeRobe MannekenPis" — the ground floor of the small costume museum at Rue du Chêne 19 as a self-contained
 // Three.js interior: cream-stone shopfront with two big street windows and a dark-grey door (+z, the entrance), dark walls,
 // black glass cabinets full of small costumed figurines, track spots, dark parquet, a staircase up at the back right.
-// Centrepiece: four tall glass vitrines on plinths in a shallow arc, each holding one of the user's four costume photos
-// (public/garderobe/costume-a..d, the original files, shown whole at their native aspect, unlit MeshBasicMaterial so the
-// colours stay exact). No origin / caption anywhere: the plaques say only 1–4 (the T1 "Tủ đồ" challenge, answered on the
+// Centrepiece: three tall glass vitrines on plinths in a shallow arc, each holding one of the three costume photos
+// (public/garderobe/costume-a..c, the original files, shown whole at their native aspect, unlit MeshBasicMaterial so the
+// colours stay exact). No origin / caption anywhere: the plaques say only 1–3 (the T1 "Tủ đồ" challenge, answered on the
 // normal clue card). `mountRoom(opts)` (rooms/types.ts) builds the room as ONE group in room-local metres (door at +z =
 // DOOR_Z, rooms/roomFrame.ts) into the given scene; the dev page (garderobe.ts) adds its own walker / camera / composer, the
 // race (main.ts) walks the game's body on colliders put into the game's Rapier world, `rooms.below` m under the box the team
 // opened (route L3B), the other teams in the room through the normal poses. No tally, no mini-game, no `race room`.
 // Close-up: F within reach of a vitrine ("Bấm F để xem gần") glides the camera to a pose that shows the whole photo
 // undistorted; Esc / F again glides back. The exit ring ("Ra khỏi phòng") beside the door is lit all the time.
-// Dev params (garderobe.ts): view=overview|plan|street / cam=x,y,z,yawDeg,pitchDeg (free camera) · n=1..4 / close=1..4
+// Dev params (garderobe.ts): view=overview|plan|street / cam=x,y,z,yawDeg,pitchDeg (free camera) · n=1..3 / close=1..3
 // (that vitrine's close-up at load) · hq=1 (shadows, bloom, every spot) · avatar=0|1, autoMove=walk|sprint. The race reads
 // `close` only in the offline ?roomDemo= (screenshots).
 import RAPIER from '@dimforge/rapier3d-compat';
@@ -33,7 +33,7 @@ export const PROMPT = 'Bấm F để xem gần', BACK = 'Esc / F để quay lạ
 export const DOOR_Z = G.halfL;
 /** The exit ring on the door half of the room, left of the aisle between the left cabinets and vitrine 1 (the body enters at
  *  (0, DOOR_Z − rooms.enterInset) facing −z and sees it ahead-left; 3.8 m off: never hit on entering). */
-export const EXIT = { x: -3.3, z: 2.8, r: 1.0 };
+export const EXIT = { x: -3.3, z: 2.8, r: 0.6 };
 const GLIDE_MS = 900, REACH = 1.7;
 
 // ---- procedural textures (module level: one page lifetime, shared by every mount; never disposed) -----------------------
@@ -219,7 +219,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     add(box(0.3, wallH, 0.6, top.x - w / 2 - 0.15, wallH / 2, -halfL + 0.3), M.wall);
   }
 
-  // ---- the four photo vitrines: plinth + brass + numbered plaque + print panel (unlit, exact colours) + glass + spot --------
+  // ---- the three photo vitrines: plinth + brass + numbered plaque + print panel (unlit, exact colours) + glass + spot --------
   const vit = vitrineGeometry();
   const vitrines: Vitrine[] = [];
   const loader = new THREE.TextureLoader();

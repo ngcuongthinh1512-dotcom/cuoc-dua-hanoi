@@ -210,7 +210,7 @@
       "teaser": "",
       "task": {
         "title": "Tủ đồ",
-        "description": "Trước mặt đội chơi là 4 bộ quần áo đã được quyên góp từ các đại diện từ 4 đất nước trên thế giới (trừ Bỉ). Đội chơi trả lời đúng nguồn gốc (đất nước) của 4 bộ quần áo này để nhận mật thư đi tiếp. Đội chơi có thể sử dụng link phía dưới để tra cứu các bộ quần áo tại bảo tàng này.",
+        "description": "Trước mặt đội chơi là 3 bộ quần áo đã được quyên góp từ các đại diện từ 3 đất nước trên thế giới (trừ Bỉ). Đội chơi trả lời đúng nguồn gốc (đất nước) của 3 bộ quần áo này để nhận mật thư đi tiếp. Đội chơi có thể sử dụng link phía dưới để tra cứu các bộ quần áo tại bảo tàng này.\n\nLưu ý: Trả lời thiếu hoặc sai sẽ bị phạt 2 phút (phải chờ 2 phút mới được gửi lại).",
         "media": [
           {
             "url": "https://www.mannekenpis.brussels/en/more-than-1000-costumes",
@@ -246,22 +246,12 @@
               "U-dơ-bê-ki-xtan",
               "Udobekixtan"
             ]
-          },
-          {
-            "label": "Bộ quần áo 4",
-            "answers": [
-              "Estonia",
-              "Estônia",
-              "Ê-xtô-ni-a",
-              "Extonia"
-            ]
           }
         ],
         "referenceAnswers": [
           "Cuba",
           "Singapore",
-          "Uzbekistan",
-          "Estonia"
+          "Uzbekistan"
         ],
         "proofInstruction": "",
         "timeLimitMinutes": null,

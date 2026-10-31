@@ -488,7 +488,6 @@ Object.assign(PRESETS, {
   'garderobe-close1': '/garderobe.html?n=1',
   'garderobe-close2': '/garderobe.html?n=2',
   'garderobe-close3': '/garderobe.html?n=3',
-  'garderobe-close4': '/garderobe.html?n=4',
   'garderobe-plan': '/garderobe.html?view=plan',
 });
 // Leg 3 race room "Phòng hoà nhạc Henry Le Bœuf" (client/hallroom.html, src/hall/hallRoom.ts; `npm run screenshot -- hallroom`;

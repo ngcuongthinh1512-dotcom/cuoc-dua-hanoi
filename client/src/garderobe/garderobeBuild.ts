@@ -2,8 +2,8 @@
 // 1 unit = 1 m. X across the room, Z along it (street front / entrance at +Z, back wall at −Z), Y up, y 0 = parquet.
 // Plan = the ground floor of the small corner-house museum: shopfront with two big windows + a door on the street side,
 // black glass cabinets of small costumed figurines along the walls, a staircase up along the right wall at the back, and
-// in the middle four tall glass vitrines on plinths (a shallow arc facing the entrance), each holding one photo print
-// (public/garderobe/costume-a..d, shown whole at its native aspect) as a lightbox panel lit by its own spot.
+// in the middle three tall glass vitrines on plinths (a shallow arc facing the entrance), each holding one photo print
+// (public/garderobe/costume-a..c, shown whole at its native aspect) as a lightbox panel lit by its own spot.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
@@ -13,20 +13,20 @@ export const G = {
   halfW: 5, halfL: 8, wallH: 4.0,
   window: { x0: 1.0, x1: 4.6, y0: 0.45, y1: 3.3 }, // two street windows mirrored in x; the door between them
   door: { hw: 0.6, h: 2.7 },
-  vitrine: { w: 1.3, d: 0.8, plinthH: 0.85, glassH: 1.95, printH: 1.55, arcR: 7.5, arcZ: 7, thetas: [-0.46, -0.16, 0.16, 0.46] },
+  vitrine: { w: 1.3, d: 0.8, plinthH: 0.85, glassH: 1.95, printH: 1.55, arcR: 7.5, arcZ: 2.2, thetas: [-0.3, 0, 0.3] },
   cabinet: { d: 0.55, h: 2.6, y0: 0.3, shelfDy: 0.55 },
   left: [4.5, 1.0, -2.5], right: [4.5, 1.0], // cabinet centres (z) on the long walls, 3.2 m wide each
   stair: { x: 4.3, w: 0.9, z0: -2.2, steps: 12, rise: 0.19, run: 0.38 },
 };
 export const CAB_W = 3.2;
-export const PHOTOS = ['costume-a.png', 'costume-b.png', 'costume-c.png', 'costume-d.jpg']; // the originals, byte-identical to the user's files
+export const PHOTOS = ['costume-a.png', 'costume-b.png', 'costume-c.png']; // the originals, byte-identical to the user's files
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const merge = (g: THREE.BufferGeometry[]) => mergeGeometries(g, false)!;
 const box = (w: number, h: number, d: number, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 
 export interface Vitrine extends Slot { n: number }
-/** Four vitrines on a shallow arc (radius arcR about (0, arcZ)), each turned to face the entrance side of the arc. */
+/** Three vitrines on a shallow arc (radius arcR about (0, arcZ)), each turned to face the entrance side of the arc. */
 export function vitrineSlots(): Vitrine[] {
   const { arcR, arcZ, thetas } = G.vitrine;
   return thetas.map((t, i) => ({ n: i + 1, x: arcR * Math.sin(t), y: 0, z: arcZ - arcR * Math.cos(t), yaw: -t }));

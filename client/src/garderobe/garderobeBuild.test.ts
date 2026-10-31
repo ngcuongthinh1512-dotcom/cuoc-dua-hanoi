@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { G, PHOTOS, cabinetSlots, figurineSlots, fitDistance, focusPose, inside, printSize, slotLocal, stairTop, vitrineGeometry, vitrineSlots } from './garderobeBuild.ts';
 
 describe('garderobe builders', () => {
-  it('4 vitrines numbered 1–4 inside the room, facing +z-ish, not overlapping, with a photo each', () => {
+  it('3 vitrines numbered 1–3 inside the room, facing +z-ish, not overlapping, with a photo each', () => {
     const s = vitrineSlots();
-    expect(s.map((x) => x.n)).toEqual([1, 2, 3, 4]);
-    expect(PHOTOS.length).toBe(4);
+    expect(s.map((x) => x.n)).toEqual([1, 2, 3]);
+    expect(PHOTOS.length).toBe(3);
     for (const a of s) {
       expect(inside(a.x, a.z, 1.2)).toBe(true);
       expect(slotLocal(a, 0, 0, 1).z).toBeGreaterThan(a.z); // the front looks toward the entrance (+z)

@@ -148,9 +148,9 @@ describe('Host bot (D18, pure)', () => {
     const { isClientMessage } = await import('@race/shared/protocol');
     expect(isClientMessage(ack[0], 'host')).toBe(true);
     const answers = answersOf(readFileSync(join(import.meta.dirname, '../worker/legs/bruxelles-demo.json'), 'utf8'));
-    expect(answers.get('T1#parts')).toBe('Cuba | Singapore | Uzbekistan | Estonia');
-    const card = { step: 'T1', type: 'challenge', status: 'active', lockedUntil: null, task: { input: 'parts', partLabels: ['a', 'b', 'c', 'd'] } } as unknown as ClueCard;
-    expect(botMove(card, 0, { i: 0, switches: false, switched: false }, answers)).toEqual({ op: { t: 'race', op: 'answer', step: 'T1', text: '', parts: ['Cuba', 'Singapore', 'Uzbekistan', 'Estonia'] } });
+    expect(answers.get('T1#parts')).toBe('Cuba | Singapore | Uzbekistan');
+    const card = { step: 'T1', type: 'challenge', status: 'active', lockedUntil: null, task: { input: 'parts', partLabels: ['a', 'b', 'c'] } } as unknown as ClueCard;
+    expect(botMove(card, 0, { i: 0, switches: false, switched: false }, answers)).toEqual({ op: { t: 'race', op: 'answer', step: 'T1', text: '', parts: ['Cuba', 'Singapore', 'Uzbekistan'] } });
   });
 
   it('every message it makes passes the server codec', async () => {

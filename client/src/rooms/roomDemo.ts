@@ -44,7 +44,7 @@ export function roomCard(kind: DetourKind, done: number, skipped = false, status
 /** The GardeRobe challenge card (invented text): 4 answer boxes, played inside the museum room. */
 export const GARDEROBE_CARD: ClueCard = {
   step: 'T1', type: 'challenge', label: 'Thử thách 1', text: '', media: [], room: 'garderobe', status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: T0, completedAt: null, retryPenaltyMinutes: 2,
-  task: { title: 'Tủ đồ', description: 'Trước mặt đội là 4 bộ trang phục minh họa: ghi nước gốc của từng bộ vào 4 ô.', media: [], kind: 'answer', verification: 'host_approval', input: 'parts', partLabels: ['Bộ 1', 'Bộ 2', 'Bộ 3', 'Bộ 4'], proofInstruction: '', timeLimitMinutes: null },
+  task: { title: 'Tủ đồ', description: 'Trước mặt đội là 3 bộ trang phục minh họa: ghi nước gốc của từng bộ vào 3 ô.', media: [], kind: 'answer', verification: 'host_approval', input: 'parts', partLabels: ['Bộ 1', 'Bộ 2', 'Bộ 3'], proofInstruction: '', timeLimitMinutes: null },
 };
 /** The BOZAR hall card (invented text): challenge T2 "pick the seat", played inside the concert hall (no input box: F on a seat). */
 export const HALL_CARD: ClueCard = {
