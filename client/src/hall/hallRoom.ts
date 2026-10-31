@@ -125,7 +125,7 @@ export function heightfieldDesc(frame: RoomFrame): RAPIER.ColliderDesc {
 
 export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   const { renderer, scene, frame } = o;
-  const RACE = !!o.world;
+  const RACE = !!o.world || !!o.viewer; // the race (colliders) or a watching spectator (drawn only)
   const HQ = !!o.hq;
   const q = RACE ? new URLSearchParams() : o.q; // the race reads none of the dev params
   const PLAN = q.get('view') === 'plan';

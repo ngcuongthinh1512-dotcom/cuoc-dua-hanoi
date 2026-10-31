@@ -123,7 +123,7 @@ interface Vitrine { n: number; slot: Slot; frame: THREE.MeshStandardMaterial; as
 
 export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   const { renderer, scene, frame } = o;
-  const RACE = !!o.world;
+  const RACE = !!o.world || !!o.viewer; // the race (colliders) or a watching spectator (drawn only)
   const HQ = !!o.hq;
   const q = RACE ? new URLSearchParams(o.q.get('roomDemo') === 'garderobe' ? { close: o.q.get('close') ?? '' } : {}) : o.q; // the race reads none of the dev params (screenshots: `close`)
   const PLAN = q.get('view') === 'plan';

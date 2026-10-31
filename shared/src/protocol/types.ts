@@ -358,6 +358,9 @@ export type ClientMessage =
    *  team (like the Host's), not only those within the interest radius. The server honours it only once the team is over
    *  (checked in / out / race ended); a racing team's `watch` changes nothing. */
   | { t: 'watch'; on: boolean }
+  /** Leg 3: the team's client mounted / left a room (chocolate, comic, GardeRobe, BOZAR hall): where its door stands. Only relayed to the
+   *  Host and the spectators (`room` server message) so they can watch inside; every 15 s while inside (the server keeps it in memory). */
+  | { t: 'room'; room: RoomAt | null }
   | RaceOp
   | HostMessage;
 
@@ -483,6 +486,9 @@ export interface Welcome {
   start: { x: number; z: number; yaw: number } | null;
 }
 
+/** The room a team stands in: its kind and the door (the box above it: world x, z; yaw = the room frame's, rooms/roomFrame.ts). */
+export interface RoomAt { kind: 'chocolate' | 'comic' | 'garderobe' | 'hall'; x: number; z: number; yaw: number }
+
 export type ServerMessage =
   | TickArray
   | Welcome
@@ -495,6 +501,8 @@ export type ServerMessage =
   /** reason 'finished': the team checked in or the race is over (a spectator, SPEC §8.6 / §8.10). */
   | { t: 'bike'; op: 'claim'; id: string; ok: boolean; reason?: 'taken' | 'far' | 'walkOnly' | 'finished' | 'gone' | 'broken' }
   | { t: 'gesture'; slot: number; g: GestureKind }
+  /** Host / spectators only: team `slot` is inside this room (null = it left). */
+  | { t: 'room'; slot: number; room: RoomAt | null }
   | { t: 'notice'; code: ServerNotice; /** SPEC §17.31: `penalized` with the Host's count, once past scoreFromMinutes. */ score?: number; of?: number }
   /** Per-team channel (SPEC §17.10): the current box's position when the team comes within boxReveal.radius, taken
    *  away again beyond radius + hysteresis. Opened boxes are never hidden. */

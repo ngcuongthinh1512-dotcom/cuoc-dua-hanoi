@@ -7,7 +7,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { SPRINT_MULTIPLIER } from '@race/shared';
 import { startSpot } from '@race/shared/leg';
-import { avatarOf, boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Avatar, type Role, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
+import { avatarOf, boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Avatar, type Role, type RoomAt, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
 import { HOST, newClaims, signToken, spectatorClaims, spectatorCodeOf, verifyToken } from './auth.ts';
 import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, readProgress, setMeta, type EventRow, type TeamRow } from './db.ts';
@@ -118,6 +118,8 @@ export class RaceRoom extends DurableObject<Env> {
   private readonly gone = new WeakSet<WebSocket>();
   /** SPEC §17.40: `team` racing changes found while the engine wrote (inside its transaction), sent at its `changed`. */
   private teamNews: ServerMessage[] = [];
+  /** Leg 3: the room each team stands in (its client says so, relayed to the Host + spectators). In memory only: the client repeats it every 15 s. */
+  private readonly rooms = new Map<string, RoomAt>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -295,6 +297,7 @@ export class RaceRoom extends DurableObject<Env> {
     this.send(server, this.welcome(role, team, race, now));
     if (team) this.broadcast({ t: 'team', slot: team.slot, online: true, avatar }, server);
     else if (role === HOST) this.send(server, this.hostState(now));
+    if (role === HOST || role === SPECTATOR) for (const [id, r] of this.rooms) this.send(server, { t: 'room', slot: this.team(id)?.slot ?? -1, room: r });
     this.soon(now); // ticks for the new set of peers + host.state
     // Bike spawning alarm (SPEC §3: only while a team is online; track C's alarm() re-arms while players remain).
     if (team && (await this.ctx.storage.getAlarm()) === null) this.setAlarm(now + this.engine.rules().vehicles.spawnIntervalMinutes * 60_000);
@@ -444,6 +447,12 @@ export class RaceRoom extends DurableObject<Env> {
         if (team) this.broadcast({ t: 'gesture', slot: team.slot, g: m.g }, ws);
         return;
       }
+      case 'room': {
+        const team = a.role === TEAM ? this.team(a.team) : undefined;
+        if (!team) return;
+        this.setRoom(team, m.room);
+        return;
+      }
       case 'watch': {
         // SPEC §17.40: remembered on the socket (hibernation); sendTicks honours it only while the team is over
         if (a.role !== TEAM) return;
@@ -521,6 +530,7 @@ export class RaceRoom extends DurableObject<Env> {
     this.saveTeamState(team, { ...this.teamState(team), lastSeen: now });
     this.event(now, team.id, 'disconnect');
     this.engine.left(team.id, now);
+    this.setRoom(team, null);
     if (l) Object.assign(l, { win: undefined, over: false });
     this.writeSnapshot(now); // SPEC §8.10: where it stood, at once
     this.broadcast({ t: 'team', slot: team.slot, online: false });
@@ -804,6 +814,15 @@ export class RaceRoom extends DurableObject<Env> {
   /** To every socket (teams and Hosts) except `skip`. */
   private broadcast(m: ServerMessage, skip?: WebSocket) {
     for (const ws of this.sockets()) if (ws !== skip) this.send(ws, m);
+  }
+
+  /** Leg 3: a team's room changed (or null): the Host and every spectator hear it. */
+  private setRoom(team: { id: string; slot: number }, room: RoomAt | null) {
+    const was = this.rooms.get(team.id);
+    if (room) this.rooms.set(team.id, room);
+    else this.rooms.delete(team.id);
+    const same = was && room && was.kind === room.kind && was.x === room.x && was.z === room.z && was.yaw === room.yaw;
+    if (!same) for (const ws of [...this.sockets(HOST), ...this.sockets(SPECTATOR)]) this.send(ws, { t: 'room', slot: team.slot, room });
   }
 
   /** Close + handle as gone at once (a dead peer never answers the close frame). */

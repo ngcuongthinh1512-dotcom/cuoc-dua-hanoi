@@ -89,6 +89,12 @@ export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator')
       return point(o) && (o.how === 'safe' || o.how === 'stairs' || o.how === 'fell');
     case 'watch':
       return role === 'team' && typeof o.on === 'boolean';
+    case 'room': {
+      if (role !== 'team') return false;
+      if (o.room === null) return true;
+      const r = o.room as Record<string, unknown> | undefined;
+      return typeof r === 'object' && r !== null && (r.kind === 'chocolate' || r.kind === 'comic' || r.kind === 'garderobe' || r.kind === 'hall') && num(r.x) && num(r.z) && num(r.yaw) && Math.abs(r.x) <= MAX_XZ / CM && Math.abs(r.z) <= MAX_XZ / CM;
+    }
     case 'host.spectator':
       return role === 'host' && o.op === 'rotate';
     case 'gesture':

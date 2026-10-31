@@ -7,6 +7,20 @@ import { avatarOf, type FinishResult, type HostMessage, MOVE_MODES, PLAYER_ACTIO
 
 const pose: PoseSample = { x: 123.456, y: 1.234, z: -910.117, yaw: 2.5, mode: 'bike', action: 'none' };
 
+describe('room message (the watch mode relays where a team stands)', () => {
+  const room = { kind: 'hall', x: 12.5, z: -30, yaw: 0.3 };
+  it('a team may send a room or null; nobody else; bad kinds / numbers refused', () => {
+    expect(isClientMessage({ t: 'room', room }, 'team')).toBe(true);
+    expect(isClientMessage({ t: 'room', room: null }, 'team')).toBe(true);
+    expect(isClientMessage({ t: 'room', room }, 'host')).toBe(false);
+    expect(isClientMessage({ t: 'room', room }, 'spectator')).toBe(false);
+    expect(isClientMessage({ t: 'room', room: { ...room, kind: 'attic' } }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'room', room: { ...room, x: NaN } }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'room', room: { ...room, z: 1e9 } }, 'team')).toBe(false);
+    expect(isClientMessage({ t: 'room' }, 'team')).toBe(false);
+  });
+});
+
 describe('pose codec', () => {
   it('round-trips within 1 cm / 1 mrad and stays small', () => {
     const a = encodePose(pose);

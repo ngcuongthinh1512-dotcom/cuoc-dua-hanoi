@@ -10,6 +10,7 @@ import { type CamPose, followPose, nextSlot, smoothPose, watchable } from './wat
 import './spectate.css';
 
 const DEG = Math.PI / 180;
+const GRACE_MS = 30_000;
 export const TEXT = {
   free: 'Bay tự do',
   none: 'Chưa có đội nào đang đua',
@@ -41,6 +42,8 @@ export class Spectate {
   /** Followed team's slot; null = free fly. */
   slot: number | null = null;
   private teams = new Map<number, TeamInfo>();
+  private goneAt = new Map<number, number>(); // when a team was last seen going offline: a blink (reconnect) must not move the camera to another team
+  private graceTimer = 0;
   private cam: CamPose | null = null;
   private auto = true; // follow the first racing team as soon as there is one (until the user chose "Bay tự do")
   private shown = false;
@@ -87,6 +90,8 @@ export class Spectate {
   /** Welcome.teams (every welcome, incl. reconnects). */
   setTeams(teams: readonly TeamInfo[]) {
     this.teams = new Map(teams.map((t) => [t.slot, { ...t }]));
+    for (const t of teams) if (t.online) this.goneAt.delete(t.slot);
+    else if (!this.goneAt.has(t.slot)) this.goneAt.set(t.slot, Date.now());
     this.refresh();
   }
 
@@ -95,6 +100,8 @@ export class Spectate {
     const t = this.teams.get(slot);
     if (!t) return;
     t.online = online;
+    if (online) this.goneAt.delete(slot);
+    else this.goneAt.set(slot, Date.now());
     if (racing !== undefined) t.racing = racing;
     this.refresh();
   }
@@ -137,7 +144,16 @@ export class Spectate {
   /** The bar from the list: options, the followed team's dot / name; a followed team that left the list → the next one. */
   private refresh() {
     const list = this.list();
-    if (this.slot !== null && !list.some((t) => t.slot === this.slot)) this.slot = nextSlot(list, this.slot, 1);
+    if (this.slot !== null && !list.some((t) => t.slot === this.slot)) {
+      // a followed team that is only offline for a moment (its socket blinked) stays followed for GRACE_MS; one that finished / was put out moves on at once
+      const cur = this.teams.get(this.slot);
+      const left = cur && cur.racing !== false && !cur.online ? GRACE_MS - (Date.now() - (this.goneAt.get(this.slot) ?? 0)) : 0;
+      if (left > 0) {
+        clearTimeout(this.graceTimer);
+        this.graceTimer = window.setTimeout(() => this.refresh(), left + 50);
+        list.push(cur!); // the bar keeps showing it
+      } else this.slot = nextSlot(list, this.slot, 1);
+    }
     if (this.auto && this.slot === null && list.length) {
       this.slot = list[0]!.slot;
       if (this.shown) document.exitPointerLock?.();

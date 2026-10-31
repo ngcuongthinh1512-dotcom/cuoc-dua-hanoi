@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { reviewSound, unlockAudio } from './audio/sfx.ts';
-import { NET, type PoseSample, type RaceView } from '@race/shared/protocol';
+import { NET, type PoseSample, type RaceView, type RoomAt } from '@race/shared/protocol';
 import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, rooms as roomCfg, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
@@ -291,6 +291,7 @@ async function start() {
   let roomExit: { x: number; z: number; yaw: number } | null = null; // the feet on leaving (in front of the box)
   const hiddenForRoom = new Set<THREE.Object3D>();
   const keepInRoom = (o: THREE.Object3D) => o === room?.group || o === player?.model.root || !!remote?.owns(o);
+  const keepInViewRoom = (o: THREE.Object3D) => o === vroom?.h.group || !!remote?.owns(o);
   const fadeEl = document.body.appendChild(Object.assign(document.createElement('div'), { className: 'room-fade' }));
   const fadeTo = (on: boolean) => new Promise<void>((r) => (fadeEl.classList.toggle('on', on), setTimeout(r, roomCfg.fadeMs)));
   const mountRoomFor = async (t: RoomTarget): Promise<RoomHandle> => {
@@ -315,6 +316,8 @@ async function start() {
       onResult: ({ done, skipped }) => (race && t.branch ? race.room(t.step, t.branch, done, skipped) : demoView && demoRoomView(demoRoomResult(demoView, done, skipped))),
     });
     roomFloor = frame.floorY;
+    roomSent = { t, frame: { x: frame.x, z: frame.z, yaw: frame.yaw } };
+    sendRoomAt(t, frame);
     roomExit = exitSpot(frame);
     const e = enterSpot(frame);
     if (player!.active) player!.moveTo(e.x, e.z, e.yaw);
@@ -331,6 +334,8 @@ async function start() {
     roomBusy = true;
     await fadeTo(true);
     room.dispose();
+    roomSent = null;
+    sendRoomAt(null);
     hideRoomDone();
     room = undefined;
     roomFloor = null;
@@ -344,6 +349,60 @@ async function start() {
     race?.release(); // the next card pops in front of the box
     if (demoHeld) raceHud?.setView(demoHeld), (demoHeld = null);
   };
+  // Leg 3 watch mode: the Host / a spectator / a finished team following a team that stands in a room (its client reports the door,
+  // `room` message): the room is built at that door and drawn, the street hidden, so the room's play can be watched.
+  const viewRooms = new Map<number, RoomAt>();
+  let vroom: { at: RoomAt; h: RoomHandle; floorY: number } | undefined;
+  let vBusy = false;
+  const sameRoom = (p: RoomAt | undefined, q: RoomAt | undefined) => !!p && !!q && p.kind === q.kind && p.x === q.x && p.z === q.z && p.yaw === q.yaw;
+  const syncViewRoom = async () => {
+    if (vBusy || room) return;
+    const slot = watching ? spectate?.slot ?? null : null;
+    const at = slot === null ? undefined : viewRooms.get(slot);
+    if (sameRoom(vroom?.at, at)) return;
+    vBusy = true;
+    try {
+      if (vroom) {
+        vroom.h.dispose();
+        vroom = undefined;
+        showWorld(hiddenForRoom);
+      }
+      if (at && slot !== null) {
+        const mod = at.kind === 'chocolate' ? await import('./choco/chocoRoom.ts') : at.kind === 'garderobe' ? await import('./garderobe/garderobeRoom.ts') : at.kind === 'hall' ? await import('./hall/hallRoom.ts') : await import('./gallery/galleryRoom.ts');
+        const teams = (session?.welcome?.teams ?? []).map(({ slot, name, colour }) => ({ slot, name, colour }));
+        const frame = roomFrame(at, env.heightAt(at.x, at.z), mod.DOOR_Z);
+        const h = await mod.mountRoom({ renderer, q: query, scene, frame, camera, viewer: true, feet: () => ({ x: 1e6, z: 1e6 }), team: teams.find((t) => t.slot === slot), teams, room: { total: 0, penaltyMinutesEach: 0 } });
+        vroom = { at, h, floorY: frame.floorY };
+      }
+    } catch (err) {
+      console.warn('view room failed:', err);
+    } finally {
+      vBusy = false;
+    }
+  };
+  // DEV offline: ?spectate=1&peers=<slot>,0,0,0,walk,wave&viewRoom=<kind>,<doorX>,<doorZ>,<boxYawDeg>,<slot>: that stand-in stands in the room
+  // at its entrance, so the watch mode's room view can be seen without a server (preset p11-watch-room)
+  let demoRoomFloor: number | undefined;
+  const vr = import.meta.env.DEV && !session && viewer ? query.get('viewRoom')?.split(',') : undefined;
+  if (vr && vr.length === 5) {
+    const [kind, x, z, yawDeg, slot] = vr;
+    const at: RoomAt = { kind: kind as RoomAt['kind'], x: Number(x), z: Number(z), yaw: (Number(yawDeg) * Math.PI) / 180 };
+    void (async () => {
+      const mod = at.kind === 'chocolate' ? await import('./choco/chocoRoom.ts') : at.kind === 'garderobe' ? await import('./garderobe/garderobeRoom.ts') : at.kind === 'hall' ? await import('./hall/hallRoom.ts') : await import('./gallery/galleryRoom.ts');
+      const frame = roomFrame(at, env.heightAt(at.x, at.z), mod.DOOR_Z);
+      const e = enterSpot(frame);
+      const p = peers.find((q) => q.slot === Number(slot));
+      if (p) Object.assign(p, { x: e.x, z: e.z, yaw: e.yaw });
+      demoRoomFloor = frame.floorY;
+      viewRooms.set(Number(slot), at);
+    })();
+  }
+  let roomPingAt = 0; // the team's own client repeats where its room is every 15 s (the server keeps it in memory only)
+  const sendRoomAt = (t: RoomTarget | null, frame?: { x: number; z: number; yaw: number }) => {
+    roomPingAt = performance.now();
+    net?.send({ t: 'room', room: t && frame ? { kind: t.room.kind, x: frame.x, z: frame.z, yaw: frame.yaw - Math.PI } : null });
+  };
+  let roomSent: { t: RoomTarget; frame: { x: number; z: number; yaw: number } } | null = null;
   const roomEvent = (ev: RoomEvent, t: RoomTarget | null) =>
     queueRoom(async () => {
       if (ev === 'enter' && t) {
@@ -430,6 +489,7 @@ async function start() {
       },
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
+        if (m.t === 'room') return void (m.room ? viewRooms.set(m.slot, m.room) : viewRooms.delete(m.slot)); // Host / spectators: a team entered / left a room
         if (race?.message(m)) return; // race / book / zone (Phase 7) → RaceHud
         if (m.t === 'team') remote?.setOnline(m.slot, m.online, m.avatar), spectate?.team(m.slot, m.online, m.racing);
         else if (m.t === 'gesture') remote?.gesture(m.slot, m.g);
@@ -695,11 +755,17 @@ async function start() {
       if (player?.active && !room) bikeLink?.frame(dt, player.controller);
       if (net && player?.active && bodyCam) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); a finished team too (§17.39), not while watching; in a room too (the Host sees the team at the box, the room's teams see each other)
       if (peers.length && (player ? player.active : worldReady) && localMs() >= nextFakeTick) {
-        remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
+        remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => demoRoomFloor ?? groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
         nextFakeTick += 1000 / NET.tickHz;
       }
       remote?.update(dt, net ? net.serverNow() : localMs(), camera.position, bodyCam ? underground(player.position, env.heightAt) : undefined, env.heightAt); // Leg 3: a team in a room is no ghost on the street and the other way round
-      if (room) hideWorld(scene.children, keepInRoom, hiddenForRoom); // every frame: streamed chunks / NPCs added meanwhile too
+      if (room && roomSent && net && performance.now() - roomPingAt > 15_000) sendRoomAt(roomSent.t, roomSent.frame);
+      if (spectate && worldReady) void syncViewRoom();
+      if (vroom) {
+        vroom.h.update(dt);
+        if (!flying) camera.position.y = Math.min(camera.position.y, vroom.floorY + vroom.h.ceiling - 0.3); // no ceiling collider: the camera stays under it
+      }
+      if (room || vroom) hideWorld(scene.children, vroom ? keepInViewRoom : keepInRoom, hiddenForRoom); // every frame: streamed chunks / NPCs added meanwhile too
       else {
         boxes.update(camera.position);
         if (pitHost && player) pitHost.update(dt, boxes.mat, player.position);
@@ -735,7 +801,7 @@ async function start() {
       }
       input.endFrame();
       cardClosed = false;
-      if (room && worldReady) return; // Leg 3: the world's streaming / sky / water wait (the room has the camera); a reload inside a room still streams until the world is ready
+      if ((room || vroom) && worldReady) return; // Leg 3: the world's streaming / sky / water wait (the room has the camera); a reload inside a room still streams until the world is ready
       const p = bodyCam ? player.position : camera.position; // streaming + colliders follow the body (watching / flying: the camera)
       sky.update();
       waterObj?.update(dt);
@@ -743,7 +809,7 @@ async function start() {
       edge.hidden = edgeDistance(p.x, p.z) >= bounds.warnDistance;
     },
     render: () => {
-      if (room) renderer.render(scene, camera); // Leg 3: plain render inside a room (no post / SMAA / bloom)
+      if (room || vroom) renderer.render(scene, camera); // Leg 3: plain render inside a room (no post / SMAA / bloom)
       else if (post) post.render();
       else {
         if (!renderer.info.autoReset) renderer.info.reset(); // post.ts counts its passes by hand

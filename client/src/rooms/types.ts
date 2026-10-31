@@ -33,6 +33,9 @@ export interface RoomMountOptions {
   teams?: readonly RoomTeam[];
   /** The race: the leg's `task.room` (total, minutes per missing item) — the overlay texts; absent = the game's own numbers. */
   room?: { total: number; penaltyMinutesEach: number };
+  /** Leg 3 watch mode: a spectator / the Host following a team inside this room: the room is only DRAWN (no walker, no colliders, no
+   *  prompts: pass a far-away `feet`), the game's camera is the Spectate's, `team` is the followed team. */
+  viewer?: boolean;
   /** More reasons the body stands still (a clue card / the menu open). */
   frozen?: () => boolean;
   /** The race: a result from the mini-game (done grew / "Bỏ qua") → `race room`. Absent = localStorage (dev pages). */
