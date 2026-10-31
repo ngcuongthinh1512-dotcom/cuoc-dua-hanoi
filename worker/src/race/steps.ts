@@ -339,11 +339,13 @@ function roomReport(leg: Leg, zones: readonly Zone[], p0: Progress, i: number, i
     fx.push({ kind: 'room', step: i, rec });
     p.room = rec;
   }
-  // every item made: the Host's queue (never trusted from the client); again after a Phạt countdown (the client re-sends it)
+  // every item made: passes at once, no Host approval (the Host sees it in the matrix and in the answer log; Phạt / undo as usual)
   if (input.done === room.total && stateOf(leg, i, p, now) === 'active') {
-    const a: AnswerRec = { id: p.lastAnswerId + 1, b: input.branch, text: `Hoàn thành phòng ${ROOM_NAME[room.kind]}: ${input.done}/${room.total}`, at: now, s: 'pending' };
-    p = { ...p, lastAnswerId: a.id, pendingId: a.id };
-    fx.push({ kind: 'answer', step: i, rec: a, verdict: 'pending' });
+    const a: AnswerRec = { id: p.lastAnswerId + 1, b: input.branch, text: `Hoàn thành phòng ${ROOM_NAME[room.kind]}: ${input.done}/${room.total}`, at: now, s: 'correct', auto: true };
+    p = { ...p, lastAnswerId: a.id };
+    fx.push({ kind: 'answer', step: i, rec: a, verdict: 'correct' });
+    const r = advance(leg, zones, p, { kind: 'approve', step: s.id, pose: input.pose }, now, running);
+    return { p: r.p, effects: [...fx, ...r.effects] };
   }
   return { p, effects: fx };
 }
