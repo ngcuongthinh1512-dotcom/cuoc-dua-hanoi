@@ -270,9 +270,10 @@
       },
       "destination": {
         "name": "BOZAR – Cung điện Mỹ thuật Bruxelles",
-        "lat": 50.84361,
-        "lon": 4.36046,
-        "radius": 40
+        "lat": 50.84431,
+        "lon": 4.35947,
+        "radius": 40,
+        "yawDeg": 20
       }
     },
     {
