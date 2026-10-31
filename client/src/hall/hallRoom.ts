@@ -10,7 +10,7 @@
 // frame; the dev page (hallRoomDev.ts) into the RoomPlayer's own world.
 // Challenge 2 "chọn ghế": walking within SEAT_REACH m of a ground-floor seat (the nearest one, those in front of the camera
 // first; every one of the 988 stalls seats counts, grey unsold ones too — the wheelchair squares are no seats) floats a small
-// bobbing arrow over it + the prompt "Hàng J · Ghế 14 — Bấm F để chọn"; F (`interact()`) → `o.onSeat(label)` with hallBuild's
+// bobbing arrow over it + the prompt "Hàng J — Bấm F để chọn" (no seat number: the team counts); F (`interact()`) → `o.onSeat(label)` with hallBuild's
 // `seatLabel` ("J-14", rear section "A2-12") and true. Right / wrong is the server's business (nothing changes in here).
 // Clue pick-up (T3): main.ts `setPickup(prompt)` lights a gold ring + beam at PICKUP (the flat floor in front of row A,
 // mid-hall); feet within PICKUP.r → the prompt, F → `o.onPickup()` and true (before any seat: row A is right there);
@@ -66,7 +66,7 @@ function makePickupRing(parent: THREE.Object3D, x: number, z: number, h = 3.5, c
     update(t: number) { const k = 1 + 0.06 * Math.sin(t * 3); ring.scale.set(k, 1, k); (ring.material as THREE.MeshBasicMaterial).opacity = 0.7 + 0.3 * Math.sin(t * 3); },
   };
 }
-export const seatPrompt = (s: StallSeat): string => `Hàng ${s.row}${s.rear ? '2' : ''} · Ghế ${s.num} — ${PROMPT}`;
+export const seatPrompt = (s: StallSeat): string => `Hàng ${s.row}${s.rear ? '2' : ''} — ${PROMPT}`;
 /** The seat to pick from (px, pz): the nearest within `r`, those in front (fx, fz = the look direction) before those behind. */
 export function nearestSeat(px: number, pz: number, fx: number, fz: number, seats: readonly StallSeat[], r = SEAT_REACH): StallSeat | null {
   let best: StallSeat | null = null, score = Infinity;
