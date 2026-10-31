@@ -727,7 +727,7 @@ async function start() {
       }
       input.endFrame();
       cardClosed = false;
-      if (room) return; // Leg 3: the world's streaming / sky / water wait (the room has the camera)
+      if (room && worldReady) return; // Leg 3: the world's streaming / sky / water wait (the room has the camera); a reload inside a room still streams until the world is ready
       const p = bodyCam ? player.position : camera.position; // streaming + colliders follow the body (watching / flying: the camera)
       sky.update();
       waterObj?.update(dt);
