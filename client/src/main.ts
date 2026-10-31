@@ -308,6 +308,7 @@ async function start() {
         if (!roomFlow.pickedUp()) return;
         room?.setPickup?.(null);
         race ? race.release() : demoHeld && (raceHud?.setView(demoHeld), (demoHeld = null)); // the held card is the team's now
+        raceHud?.openNew(); // and it opens at once (the stand-in had the same step: no new envelope by itself)
       },
       onSeat: (label) => (race ? race.answer(t.step, label) : demoSeat(label)),
       onResult: ({ done, skipped }) => (race && t.branch ? race.room(t.step, t.branch, done, skipped) : demoView && demoRoomView(demoRoomResult(demoView, done, skipped))),

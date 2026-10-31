@@ -255,6 +255,14 @@ export class RaceHud {
     if (!this.open && this.view?.card) this.openFull(this.view.card, false, true);
   }
 
+  /** Leg 3: F at the stage handed over the held card (same step as its stand-in, so setView sees nothing new): open it as a new clue. */
+  openNew(): void {
+    const card = this.view?.card;
+    if (!card || card.status === 'done') return;
+    this.bookOpen = false;
+    this.openFull(card, true);
+  }
+
   /** The book, a full card or the finish card is open: the body stops, keys go to the panel (main.ts modal()). */
   get open(): boolean {
     return this.bookOpen || this.fullCard != null || this.resultOpen;
