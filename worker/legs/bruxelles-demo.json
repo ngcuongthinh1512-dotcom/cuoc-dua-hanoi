@@ -140,10 +140,10 @@
             "media": [],
             "location": {
               "name": "Choco-Story Brussels",
-              "lat": 50.84546,
-              "lon": 4.35054,
+              "lat": 50.84524,
+              "lon": 4.35026,
               "radius": 20,
-              "yawDeg": -135
+              "yawDeg": 180
             },
             "kind": "free",
             "verification": "host_approval",
