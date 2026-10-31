@@ -59,6 +59,15 @@ export default {
       if (format !== 'csv' && format !== 'json') return json({ ok: false, error: 'bad_format' }, 400);
       return env.RACE_ROOM.getByName(race).fetch(`https://do/export?format=${format}`);
     }
+    // Host-only: every answer each team sent (race/export.ts answersCsv), same Bearer token as the export
+    const ans = /^\/api\/race\/([^/]+)\/answers$/.exec(pathname);
+    if (ans && request.method === 'GET') {
+      const race = ans[1]!;
+      if (!RACE_ID.test(race)) return json({ ok: false, error: 'bad_race' }, 400);
+      const token = /^Bearer (.+)$/.exec(request.headers.get('Authorization') ?? '')?.[1];
+      if ((await verifyToken(env.HOST_PASSWORD, token, race))?.t !== HOST) return json({ ok: false, error: 'bad_token' }, 401);
+      return env.RACE_ROOM.getByName(race).fetch('https://do/answers');
+    }
     return json({ ok: false, error: 'not_found' }, 404);
   },
 } satisfies ExportedHandler<Env>;

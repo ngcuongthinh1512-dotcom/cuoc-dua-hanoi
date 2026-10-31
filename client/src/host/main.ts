@@ -275,6 +275,20 @@ function once(key: keyof typeof sigs, sig: string, build: () => void) {
 
 // Phase 10 (SPEC §17.25): "Xuất dữ liệu thời gian". Both outlive drawStatus, which rebuilds its row whenever the race state changes.
 const exportBtn = el('button', { title: 'Tải về bảng thời gian của từng đội (CSV cho Excel + JSON thô) để làm báo cáo cuối cuộc đua', onclick: () => void exportTimes() }, 'Xuất dữ liệu thời gian');
+const answersBtn = el('button', { title: 'Tải về mọi đáp án các đội đã gửi (kể cả ghế đã chọn ở Thử thách 2), kèm giờ và kết quả: CSV cho Excel', onclick: () => void exportAnswers() }, 'Xuất đáp án các đội');
+async function exportAnswers() {
+  if (answersBtn.disabled) return;
+  if (!hostToken) return void paintExport('Chỉ có khi nối với máy chủ thật.', 'bad');
+  answersBtn.disabled = true;
+  paintExport('Đang tải…', 'warn');
+  const r = await fetch(`${net.apiBase}/race/${encodeURIComponent(race)}/answers`, { headers: { Authorization: `Bearer ${hostToken}` } }).catch(() => null);
+  if (!r?.ok) paintExport(r ? `Máy chủ từ chối (mã ${r.status}).` : 'Không kết nối được máy chủ.', 'bad');
+  else {
+    saveBlob(await r.blob(), `race-${race}-dap-an.csv`);
+    paintExport('Đã tải file đáp án (CSV).', 'on');
+  }
+  answersBtn.disabled = false;
+}
 const exportStat = el('span', { className: 'note' });
 const paintExport = (text: string, className: string) => Object.assign(exportStat, { textContent: text, className });
 /** Both files from the Worker (Host token in a header, never in the URL), each saved through a temporary <a download>; all or none,
@@ -316,7 +330,7 @@ function drawStatus(s: State) {
             if (!cur || (cur.confirm && !confirm(cur.confirm))) return;
             if (!send({ t: 'host.race', op: b.op })) addNotice('error', 'Đang mất kết nối, chưa gửi được.');
           } }, b.label)),
-        exportBtn, exportStat),
+        exportBtn, answersBtn, exportStat),
       el('p', { className: 'note' }, 'Tạm dừng: đội vẫn đi lại được nhưng không mở hòm / làm nhiệm vụ được. Xếp hạng theo thứ tự về đích thực (không có đồng hồ từng đội). Kết thúc: đội chưa về đích nhận thông báo BỊ LOẠI.'),
     );
   });

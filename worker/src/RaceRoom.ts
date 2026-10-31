@@ -14,7 +14,7 @@ import { addEvent, getMeta, migrate, readProgress, setMeta, type EventRow, type 
 import type { Env } from './index.ts';
 import { BikeService } from './race/BikeService.ts';
 import { NEW_TEAM_RACE, RaceEngine, type TeamRace } from './race/engine.ts';
-import { exportCsv, exportRace } from './race/export.ts';
+import { answersCsv, exportCsv, exportRace } from './race/export.ts';
 import { needsTick, tickEntries, tickKey, type Peer } from './race/presence.ts';
 import type { PlayerSpot } from './race/VehicleSpawner.ts';
 
@@ -205,6 +205,7 @@ export class RaceRoom extends DurableObject<Env> {
     if (request.method === 'GET' && url.pathname === '/media') return new Response(null, { status: this.engine.mediaAllowed(url.searchParams.get('team') ?? '', url.searchParams.get('name') ?? '') ? 204 : 404 });
     // SPEC §17.25: the Worker checked the Host token
     if (request.method === 'GET' && url.pathname === '/export') return this.export(url.searchParams.get('format') === 'json' ? 'json' : 'csv');
+    if (request.method === 'GET' && url.pathname === '/answers') return new Response(answersCsv(this.engine.leg, this.teams(), readProgress(this.sql)), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="race-${this.race}-dap-an.csv"`, 'Cache-Control': 'no-store' } });
     return json({ ok: false, error: 'not_found' }, 404);
   }
 

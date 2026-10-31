@@ -98,3 +98,18 @@ export function exportCsv(x: ReturnType<typeof exportRace>): string {
   const table = (title: string, cols: Col[], rows: Row[]) => [cell(title), cols.map(([, h]) => cell(h)).join(','), ...rows.map((r) => cols.map(([k]) => cell(r[k])).join(','))].join('\r\n');
   return `﻿${[table('Bảng 1 – Thời gian đội × bước', STEP_COLS, x.steps), table('Bảng 2 – Đội', TEAM_COLS, x.teams), table('Bảng 3 – Nhật ký sự kiện thô (bảng events)', EVENT_COLS, x.events)].join('\r\n\r\n')}\r\n`;
 }
+
+/** Host-only "Xuất đáp án": every answer each team sent (typed text, a picked seat, a box list "a | b | c"), oldest first, with its time
+ *  (Vietnam), verdict and the Host's score. A separate file: the timing export never carries answer text. CSV, UTF-8 BOM + CRLF. */
+export function answersCsv(leg: Leg, teams: { id: string; name: string }[], rows: StepProgressRow[]): string {
+  const names = new Map(teams.map((t) => [t.id, t.name]));
+  const labels = new Map(leg.steps.map((st) => [st.id, st.label]));
+  const verdict: Record<string, string> = { pending: 'chờ duyệt', correct: 'đúng', approved: 'đúng (Host duyệt)', penalized: 'sai / bị phạt', rejected: 'bị từ chối' };
+  const cell = (v: unknown): string => {
+    const str = v === null || v === undefined ? '' : /^[=+\-@\t\r]/.test(String(v)) ? `'${v}` : String(v);
+    return /[",\r\n]/.test(str) ? `"${str.replaceAll('"', '""')}"` : str;
+  };
+  const out = rows.flatMap((r) => parseAnswers(r).map((a) => ({ t: a.at, line: [names.get(r.team) ?? r.team, r.step, labels.get(r.step) ?? '', a.b ?? '', vn(a.at), a.text, verdict[a.s] ?? a.s, a.sc !== undefined ? a.sc : ''] })));
+  out.sort((x, y) => x.t - y.t);
+  return `\ufeff${[['Đội', 'Mã bước', 'Tên bước', 'Nhánh', 'Giờ gửi (giờ Việt Nam)', 'Đáp án', 'Kết quả', 'Điểm Host chấm'], ...out.map((o) => o.line)].map((l) => l.map(cell).join(',')).join('\r\n')}`;
+}

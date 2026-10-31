@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyProgress, type EventRow, type StepProgressRow } from '../db.ts';
 import { NEW_TEAM_RACE } from './engine.ts';
-import { exportCsv, exportRace, STEP_COLS } from './export.ts';
+import { answersCsv, exportCsv, exportRace, STEP_COLS } from './export.ts';
 import { bundledLeg } from './leg.ts';
 
 const mini = bundledLeg('mini')!;
@@ -86,5 +86,20 @@ describe('exportRace (SPEC §17.25)', () => {
     expect(csv).toContain(`,"{""step"":""T1"",""op"":""penalize"",""id"":1,""by"":""host""}"\r\n`);
     expect(csv.endsWith('\r\n')).toBe(true);
     expect(csv).not.toContain('\n\n'); // only CRLF line ends
+  });
+});
+
+describe('answersCsv (Host-only "Xuất đáp án")', () => {
+  it('lists every answer with its time, the text (a picked seat too) and the verdict, oldest first; a formula-like text is neutralised', () => {
+    const leg = bundledLeg('bruxelles-demo')!;
+    const row = (team: string, step: string, answers: unknown[]): StepProgressRow => ({ ...emptyProgress(team, step), answers: JSON.stringify(answers) });
+    const csv = answersCsv(leg, [{ id: 't0', name: 'Hiếu' }], [
+      row('t0', 'T2', [{ id: 1, b: null, text: 'K-5', at: 2000, s: 'penalized' }, { id: 2, b: null, text: '=SUM(1)', at: 1000, s: 'penalized' }, { id: 3, b: null, text: 'K-3', at: 3000, s: 'correct' }]),
+    ]);
+    const lines = csv.replace('\ufeff', '').split('\r\n');
+    expect(lines[0]).toContain('Đáp án');
+    expect(lines.slice(1).map((l) => l.split(',')[5])).toEqual(["'=SUM(1)", 'K-5', 'K-3']); // oldest first
+    expect(lines[3]).toContain('đúng');
+    expect(lines[1]).toContain('Hiếu');
   });
 });
