@@ -59,7 +59,7 @@ export const STALLS_MAP: MapRow[] = [
   { ...F('D', 96, '..rrrrrrrr....|..............', '', '', 365), rear: true },
   { ...F('E', 53, '..............|..............', '', '', 365), rear: true },
 ];
-for (let k = 0; k < 7; k++) STALLS_MAP.push({ ...F('FGHIJKL'[k], 53 - 43 * (k + 1), '..............|..............', '', '', 365), rear: true }); // ponytail: cropped on the map, clipped to the plan
+for (let k = 0; k < 5; k++) STALLS_MAP.push({ ...F('FGHIJ'[k], 53 - 43 * (k + 1), '..............|..............', '', '', 365), rear: true }); // rows K2 / L2 dropped (user); ponytail: cropped on the map, clipped to the plan
 export const mapX = (px: number): number => (px - MAP.x0) * MAP.s;
 export const mapZ = (py: number): number => H.zFront + (MAP.y0 - py) * MAP.s;
 /** Radius of a row's centre arc around (0, stalls.cz). */
