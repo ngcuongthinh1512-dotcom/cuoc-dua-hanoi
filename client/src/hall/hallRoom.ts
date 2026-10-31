@@ -66,6 +66,7 @@ function makePickupRing(parent: THREE.Object3D, x: number, z: number, h = 3.5, c
     update(t: number) { const k = 1 + 0.06 * Math.sin(t * 3); ring.scale.set(k, 1, k); (ring.material as THREE.MeshBasicMaterial).opacity = 0.7 + 0.3 * Math.sin(t * 3); },
   };
 }
+const TAG_REACH = 7, TAG_MAX = 40; // m / sprites: the seats whose number is drawn
 export const seatPrompt = (s: StallSeat): string => `Hàng ${s.row}${s.rear ? '2' : ''} · Ghế ${s.num} — ${PROMPT}`;
 /** The seat to pick from (px, pz): the nearest within `r`, those in front (fx, fz = the look direction) before those behind. */
 export function nearestSeat(px: number, pz: number, fx: number, fz: number, seats: readonly StallSeat[], r = SEAT_REACH): StallSeat | null {
@@ -151,6 +152,42 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     new THREE.MeshBasicMaterial({ color: '#ffd23c' }));
   arrow.visible = false;
   g.add(arrow);
+  // seat numbers: a pool of small sprites over the seats within reach of the eye (row letter + number), moved as the body walks
+  const tags: THREE.Sprite[] = [];
+  const tagMats = new Map<string, THREE.SpriteMaterial>();
+  const tagMat = (s: StallSeat) => {
+    const key = seatLabel(s);
+    let m = tagMats.get(key);
+    if (!m) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const x = c.getContext('2d')!;
+      x.fillStyle = 'rgba(20,12,8,.72)';
+      x.beginPath(); x.roundRect(2, 2, 60, 60, 10); x.fill();
+      x.fillStyle = '#e9c46a'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = '700 18px system-ui, sans-serif'; x.fillText(`${s.row}${s.rear ? '2' : ''}`, 32, 15);
+      x.fillStyle = '#fff'; x.font = '700 34px system-ui, sans-serif'; x.fillText(String(s.num), 32, 40);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      m = new THREE.SpriteMaterial({ map: tex, depthWrite: false, fog: false });
+      tagMats.set(key, m);
+    }
+    return m;
+  };
+  let tagAt = -1;
+  const updateTags = (px: number, pz: number, now: number) => {
+    if (now - tagAt < 150) return;
+    tagAt = now;
+    const near = stalls.seats.map((s) => ({ s, d: Math.hypot(s.x - px, s.z - pz) })).filter((e) => e.d <= TAG_REACH).sort((p, q) => p.d - q.d).slice(0, TAG_MAX);
+    near.forEach(({ s }, i) => {
+      const sp = tags[i] ?? (tags[i] = g.add(new THREE.Sprite()).children.at(-1) as THREE.Sprite);
+      sp.material = tagMat(s);
+      sp.scale.set(0.28, 0.28, 1);
+      sp.position.set(s.x, s.y + 1.05, s.z);
+      sp.visible = true;
+    });
+    for (let i = near.length; i < tags.length; i++) tags[i].visible = false;
+  };
   const dom = document.createElement('div');
   dom.innerHTML = PROMPT_HTML;
   document.body.append(dom);
@@ -291,6 +328,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       const t = clock.elapsedTime;
       exit.update(t);
       pickup.update(t);
+      if (!walk?.flying) { const f = feet(); updateTags(f.x, f.z, performance.now()); }
       const s = near(), pick = atPickup();
       arrow.visible = !!s;
       if (s) arrow.position.set(s.x, s.y + 1.45 + 0.08 * Math.sin(t * 4), s.z);
@@ -325,6 +363,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       removeEventListener('mousemove', onMove);
       renderer.domElement.removeEventListener('click', onClick);
       walk?.dispose();
+      for (const m of tagMats.values()) { m.map?.dispose(); m.dispose(); }
       dom.remove();
       composer?.dispose();
       pmrem.dispose();
