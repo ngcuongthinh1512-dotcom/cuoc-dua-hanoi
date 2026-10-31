@@ -250,8 +250,12 @@ const LV=[
 const TEAM=new URLSearchParams(location.search).get('team')||'dev'; let KEY='ligne4:'+TEAM;
 // The race (client/src/gallery/galleryRoom.ts): the server's tally is the truth — 'room-init' {done, skipped, key} replaces
 // whatever this browser stored (a branch switch reset it; another device): the first `done` drawings count as passed.
-addEventListener('message',e=>{const d=e.data;if(!d||d.type!=='room-init')return;wipeStrokes();KEY='ligne4:'+(d.key||TEAM);const n=Math.max(0,Math.min(LV.length,d.done|0));
-  prog={st:LV.map((_,i)=>i<n?'pass':''),best:LV.map((_,i)=>i<n?1:0),skipped:!!d.skipped};save();wipeStrokes();pickLevel(firstOpen());if(prog.skipped)showEnd()});
+addEventListener('message',e=>{const d=e.data;if(!d||d.type!=='room-init')return;const oldKey=KEY;KEY=(KEY.startsWith('ligne4')?'ligne4:':'ligne:')+(d.key||TEAM);const n=Math.max(0,Math.min(LV.length,d.done|0));
+  // the same tally as this browser already holds (the overlay was only closed and opened again / a reload): keep the drawing in progress; any other tally = the server reset it (a branch switch, another device): start clean
+  let j=null;try{j=JSON.parse(localStorage.getItem(KEY)||'null')}catch(_){}
+  if(j&&Array.isArray(j.st)&&j.st.length===LV.length&&j.st.filter(x=>x==='pass').length===n&&!!j.skipped===!!d.skipped)prog={...prog,...j};
+  else{const nk=KEY;KEY=oldKey;wipeStrokes();KEY=nk;wipeStrokes();prog={st:LV.map((_,i)=>i<n?'pass':''),best:LV.map((_,i)=>i<n?1:0),skipped:!!d.skipped};save()}
+  pickLevel(firstOpen());if(prog.skipped)showEnd()});
 let prog={st:LV.map(()=>''),best:LV.map(()=>0),skipped:false};
 try{const j=JSON.parse(localStorage.getItem(KEY)||'null');if(j&&Array.isArray(j.st)&&j.st.length===LV.length)prog={...prog,...j}}catch(e){}
 // Test page (copy of ligne-claire.html): opens with the first 3 drawings already passed (?pass=N for another number); its own storage key (ligne4:)

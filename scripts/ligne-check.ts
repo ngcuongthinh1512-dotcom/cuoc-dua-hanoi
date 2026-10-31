@@ -74,6 +74,20 @@ try {
   const g = await read(f);
   const left = await f.evaluate(() => Object.keys(localStorage).filter((k) => k.includes(':strokes:')).length);
   ok(g.lv === 0 && g.n === 0 && left === 0, `room-init done 0: về bức 1, ${left} nét lưu còn lại`);
+  // the overlay opened again with the SAME tally (done 0, key race:9): the drawing in progress survives; a tally that changed wipes it
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 50, cy + 30);
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  await f.evaluate(() => postMessage({ type: 'room-init', done: 0, skipped: false, key: 'race:9' }, '*'));
+  await page.waitForTimeout(200);
+  const h = await read(f);
+  ok(h.lv === 0 && h.n === 1, `room-init cùng số bức đã xong: nét đang vẽ còn nguyên (${h.n} nét)`);
+  await f.evaluate(() => postMessage({ type: 'room-init', done: 2, skipped: false, key: 'race:9' }, '*'));
+  await page.waitForTimeout(200);
+  const k = await read(f);
+  ok(k.lv === 2 && k.n === 0, `room-init số bức đổi: giấy trắng ở bức ${k.lv + 1}`);
 } finally {
   await browser.close();
   await server.close();
