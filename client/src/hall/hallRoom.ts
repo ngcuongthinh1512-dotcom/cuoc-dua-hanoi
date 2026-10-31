@@ -1,6 +1,6 @@
 // "Phòng hoà nhạc Henry Le Bœuf" (BOZAR) as a Leg 3 race room (rooms/types.ts `mountRoom`, the GardeRobe room's contract):
 // the team opens the box at BOZAR, walks in at the back of the stalls (behind the last ground-floor row, facing the stage)
-// and may walk the aisles freely — no mini-game, no table, no tally; the exit ring beside the entrance is lit all the time.
+// and may walk the aisles freely — no mini-game, no table, no tally; the exit ring beside the entrance lights once the step is done (dev page: always).
 // The hall is hallScene.ts `buildHall` (shared with the dev page hall.ts): minimal graphics by default (no audience, no
 // shadows / post, 7 lights), `hq` = the full dev look. Room-local metres = the hall's own (x across, stage at −z, the rear
 // of the stalls at +z = the door end DOOR_Z, y 0 = the stalls floor at the stage front).
@@ -157,12 +157,12 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   const promptEl = dom.querySelector<HTMLElement>('#hr-prompt')!, toastEl = dom.querySelector<HTMLElement>('#hr-toast')!, help = dom.querySelector<HTMLElement>('#hr-help')!;
   let toastAt = 0;
   const toast = (text: string) => { toastEl.textContent = text; toastEl.hidden = false; toastEl.style.opacity = '1'; toastAt = performance.now(); };
-  // the exit portal beside the entrance, on the last terrace, lit all the time (the team may leave whenever it likes)
+  // the exit portal beside the entrance, on the last terrace: in the race it lights only once the step is done (main.ts setExit); the dev page keeps it lit
   const exitG = new THREE.Group();
   exitG.position.y = floorYAt(EXIT.x, EXIT.z);
   g.add(exitG);
   const exit = makeExitRing(exitG, EXIT.x, EXIT.z, 3.2, EXIT.r);
-  exit.set(true);
+  exit.set(!RACE);
   // the clue pick-up spot by the stage (main.ts `setPickup(prompt)` lights it after T2; dev `?pickup=1`)
   const pickup = makePickupRing(g, PICKUP.x, PICKUP.z);
   let pickupPrompt: string | null = null;
@@ -312,7 +312,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       composer?.setSize(innerWidth, innerHeight);
     },
     setProgress: () => {}, // no tally in this room
-    setExit: () => {}, // the ring is always lit
+    setExit: (on: boolean) => exit.set(on), // lit once the step is done (main.ts 'exitReady'); a Host undo puts it out
     setLocked: () => {},
     setPickup,
     exitHit: () => { const f = feet(); return exit.hit(f.x, f.z); },

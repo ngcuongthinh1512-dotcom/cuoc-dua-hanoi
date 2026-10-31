@@ -8,7 +8,7 @@
 //  left     = `done`, then the body walks into the ring: back in the world, the next card pops
 // kind hall (the BOZAR concert hall, challenge T2 with `room` + `pick: 'seat'`): in = picking the seat · done = T2 done: the stand-in
 // card, T3 held until F at the stage pick-up spot · left = then walked out through the ring (T3 pops).
-// kind garderobe (the GardeRobe challenge room, card T1 with `room`): in = answering inside (ring always lit) · done = T1
+// kind garderobe (the GardeRobe challenge room, card T1 with `room`): in = answering inside (ring dark) · done = T1
 // completed (4/4): the next card held · left = then walked out through the ring. (`?close=n` = vitrine n's close-up: the room.)
 import type { ClueCard, RaceView, RoomView, TaskView } from '@race/shared/protocol';
 

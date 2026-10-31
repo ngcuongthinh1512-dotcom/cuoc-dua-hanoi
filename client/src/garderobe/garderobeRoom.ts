@@ -9,7 +9,7 @@
 // race (main.ts) walks the game's body on colliders put into the game's Rapier world, `rooms.below` m under the box the team
 // opened (route L3B), the other teams in the room through the normal poses. No tally, no mini-game, no `race room`.
 // Close-up: F within reach of a vitrine ("Bấm F để xem gần") glides the camera to a pose that shows the whole photo
-// undistorted; Esc / F again glides back. The exit ring ("Ra khỏi phòng") beside the door is lit all the time.
+// undistorted; Esc / F again glides back. The exit ring ("Ra khỏi phòng") beside the door lights once the step is done (dev page: always).
 // Dev params (garderobe.ts): view=overview|plan|street / cam=x,y,z,yawDeg,pitchDeg (free camera) · n=1..3 / close=1..3
 // (that vitrine's close-up at load) · hq=1 (shadows, bloom, every spot) · avatar=0|1, autoMove=walk|sprint. The race reads
 // `close` only in the offline ?roomDemo= (screenshots).
@@ -290,9 +290,9 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     pt.position.set(0, 3.4, 1.5);
     g.add(pt);
   }
-  // the exit portal beside the door, lit all the time (the team may leave whenever it likes)
+  // the exit portal beside the door: in the race it lights only once the step is done (main.ts setExit); the dev page keeps it lit
   const exit = makeExitRing(g, EXIT.x, EXIT.z, wallH - 0.5, EXIT.r);
-  exit.set(true);
+  exit.set(!RACE);
 
   // ---- prompt DOM, the walker (race: the game's body; dev: a RoomPlayer), the close-up glide ----------------------------
   const dom = document.createElement('div');
@@ -464,7 +464,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       composer?.setSize(innerWidth, innerHeight);
     },
     setProgress: () => {}, // no tally in this room
-    setExit: () => {}, // the ring is always lit (the step done = main.ts toasts; a Host undo changes nothing here)
+    setExit: (on: boolean) => exit.set(on), // the step done → lit (main.ts 'exitReady'); a Host undo puts it out again ('resume')
     setLocked: () => {},
     exitHit: () => { const f = feet(); return !focused && exit.hit(f.x, f.z); },
     overlayOpen: () => !!focused, // the close-up: the body stands still, the pointer is free, no menu on the lost lock
