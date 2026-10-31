@@ -1,6 +1,6 @@
 {
   "id": "bruxelles-demo",
-  "title": "Chặng Demo – Bruxelles (lời dẫn GIẢ)",
+  "title": "Chặng Bruxelles",
   "timezone": "Asia/Ho_Chi_Minh",
   "eliminationLeg": false,
   "mapLabels": "streets-only",
@@ -76,7 +76,7 @@
       "id": "L1",
       "type": "route_info",
       "label": "Lộ trình 1",
-      "clue": "(GIẢ) Lời dẫn của Lộ trình 1 (bản thử, không nêu tên điểm đến).",
+      "clue": "Mở hòm mật thư cạnh bạn để nhận mật thư đi tới Lộ trình 2.",
       "transport": {
         "allowed": "any"
       },
