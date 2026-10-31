@@ -128,10 +128,10 @@ describe.skipIf(!hasData)('real map data', () => {
     expect(Math.max(...viaduct.map((l) => new Set(l.map((q) => q.key)).size))).toBeGreaterThan(5);
   });
 
-  it('leg destinations L1–L6 are not inside a building', () => {
+  it('leg destinations L1–L5 are not inside a building', () => {
     const leg = read<{ steps: { id: string; destination?: { lat: number; lon: number } }[] }>('../../../worker/legs/bruxelles-demo.json', import.meta.url);
     const dests = leg.steps.filter((s) => /^L[1-6]$/.test(s.id) && s.destination);
-    expect(dests.length).toBe(6);
+    expect(dests.length).toBe(5);
     const walkable = new Set(['bridge', 'fountain', 'artwork', 'ruins']); // landmark outlines that are not buildings (L1 now stands at the foot of the Ruínas stair, leg2-fixes.md)
     const blocking = all('buildings').filter((b) => !walkable.has(b.kind));
     for (const s of dests) {

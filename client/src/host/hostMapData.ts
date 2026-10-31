@@ -122,7 +122,7 @@ export function demoTick(state: HostState, now: number): TickArray {
   return encodeTick(now, state.teams.flatMap((t) => {
     const p = t.online ? placeOf(places, head, t) : undefined;
     if (!p) return [];
-    const [r, a] = t.finishAt !== null ? [3, t.slot] : [60 + 25 * (t.slot % 3), t.slot * 2.4 + (now / 1000) * ((2 * Math.PI) / 90)];
+    const [r, a] = t.finishAt !== null ? [1, t.slot] : [60 + 25 * (t.slot % 3), t.slot * 2.4 + (now / 1000) * ((2 * Math.PI) / 90)];
     return [{ slot: t.slot, pose: { x: p.x + r * Math.cos(a), y: 0, z: p.z + r * Math.sin(a), yaw: a, mode: 'walk' as const, action: 'none' as const } }];
   }));
 }

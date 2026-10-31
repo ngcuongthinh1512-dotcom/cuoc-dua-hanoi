@@ -53,7 +53,7 @@ function loginView() {
   };
   pwIn.addEventListener('keydown', (e) => e.key === 'Enter' && void go());
   app.replaceChildren(
-    el('h1', {}, 'Cuộc đua Ma Cao – Host'),
+    el('h1', {}, 'Cuộc đua Bruxelles – Host'),
     el('section', {}, el('label', {}, 'Mã cuộc đua ', raceIn), el('label', {}, 'Mật khẩu Host ', pwIn), el('button', { onclick: () => void go() }, 'Đăng nhập'), err),
   );
 }
@@ -137,23 +137,35 @@ function mainView() {
   const link = `${location.origin}/?race=${encodeURIComponent(race)}`;
   sigs.status = sigs.leg = sigs.start = sigs.queue = sigs.undo = sigs.matrix = sigs.media = '';
   drawNotify();
+  const TABS = [['run', 'Điều hành'], ['setup', 'Thiết lập'], ['sys', 'Hệ thống']] as const;
+  type Tab = (typeof TABS)[number][0];
+  const saved = ((): string | null => { try { return sessionStorage.getItem('host-tab'); } catch { return null; } })();
+  let tab: Tab = TABS.some(([k]) => k === saved) ? (saved as Tab) : state?.status === 'lobby' ? 'setup' : 'run'; // before the start: the setup; once racing: the live view
+  const panels: Record<Tab, HTMLElement> = {
+    run: el('div', { className: 'tab-panel' }, statusBox, el('h2', {}, 'Tiến trình & xếp hạng (theo thứ tự về đích)'), matrixBox, el('h2', {}, 'Phạt vạch đích & thứ tự vào game'), startBox, el('h2', {}, 'Các đội'), teamsBox),
+    setup: el('div', { className: 'tab-panel' },
+      el('h2', {}, 'Tạo đội'),
+      el('section', {}, el('button', { onclick: createFixedTeams, title: 'Tên và màu đã cố định (Hai Long, Chị 6, WindyPhon…): chỉ sinh mã đội' }, `Tạo ${hostPage.fixedTeams.length} đội cố định & sinh mã`), create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
+      el('h2', {}, 'Chặng'), legBox, el('h2', {}, 'Hình mật thư (R2)'), mediaBox, el('h2', {}, 'Xe chung'), bikes),
+    sys: el('div', { className: 'tab-panel' }, el('h2', {}, 'Hạn mức Cloudflare (ước tính)'), counters),
+  };
+  const tabBtns = TABS.map(([k, label]) => el('button', { className: 'tab', onclick: () => pick(k) }, label));
+  const pick = (k: Tab) => {
+    tab = k;
+    try { sessionStorage.setItem('host-tab', k); } catch { /* private window */ }
+    TABS.forEach(([key], i) => { panels[key].hidden = key !== k; tabBtns[i]!.classList.toggle('on', key === k); });
+    if (k === 'run') requestAnimationFrame(() => state && render(state)); // the matrix was hidden: its sticky sizes are right again
+  };
   app.replaceChildren(
-    el('h1', {}, `Cuộc đua Ma Cao – Host · ${race}`),
-    el('p', {}, 'Link cho người chơi: ', el('code', {}, link), ' ', el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(link) }, 'Sao chép')),
+    el('div', { className: 'top' }, el('h1', {}, `Cuộc đua Bruxelles – Host · ${race}`),
+      el('span', { className: 'link' }, 'Link người chơi: ', el('code', {}, link), ' ', el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(link) }, 'Sao chép'))),
     specBox,
     banner, noticeBox, err, queueWrap,
-    el('h2', {}, 'Cuộc đua'), statusBox,
-    el('h2', {}, 'Chặng'), legBox,
-    el('h2', {}, 'Hình mật thư (R2)'), mediaBox,
-    el('h2', {}, 'Tạo đội'),
-    el('section', {}, el('button', { onclick: createFixedTeams, title: 'Tên và màu đã cố định (Hai Long, Chị 6, WindyPhon…): chỉ sinh mã đội' }, `Tạo ${hostPage.fixedTeams.length} đội cố định & sinh mã`), create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
-    el('h2', {}, 'Thứ tự vào game'), startBox,
-    el('h2', {}, 'Tiến trình & xếp hạng (theo thứ tự về đích)'), matrixBox,
-    el('h2', {}, 'Các đội'), teamsBox,
-    el('h2', {}, 'Hạn mức Cloudflare (ước tính)'), counters,
-    el('h2', {}, 'Xe chung'), bikes,
+    el('nav', { className: 'tabs' }, ...tabBtns),
+    ...Object.values(panels),
     mapPanel,
   );
+  pick(tab);
   if (mapPanel.open) void openMap();
   drawNotices();
   if (state) render(state);
@@ -192,7 +204,7 @@ function loadGraph() {
 
 // ── SPEC §17.41: "Bản đồ trực tiếp", a floating panel (fixed bottom right, the title bar drags / folds it). hostMap.ts + the
 // in-game map code load with the road graph when it first opens; the ticks / host.state reach it from connect(). ──
-const mapPanel = el('details', { className: 'map-panel', open: matchMedia('(min-width: 1180px)').matches }, el('summary', { title: 'Kéo để di chuyển · nhấp để thu gọn / mở' }, 'Bản đồ trực tiếp')); // open at load where host.css keeps a column free for it
+const mapPanel = el('details', { className: 'map-panel', open: false }, el('summary', { title: 'Kéo để di chuyển · nhấp để thu gọn / mở' }, 'Bản đồ trực tiếp')); // closed at load (the tables get the full width); opened it keeps a column free on a wide screen
 const mapErr = el('p', { className: 'bad' });
 let hostMap: HostMap | undefined;
 let mapLoad: Promise<void> | undefined;

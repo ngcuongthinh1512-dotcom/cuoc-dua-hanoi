@@ -38,9 +38,9 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(legFile))('spawnCandidates
     return d;
   };
 
-  it('6 segments, each ≥ minCandidates points inside its corridor, all ≥ 100 m from every route point (L2 → L3 too)', () => {
+  it('5 segments, each ≥ minCandidates points inside its corridor, all ≥ 100 m from every route point (L2 → L3 too)', () => {
     console.log(`spawnCandidates: ${ms.toFixed(0)} ms, ${c.segments.map((s) => s.length / 2).join(' / ')} points, ${c.decoys.length / 2} decoys`);
-    expect(c.segments).toHaveLength(6);
+    expect(c.segments).toHaveLength(5);
     c.segments.forEach((seg, i) => {
       expect(seg.length / 2).toBeGreaterThanOrEqual(serverBikes.minCandidates);
       for (const [x, z] of pairs(seg)) {

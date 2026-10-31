@@ -1,5 +1,5 @@
 body { margin: 0; background: #0b0f16; color: #e8ecf2; font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
-main { max-width: 84em; margin: 0 auto; padding: 20px 16px 40px; }
+main { max-width: 110em; margin: 0 auto; padding: 20px 16px 40px; }
 h1 { font-size: 22px; margin: 0 0 12px; }
 h2 { font-size: 16px; margin: 24px 0 8px; color: #9cc7ff; }
 section { background: #141a26; border-radius: 10px; padding: 12px 16px; }
@@ -56,7 +56,7 @@ button.ok { background: #2c9a4a; }
 .queue-wrap.has summary { color: #ffb45c; }
 .queue-wrap > button { position: absolute; top: 12px; right: 0; z-index: 1; }
 .queue-wrap.has { position: sticky; top: 0; z-index: 5; background: #0b0f16; padding-bottom: 6px; box-shadow: 0 6px 8px -6px #000; }
-.queue-wrap.has section { max-height: 50vh; overflow-y: auto; border: 1px solid #b86a1c; }
+.queue-wrap.has section { max-height: 38vh; overflow-y: auto; border: 1px solid #b86a1c; }
 /* SPEC §17.42: one card per waiting answer. Head / "ĐỘI TRẢ LỜI" (blue frame, the team's colour on its left edge, big white text)
    / "ĐÁP ÁN ĐÚNG – chỉ Host thấy" (dark green, dashed, smaller) / actions. Labels are words, never colour alone; text ≥ 4.5:1. */
 .review { padding: 10px 0 12px; border-bottom: 1px solid #222b3d; --team: #8d99b0; }
@@ -111,7 +111,7 @@ th.wrap { white-space: normal; line-height: 1.2; min-width: 4.5em; }
    stick to the top of THAT box (a sticky `top` needs its own scroll container; on the page it hid under the review queue). z-index:
    corner 3 > header 2 > team column 1. The header's bottom edge is a shadow: collapsed borders scroll away under a sticky cell. */
 /* review fix (e2e F5): the sticky "Chờ duyệt" frame (its height in --queue-h, main.ts) is taken off, so the box fits a low screen */
-.matrix-wrap { max-height: max(200px, min(72vh, calc(100vh - var(--queue-h, 0px) - 24px))); overflow: auto; }
+.matrix-wrap { max-height: max(380px, min(72vh, calc(100vh - var(--queue-h, 0px) - 24px))); overflow: auto; }
 table.matrix thead th { position: sticky; top: 0; z-index: 2; background: #141a26; box-shadow: 0 1px 0 #34405a; }
 table.matrix thead th:first-child { left: 0; z-index: 3; box-shadow: 2px 0 0 #222b3d, 0 1px 0 #34405a; }
 td.flag { white-space: normal; min-width: 13em; }
@@ -141,3 +141,14 @@ td.flag { white-space: normal; min-width: 13em; }
 .fp { white-space: nowrap; }
 .fp .fp-min { width: 5em; }
 .fp .fp-why { width: 16em; }
+
+/* Host redesign: the live view first, setup and system numbers on their own tabs; the review queue stays above every tab */
+.top { display: flex; align-items: baseline; gap: 6px 20px; flex-wrap: wrap; margin-bottom: 4px; }
+.top h1 { margin: 0; }
+.top .link { color: #8d99b0; font-size: 13px; }
+nav.tabs { display: flex; gap: 4px; margin: 14px 0 4px; border-bottom: 1px solid #222b3d; }
+nav.tabs button.tab { background: transparent; color: #8d99b0; border-radius: 8px 8px 0 0; padding: 8px 18px; font-weight: 600; border-bottom: 3px solid transparent; }
+nav.tabs button.tab:hover { color: #e8ecf2; }
+nav.tabs button.tab.on { color: #fff; background: #141a26; border-bottom-color: #2c6bd8; }
+.tab-panel[hidden] { display: none; }
+.tab-panel > h2:first-child { margin-top: 12px; }
