@@ -38,25 +38,25 @@ describe('F and the Pit Stop (D23, D19)', () => {
     expect(c.frame([box], 0, 0, true, 0).inZone).toBe(false);
   });
 
-  it('check-in every checkinEveryMs ON the mat (SPEC §17.38: the 16 × 32 m rectangle, not r) while racing the Pit Stop on foot; never riding, paused, finished, before the penalty ends', () => {
+  it('check-in every checkinEveryMs ON the mat (SPEC §17.38: the 3,2 × 6,4 m rectangle, not r) while racing the Pit Stop on foot; never riding, paused, finished, before the penalty ends', () => {
     const { c, sent } = client(50_000);
     c.welcome({ teams: [], view: view(), showStartOrder: false, startOrder: 1 } as unknown as Welcome, 0);
     c.frame([mat], 100, 0, false, 0);
     expect(sent).toEqual([]); // still the route before the Pit Stop: its zone completes it by pose
     c.message({ t: 'race', view: pit() });
-    expect(matAt([mat], 100, 15)).toBe(mat); // 15 m along the long axis (yaw 0 = north-south)
-    expect([matAt([mat], 110, 0), matAt([mat], 100, 17)]).toEqual([undefined, undefined]); // beside / past the mat, within r = 15
-    c.frame([mat], 100, 15, true, 10_000);
+    expect(matAt([mat], 100, 3)).toBe(mat); // 3 m along the long axis (yaw 0 = north-south)
+    expect([matAt([mat], 110, 0), matAt([mat], 100, 4)]).toEqual([undefined, undefined]); // beside / past the mat, within r = 15
+    c.frame([mat], 100, 3, true, 10_000);
     expect(sent).toEqual([]); // on the bike
-    c.frame([mat], 100, 15, false, 10_000);
-    c.frame([mat], 100, 15, false, 10_000 + raceClient.checkinEveryMs - 1);
-    c.frame([mat], 100, 15, false, 10_000 + raceClient.checkinEveryMs);
+    c.frame([mat], 100, 3, false, 10_000);
+    c.frame([mat], 100, 3, false, 10_000 + raceClient.checkinEveryMs - 1);
+    c.frame([mat], 100, 3, false, 10_000 + raceClient.checkinEveryMs);
     expect(sent).toEqual([{ t: 'race', op: 'checkin' }, { t: 'race', op: 'checkin' }]);
     sent.length = 0;
     c.message({ t: 'race', view: pit({ status: 'paused' }) });
-    c.frame([mat], 100, 15, false, 99_000);
+    c.frame([mat], 100, 3, false, 99_000);
     c.message({ t: 'race', view: pit({ checkinAt: 60_000 }) }); // penalty: server clock 50 000
-    c.frame([mat], 100, 15, false, 199_000);
+    c.frame([mat], 100, 3, false, 199_000);
     expect(sent).toEqual([]);
   });
 

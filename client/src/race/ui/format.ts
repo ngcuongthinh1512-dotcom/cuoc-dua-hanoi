@@ -284,6 +284,7 @@ export interface AnswerLine {
 export function answerLines(card: ClueCard): AnswerLine[] {
   const pen = card.retryPenaltyMinutes;
   const task = card.task ?? card.branches?.find((b) => b.id === card.branch)?.task;
+  if (task?.input === 'seat') return []; // Leg 3 BOZAR seat pick: the team never sees which seat it picked (it counts them itself)
   const parts = task?.input === 'parts'; // SPEC §17.44: N boxes stored "a | b | c | d" (the Host's Phạt may carry "đúng c/N")
   return card.answers
     .slice(-NET.answerHistory)
