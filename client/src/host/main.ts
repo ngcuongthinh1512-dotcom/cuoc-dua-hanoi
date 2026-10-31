@@ -110,6 +110,8 @@ const queueWrap = el('div', { className: 'queue-wrap' }, queueDetails, notifyBtn
 // review fix (e2e F5): the matrix box's max-height subtracts this (host.css .matrix-wrap), so both fit an 800 px screen
 new ResizeObserver(() => document.documentElement.style.setProperty('--queue-h', `${queueWrap.offsetHeight}px`)).observe(queueWrap);
 const teamsBox = el('section');
+/** "Điều hành" at a glance: online / finished / waiting for review / flagged (numbers only, rewritten by render()). */
+const statsBar = el('div', { className: 'stats' });
 const counters = el('section');
 const bikes = el('section');
 const candStatus = el('span', { className: 'note' }); // outlives render(): the status of the last "Tính hành lang" click
@@ -142,7 +144,7 @@ function mainView() {
   const saved = ((): string | null => { try { return sessionStorage.getItem('host-tab'); } catch { return null; } })();
   let tab: Tab = TABS.some(([k]) => k === saved) ? (saved as Tab) : state?.status === 'lobby' ? 'setup' : 'run'; // before the start: the setup; once racing: the live view
   const panels: Record<Tab, HTMLElement> = {
-    run: el('div', { className: 'tab-panel' }, statusBox, el('h2', {}, 'Tiến trình & xếp hạng (theo thứ tự về đích)'), matrixBox, el('h2', {}, 'Phạt vạch đích & thứ tự vào game'), startBox, el('h2', {}, 'Các đội'), teamsBox),
+    run: el('div', { className: 'tab-panel' }, statsBar, statusBox, el('h2', {}, 'Tiến trình & xếp hạng (theo thứ tự về đích)'), matrixBox, el('h2', {}, 'Phạt vạch đích & thứ tự vào game'), startBox, el('h2', {}, 'Các đội'), teamsBox),
     setup: el('div', { className: 'tab-panel' },
       el('h2', {}, 'Tạo đội'),
       el('section', {}, el('button', { onclick: createFixedTeams, title: 'Tên và màu đã cố định (Hai Long, Chị 6, WindyPhon…): chỉ sinh mã đội' }, `Tạo ${hostPage.fixedTeams.length} đội cố định & sinh mã`), create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
@@ -690,7 +692,15 @@ function render(s: State) {
   const th = (...h: string[]) => el('tr', {}, ...h.map((t) => el('th', {}, t)));
   const now = s.serverMs + (Date.now() - receivedAt);
   banner.replaceChildren(...[...warnings(s), ...stuckLines(s, now)].map((w) => el('div', {}, w)));
-  queueWrap.classList.toggle('has', drawQueue(s, now) + drawUndo(s, now) > 0);
+  const waiting = drawQueue(s, now);
+  queueWrap.classList.toggle('has', waiting + drawUndo(s, now) > 0);
+  const stat = (cls: string, k: string, v: number, of?: number) => el('div', { className: `stat ${cls}` }, el('div', { className: 'k' }, k), el('div', { className: 'v' }, String(v), of === undefined ? '' : el('small', {}, `/ ${of}`)));
+  statsBar.replaceChildren(
+    stat('ok', 'Đội online', s.teams.filter((t) => t.online).length, s.teams.length),
+    stat('', 'Đã về đích', s.teams.filter((t) => t.finishAt !== null).length, s.teams.length),
+    stat(waiting ? 'pend hot' : 'pend', 'Chờ duyệt', waiting),
+    stat('warn', 'Cờ đỏ', s.teams.filter((t) => t.flagged).length),
+  );
   drawSpectators(s);
   drawStatus(s);
   drawLeg(s);
