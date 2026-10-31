@@ -552,7 +552,7 @@ describe('pinned matrix and folding review frame (V1): host.css, main.ts', () =>
     expect(main).toMatch(/new ResizeObserver\(\(\) => document\.documentElement\.style\.setProperty\('--queue-h', `\$\{queueWrap\.offsetHeight\}px`\)\)\.observe\(queueWrap\)/);
     expect(rule('.matrix-wrap')).toMatch(/overflow:\s*auto/);
     expect(rule('table.matrix thead th')).toMatch(/position:\s*sticky;\s*top:\s*0/);
-    expect(rule('table.matrix thead th')).toMatch(/background:\s*#/); // opaque, or the cells show through while scrolling
+    expect(rule('table.matrix thead th')).toMatch(/background:\s*(#|var\(--card)/); // opaque, or the cells show through while scrolling
     expect(rule('table.pin tr > :first-child')).toMatch(/position:\s*sticky;\s*left:\s*0/);
     expect(rule('table.matrix thead th:first-child')).toMatch(/left:\s*0/);
     expect(z('table.matrix thead th:first-child')).toBeGreaterThan(z('table.matrix thead th'));
