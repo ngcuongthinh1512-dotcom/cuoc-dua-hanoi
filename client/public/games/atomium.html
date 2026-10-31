@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lắp ráp</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #10141a; font-family: system-ui, sans-serif; }
+  canvas { display: block; touch-action: none; }
+  #reset { position: fixed; right: 14px; bottom: 14px; padding: 9px 16px; border: 0; border-radius: 8px; background: #2c3a4c; color: #fff; font-size: 15px; cursor: pointer; }
+  #reset:hover { background: #41546d; }
+  #win { position: fixed; left: 0; right: 0; top: 18px; text-align: center; font-size: 28px; font-weight: 600; color: #ffd27a; opacity: 0; transition: opacity .6s; pointer-events: none; text-shadow: 0 2px 12px #000; }
+</style>
+</head>
+<body>
+<div id="win">Hoàn thành!</div>
+<button id="reset">Làm lại</button>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// Bộ lắp ráp: 9 quả cầu thép + 20 trụ rải lộn xộn thành một đống. Không có hình mẫu chung: mỗi mảnh có đúng một chỗ của nó,
+// và chỉ khi cầm mảnh nào lên thì mới hiện đường mờ chỗ của riêng mảnh đó. Mảnh chỉ gắn được vào chỗ của nó, và chỉ khi
+// chỗ đó đã có chỗ dựa (cầu giữa đặt trước; trụ cần một đầu có cầu; cầu cần một đầu trụ đã gắn).
+const U = 3.75, R_BALL = 1.8, R_ROD = 0.27; // U = đơn vị lưới (m); trụ dài = 2U, trụ ngắn = √3·U
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const up = V(0, 1, 0), tmp = V(0, 0, 0);
+const AX = [[2, 0, 0], [-2, 0, 0], [0, 2, 0], [0, -2, 0], [0, 0, 2], [0, 0, -2]];
+const DG = [];
+for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) DG.push([x, y, z]);
+const add = (p, d) => [p[0] + d[0], p[1] + d[1], p[2] + d[2]];
+const key = (p) => p.join(',');
+const seg = (p, q) => [key(p), key(q)].sort().join('|');
+const world = (p) => V(p[0] * U, p[1] * U, p[2] * U);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x10141a);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(3, 5, 4);
+scene.add(sun);
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+const D = Math.max(20, 18 / (innerWidth / innerHeight));
+camera.position.set(Math.sin(0.55) * D, 4, Math.cos(0.55) * D);
+let orbit; // tạo sau các handler kéo-thả để handler của mình chạy trước và tắt xoay camera kịp
+
+function place(mesh, a, b) {
+  tmp.subVectors(b, a);
+  const len = Math.max(tmp.length(), 1e-4);
+  mesh.position.addVectors(a, b).multiplyScalar(0.5);
+  mesh.scale.set(1, len, 1);
+  mesh.quaternion.setFromUnitVectors(up, tmp.divideScalar(len));
+}
+
+const steel = new THREE.MeshStandardMaterial({ color: 0xe6ebf0, metalness: 1, roughness: 0.22, envMapIntensity: 2.2 });
+const rodSteel = new THREE.MeshStandardMaterial({ color: 0xcfd6dd, metalness: 1, roughness: 0.3, envMapIntensity: 2.2 });
+const rnd = (a, b) => a + Math.random() * (b - a);
+const heapPoint = () => V((Math.random() < 0.5 ? -1 : 1) * rnd(8.5, 12), rnd(-6, 4.5), rnd(-2, 2)); // đống lộn xộn hai bên khối lắp
+
+const balls = Array.from({ length: 9 }, () => {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(R_BALL, 48, 32), steel);
+  scene.add(mesh);
+  const b = { mesh, node: null, home: V(0, 0, 0), goHome: false };
+  mesh.userData.obj = b;
+  return b;
+});
+const rods = Array.from({ length: 20 }, (_, i) => {
+  const long = i < 12;
+  const len = (long ? 2 : Math.sqrt(3)) * U;
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(R_ROD, R_ROD, 1, 20), rodSteel);
+  scene.add(mesh);
+  const r = { mesh, long, len, a: V(0, 0, 0), b: V(0, 0, 0), place: null, home: { a: V(0, 0, 0), b: V(0, 0, 0) }, goHome: false };
+  mesh.userData.obj = r;
+  return r;
+});
+const nodeBall = new Map(), segRod = new Map();
+// chỗ của từng mảnh: cầu 0 = tâm, cầu 1–8 = 8 đỉnh; trụ 0–11 = 12 cạnh, trụ 12–19 = 8 đường chéo vào tâm
+balls.forEach((b, i) => { b.target = i ? DG[i - 1] : [0, 0, 0]; });
+{
+  let k = 0;
+  for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) if (DG[i].filter((v, t) => v !== DG[j][t]).length === 1) rods[k++].target = { from: DG[i], to: DG[j] };
+  for (let i = 0; i < 8; i++) rods[12 + i].target = { from: [0, 0, 0], to: DG[i] };
+}
+
+// chỗ dự kiến (mờ) chỉ hiện khi đang kéo một mảnh lại gần chỗ gắn được
+const ghost = (opacity) => new THREE.MeshBasicMaterial({ color: 0x6fb7ff, transparent: true, opacity, depthWrite: false });
+const markBall = new THREE.Mesh(new THREE.SphereGeometry(R_BALL, 24, 16), ghost(0.5)); // chỗ sắp gắn (khi mảnh đã lại gần)
+const markRod = new THREE.Mesh(new THREE.CylinderGeometry(R_ROD * 1.2, R_ROD * 1.2, 1, 12), ghost(0.5));
+const outBall = new THREE.Mesh(new THREE.SphereGeometry(R_BALL, 24, 16), ghost(0.16)); // đường mờ chỗ của mảnh đang cầm
+const outRod = new THREE.Mesh(new THREE.CylinderGeometry(R_ROD * 1.2, R_ROD * 1.2, 1, 12), ghost(0.16));
+for (const m of [markBall, markRod, outBall, outRod]) { m.visible = false; scene.add(m); }
+function showOutline(o) {
+  outBall.visible = outRod.visible = false;
+  if (!o) return;
+  if (balls.includes(o)) { outBall.visible = true; outBall.position.copy(world(o.target)); }
+  else { outRod.visible = true; place(outRod, world(o.target.from), world(o.target.to)); }
+}
+
+function scatter() {
+  for (const b of balls) { b.home = heapPoint(); b.goHome = true; }
+  for (const r of rods) {
+    const c = heapPoint(), d = V(rnd(-0.8, 0.8), rnd(0.5, 1) * (Math.random() < 0.5 ? -1 : 1), rnd(-0.8, 0.8)).normalize().multiplyScalar(r.len / 2);
+    r.home = { a: c.clone().sub(d), b: c.clone().add(d) };
+    r.goHome = true;
+  }
+}
+function unplaceRod(r) {
+  if (!r.place) return;
+  segRod.delete(seg(r.place.from, r.place.to));
+  r.place = null;
+}
+function releaseOrphans() { // trụ không còn đầu nào gắn cầu thì rơi về đống
+  for (const r of rods) if (r.place && !nodeBall.has(key(r.place.from)) && !nodeBall.has(key(r.place.to))) { unplaceRod(r); r.goHome = true; }
+}
+function takeBall(b) {
+  if (b.node) { nodeBall.delete(key(b.node)); b.node = null; }
+  b.goHome = false;
+}
+function takeRod(r) { unplaceRod(r); r.goHome = false; }
+
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane();
+const aim = (ev) => { ndc.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); };
+let drag = null, cand = null;
+
+// Chỗ của mảnh đang cầm: mảnh lại gần (trong SNAP, đo theo không gian 3D) thì tự hút vào, không cần thả đúng chỗ
+const SNAP = 4.8, SNAP_ROD = 0.9; // cầu hút từ xa hơn; trụ phải nằm rất sát (nhìn từ camera) mới hút
+const near = (piece, spot) => piece.distanceTo(spot) < SNAP || ray.ray.distanceToPoint(spot) < 3.6; // cầu: gần chỗ, hoặc con trỏ đang chỉ vào chỗ đó
+const nearRod = (centre, spot) => new THREE.Ray(camera.position, centre.clone().sub(camera.position).normalize()).distanceToPoint(spot) < SNAP_ROD;
+function findCandidate() {
+  if (drag.ball) {
+    const t = drag.ball.target;
+    return !nodeBall.has(key(t)) && near(drag.ball.mesh.position, world(t)) ? { node: t } : null;
+  }
+  const r = drag.rod, t = r.target, c = tmp.addVectors(r.a, r.b).multiplyScalar(0.5);
+  return !segRod.has(seg(t.from, t.to)) && nearRod(c, world(t.from).add(world(t.to)).multiplyScalar(0.5)) ? { from: t.from, to: t.to } : null;
+}
+function showCandidate() {
+  markBall.visible = markRod.visible = false;
+  if (!cand) return;
+  if (cand.node) { markBall.visible = true; markBall.position.copy(world(cand.node)); }
+  else { markRod.visible = true; place(markRod, world(cand.from), world(cand.to)); }
+}
+
+const dom = renderer.domElement;
+dom.addEventListener('pointerdown', (ev) => {
+  aim(ev);
+  const hit = ray.intersectObjects([...balls, ...rods].map((o) => o.mesh))[0];
+  if (!hit) return;
+  orbit.enabled = false;
+  dom.setPointerCapture(ev.pointerId);
+  plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(tmp.clone()), hit.point);
+  const o = hit.object.userData.obj;
+  if (balls.includes(o)) { takeBall(o); drag = { ball: o, last: hit.point.clone() }; }
+  else { takeRod(o); drag = { rod: o, last: hit.point.clone() }; }
+  showOutline(o);
+});
+dom.addEventListener('pointermove', (ev) => {
+  aim(ev);
+  if (!drag) return;
+  const p = ray.ray.intersectPlane(plane, V(0, 0, 0));
+  if (!p) return;
+  const d = p.clone().sub(drag.last);
+  drag.last.copy(p);
+  if (drag.ball) drag.ball.mesh.position.add(d);
+  else { drag.rod.a.add(d); drag.rod.b.add(d); }
+  cand = findCandidate();
+  if (cand?.node) drag.ball.mesh.position.copy(world(cand.node)); // hút vào ngay
+  else if (cand) { drag.rod.a.copy(world(cand.from)); drag.rod.b.copy(world(cand.to)); }
+  showCandidate();
+});
+const drop = () => {
+  if (!drag) return;
+  if (cand && drag.ball) { drag.ball.node = cand.node; nodeBall.set(key(cand.node), drag.ball); }
+  else if (cand) { drag.rod.place = { from: cand.from, to: cand.to }; segRod.set(seg(cand.from, cand.to), drag.rod); }
+  drag = null; cand = null;
+  showCandidate();
+  showOutline(null);
+  orbit.enabled = true;
+  checkWin();
+};
+dom.addEventListener('pointerup', drop);
+dom.addEventListener('pointercancel', drop);
+
+// xong khi đủ 9 cầu + 20 trụ, mọi trụ nối 2 cầu, và các cầu tạo thành khối lập phương 2×2×2 có 1 cầu ở tâm
+const win = document.getElementById('win');
+function checkWin() {
+  let ok = balls.every((b) => b.node) && rods.every((r) => r.place && nodeBall.has(key(r.place.from)) && nodeBall.has(key(r.place.to)));
+  if (ok) {
+    const ns = balls.map((b) => b.node), min = [0, 1, 2].map((i) => Math.min(...ns.map((n) => n[i])));
+    const got = new Set(ns.map((n) => key(n.map((v, i) => v - min[i]))));
+    const want = ['1,1,1', ...[0, 2].flatMap((x) => [0, 2].flatMap((y) => [0, 2].map((z) => `${x},${y},${z}`)))];
+    ok = got.size === 9 && want.every((k) => got.has(k));
+  }
+  win.style.opacity = ok ? 1 : 0;
+  orbit.autoRotate = ok;
+  orbit.autoRotateSpeed = 2;
+}
+
+document.getElementById('reset').onclick = () => {
+  balls.forEach((b) => { b.node = null; });
+  nodeBall.clear();
+  rods.forEach(unplaceRod);
+  scatter();
+  checkWin();
+};
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+scatter();
+balls.forEach((b) => b.mesh.position.copy(b.home));
+rods.forEach((r) => { r.a.copy(r.home.a); r.b.copy(r.home.b); });
+orbit = new OrbitControls(camera, renderer.domElement);
+orbit.target.set(0, 0, 0);
+orbit.enableDamping = true;
+orbit.enablePan = false;
+
+window.__atomium = { balls, rods, nodeBall, camera, AX, DG, U, orbit, D, key }; // chỉ để kiểm thử
+renderer.setAnimationLoop(() => {
+  for (const b of balls) {
+    if (drag?.ball === b) continue;
+    if (b.node) b.mesh.position.lerp(world(b.node), 0.3);
+    else if (b.goHome) b.mesh.position.lerp(b.home, 0.12);
+  }
+  for (const r of rods) {
+    if (drag?.rod !== r) {
+      if (r.place) { r.a.lerp(world(r.place.from), 0.3); r.b.lerp(world(r.place.to), 0.3); }
+      else if (r.goHome) { r.a.lerp(r.home.a, 0.12); r.b.lerp(r.home.b, 0.12); }
+    }
+    place(r.mesh, r.a, r.b);
+  }
+  orbit.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
