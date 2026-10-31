@@ -76,7 +76,7 @@
       "id": "L1",
       "type": "route_info",
       "label": "Lộ trình 1",
-      "clue": "Mở hòm mật thư cạnh bạn để nhận mật thư đi tới Lộ trình 2.",
+      "clue": "Mở hòm mật thư cạnh bạn để nhận mật thư tiếp theo.",
       "transport": {
         "allowed": "any"
       },
