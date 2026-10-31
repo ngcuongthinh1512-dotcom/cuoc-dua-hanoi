@@ -21,6 +21,7 @@ import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
 import { DEMO_ROOM_STATES, demoRoomResult, demoRoomViews, type DemoRoomState } from './rooms/roomDemo.ts';
 import { enterSpot, exitSpot, roomFrame } from './rooms/roomFrame.ts';
+import { hideRoomDone, showRoomDone } from './rooms/doneScreen.ts';
 import { ROOM_TEXT, RoomFlow, isFreeRoom, pickupView, roomOf, type RoomEvent, type RoomTarget } from './rooms/roomState.ts';
 import type { RoomHandle } from './rooms/types.ts';
 import { hideWorld, showWorld } from './world/hideWorld.ts';
@@ -330,6 +331,7 @@ async function start() {
     roomBusy = true;
     await fadeTo(true);
     room.dispose();
+    hideRoomDone();
     room = undefined;
     roomFloor = null;
     player!.camera.override = null;
@@ -352,10 +354,15 @@ async function start() {
         resize();
         await fadeTo(false);
         roomBusy = false;
-      } else if (ev === 'exitReady') room?.setExit(true), toast(isFreeRoom(t?.room.kind) ? ROOM_TEXT.exitDoor : ROOM_TEXT.exit);
+      } else if (ev === 'exitReady') {
+        room?.setExit(true);
+        toast(isFreeRoom(t?.room.kind) ? ROOM_TEXT.exitDoor : ROOM_TEXT.exit);
+        // Lựa chọn kép finished (not skipped): the big "Hoàn thành" screen, then the way out
+        if (t && !isFreeRoom(t.room.kind) && !t.room.skipped) showRoomDone(t.room.kind === 'chocolate' ? 'phòng sô-cô-la' : 'phòng vẽ truyện tranh', 'Đi tới vòng sáng ở cuối phòng để ra khỏi phòng');
+      }
       else if (ev === 'pickup' && roomFlow.pickup?.pickup && pickupHeld) room?.setPickup?.(roomFlow.pickup.pickup.prompt), raceHud?.setView(pickupView(pickupHeld, roomFlow.pickup.pickup)); // T2 done: the stand-in card, the next one waits for F at the stage
       else if (ev === 'switched') room?.setExit(true), room?.setLocked(true), toast(ROOM_TEXT.switched);
-      else if (ev === 'resume') room?.setExit(false), room?.setLocked(false);
+      else if (ev === 'resume') room?.setExit(false), room?.setLocked(false), hideRoomDone();
     });
   /** Every view before the HUD (RaceDeps.view): true = hold it. */
   let pickupHeld: RaceView | null = null; // the held view whose stand-in card shows (pickupView)
