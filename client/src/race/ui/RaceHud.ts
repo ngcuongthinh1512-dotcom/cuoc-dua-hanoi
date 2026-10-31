@@ -638,7 +638,7 @@ export class RaceHud {
     const values = this.partInputs.map((i) => i.value.trim());
     const active = this.partInputs.indexOf(document.activeElement as HTMLInputElement);
     const empty = this.partInputs.findIndex((_, k) => !values[k] && k !== active);
-    if (empty >= 0 || !values[active]) return (this.partInputs[empty >= 0 ? empty : active]?.focus(), false);
+    if (empty >= 0 || (active >= 0 && !values[active])) return (this.partInputs[empty >= 0 ? empty : active]?.focus(), false); // active = -1: the button was clicked (all boxes filled: send)
     if (active >= 0 && active < this.partInputs.length - 1) return (this.partInputs[active + 1]!.focus(), false);
     this.actions.answer(card.step, '', values); // the texts stay in the boxes: a Phạt means "fix them"
   }
