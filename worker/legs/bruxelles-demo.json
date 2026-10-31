@@ -30,18 +30,18 @@
     "minDistanceFromCheckpoint": 100,
     "initialPerSegment": [
       0,
-      1
+      2
     ],
     "spawnIntervalMinutes": 3,
-    "spawnChance": 0.3,
-    "maxAvailablePerSegment": 1,
+    "spawnChance": 0.6,
+    "maxAvailablePerSegment": 2,
     "decoyRatio": 0.4,
     "noSpawnNearPlayerMeters": 120,
     "abandonMeters": 200,
     "abandonSeconds": 60,
     "bikeParking": {
       "offsetMeters": 20,
-      "maxBikes": 6
+      "maxBikes": 12
     }
   },
   "clueBook": {
