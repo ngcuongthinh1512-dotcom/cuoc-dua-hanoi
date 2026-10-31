@@ -56,7 +56,7 @@ describe('VehicleSpawner (SPEC §6.2)', () => {
       for (let i = 0; i < 6; i++) expect(bikes.filter((b) => b.segment === i && b.rack === null).length).toBeLessThanOrEqual(cfg.maxAvailablePerSegment);
       expect(bikes.filter((b) => b.segment === -1).length).toBeLessThanOrEqual(6 * cfg.maxAvailablePerSegment);
     }
-    for (let i = 0; i < 6; i++) expect(bikes.filter((b) => b.segment === i && b.rack === null)).toHaveLength(1); // 30 % / round → full
+    for (let i = 0; i < 6; i++) expect(bikes.filter((b) => b.segment === i && b.rack === null)).toHaveLength(cfg.maxAvailablePerSegment); // many rounds → full
     // a claimed bike is no longer free: the segment gets a new one
     bikes.find((b) => b.segment === 2)!.owner = 't0';
     let more: ServerBike[] = [];
