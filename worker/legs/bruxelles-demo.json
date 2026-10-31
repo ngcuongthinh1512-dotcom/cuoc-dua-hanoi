@@ -191,7 +191,7 @@
       "id": "L3B",
       "type": "route_info",
       "label": "Lộ trình 4",
-      "clue": "Đội chơi tìm đường đến \"tủ quần áo\" của bé trai trong bài thơ để nhận mật thư đi tiếp.",
+      "clue": "Đội chơi tìm đường đến \"tủ quần áo\" của \"bé trai\" trong Lộ trình 3 để nhận mật thư đi tiếp.",
       "transport": {
         "allowed": "any"
       },
