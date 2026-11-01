@@ -1,5 +1,6 @@
 // Phase 4B track A (docs/plans/phase4b.md §5.2): loads the three NPC GLBs made by scripts/process-assets.ts
 //   npc-vehicles.glb  a node per CarKind: one primitive, vertex colours + `_PAINT` (1 = body paint), extras axles / wheelRadius
+//   hanoi-vehicles.glb (Leg 3, scripts/process-hanoi-vehicles.ts) the same contract; its kinds override / extend the old file's
 //   npc-peds.glb      4 Rocketbox avatars `ped_<i>`: skinned LOD0 + LOD1 (extras lod), one atlas material, extras gender / height
 //   npc-ped-anims.glb 14 clips m_* / f_*, bound by bone name
 // A missing / unreadable file → console.warn + boxes / capsules / no clips (the game still runs).
@@ -47,14 +48,15 @@ function floats(a: BufferAttribute | InterleavedBufferAttribute) {
   return new Float32BufferAttribute(out, a.itemSize);
 }
 
-/** The 10 vehicle templates of a loaded npc-vehicles scene; geometry in model space (node matrix baked, float attributes). */
+/** The vehicle templates of a loaded npc-vehicles / hanoi-vehicles scene (the kinds it has a node for; none at all is an
+ *  error); geometry in model space (node matrix baked, float attributes). */
 export function prepareVehicles(scene: Object3D) {
   scene.updateMatrixWorld(true);
   const out = new Map<CarKind, VehicleTemplate>();
   for (const kind of KINDS) {
     const node = scene.getObjectByName(kind);
     const mesh = node instanceof Mesh ? node : (node?.children.find((c) => c instanceof Mesh) as Mesh | undefined);
-    if (!node || !mesh) throw new Error(`NpcAssets: no node "${kind}" in the vehicles file`);
+    if (!node || !mesh) continue;
     const g = mesh.geometry;
     const geometry = new BufferGeometry();
     for (const name of ['position', 'normal', 'color', '_paint']) {
@@ -69,6 +71,7 @@ export function prepareVehicles(scene: Object3D) {
     const u = { ...node.userData, ...mesh.userData } as { axles?: [number, number, number][]; wheelRadius?: number };
     out.set(kind, { kind, geometry, axles: u.axles ?? [], wheelRadius: u.wheelRadius ?? 0 });
   }
+  if (!out.size) throw new Error('NpcAssets: no node of any CarKind in the vehicles file');
   return out;
 }
 
@@ -120,10 +123,13 @@ export async function loadNpcAssets(): Promise<NpcAssets> {
       return fallback();
     }
   };
-  const [vehicles, peds, clips] = await Promise.all([
-    load(npcAssets.vehiclesUrl, (g) => prepareVehicles(g.scene), standInVehicles),
+  const [old, hanoi, peds, clips] = await Promise.all([
+    load(npcAssets.vehiclesUrl, (g) => prepareVehicles(g.scene), () => new Map<CarKind, VehicleTemplate>()),
+    load(npcAssets.hanoiUrl, (g) => prepareVehicles(g.scene), () => new Map<CarKind, VehicleTemplate>()),
     load(npcAssets.pedsUrl, (g) => preparePeds(g.scene, []).peds, standInPeds),
     load(npcAssets.clipsUrl, (g) => preparePeds(g.scene, g.animations).clips, () => new Map<string, AnimationClip>()),
   ]);
+  // every kind has a template: the Hà Nội file's over the old file's over a stand-in box of its dims
+  const vehicles = new Map([...standInVehicles(), ...old, ...hanoi]);
   return { vehicles, peds, clips };
 }

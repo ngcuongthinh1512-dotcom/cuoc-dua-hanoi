@@ -26,7 +26,8 @@
     "build-chunks": "tsx scripts/build-chunks.ts",
     "ground-dem": "tsx scripts/ground-dem.ts",
     "build-graph": "tsx scripts/build-graph.ts",
-    "process-assets": "tsx scripts/process-assets.ts"
+    "process-assets": "tsx scripts/process-assets.ts",
+    "process-hanoi": "tsx scripts/process-hanoi-vehicles.ts"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.5.0",

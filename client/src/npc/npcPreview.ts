@@ -1,10 +1,13 @@
 // DEV TURNTABLE (Phase 4B track A): NPC models without the world. Dev server only (/npc.html?…):
-//   show=cars   the 10 vehicles in two rows, side view, body paints from npc.paints (wheels drawn as dark cylinders)
+//   show=cars   every vehicle kind in rows (Leg 3: 4 rows, the Hà Nội kinds last), side view, body paints (wheels drawn as dark cylinders)
 //     · kinds=scooter,moto only those (one row, closer) · paint=<#hex> body paint for all
 //   show=peds   the 4 Rocketbox avatars: LOD0 row in front, LOD1 row behind · clip=walk | stroll | idle | lookAround | phone | sit | wave
 //     (several, comma separated: one per avatar, cycling; `m_` / `f_` by the avatar's gender) · t=<s> clip time (default 0)
 //   dist=<m> camera distance · yaw=<°> camera angle around the row (0 = from +Z, front view of the peds)
+//   raw=<url> any GLB as downloaded (e.g. /@fs/…/.cache/assets/hanoi/x.glb): auto-framed, axes (red +X, green +Y, blue +Z),
+//     bounds in the console / __STATS__ (judging a source model before scripts/process-hanoi-vehicles.ts normalises it)
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { npc, render as R } from '../config.ts';
 import { loadNpcAssets } from './NpcAssets.ts';
@@ -38,9 +41,36 @@ const assets = await loadNpcAssets();
 const target = new THREE.Vector3(0, 0.9, 0);
 let width = 4; // m the camera must frame
 
-if (show === 'cars') {
+let rawBounds: object | undefined;
+if (q.has('raw')) {
+  const g = await new GLTFLoader().loadAsync(q.get('raw')!);
+  const box = new THREE.Box3().setFromObject(g.scene);
+  const size = box.getSize(new THREE.Vector3());
+  const s = num('scale') || 2 / Math.max(size.x, size.y, size.z); // fit ≈ 2 m
+  g.scene.scale.setScalar(s);
+  g.scene.position.set(-(box.min.x + box.max.x) / 2 * s, -box.min.y * s, -(box.min.z + box.max.z) / 2 * s);
+  const legend: Record<string, string> = {};
+  const [axis, lo, hi] = (q.get('clip') ?? '').split(',');
+  const n = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }[axis ?? ''] ?? null;
+  const clip = n && [new THREE.Plane(new THREE.Vector3(...n), -Number(lo) * s), new THREE.Plane(new THREE.Vector3(...n).negate(), Number(hi) * s)];
+  renderer.localClippingEnabled = !!clip;
+  g.scene.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    o.castShadow = true;
+    if (clip) (o.material as THREE.Material).clippingPlanes = clip; // clip=x|y|z,min,max (raw units): only that slab is drawn
+    if (!q.has('mats')) return; // mats=1: every source material in its own hue (legend in the console / __STATS__)
+    const name = (o.material as THREE.Material).name;
+    const c = legend[name] ?? (legend[name] = new THREE.Color().setHSL((Object.keys(legend).length * 0.137) % 1, 0.8, 0.5).getStyle());
+    o.material = new THREE.MeshStandardMaterial({ color: c, side: THREE.DoubleSide });
+  });
+  scene.add(g.scene, new THREE.AxesHelper(1.5));
+  rawBounds = { min: box.min.toArray(), max: box.max.toArray(), size: size.toArray(), legend };
+  console.log('raw bounds', JSON.stringify(rawBounds));
+  width = 2.4;
+  target.set(0, (size.y * s) / 2, 0);
+} else if (show === 'cars') {
   const only = q.get('kinds')?.split(',') as CarKind[] | undefined;
-  const rows: CarKind[][] = only ? [only] : [['city', 'hatchback', 'sedan', 'suv', 'taxi'], ['van', 'truck', 'bus', 'scooter', 'moto']];
+  const rows: CarKind[][] = only ? [only] : [['city', 'hatchback', 'sedan', 'suv', 'taxi'], ['van', 'truck', 'bus', 'scooter', 'moto'], ['wave', 'wave2', 'wave3', 'waveHat', 'wave2p'], ['xichlo', 'xichlo2', 'bagac']];
   const wheelGeo = new THREE.CylinderGeometry(1, 1, 1, 16).rotateZ(Math.PI / 2);
   const wheelMat = new THREE.MeshStandardMaterial({ color: '#1b1b1d', roughness: 0.9 });
   const GAP = 1.6;
@@ -71,7 +101,7 @@ if (show === 'cars') {
         car.add(w);
       }
       car.rotation.y = Math.PI / 2; // nose +Z → +X: the camera on +Z sees the right side
-      car.position.set(x + len / 2, 0, rows.length > 1 ? (r ? 4.5 : -4.5) : 0);
+      car.position.set(x + len / 2, 0, (r - (rows.length - 1) / 2) * 5);
       scene.add(car);
       x += len + GAP;
     }
@@ -114,15 +144,15 @@ if (show === 'cars') {
 
 const camera = new THREE.PerspectiveCamera(R.fov, innerWidth / innerHeight, 0.1, 300);
 const tanHalfW = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
-const rows2 = show === 'cars' && !q.has('kinds');
+const rows2 = show === 'cars' && !q.has('kinds') && !q.has('raw');
 const dist = num('dist') || ((width / 2 + 0.6) / tanHalfW) * (rows2 ? 1.3 : 1);
 const yaw = THREE.MathUtils.degToRad(num('yaw'));
-camera.position.set(target.x + Math.sin(yaw) * dist, show === 'cars' ? 1.6 + dist * (rows2 ? 0.42 : 0.1) : 1.2, (show === 'cars' ? 0 : 0) + Math.cos(yaw) * dist);
+camera.position.set(target.x + Math.sin(yaw) * dist, q.has('raw') ? 0.4 + dist * 0.45 : show === 'cars' ? 1.6 + dist * (rows2 ? 0.42 : 0.1) : 1.2, Math.cos(yaw) * dist);
 camera.lookAt(target);
 let frames = 0;
 renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   if (++frames !== 3) return;
   const { calls, triangles } = renderer.info.render;
-  Object.assign(window, { __STATS__: { calls, triangles }, __READY__: true });
+  Object.assign(window, { __STATS__: { calls, triangles, ...(rawBounds && { rawBounds }) }, __READY__: true });
 });

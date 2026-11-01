@@ -10,6 +10,11 @@ import type { CarKind } from './types.ts';
 
 const file = (n: string) => new URL(`../../public/models/${n}.glb`, import.meta.url);
 const KINDS = Object.keys(npc.vehicles) as CarKind[];
+// Leg 3: hanoi-vehicles.glb (scripts/process-hanoi-vehicles.ts) carries the Hà Nội kinds and overrides bus + taxi; the
+// old npc-vehicles.glb still has its 10 nodes (bus / taxi there are the Paris ones, no longer the config dims)
+const HANOI: CarKind[] = ['bus', 'taxi', 'wave', 'wave2', 'wave3', 'waveHat', 'wave2p', 'xichlo', 'xichlo2', 'bagac'];
+const OLD: CarKind[] = ['city', 'hatchback', 'sedan', 'suv', 'taxi', 'van', 'truck', 'bus', 'scooter', 'moto'];
+const OLD_ONLY = OLD.filter((k) => !HANOI.includes(k));
 const TWO_WHEELERS: CarKind[] = ['scooter', 'moto'];
 
 /** GLTFLoader.parse in node: the atlas texture goes through a stub createImageBitmap. */
@@ -32,12 +37,12 @@ describe('npc-vehicles.glb', async () => {
   const { scene } = await load('npc-vehicles');
   const templates = prepareVehicles(scene);
 
-  it('a node per CarKind, file ≤ 1.5 MB', () => {
-    for (const k of KINDS) expect(scene.getObjectByName(k), k).toBeTruthy();
+  it('a node per old CarKind, file ≤ 1.5 MB', () => {
+    for (const k of OLD) expect(scene.getObjectByName(k), k).toBeTruthy();
     expect(statSync(file('npc-vehicles')).size).toBeLessThanOrEqual(1.5 * 2 ** 20);
   });
 
-  it.each(KINDS)('%s: size = dims ± 3 %, on the ground, nose +Z, triangle budget', (kind) => {
+  it.each(OLD_ONLY)('%s: size = dims ± 3 %, on the ground, nose +Z, triangle budget', (kind) => {
     const t = templates.get(kind)!;
     const node = scene.getObjectByName(kind)!;
     const [w, h, l] = npc.vehicles[kind].dims;
@@ -58,7 +63,7 @@ describe('npc-vehicles.glb', async () => {
     expect(tris).toBeLessThanOrEqual(TWO_WHEELERS.includes(kind) ? C.maxTris.twoWheeler + C.maxTris.rider : big ? C.maxTris.big : C.maxTris.car);
   });
 
-  it.each(KINDS.filter((k) => !TWO_WHEELERS.includes(k)))('%s: 4 axles with a radius, wheels inside the track', (kind) => {
+  it.each(OLD_ONLY.filter((k) => !TWO_WHEELERS.includes(k)))('%s: 4 axles with a radius, wheels inside the track', (kind) => {
     const t = templates.get(kind)!;
     const [w, , l] = npc.vehicles[kind].dims;
     expect(t.axles.length).toBeGreaterThanOrEqual(4);
@@ -70,7 +75,7 @@ describe('npc-vehicles.glb', async () => {
     }
   });
 
-  it.each(KINDS)('%s: vertex colours + _paint (body paint ≥ 20 % of the vertices; riders ≥ 5 %)', (kind) => {
+  it.each(OLD_ONLY)('%s: vertex colours + _paint (body paint ≥ 20 % of the vertices; riders ≥ 5 %)', (kind) => {
     const g = templates.get(kind)!.geometry;
     expect(g.getAttribute('color')).toBeTruthy();
     const p = g.getAttribute('_paint');
@@ -85,7 +90,7 @@ describe('npc-vehicles.glb', async () => {
 
   it('prepareVehicles: a synthetic scene (mesh per kind) gives float attributes and the extras', () => {
     const s = new Group();
-    for (const k of KINDS) {
+    for (const k of OLD) {
       const g = new BufferGeometry();
       g.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3));
       g.setAttribute('normal', new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3));
@@ -103,6 +108,56 @@ describe('npc-vehicles.glb', async () => {
     expect(t.wheelRadius).toBe(0.3);
     expect(t.geometry.getAttribute('color').getX(0)).toBe(1); // normalised bytes → floats
     expect(t.geometry.getAttribute('position').getY(0)).toBe(2); // node matrix baked
+  });
+});
+
+describe('hanoi-vehicles.glb (Leg 3)', async () => {
+  const { scene } = await load('hanoi-vehicles');
+  const templates = prepareVehicles(scene);
+  const AXLES: Partial<Record<CarKind, number>> = { bus: 4, taxi: 4, wave: 2, wave2: 2, wave3: 2, waveHat: 2, wave2p: 2, xichlo: 3, xichlo2: 3, bagac: 0 };
+
+  it('a node per Hà Nội kind and nothing else, file ≤ 1 MB (the whole set ≤ 2 MB with npc-vehicles.glb)', () => {
+    for (const k of HANOI) expect(scene.getObjectByName(k), k).toBeTruthy();
+    expect([...templates.keys()].sort()).toEqual([...HANOI].sort());
+    expect(statSync(file('hanoi-vehicles')).size).toBeLessThanOrEqual(2 ** 20);
+    expect(statSync(file('hanoi-vehicles')).size + statSync(file('npc-vehicles')).size).toBeLessThanOrEqual(2 * 2 ** 20);
+  });
+
+  it.each(HANOI)('%s: body = dims ± 3 %, wheels on the ground, nose +Z, ≤ 3 000 triangles, axles', (kind) => {
+    const t = templates.get(kind)!;
+    const node = scene.getObjectByName(kind)!;
+    const [w, h, l] = npc.vehicles[kind].dims;
+    const [x0, , z0, x1, y1, z1] = node.userData.bodyBox as number[]; // the vehicle without its riders
+    expect(Math.abs((x1! - x0!) / w - 1)).toBeLessThan(0.03);
+    expect(Math.abs((z1! - z0!) / l - 1)).toBeLessThan(0.03);
+    const box = t.geometry.boundingBox!;
+    const ground = t.axles.length ? Math.min(...t.axles.map((a) => a[1] - t.wheelRadius)) : box.min.y;
+    expect(Math.abs(ground)).toBeLessThan(0.02);
+    expect(Math.abs((y1! - ground) / h - 1)).toBeLessThan(0.03);
+    expect((node.userData.front as number[])[2]).toBeGreaterThan(0.3 * l);
+    expect(t.geometry.index!.count / 3).toBeLessThanOrEqual(3000);
+    expect(t.axles.length).toBe(AXLES[kind]);
+    for (const [x, y, z] of t.axles) {
+      expect(Math.abs(x)).toBeLessThanOrEqual(w / 2);
+      expect(Math.abs(z)).toBeLessThan(l / 2);
+      expect(y).toBeCloseTo(t.wheelRadius, 1);
+    }
+  });
+
+  it.each(HANOI)('%s: vertex colours + _paint (taxi body ≥ 20 %, the others ≥ 2 %)', (kind) => {
+    const g = templates.get(kind)!.geometry;
+    expect(g.getAttribute('color')).toBeTruthy();
+    const p = g.getAttribute('_paint');
+    let n = 0;
+    for (let i = 0; i < p.count; i++) n += p.getX(i) > 0.5 ? 1 : 0;
+    expect(n / p.count).toBeGreaterThanOrEqual(kind === 'taxi' ? 0.2 : 0.02);
+  });
+
+  it('every CarKind has a template once both files are merged (NpcAssets order: stand-in < old < hanoi)', async () => {
+    const old = prepareVehicles((await load('npc-vehicles')).scene);
+    const all = new Map([...old, ...templates]);
+    for (const k of KINDS) expect(all.get(k), k).toBeTruthy();
+    expect(all.get('bus')!.geometry.boundingBox!.max.z).toBeCloseTo(npc.vehicles.bus.dims[2] / 2, 0); // the Hà Nội bus, not the 12 m Paris one
   });
 });
 
@@ -203,9 +258,9 @@ describe('loadNpcAssets', () => {
   it('unreadable files → a warning per file and stand-ins (boxes of the dims, 4 capsules, no clips)', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const a = await loadNpcAssets();
-    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledTimes(4);
     warn.mockRestore();
-    expect(a.vehicles.size).toBe(10);
+    expect(a.vehicles.size).toBe(KINDS.length);
     expect(a.peds).toHaveLength(4);
     expect(a.clips.size).toBe(0);
     expect(a.vehicles.get('bus')!.geometry.getAttribute('_paint').count).toBeGreaterThan(0);

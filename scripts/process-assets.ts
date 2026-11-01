@@ -398,7 +398,7 @@ interface Veh {
 const RG = 'free_low_poly_vehicles_pack_by_rgsdev/Free Low Poly Vehicles Pack by Rgsdev';
 const quat = (file: string): Veh => ({ file, wheel: /Wheel/i, paint: (t) => QUAT_PAINT.has(t.mat), light: (t) => t.mat === 'Headlights' });
 const rgs = (dir: string): Veh => ({ file: `${RG}/${dir}/${dir}.fbx`, wheel: /_wheel_/, paint: (t) => /^body /.test(t.mat) && !/black|white/.test(t.mat), light: (t) => t.mat === 'headlights' });
-const VEHICLES: Record<keyof typeof npc.vehicles, Veh> = {
+const VEHICLES: Partial<Record<keyof typeof npc.vehicles, Veh>> = { // Leg 3: the Hà Nội kinds come from scripts/process-hanoi-vehicles.ts
   city: quat('car-sedan-1_quaternius.glb'),
   sedan: quat('car-sedan-2_quaternius.glb'),
   suv: quat('suv_quaternius.glb'),

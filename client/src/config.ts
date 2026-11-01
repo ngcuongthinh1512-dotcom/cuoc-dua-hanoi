@@ -786,20 +786,33 @@ export const stairs = {
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════
 
 // ── Foundation · shared NPC settings (npc/types.ts, npc/roads.ts) ──
-/** dims: m width × height × length the models are baked to (process-assets) and the sims use; share of the fleet
- *  (sums to 1); paint: own sRGB paints (else npc.paints); roads: highway kinds it may drive on (else traffic.kinds). */
-type NpcVehicle = { dims: readonly [number, number, number]; share: number; paint?: readonly string[]; roads?: readonly string[]; speed?: number; accel?: number };
+/** dims: m width × height × length the models are baked to (process-assets / process-hanoi-vehicles) and the sims use;
+ *  share of the fleet (sums to 1); paint: own sRGB paints (else npc.paints); roads: highway kinds it may drive on (else
+ *  traffic.kinds); speed: own top speed m/s (below the road's); kerb: always in the kerb lane; max: alive at once. */
+type NpcVehicle = { dims: readonly [number, number, number]; share: number; paint?: readonly string[]; roads?: readonly string[]; speed?: number; kerb?: boolean; max?: number };
+const ORDINARY = ['secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'secondary_link', 'tertiary_link']; // no primary (no slow three-wheelers on Trần Hưng Đạo / Giải Phóng)
+// Leg 3 Hà Nội mix: two-wheelers ≈ 60 % (wave* = Honda-Wave-like motorbikes with riders from hanoi-vehicles.glb, scooter /
+// moto the old Vespa / sport bike riders), taxis ≈ 17 % of the cars (Mai Linh green), xích lô + xe ba gác a few %.
 const npcVehicles = {
-  city: { dims: [1.7, 1.5, 3.6], share: 0.14 },
-  hatchback: { dims: [1.75, 1.45, 4.0], share: 0.16 },
-  sedan: { dims: [1.8, 1.45, 4.6], share: 0.14 },
-  suv: { dims: [1.9, 1.7, 4.6], share: 0.08 },
-  taxi: { dims: [1.8, 1.5, 4.6], share: 0.12, paint: ['#1d1f22'] }, // Paris taxis are dark, white "TAXI" roof light
-  van: { dims: [2.0, 2.3, 5.4], share: 0.08 },
-  truck: { dims: [2.3, 3.0, 6.5], share: 0.05 },
-  bus: { dims: [2.55, 3.1, 12], share: 0.05, roads: ['primary', 'secondary'], paint: ['#e8ebe6'] },
-  scooter: { dims: [0.7, 1.4, 1.8], share: 0.1 },
-  moto: { dims: [0.8, 1.4, 2.1], share: 0.08 },
+  city: { dims: [1.7, 1.5, 3.6], share: 0.065 },
+  hatchback: { dims: [1.75, 1.45, 4.0], share: 0.05 },
+  sedan: { dims: [1.8, 1.45, 4.6], share: 0.05 },
+  suv: { dims: [1.9, 1.7, 4.6], share: 0.03 },
+  taxi: { dims: [1.8, 1.5, 4.6], share: 0.05, paint: ['#0b7a3b', '#0b7a3b', '#0b7a3b', '#f0f0ec'] }, // Mai Linh green (3 of 4), white
+  van: { dims: [2.0, 2.3, 5.4], share: 0.025 },
+  truck: { dims: [2.3, 3.0, 6.5], share: 0.01 },
+  bus: { dims: [2.5, 3.1, 10.3], share: 0.03, roads: ['primary', 'secondary'], paint: ['#c62828', '#2e8b4a', '#7cb342'] }, // Transerco: red / green / yellow-green skirt, white body
+  scooter: { dims: [0.7, 1.4, 1.8], share: 0.06 },
+  moto: { dims: [0.8, 1.4, 2.1], share: 0.04 },
+  // Hà Nội motorbikes (hanoi-vehicles.glb): paint = tank / side covers; rider shirt + helmet baked per kind
+  wave: { dims: [0.7, 1.15, 1.7], share: 0.15, paint: ['#1d1f22', '#c0392b', '#1f3350', '#f2f2ef', '#8d9296', '#7a1f22'] },
+  wave2: { dims: [0.7, 1.15, 1.7], share: 0.12, paint: ['#1d1f22', '#2a5db0', '#f2f2ef', '#35503a', '#c3c7ca'] },
+  wave3: { dims: [0.7, 1.15, 1.7], share: 0.1, paint: ['#1d1f22', '#c0392b', '#f2f2ef', '#8d9296', '#1f3350'] },
+  waveHat: { dims: [0.7, 1.15, 1.7], share: 0.06, paint: ['#1d1f22', '#7a1f22', '#8d9296', '#35503a'] }, // rider under a nón lá
+  wave2p: { dims: [0.7, 1.15, 1.7], share: 0.08, paint: ['#1d1f22', '#c0392b', '#2a5db0', '#f2f2ef'] }, // with a pillion passenger
+  xichlo: { dims: [1.19, 1.22, 2.52], share: 0.03, paint: ['#b4232a', '#2f6b3a', '#1f4f8a', '#6b6b2a'], roads: ORDINARY, speed: 3, kerb: true, max: 6 }, // paint = canopy / sides
+  xichlo2: { dims: [1.19, 1.22, 2.52], share: 0.02, paint: ['#b4232a', '#2f6b3a', '#1f4f8a', '#6b6b2a'], roads: ORDINARY, speed: 2.8, kerb: true, max: 4 }, // with a passenger
+  bagac: { dims: [1.12, 1.13, 3.12], share: 0.03, paint: ['#2f5fa8', '#4f7a3a', '#8a6a3a', '#c8b24a'], roads: ORDINARY, speed: 6.5, kerb: true },
 } satisfies Record<string, NpcVehicle>;
 export const npc = {
   enabled: true, // URL ?npc=0 turns NPCs off (ride-check, physics presets); the spectator ?cam= has them too (§17.11)
@@ -810,12 +823,15 @@ export const npc = {
   // the Ruínas de São Paulo platform + great stair (local z −40 … 63.5 of the façade frame, ±12.5 m)
   landmarkZones: [[150, -466, 14], [150, -445, 14], [150, -424, 14], [150, -403, 14], [150, -385, 13]] as [number, number, number][],
   vehicles: npcVehicles as Readonly<Record<keyof typeof npcVehicles, NpcVehicle>>,
+  // Old Quarter / Hồ Gươm: within r m of the origin (Đông Kinh Nghĩa Thục square) these kinds' spawn shares are × factor
+  boost: { r: 550, kinds: { xichlo: 4, xichlo2: 4 } as Readonly<Record<string, number>> },
   paints: ['#f2f2ef', '#1d1f22', '#8d9296', '#c3c7ca', '#1f3350', '#7a1f22', '#35503a'], // sRGB body paints
 };
 
 // ── A · NPC asset pipeline (scripts/process-assets.ts, scripts/fbx.ts, npc/NpcAssets.ts) ──
 export const npcAssets = {
   vehiclesUrl: 'models/npc-vehicles.glb', // 1 node per CarKind, vertex colours + _PAINT, wheels in extras
+  hanoiUrl: 'models/hanoi-vehicles.glb', // Leg 3 kinds (scripts/process-hanoi-vehicles.ts), same contract; its nodes override / extend the above
   pedsUrl: 'models/npc-peds.glb', // 4 Rocketbox avatars, LOD0 + LOD1, 1 material (atlas) each
   clipsUrl: 'models/npc-ped-anims.glb', // 14 clips m_* / f_*
   atlas: 2048, // px, per-avatar texture atlas (body | head | opacity)

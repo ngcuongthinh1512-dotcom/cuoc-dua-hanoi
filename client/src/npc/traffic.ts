@@ -157,9 +157,10 @@ export class Traffic {
     return o;
   }
   private isRing = (de: number) => (this.roads.graph.flags(de >> 1) & WayFlag.roundabout) !== 0;
-  private speedOf(de: number): number {
+  private speedOf(de: number, kind?: CarKind): number {
     const s = traffic.speed;
-    return this.isRing(de) ? s.roundabout! : s[this.roads.kind(this.way(de))] ?? s.default!;
+    const road = this.isRing(de) ? s.roundabout! : s[this.roads.kind(this.way(de))] ?? s.default!;
+    return Math.min(road, (kind && npc.vehicles[kind].speed) ?? Infinity); // a xích lô never does 30 km/h
   }
   private cornerC = (a: number, b: number) => Math.min(traffic.cornerCut, this.len(a) / 2, this.len(b) / 2);
   /** The corner from de onto nx in `lane` (cached): the Bézier starts cA m before the node on de and ends cB m along nx.
@@ -587,7 +588,7 @@ export class Traffic {
 
   private decide(car: SimCar, dt: number): void {
     const de = car.route[0]!, L = this.len(de), nx = car.route[1]!;
-    const vlim = this.speedOf(de) * car.vf;
+    const vlim = this.speedOf(de, car.kind) * car.vf;
     let cap = vlim;
     // slower next edge / corner ahead
     const k = this.corner(de, nx, car.lane), c = this.cornerC(de, nx), toCorner = L - k.cA - car.s;
@@ -595,7 +596,7 @@ export class Traffic {
     const th = angDiff(Math.atan2(-a.dx, -a.dz), Math.atan2(-b.dx, -b.dz));
     const r = th > 0.02 && c > 0 ? c / Math.tan(th / 2) : Infinity;
     const vc = Math.max(2, Math.sqrt(traffic.latAccel * r));
-    cap = Math.min(cap, cap2(Math.min(vc, this.speedOf(nx) * car.vf), Math.max(0, toCorner)));
+    cap = Math.min(cap, cap2(Math.min(vc, this.speedOf(nx, car.kind) * car.vf), Math.max(0, toCorner)));
     if (toCorner < 0 && car.s < L - k.cA + k.arc) cap = Math.min(cap, Math.max(vc, 0.5));
     // car ahead / obstacle: stop gap
     this.zoneSpan(car);
@@ -682,7 +683,11 @@ export class Traffic {
   private spawn(anchor: NpcAnchor, fill: boolean): boolean {
     const total = this.nearCum[this.nearCum.length - 1] ?? 0;
     if (total <= 0) return false;
-    const kind = this.kinds[pickWeighted(this.rng, this.shares)]!;
+    // Leg 3: npc.boost multiplies some kinds' shares near the origin (xích lô around Hồ Gươm); npc.vehicles[kind].max caps a kind
+    const boosted = Math.hypot(anchor.x, anchor.z) <= npc.boost.r;
+    const kind = this.kinds[pickWeighted(this.rng, boosted ? this.shares.map((w, i) => w * (npc.boost.kinds[this.kinds[i]!] ?? 1)) : this.shares)]!;
+    const max = npc.vehicles[kind].max;
+    if (max !== undefined && this.cars.reduce((n, c) => n + (c.kind === kind ? 1 : 0), 0) >= max) return false;
     const pick = this.rng() * total;
     let lo = 0, hi = this.nearCum.length - 1;
     while (lo < hi) {
@@ -695,7 +700,7 @@ export class Traffic {
     if (!dirs.length) return false;
     const de = 2 * e + dirs[Math.floor(this.rng() * dirs.length)]!;
     const s = this.rng() * L;
-    const lane = Math.floor(this.rng() * this.laneN(de));
+    const lane = npc.vehicles[kind].kerb ? 0 : Math.floor(this.rng() * this.laneN(de)); // lane 0 = the kerb lane
     const dims = npc.vehicles[kind].dims;
     const tmp = this.addCarRaw(kind, de, s, lane);
     const d = Math.hypot(tmp.x - anchor.x, tmp.z - anchor.z);
@@ -714,7 +719,7 @@ export class Traffic {
       }
     }
     if (!ok) return false;
-    tmp.speed = Math.min(this.speedOf(de) * tmp.vf, 4);
+    tmp.speed = Math.min(this.speedOf(de, kind) * tmp.vf, 4);
     this.nextId++;
     this.cars.push(tmp);
     return true;
