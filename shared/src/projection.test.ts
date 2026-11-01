@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { ORIGIN, RACE_BBOX } from './constants.ts';
 import { latLonToWorld, worldToLatLon } from './projection.ts';
 
-// Leg 3 (Brussels): the Place Royale (east of the Grand-Place) and the Tour du Midi (south-west corner of the map)
-const PLACE_ROYALE = { lat: 50.8419, lon: 4.3623 };
-const TOUR_DU_MIDI = { lat: 50.8359, lon: 4.3366 };
+// Leg 3 (Hà Nội): the Nhà hát Lớn square (south-east of the origin) and the Ga Hà Nội (west side of the map)
+const NHA_HAT_LON = { lat: 21.0243, lon: 105.8574 };
+const GA_HA_NOI = { lat: 21.0246, lon: 105.8412 };
 
 function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
   const r = Math.PI / 180;
@@ -35,8 +35,8 @@ describe('projection', () => {
   });
 
   it.each([
-    ['Grand-Place → Place Royale', 0.9, ORIGIN, PLACE_ROYALE],
-    ['Tour du Midi → Place Royale', 1.9, TOUR_DU_MIDI, PLACE_ROYALE],
+    ['Đông Kinh Nghĩa Thục → Nhà hát Lớn', 1.0, ORIGIN, NHA_HAT_LON],
+    ['Ga Hà Nội → Nhà hát Lớn', 1.7, GA_HA_NOI, NHA_HAT_LON],
   ])('%s ≈ %s km', (_, km, a, b) => {
     const d = worldDist(a, b);
     expect(Math.abs(d - haversine(a, b))).toBeLessThan(50);
@@ -55,16 +55,16 @@ describe('projection', () => {
     }
   });
 
-  it('bbox is about 4.4 × 3.3 km', () => {
+  it('bbox is about 9.1 × 6.1 km', () => {
     const midLat = (RACE_BBOX.south + RACE_BBOX.north) / 2;
     const width = worldDist({ lat: midLat, lon: RACE_BBOX.west }, { lat: midLat, lon: RACE_BBOX.east });
     const height = worldDist(
       { lat: RACE_BBOX.south, lon: RACE_BBOX.west },
       { lat: RACE_BBOX.north, lon: RACE_BBOX.west },
     );
-    expect(width).toBeGreaterThan(4350);
-    expect(width).toBeLessThan(4500);
-    expect(height).toBeGreaterThan(3300);
-    expect(height).toBeLessThan(3370);
+    expect(width).toBeGreaterThan(9100);
+    expect(width).toBeLessThan(9200);
+    expect(height).toBeGreaterThan(6050);
+    expect(height).toBeLessThan(6130);
   });
 });

@@ -91,7 +91,7 @@ describe('exportRace (SPEC §17.25)', () => {
 
 describe('answersCsv (Host-only "Xuất đáp án")', () => {
   it('lists every answer with its time, the text (a picked seat too) and the verdict, oldest first; a formula-like text is neutralised', () => {
-    const leg = bundledLeg('bruxelles-demo')!;
+    const leg = bundledLeg('hanoi-demo')!;
     const row = (team: string, step: string, answers: unknown[]): StepProgressRow => ({ ...emptyProgress(team, step), answers: JSON.stringify(answers) });
     const csv = answersCsv(leg, [{ id: 't0', name: 'Hiếu' }], [
       row('t0', 'T2', [{ id: 1, b: null, text: 'K-5', at: 2000, s: 'penalized' }, { id: 2, b: null, text: '=SUM(1)', at: 1000, s: 'penalized' }, { id: 3, b: null, text: 'K-3', at: 3000, s: 'correct' }]),

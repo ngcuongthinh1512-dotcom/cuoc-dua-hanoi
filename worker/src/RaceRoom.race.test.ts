@@ -104,7 +104,7 @@ describe.concurrent('race engine (workerd)', () => {
     expect(await hostSays(host, 'host.legResult')).toEqual({ t: 'host.legResult', ok: true, issues: [] });
     host.send({ t: 'host.leg', json: JSON.stringify(nearLeg()) });
     expect(await hostSays(host, 'host.legResult')).toMatchObject({ ok: true });
-    expect(((await hostSays(host, 'host.state')) as unknown as HostState).leg).toMatchObject({ id: 'near', start: { x: expect.closeTo(LEG_START.x, 1) }, bundled: ['bruxelles-demo', 'bruxelles-demo-filled', 'mini'] });
+    expect(((await hostSays(host, 'host.state')) as unknown as HostState).leg).toMatchObject({ id: 'near', start: { x: expect.closeTo(LEG_START.x, 1) }, bundled: ['hanoi-demo', 'hanoi-demo-filled', 'mini'] });
 
     // two teams open their sockets at the same time: start orders 1 and 2, the banner only on that first welcome
     const [a, b0] = await Promise.all(teams.map((t) => joinTeam(server, race, t.code)));

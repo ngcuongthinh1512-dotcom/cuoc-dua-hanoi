@@ -37,12 +37,12 @@ describe('tileGrid', () => {
   });
 
   it('puts each point in the tile its world coordinates fall in', () => {
-    const p = latLonToWorld(50.8437, 4.3568); // Mont des Arts (Leg 3)
+    const p = latLonToWorld(21.0263, 105.854); // Bưu điện Hà Nội (Leg 3)
     const t = tiles.find((t) => t.ix === Math.floor(p.x / 500) && t.iz === Math.floor(p.z / 500))!;
-    expect(50.8437).toBeGreaterThan(t.latLon.south);
-    expect(50.8437).toBeLessThan(t.latLon.north);
-    expect(4.3568).toBeGreaterThan(t.latLon.west);
-    expect(4.3568).toBeLessThan(t.latLon.east);
+    expect(21.0263).toBeGreaterThan(t.latLon.south);
+    expect(21.0263).toBeLessThan(t.latLon.north);
+    expect(105.854).toBeGreaterThan(t.latLon.west);
+    expect(105.854).toBeLessThan(t.latLon.east);
   });
 });
 
@@ -57,11 +57,11 @@ describe('DEM helpers', () => {
     expect(lonLatToPixel(0, 0, 0)).toEqual({ px: 128, py: 128 });
     expect(lonLatToPixel(-180, 85.0511287798, 1).py).toBeCloseTo(0, 3);
     // OSM wiki slippy-map formula: y = (1 − ln(tan φ + sec φ) / π) / 2 · 2^z
-    const phi = (50.84675 * Math.PI) / 180;
+    const phi = (21.03218 * Math.PI) / 180;
     const y = ((1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2) * 2 ** 14;
-    const senado = lonLatToPixel(4.35247, 50.84675, 14); // Leg 3: the origin, Grand-Place (was the Concorde obelisk)
+    const senado = lonLatToPixel(105.85213, 21.03218, 14); // Leg 3: the origin, quảng trường Đông Kinh Nghĩa Thục
     expect(senado.py / 256).toBeCloseTo(y, 9);
-    expect([Math.floor(senado.px / 256), Math.floor(senado.py / 256)]).toEqual([8390, 5496]);
+    expect([Math.floor(senado.px / 256), Math.floor(senado.py / 256)]).toEqual([13009, 7212]);
   });
 
   it('interpolates between pixel centres', () => {

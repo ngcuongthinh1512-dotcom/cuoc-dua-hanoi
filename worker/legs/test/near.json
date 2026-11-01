@@ -6,9 +6,9 @@
     "hysteresis": 10
   },
   "start": {
-    "name": "Grand-Place – lối vào",
-    "lat": 50.84697,
-    "lon": 4.353084,
+    "name": "Quảng trường Đông Kinh Nghĩa Thục – lối vào",
+    "lat": 21.03222,
+    "lon": 105.85213,
     "yawDeg": 0,
     "spreadMeters": 3
   },
@@ -19,10 +19,10 @@
       "label": "Lộ trình 1",
       "clue": "(GIẢ) Lời dẫn của Lộ trình 1 (bản thử, không nêu tên điểm đến).",
       "destination": {
-        "name": "Grand-Place – điểm 1",
-        "lat": 50.84729,
-        "lon": 4.35374,
-        "radius": 20
+        "name": "Quảng trường Đông Kinh Nghĩa Thục – điểm 1",
+        "lat": 21.03244,
+        "lon": 105.8525,
+        "radius": 25
       }
     },
     {
@@ -43,10 +43,10 @@
       "label": "Lộ trình 2",
       "clue": "(GIẢ) Lời dẫn của Lộ trình 2 (bản thử, không nêu tên điểm đến).",
       "destination": {
-        "name": "Grand-Place – điểm 2",
-        "lat": 50.84655,
-        "lon": 4.35275,
-        "radius": 20
+        "name": "Quảng trường Đông Kinh Nghĩa Thục – điểm 2",
+        "lat": 21.03176,
+        "lon": 105.8519,
+        "radius": 25
       }
     },
     {
@@ -54,10 +54,10 @@
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Grand-Place – điểm 2",
-        "lat": 50.84655,
-        "lon": 4.35275,
-        "radius": 20,
+        "name": "Quảng trường Đông Kinh Nghĩa Thục – điểm 2",
+        "lat": 21.03176,
+        "lon": 105.8519,
+        "radius": 25,
         "yawDeg": -40
       },
       "announce": {

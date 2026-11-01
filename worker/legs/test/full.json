@@ -2,9 +2,9 @@
   "id": "full",
   "title": "Chặng đủ kịch bản để test (NỘI DUNG GIẢ): thử thách Host duyệt, Lựa chọn kép",
   "start": {
-    "name": "Tháp Rogier",
-    "lat": 50.8558,
-    "lon": 4.3592,
+    "name": "Bờ hồ Hoàn Kiếm (Đinh Tiên Hoàng)",
+    "lat": 21.03046,
+    "lon": 105.8525,
     "yawDeg": 33,
     "spreadMeters": 5
   },
@@ -15,14 +15,14 @@
       "label": "Lộ trình 1",
       "clue": "(GIẢ) Lời dẫn của Lộ trình 1 (bản thử, không nêu tên điểm đến).",
       "destination": {
-        "name": "Grand-Place",
-        "lat": 50.84675,
-        "lon": 4.35247,
+        "name": "Ga Hà Nội",
+        "lat": 21.0246,
+        "lon": 105.8412,
         "radius": 35,
         "yawDeg": 150,
         "bikeParking": {
-          "lat": 50.84626,
-          "lon": 4.35214
+          "lat": 21.02406,
+          "lon": 105.84117
         }
       },
       "media": [
@@ -38,20 +38,20 @@
       "type": "challenge",
       "label": "Thử thách 1",
       "task": {
-        "title": "(GIẢ) Câu hỏi ở Công viên Bruxelles",
+        "title": "(GIẢ) Câu hỏi ở Hồ Thiền Quang",
         "description": "(GIẢ) 6 × 7 = ?",
         "media": [
-          "https://example.invalid/gia/vuon-vasco-da-gama",
+          "https://example.invalid/gia/ho-thien-quang",
           "r2:test-gia-2.jpg"
         ],
         "location": {
-          "name": "Công viên Bruxelles (lối phụ)",
-          "lat": 50.8448,
-          "lon": 4.3617,
+          "name": "Vườn hoa Lý Thái Tổ (lối phụ)",
+          "lat": 21.02833,
+          "lon": 105.85383,
           "radius": 30,
           "bikeParking": {
-            "lat": 50.84426,
-            "lon": 4.36096
+            "lat": 21.02779,
+            "lon": 105.853329
           }
         },
         "verification": "host_approval",
@@ -98,9 +98,9 @@
         "mandatory": "walk"
       },
       "destination": {
-        "name": "Place Royale",
-        "lat": 50.84211,
-        "lon": 4.36237,
+        "name": "Nhà hát Lớn Hà Nội",
+        "lat": 21.0243,
+        "lon": 105.8574,
         "radius": 40
       }
     },
@@ -122,9 +122,9 @@
               "bảy"
             ],
             "location": {
-              "name": "Jardin du Mont des Arts, cạnh thư viện",
-              "lat": 50.8456,
-              "lon": 4.3595,
+              "name": "Bưu điện Hà Nội, cạnh quầy bưu thiếp",
+              "lat": 21.02609,
+              "lon": 105.85391,
               "radius": 15,
               "yawDeg": 135
             }
@@ -141,13 +141,13 @@
             "verification": "host_approval",
             "proofInstruction": "(GIẢ) Gửi ảnh qua Facebook.",
             "location": {
-              "name": "Place du Petit Sablon",
-              "lat": 50.83949,
-              "lon": 4.35495,
+              "name": "Tràng Tiền Plaza",
+              "lat": 21.0249,
+              "lon": 105.853,
               "radius": 30,
               "bikeParking": {
-                "lat": 50.83941,
-                "lon": 4.35558
+                "lat": 21.02483,
+                "lon": 105.85272
               }
             },
             "referenceAnswers": [
@@ -163,13 +163,13 @@
       "label": "Lộ trình 3",
       "clue": "(GIẢ) Lời dẫn của Lộ trình 3 (bản thử, không nêu tên điểm đến).",
       "destination": {
-        "name": "Công viên Bruxelles (Parc de Bruxelles)",
-        "lat": 50.8454,
-        "lon": 4.363,
+        "name": "Hồ Thiền Quang (Thiền Quang Lake)",
+        "lat": 21.0187,
+        "lon": 105.8445,
         "radius": 25,
         "bikeParking": {
-          "lat": 50.8456,
-          "lon": 4.36166
+          "lat": 21.0189,
+          "lon": 105.843594
         }
       }
     },
@@ -178,17 +178,17 @@
       "type": "pit_stop",
       "label": "Về đích",
       "destination": {
-        "name": "Công viên Bruxelles (Parc de Bruxelles)",
-        "lat": 50.8454,
-        "lon": 4.363,
+        "name": "Hồ Thiền Quang (Thiền Quang Lake)",
+        "lat": 21.0187,
+        "lon": 105.8445,
         "radius": 25
       },
       "announce": {
-        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại Công viên Bruxelles!",
+        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại Hồ Thiền Quang!",
         "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
-        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại Công viên Bruxelles.",
+        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại Hồ Thiền Quang.",
         "first": {
-          "npc": "(GIẢ) {tên đội} về nhất tại Công viên Bruxelles!",
+          "npc": "(GIẢ) {tên đội} về nhất tại Hồ Thiền Quang!",
           "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
         },
         "out": {

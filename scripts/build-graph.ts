@@ -11,6 +11,7 @@ import { RACE_BBOX, latLonToWorld } from '@race/shared';
 import { GRAPH_VERSION, RoadGraph, type RoadGraphFile, WayFlag, segPoint } from '@race/shared/graph';
 import { props, roads } from '../client/src/config.ts';
 import { type Tags, classify, parseNumber, roadFacts } from '../client/src/geo/osm.ts';
+import { loadDistrictMask } from './district-mask.ts';
 import { worldRect, type Rect } from './geo.ts';
 
 export type OsmElement = {
@@ -59,12 +60,12 @@ function keep(t: Tags, closed: boolean): Omit<Kept, 'id' | 'refs'> | undefined {
   };
 }
 
-export function buildGraph(elements: Iterable<OsmElement>, rect: Rect): RoadGraphFile {
+export function buildGraph(elements: Iterable<OsmElement>, rect: Rect, mask?: (x: number, z: number) => boolean): RoadGraphFile {
   const pos = new Map<number, [number, number]>();
   const nodeTags = new Map<number, Tags>();
   const bikeParking: [number, number][] = [];
   const kept: Kept[] = [];
-  const inside = (x: number, z: number) => x >= rect.minX && x <= rect.maxX && z >= rect.minZ && z <= rect.maxZ;
+  const inside = (x: number, z: number) => x >= rect.minX && x <= rect.maxX && z >= rect.minZ && z <= rect.maxZ && (mask?.(x, z) ?? true);
   const world = (lat: number, lon: number) => {
     const w = latLonToWorld(lat, lon);
     return [w.x, w.z] as [number, number];
@@ -191,7 +192,7 @@ function main() {
       if (!elements.has(k)) elements.set(k, e);
     }
   }
-  const file = buildGraph([...elements.values()].sort((a, b) => a.id - b.id), worldRect(RACE_BBOX));
+  const file = buildGraph([...elements.values()].sort((a, b) => a.id - b.id), worldRect(RACE_BBOX), loadDistrictMask(args.cache).contains); // Leg 3 Hà Nội: only the 3 race districts
   const json = JSON.stringify(file);
   writeFileSync(args.out, json);
   const g = RoadGraph.decode(file);

@@ -123,7 +123,7 @@ describe('RaceEngine', () => {
     expect(f.log.filter((l) => !l.startsWith('send'))).toEqual(['sql INSERT INTO step_progress', 'event arrive']);
     const r: ServerMessage[] = [];
     e.onHost({ t: 'host.race', op: 'resume' }, (m) => r.push(m), 30);
-    e.onHost({ t: 'host.leg', id: 'bruxelles-demo' }, (m) => r.push(m), 30);
+    e.onHost({ t: 'host.leg', id: 'hanoi-demo' }, (m) => r.push(m), 30);
     expect(r).toEqual([{ t: 'host.notice', level: 'error', message: expect.stringContaining('tạm dừng') }, { t: 'host.legResult', ok: false, issues: [expect.objectContaining({ message: expect.stringContaining('race id mới') })] }]);
     f.log.length = 0;
     e.onOp('t0', { t: 'race', op: 'open', step: 'L1' }, at(0, 'bike'), 40);
@@ -370,11 +370,11 @@ describe('RaceEngine', () => {
       return (to(team).filter((m) => (m as { t: string }).t === 'race').at(-1) as { view: RaceView }).view;
     };
     const a = finish('t1', 100); // t1 entered after t0's order but touches the mat first
-    expect(a.result).toEqual({ rank: 1, total: 3, kind: 'first', npc: '(GIẢ) Đội t1 về nhất tại Công viên Bruxelles!', toast: '(GIẢ) Về đích thứ 1/3', card: '(GIẢ) Đội t1 về nhất trên 3 đội.' });
+    expect(a.result).toEqual({ rank: 1, total: 3, kind: 'first', npc: '(GIẢ) Đội t1 về nhất tại Hồ Thiền Quang!', toast: '(GIẢ) Về đích thứ 1/3', card: '(GIẢ) Đội t1 về nhất trên 3 đội.' });
     expect(f.teams.get('t1')).toMatchObject({ rank: 1, out: false, finishAt: 100 });
     expect(f.events.at(-1)).toEqual(['finish', { rank: 1, out: false, total: 3 }]);
     const b = finish('t0', 200);
-    expect(b.result).toMatchObject({ rank: 2, kind: 'finish', npc: '(GIẢ) Đội t0 về đích thứ 2 tại Công viên Bruxelles!', card: '(GIẢ) Chúc mừng Đội t0: về đích thứ 2 trên 3 đội tại Công viên Bruxelles.' });
+    expect(b.result).toMatchObject({ rank: 2, kind: 'finish', npc: '(GIẢ) Đội t0 về đích thứ 2 tại Hồ Thiền Quang!', card: '(GIẢ) Chúc mừng Đội t0: về đích thứ 2 trên 3 đội tại Hồ Thiền Quang.' });
     expect(Object.keys(b)).not.toContain('officialMs');
     e.onPose('t1', at(4), 300); // checked in already: nothing changes
     expect(f.teams.get('t1')!.rank).toBe(1);
@@ -446,14 +446,14 @@ describe('RaceEngine', () => {
     expect(result('t0')).toMatchObject({ finishPenalty: { minutes: 12 } });
   });
 
-  describe('Leg 3: auto-graded Thử thách 1 (bruxelles-demo T1: 3 boxes with answers)', () => {
-    const bx = bundledLeg('bruxelles-demo')!;
+  describe('Leg 3: auto-graded Thử thách 1 (hanoi-demo T1: 3 boxes with answers)', () => {
+    const bx = bundledLeg('hanoi-demo')!;
     const T = bx.steps.findIndex((s) => s.id === 'T1');
     const RIGHT = ['Cuba', 'Singapore', 'Uzbekistan'];
     const ans = (parts: string[]): RaceOp => ({ t: 'race', op: 'answer', step: 'T1', text: '', parts });
 
     it('3/3: written, then "Chính xác!" + the next clue at once; the Host queue shows it until "✓ Đồng ý"', () => {
-      const { f, e, op, to, card, review, host } = racing({ t0: T }, 'bruxelles-demo');
+      const { f, e, op, to, card, review, host } = racing({ t0: T }, 'hanoi-demo');
       op('t0', ans(['cu-ba', 'XIN-GA-PO', 'udobekixtan']), 10);
       writesFirst(f);
       expect(to('t0').filter((m) => (m as { t: string }).t === 'notice')).toEqual([{ t: 'notice', code: 'autoCorrect', score: 3, of: 3 }]); // no extra clueNew
@@ -471,7 +471,7 @@ describe('RaceEngine', () => {
     });
 
     it('1/3: Phạt at once (2 min) + "đúng 1/3"; the queue never blocks the team; Host score → live; "Đúng" lifts the lock + next clue', () => {
-      const { f, e, op, to, card, review } = racing({ t0: T }, 'bruxelles-demo');
+      const { f, e, op, to, card, review } = racing({ t0: T }, 'hanoi-demo');
       op('t0', ans(['Cuba', 'Latvia', 'Peru']), 10);
       expect(to('t0').filter((m) => (m as { t: string }).t === 'notice')).toEqual([{ t: 'notice', code: 'autoPenalized', score: 1, of: 3 }]);
       expect(card('t0')).toMatchObject({ step: 'T1', status: 'locked', lockKind: 'retry', lockedUntil: 10 + 2 * 60_000, answers: [{ id: 1, status: 'penalized', score: 1, of: 3 }] });
@@ -488,8 +488,8 @@ describe('RaceEngine', () => {
     });
   });
 
-  describe('Leg 3: Lựa chọn kép rooms (race room, bruxelles-demo D1: A chocolate 5 × 20 min, B comic 9 × 12 min)', () => {
-    const bx = bundledLeg('bruxelles-demo')!;
+  describe('Leg 3: Lựa chọn kép rooms (race room, hanoi-demo D1: A chocolate 5 × 20 min, B comic 9 × 12 min)', () => {
+    const bx = bundledLeg('hanoi-demo')!;
     const BZ = stepZones(bx);
     const D = bx.steps.findIndex((s) => s.id === 'D1');
     const stand = (b: string): PoseSample => {
@@ -499,7 +499,7 @@ describe('RaceEngine', () => {
     const room = (b: string, done: number, skipped = false): RaceOp => ({ t: 'race', op: 'room', step: 'D1', branch: b, done, skipped });
     /** t0 on D1, branch `b` chosen and its box opened. */
     const inRoom = (b = 'A') => {
-      const h = racing({ t0: D, t1: D }, 'bruxelles-demo');
+      const h = racing({ t0: D, t1: D }, 'hanoi-demo');
       h.op('t0', { t: 'race', op: 'branch', step: 'D1', branch: b }, 5);
       h.op('t0', { t: 'race', op: 'open', step: 'D1', branch: b }, 6, stand(b));
       h.f.log.length = h.f.txs.length = 0;

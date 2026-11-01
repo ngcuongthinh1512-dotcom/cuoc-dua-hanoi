@@ -81,7 +81,7 @@ describe('build-graph (fixture)', () => {
 // --- the committed file (real OSM data) ---
 const FILE = new URL('../shared/data/roadgraph.json', import.meta.url);
 const real = RoadGraph.decode(JSON.parse(readFileSync(FILE, 'utf8')) as RoadGraphFile);
-const leg = JSON.parse(readFileSync(new URL('../worker/legs/bruxelles-demo.json', import.meta.url), 'utf8')) as {
+const leg = JSON.parse(readFileSync(new URL('../worker/legs/hanoi-demo.json', import.meta.url), 'utf8')) as {
   steps: { id: string; destination?: { lat: number; lon: number } }[];
 };
 const L = leg.steps.filter((s) => /^L[1-5]$/.test(s.id) && s.destination).map((s) => ({ id: s.id, ...latLonToWorld(s.destination!.lat, s.destination!.lon) }));
@@ -100,7 +100,7 @@ describe('roadgraph.json (real data)', () => {
     expect(real.component.filter((c) => c === real.main).length / real.nodeCount).toBeGreaterThan(0.9);
   });
 
-  it('L1–L5 and the spawn are all walk-connected, paths ≤ 1.7 × straight line (Leg 3: the medieval centre, measured 1.61)', () => {
+  it('L1–L5 and the spawn are all walk-connected, paths ≤ 2.0 × straight line (Leg 3 Hà Nội: Phố cổ + the lake shore, measured 1.88)', () => {
     expect(L.length).toBe(5); // Leg 3: the last route (L5) ends at the Pit Stop, so there is no L6
     const ns = [...L.map((p) => snap(p.x, p.z)), snap(playerSetup.spawn.x, playerSetup.spawn.z)];
     expect(ns.every((n) => n >= 0)).toBe(true);
@@ -108,12 +108,12 @@ describe('roadgraph.json (real data)', () => {
       for (let j = i + 1; j < ns.length; j++) {
         const p = route(ns[i]!, ns[j]!);
         expect(p, `${i}→${j}`).not.toBeNull();
-        if (crow(ns[i]!, ns[j]!) > 300) expect(p!.length / crow(ns[i]!, ns[j]!), `${i}→${j}`).toBeLessThan(1.7);
+        if (crow(ns[i]!, ns[j]!) > 300) expect(p!.length / crow(ns[i]!, ns[j]!), `${i}→${j}`).toBeLessThan(2.0);
       }
     }
   });
 
-  it('A* L1 → L5 under 30 ms; the canal is crossed by walkable bridges', () => {
+  it('A* L1 → L5 under 30 ms; the rivers are crossed by walkable bridges', () => {
     const [p1, p6] = [snap(L[0]!.x, L[0]!.z), snap(L[4]!.x, L[4]!.z)];
     route(p1, p6); // warm-up (JIT)
     const t0 = performance.now();
@@ -121,30 +121,30 @@ describe('roadgraph.json (real data)', () => {
     const ms = performance.now() - t0;
     console.log(`A* L1 → L5: ${ms.toFixed(1)} ms`);
     expect(ms).toBeLessThan(30);
-    // Leg 3: Brussels has no river inside the box, only the canal (NW edge): its crossings are walkable bridge edges that tie both banks
+    // Leg 3 (Hà Nội): the river polygons (Sông Hồng, Tô Lịch, Kim Ngưu …): their crossings are walkable bridge edges that tie both banks
     // into the one walk component.
-    const canal = (JSON.parse(readFileSync(new URL('../client/public/data/water.json', import.meta.url), 'utf8')) as { polygons: { river?: boolean; outer: number[] }[] }).polygons.filter((p) => p.river)[0]!.outer;
+    const rivers = (JSON.parse(readFileSync(new URL('../client/public/data/water.json', import.meta.url), 'utf8')) as { polygons: { river?: boolean; outer: number[] }[] }).polygons.filter((p) => p.river).map((p) => p.outer);
     const near: number[] = [];
     for (let e = 0; e < real.edgeA.length; e++) {
       if (!(real.flags(e) & WayFlag.bridge) || !(real.flags(e) & WayFlag.walk)) continue;
       const [mx, mz] = [(real.x[real.edgeA[e]!]! + real.x[real.edgeB[e]!]!) / 2, (real.z[real.edgeA[e]!]! + real.z[real.edgeB[e]!]!) / 2];
-      if (canal.some((v, i) => i % 2 === 0 && Math.hypot(v - mx, canal[i + 1]! - mz) < 40)) near.push(e);
+      if (rivers.some((riv) => riv.some((v, i) => i % 2 === 0 && Math.hypot(v - mx, riv[i + 1]! - mz) < 40))) near.push(e);
     }
     expect(near.length).toBeGreaterThan(20);
     for (const e of near.slice(0, 8)) expect([real.edgeA[e], real.edgeB[e]].every((n) => real.component[n!] === real.main) || real.edgeLength[e]! < 40).toBe(true);
   });
 
-  it('surfaceAt: Rue du Marché aux Herbes is pave (sett), Rue de la Loi asphalt; oneway streets bind cars on real data', () => {
-    // Leg 3: the cobbled street off the Grand-Place and the primary road of the European quarter
+  it('surfaceAt: a paved footway is pave, Phố Minh Khai (primary) asphalt; oneway streets bind cars on real data', () => {
+    // Leg 3 (Hà Nội): no named cobbled street in the data; a paved (unnamed) footway stands for it, and Phố Minh Khai is a primary road
     const edgeOf = (name: string, kind: string) => {
       const n = real.file.names.indexOf(name);
       return real.edgeWay.findIndex((k) => real.file.ways[k]![3] === n && real.file.kinds[real.file.ways[k]![0]!] === kind);
     };
     const mid = (e: number): [number, number] => [(real.x[real.edgeA[e]!]! + real.x[real.edgeB[e]!]!) / 2 + 1, (real.z[real.edgeA[e]!]! + real.z[real.edgeB[e]!]!) / 2];
-    const cobbled = edgeOf('Rue du Marché aux Herbes - Grasmarkt', 'living_street');
+    const cobbled = [...real.edgeWay.keys()].find((e) => real.file.kinds[real.file.ways[real.edgeWay[e]!]![0]!] === 'footway' && real.surfaceAt(...mid(e)) === 'pave') ?? -1;
     expect(cobbled).toBeGreaterThanOrEqual(0);
     expect(real.surfaceAt(...mid(cobbled))).toBe('pave');
-    const loi = edgeOf('Rue de la Loi - Wetstraat', 'primary');
+    const loi = edgeOf('Phố Minh Khai', 'primary');
     expect(loi).toBeGreaterThanOrEqual(0);
     expect(real.surfaceAt(...mid(loi))).toBe('asphalt');
     let checked = 0;

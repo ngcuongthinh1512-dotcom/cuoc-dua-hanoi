@@ -14,6 +14,7 @@ const map = loadMap(root);
 const legs = (n: string) => join(root, 'worker/legs', n);
 const run = (file: string, scanDirs: string[] = []) => checkFile(file, { root, map, scanDirs });
 const tmp = mkdtempSync(join(tmpdir(), 'legcheck-'));
+const BR = { lat: 21.03353, lon: 105.82404 }; // Hà Nội: a bridge over land (viaduct)
 const miniJson = () => JSON.parse(readFileSync(legs('test/mini.json'), 'utf8'));
 /** Writes a leg under <tmp>/worker/legs/ (no "outside worker/legs" warning). */
 const put = (name: string, j: unknown) => {
@@ -25,9 +26,9 @@ const put = (name: string, j: unknown) => {
 const runT = (name: string, j: unknown) => checkFile(put(name, j), { root: tmp, map, scanDirs: [] });
 const errors = (r: { issues: { level: string; where: string; message: string }[] }) => r.issues.filter((i) => i.level === 'error').map((i) => `${i.where}: ${i.message}`);
 
-/** A point inside a real solid building near the Grand-Place (Leg 3), found in the chunk data. */
+/** A point inside a real solid building near the origin square (Leg 3 Hà Nội), found in the chunk data. */
 function insideBuilding() {
-  const c = latLonToWorld(50.84675, 4.35247);
+  const c = latLonToWorld(21.03218, 105.85213);
   const [ci, cj] = chunkKey(c.x, c.z).split('_').map(Number) as [number, number];
   const chunk = { buildings: [] as ChunkData['buildings'] };
   for (const [i, j] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) chunk.buildings.push(...(JSON.parse(readFileSync(join(root, 'client/public/data/chunks', `${ci + i!}_${cj + j!}.json`), 'utf8')) as ChunkData).buildings);
@@ -41,8 +42,8 @@ function insideBuilding() {
 }
 
 describe('leg:check (docs/LEG_FORMAT.md)', () => {
-  it('bruxelles-demo: valid, only blanks (and no error)', () => {
-    const r = run(legs('bruxelles-demo.json'));
+  it('hanoi-demo: valid, only blanks (and no error)', () => {
+    const r = run(legs('hanoi-demo.json'));
     expect(r.ok).toBe(true);
     expect(r.issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(r.issues.some((i) => i.level === 'blank')).toBe(false); // the real texts are in
@@ -50,7 +51,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(r.issues.filter((i) => i.level === 'warning').map((i) => i.where)).toEqual([]);
   });
 
-  it.each(['test/mini.json', 'test/bruxelles-demo.filled.json', 'test/near.json'])('%s: 0 errors on the real map data', (f) => {
+  it.each(['test/mini.json', 'test/hanoi-demo.filled.json', 'test/near.json'])('%s: 0 errors on the real map data', (f) => {
     const r = run(legs(f));
     expect(errors(r)).toEqual([]);
     expect(r.ok).toBe(true);
@@ -62,9 +63,9 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('summary lists every point with street, district, OSM link and screenshot command', () => {
     const { report } = run(legs('test/mini.json'));
-    const l1 = miniJson().steps[0].destination; // L1 = Grand-Place (Leg 3)
+    const l1 = miniJson().steps[0].destination; // L1 = Ga Hà Nội (Leg 3)
     const [lat, lon] = [l1.lat.toFixed(5), l1.lon.toFixed(5)];
-    expect(report).toContain('Commune Bruxelles'); // the district (a commune of Brussels) of L1; the middle of the square has no street name
+    expect(report).toContain('Quận Đống Đa'); // the district of L1
     expect(report).toContain(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=19/${lat}/${lon}`);
     expect(report).toContain(`Vệ tinh: https://www.google.com/maps?q=${lat},${lon}&t=k&z=19`);
     // the game's spectator camera 65 m south-up of the point, a mat on it (organiser review: the old preview showed no point)
@@ -89,12 +90,12 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
   });
 
   it('suggests a bike rack that exists in OSM near a point without one', () => {
-    // Leg 3: Brussels OSM does have racks, but the test must not depend on them: a synthetic one 90 m east of L2 (Place Royale,
+    // Leg 3: Brussels OSM does have racks, but the test must not depend on them: a synthetic one 90 m east of L2 (Nhà hát Lớn,
     // no rack in mini.json), outside its 40 m zone and within the 120 m the suggestion looks
-    const l2 = latLonToWorld(50.84211, 4.36237);
+    const l2 = latLonToWorld(21.0243, 105.8574);
     const graph = Object.assign(Object.create(map.graph), { file: { ...map.graph.file, bikeParking: [Math.round((l2.x + 90) * 10), Math.round(l2.z * 10)] } });
     const r = checkFile(legs('test/mini.json'), { root, map: { ...map, graph }, scanDirs: [] });
-    expect(r.report).toMatch(/Gợi ý bãi xe \(có sẵn trong OSM, cách 90 m\): "bikeParking": \{ "lat": 50\.\d+, "lon": 4\.\d+ \}/);
+    expect(r.report).toMatch(/Gợi ý bãi xe \(có sẵn trong OSM, cách 90 m\): "bikeParking": \{ "lat": 21\.\d+, "lon": 105\.\d+ \}/);
   });
 
   it('a detour branch with its own place inside a building is an error', () => {
@@ -144,23 +145,24 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('Leg 2 (leg2-fixes.md item 2): a point against a landmark outline and a Pit Stop mat over buildings are warnings', () => {
     const j = miniJson();
-    // Leg 3: L1 on the cathedral nave; PS 1 m from the Maison du Roi's body on the Grand-Place, the mat (yawDeg 0) over buildings
+    // Leg 3 (Hà Nội): L1 on the Nhà thờ Lớn nave; PS 1 m from the Nhà hát Lớn body, the mat (yawDeg 0) over buildings
     const ps = j.steps.find((s: { type: string }) => s.type === 'pit_stop').destination;
-    Object.assign(j.steps[0].destination, { lat: 50.84782, lon: 4.36002 });
-    Object.assign(ps, { lat: 50.84697, lon: 4.35308, yawDeg: 0 });
+    Object.assign(j.steps[0].destination, { lat: 21.02852, lon: 105.84871 });
+    Object.assign(ps, { lat: 21.02401, lon: 105.85784, yawDeg: 0 });
     const warn = runT('lm.json', j).issues.filter((i) => i.level === 'warning').map((i) => i.message);
-    expect(warn.some((m) => m.includes('khuôn viên địa danh Nhà thờ lớn Thánh Michel và Gudule'))).toBe(true);
-    expect(warn.some((m) => m.includes('khuôn viên địa danh Nhà Vua (Maison du Roi)'))).toBe(true);
+    expect(warn.some((m) => m.includes('khuôn viên địa danh Nhà thờ Lớn Hà Nội'))).toBe(true);
+    expect(warn.some((m) => m.includes('khuôn viên địa danh Nhà hát Lớn Hà Nội'))).toBe(true);
     expect(warn.some((m) => /^thảm Chặng dừng [\d.]+ × [\d.]+ m/.test(m))).toBe(true);
   });
 
-  it('a point in the middle of the river (Leg 3: the canal, a `river: true` polygon) is a warning; a bad timezone is an error (the server refuses the leg)', () => {
+  it('a point in the middle of the river (Leg 3 Hà Nội: a `river: true` polygon on the west edge of the map) is a warning; a bad timezone is an error (the server refuses the leg)', () => {
     const j = miniJson();
-    const w = latLonToWorld(50.8498, 4.33544); // the canal, NW corner of the map
+    const w = latLonToWorld(21.02486, 105.79749); // a river polygon on the west edge of the map (the Sông Hồng channel is not reachable on foot)
     expect(map.waterAt(w.x, w.z)).toBe('river');
     expect(map.onBridge(w.x, w.z)).toBe(false);
-    Object.assign(j.steps[2].destination, { lat: 50.8498, lon: 4.33544 }); // in the canal
+    Object.assign(j.steps[2].destination, { lat: 21.02486, lon: 105.79749 }); // in the river
     const r = runT('w1.json', j);
+    expect(errors(r)).toEqual([]);
     expect(r.ok).toBe(true);
     expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('giữa biển') && i.message.includes('lên mặt cầu'))).toBe(true);
     const tz = runT('w2.json', { ...j, timezone: 'Viet/Nam' });
@@ -178,7 +180,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(secrets).toContain(miniJson().steps[0].clue);
     expect(secrets.some((s) => s === '42')).toBe(false);
     // Leg 3: an auto-graded box's spellings are secrets too (long ones are searched in the static assets)
-    const demo = parseLeg(JSON.parse(readFileSync(join(import.meta.dirname, '../worker/legs/bruxelles-demo.json'), 'utf8')));
+    const demo = parseLeg(JSON.parse(readFileSync(join(import.meta.dirname, '../worker/legs/hanoi-demo.json'), 'utf8')));
     expect(demo.ok && secretStrings(demo.leg)).toContain('U-dơ-bê-ki-xtan');
     const dir = mkdtempSync(join(tmpdir(), 'legleak-'));
     expect(scanLeaks([dir], secrets, dir)).toEqual([]);
@@ -192,7 +194,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('leak scan: an answer equal to a street / landmark name already shipped in the map data is only a warning', () => {
     const j = miniJson();
-    const street = 'Rue du Marché aux Herbes - Grasmarkt'; // Leg 3: a road name of the map (bilingual in OSM Brussels), shipped in the chunks
+    const street = 'Đường Trần Quang Khải'; // Leg 3 Hà Nội: a road name of the map, shipped in the chunks
     j.steps.find((s: { id: string }) => s.id === 'T1').task.answers = [street];
     const f = put('leak-street.json', j);
     const r = checkFile(f, { root: tmp, map, scanDirs: [join(root, 'client/public')] });
@@ -205,19 +207,19 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(checkFile(put('leak-copy.json', j), { root: tmp, map, scanDirs: [dir] }).ok).toBe(false);
   });
 
-  it('a start on a bridge over land (Brussels: a footway viaduct; the graph\'s bridge edges) is a warning', () => {
+  it('a start on a bridge over land (Hà Nội: a viaduct / footbridge over land; the graph\'s bridge edges) is a warning', () => {
     // Leg 2: Paris had the Bir-Hakeim viaduct over the Île aux Cygnes (a chunk bridge polygon); Macao's chunks hold no bridge
     // polygon, so the bridge is the footway overpass of the road graph (edge flagged bridge, no water under it)
     const j = miniJson();
-    Object.assign(j.start, { lat: 50.84356, lon: 4.37798 });
-    const p = latLonToWorld(50.84356, 4.37798);
+    Object.assign(j.start, { lat: BR.lat, lon: BR.lon });
+    const p = latLonToWorld(BR.lat, BR.lon);
     expect(map.onBridge(p.x, p.z)).toBe(true);
     expect(map.waterAt(p.x, p.z)).toBe(null);
     const r = runT('bh.json', j);
     // not "does not cross the river" (it does): this part of the deck stands over the island
     expect(r.issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`)).toEqual([expect.stringMatching(/^điểm xuất phát: nằm trên đoạn cầu bắc qua đất \(bờ \/ đảo\)/)]);
     // step 1 = the start (first clue handed out of game): the same warning once, and a note that the box opens at once
-    Object.assign(j.steps[0].destination, { lat: 50.84356, lon: 4.37798, radius: 20 });
+    Object.assign(j.steps[0].destination, { lat: BR.lat, lon: BR.lon, radius: 20 });
     delete j.steps[0].destination.bikeParking;
     const r2 = runT('bh2.json', j);
     expect(r2.issues.filter((i) => i.level === 'warning')).toHaveLength(1);
@@ -226,8 +228,8 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('a point beside a disconnected footpath: the distance is measured to the main walk network', () => {
     const j = miniJson();
-    Object.assign(j.steps[0].destination, { lat: 50.85602, lon: 4.35188, radius: 20 }); // Leg 3: a path of a separate walk component, ≈ 35 m from the main network
-    const w = latLonToWorld(50.85602, 4.35188);
+    Object.assign(j.steps[0].destination, { lat: 21.02642, lon: 105.84867, radius: 20 }); // Leg 3: a path of a separate walk component, ≈ 34 m from the main network
+    const w = latLonToWorld(21.02642, 105.84867);
     expect(map.geo.walk({ x: w.x, z: w.z }, { x: w.x, z: w.z })!.snapB).toBeGreaterThan(20);
     const r = runT('snap.json', j);
     expect(r.issues.some((i) => i.level === 'warning' && i.message.includes('đường đi bộ gần nhất'))).toBe(true);
@@ -251,12 +253,12 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('a pond / garden basin is not called a river; a box on a carriageway is a warning', () => {
     const j = miniJson();
-    Object.assign(j.steps[0].destination, { lat: 50.84575, lon: 4.36399 }); // Leg 3: the basin of the Parc de Bruxelles (a non-river water polygon)
-    Object.assign(j.steps[2].destination, { lat: 50.84438, lon: 4.37435 }); // Rue de la Loi, centre line
+    Object.assign(j.steps[0].destination, { lat: 21.03137, lon: 105.85131 }); // Leg 3: Hồ Hoàn Kiếm (a non-river water polygon)
+    Object.assign(j.steps[2].destination, { lat: 21.0283, lon: 105.8538 }); // Phố Đinh Tiên Hoàng, centre line
     const w = runT('pond.json', j).issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`);
     expect(w).toContain('Bước 1 (L1) › điểm đến: nằm giữa mặt nước (hồ / bể nước / đài phun nước), đội không đứng được; dời ra chỗ đất cạnh đó');
     expect(w.join('\n')).not.toMatch(/sông|lên mặt cầu/);
-    expect(w).toContain('Bước 3 (L2) › điểm đến: tâm nằm giữa lòng đường xe chạy (Rue de la Loi - Wetstraat): hộp mật thư sẽ nằm giữa dòng xe; dời lên vỉa hè / quảng trường cạnh đó');
+    expect(w).toContain('Bước 3 (L2) › điểm đến: tâm nằm giữa lòng đường xe chạy (Phố Đinh Tiên Hoàng): hộp mật thư sẽ nằm giữa dòng xe; dời lên vỉa hè / quảng trường cạnh đó');
   });
 
   it('inside a building: a name and the nearest outdoor point, never the raw OSM value "(yes)"', () => {
@@ -264,16 +266,16 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     const j = miniJson();
     Object.assign(j.steps[2].destination, { lat: b.lat, lon: b.lon });
     const e = errors(runT('in.json', j)).find((m) => m.startsWith('Bước 3 (L2)'))!;
-    expect(e).toMatch(/^Bước 3 \(L2\) › điểm đến: tâm vùng nằm trong một tòa nhà \(điểm ngoài nhà gần nhất: 50\.\d{5}, 4\.\d{5}, cách \d+ m/);
+    expect(e).toMatch(/^Bước 3 \(L2\) › điểm đến: tâm vùng nằm trong một tòa nhà \(điểm ngoài nhà gần nhất: 21\.\d{5}, 105\.\d{5}, cách \d+ m/);
     expect(e).not.toContain('(yes)');
     const m = /gần nhất: ([\d.]+), ([\d.]+)/.exec(e)!;
     Object.assign(j.steps[2].destination, { lat: Number(m[1]), lon: Number(m[2]) }); // the suggestion passes
     expect(errors(runT('in2.json', j))).toEqual([]);
   });
 
-  it('inside a landmark building: its name comes first (the cathedral)', () => {
+  it('inside a landmark building: its name comes first (Nhà thờ Lớn)', () => {
     const t = miniJson();
-    Object.assign(t.steps[2].destination, { lat: 50.84782, lon: 4.36002 }); // inside the cathedral outline (landmark 'cathedrale-st-michel')
+    Object.assign(t.steps[2].destination, { lat: 21.02852, lon: 105.84871 }); // inside the Nhà thờ Lớn outline (landmark 'nha-tho-lon')
     expect(errors(runT('in3.json', t))).toEqual([expect.stringMatching(/tòa nhà \([^;]+; điểm ngoài nhà gần nhất: /)]);
   });
 
@@ -297,7 +299,7 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
 
   it('a bike rack inside the map but far from its point (a typo) is a warning with the distance', () => {
     const j = miniJson();
-    Object.assign(j.steps[1].task.location.bikeParking, { lat: 50.84426, lon: 4.371 }); // ≈ 680 m east of T1, in the European quarter
+    Object.assign(j.steps[1].task.location.bikeParking, { lat: 21.02776, lon: 105.8602 }); // ≈ 665 m east of T1, by the river dyke
     const r = runT('rack-far.json', j);
     expect(r.ok).toBe(true);
     expect(r.issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`)).toEqual([
@@ -341,10 +343,10 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
   const step = (j: { steps: Step[] }, id: string) => j.steps.find((s) => s.id === id)!;
   const branch = (j: { steps: Step[] }, id: string) => step(j, 'D1').branches.find((b: { id: string }) => b.id === id);
 
-  it('the bundled legs: mini (0 warning) / filled / near have no error; bruxelles-demo only blanks (Leg 2: no warning, Paris had the L6 one)', () => {
-    for (const f of ['test/mini.json', 'test/bruxelles-demo.filled.json', 'test/near.json']) expect(lvl(run(legs(f)), 'error')).toEqual([]);
+  it('the bundled legs: mini (0 warning) / filled / near have no error; hanoi-demo only blanks (Leg 2: no warning, Paris had the L6 one)', () => {
+    for (const f of ['test/mini.json', 'test/hanoi-demo.filled.json', 'test/near.json']) expect(lvl(run(legs(f)), 'error')).toEqual([]);
     expect(run(legs('test/mini.json')).issues).toEqual([]);
-    const demo = run(legs('bruxelles-demo.json'));
+    const demo = run(legs('hanoi-demo.json'));
     expect(lvl(demo, 'error')).toEqual([]);
     expect(lvl(demo, 'warning')).toEqual([]);
     expect(lvl(demo, 'blank')).toEqual([]); // Leg 3: D1 is filled (Chocolate / Truyện Tranh), T1 / T2 and the mini-game texts still open
@@ -467,9 +469,9 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     const parsed = parseLeg(miniJson());
     if (!parsed.ok) throw new Error('mini invalid');
     const secrets = secretStrings(parsed.leg);
-    for (const x of ['(GIẢ) {tên đội} về đích thứ {n} tại Công viên Bruxelles!', '(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}.']) expect(secrets).toContain(x);
+    for (const x of ['(GIẢ) {tên đội} về đích thứ {n} tại Hồ Thiền Quang!', '(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}.']) expect(secrets).toContain(x);
     const dir = mkdtempSync(join(tmpdir(), 'legann-'));
-    writeFileSync(join(dir, 'x.js'), JSON.stringify(['(GIẢ) {tên đội} về nhất tại Công viên Bruxelles!']));
+    writeFileSync(join(dir, 'x.js'), JSON.stringify(['(GIẢ) {tên đội} về nhất tại Hồ Thiền Quang!']));
     expect(errors(checkFile(legs('test/mini.json'), { root, map, scanDirs: [dir] }))).toEqual([expect.stringContaining('chứa nguyên văn "(GIẢ) {tên đội} về nhất')]);
   });
 
@@ -486,7 +488,7 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
     expect(errors(r1)).toEqual([expect.stringContaining('chứa nguyên văn "42 (bốn mươi hai)')]);
     // a reference answer equal to a landmark name (other case / accents) shipped in a static file: a warning only
     const j = miniJson();
-    const placeAnswer = 'rue du marche aux herbes - grasmarkt'; // Leg 3: "Rue du Marché aux Herbes - Grasmarkt" without the accent, in lower case (Paris: 'cau alexandre iii')
+    const placeAnswer = 'duong tran quang khai'; // Leg 3 Hà Nội: "Đường Trần Quang Khải" without the accents, in lower case (Paris: 'cau alexandre iii')
     j.steps.find((s: { id: string }) => s.id === 'T1').task.referenceAnswers = [placeAnswer];
     const place = mkdtempSync(join(tmpdir(), 'legref3-'));
     writeFileSync(join(place, 'x.json'), JSON.stringify({ a: placeAnswer }));
@@ -501,7 +503,7 @@ describe('leg:check Phase 8 (typed answers, branch boxes, media)', () => {
   });
   it('the Host page demo (demoState, shipped in client/dist) copies no text or answer of a bundled leg (R-6: leg:check mini = 0 warnings)', () => {
     const demo = JSON.stringify(demoState());
-    for (const f of ['test/mini.json', 'test/near.json', 'bruxelles-demo.json']) {
+    for (const f of ['test/mini.json', 'test/near.json', 'hanoi-demo.json']) {
       const parsed = parseLeg(JSON.parse(readFileSync(legs(f), 'utf8')));
       if (!parsed.ok) throw new Error(`${f} invalid`);
       for (const x of [...secretStrings(parsed.leg, 8)]) expect(demo, `${f}: ${x}`).not.toContain(JSON.stringify(x).slice(1, -1));

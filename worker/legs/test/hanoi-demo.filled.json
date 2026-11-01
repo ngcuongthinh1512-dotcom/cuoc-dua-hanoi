@@ -1,0 +1,294 @@
+{
+  "id": "hanoi-demo-filled",
+  "title": "Chặng Demo – Hà Nội (NỘI DUNG GIẢ để test)",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "eliminationLeg": false,
+  "mapLabels": "streets-only",
+  "presence": {
+    "renderRadius": 300,
+    "showOthersOnMinimap": false
+  },
+  "boxReveal": {
+    "radius": 150,
+    "hysteresis": 20
+  },
+  "penalties": {
+    "walkOnlyViolationMinutes": 15,
+    "quitTaskMinutes": 30,
+    "retryLockMinutes": 3,
+    "branchSwitchLockMinutes": 10
+  },
+  "hostAlerts": {
+    "stuckMinutes": 45
+  },
+  "movement": {
+    "footSpeed": 4,
+    "bikeSpeedMultiplier": 1.3
+  },
+  "vehicles": {
+    "corridorMeters": 150,
+    "minDistanceFromCheckpoint": 100,
+    "initialPerSegment": [
+      0,
+      1
+    ],
+    "spawnIntervalMinutes": 3,
+    "spawnChance": 0.3,
+    "maxAvailablePerSegment": 1,
+    "decoyRatio": 0.4,
+    "noSpawnNearPlayerMeters": 120,
+    "abandonMeters": 200,
+    "abandonSeconds": 60,
+    "bikeParking": {
+      "offsetMeters": 20,
+      "maxBikes": 6
+    }
+  },
+  "clueBook": {
+    "showLockedSlots": false
+  },
+  "specials": {
+    "uTurn": {
+      "enabled": false
+    },
+    "yield": {
+      "enabled": false
+    },
+    "fastForward": {
+      "enabled": false
+    },
+    "speedBump": {
+      "enabled": false
+    },
+    "expressPass": {
+      "enabled": true
+    }
+  },
+  "start": {
+    "name": "Bờ hồ Hoàn Kiếm (Đinh Tiên Hoàng)",
+    "lat": 21.03046,
+    "lon": 105.8525,
+    "yawDeg": 33,
+    "spreadMeters": 5
+  },
+  "steps": [
+    {
+      "id": "L1",
+      "type": "route_info",
+      "label": "Lộ trình 1",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 1 (bản thử, không nêu tên điểm đến).",
+      "transport": {
+        "allowed": "any"
+      },
+      "destination": {
+        "name": "Bưu điện Hà Nội",
+        "lat": 21.02622,
+        "lon": 105.85396,
+        "radius": 35
+      }
+    },
+    {
+      "id": "L2",
+      "type": "route_info",
+      "label": "Lộ trình 2",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 2 (bản thử, không nêu tên điểm đến).",
+      "transport": {
+        "allowed": "any"
+      },
+      "destination": {
+        "name": "Nhà hát Lớn Hà Nội",
+        "lat": 21.0243,
+        "lon": 105.8574,
+        "radius": 35
+      }
+    },
+    {
+      "id": "D1",
+      "type": "detour",
+      "label": "Lựa chọn kép",
+      "clue": "(GIẢ) Lựa chọn kép: Đếm hay Chụp?",
+      "branches": [
+        {
+          "id": "A",
+          "name": "Đếm",
+          "summary": "(GIẢ) Đếm số cột đèn quanh đài phun nước.",
+          "task": {
+            "title": "(GIẢ) Đếm cột đèn",
+            "description": "(GIẢ) Có bao nhiêu cột đèn quanh đài phun nước giữa quảng trường trước Bưu điện? Nhập một số.",
+            "media": [],
+            "location": {
+              "name": "Tràng Tiền Plaza",
+              "lat": 21.0249,
+              "lon": 105.853,
+              "radius": 15,
+              "yawDeg": 315,
+              "bikeParking": {
+                "lat": 21.02414,
+                "lon": 105.853528
+              }
+            },
+            "kind": "answer",
+            "verification": "auto",
+            "answers": [
+              "12",
+              "mười hai"
+            ],
+            "proofInstruction": "",
+            "timeLimitMinutes": null
+          }
+        },
+        {
+          "id": "B",
+          "name": "Chụp",
+          "summary": "(GIẢ) Chụp ảnh nhóm với mặt tiền Bưu điện phía sau.",
+          "task": {
+            "title": "(GIẢ) Ảnh với Bưu điện",
+            "description": "(GIẢ) Chụp màn hình nhân vật của đội với mặt tiền Bưu điện phía sau.",
+            "media": [],
+            "location": {
+              "name": "Vườn hoa Lý Thái Tổ",
+              "lat": 21.02833,
+              "lon": 105.85383,
+              "radius": 15,
+              "bikeParking": {
+                "lat": 21.02883,
+                "lon": 105.855021
+              }
+            },
+            "kind": "free",
+            "verification": "host_approval",
+            "answers": [],
+            "proofInstruction": "(GIẢ) Gửi ảnh chụp màn hình kèm mã bài nộp qua Facebook.",
+            "timeLimitMinutes": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "L3",
+      "type": "route_info",
+      "label": "Lộ trình 3",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 3 (bản thử, không nêu tên điểm đến).",
+      "transport": {
+        "mandatory": "walk"
+      },
+      "destination": {
+        "name": "Nhà hát Lớn Hà Nội",
+        "lat": 21.0243,
+        "lon": 105.8574,
+        "radius": 40
+      }
+    },
+    {
+      "id": "T1",
+      "type": "challenge",
+      "label": "Thử thách 1",
+      "teaser": "(GIẢ) Ai có đôi mắt tinh nhất?",
+      "task": {
+        "title": "(GIẢ) Cột mặt tiền",
+        "description": "(GIẢ) Đếm số cột trắng trên mặt tiền thư viện ở một quảng trường lớn. Nhập một số.",
+        "media": [],
+        "location": null,
+        "kind": "answer",
+        "verification": "auto",
+        "answers": [
+          "8",
+          "tám"
+        ],
+        "proofInstruction": "",
+        "timeLimitMinutes": null
+      }
+    },
+    {
+      "id": "L4",
+      "type": "route_info",
+      "label": "Lộ trình 4",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 4 (bản thử, không nêu tên điểm đến).",
+      "transport": {
+        "allowed": "any"
+      },
+      "destination": {
+        "name": "Phố cổ Hàng Gai",
+        "lat": 21.03353,
+        "lon": 105.85041,
+        "radius": 30
+      }
+    },
+    {
+      "id": "L5",
+      "type": "route_info",
+      "label": "Lộ trình 5",
+      "clue": "(GIẢ) Lời dẫn của Lộ trình 5 (bản thử, không nêu tên điểm đến).",
+      "transport": {
+        "allowed": "any"
+      },
+      "destination": {
+        "name": "Ga Hà Nội",
+        "lat": 21.0246,
+        "lon": 105.8412,
+        "radius": 35
+      }
+    },
+    {
+      "id": "T2",
+      "type": "challenge",
+      "label": "Thử thách 2",
+      "teaser": "",
+      "task": {
+        "title": "(GIẢ) Đại bác",
+        "description": "(GIẢ) Chụp màn hình hàng đại bác trên tường pháo đài.",
+        "media": [],
+        "location": null,
+        "kind": "free",
+        "verification": "host_approval",
+        "answers": [],
+        "referenceAnswers": [
+          "(GIẢ) Ảnh thấy rõ ít nhất hai khẩu đại bác trên tường"
+        ],
+        "proofInstruction": "(GIẢ) Gửi ảnh chụp màn hình kèm mã bài nộp qua Facebook.",
+        "timeLimitMinutes": null
+      }
+    },
+    {
+      "id": "L6",
+      "type": "route_info",
+      "label": "Lộ trình 6",
+      "clue": "Chặng dừng! (GIẢ) Trở về quảng trường có đài phun nước, đối diện Bưu điện có mặt tiền trắng. Người dẫn chương trình đang chờ bạn. Bắt buộc: đi bộ.",
+      "transport": {
+        "mandatory": "walk"
+      },
+      "destination": {
+        "name": "Quảng trường Đông Kinh Nghĩa Thục",
+        "lat": 21.03222,
+        "lon": 105.85213,
+        "radius": 20
+      }
+    },
+    {
+      "id": "PS",
+      "type": "pit_stop",
+      "label": "Về đích",
+      "destination": {
+        "name": "Quảng trường Đông Kinh Nghĩa Thục",
+        "lat": 21.03222,
+        "lon": 105.85213,
+        "radius": 20,
+        "yawDeg": 90
+      },
+      "announce": {
+        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại Quảng trường Đông Kinh Nghĩa Thục!",
+        "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
+        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại Quảng trường Đông Kinh Nghĩa Thục.",
+        "first": {
+          "npc": "(GIẢ) {tên đội} về nhất tại Quảng trường Đông Kinh Nghĩa Thục!",
+          "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
+        },
+        "out": {
+          "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.",
+          "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}",
+          "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}."
+        }
+      }
+    }
+  ]
+}

@@ -27,6 +27,7 @@ import { offsetPolyline } from '../client/src/world/geom.ts';
 import { roadWidth, sidewalkWidth } from '../client/src/world/RoadBuilder.ts';
 import { seaPolygons } from './coast.ts';
 import { PARISHES } from '../client/src/geo/districts.ts';
+import { loadDistrictMask } from './district-mask.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const { values: args } = parseArgs({
@@ -650,6 +651,31 @@ for (const st of osmStairs) {
   chunkAt(...midpoint(st.pts))?.stairs!.push(st);
 }
 for (const f of quayFlights) chunkAt(...midpoint(f.pts))?.stairs!.push({ pts: f.pts, width: Q.width, quay: true });
+
+// --- Leg 3 Hà Nội: only the three race districts stay (scripts/district-mask.ts); everything whose reference point is outside goes ---
+const mask = loadDistrictMask(args.cache);
+const midVertex = (p: XZ): [number, number] => { const k = Math.floor(p.length / 4) * 2; return [p[k]!, p[k + 1]!]; };
+const keepRing = (outer: XZ) => mask.contains(...ringCentroid(outer));
+quayFlights.splice(0, quayFlights.length, ...quayFlights.filter((f) => mask.contains(...midVertex(f.pts))));
+let masked = 0;
+const keep = <T>(list: T[], inside: (t: T) => boolean) => list.filter((t) => inside(t) || (masked++, false));
+for (const c of chunks.values()) {
+  c.buildings = keep(c.buildings, (b) => keepRing(b.outer));
+  c.roads = keep(c.roads, (r) => mask.contains(...midVertex(r.pts)));
+  c.bridges = keep(c.bridges, (b) => mask.contains(...midVertex(b.pts)));
+  c.areas = keep(c.areas, (a) => keepRing(a.outer));
+  c.points = keep(c.points, (q) => mask.contains(q.x, q.z));
+  if (c.stairs) c.stairs = keep(c.stairs, (st) => mask.contains(...midVertex(st.pts)));
+  if (c.junctions) c.junctions = keep(c.junctions, (j) => mask.contains(j.x, j.z));
+}
+const keptWater = keep(water, (w) => keepRing(w.outer));
+water.splice(0, water.length, ...keptWater);
+quays.splice(0, quays.length, ...keep(quays, (q) => mask.contains(q[0]!, q[1]!)));
+const gapsKept: number[] = [];
+for (let i = 0; i < bridgeGaps.length; i += 5) if (mask.contains(bridgeGaps[i]!, bridgeGaps[i + 1]!)) gapsKept.push(...bridgeGaps.slice(i, i + 5));
+bridgeGaps.splice(0, bridgeGaps.length, ...gapsKept);
+parkOverview.splice(0, parkOverview.length, ...keep(parkOverview, keepRing));
+bump('masked.outsideDistricts', masked);
 
 // --- write ---
 const chunkDir = join(args.out, 'chunks');

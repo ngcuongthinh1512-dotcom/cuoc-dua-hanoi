@@ -76,6 +76,12 @@ Object.assign(PRESETS, {
   'hn-loduc': '/?cam=805.9,1.7,2374.4,-144,3',
   'hn-oldq-obl': cam(21.0345, 105.8505, 150, 0, -40),
   'hn-ktt-obl': cam(21.0040, 105.8500, 200, 0, -45),
+  // KTT Kim Liên / Nguyễn Công Trứ obliques + a Kim Liên street, Old Quarter close oblique (Hàng Bạc), Hàng Bông street
+  'hn-kimlien-obl': cam(21.0060, 105.8360, 110, 0, -40),
+  'hn-ntct-obl': cam(21.0120, 105.8570, 110, 0, -40),
+  'hn-kimlien': cam(21.0075, 105.8365, 1.7, 90, 4),
+  'hn-hangbac-obl': cam(21.0325, 105.8520, 70, 0, -35),
+  'hn-hangbong': cam(21.0295, 105.8465, 1.7, -70, 4),
 });
 // Phase 3 (docs/plans/phase3.md "Screenshot presets"): player mode. ?player[=x,z,yawDeg] (feet on the ground), camMode,
 // orbit (° of camera yaw from behind the body), action, autoMove, wait (s simulated before __READY__). Owner in brackets.
@@ -240,7 +246,7 @@ Object.assign(PRESETS, {
 
 // [B] demo leg start spots (startSpot, as the server sends welcome.start); mat / box views mid Pont d'Iéna (a deck over the
 // Seine: the placement ray must pick the deck; the demo Pit Stop's centre is ON the Louvre glass pyramid)
-const DEMO_LEG = JSON.parse(readFileSync(join(root, 'worker/legs/bruxelles-demo.json'), 'utf8')) as Leg;
+const DEMO_LEG = JSON.parse(readFileSync(join(root, 'worker/legs/hanoi-demo.json'), 'utf8')) as Leg;
 const startAt = (n: number) => {
   const s = startSpot(DEMO_LEG, n);
   return [s.x, s.z, (s.yaw * 180) / Math.PI].map((v) => +v.toFixed(2)).join(',');
@@ -351,7 +357,7 @@ if (existsSync(join(dataDir, 'index.json'))) {
     }
   }
   // Street level at the demo leg destinations (eye 1.7 m), facing the landmark of that step (L3 / T / PS: no registered landmark, no preset).
-  const leg = JSON.parse(readFileSync(join(root, 'worker/legs/bruxelles-demo.json'), 'utf8')) as { steps: { id: string; destination?: { lat: number; lon: number } }[] };
+  const leg = JSON.parse(readFileSync(join(root, 'worker/legs/hanoi-demo.json'), 'utf8')) as { steps: { id: string; destination?: { lat: number; lon: number } }[] };
   const FACING: Record<string, [string, number]> = {
     L1: ['ruinas-sao-paulo', 8], L2: ['leal-senado', 6], L4: ['fortaleza-monte', 4], L5: ['sao-domingos', 8], L6: ['leal-senado', 6],
   };

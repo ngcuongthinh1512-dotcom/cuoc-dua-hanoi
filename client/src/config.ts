@@ -265,26 +265,45 @@ export const buildings = {
   // tenementKinds of h ≥ tenementMin with chance tenementShare, else colonial. Colours are sRGB (vertex colour = linear of it).
   macao: {
     towerHeight: [40, 60], // m (Hà Nội: tube houses and KTT blocks stay plaster / concrete, only real towers get a grid or curtain wall)
-    tenementMin: 15, // m (≈ 5 storeys)
-    tenementShare: 0.55, // Hà Nội: khu tập thể (tagged apartments / dormitory …) get the grey tenement look
+    tenementMin: 12, // m (≈ 4 storeys: KTT slabs tagged building:levels 4–5)
+    tenementShare: 0.7, // Hà Nội: khu tập thể (tagged apartments / dormitory …) get the grey tenement look
     tenementYesShare: 0.2, // … untagged 'yes' footprints (the OSM default 20 m, mostly nhà ống rows) less often
     tenementKinds: ['yes', 'apartments', 'residential', 'dormitory', 'mixed'] as string[],
     curtainShare: 0.4, // towers with a glass curtain wall; the rest get the tenement texture as a concrete grid
     blankKinds: ['roof', 'garage', 'garages', 'shed', 'storage_tank', 'warehouse', 'hut', 'carport', 'service'] as string[], // no windows
     shopMinHeight: 7, // m: buildings at least this tall get the ground-floor shop band (shopfrontHeight) on street faces
+    kioskShopMin: 3, // m: a windowless low box (untagged < smallArea: the Old Quarter's street-front slivers) at least this tall is a shop (quán) band
     // tiled hip / pitched roof (m, m², m above / in from the walls): chance outside the French quarter (Old Quarter tube houses
     // with a tile cap); the rise shrinks with the inset on plots narrower than 2 × inset (a 4 m tube house gets a low ridge)
-    hip: { chance: 0.12, maxHeight: 40, maxArea: 3000, rise: 4.2, inset: 3.2 },
-    // French quarter (south of Hoàn Kiếm lake to Hai Bà Trưng, world m [x0, z0, x1, z1]): more hip roofs, ochre plaster
-    // ponytail: one axis-aligned box, upgrade: the district polygons of geo/districts.ts (the builder runs in a worker without them)
+    hip: { chance: 0.12, maxHeight: 40, maxArea: 700, rise: 4.2, inset: 3.2 }, // (bigger untagged blocks get per-plot caps instead, macao.plots)
+    // French quarter (world m [x0, z0, x1, z1]: south of Hoàn Kiếm lake to Hai Bà Trưng + the strip east of the lake, Lý Thái Tổ):
+    // more hip roofs, ochre plaster. ponytail: axis-aligned boxes, upgrade: the district polygons of geo/districts.ts (the builder runs in a worker without them)
     // (ochreShare of buildings take their tint from the first ochreCount `colonial` colours), fewer rooftop boxes
-    french: { box: [-750, 120, 1050, 1800], hipChance: 0.55, ochreShare: 0.7, ochreCount: 4, roofBoxChance: 0.15, shopShare: 0.5, tenementShare: 0.1 },
+    // plotFlat: share of French plots that keep the block height (villas / colonial blocks are not ragged); the French
+    // facade columns of the wall atlas (arched windows, white mouldings, balustrade balconies) are picked by BuildingBuilder
+    french: { boxes: [[-750, 650, 1050, 1800], [250, 100, 1050, 650]] as [number, number, number, number][], hipChance: 0.55, ochreShare: 0.7, ochreCount: 4, roofBoxChance: 0.15, shopShare: 0.5, tenementShare: 0.1, plotFlat: 0.75 },
+    // Nhà ống plots (BuildingBuilder emit, low-rise 'wall' fronts): every outer edge ≥ minEdge m is cut into plots ≈ width m,
+    // each with its own facade column + plaster tint. Untagged footprints (no height / building:levels, kinds below) get a hashed
+    // base height of floors[0]–[1] storeys instead of defaultHeight, and each plot may rise `extra` more storeys (flatShare of
+    // them stay at the base; a footprint under minBoxArea m² is one plot and rises as a whole) as a box depth m deep (clamped to half the footprint across that edge): stepped roof lines with bare
+    // side party walls (sideTint × the plot tint). Raised plot caps: gableShare get a pitched cap (rise m; tileShare terracotta,
+    // else tôn), tumShare a stair-head 'tum' box (tum: side, height; tankShare with a water tank), the rest stay flat.
+    // ponytail: the strips of adjacent edges overlap at corners (a deeper corner house pokes through its neighbours' caps) and
+    // the collider stays the base prism; upgrade: a proper plot subdivision of the footprint in build-chunks.
+    plots: {
+      kinds: ['yes', 'house', 'residential', 'detached', 'terrace', 'semidetached_house', 'apartments', 'commercial', 'retail', 'shop'] as string[],
+      floors: [2, 4], extra: 3, flatShare: 0.35, width: 4, depth: 7, minEdge: 2.6, maxArea: 2500, minBoxArea: 150,
+      gableShare: 0.3, tileShare: 0.5, rise: 1.5, tumShare: 0.35, tum: [2.2, 2.4], tankShare: 0.5, sideTint: '#c3baa6',
+      // a projecting balcony slab (roof bucket) on plots showing an atlas balcony column, slabUp m above the band on the first floor, depth / thickness m
+      slabCols: [1, 5, 7] as number[], slabUp: 0.7, slabDepth: 0.8, slabThick: 0.15,
+    },
     // nhà ống rooftop box (stair head / terrace room, roof bucket): chance per flat-roofed low-rise, size as plantBox
     // ([min side, height, side as a share of √(largest roof triangle area), max side]); a water tank (bồn nước, hex prism)
     // stands on tankShare of the boxes
     roofBox: { chance: 0.55, maxHeight: 30, size: [1.8, 2.4, 0.3, 3.5], tankShare: 0.6, tankRadius: 0.55, tankHeight: 1, tank: '#d4d8dc' },
-    colonial: ['#e8c766', '#f0d68a', '#e3b94f', '#e9c97a', '#efe6d2', '#f4efe4', '#e9d9c0', '#d9d2c4', '#f0c9b8', '#cfe0e3', '#c9d8b8', '#e8d3a0', '#ddd8cf', '#f2d9a8', '#dfe8d8', '#e6cfd6'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / white plaster, pale pink, blue, green tube-house fronts
-    tenement: ['#cfc8bb', '#c4bcae', '#d6d0c2', '#bdb6aa', '#c9c5bc', '#b8b5ad', '#dcd6c8', '#c7bba8'], // KTT: grey-cream stucco
+    colonial: ['#e8c766', '#f0d68a', '#e3b94f', '#e9c97a', '#e9e2cf', '#f1ede2', '#e4d3b6', '#cfc8b8', '#e8c4ae', '#c3d2d4', '#bfcdb0', '#e2cc98', '#d2cec4', '#ead3a4', '#d4dccb', '#dcc6cb', '#bdb5a6', '#d8d2c6'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / off-white plaster, dusty pink, blue, green tube-house fronts, grey render
+    tenement: ['#d6c58f', '#cdbd8a', '#c9c0a8', '#bdb6aa', '#d9cc9e', '#b8b5ad', '#c7b995', '#c2b89f'], // KTT: yellowed / grey stucco
+    kttRoof: { share: 0.6, maxHeight: 22, rise: 1.6, inset: 2.5, colours: ['#4f7fae', '#9c5a48', '#6f8fae', '#8a5444'] }, // tôn 'mái che' pitched cap over KTT slabs (blue / rust), slope rise m over inset m
     concrete: ['#d8ccb2', '#c9c3b8', '#e1d9c9', '#bdb5a5'], // concrete-grid towers
     glass: ['#a9c4dc', '#9fcfcc', '#bcc6ce', '#a8d0dc', '#aab8d0'], // curtain-wall tint
     tileRoof: '#9a4e34', // hip roofs (terracotta tiles, Old Quarter / French villas)

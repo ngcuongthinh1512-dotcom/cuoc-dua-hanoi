@@ -147,7 +147,7 @@ describe('Host bot (D18, pure)', () => {
     expect(ack).toEqual([{ t: 'host.review', team: 't0', step: 'T1', id: 1, op: 'ack' }]);
     const { isClientMessage } = await import('@race/shared/protocol');
     expect(isClientMessage(ack[0], 'host')).toBe(true);
-    const answers = answersOf(readFileSync(join(import.meta.dirname, '../worker/legs/bruxelles-demo.json'), 'utf8'));
+    const answers = answersOf(readFileSync(join(import.meta.dirname, '../worker/legs/hanoi-demo.json'), 'utf8'));
     expect(answers.get('T1#parts')).toBe('Cuba | Singapore | Uzbekistan');
     const card = { step: 'T1', type: 'challenge', status: 'active', lockedUntil: null, task: { input: 'parts', partLabels: ['a', 'b', 'c'] } } as unknown as ClueCard;
     expect(botMove(card, 0, { i: 0, switches: false, switched: false }, answers)).toEqual({ op: { t: 'race', op: 'answer', step: 'T1', text: '', parts: ['Cuba', 'Singapore', 'Uzbekistan'] } });
@@ -363,9 +363,9 @@ describe('sim --leg (Phase 7 / 8)', () => {
 
   it('--leg <id> finds the test leg file; unknown id says so', () => {
     expect(legArg('mini')).toMatchObject({ id: 'mini' });
-    // the id the Host page lists → its file test/bruxelles-demo.filled.json (organiser review: "Không tìm thấy chặng")
-    expect(legArg('bruxelles-demo-filled')).toMatchObject({ id: 'bruxelles-demo-filled', file: expect.stringMatching(/worker\/legs\/test\/bruxelles-demo\.filled\.json$/) });
-    expect(legArg('bruxelles-demo').file).toMatch(/worker\/legs\/bruxelles-demo\.json$/);
+    // the id the Host page lists → its file test/hanoi-demo.filled.json (organiser review: "Không tìm thấy chặng")
+    expect(legArg('hanoi-demo-filled')).toMatchObject({ id: 'hanoi-demo-filled', file: expect.stringMatching(/worker\/legs\/test\/hanoi-demo\.filled\.json$/) });
+    expect(legArg('hanoi-demo').file).toMatch(/worker\/legs\/hanoi-demo\.json$/);
     expect(() => legArg('khong-co')).toThrow('khong-co');
     expect(() => legArg('/khong/co/chang.json')).toThrow('Không tìm thấy file chặng "/khong/co/chang.json"');
   });

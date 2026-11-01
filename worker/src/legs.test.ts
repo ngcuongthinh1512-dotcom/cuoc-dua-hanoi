@@ -1,12 +1,12 @@
 import { latLonToWorld, RACE_BBOX } from '@race/shared';
 import { parseLeg } from '@race/shared/leg';
 import { describe, expect, it } from 'vitest';
-import leg from '../legs/bruxelles-demo.json';
+import leg from '../legs/hanoi-demo.json';
 import { BUNDLED_LEGS, bundledLeg } from './race/leg.ts';
 import { gradeParts } from './race/tasks.ts';
 describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
   it('every bundled leg parses with no error', () => {
-    expect(BUNDLED_LEGS).toEqual(['bruxelles-demo', 'bruxelles-demo-filled', 'mini']);
+    expect(BUNDLED_LEGS).toEqual(['hanoi-demo', 'hanoi-demo-filled', 'mini']);
     for (const id of BUNDLED_LEGS) expect(bundledLeg(id)?.id).toBe(id);
   });
 
@@ -18,9 +18,9 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
     }
   });
 
-  it('starts at the Tháp Rogier (Leg 3 start; SPEC §17.12 = one agreed start): every bundled leg, within 25 m', () => {
-    // Leg 1 (Paris) was the Pont de Bir-Hakeim; Leg 3 (Brussels): the Rogier Tower, north of the Botanique
-    const start = latLonToWorld(50.8558, 4.3592);
+  it('starts at the Hồ Gươm bank (Leg 3 start; SPEC §17.12 = one agreed start): every bundled leg, within 25 m', () => {
+    // Leg 1 (Paris) was the Pont de Bir-Hakeim; Leg 3 (Hà Nội): the Đinh Tiên Hoàng promenade of Hồ Hoàn Kiếm
+    const start = latLonToWorld(21.03046, 105.8525);
     for (const id of BUNDLED_LEGS) {
       const s = bundledLeg(id)!.start;
       const p = latLonToWorld(s.lat, s.lon);
@@ -30,7 +30,7 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
 });
 
 // Pure data checks of the demo leg against SPEC §10.1.
-describe('legs/bruxelles-demo.json', () => {
+describe('legs/hanoi-demo.json', () => {
   const steps = leg.steps;
   const count = (type: string) => steps.filter((s) => s.type === type).length;
 
@@ -67,18 +67,18 @@ describe('legs/bruxelles-demo.json', () => {
     }
   });
 
-  it('Leg 3 Detour: Chocolate (Choco-Story) / Truyện Tranh (La Boutique Tintin), each with its own place, afterChoice and a placeholder task; T2 = the BOZAR seat pick', () => {
+  it('Leg 3 Detour: Chocolate (Tràng Tiền Plaza) / Truyện Tranh (Bưu điện Hà Nội), each with its own place, afterChoice and a placeholder task; T2 = the Nhà hát Lớn seat pick', () => {
     const d1 = steps.find((s) => s.id === 'D1');
-    expect(d1?.clue).toMatch(/praline/);
+    expect(d1?.clue).toMatch(/Chọn một trong hai/);
     const branches = d1?.branches ?? [];
-    expect(branches.map((b) => [b.id, b.name, b.task.location?.name, b.task.kind, b.task.verification])).toEqual([['A', 'Chocolate', 'Choco-Story Brussels', 'free', 'host_approval'], ['B', 'Truyện Tranh', 'La Boutique Tintin', 'free', 'host_approval']]);
+    expect(branches.map((b) => [b.id, b.name, b.task.location?.name, b.task.kind, b.task.verification])).toEqual([['A', 'Chocolate', 'Tràng Tiền Plaza', 'free', 'host_approval'], ['B', 'Truyện Tranh', 'Bưu điện Hà Nội', 'free', 'host_approval']]);
     expect(branches.map((b) => /^Đội chơi di chuyển tới/.test(b.afterChoice ?? ''))).toEqual([true, true]);
     expect(branches[1]!.afterChoice).toMatch(/\n• Độ đủ nét/); // bullet lines → a list on the card
     for (const b of branches) expect([b.summary.length > 0, b.task.description.length > 40 && !b.task.description.startsWith('[CHƯA NHẬP'), !b.task.proofInstruction.startsWith('[CHƯA NHẬP'), b.task.media, b.task.answers]).toEqual([true, true, true, [], []]);
     const t2 = steps.find((s) => s.id === 'T2')!;
-    // Leg 3: T2 "Ai hay đi nhà hát" is played in the BOZAR hall (room 'hall') right after L4's box: pick the seat, server-graded
+    // Leg 3: T2 "Ai hay đi nhà hát" is played in the Nhà hát Lớn hall (room 'hall') right after L4's box: pick the seat, server-graded
     expect([t2.room, t2.task?.title, t2.task?.pick, t2.task?.verification, t2.task?.answers, t2.task?.retryLockMinutes]).toEqual(['hall', 'Ai hay đi nhà hát', 'seat', 'auto', ['K-3'], 1]);
-    expect(t2.task?.description).toMatch(/^Đội chơi đang đứng tại Henry Le Bœuf/);
+    expect(t2.task?.description).toMatch(/^Đội chơi đang đứng tại Nhà hát Lớn/);
     expect(t2.task?.description).not.toMatch(/mũi tên|bấm F/i); // the mechanism is not part of the clue
     // T3 (Queen Elisabeth): held at the stage until F (pickup), 4 boxes (2 pieces × song + performer), wrong = Phạt 3 min with x/4 at once
     const t3 = steps.find((s) => s.id === 'T3')!;

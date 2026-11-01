@@ -3,17 +3,17 @@
 // uploads, `host.leg`) into its Durable Object's SQLite (docs/plans/phase7.md D11). Phase 7 track A: the engine
 // (race/engine.ts) owns the loaded leg; `legRules()` of the default leg stays for the bike tests.
 import { type Leg, parseLeg } from '@race/shared/leg';
-import demo from '../../legs/bruxelles-demo.json';
-import filled from '../../legs/test/bruxelles-demo.filled.json';
+import demo from '../../legs/hanoi-demo.json';
+import filled from '../../legs/test/hanoi-demo.filled.json';
 import mini from '../../legs/test/mini.json';
 
 export type { VehiclesConfig } from '@race/shared/leg';
 
-/** Bundled legs by id. bruxelles-demo = SPEC §10.1 test points, tasks empty for the Host (§17.9: the real leg is not in);
+/** Bundled legs by id. hanoi-demo = SPEC §10.1 test points, tasks empty for the Host (§17.9: the real leg is not in);
  *  test/* = fake content for tests and the sim bots (SPEC §15 Phase 11). The user's real leg is uploaded by the Host. */
-const FILES: Record<string, unknown> = { 'bruxelles-demo': demo, 'bruxelles-demo-filled': filled, mini };
+const FILES: Record<string, unknown> = { 'hanoi-demo': demo, 'hanoi-demo-filled': filled, mini };
 
-export const DEFAULT_LEG_ID = 'bruxelles-demo';
+export const DEFAULT_LEG_ID = 'hanoi-demo';
 export const BUNDLED_LEGS = Object.keys(FILES);
 
 /** A bundled leg, parsed (defaults filled). Throws if a bundled file is invalid (worker/src/legs.test.ts catches it). */
