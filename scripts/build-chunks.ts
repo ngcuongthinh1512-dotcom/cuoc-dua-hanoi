@@ -223,6 +223,21 @@ const box = (r: XZ): Rect => {
   return { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) };
 };
 
+/** Park / grass ground of one polygon: the big-map overview + the per-chunk `areas`. */
+function addPark(poly: { outer: XZ; holes?: XZ[] }, kind: 'park' | 'grass') {
+  const whole = clipPoly(poly, waterRect)?.outer;
+  if (whole && ringArea(whole) >= PARK_MIN_AREA) parkOverview.push(simplifyRing(whole, PARK_TOL));
+  const xs = poly.outer.filter((_, k) => k % 2 === 0);
+  const zs = poly.outer.filter((_, k) => k % 2 === 1);
+  for (let i = Math.floor(Math.min(...xs) / CHUNK_SIZE); i * CHUNK_SIZE < Math.max(...xs); i++) {
+    for (let j = Math.floor(Math.min(...zs) / CHUNK_SIZE); j * CHUNK_SIZE < Math.max(...zs); j++) {
+      const c = chunks.get(`${i}_${j}`);
+      const clipped = c && clipPoly(poly, chunkBounds(c.key));
+      if (clipped) c.areas.push({ kind, ...clipped });
+    }
+  }
+}
+
 for (const { geometry: g, p } of features) {
   const tags = p.tags ?? {};
   const shape = g.type === 'Point' ? 'point' : g.type === 'LineString' ? 'line' : g.type === 'Polygon' || g.type === 'MultiPolygon' ? 'area' : undefined;
@@ -319,6 +334,7 @@ for (const { geometry: g, p } of features) {
       const [cx, cz] = ringCentroid(poly.outer);
       const lm = def ?? zones.find((zn) => zn.polys.some((zp) => inPoly(cx, cz, zp)))?.def;
       const rec: BuildingRec = { ...poly, ...buildingFacts(tags), ...(lm && { landmark: lm.id }) };
+      if (rec.height === undefined && rec.levels === undefined && (tags.amenity === 'shelter' || tags.shelter_type)) rec.height = 5; // pavilions / bandstands (Nhà Bát Giác) are one storey, not the 6-storey default
       // Landmark outlines that are not buildings (bridge decks, fountains, artworks) keep what they are.
       // historic=ruins|fort without building=* (Ruínas de São Paulo, Fortaleza da Guia) are solid → kind 'ruins'.
       if (lm && !tags.building) rec.kind = tags.man_made === 'bridge' ? 'bridge' : tags.amenity === 'fountain' ? 'fountain' : /^(ruins|fort)$/.test(tags.historic ?? '') ? 'ruins' : 'artwork';
@@ -328,18 +344,10 @@ for (const { geometry: g, p } of features) {
       }
       if (rec.height === undefined && rec.levels === undefined) bump('missing.building.heightAndLevels');
       chunkAt(cx, cz)?.buildings.push(rec);
+      const ground = lm && !tags.building ? classify(tags, 'area') : undefined; // a landmark park / garden keeps its lawn ground
+      if (ground === 'park' || ground === 'grass') addPark(poly, ground);
     } else if (cat === 'park' || cat === 'grass') {
-      const whole = clipPoly(poly, waterRect)?.outer;
-      if (whole && ringArea(whole) >= PARK_MIN_AREA) parkOverview.push(simplifyRing(whole, PARK_TOL));
-      const xs = poly.outer.filter((_, k) => k % 2 === 0);
-      const zs = poly.outer.filter((_, k) => k % 2 === 1);
-      for (let i = Math.floor(Math.min(...xs) / CHUNK_SIZE); i * CHUNK_SIZE < Math.max(...xs); i++) {
-        for (let j = Math.floor(Math.min(...zs) / CHUNK_SIZE); j * CHUNK_SIZE < Math.max(...zs); j++) {
-          const c = chunks.get(`${i}_${j}`);
-          const clipped = c && clipPoly(poly, chunkBounds(c.key));
-          if (clipped) c.areas.push({ kind: cat, ...clipped });
-        }
-      }
+      addPark(poly, cat);
     } else if (cat === 'water') {
       const clipped = clipPoly(poly, waterRect);
       const river = tags.water === 'river' || tags.water === 'canal' || tags.waterway === 'riverbank' || tags.waterway === 'canal' || /canal/i.test(tags.name ?? '');

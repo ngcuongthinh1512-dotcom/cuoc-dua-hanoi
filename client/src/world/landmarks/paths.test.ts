@@ -19,6 +19,15 @@ const [KNEE, HIP] = [0.4, 1.0];
 /** Samples left blocked on purpose, `landmark: kind name (inside|wall)` → the most samples allowed (docs/reports/leg2-fixes.md
  *  item 3 lists them). A new finding or a higher count fails. */
 const ALLOWED: Record<string, number> = {
+  // Leg 3 Hà Nội (docs/reports/leg3-hanoi-landmarks.md): OSM footways / steps run THROUGH building outlines: the gates and halls of
+  // Văn Miếu (courtyard paths pass through Đại Trung Môn / Đại Thành Môn / the stele houses), a Bách Khoa yard, an alley under chợ Đồng
+  // Xuân, the Nhà thờ Lớn forecourt, Gò Đống Đa. TODO: make the Văn Miếu gates walk-through if the race needs the inner courtyards.
+  'go-dong-da: footway (inside)': 1,
+  'van-mieu: footway (inside)': 17,
+  'van-mieu: steps (inside)': 6,
+  'dhbk: footway (inside)': 3,
+  'cho-dong-xuan: footway (inside)': 1,
+  'nha-tho-lon: footway (inside)': 1,
   // Leg 3 (docs/reports/leg3-landmarks.md): OSM maps these ways THROUGH the building outline (passages under the block, station /
   // library entrances, the stairs that climb the podium of the Palais de Justice / Gare Centrale): the solid body stays, a
   // clue box is never placed there (leg:check rejects points inside buildings)
