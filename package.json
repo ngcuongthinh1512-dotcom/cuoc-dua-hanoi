@@ -1,5 +1,5 @@
 {
-  "name": "cuoc-dua-bi",
+  "name": "cuoc-dua-hanoi",
   "private": true,
   "type": "module",
   "engines": {
@@ -22,7 +22,7 @@
     "landmark-audit": "tsx scripts/landmark-audit.ts",
     "sim": "tsx scripts/sim.ts",
     "leg:check": "tsx scripts/leg-check.ts",
-    "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts",
+    "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts --flat",
     "build-chunks": "tsx scripts/build-chunks.ts",
     "ground-dem": "tsx scripts/ground-dem.ts",
     "build-graph": "tsx scripts/build-graph.ts",

@@ -51,11 +51,9 @@ const WATER_FAIL_BYTES = 1024 * 1024;
 // Phase 5 (docs/plans/phase5.md §3): big-map park overview in water.json (whole map, not per chunk)
 const PARK_TOL = 2; // m, Douglas–Peucker tolerance
 const PARK_MIN_AREA = 400; // m²: smaller park / grass areas (verge strips) are left out of the overview
-/** Commune (Brussels: boundary=administrative + admin_level=8 + name:fr in PARISHES) → its number 1…n, else 0. */
+/** Old Hà Nội quận (boundary=historic, name "Quận <PARISHES>") → its number 1…n, else 0. */
 const districtNo = (t: Tags | undefined) =>
-  t?.boundary === 'administrative' && t.admin_level === '8'
-    ? PARISHES.indexOf((t['name:fr'] ?? t.name?.split(' - ')[0] ?? '') as (typeof PARISHES)[number]) + 1
-    : 0;
+  t?.boundary === 'historic' && t.name?.startsWith('Quận ') ? PARISHES.indexOf(t.name.slice(5) as (typeof PARISHES)[number]) + 1 : 0;
 
 const t0 = performance.now();
 const stats: Record<string, number> = {};

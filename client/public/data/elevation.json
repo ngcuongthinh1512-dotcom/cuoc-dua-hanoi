@@ -1,13 +1,12 @@
 {
-  "minX": -1235,
-  "minZ": -1475,
-  "width": 890,
-  "height": 669,
+  "minX": -5840,
+  "minZ": -1310,
+  "width": 1832,
+  "height": 1220,
   "cellSize": 5,
   "layout": "row-major, width × height nodes; value k = j·width + i is the height at world (x = minX + i·cellSize, z = minZ + j·cellSize); i → east, j → south",
   "encoding": "int16 little-endian, decimetres",
-  "min": 17.4,
-  "max": 95.2,
-  "source": "AWS Terrain Tiles (terrarium), zoom 14, bilinear; ground-dem: blurred 45 m where buildings stand",
-  "attribution": "Terrain Tiles (Mapzen / AWS Open Data, github.com/tilezen/joerd/blob/master/docs/attribution.md): EU-DEM – produced using Copernicus data and information funded by the European Union; SRTM – NASA / USGS"
+  "min": 0,
+  "max": 0,
+  "source": "flat (fetch-dem --flat): mặt đất phẳng 0 m, không dùng DEM"
 }

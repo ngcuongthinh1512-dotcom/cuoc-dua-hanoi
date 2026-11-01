@@ -56,6 +56,18 @@ const PRESETS: Record<string, string> = {
   edge: cam(48.86, 2.2855, 20, 90, -10), // ~37 m inside the west bbox edge, facing out
 };
 
+// Leg 3 Hà Nội (`npm run screenshot -- hn`; not in the default run): whole map, the lake, the Old Quarter, Nhà thờ Lớn, Văn Miếu,
+// Công viên Thống Nhất from above, and street level at the Nhà hát Lớn / Tràng Tiền crossing.
+Object.assign(PRESETS, {
+  'hn-top': '/?cam=-1260,7600,260,0,-90',
+  'hn-hoguom': cam(21.0285, 105.8523, 420, 0, -90),
+  'hn-hoguom-obl': cam(21.0225, 105.8523, 170, 0, -35),
+  'hn-phophap': cam(21.0345, 105.8505, 380, 0, -90),
+  'hn-nhathoLon': cam(21.0270, 105.8490, 90, 0, -30),
+  'hn-vanmieu': cam(21.0293, 105.8355, 300, 0, -90),
+  'hn-thongnhat': cam(21.0145, 105.8445, 600, 0, -90),
+  'hn-street': cam(21.0252, 105.8555, 1.7, yawTo(21.0252, 105.8555, 21.0242, 105.8576), 2),
+});
 // Phase 3 (docs/plans/phase3.md "Screenshot presets"): player mode. ?player[=x,z,yawDeg] (feet on the ground), camMode,
 // orbit (° of camera yaw from behind the body), action, autoMove, wait (s simulated before __READY__). Owner in brackets.
 const playerAt = (lat: number, lon: number, yawDeg: number, extra = '') => {

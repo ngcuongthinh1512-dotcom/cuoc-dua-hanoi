@@ -1,5 +1,7 @@
 // SPEC §4.3 "Độ cao": AWS Terrain Tiles (terrarium PNG) → world-aligned height grid.
-//   npm run fetch-map   (or: tsx scripts/fetch-dem.ts [--cache <dir>] [--out <dir>])
+//   npm run fetch-map   (or: tsx scripts/fetch-dem.ts [--cache <dir>] [--out <dir>] [--flat])
+// --flat (Leg 3 Hà Nội): every node 0 m, no download. The AWS tiles are a SURFACE model (roofs included), so in a dense
+// city the streets come out as 10–25° bumps; central Hanoi is really flat (±2 m), only rivers / lakes are carved (Terrain.ts).
 // Writes <out>/elevation.bin + elevation.json (default client/public/data); PNGs cached in <cache> (default .cache/dem).
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -15,13 +17,14 @@ const ZOOM = 14;
 const CELL = 5; // m
 const SEA_FLOOR_DM = -150; // decimetres: −15 m
 const TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
-const USER_AGENT = 'cuoc-dua-bi/0.1 (game dev; one-time fetch)';
+const USER_AGENT = 'cuoc-dua-hanoi/0.1 (game dev; one-time fetch)';
 
 const root = join(import.meta.dirname, '..');
 const { values: args } = parseArgs({
   options: {
     cache: { type: 'string', default: join(root, '.cache/dem') },
     out: { type: 'string', default: join(root, 'client/public/data') },
+    flat: { type: 'boolean', default: false },
   },
 });
 
@@ -58,6 +61,15 @@ const tx0 = Math.floor((Math.min(...corner.map((p) => p.px)) - 1) / 256);
 const tx1 = Math.floor((Math.max(...corner.map((p) => p.px)) + 1) / 256);
 const ty0 = Math.floor((Math.min(...corner.map((p) => p.py)) - 1) / 256);
 const ty1 = Math.floor((Math.max(...corner.map((p) => p.py)) + 1) / 256);
+
+if (args.flat) {
+  const header = { ...grid, cellSize: CELL, layout: 'row-major, width × height nodes; value k = j·width + i is the height at world (x = minX + i·cellSize, z = minZ + j·cellSize); i → east, j → south', encoding: 'int16 little-endian, decimetres', min: 0, max: 0, source: 'flat (fetch-dem --flat): mặt đất phẳng 0 m, không dùng DEM' };
+  await mkdir(args.out, { recursive: true });
+  await writeFile(join(args.out, 'elevation.bin'), new Uint8Array(grid.width * grid.height * 2));
+  await writeFile(join(args.out, 'elevation.json'), `${JSON.stringify(header, null, 2)}\n`);
+  console.log(`elevation.bin flat, ${grid.width} × ${grid.height} nodes @ ${CELL} m`);
+  process.exit(0);
+}
 
 await mkdir(args.cache, { recursive: true });
 console.log(`fetch-dem: z${ZOOM} tiles x ${tx0}..${tx1}, y ${ty0}..${ty1} → ${grid.width} × ${grid.height} nodes @ ${CELL} m`);

@@ -11,17 +11,19 @@ import { parseArgs } from 'node:util';
 import { RACE_BBOX } from '@race/shared';
 import { type Bbox, tileGrid } from './geo.ts';
 
-const TILE_SIZE = 500; // m
 const DELAY_MS = 2500; // between requests (≥ 2 s, Overpass etiquette)
-const MAX_ATTEMPTS = 10; // Brussels is dense: the main server rate-limits (429) often
+const MAX_ATTEMPTS = 10; // Hanoi is dense: the main server rate-limits (429) often
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter', // fallback mirror (VK Maps)
 ];
-const USER_AGENT = 'cuoc-dua-bi/0.1 (game dev; one-time fetch)';
+const USER_AGENT = 'cuoc-dua-hanoi/0.1 (game dev; one-time fetch)';
 
 const root = join(import.meta.dirname, '..');
-const { values: args } = parseArgs({ options: { out: { type: 'string', default: join(root, '.cache/osm') } } });
+// --tile <m>: bigger tiles when Overpass is queueing (Hà Nội 2026-11: ~45 s per request whatever its size); build-chunks /
+// build-graph read every tiles/*.json and drop duplicates, so tiles of several sizes can sit side by side.
+const { values: args } = parseArgs({ options: { out: { type: 'string', default: join(root, '.cache/osm') }, tile: { type: 'string', default: '500' } } });
+const TILE_SIZE = Number(args.tile); // m
 const outDir = args.out;
 
 const bb = (b: Bbox) => `(${b.south},${b.west},${b.north},${b.east})`;
@@ -34,7 +36,7 @@ const bb = (b: Bbox) => `(${b.south},${b.west},${b.north},${b.east})`;
 // (504 "Dispatcher_Client::request_read_and_idx::timeout").
 const tileQuery = (b: Bbox) => {
   const B = bb(b);
-  return `[out:json][timeout:90][maxsize:134217728];
+  return `[out:json][timeout:180][maxsize:536870912];
 (
   nw[building]${B}; nw["building:part"]${B};
   nw[highway]${B}; way[bridge]${B}; way[tunnel]${B}; nw[man_made=bridge]${B};
@@ -58,7 +60,7 @@ const globalQuery = (b: Bbox) => {
   wr[natural=water]${B}; way[waterway~"^(river|riverbank)$"]${B}; way[natural=coastline]${C};
   way[barrier=retaining_wall]${B}; way[man_made~"^(embankment|quay)$"]${B};
   wr[leisure~"^(park|garden)$"]${B}; wr[landuse=grass]${B};
-  rel[boundary=administrative][admin_level=8]${B};
+  rel[boundary=historic][name~"^Quận "]${B};
   rel[building]${B}; rel["building:part"]${B}; rel[highway]${B};
   rel[man_made=bridge]${B}; rel[bridge]${B}; rel[tunnel]${B};
   rel[amenity~"^(fountain|bicycle_parking)$"]${B}; rel[natural=tree_row]${B};
@@ -67,8 +69,8 @@ const globalQuery = (b: Bbox) => {
 out geom;`;
 };
 
-// Skyline (SPEC §17.6, phase2b-assets.md §5.7): towers ≥ 60 m around RACE_BBOX (Gare du Nord / Madou / Midi towers, Basilique de Koekelberg, Atomium side); one small query.
-const SKYLINE_BBOX: Bbox = { south: 50.80, west: 4.29, north: 50.90, east: 4.44 };
+// Skyline (SPEC §17.6, phase2b-assets.md §5.7): towers ≥ 60 m around RACE_BBOX (Keangnam / Landmark 72, Lotte Center, Times City, Royal City); one small query.
+const SKYLINE_BBOX: Bbox = { south: 20.95, west: 105.76, north: 21.08, east: 105.92 };
 const skylineQuery = () => {
   const B = bb(SKYLINE_BBOX);
   const tall = '["height"~"^([6-9][0-9]|[1-9][0-9][0-9])([.,][0-9]+)?( ?m)?$"]';
@@ -194,7 +196,7 @@ const pending: string[] = [];
 const jobs = [
   { file: join(outDir, 'global.json'), query: globalQuery(RACE_BBOX), label: 'global' },
   { file: join(outDir, 'skyline.json'), query: skylineQuery(), label: 'skyline' },
-  ...tiles.map((t) => ({ file: join(outDir, 'tiles', `${t.ix}_${t.iz}.json`), query: tileQuery(t.latLon), label: `tile ${t.ix}_${t.iz}` })),
+  ...tiles.map((t) => ({ file: join(outDir, 'tiles', TILE_SIZE === 500 ? `${t.ix}_${t.iz}.json` : `${TILE_SIZE}m_${t.ix}_${t.iz}.json`), query: tileQuery(t.latLon), label: `tile ${t.ix}_${t.iz}` })),
 ];
 for (const [n, job] of jobs.entries()) {
   console.log(`[${n + 1}/${jobs.length}] ${job.label}`);

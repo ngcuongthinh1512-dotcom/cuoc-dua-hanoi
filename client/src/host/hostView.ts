@@ -605,15 +605,15 @@ export function demoState(now = 1_000_000): HostState {
     bikes: [],
     spawning: { paused: false, candidates: 120, nextAt: null },
     leg: {
-      id: 'mini', title: 'Chặng ngắn để test (NỘI DUNG GIẢ)', timezone: 'Asia/Ho_Chi_Minh', start: (({ x, z }) => ({ x, z }))(latLonToWorld(50.8512, 4.3470)),
+      id: 'mini', title: 'Chặng ngắn để test (NỘI DUNG GIẢ)', timezone: 'Asia/Ho_Chi_Minh', start: (({ x, z }) => ({ x, z }))(latLonToWorld(21.0246, 105.8420)),
       steps: [
-        s('L1', 'route_info', 'Lộ trình 1', pt(50.84675, 4.35247, 35, 'Grand-Place')),
-        s('T1', 'challenge', 'Thử thách 1', pt(50.8454, 4.3630, 30, 'Parc de Bruxelles')),
-        s('L2', 'route_info', 'Lộ trình 2', pt(50.8419, 4.3623, 40, 'Place Royale')),
-        s('D1', 'detour', 'Lựa chọn kép', pt(50.8419, 4.3623, 40, 'Place Royale'), [pt(50.8419, 4.3623, 40, 'Place Royale'), pt(50.8397, 4.3550, 30, 'Place du Petit Sablon')]),
-        s('L3', 'route_info', 'Lộ trình 3', pt(50.8405, 4.3555, 25, 'Place du Grand Sablon')),
-        s('T2', 'challenge', 'Thử thách 2', pt(50.8405, 4.3555, 25, 'Place du Grand Sablon')), // a typed place name (SPEC §17.42)
-        s('PS', 'pit_stop', 'Về đích', pt(50.8405, 4.3555, 25, 'Place du Grand Sablon')),
+        s('L1', 'route_info', 'Lộ trình 1', pt(21.03218, 105.85213, 35, 'Quảng trường Đông Kinh Nghĩa Thục')),
+        s('T1', 'challenge', 'Thử thách 1', pt(21.0285, 105.8494, 30, 'Nhà thờ Lớn')),
+        s('L2', 'route_info', 'Lộ trình 2', pt(21.0240, 105.8572, 40, 'Nhà hát Lớn')),
+        s('D1', 'detour', 'Lựa chọn kép', pt(21.0240, 105.8572, 40, 'Nhà hát Lớn'), [pt(21.0240, 105.8572, 40, 'Nhà hát Lớn'), pt(21.0290, 105.8360, 30, 'Văn Miếu')]),
+        s('L3', 'route_info', 'Lộ trình 3', pt(21.0187, 105.8436, 25, 'Hồ Thiền Quang')),
+        s('T2', 'challenge', 'Thử thách 2', pt(21.0187, 105.8436, 25, 'Hồ Thiền Quang')), // a typed place name (SPEC §17.42)
+        s('PS', 'pit_stop', 'Về đích', pt(21.0187, 105.8436, 25, 'Hồ Thiền Quang')),
       ],
       vehicles: { corridorMeters: 150, minDistanceFromCheckpoint: 100, initialPerSegment: [0, 1], spawnIntervalMinutes: 3, spawnChance: 0.3, maxAvailablePerSegment: 1, decoyRatio: 0.4, noSpawnNearPlayerMeters: 120, abandonMeters: 200, abandonSeconds: 60, bikeParking: { offsetMeters: 20, maxBikes: 6 } },
       bundled: ['bruxelles-demo', 'mini'],

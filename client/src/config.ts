@@ -139,7 +139,7 @@ export const physics = {
 
 // Default view (Leg 2): ~60 m above Largo do Senado (the world origin), a little behind it, looking toward the Mont des Arts / Palais Royal.
 // (name kept from Leg 1, where this was the Arc de Triomphe)
-const ARC = latLonToWorld(50.8417, 4.3622);
+const ARC = latLonToWorld(21.02822, 105.85224); // Tháp Rùa, hồ Hoàn Kiếm
 const toArc = Math.hypot(ARC.x, ARC.z);
 const SPAWN_BACK = 120; // m behind the origin, so the Grand-Place is in view
 
@@ -260,23 +260,23 @@ export const buildings = {
   chimneyChance: 0.35, // per inset roof corner
   chimneySize: [1.1, 0.6, 1.5], // m: along the edge, across, above the roof
   colours: { limestone: '#e3d5b8', zinc: '#6f7c85', iron: '#2a2d30' },
-  // Leg 3 (Brussels) look (the block keeps its Leg 2 name `macao`), used whenever the Haussmann style is off for a building. Style per building (hash01 of its first vertex):
+  // Leg 3 (Hà Nội) look (the block keeps its Leg 2 name `macao`), used whenever the Haussmann style is off for a building. Style per building (hash01 of its first vertex):
   // h ≥ towerHeight[1] tower; towerHeight[0]–[1] tower with chance (h − [0]) / ([1] − [0]), else tenement; below: tenement for
   // tenementKinds of h ≥ tenementMin with chance tenementShare, else colonial. Colours are sRGB (vertex colour = linear of it).
   macao: {
-    towerHeight: [40, 55], // m (Leg 3: mid-rise housing stays brick townhouse / mansion, only real towers get a grid or curtain wall)
+    towerHeight: [40, 60], // m (Hà Nội: tube houses and KTT blocks stay plaster / concrete, only real towers get a grid or curtain wall)
     tenementMin: 15, // m (≈ 5 storeys)
-    tenementShare: 0, // Leg 3: the Macao grey tenement look is off
+    tenementShare: 0.55, // Hà Nội: khu tập thể / 5–9 storey tube houses get the grey tenement look
     tenementKinds: ['yes', 'apartments', 'residential', 'dormitory', 'mixed'] as string[],
     curtainShare: 0.4, // towers with a glass curtain wall; the rest get the tenement texture as a concrete grid
     blankKinds: ['roof', 'garage', 'garages', 'shed', 'storage_tank', 'warehouse', 'hut', 'carport', 'service'] as string[], // no windows
     shopMinHeight: 7, // m: buildings at least this tall get the ground-floor shop band (shopfrontHeight) on street faces
-    hip: { chance: 0.9, maxHeight: 40, maxArea: 3000, rise: 4.2, inset: 3.2 }, // colonial low hip roof (m, m², m above / in from the walls)
-    colonial: ['#a8584a', '#b9674f', '#9c4f43', '#a35a45', '#8f5a4a', '#b06a52', '#c9a27e', '#d9c7a3', '#cdb89a', '#d8cdb4', '#9a5444', '#e0d3b5'], // Brussels townhouses: red / brown brick, cream and grey stone
+    hip: { chance: 0.3, maxHeight: 40, maxArea: 3000, rise: 4.2, inset: 3.2 }, // colonial low hip roof (m, m², m above / in from the walls)
+    colonial: ['#e8c766', '#f0d68a', '#e3b94f', '#efe6d2', '#f4efe4', '#e9d9c0', '#d9d2c4', '#f0c9b8', '#cfe0e3', '#c9d8b8', '#e8d3a0', '#ddd8cf'], // Hà Nội: French-yellow ochre, cream / white plaster, pale pink, blue, green tube-house fronts
     tenement: ['#b9a79a', '#a99486', '#cfc5b0', '#c0a898', '#b2b0a8', '#9fa3a0', '#d6cfc0', '#bfb39e'],
     concrete: ['#d8ccb2', '#c9c3b8', '#e1d9c9', '#bdb5a5'], // concrete-grid towers
     glass: ['#a9c4dc', '#9fcfcc', '#bcc6ce', '#a8d0dc', '#aab8d0'], // curtain-wall tint
-    tileRoof: '#5f6670', // hip roofs (Belgian slate)
+    tileRoof: '#9a4e34', // hip roofs (terracotta tiles, Old Quarter / French villas)
     flatRoof: '#b2b8be', // flat roofs (concrete)
     roofLift: 3.2, // × roof tint over the dark roof_slates_03 diffuse (graphics8c.roofs); 1 with the canvas roof
     plantBox: [3, 2.2, 0.4, 7], // tower roof plant box: min side, height (m), side as a share of √(largest roof triangle area), max side
@@ -331,7 +331,8 @@ export const terrain = {
   cell: 5, // m, HeightGrid spacing
   margin: 100, // m of grid beyond RACE_BBOX on every side
   chunkRes: 51, // vertices per side of one chunk's terrain mesh (250 m / 5 m + 1)
-  waterLevel: null as number | null, // y (m); null = median grid height inside river cells
+  waterLevel: -7 as number | null, // y (m); null = median grid height inside river cells. Leg 3 Hà Nội: flat ground at 0, so the river sits
+  // quayHeight under it and carveRiver raises no quay band (streets stay flat up to the bank)
   riverDepth: 3, // m; river cells are carved to waterLevel − this
   quayHeight: 7, // m; cells within quayBand outside the river are raised to ≥ waterLevel + this (SPEC §4.3: 6–8 m)
   quayBand: 8, // m
@@ -459,7 +460,7 @@ export const movement = {
   bikeSpeedMultiplier: 1.3, // Phase 4: bike speed = footSpeed × this (Leg 2: 1.3 like the legs / schema default; Leg 1 offline had 1.5)
 };
 
-const SPAWN_OUT = 14; // m from the origin toward the Mont des Arts / Palais Royal
+const SPAWN_OUT = 14; // m from the origin toward hồ Hoàn Kiếm (facing the lake)
 export const playerSetup = {
   spawn: { x: (ARC.x / toArc) * SPAWN_OUT, z: (ARC.z / toArc) * SPAWN_OUT, yawDeg: (Math.atan2(-ARC.x, -ARC.z) * 180) / Math.PI },
   teamColour: '#d8342c', // test team until login (Phase 6): shirt colour
@@ -731,7 +732,7 @@ export const npcAssets = {
 
 // ── B · traffic sim (npc/traffic.ts, npc/lights.ts, npc/roads.ts bridges) ──
 export const traffic = {
-  driveLeft: false, // Leg 3 Brussels drives on the right (Leg 2 Macao: true). npc/roads.ts laneOffset flips the lane side; side-turn lanes + light poles follow
+  driveLeft: false, // Leg 3 Hà Nội drives on the right (Leg 2 Macao: true). npc/roads.ts laneOffset flips the lane side; side-turn lanes + light poles follow
   // highway=* kinds cars drive on (no service: parking entrances, courtyards); npc/roads.ts keeps the largest strongly
   // connected part of them, so no car ever gets stuck in a dead end
   kinds: ['primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'primary_link', 'secondary_link', 'tertiary_link'] as string[],
@@ -1048,7 +1049,7 @@ export const hudWidgets = {
 
 // ── Foundation · session (net/session.ts, main.ts) ──
 export const net = {
-  defaultRace: 'bruxelles', // race id when the URL has no ?race= (the Host's link carries one); each race = one Durable Object
+  defaultRace: 'hanoi', // race id when the URL has no ?race= (the Host's link carries one); each race = one Durable Object
   apiBase: '/api', // same origin (Workers Static Assets + Worker); the Vite dev server proxies it to wrangler dev (vite.config.ts)
 };
 

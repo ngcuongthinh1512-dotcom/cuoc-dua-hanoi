@@ -21,11 +21,12 @@ export function districtAt(d: Districts | undefined, x: number, z: number): numb
   return 0;
 }
 
-/** Brussels communes inside the box (OSM admin_level 8, `name:fr`); district number n = index + 1. */
-export const PARISHES = ['Bruxelles', 'Saint-Josse-ten-Noode', 'Ixelles', 'Etterbeek', 'Saint-Gilles', 'Schaerbeek', 'Molenbeek-Saint-Jean', 'Anderlecht'] as const;
+/** Hà Nội: the old urban districts (quận) in the box, boundaries before the 1/7/2025 reform (OSM boundary=historic,
+ *  name "Quận …"); the 3 race districts first. District number n = index + 1. */
+export const PARISHES = ['Hoàn Kiếm', 'Hai Bà Trưng', 'Đống Đa', 'Ba Đình', 'Tây Hồ', 'Cầu Giấy', 'Thanh Xuân', 'Hoàng Mai', 'Long Biên', 'Nam Từ Liêm'] as const;
 
-/** Street-plaque form: the commune name (Paris "8e Arrt" in Leg 1); 0 → "". */
+/** Street-plaque form: the district name (Paris "8e Arrt" in Leg 1); 0 → "". */
 export const districtPlaque = (n: number) => PARISHES[n - 1] ?? '';
 
-/** HUD form (Vietnamese): 1 → "Commune Bruxelles"; 0 → "". */
-export const districtLabel = (n: number) => (PARISHES[n - 1] ? `Commune ${PARISHES[n - 1]}` : '');
+/** HUD form (Vietnamese): 1 → "Quận Hoàn Kiếm"; 0 → "". */
+export const districtLabel = (n: number) => (PARISHES[n - 1] ? `Quận ${PARISHES[n - 1]}` : '');
