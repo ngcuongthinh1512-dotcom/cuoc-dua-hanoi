@@ -130,7 +130,7 @@ describe('roadgraph.json (real data)', () => {
       const [mx, mz] = [(real.x[real.edgeA[e]!]! + real.x[real.edgeB[e]!]!) / 2, (real.z[real.edgeA[e]!]! + real.z[real.edgeB[e]!]!) / 2];
       if (rivers.some((riv) => riv.some((v, i) => i % 2 === 0 && Math.hypot(v - mx, riv[i + 1]! - mz) < 40))) near.push(e);
     }
-    expect(near.length).toBeGreaterThan(20);
+    expect(near.length).toBeGreaterThan(8); // the 3-district cut leaves 12 walkable bridge edges near river polygons (71k-node graph had > 20)
     for (const e of near.slice(0, 8)) expect([real.edgeA[e], real.edgeB[e]].every((n) => real.component[n!] === real.main) || real.edgeLength[e]! < 40).toBe(true);
   });
 

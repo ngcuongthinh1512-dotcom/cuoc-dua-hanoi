@@ -82,6 +82,9 @@ Object.assign(PRESETS, {
   'hn-kimlien': cam(21.0075, 105.8365, 1.7, 90, 4),
   'hn-hangbac-obl': cam(21.0325, 105.8520, 70, 0, -35),
   'hn-hangbong': cam(21.0295, 105.8465, 1.7, -70, 4),
+  // roofscape obliques: Đống Đa (Xã Đàn / Phương Liên) and Hai Bà Trưng (Lò Đúc / Nguyễn Công Trứ), 120 m
+  'hn-dongda-obl': cam(21.0140, 105.8330, 120, 0, -40),
+  'hn-hbt-obl': cam(21.0090, 105.8560, 120, 0, -40),
 });
 // Phase 3 (docs/plans/phase3.md "Screenshot presets"): player mode. ?player[=x,z,yawDeg] (feet on the ground), camMode,
 // orbit (° of camera yaw from behind the body), action, autoMove, wait (s simulated before __READY__). Owner in brackets.

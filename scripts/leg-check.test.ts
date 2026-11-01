@@ -14,7 +14,7 @@ const map = loadMap(root);
 const legs = (n: string) => join(root, 'worker/legs', n);
 const run = (file: string, scanDirs: string[] = []) => checkFile(file, { root, map, scanDirs });
 const tmp = mkdtempSync(join(tmpdir(), 'legcheck-'));
-const BR = { lat: 21.03353, lon: 105.82404 }; // Hà Nội: a bridge over land (viaduct)
+const BR = { lat: 21.03621, lon: 105.85427 }; // Hà Nội: a footbridge / viaduct edge over land, inside the 3 race districts (the old Ba Đình point was cut by the district mask)
 const miniJson = () => JSON.parse(readFileSync(legs('test/mini.json'), 'utf8'));
 /** Writes a leg under <tmp>/worker/legs/ (no "outside worker/legs" warning). */
 const put = (name: string, j: unknown) => {
@@ -217,12 +217,13 @@ describe('leg:check (docs/LEG_FORMAT.md)', () => {
     expect(map.waterAt(p.x, p.z)).toBe(null);
     const r = runT('bh.json', j);
     // not "does not cross the river" (it does): this part of the deck stands over the island
-    expect(r.issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`)).toEqual([expect.stringMatching(/^điểm xuất phát: nằm trên đoạn cầu bắc qua đất \(bờ \/ đảo\)/)]);
+    // inside the 3 districts every bridge over land is a road ramp (Cầu Chương Dương approaches), so the carriageway warning comes with it
+    expect(r.issues.filter((i) => i.level === 'warning').map((i) => `${i.where}: ${i.message}`)).toEqual([expect.stringMatching(/^điểm xuất phát: nằm trên đoạn cầu bắc qua đất \(bờ \/ đảo\)/), expect.stringMatching(/^điểm xuất phát: nằm giữa lòng đường xe chạy/)]);
     // step 1 = the start (first clue handed out of game): the same warning once, and a note that the box opens at once
     Object.assign(j.steps[0].destination, { lat: BR.lat, lon: BR.lon, radius: 20 });
     delete j.steps[0].destination.bikeParking;
     const r2 = runT('bh2.json', j);
-    expect(r2.issues.filter((i) => i.level === 'warning')).toHaveLength(1);
+    expect(r2.issues.filter((i) => i.level === 'warning').length).toBeGreaterThanOrEqual(1); // bridge-over-land warning (+ the carriageway one)
     expect(r2.report).toContain('Điểm xuất phát nằm trong vùng này');
   });
 

@@ -25,6 +25,10 @@ const inRing = (x: number, z: number, r: Ring) => {
 export function loadDistrictMask(cacheDir: string): Mask {
   const global = JSON.parse(readFileSync(join(cacheDir, 'global.json'), 'utf8')) as { elements: { type: string; id: number; tags?: Record<string, string> }[] };
   const wanted = global.elements.filter((e) => e.type === 'relation' && e.tags?.boundary === 'historic' && RACE_DISTRICTS.includes(e.tags.name ?? ''));
+  if (!wanted.length) { // a test fixture cache without the boundaries: no mask
+    console.warn('[district-mask] no race district relation in global.json: nothing is cut');
+    return { rings: [], contains: () => true };
+  }
   if (wanted.length !== RACE_DISTRICTS.length) throw new Error(`district-mask: found ${wanted.length} of ${RACE_DISTRICTS.length} district relations in global.json`);
   const ring = (c: number[][]): Ring => c.flatMap(([lon, lat]) => {
     const w = latLonToWorld(lat!, lon!);
