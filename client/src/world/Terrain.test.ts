@@ -21,18 +21,36 @@ const square: WaterData = {
 const at = (g: HeightGrid, c: number, r: number) => g.h[r * g.cols + c]!;
 
 describe('carveRiver', () => {
-  it('lowers river nodes and their neighbours, raises the quay band, falls off to the DEM, keeps the island', () => {
+  it('lowers river nodes and their neighbours, raises the quay band, falls off to the DEM, keeps the island (config waterLevel null: the level is the median ground)', () => {
+    const saved = T.waterLevel;
+    T.waterLevel = null; // Hà Nội pins the river at −7 m under flat ground; this test is about the generic carve
+    try {
+      const g = flat();
+      carveRiver(g, square);
+      const level = riverLevel(g, square);
+      expect(level).toBe(0);
+      const top = level + T.quayHeight;
+      expect(at(g, 25, 10)).toBe(level - T.riverDepth); // in the river
+      expect(at(g, 19, 10)).toBe(level - T.riverDepth); // 5 m west of the bank: bed too (the slope sits behind the wall)
+      expect(at(g, 18, 10)).toBe(top); // 10 m west
+      expect(at(g, 30, 30)).toBeCloseTo(top - T.quayGrade * (15 - T.quayBand), 4); // island centre, 15 m from the bed
+      expect(at(g, 10, 10)).toBeCloseTo(top - T.quayGrade * (45 - T.quayBand), 4); // 45 m west of the bed
+      expect(at(g, 0, 10)).toBeGreaterThan(0);
+      expect(g.h.every(Number.isFinite)).toBe(true);
+    } finally {
+      T.waterLevel = saved;
+    }
+  });
+
+  it('Hà Nội config (waterLevel −7, flat ground 0): river nodes and their neighbours sink, no quay band is raised, the island and the far ground stay at 0', () => {
     const g = flat();
     carveRiver(g, square);
     const level = riverLevel(g, square);
-    expect(level).toBe(0);
-    const top = level + T.quayHeight;
+    expect(level).toBe(T.waterLevel);
+    expect(level + T.quayHeight).toBe(0); // the quay top is the street itself
     expect(at(g, 25, 10)).toBe(level - T.riverDepth); // in the river
-    expect(at(g, 19, 10)).toBe(level - T.riverDepth); // 5 m west of the bank: bed too (the slope sits behind the wall)
-    expect(at(g, 18, 10)).toBe(top); // 10 m west
-    expect(at(g, 30, 30)).toBeCloseTo(top - T.quayGrade * (15 - T.quayBand), 4); // island centre, 15 m from the bed
-    expect(at(g, 10, 10)).toBeCloseTo(top - T.quayGrade * (45 - T.quayBand), 4); // 45 m west of the bed
-    expect(at(g, 0, 10)).toBeGreaterThan(0);
+    expect(at(g, 19, 10)).toBe(level - T.riverDepth); // 5 m west of the bank: bed too
+    for (const [c, r] of [[18, 10], [30, 30], [10, 10], [0, 10]] as const) expect(at(g, c, r)).toBe(0); // 10 m west, island, 45 m west, far: untouched
     expect(g.h.every(Number.isFinite)).toBe(true);
   });
 
@@ -132,11 +150,11 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
     }
   });
 
-  it('carved grid has no NaN and the canal (a river: true polygon) below its quays', () => {
+  it('carved grid has no NaN and the Sông Tô Lịch (a river: true polygon) below the street', () => {
     expect(grid.h.every(Number.isFinite)).toBe(true);
     const level = riverLevel(grid, water);
-    expect(level).toBeLessThan(-8); // Leg 3: the canal sits 10.6 m below the Grand-Place (y = 0) (Macao sea: −21; the Seine: −5.5)
-    expect(heightAt(grid, -395.7, -1400)).toBeCloseTo(level - T.riverDepth, 4); // the carved bed, mid canal (north-west corner)
+    expect(level).toBe(-7); // Leg 3 Hà Nội: the rivers sit 7 m under the flat ground (y = 0) (Brussels canal −10.6, Macao sea −21, the Seine −5.5)
+    expect(heightAt(grid, -3999, 2590)).toBeCloseTo(level - T.riverDepth, 4); // the carved bed, mid Tô Lịch (Đống Đa)
     // Leg 3: nothing lies below the carved bed (Leg 2: the DEM's own sea floor went deeper, −36)
     expect(grid.h.reduce((a, b) => Math.min(a, b))).toBeLessThanOrEqual(level - T.riverDepth + 1e-4);
   });

@@ -141,7 +141,7 @@ export const physics = {
 // (name kept from Leg 1, where this was the Arc de Triomphe)
 const ARC = latLonToWorld(21.02822, 105.85224); // Tháp Rùa, hồ Hoàn Kiếm
 const toArc = Math.hypot(ARC.x, ARC.z);
-const SPAWN_BACK = 120; // m behind the origin, so the Grand-Place is in view
+const SPAWN_BACK = 120; // m behind the origin, so the origin square is in view
 
 export const flyCamera = {
   baseSpeed: 20, // m/s
@@ -275,7 +275,7 @@ export const buildings = {
     kioskShopMin: 3, // m: a windowless low box (untagged < smallArea: the Old Quarter's street-front slivers) at least this tall is a shop (quán) band
     // tiled hip / pitched roof (m, m², m above / in from the walls): chance outside the French quarter (Old Quarter tube houses
     // with a tile cap); the rise shrinks with the inset on plots narrower than 2 × inset (a 4 m tube house gets a low ridge)
-    hip: { chance: 0.12, maxHeight: 40, maxArea: 700, rise: 4.2, inset: 3.2 }, // (bigger untagged blocks get per-plot caps instead, macao.plots)
+    hip: { chance: 0.12, smallChance: 0.6, tonShare: 0.45, maxHeight: 40, maxArea: 700, rise: 4.2, inset: 3.2 }, // smallChance: footprints under plots.minBoxArea (whole-house plots); tonShare of hips are tôn, the rest tile (bigger untagged blocks get per-plot caps instead, macao.plots)
     // French quarter (world m [x0, z0, x1, z1]: south of Hoàn Kiếm lake to Hai Bà Trưng + the strip east of the lake, Lý Thái Tổ):
     // more hip roofs, ochre plaster. ponytail: axis-aligned boxes, upgrade: the district polygons of geo/districts.ts (the builder runs in a worker without them)
     // (ochreShare of buildings take their tint from the first ochreCount `colonial` colours), fewer rooftop boxes
@@ -293,7 +293,8 @@ export const buildings = {
     plots: {
       kinds: ['yes', 'house', 'residential', 'detached', 'terrace', 'semidetached_house', 'apartments', 'commercial', 'retail', 'shop'] as string[],
       floors: [2, 4], extra: 3, flatShare: 0.35, width: 4, depth: 7, minEdge: 2.6, maxArea: 2500, minBoxArea: 150,
-      gableShare: 0.3, tileShare: 0.5, rise: 1.5, tumShare: 0.35, tum: [2.2, 2.4], tankShare: 0.5, sideTint: '#c3baa6',
+      gableShare: 0.5, tileShare: 0.5, rise: 1.5, tumShare: 0.3, tum: [2.2, 2.4], tankShare: 0.5, sideTint: '#cdc5b2',
+      parapet: 0.5, // m: concrete lip around every flat roof (terrace), outer + inner face
       // a projecting balcony slab (roof bucket) on plots showing an atlas balcony column, slabUp m above the band on the first floor, depth / thickness m
       slabCols: [1, 5, 7] as number[], slabUp: 0.7, slabDepth: 0.8, slabThick: 0.15,
     },
@@ -303,12 +304,12 @@ export const buildings = {
     roofBox: { chance: 0.55, maxHeight: 30, size: [1.8, 2.4, 0.3, 3.5], tankShare: 0.6, tankRadius: 0.55, tankHeight: 1, tank: '#d4d8dc' },
     colonial: ['#e8c766', '#f0d68a', '#e3b94f', '#e9c97a', '#e9e2cf', '#f1ede2', '#e4d3b6', '#cfc8b8', '#e8c4ae', '#c3d2d4', '#bfcdb0', '#e2cc98', '#d2cec4', '#ead3a4', '#d4dccb', '#dcc6cb', '#bdb5a6', '#d8d2c6'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / off-white plaster, dusty pink, blue, green tube-house fronts, grey render
     tenement: ['#d6c58f', '#cdbd8a', '#c9c0a8', '#bdb6aa', '#d9cc9e', '#b8b5ad', '#c7b995', '#c2b89f'], // KTT: yellowed / grey stucco
-    kttRoof: { share: 0.6, maxHeight: 22, rise: 1.6, inset: 2.5, colours: ['#4f7fae', '#9c5a48', '#6f8fae', '#8a5444'] }, // tôn 'mái che' pitched cap over KTT slabs (blue / rust), slope rise m over inset m
+    kttRoof: { share: 0.6, maxHeight: 22, rise: 1.6, inset: 2.5, colours: ['#5c8fc0', '#a04a30', '#7aa0c6', '#b05838'] }, // (rust = saturated red: a pink-brown tint goes olive over the blue-grey slate diffuse) // tôn 'mái che' pitched cap over KTT slabs (blue / rust), slope rise m over inset m
     concrete: ['#d8ccb2', '#c9c3b8', '#e1d9c9', '#bdb5a5'], // concrete-grid towers
     glass: ['#a9c4dc', '#9fcfcc', '#bcc6ce', '#a8d0dc', '#aab8d0'], // curtain-wall tint
     tileRoof: '#9a4e34', // hip roofs (terracotta tiles, Old Quarter / French villas)
-    flatRoofs: ['#b2b8be', '#a9afb4', '#bfc3c5', '#9ea5aa', '#c6c9c6', '#b7bcc0'], // flat roofs: concrete greys
-    ton: { share: 0.3, maxArea: 260, colours: ['#5f8fba', '#9c5a48', '#4f7fae'] }, // corrugated-metal (tôn) cap on a share of small flat-roofed plots: blue / rust
+    flatRoofs: ['#aaa89f', '#9e9d95', '#b3b1a8', '#98998f', '#a7a69c', '#a6a08f'], // flat roofs: concrete terraces (wall bucket plain texel × tint, unlifted: mid greys)
+    ton: { share: 0.3, maxArea: 260, colours: ['#6a9ccb', '#b05838', '#5d8fc2', '#a04a30'] }, // corrugated-metal (tôn) cap on a share of small flat-roofed plots: blue / rust
     roofLift: 3.2, // × roof tint over the dark roof_slates_03 diffuse (graphics8c.roofs); 1 with the canvas roof
     plantBox: [3, 2.2, 0.4, 7], // tower roof plant box: min side, height (m), side as a share of √(largest roof triangle area), max side
     litShare: 0.35, // share of buildings whose windows are lit in the evening (MeshBucket.lit)

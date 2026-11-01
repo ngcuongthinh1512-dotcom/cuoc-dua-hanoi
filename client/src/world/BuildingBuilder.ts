@@ -120,7 +120,8 @@ interface Prep {
   shift: number; // facade atlas column the first bay of every edge starts at (per building, so a row of plots differs)
   plots?: { extra: number; flat: number; cols: readonly [number, number]; palette: string[] }; // emitPlots: max extra storeys, share kept flat, atlas column range, tint palette
   tint: V3;
-  roofTint: V3;
+  roofTint: V3; // roof bucket (slates, lifted): slopes
+  capTint: V3; // wall bucket (plain plaster texel, unlifted): flat caps, parapets, tum / stair boxes
   lit: number; // MeshBucket.lit
 }
 
@@ -188,6 +189,7 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
       slope: [B.mansardHeight, B.mansardInset],
       tint: [bright, bright * (0.97 - 0.05 * k), bright * (0.93 - 0.1 * k)], // warm cream ↔ neutral grey-white limestone
       roofTint: ROOF_PBR ? [rb * 1.35, rb * 1.5, rb * 1.8] : [rb, rb, rb * 1.03], // slate diffuse is dark and warm: lift + cool it
+      capTint: [rb * 0.5, rb * 0.52, rb * 0.55],
     };
   }
   // Macao: colonial pastel low-rise, Chinese tenements, towers (config buildings.macao)
@@ -198,7 +200,7 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
   const tenementShare = french ? F.tenementShare : b.kind === 'yes' ? M.tenementYesShare : M.tenementShare;
   const tenement = !tower && (h > t0 || (M.tenementKinds.includes(b.kind) && h >= M.tenementMin && r(6) < tenementShare));
   const curtain = tower && r(7) < M.curtainShare;
-  const hip = !tower && !tenement && minH === 0 && h <= M.hip.maxHeight && area <= M.hip.maxArea && r(8) < (french ? F.hipChance : M.hip.chance);
+  const hip = !tower && !tenement && minH === 0 && h <= M.hip.maxHeight && area <= M.hip.maxArea && r(8) < (french ? F.hipChance : untagged && !boxes ? M.hip.smallChance : M.hip.chance);
   let minEdge = Infinity;
   for (let i = 0; i < outer.length; i += 2) minEdge = Math.min(minEdge, Math.hypot(outer[(i + 2) % outer.length]! - outer[i]!, outer[(i + 3) % outer.length]! - outer[i + 1]!));
   const inset = Math.min(M.hip.inset, minEdge / 2);
@@ -225,7 +227,10 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
     tank: roofBox && r(15) < M.roofBox.tankShare,
     ...(plots && { plots: { extra: untagged && boxes ? P.extra : 0, flat: french ? F.plotFlat : P.flatShare, cols: french ? [6, 2] : [0, 6], palette } }),
     tint: pick(palette),
-    roofTint: hip ? linear(M.tileRoof, lift) : ktt ? pick(K.colours, lift, 22) : pick(low && area <= M.ton.maxArea && r(19) < M.ton.share ? M.ton.colours : M.flatRoofs, lift, 17),
+    roofTint: hip ? (!french && r(23) < M.hip.tonShare ? pick(M.ton.colours, lift, 24) : linear(M.tileRoof, lift)) : ktt ? pick(K.colours, lift, 22) : pick(M.flatRoofs, lift, 17),
+    // ponytail: flat caps, parapets and roof boxes go to the wall bucket's plain plaster texel (the lifted slate diffuse turns
+    // every grey into an olive slab); upgrade: a concrete roof PBR map on its own material (+1 draw call per chunk)
+    capTint: pick(low && area <= M.ton.maxArea && r(19) < M.ton.share ? M.ton.colours : M.flatRoofs, 1, 17),
   };
 }
 
@@ -282,7 +287,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     const shopOn = p.shop && wallTop > shopTop + 1; // the band needs at least a strip of facade above it
     const base = shopOn ? shopTop : g; // facade v = floors above this
     face.color = shop.color = p.tint;
-    face.lit = p.lit;
+    face.lit = wall.lit = p.lit;
     shop.lit = p.lit || 0.01 + 0.99 * hash01(p.rings[0]![0]!, p.rings[0]![1]!, 5); // shops: always a seed (night open / closed)
     roof.color = p.roofTint;
     const insets: XZ[] = [];
@@ -345,6 +350,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
         }
         if (shopHere) wallQuad(face, shopTop, wallTop, u0, 0, u0 + bays, floorsV(wallTop));
         else wallQuad(face, bottom, wallTop, u0, floorsV(bottom), u0 + bays, floorsV(wallTop));
+        if (!slope && !haussmann && ri === 0) parapet([ax, 0, az], [bx, 0, bz], top, (bz - az) / len, (ax - bx) / len);
         if (slope) {
           roof.quad([ax, wallTop, az], [bx, wallTop, bz], [q[2 * j]!, top, q[2 * j + 1]!], [q[2 * i]!, top, q[2 * i + 1]!], 0, ROOF_PBR ? 0 : 0.25, ROOF_PBR ? len : bays, ROOF_PBR ? Math.hypot(top - wallTop, slope[1]) : 1);
         }
@@ -372,17 +378,20 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     const ringIdx = triangulate(p.rings[0]!, p.rings.slice(1));
     const insetIdx = slope ? triangulate(insets[0]!, insets.slice(1)) : [];
     const [capRings, capIdx] = insetIdx.length ? [insets, insetIdx] : [p.rings, ringIdx];
-    const flatFace = (rings: XZ[], idx: number[], y: number, ny: number) => {
+    // a flat cap is concrete (wall bucket, capTint); the cap under a slope is the roof surface (roof bucket)
+    const flatFace = (rings: XZ[], idx: number[], y: number, ny: number, buf: MeshBuffer) => {
       const pts = rings.flat();
-      const b0 = roof.vertexCount;
-      for (let i = 0; i < pts.length; i += 2) roof.vertex(pts[i]!, y, pts[i + 1]!, 0, ny, 0, ROOF_PBR ? pts[i]! : PLAIN_ROOF_UV[0], ROOF_PBR ? pts[i + 1]! : PLAIN_ROOF_UV[1]);
+      const b0 = buf.vertexCount;
+      const slates = buf === roof && ROOF_PBR;
+      for (let i = 0; i < pts.length; i += 2) buf.vertex(pts[i]!, y, pts[i + 1]!, 0, ny, 0, slates ? pts[i]! : buf === roof ? PLAIN_ROOF_UV[0] : PLAIN_WALL_UV[0], slates ? pts[i + 1]! : buf === roof ? PLAIN_ROOF_UV[1] : PLAIN_WALL_UV[1]);
       for (let i = 0; i < idx.length; i += 3) {
-        if (ny > 0) roof.face(b0 + idx[i]!, b0 + idx[i + 1]!, b0 + idx[i + 2]!);
-        else roof.face(b0 + idx[i]!, b0 + idx[i + 2]!, b0 + idx[i + 1]!);
+        if (ny > 0) buf.face(b0 + idx[i]!, b0 + idx[i + 1]!, b0 + idx[i + 2]!);
+        else buf.face(b0 + idx[i]!, b0 + idx[i + 2]!, b0 + idx[i + 1]!);
       }
     };
-    flatFace(capRings, capIdx, top, 1);
-    if (bottom > g) flatFace(p.rings, ringIdx, bottom, -1);
+    wall.color = p.capTint;
+    flatFace(capRings, capIdx, top, 1, slope ? roof : wall);
+    if (bottom > g) flatFace(p.rings, ringIdx, bottom, -1, wall);
     if (p.plant) roofBlock(p.rings.flat(), ringIdx, top, B.macao.plantBox as [number, number, number, number], 0.75);
     else if (p.roofBox) roofBlock(p.rings.flat(), ringIdx, top, B.macao.roofBox.size as [number, number, number, number], 0.9, p.tank);
     // collider cap
@@ -438,7 +447,6 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     }
     const lift = (ROOF_PBR ? B.macao.roofLift : 1) * (0.85 + 0.2 * hash01(ax, az, 24));
     const [u, v] = PLAIN_WALL_UV;
-    const uvm = (q: V3, m: number): [number, number] => (ROOF_PBR ? [q[0] + m, q[2]] : [PLAIN_ROOF_UV[0], PLAIN_ROOF_UV[1]]);
     const sideTint = SIDE_TINT;
     for (let k = 0; k < count; k++) {
       const hk = heights[k]!;
@@ -455,16 +463,19 @@ export const buildBuildings: Builder = (chunk, ctx) => {
       if (P.slabCols.includes(col) && hk - y0 > B.levelHeight * 1.5 && d >= 1) { // projecting balcony slab under the painted railing
         const ys = y0 + P.slabUp;
         const [sd, so] = [P.slabDepth, 0.08 * w];
-        roof.color = SIDE_TINT;
+        wall.color = SIDE_TINT;
         const q0 = at([A[0] + tx * so, 0, A[2] + tz * so], ys);
         const q1 = at([Bp[0] - tx * so, 0, Bp[2] - tz * so], ys);
         const q2 = at(q1, ys, -sd);
         const q3 = at(q0, ys, -sd);
-        facing(roof, q0, q1, q2, q3, [0, 1, 0], ...uvm(q0, 0), ...uvm(q2, 0));
-        facing(roof, q3, q2, [q2[0], ys - P.slabThick, q2[2]], [q3[0], ys - P.slabThick, q3[2]], [-nx, 0, -nz], u, v, u, v);
-        facing(roof, q0, q1, q2, q3, [0, -1, 0], ...uvm(q0, 0), ...uvm(q2, 0));
+        facing(wall, q0, q1, q2, q3, [0, 1, 0], u, v, u, v);
+        facing(wall, q3, q2, [q2[0], ys - P.slabThick, q2[2]], [q3[0], ys - P.slabThick, q3[2]], [-nx, 0, -nz], u, v, u, v);
+        facing(wall, q0, q1, q2, q3, [0, -1, 0], u, v, u, v);
       }
-      if (hk <= top) continue;
+      if (hk <= top) {
+        parapet(A, Bp, top, nx, nz);
+        continue;
+      }
       // side walls (bare plaster) where the neighbour plot is lower; the ends of the edge face the block's own roof
       face.color = [sideTint[0] * (0.9 + 0.2 * rnd(28)), sideTint[1] * (0.9 + 0.2 * rnd(28)), sideTint[2] * (0.9 + 0.2 * rnd(28))];
       const hPrev = k ? heights[k - 1]! : top;
@@ -479,8 +490,8 @@ export const buildBuildings: Builder = (chunk, ctx) => {
       };
       if (hk > hPrev) side(A, hPrev, [-tx, 0, -tz], k === 0 && streetPrev);
       if (hk > hNext) side(Bp, hNext, [tx, 0, tz], k === count - 1 && streetNext);
-      face.color = [sideTint[0] * 0.7, sideTint[1] * 0.7, sideTint[2] * 0.7];
-      facing(face, at(Bp, top, d), at(A, top, d), at(A, hk, d), at(Bp, hk, d), [nx, 0, nz], u, v, u, v); // back (bare, darker)
+      face.color = sideTint;
+      facing(face, at(Bp, top, d), at(A, top, d), at(A, hk, d), at(Bp, hk, d), [nx, 0, nz], col % 6, floorsV(top), (col % 6) + bays, floorsV(hk)); // back: plaster with windows
       const kind = rnd(29);
       if (kind < P.gableShare) {
         roof.color = rnd(30) < P.tileShare ? linear(B.macao.tileRoof, lift) : linear(B.macao.ton.colours[Math.floor(rnd(31) * B.macao.ton.colours.length)]!, lift);
@@ -493,32 +504,40 @@ export const buildBuildings: Builder = (chunk, ctx) => {
         facing(roof, at(Bp, hk), rb, at(Bp, hk, d), at(Bp, hk, d), [tx, 0, tz], u, v, u, v);
         continue;
       }
-      roof.color = p.roofTint;
-      const c0 = at(A, hk);
-      const c1 = at(Bp, hk);
-      const c2 = at(Bp, hk, d);
-      const c3 = at(A, hk, d);
-      const rc = roof.vertexCount;
-      for (const q of [c0, c1, c2, c3]) roof.vertex(q[0], hk, q[2], 0, 1, 0, ...uvm(q, 0));
-      roof.face(rc, rc + 2, rc + 1); // cap, up (A→B→inner is clockwise seen from above)
-      roof.face(rc, rc + 3, rc + 2);
+      wall.color = p.capTint;
+      const rc = wall.vertexCount;
+      for (const q of [at(A, hk), at(Bp, hk), at(Bp, hk, d), at(A, hk, d)]) wall.vertex(q[0], hk, q[2], 0, 1, 0, u, v);
+      wall.face(rc, rc + 2, rc + 1); // flat cap (concrete), up (A→B→inner is clockwise seen from above)
+      wall.face(rc, rc + 3, rc + 2);
+      parapet(at(A, 0), at(Bp, 0), hk, nx, nz);
       if (kind < P.gableShare + P.tumShare) {
         const [side, up] = P.tum;
         const sz = Math.min(side, 0.7 * w, 0.5 * d);
         const cx = px + tx * w * 0.5 + nx * (d - sz * 0.5 - 0.3);
         const cz = pz + tz * w * 0.5 + nz * (d - sz * 0.5 - 0.3);
-        roof.color = [p.roofTint[0] * 0.9, p.roofTint[1] * 0.9, p.roofTint[2] * 0.9];
+        wall.color = [p.capTint[0] * 0.9, p.capTint[1] * 0.9, p.capTint[2] * 0.9];
         const corner = (s: number, t: number, y: number): V3 => [cx + tx * s * sz * 0.5 + nx * t * sz * 0.5, y, cz + tz * s * sz * 0.5 + nz * t * sz * 0.5];
         const ring: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
         for (let e = 0; e < 4; e++) {
           const [f0, f1] = [ring[e]!, ring[(e + 1) % 4]!];
           const out: V3 = [(f0[0] + f1[0]) * 0.5 * tx + (f0[1] + f1[1]) * 0.5 * nx, 0, (f0[0] + f1[0]) * 0.5 * tz + (f0[1] + f1[1]) * 0.5 * nz];
-          facing(roof, corner(f0[0], f0[1], hk), corner(f1[0], f1[1], hk), corner(f1[0], f1[1], hk + up), corner(f0[0], f0[1], hk + up), out, 0, 0, sz, up);
+          facing(wall, corner(f0[0], f0[1], hk), corner(f1[0], f1[1], hk), corner(f1[0], f1[1], hk + up), corner(f0[0], f0[1], hk + up), out, u, v, u, v);
         }
-        facing(roof, corner(-1, -1, hk + up), corner(1, -1, hk + up), corner(1, 1, hk + up), corner(-1, 1, hk + up), [0, 1, 0], ...uvm(corner(-1, -1, 0), 0), ...uvm(corner(1, 1, 0), 0));
+        facing(wall, corner(-1, -1, hk + up), corner(1, -1, hk + up), corner(1, 1, hk + up), corner(-1, 1, hk + up), [0, 1, 0], u, v, u, v);
         if (rnd(32) < P.tankShare) waterTank(cx, cz, hk + up, Math.min(B.macao.roofBox.tankRadius, sz * 0.4));
       }
     }
+  }
+
+  /** Concrete lip along a flat roof edge A→B at y (inward normal n): outer + inner face, wall bucket in bare plaster. */
+  function parapet(A: V3, Bp: V3, y: number, nx: number, nz: number) {
+    const h = B.macao.plots.parapet;
+    const saved = wall.color;
+    wall.color = SIDE_TINT;
+    const [u, v] = PLAIN_WALL_UV;
+    wall.quad([A[0], y, A[2]], [Bp[0], y, Bp[2]], [Bp[0], y + h, Bp[2]], [A[0], y + h, A[2]], u, v, u, v);
+    wall.quad([Bp[0] + nx * 0.2, y, Bp[2] + nz * 0.2], [A[0] + nx * 0.2, y, A[2] + nz * 0.2], [A[0] + nx * 0.2, y + h, A[2] + nz * 0.2], [Bp[0] + nx * 0.2, y + h, Bp[2] + nz * 0.2], u, v, u, v);
+    wall.color = saved;
   }
 
   /** Hex-prism water tank (bồn nước) standing at (cx, cz) on y0. */
@@ -538,7 +557,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     roof.color = saved;
   }
 
-  /** Box (roof bucket, tint × dim) centred on the largest roof triangle's centroid; skipped when it would not fit that triangle.
+  /** Box (wall bucket, capTint × dim) centred on the largest roof triangle's centroid; skipped when it would not fit that triangle.
    *  size = [min side, height, side as a share of √(triangle area), max side]; `tank`: a hex-prism water tank on its top. */
   function roofBlock(pts: number[], idx: number[], top: number, size: readonly [number, number, number, number], dim: number, tank = false) {
     let best = 0;
@@ -554,18 +573,19 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     const [a, b, c] = [idx[at]! * 2, idx[at + 1]! * 2, idx[at + 2]! * 2];
     const cx = (pts[a]! + pts[b]! + pts[c]!) / 3;
     const cz = (pts[a + 1]! + pts[b + 1]! + pts[c + 1]!) / 3;
-    const saved = roof.color;
-    roof.color = [saved[0] * dim, saved[1] * dim, saved[2] * dim];
+    const saved = wall.color;
+    wall.color = [saved[0] * dim, saved[1] * dim, saved[2] * dim];
     const h = s / 2;
+    const [u, v] = PLAIN_WALL_UV;
     const P = (sx: number, sz: number, y: number): V3 => [cx + sx * h, y, cz + sz * h];
     const ring: [number, number][] = [[-1, 1], [1, 1], [1, -1], [-1, -1]]; // counter-clockwise seen from above
     for (let k = 0; k < 4; k++) {
       const [e, f] = [ring[k]!, ring[(k + 1) % 4]!];
-      roof.quad(P(e[0], e[1], top), P(f[0], f[1], top), P(f[0], f[1], top + up), P(e[0], e[1], top + up), 0, 0, s, up);
+      wall.quad(P(e[0], e[1], top), P(f[0], f[1], top), P(f[0], f[1], top + up), P(e[0], e[1], top + up), u, v, u, v);
     }
-    roof.quad(P(-1, 1, top + up), P(1, 1, top + up), P(1, -1, top + up), P(-1, -1, top + up), 0, 0, s, s);
+    wall.quad(P(-1, 1, top + up), P(1, 1, top + up), P(1, -1, top + up), P(-1, -1, top + up), u, v, u, v);
     if (tank) waterTank(cx, cz, top + up, Math.min(B.macao.roofBox.tankRadius, h * 0.8));
-    roof.color = saved;
+    wall.color = saved;
   }
 
   function chimneys(r: XZ, q: XZ, top: number) {

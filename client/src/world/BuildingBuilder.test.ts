@@ -32,9 +32,10 @@ describe('BuildingBuilder', () => {
       }
       // style by height: a 60 m block is a tower (curtain or tenement grid), a 6 m block colonial (wall), each one facade bucket
       const sq = (x: number, h: number) => ({ outer: [x, 20, x + 20, 20, x + 20, 0, x, 0], kind: 'yes', height: h });
+      // (the wall bucket also carries every flat roof cap, so a tower has it next to its own facade bucket)
       const faceOf = (h: number) => build({ ...fixture, buildings: [sq(0, h)] }).meshes.map((b) => b.material).filter((m) => m !== 'roof' && m !== 'shopfront');
       expect(faceOf(6)).toEqual(['wall']);
-      expect(['tenement', 'curtain']).toContain(faceOf(60)[0]);
+      expect(['tenement', 'curtain']).toContain(faceOf(60).find((m) => m !== 'wall'));
       // lit: constant per building, ≈ litShare of many buildings lit
       const many = build({ ...fixture, buildings: Array.from({ length: 400 }, (_, i) => sq(i * 30, 6)) });
       const lit = bucket(many, 'wall').lit!;

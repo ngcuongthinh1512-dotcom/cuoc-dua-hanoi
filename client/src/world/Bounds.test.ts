@@ -8,12 +8,12 @@ beforeAll(() => RAPIER.init());
 
 describe('edgeDistance', () => {
   it('is the distance to the nearest edge, negative outside', () => {
-    const w = latLonToWorld(50.845, B.west);
+    const w = latLonToWorld(21.015, B.west);
     expect(edgeDistance(w.x + 25, w.z)).toBeCloseTo(25, 6);
     expect(edgeDistance(w.x - 10, w.z)).toBeCloseTo(-10, 6);
-    const n = latLonToWorld(B.north, 4.36);
+    const n = latLonToWorld(B.north, 105.84);
     expect(edgeDistance(n.x, n.z + 7)).toBeCloseTo(7, 6);
-    expect(edgeDistance(0, 0)).toBeGreaterThan(1000); // the origin (Grand-Place) is well inside
+    expect(edgeDistance(0, 0)).toBeGreaterThan(1000); // the origin (Đông Kinh Nghĩa Thục square) is well inside
   });
 });
 
