@@ -266,18 +266,30 @@ export const buildings = {
   macao: {
     towerHeight: [40, 60], // m (Hà Nội: tube houses and KTT blocks stay plaster / concrete, only real towers get a grid or curtain wall)
     tenementMin: 15, // m (≈ 5 storeys)
-    tenementShare: 0.55, // Hà Nội: khu tập thể / 5–9 storey tube houses get the grey tenement look
+    tenementShare: 0.55, // Hà Nội: khu tập thể (tagged apartments / dormitory …) get the grey tenement look
+    tenementYesShare: 0.2, // … untagged 'yes' footprints (the OSM default 20 m, mostly nhà ống rows) less often
     tenementKinds: ['yes', 'apartments', 'residential', 'dormitory', 'mixed'] as string[],
     curtainShare: 0.4, // towers with a glass curtain wall; the rest get the tenement texture as a concrete grid
     blankKinds: ['roof', 'garage', 'garages', 'shed', 'storage_tank', 'warehouse', 'hut', 'carport', 'service'] as string[], // no windows
     shopMinHeight: 7, // m: buildings at least this tall get the ground-floor shop band (shopfrontHeight) on street faces
-    hip: { chance: 0.3, maxHeight: 40, maxArea: 3000, rise: 4.2, inset: 3.2 }, // colonial low hip roof (m, m², m above / in from the walls)
-    colonial: ['#e8c766', '#f0d68a', '#e3b94f', '#efe6d2', '#f4efe4', '#e9d9c0', '#d9d2c4', '#f0c9b8', '#cfe0e3', '#c9d8b8', '#e8d3a0', '#ddd8cf'], // Hà Nội: French-yellow ochre, cream / white plaster, pale pink, blue, green tube-house fronts
-    tenement: ['#b9a79a', '#a99486', '#cfc5b0', '#c0a898', '#b2b0a8', '#9fa3a0', '#d6cfc0', '#bfb39e'],
+    // tiled hip / pitched roof (m, m², m above / in from the walls): chance outside the French quarter (Old Quarter tube houses
+    // with a tile cap); the rise shrinks with the inset on plots narrower than 2 × inset (a 4 m tube house gets a low ridge)
+    hip: { chance: 0.12, maxHeight: 40, maxArea: 3000, rise: 4.2, inset: 3.2 },
+    // French quarter (south of Hoàn Kiếm lake to Hai Bà Trưng, world m [x0, z0, x1, z1]): more hip roofs, ochre plaster
+    // ponytail: one axis-aligned box, upgrade: the district polygons of geo/districts.ts (the builder runs in a worker without them)
+    // (ochreShare of buildings take their tint from the first ochreCount `colonial` colours), fewer rooftop boxes
+    french: { box: [-750, 120, 1050, 1800], hipChance: 0.55, ochreShare: 0.7, ochreCount: 4, roofBoxChance: 0.15, shopShare: 0.5, tenementShare: 0.1 },
+    // nhà ống rooftop box (stair head / terrace room, roof bucket): chance per flat-roofed low-rise, size as plantBox
+    // ([min side, height, side as a share of √(largest roof triangle area), max side]); a water tank (bồn nước, hex prism)
+    // stands on tankShare of the boxes
+    roofBox: { chance: 0.55, maxHeight: 30, size: [1.8, 2.4, 0.3, 3.5], tankShare: 0.6, tankRadius: 0.55, tankHeight: 1, tank: '#d4d8dc' },
+    colonial: ['#e8c766', '#f0d68a', '#e3b94f', '#e9c97a', '#efe6d2', '#f4efe4', '#e9d9c0', '#d9d2c4', '#f0c9b8', '#cfe0e3', '#c9d8b8', '#e8d3a0', '#ddd8cf', '#f2d9a8', '#dfe8d8', '#e6cfd6'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / white plaster, pale pink, blue, green tube-house fronts
+    tenement: ['#cfc8bb', '#c4bcae', '#d6d0c2', '#bdb6aa', '#c9c5bc', '#b8b5ad', '#dcd6c8', '#c7bba8'], // KTT: grey-cream stucco
     concrete: ['#d8ccb2', '#c9c3b8', '#e1d9c9', '#bdb5a5'], // concrete-grid towers
     glass: ['#a9c4dc', '#9fcfcc', '#bcc6ce', '#a8d0dc', '#aab8d0'], // curtain-wall tint
     tileRoof: '#9a4e34', // hip roofs (terracotta tiles, Old Quarter / French villas)
-    flatRoof: '#b2b8be', // flat roofs (concrete)
+    flatRoofs: ['#b2b8be', '#a9afb4', '#bfc3c5', '#9ea5aa', '#c6c9c6', '#b7bcc0'], // flat roofs: concrete greys
+    ton: { share: 0.3, maxArea: 260, colours: ['#5f8fba', '#9c5a48', '#4f7fae'] }, // corrugated-metal (tôn) cap on a share of small flat-roofed plots: blue / rust
     roofLift: 3.2, // × roof tint over the dark roof_slates_03 diffuse (graphics8c.roofs); 1 with the canvas roof
     plantBox: [3, 2.2, 0.4, 7], // tower roof plant box: min side, height (m), side as a share of √(largest roof triangle area), max side
     litShare: 0.35, // share of buildings whose windows are lit in the evening (MeshBucket.lit)

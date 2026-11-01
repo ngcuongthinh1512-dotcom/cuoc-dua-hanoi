@@ -67,6 +67,15 @@ Object.assign(PRESETS, {
   'hn-vanmieu': cam(21.0293, 105.8355, 300, 0, -90),
   'hn-thongnhat': cam(21.0145, 105.8445, 600, 0, -90),
   'hn-street': cam(21.0252, 105.8555, 1.7, yawTo(21.0252, 105.8555, 21.0242, 105.8576), 2),
+  // Leg 3 building styles (BuildingBuilder): street level on Hàng Gai (Old Quarter), Lý Thái Tổ (French quarter), Xã Đàn (Đống Đa),
+  // Bạch Mai / Lò Đúc (Hai Bà Trưng, KTT), and obliques over the Old Quarter / Bạch Mai (road-graph midpoints, 1.7 m eye)
+  'hn-hanggai': '/?cam=-95.9,1.7,-14.7,-94,3',
+  'hn-lythaito': '/?cam=295.4,1.7,215.7,-161,3',
+  'hn-xadan': '/?cam=-2031.1,1.7,1795.6,45,3',
+  'hn-bachmai': '/?cam=-186.8,1.7,3665.8,-8,3',
+  'hn-loduc': '/?cam=805.9,1.7,2374.4,-144,3',
+  'hn-oldq-obl': cam(21.0345, 105.8505, 150, 0, -40),
+  'hn-ktt-obl': cam(21.0040, 105.8500, 200, 0, -45),
 });
 // Phase 3 (docs/plans/phase3.md "Screenshot presets"): player mode. ?player[=x,z,yawDeg] (feet on the ground), camMode,
 // orbit (° of camera yaw from behind the body), action, autoMove, wait (s simulated before __READY__). Owner in brackets.
