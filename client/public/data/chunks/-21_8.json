@@ -1,1 +1,1 @@
-{"v":2,"key":"-21_8","buildings":[],"roads":[],"bridges":[],"areas":[],"points":[],"stairs":[],"junctions":[]}
+{"v":2,"key":"-21_8","buildings":[],"roads":[],"bridges":[{"pts":[-5057.8,2000,-5076.8,2017.8],"kind":"primary","layer":2,"lanes":4,"name":"Cầu vượt Nguyễn Chí Thanh - Trần Duy Hưng","chain":{"ends":[-4742.3,1682,-4753.2,1694.6,-5008,1953.5,-5076.8,2017.8],"length":474.1,"s0":448.1}}],"areas":[],"points":[],"stairs":[],"junctions":[]}

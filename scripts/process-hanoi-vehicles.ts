@@ -249,34 +249,103 @@ const QINGQI_CUT = 250; // raw z: the motorbike is ahead of it
 let qingqi: Tri[] | undefined;
 const qingqiTris = async () => (qingqi ??= await readTris('sketchfab/qingqi-rickshaw_junaid.glb'));
 
-/** A Honda-Wave-like underbone motorbike from boxes (≈ 170 triangles; wheels = axles, drawn rolling by the renderer):
- *  nose +Z, pivot mid-wheelbase, wheels on y 0; paint = leg shield, side covers, mudguards. ponytail: jeremy's Poly Pizza
- *  "Scooter" turned out to be a kick scooter and the QINGQI's motorbike half is black-textured spoke soup once cut, so the
- *  bike is drawn by hand; swap in a real Wave model here if one is approved. */
+/** Flat-shaded n-gon tube from a to b (radius r0 → r1, section scaled sx along the local x / sy along the local y) with end
+ *  caps; thin bars, pipes, the tank and the fairing of the motorbike below. */
+function tube(a: V3, b: V3, r0: number, r1: number, n: number, colour: V3, paint = false, sx = 1, sy = 1): Tri[] {
+  const d: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const l = Math.hypot(...d) || 1;
+  const dn = d.map((v) => v / l) as V3;
+  const up: V3 = Math.abs(dn[1]) > 0.9 ? [0, 0, 1] : [0, 1, 0];
+  const u0: V3 = [dn[1] * up[2] - dn[2] * up[1], dn[2] * up[0] - dn[0] * up[2], dn[0] * up[1] - dn[1] * up[0]];
+  const ul = Math.hypot(...u0) || 1;
+  const u = u0.map((v) => v / ul) as V3;
+  const v: V3 = [dn[1] * u[2] - dn[2] * u[1], dn[2] * u[0] - dn[0] * u[2], dn[0] * u[1] - dn[1] * u[0]];
+  const ring = (c: V3, r: number): V3[] => Array.from({ length: n }, (_, k) => {
+    const t = (2 * Math.PI * k) / n, cu = Math.cos(t) * r * sx, cv = Math.sin(t) * r * sy;
+    return [c[0] + u[0] * cu + v[0] * cv, c[1] + u[1] * cu + v[1] * cv, c[2] + u[2] * cu + v[2] * cv];
+  });
+  const [ra, rb] = [ring(a, r0), ring(b, r1)];
+  const out: Tri[] = [];
+  const tri = (p: V3, q: V3, r: V3) => {
+    const e1: V3 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], e2: V3 = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
+    const nn: V3 = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    const nl = Math.hypot(...nn) || 1;
+    const m = nn.map((x) => x / nl) as V3;
+    out.push({ p: [...p, ...q, ...r], n: [...m, ...m, ...m], c: colour, mat: 'tube', node: 'tube', paint });
+  };
+  for (let k = 0; k < n; k++) {
+    const j = (k + 1) % n;
+    tri(ra[k]!, rb[k]!, rb[j]!);
+    tri(ra[k]!, rb[j]!, ra[j]!);
+    if (k >= 1 && k + 1 < n) (tri(ra[0]!, ra[j]!, ra[k]!), tri(rb[0]!, rb[k]!, rb[j]!)); // caps
+  }
+  return out;
+}
+/** Mudguard: a strip of `seg` quads (two-sided, `th` thick) round a wheel centre c from angle a0 to a1 (0 = ahead, 90° = up). */
+function guard(c: V3, r: number, width: number, a0: number, a1: number, seg: number, colour: V3, paint = true, th = 0.015): Tri[] {
+  const out: Tri[] = [];
+  const at = (a: number, rr: number, x: number): V3 => [c[0] + x, c[1] + rr * Math.sin(a), c[2] + rr * Math.cos(a)];
+  const push = (p: V3, q: V3, r2: V3, nrm: V3) => out.push({ p: [...p, ...q, ...r2], n: [...nrm, ...nrm, ...nrm], c: colour, mat: 'guard', node: 'guard', paint });
+  for (let k = 0; k < seg; k++) {
+    const [b0, b1] = [a0 + ((a1 - a0) * k) / seg, a0 + ((a1 - a0) * (k + 1)) / seg];
+    const am = (b0 + b1) / 2;
+    const nOut: V3 = [0, Math.sin(am), Math.cos(am)], nIn: V3 = [0, -Math.sin(am), -Math.cos(am)];
+    const [w0, w1] = [-width / 2, width / 2];
+    push(at(b0, r, w0), at(b0, r, w1), at(b1, r, w1), nOut), push(at(b0, r, w0), at(b1, r, w1), at(b1, r, w0), nOut); // outside
+    push(at(b0, r - th, w1), at(b0, r - th, w0), at(b1, r - th, w0), nIn), push(at(b0, r - th, w1), at(b1, r - th, w0), at(b1, r - th, w1), nIn); // inside
+    for (const [x, nx] of [[w0, -1], [w1, 1]] as const) { // side lips
+      const nrm: V3 = [nx, 0, 0];
+      const [p0, p1, p2, p3] = [at(b0, r, x), at(b1, r, x), at(b1, r - th, x), at(b0, r - th, x)];
+      if (nx > 0) (push(p0, p1, p2, nrm), push(p0, p2, p3, nrm)); else (push(p0, p2, p1, nrm), push(p0, p3, p2, nrm));
+    }
+  }
+  return out;
+}
+
+/** A Honda Wave / Dream underbone motorbike (≈ 560 triangles; wheels = axles, drawn rolling by the renderer): nose +Z, pivot
+ *  mid-wheelbase, wheels on y 0; paint = leg shield, side covers, mudguards, headlamp cowl. Tubes (8-gon) for the fork, frame
+ *  spine, tank / side covers, seat, exhaust, handlebar and rack; curved mudguards over both wheels; a flat footboard between
+ *  them. ponytail: jeremy's Poly Pizza "Scooter" turned out to be a kick scooter and the QINGQI's motorbike half is
+ *  black-textured spoke soup once cut, so the bike is drawn by hand; swap in a real Wave model here if one is approved. */
 const WAVE_R = 0.3, WAVE_BASE = 1.23; // wheel radius, wheelbase (m)
 function waveBike(): { tris: Tri[]; axles: V3[]; seat: { y: number; z: number } } {
-  const dark = hex('#1f2023'), chrome = hex('#9a9ea3'), engine = hex('#3a3d42'), paint: V3 = [1, 1, 1];
+  const dark = hex('#1f2023'), chrome = hex('#9a9ea3'), engine = hex('#3a3d42'), rubber = hex('#2b2b2e'), paint: V3 = [1, 1, 1];
   const zF = WAVE_BASE / 2, zR = -WAVE_BASE / 2;
+  const head: V3 = [0, 0.92, zF - 0.24]; // steering head
   const tilt = (ts: Tri[], a: number, y0: number, z0: number) => map(ts, rotX(deg(a), y0, z0));
   const tris: Tri[] = [
-    ...tilt([-0.06, 0.06].flatMap((x) => box([x, 0.56, zF + 0.02], [0.03, 0.56, 0.03], chrome)), -22, WAVE_R, zF), // fork legs
-    ...tilt(box([0, 0.88, zF - 0.22], [0.1, 0.16, 0.1], dark), -22, 0.8, zF - 0.2), // steering head
-    ...box([0, 0.54, zF + 0.02], [0.14, 0.05, 0.42], paint, true), // front mudguard
-    ...tilt(box([0, 0.6, 0.3], [0.42, 0.46, 0.1], paint, true), -12, 0.37, 0.3), // leg shield
-    ...box([0, 0.37, 0.02], [0.2, 0.12, 0.6], dark), // frame / floor
-    ...box([0, 0.34, -0.08], [0.3, 0.24, 0.3], engine), // engine
-    ...box([0, 0.62, -0.27], [0.3, 0.22, 0.56], paint, true), // side covers / tank
-    ...box([0, 0.78, -0.2], [0.3, 0.09, 0.64], dark), // seat
-    ...box([0, 0.6, -0.6], [0.16, 0.05, 0.42], paint, true), // rear mudguard
-    ...box([0, 0.6, -0.83], [0.1, 0.06, 0.04], hex('#c0392b')), // tail light
-    ...box([0, 0.84, -0.62], [0.26, 0.02, 0.24], dark), // rack
-    ...box([0.19, 0.3, -0.3], [0.07, 0.07, 0.75], chrome), // exhaust
-    ...box([0, 0.98, 0.3], [0.66, 0.03, 0.03], dark), // handlebar
-    ...box([0, 0.86, 0.4], [0.18, 0.14, 0.08], hex('#f4efd8')), // headlight
-    ...[-0.3, 0.3].flatMap((x) => [...box([x, 1.1, 0.28], [0.08, 0.06, 0.02], chrome), ...box([x, 1.04, 0.29], [0.015, 0.1, 0.015], dark)]), // mirrors
-    ...box([0, 0.3, 0.04], [0.5, 0.02, 0.05], dark), // foot pegs
+    ...[-0.07, 0.07].flatMap((x) => [
+      ...tube([x, 0.88, zF - 0.22], [x, WAVE_R, zF], 0.016, 0.016, 6, chrome), // fork stanchions
+      ...tube([x, 0.58, zF - 0.1], [x, WAVE_R, zF], 0.026, 0.022, 6, dark), // sliders
+    ]),
+    ...tube([head[0], head[1] - 0.1, head[2] + 0.02], [head[0], head[1] + 0.08, head[2] - 0.05], 0.045, 0.045, 6, dark), // steering head tube
+    ...guard([0, WAVE_R, zF], 0.345, 0.11, deg(40), deg(118), 4, paint), // front mudguard (npc.vehicles.wave.dims: 1.7 m long)
+    ...tube([0, 0.86, zF - 0.14], [0, 0.9, zF + 0.1], 0.12, 0.09, 8, paint, true, 1, 0.75), // headlamp cowl (flattened 8-gon)
+    ...tube([0, 0.9, zF + 0.1], [0, 0.9, zF + 0.125], 0.085, 0.07, 6, hex('#f4efd8'), false, 1, 0.75), // lens
+    ...box([0, 0.36, 0.02], [0.3, 0.035, 0.62], dark), // footboard
+    ...tube([0, 0.82, zF - 0.28], [0, 0.42, -0.02], 0.05, 0.04, 8, paint, true, 2.6, 1), // leg shield: wide flat spine down from the head
+    ...tube([0, 0.62, zF - 0.33], [0, 0.42, 0.14], 0.03, 0.03, 6, paint, true, 7, 0.6), // leg shield skirt (wide thin blade)
+    ...tube([0, 0.4, -0.02], [0, 0.56, -0.58], 0.06, 0.05, 6, engine), // frame spine
+    ...box([0, 0.33, -0.08], [0.28, 0.2, 0.26], engine), // crankcase
+    ...tube([0, 0.42, 0.02], [0, 0.5, 0.2], 0.055, 0.05, 6, engine), // cylinder leaning forward
+    ...tube([0, 0.6, 0.02], [0, 0.66, -0.56], 0.11, 0.1, 8, paint, true, 1.35, 0.85), // tank / side covers (wide 8-gon)
+    ...tube([0, 0.79, -0.04], [0, 0.86, -0.7], 0.05, 0.05, 8, dark, false, 2.8, 0.9), // seat: long, flat, rising to the rear
+    ...guard([0, WAVE_R, zR], 0.35, 0.12, deg(45), deg(130), 5, paint), // rear mudguard
+    ...[-0.1, 0.1].flatMap((x) => tilt(box([x, 0.36, -0.37], [0.03, 0.035, 0.52], dark), -13, 0.36, -0.37)), // swingarm
+    ...[-0.12, 0.12].flatMap((x) => tilt(box([x, 0.48, -0.55], [0.025, 0.3, 0.025], chrome), 20, 0.48, -0.55)), // rear shocks
+    ...box([0, 0.64, -0.82], [0.1, 0.06, 0.03], hex('#c0392b')), // tail light
+    ...box([0, 0.52, -0.825], [0.16, 0.11, 0.01], hex('#e9e6dc')), // number plate
+    ...[-0.14, 0.14].flatMap((x) => [...box([x, 0.9, -0.66], [0.024, 0.024, 0.34], chrome), ...box([x, 0.78, -0.66], [0.024, 0.24, 0.024], chrome)]), // rack rails + posts
+    ...[-0.5, -0.82].flatMap((z) => box([0, 0.9, z], [0.28, 0.024, 0.024], chrome)), // rack cross bars
+    ...tube([0.17, 0.33, 0.14], [0.2, 0.3, -0.3], 0.03, 0.03, 6, chrome), // exhaust pipe
+    ...tube([0.2, 0.3, -0.3], [0.22, 0.4, -0.78], 0.04, 0.05, 8, chrome), // muffler
+    ...tube([-0.33, 1.0, 0.33], [0.33, 1.0, 0.33], 0.014, 0.014, 6, chrome), // handlebar
+    ...[-0.3, 0.3].flatMap((x) => box([x, 1.0, 0.33], [0.12, 0.04, 0.04], rubber)), // grips
+    ...[-0.28, 0.28].flatMap((x) => [...box([x, 1.12, 0.3], [0.09, 0.07, 0.015], chrome), ...box([x, 1.04, 0.31], [0.015, 0.09, 0.015], dark)]), // mirrors
+    ...box([0, 0.31, 0.06], [0.52, 0.02, 0.05], dark), // foot pegs
+    ...[-0.22, 0.22].flatMap((x) => box([x, 0.34, -0.62], [0.1, 0.02, 0.04], dark)), // pillion pegs
   ];
-  return { tris, axles: [[0, WAVE_R, zF], [0, WAVE_R, zR]], seat: { y: 0.825, z: -0.14 } };
+  return { tris, axles: [[0, WAVE_R, zF], [0, WAVE_R, zR]], seat: { y: 0.84, z: -0.2 } };
 }
 
 async function buildWave(outfit: Outfit, pillion?: Outfit): Promise<Built> {

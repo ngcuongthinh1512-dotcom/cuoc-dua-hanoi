@@ -5,7 +5,7 @@
 // never solid (SPEC §5.9): colliders come from the body prisms only. Heights not in OSM are estimates, marked "ước lượng".
 // Sink.buf('masonry') is ONE shared buffer whose .color applies to what is drawn next: always paint through `M(hex)` right
 // before drawing, never keep coloured aliases.
-import { landmarks as L } from '../../config.ts';
+import { buildings as B, landmarks as L } from '../../config.ts';
 import { type BuildingRec, type LandmarkId, type PartRec, ringArea } from '../../geo/chunkData.ts';
 import type { V3 } from '../geom.ts';
 import { cap, fbox, type Fr, P, rgb, ring, spire, stack, UP } from './b.ts';
@@ -51,6 +51,15 @@ export function edges(outer: number[], minLen: number, keep: (nx: number, nz: nu
   return out;
 }
 const toward = (nx: number, nz: number, min = 0.7) => (x: number, z: number) => x * nx + z * nz > min;
+/** Even-odd point in ring test. */
+function inRing(x: number, z: number, r: number[]): boolean {
+  let inside = false;
+  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+    const [xi, zi, xj, zj] = [r[i]!, r[i + 1]!, r[j]!, r[j + 1]!];
+    if (zi > z !== zj > z && x < xi + ((z - zi) / (zj - zi)) * (xj - xi)) inside = !inside;
+  }
+  return inside;
+}
 
 /** Dark opening on plane w of frame f (spanning a0..a1, y0..y1), facing +w (dir −1: −w). */
 function opening(buf: Buf, f: Fr, a0: number, a1: number, w: number, y0: number, y1: number, head: Head = 'flat', dir = 1) {
@@ -141,8 +150,13 @@ const ubnd: DetailFn = (rec, parts, ctx, h) => {
   const g = ctx.ground;
   const tower = largest(parts.filter((p) => p.levels === 6));
   bodyAll(rec, parts, ctx, h, s, { colour: CREAM }, (p) => (p === tower ? { colour: CREAM, height: 6 * 3.2 + 4, roofShape: 'hipped', roofHeight: 4, roofColour: TILE } : { colour: CREAM }));
+  // The parts cover the outline (no outline body): on each lake-side edge only the rows under the top of the part behind it
+  // (the 2-storey wings at the north-west corner have 2 rows, the 4-storey centre 4).
+  const rows: [number, number, Head][] = [[g + 1, g + 3.4, 'round'], [g + 4.4, g + 6.6, 'flat'], [g + 7.6, g + 9.8, 'flat'], [g + 10.8, g + 12.8, 'flat']];
   for (const e of edges(rec.outer, 7, toward(-1, 0, 0.6))) {
-    bays(M(DARK), e, [[g + 1, g + 3.4, 'round'], [g + 4.4, g + 6.6, 'flat'], [g + 7.6, g + 9.8, 'flat'], [g + 10.8, g + 12.8, 'flat']], 3.6, 1.6, 1.5);
+    const behind = parts.find((p) => inRing(e.f.cx + e.f.uz * 0.5, e.f.cz - e.f.ux * 0.5, p.outer)); // 0.5 m inside the edge
+    const top = g + (behind ? (behind.height ?? (behind.levels ?? 0) * B.levelHeight) : 15);
+    bays(M(DARK), e, rows.filter(([, y1]) => y1 < top - 0.3), 3.6, 1.6, 1.5);
     band(M(WHITE), e, 0, 0.25, g + 3.8, g + 4.1);
   }
   if (tower) {

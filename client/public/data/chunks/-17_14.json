@@ -1,1 +1,1 @@
-{"v":2,"key":"-17_14","buildings":[],"roads":[],"bridges":[],"areas":[],"points":[],"stairs":[],"junctions":[]}
+{"v":2,"key":"-17_14","buildings":[],"roads":[],"bridges":[{"pts":[-4000,3717.4,-4045.6,3750],"kind":"subway","layer":2,"chain":{"ends":[-2597.1,343,-2596.2,354.4,-5005.2,4450.6,-5038.8,4475.4],"length":5369.1,"s0":4082.9}},{"pts":[-4000,3711.7,-4053.7,3750],"kind":"subway","layer":2,"chain":{"ends":[-2576.8,537.6,-2570.7,594.2,-4998.8,4441.6,-5041,4472.7],"length":5168.5,"s0":3878.7}}],"areas":[],"points":[],"stairs":[],"junctions":[]}

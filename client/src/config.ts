@@ -399,7 +399,11 @@ export const terrain = {
   quayGrade: 0.04, // beyond the band the raised floor falls off this steeply until it meets the (smeared) DEM
   padBlend: 25, // m outside a flattened plaza (geo/landmarks PADS) over which the ground eases back to the DEM
   stoneSlope: 1, // |gradient| above this is coloured stone (quay walls: the band drop is ~2)
-  colours: { pavement: '#968e80', park: '#b3a37e', grass: '#788748', stone: '#b3a78f' }, // park = gravel paths; Leg 3 look: olive grass, warm dust (was '#9a9892' / '#b9a987' / '#6f8f4e')
+  // Leg 3 Hà Nội: park / garden ground is lawn (paths are RoadBuilder footways); buildTerrain mixes grass → worn (dust / trodden
+  // patches, value noise) and darkens it under the chunk's trees (shade). Paris: park = gravel '#b3a37e'.
+  colours: { pavement: '#968e80', park: '#6e7b45', grass: '#788748', stone: '#b3a78f', worn: '#9a9064', shade: '#51603a', lakeBed: '#5e5f4a' },
+  lakeBank: 0.15, // m: ground this far under the flat street (a carved lake / pond bottom, not the river bed) is water bottom, its dry neighbours a grass bank
+  lawn: { patch: [11, 37], worn: 0.55, shadeRadius: 4.5, shade: 0.45 }, // noise lattice m (2 octaves), max worn share, m round a tree trunk, max shade share
 };
 
 export const water = {
@@ -408,7 +412,10 @@ export const water = {
   lakeRim: 0.05, // rim height = this quantile of the heights along a lake's outer ring (the DEM's rims dip in places)
   lakeDepth: 0.4, // m: every node inside a pond / basin sinks at least this far under its surface (no DEM island pokes through)
   swimMinArea: 600, // m²: a water polygon this big is a lake you can swim in (Hồ Gươm, Thiền Quang …): carved lakeSwimDepth deep, swim.enterDepth 1.2 + floatDepth 1.35 fit
-  lakeSwimDepth: 2.6, // m
+  lakeSwimDepth: 2.6, // m; the first grid cell inside the shore keeps lakeDepth (a shelf: the drop starts under water, not at the bank)
+  // Leg 3 Hà Nội lake banks (Terrain.lakeKerbMesh, drawn by Water.ts, no collider): a stone kerb on every swim lake's shoreline,
+  // `width` m across the polygon edge, top `lift` m over the surface, skirts `skirt` m down on both sides (hide the bank slope)
+  kerb: { width: 1.2, lift: 0.18, skirt: 0.8, colour: '#a39a86' },
   normalScroll: 0.02, // UV units per second
   colour: '#3d5a66',
   normalTile: 24, // m per normal-map repeat

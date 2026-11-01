@@ -538,7 +538,7 @@ describe.skipIf(!has)('real water (rivers)', () => {
     createTerrainCollider(world, grid);
     const c = new CharacterController(world, env);
     const feet = water.stairs!;
-    expect(feet.length / 2).toBe(48); // Leg 3 Hà Nội: 48 flights (Brussels: 4 on the canal banks)
+    expect(feet.length / 2).toBe(44); // Leg 3 Hà Nội: 44 flights (Brussels: 4 on the canal banks); build-chunks drops the 4 whose landing is in another Red River polygon
     const bad: string[] = [];
     const notWater: number[] = [], outside: string[] = [];
     let farthest = 0;

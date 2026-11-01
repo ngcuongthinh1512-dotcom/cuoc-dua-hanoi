@@ -34,7 +34,7 @@ import { triangulate } from './geom.ts';
 import { graphics } from './graphics.ts';
 import { hash01 } from './geom.ts';
 import { isNight, nightTime } from './night.ts';
-import { quayMesh, riverLevel, waterLevelOf } from './Terrain.ts';
+import { lakeKerbMesh, quayMesh, riverLevel, waterLevelOf } from './Terrain.ts';
 
 const GW = graphics8c.water;
 
@@ -294,8 +294,16 @@ ${map ? `\t{
   const wallMesh = new Mesh(walls, new MeshStandardMaterial({ color: W.wallColour, roughness: 0.9, side: DoubleSide, shadowSide: BackSide }));
   wallMesh.castShadow = wallMesh.receiveShadow = true;
   wallMesh.name = 'quay-walls';
+  const kerbs = lakeKerbMesh(grid, water); // Leg 3: stone kerb round every swim lake
+  const kerb = new BufferGeometry();
+  kerb.setAttribute('position', new Float32BufferAttribute(kerbs.vertices, 3));
+  kerb.setIndex(new BufferAttribute(kerbs.indices, 1));
+  kerb.computeVertexNormals();
+  const kerbMesh = new Mesh(kerb, new MeshStandardMaterial({ color: W.kerb.colour, roughness: 0.9, side: DoubleSide, shadowSide: BackSide }));
+  kerbMesh.castShadow = kerbMesh.receiveShadow = true;
+  kerbMesh.name = 'lake-kerbs';
   if (boats) waterMesh.add(boats); // world coordinates (the water mesh sits at the origin)
-  scene.add(waterMesh, wallMesh);
+  scene.add(waterMesh, wallMesh, kerbMesh);
 
   return {
     update(dt: number) {

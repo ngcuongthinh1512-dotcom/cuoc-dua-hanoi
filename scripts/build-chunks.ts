@@ -462,11 +462,17 @@ const riverAt = (x: number, z: number) => water.some((w) => w.river && inPoly(x,
 const riverNear = (x: number, z: number) =>
   riverAt(x, z) ||
   riverRings.some((r) => r.some((_, i) => i % 2 === 0 && segDist(x, z, r, i, (i + 2) % r.length) <= BRIDGE_STUB_NEAR));
+// Leg 3 Hà Nội (scripts/district-mask.ts): a bridge chain stays when any vertex of it is in the three districts, whole: a deck
+// over the Tô Lịch / Red River boundary reaches the far bank instead of ending mid-river at the cut, and its gaps in the quay
+// wall (below) are made for both banks.
+const mask = loadDistrictMask(args.cache);
+const touchesMask = (pts: XZ) => { for (let k = 0; k < pts.length; k += 2) if (mask.contains(pts[k]!, pts[k + 1]!)) return true; return false; };
 const bridgeChains = mergeChains(bridgeWays).filter(({ pts, members }) => {
   const { kind } = bridgeWays[members[0]!]!.facts;
   const stub = polylineLength(pts) < BRIDGE_STUB && STREET.has(kind) && !RD.footKinds.includes(kind) && riverNear(...midpoint(pts));
   if (stub) bump('dropped.bridgeStubs');
-  return !stub;
+  if (!stub && !touchesMask(pts)) bump('masked.bridges');
+  return !stub && touchesMask(pts);
 });
 for (const { pts, members } of bridgeChains) {
   bump('bridges.ways', members.length);
@@ -653,27 +659,28 @@ for (const st of osmStairs) {
 for (const f of quayFlights) chunkAt(...midpoint(f.pts))?.stairs!.push({ pts: f.pts, width: Q.width, quay: true });
 
 // --- Leg 3 Hà Nội: only the three race districts stay (scripts/district-mask.ts); everything whose reference point is outside goes ---
-const mask = loadDistrictMask(args.cache);
 const midVertex = (p: XZ): [number, number] => { const k = Math.floor(p.length / 4) * 2; return [p[k]!, p[k + 1]!]; };
 const keepRing = (outer: XZ) => mask.contains(...ringCentroid(outer));
-quayFlights.splice(0, quayFlights.length, ...quayFlights.filter((f) => mask.contains(...midVertex(f.pts))));
+// A flight whose landing is itself in a river polygon (the Red River's OSM water polygons overlap each other along the Bãi Giữa
+// sandbank) leads nowhere: no quay wall behind it, the swimmer cannot climb out there.
+const landing = (f: { pts: XZ; gap: [number, number] }) => { const [fx, fz] = f.pts.slice(-2) as [number, number]; const [dx, dz] = [f.gap[0] - fx, f.gap[1] - fz]; const l = Math.hypot(dx, dz) || 1; return [f.gap[0] + (dx / l) * 2, f.gap[1] + (dz / l) * 2] as const; };
+quayFlights.splice(0, quayFlights.length, ...quayFlights.filter((f) => mask.contains(...midVertex(f.pts)) && !riverAt(...landing(f))));
 let masked = 0;
 const keep = <T>(list: T[], inside: (t: T) => boolean) => list.filter((t) => inside(t) || (masked++, false));
 for (const c of chunks.values()) {
   c.buildings = keep(c.buildings, (b) => keepRing(b.outer));
   c.roads = keep(c.roads, (r) => mask.contains(...midVertex(r.pts)));
-  c.bridges = keep(c.bridges, (b) => mask.contains(...midVertex(b.pts)));
   c.areas = keep(c.areas, (a) => keepRing(a.outer));
   c.points = keep(c.points, (q) => mask.contains(q.x, q.z));
   if (c.stairs) c.stairs = keep(c.stairs, (st) => mask.contains(...midVertex(st.pts)));
   if (c.junctions) c.junctions = keep(c.junctions, (j) => mask.contains(j.x, j.z));
 }
-const keptWater = keep(water, (w) => keepRing(w.outer));
+// Water stays when any of it lies in the districts: the Red River's main channel (one OSM polygon whose centroid is on the
+// Long Biên side) is the districts' east edge, without it the bank houses and the bridges stood in a void.
+const touches = (outer: XZ) => { for (let k = 0; k < outer.length; k += 2) if (mask.contains(outer[k]!, outer[k + 1]!)) return true; return false; };
+const keptWater = keep(water, (w) => keepRing(w.outer) || touches(w.outer));
 water.splice(0, water.length, ...keptWater);
 quays.splice(0, quays.length, ...keep(quays, (q) => mask.contains(q[0]!, q[1]!)));
-const gapsKept: number[] = [];
-for (let i = 0; i < bridgeGaps.length; i += 5) if (mask.contains(bridgeGaps[i]!, bridgeGaps[i + 1]!)) gapsKept.push(...bridgeGaps.slice(i, i + 5));
-bridgeGaps.splice(0, bridgeGaps.length, ...gapsKept);
 parkOverview.splice(0, parkOverview.length, ...keep(parkOverview, keepRing));
 bump('masked.outsideDistricts', masked);
 

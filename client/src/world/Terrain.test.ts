@@ -107,7 +107,7 @@ describe('carveRiver', () => {
 
 describe('buildTerrain', () => {
   it('builds a chunkRes² grid, park colour inside the fixture park, unit normals, no NaN', () => {
-    const out = buildTerrain(fixture, { key: fixture.key, bounds: chunkBounds(fixture.key), height: (x, z) => 0.01 * x - 0.02 * z });
+    const out = buildTerrain(fixture, { key: fixture.key, bounds: chunkBounds(fixture.key), height: (x, z) => 0.01 * x - 0.002 * z }); // gentle: under terrain.lakeBank the fixture would read as a carved lake bottom
     const b = out.meshes[0]!;
     const n = T.chunkRes;
     expect(b.position.length).toBe(n * n * 3);
@@ -119,7 +119,9 @@ describe('buildTerrain', () => {
       return [b.color![3 * k], b.color![3 * k + 1], b.color![3 * k + 2]];
     };
     const c = (hex: string) => new Color(hex).toArray();
-    expect(colourAt(150, 200)).toEqual(c(T.colours.park).map((v) => Math.fround(v)));
+    // park = lawn: the park colour worn toward terrain.colours.worn by value noise (no tree in the fixture park: no shade)
+    const [park, worn] = [c(T.colours.park), c(T.colours.worn)];
+    for (const [i, v] of colourAt(150, 200).entries()) expect(v).toBeGreaterThanOrEqual(Math.min(park[i]!, worn[i]!) - 1e-6), expect(v).toBeLessThanOrEqual(Math.max(park[i]!, worn[i]!) + 1e-6);
     expect(colourAt(5, 5)).toEqual(c(T.colours.pavement).map((v) => Math.fround(v)));
     expect(colourAt(190, 155)).toEqual(c(T.colours.pavement).map((v) => Math.fround(v))); // the pond hole
     // Normal tilts against the gradient: height rises to +x → normal points −x.
@@ -208,7 +210,7 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
     const w = createWater(scene, water, grid);
     w.update(0.016);
     const meshes = scene.children.filter((o): o is Mesh => o instanceof Mesh);
-    expect(meshes.map((m) => m.name)).toEqual(['water', 'quay-walls']);
+    expect(meshes.map((m) => m.name)).toEqual(['water', 'quay-walls', 'lake-kerbs']);
     for (const m of meshes) expect((m.geometry.getAttribute('position').array as Float32Array).every(Number.isFinite)).toBe(true);
     const level = riverLevel(grid, water);
     const ys = meshes[0]!.geometry.getAttribute('position').array as Float32Array;

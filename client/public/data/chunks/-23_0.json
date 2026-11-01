@@ -1,1 +1,1 @@
-{"v":2,"key":"-23_0","buildings":[],"roads":[],"bridges":[],"areas":[],"points":[],"stairs":[],"junctions":[]}
+{"v":2,"key":"-23_0","buildings":[],"roads":[],"bridges":[{"pts":[-5508.6,0,-5500,8.6],"kind":"subway","layer":2,"chain":{"ends":[-7317,-497.3,-7217.6,-494.3,-4585.6,298.8,-4492.5,286.6],"length":3094.5,"s0":1935.4}}],"areas":[],"points":[],"stairs":[],"junctions":[]}

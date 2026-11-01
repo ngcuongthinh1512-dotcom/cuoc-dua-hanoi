@@ -217,7 +217,9 @@ export function carveRiver(g: HeightGrid, water: WaterData): void {
     const deep = Math.abs(ringArea(p.outer)) >= W.swimMinArea;
     fillRings([p.outer, ...(p.holes ?? [])], g.minX, g.minZ, cell, cols, rows, (c, r) => {
       const k = r * cols + c;
-      g.h[k] = Math.min(g.h[k]!, y - (deep ? W.lakeSwimDepth : W.lakeDepth));
+      // a swim lake's first cell inside the shore is a lakeDepth shelf: the 27° drop to the swim depth starts under water
+      const shelf = deep && ringDistance(p.outer, g.minX + c * cell, g.minZ + r * cell) < cell;
+      g.h[k] = Math.min(g.h[k]!, y - (deep && !shelf ? W.lakeSwimDepth : W.lakeDepth));
       lake[k] = i;
       if (deep) swim[k] = i;
     });
@@ -346,6 +348,51 @@ export function quayMesh(water: WaterData, level: number): TriMesh {
   return { vertices: new Float32Array(v), indices: new Uint32Array(idx) };
 }
 
+/** Deterministic value noise in [0, 1] on the unit lattice (smoothstep between hashed corners). */
+export function valueNoise(x: number, z: number): number {
+  const h = (i: number, j: number) => {
+    let n = (i * 374761393 + j * 668265263) | 0;
+    n = Math.imul(n ^ (n >>> 13), 1274126177);
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+  };
+  const [i, j] = [Math.floor(x), Math.floor(z)];
+  const [u, v] = [x - i, z - j].map((t) => t * t * (3 - 2 * t)) as [number, number];
+  return (h(i, j) * (1 - u) + h(i + 1, j) * u) * (1 - v) + (h(i, j + 1) * (1 - u) + h(i + 1, j + 1) * u) * v;
+}
+
+/** Stone kerb along the shoreline of every swim lake (water.swimMinArea): a flat top water.kerb.width wide across the
+ *  polygon edge, water.kerb.lift over the surface, with a skirt down both sides (the carved bank slope under it never
+ *  shows). Flat quads, rendered by Water.ts with the quay walls; no collider (0.2 m high, the feet pass through). */
+export function lakeKerbMesh(g: HeightGrid, water: WaterData): TriMesh {
+  const v: number[] = [];
+  const idx: number[] = [];
+  const quad = (...p: V3[]) => {
+    const k = v.length / 3;
+    for (const q of p) v.push(...q);
+    idx.push(k, k + 1, k + 2, k, k + 2, k + 3);
+  };
+  const K = W.kerb;
+  water.polygons.forEach((p, i) => {
+    if (p.river || Math.abs(ringArea(p.outer)) < W.swimMinArea) return;
+    const y = waterLevelOf(g, water, i);
+    const [top, low] = [y + K.lift, y - K.skirt];
+    for (const ring of [riverLeft(p.outer, false), ...(p.holes ?? []).map((h) => riverLeft(h, true))]) {
+      const n = ring.length / 2;
+      const ends: [[number, number], [number, number]] = [[ring[2 * n - 2]!, ring[2 * n - 1]!], [ring[0]!, ring[1]!]];
+      const inn = offsetPolyline(ring, K.width / 2, ...ends); // water side (left)
+      const out = offsetPolyline(ring, -K.width / 2, ...ends); // land side
+      for (let a = 0; a < n; a++) {
+        const b = (a + 1) % n;
+        const P = (r: XZ, k: number, yy: number): V3 => [r[2 * k]!, yy, r[2 * k + 1]!];
+        quad(P(inn, a, top), P(out, a, top), P(out, b, top), P(inn, b, top)); // top (+Y)
+        quad(P(inn, b, low), P(inn, a, low), P(inn, a, top), P(inn, b, top)); // water-side skirt
+        quad(P(out, a, low), P(out, b, low), P(out, b, top), P(out, a, top)); // land-side skirt
+      }
+    }
+  });
+  return { vertices: new Float32Array(v), indices: new Uint32Array(idx) };
+}
+
 const linear = (hex: string): V3 => {
   const c = new Color(hex); // sRGB hex → linear
   return [c.r, c.g, c.b];
@@ -360,22 +407,52 @@ export const buildTerrain: Builder = (chunk, ctx) => {
   const s = CHUNK_SIZE / (n - 1);
   const { minX, minZ } = ctx.bounds;
   const f = 2 * n + 1; // sub-samples at s/2, one extra ring so every vertex has a full 3 × 3 window
-  const surface = new Uint8Array(f * f); // 0 pavement, 1 park, 2 grass
+  // Lake bank (Leg 3, terrain.waterLevel set: the street is flat at waterLevel + quayHeight and carveRiver sinks lakes and
+  // ponds ≥ lakeDepth under it): a sub-sample dipped under the street but above the river bed is water bottom (3); a dry
+  // vertex with one in its window is the bank, coloured grass. Off (waterLevel null: a DEM) → never sunk. A lake bottom is
+  // never deeper than lakeSwimDepth, nor is anything a cell away from it: the river's one-cell quay band (bed → street) is
+  // not a bank, whatever height its bilinear midpoints take.
+  const bedHi = (T.waterLevel ?? -Infinity) + T.quayHeight - T.lakeBank;
+  const bedLo = bedHi - W.lakeSwimDepth - 0.5;
+  const sunk = (x: number, z: number) => {
+    const h = ctx.height(x, z);
+    return h > bedLo && h < bedHi && Math.min(ctx.height(x + s, z), ctx.height(x - s, z), ctx.height(x, z + s), ctx.height(x, z - s)) > bedLo;
+  };
+  const surface = new Uint8Array(f * f); // 0 pavement, 1 park, 2 grass, 3 lake bottom
   for (const a of chunk.areas) {
     const v = a.kind === 'grass' ? 2 : 1;
     fillRings([a.outer, ...(a.holes ?? [])], minX - s / 2, minZ - s / 2, s / 2, f, f, (c, r) => (surface[r * f + c] = Math.max(surface[r * f + c]!, v)));
   }
+  for (let r = 0; r < f; r++) for (let c = 0; c < f; c++) if (sunk(minX + (c - 1) * (s / 2), minZ + (r - 1) * (s / 2))) surface[r * f + c] = 3;
   const colours = [linear(T.colours.pavement), linear(T.colours.park), linear(T.colours.grass)];
-  const stone = linear(T.colours.stone);
+  const [stone, worn, shade, bed] = [linear(T.colours.stone), linear(T.colours.worn), linear(T.colours.shade), linear(T.colours.lakeBed)];
+  const trees = chunk.points.filter((p) => p.kind === 'tree');
+  // Lawn at (x, z): grass → worn by two octaves of value noise, darkened within lawn.shadeRadius of a tree trunk.
+  const lawn = (col: V3, x: number, z: number): V3 => {
+    const [p0, p1] = T.lawn.patch;
+    const t = Math.min(1, Math.max(0, (valueNoise(x / p0, z / p0) * 0.4 + valueNoise(x / p1 + 7.3, z / p1 + 2.1) * 0.6 - 0.35) / 0.4)) * T.lawn.worn;
+    let sh = 0;
+    for (const q of trees) {
+      const d = Math.hypot(q.x - x, q.z - z);
+      if (d < T.lawn.shadeRadius) sh = Math.max(sh, 1 - d / T.lawn.shadeRadius);
+    }
+    const k = sh * T.lawn.shade;
+    const ch = (i: number) => { const v = col[i]! + (worn[i]! - col[i]!) * t; return v + (shade[i]! - v) * k; };
+    return [ch(0), ch(1), ch(2)];
+  };
   // Border vertices use their inside half-step sample in place of the outside / on-edge ones (areas are clipped to the
   // chunk, so those read as pavement and would draw pale lines along the chunk grid across parks).
   const inner = (k: number) => Math.min(Math.max(k, 2), f - 3);
-  const mix = (r: number, c: number): V3 => {
+  const mix = (r: number, c: number, x: number, z: number): V3 => {
     const out: [number, number, number] = [0, 0, 0];
+    if (sunk(x, z)) return bed;
+    let bank = false;
+    for (let dr = 0; dr < 3; dr++) for (let dc = 0; dc < 3; dc++) if (surface[inner(2 * r + dr) * f + inner(2 * c + dc)] === 3) bank = true;
     for (let dr = 0; dr < 3; dr++) {
       for (let dc = 0; dc < 3; dc++) {
         const w = ((dr === 1 ? 2 : 1) * (dc === 1 ? 2 : 1)) / 16; // tent filter
-        const col = colours[surface[inner(2 * r + dr) * f + inner(2 * c + dc)]!]!;
+        const kind = bank ? 2 : surface[inner(2 * r + dr) * f + inner(2 * c + dc)]!;
+        const col = kind ? lawn(colours[kind]!, x, z) : colours[0]!;
         for (let i = 0; i < 3; i++) out[i] = out[i]! + w * col[i]!;
       }
     }
@@ -389,7 +466,7 @@ export const buildTerrain: Builder = (chunk, ctx) => {
       const dx = ctx.height(x + s, z) - ctx.height(x - s, z);
       const dz = ctx.height(x, z + s) - ctx.height(x, z - s);
       const l = Math.hypot(dx, 2 * s, dz);
-      m.color = Math.hypot(dx, dz) / (2 * s) > T.stoneSlope ? stone : mix(r, c);
+      m.color = Math.hypot(dx, dz) / (2 * s) > T.stoneSlope ? stone : mix(r, c, x, z);
       m.vertex(x, ctx.height(x, z), z, -dx / l, (2 * s) / l, -dz / l, x, z);
     }
   }
