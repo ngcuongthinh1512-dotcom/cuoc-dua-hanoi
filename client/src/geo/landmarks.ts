@@ -49,7 +49,7 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   { id: 'cho-dong-xuan', name: 'Chợ Đồng Xuân', group: 'h1', osm: ['way/1255852379'], near: 25, view: [200, 100] },
   { id: 'o-quan-chuong', name: 'Ô Quan Chưởng', group: 'h1', osm: ['way/700627452'], near: 15, view: [270, 50] },
   { id: 'den-bach-ma', name: 'Đền Bạch Mã', group: 'h1', osm: ['way/700840711'], near: 15, view: [160, 60] },
-  { id: 'cau-long-bien', name: 'Cầu Long Biên', group: 'h1', osm: ['way/874082896'], near: 40, view: [200, 200] }, // cầu thép giàn, sông Hồng
+  // Cầu Long Biên (way/874082896) is east of the three-district mask (its outline is dropped by district-mask.ts): no entry until the mask keeps it
   // ── Đống Đa ──
   { id: 'van-mieu', name: 'Văn Miếu – Quốc Tử Giám', group: 'h3', osm: ['way/702185155', 'way/702185143', 'way/702185144', 'way/702241362', 'way/702241363', 'way/702185149', 'way/702185150', 'way/702185156', 'way/702185157', 'way/702185158', 'way/702185159', 'way/702185160', 'way/702185162', 'way/702185163', 'way/702185164', 'way/702185165', 'way/702185166', 'way/702185176', 'way/702185187', 'way/702185188', 'way/702185189', 'way/702185190', 'way/702185186', 'way/702185138', 'way/702241311', 'way/702241314', 'way/702241315', 'way/702241316', 'way/702241331', 'way/702241327', 'way/702241328', 'way/37934138', 'way/37934139', 'way/702241326', 'way/702241324', 'way/702241325', 'way/702241280', 'way/702241281'], near: 40, view: [200, 110] }, // Khuê Văn Các + Văn Miếu Môn + cả khu (≈ 35 building=yes: Đại Trung Môn, nhà bia, Đại Thành, Thái Học…)
   { id: 'go-dong-da', name: 'Gò Đống Đa', group: 'h3', osm: ['way/29133247', 'way/838426608'], near: 40, view: [200, 110] }, // gò (park) + Đền thờ Quang Trung; tượng đài = node/5485636741

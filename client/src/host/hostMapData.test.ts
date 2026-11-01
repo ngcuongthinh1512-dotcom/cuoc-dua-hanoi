@@ -26,7 +26,7 @@ describe('Host minimap (SPEC §17.41)', () => {
     const s = demoState(NOW);
     const head = heading(s);
     expect([...head]).toEqual([['t1', 'D1|B'], ['t2', 'D1|B'], ['t4', 'T1'], ['t5', 'D1|A'], ['t6', 'T2']]);
-    expect(placeTip(legPlaces(s.leg!)[4]!, byEntry(s, head))).toBe('Lựa chọn kép B – Ảnh · Place du Petit Sablon\n   đội ở bước này: Đội Đỏ, Đội Vàng');
+    expect(placeTip(legPlaces(s.leg!)[4]!, byEntry(s, head))).toBe('Lựa chọn kép B – Ảnh · Văn Miếu\n   đội ở bước này: Đội Đỏ, Đội Vàng');
     expect(heading({ ...s, status: 'finished' }).size).toBe(0);
   });
 

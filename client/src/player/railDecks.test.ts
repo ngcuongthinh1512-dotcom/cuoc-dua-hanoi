@@ -10,9 +10,8 @@ const chunk = (x: number, z: number) => JSON.parse(readFileSync(new URL(`../../p
 const strips = (x: number, z: number) => railStrips(chunk(x, z).bridges);
 
 describe('spawn / box surface (D17: highest walkable, never a rail viaduct top)', () => {
-  // Leg 3: Bruxelles has NO upper rail viaduct (no rail BridgeRec with layer ≥ 2: the lines run at layer 1, on embankments / over
-  // streets), so the strip rules run on a synthetic layer-2 rail piece; a real layer-1 rail bridge (chunk −2_2, west of the Gare du
-  // Midi side) must give no strip. Leg 1 (Paris): the Line 6 strip over the Pont de Bir-Hakeim start.
+  // Leg 3 Hà Nội: the elevated metro (Cát Linh – Hà Đông, `subway` layer 2) is far west of the three-district core; the strip rules run on
+  // a synthetic layer-2 rail piece; a real layer-1 rail bridge (the Long Biên railway, chunk -3_-3) must give no strip. Leg 1 (Paris): the Line 6 strip over the Pont de Bir-Hakeim start.
   it('rail viaduct (synthetic layer-2 rail piece): the column under its strip is rail; the ground 12 m either side of the double track is not', () => {
     const piece = { kind: 'rail', layer: 2, pts: [0, 0, 40, 0, 80, 0] } as BridgeRec;
     const st = railStrips([piece]);
@@ -23,16 +22,16 @@ describe('spawn / box surface (D17: highest walkable, never a rail viaduct top)'
     expect(pickSurface([{ y: 7.22, walkable: true }, { y: 6.22, walkable: true }, { y: 1.3, walkable: true }, { y: -1, walkable: true }], true)).toBe(1.3);
   });
 
-  it('Leg 3: the real rail bridges of Bruxelles are layer 1 → no strip (the ground / deck stays walkable)', () => {
-    const rail = (chunk(-363, 642).bridges as BridgeRec[]).filter((b) => R.railKinds.includes(b.kind));
+  it('Leg 3: the real layer-1 rail bridges of Hà Nội (the Long Biên railway, chunk -3_-3) → no strip (the ground / deck stays walkable)', () => {
+    const rail = (chunk(-619, -579).bridges as BridgeRec[]).filter((b) => R.railKinds.includes(b.kind));
     expect(rail.length).toBeGreaterThan(0);
     expect(rail.every((b) => b.layer === 1)).toBe(true);
     const [ax, az, bx, bz] = rail[0]!.pts as [number, number, number, number];
     expect(inStrips(strips(ax, az), (ax + bx) / 2, (az + bz) / 2)).toBe(false);
   });
 
-  it('Leg 3: a primary road bridge in the east (1839, 363; layer 2, but a road): no rail strip, the deck (highest) wins, not the road under it', () => {
-    const p = { x: 1839, z: 363 };
+  it('Leg 3: a primary road bridge in the west (−4779, 1721, the Nguyễn Chí Thanh flyover; layer 2, but a road): no rail strip, the deck (highest) wins, not the road under it', () => {
+    const p = { x: -4779, z: 1721 };
     for (const [dx, dz] of [[0, 0], [0, 60], [0, -60]]) expect(inStrips(strips(p.x + dx!, p.z + dz!), p.x + dx!, p.z + dz!)).toBe(false);
     expect(pickSurface([{ y: 3.4, walkable: true }, { y: -2.1, walkable: true }], false)).toBe(3.4);
   });

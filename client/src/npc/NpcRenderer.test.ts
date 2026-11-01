@@ -96,7 +96,7 @@ describe.skipIf(!existsSync(graphFile))('NpcRenderer lights (real TrafficLights,
     const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
     const roads = new NpcRoads(g, () => 0);
     const lights = new TrafficLights(roads);
-    const heads = lights.headsNear(0, 0, 300);
+    const heads = lights.headsNear(0, 0, 500); // Leg 3 Hà Nội: 500 m round the origin (only 4 heads within 300 m); |coordinates| < 512 keeps the float32 matrices within the 1e-4 checks
     expect(heads.length).toBeGreaterThan(10);
     const r = new NpcRenderer(assets);
     r.setLights(heads, roads);

@@ -34,7 +34,7 @@ const overRiver = (x: number, z: number) => load().water.polygons.some((p) => p.
 describe.skipIf(!hasData)('real map data', () => {
   it('index lists every chunk of the bbox and each file exists', () => {
     const index = read<ChunkIndex>('chunks/index.json');
-    expect(index.keys.length).toBeGreaterThan(200); // Leg 3: 252 chunks
+    expect(index.keys.length).toBeGreaterThan(200); // Leg 3 Hà Nội: 988 chunks (539 empty outside the three districts)
     expect(load().chunks.map((c) => c.key)).toEqual(index.keys);
   });
 
@@ -43,9 +43,9 @@ describe.skipIf(!hasData)('real map data', () => {
     expect(polys.filter((p) => !(ringArea(p.outer) >= 2) || (p.holes ?? []).some((h) => !(ringArea(h) < 0)))).toEqual([]);
   });
 
-  it('4 distinct streets touch the Place Rouppe roundabout', () => {
+  it('5 distinct streets touch the Quảng trường Cách mạng Tháng Tám roundabout', () => {
     const roads = all('roads');
-    const NAME = 'Place Rouppe - Rouppeplein';
+    const NAME = 'Quảng trường Cách mạng Tháng Tám';
     const ring = roads.filter((r) => r.name === NAME && r.roundabout);
     expect(ring.length).toBeGreaterThan(0);
     expect(ring.every((r) => r.roundabout)).toBe(true);
@@ -53,34 +53,34 @@ describe.skipIf(!hasData)('real map data', () => {
     const names = new Set(
       roads.filter((r) => r.name && r.name !== NAME && r.pts.some((_, i) => i % 2 === 0 && v.has(`${r.pts[i]},${r.pts[i + 1]}`))).map((r) => r.name),
     );
-    expect([...names].sort()).toEqual(['Avenue de Stalingrad - Stalingradlaan', 'Rue de Tournai - Doornikstraat', 'Rue du Chasseur - Jagersstraat', 'Rue du Midi - Zuidstraat']);
+    expect([...names].sort()).toEqual(['Phố Cổ Tân', 'Phố Lê Thánh Tông', 'Phố Lý Thái Tổ', 'Phố Phan Chu Trinh', 'Phố Tràng Tiền']);
   });
 
-  it('the Rue de la Loi carriageways lie within 30 m of the straight line between their ends', () => {
-    const [a, b] = [W(50.84687, 4.36236), W(50.84184, 4.38603)]; // Leg 3: Rue Royale junction → Schuman, measured max deviation 26.4 m
+  it('the Phố Hai Bà Trưng carriageways lie within 10 m of the straight line between their ends', () => {
+    const [a, b] = [W(21.02288, 105.85748), W(21.02763, 105.84155)]; // Leg 3 Hà Nội: Nhà hát Lớn end → Lê Duẩn end, measured max deviation 5.8 m
     const [dx, dz] = [b.x - a.x, b.z - a.z];
     const len = Math.hypot(dx, dz);
     const notCar = new Set(['cycleway', 'footway', 'path', 'pedestrian', 'steps']);
-    const pts = all('roads').filter((r) => r.name === 'Rue de la Loi - Wetstraat' && !notCar.has(r.kind)).flatMap((r) => r.pts);
+    const pts = all('roads').filter((r) => r.name === 'Phố Hai Bà Trưng' && !notCar.has(r.kind)).flatMap((r) => r.pts);
     expect(pts.length).toBeGreaterThan(20);
     let maxDev = 0;
     for (let i = 0; i < pts.length; i += 2) maxDev = Math.max(maxDev, Math.abs((pts[i]! - a.x) * dz - (pts[i + 1]! - a.z) * dx) / len);
-    expect(maxDev).toBeLessThan(30);
+    expect(maxDev).toBeLessThan(10);
   });
 
-  it('the Chaussée de Ninove bridge spans the canal (a river: true polygon)', () => {
-    const pieces = all('bridges').filter((b) => b.name === 'Chaussée de Ninove - Ninoofsesteenweg');
+  it('the Cầu Tô Lịch bridge spans the Sông Tô Lịch (a river: true polygon; the Red River polygon is cut by the district mask and no longer lies under the Long Biên deck)', () => {
+    const pieces = all('bridges').filter((b) => b.name === 'Cầu Tô Lịch');
     expect(pieces.length).toBeGreaterThan(0);
     expect(pieces.some((b) => overRiver(...midpoint(b.pts)))).toBe(true);
   });
 
-  it('a west–east segment in the north-west corner crosses the Bruxelles–Charleroi canal', () => {
-    const [a, b] = [W(50.8498, 4.333), W(50.8498, 4.3395)];
+  it('a west–east segment in the south-west crosses the Sông Tô Lịch', () => {
+    const [a, b] = [W(21.014, 105.802), W(21.014, 105.8087)];
     const hits = Array.from({ length: 101 }, (_, k) => overRiver(a.x + ((b.x - a.x) * k) / 100, a.z + ((b.z - a.z) * k) / 100));
     expect(hits.some(Boolean)).toBe(true);
     expect(hits[0] || hits[100]).toBe(false);
-    expect(overRiver(W(50.84575, 4.36399).x, W(50.84575, 4.36399).z)).toBe(false); // the Parc de Bruxelles pond is water but not a river polygon
-    expect(overRiver(0, 0)).toBe(false); // Grand-Place
+    expect(overRiver(W(21.0285, 105.8524).x, W(21.0285, 105.8524).z)).toBe(false); // Hồ Hoàn Kiếm is water but not a river polygon
+    expect(overRiver(0, 0)).toBe(false); // the origin
   });
 
   it('chunk format v2', () => {
@@ -118,18 +118,19 @@ describe.skipIf(!hasData)('real map data', () => {
       for (let k = 0; k < list.length; k++) {
         const q = list[k]!;
         const end = q.chain!.s0 + polylineLength(q.pts);
-        expect(chunkKey(...midpoint(q.pts))).toBe(q.key);
+        // (a sliver < 2 m at a chunk border has its midpoint rounded to 0.1 m onto the grid line: Hà Nội has one, Vành đai 2)
+        if (polylineLength(q.pts) >= 2) expect(chunkKey(...midpoint(q.pts))).toBe(q.key);
         expect(end).toBeLessThanOrEqual(q.chain!.length + 0.2);
         // consecutive pieces share their border vertex (a gap = pieces outside the chunk grid)
         if (k + 1 < list.length && Math.abs(list[k + 1]!.chain!.s0 - end) < 0.2) expect(q.pts.slice(-2)).toEqual(list[k + 1]!.pts.slice(0, 2));
       }
     }
-    const viaduct = [...chains.values()].filter((l) => l[0]!.kind === 'rail' && l[0]!.layer === 1); // Leg 3: the railway viaduct (Leg 1: Line 6 metro viaduct, layer 2)
+    const viaduct = [...chains.values()].filter((l) => l[0]!.kind === 'trunk' && l[0]!.layer === 2); // Leg 3 Hà Nội: the Vành đai 2 elevated road (the Phùng Hưng rail viaduct is outside the data; Leg 3 Brussels: the railway viaduct, Leg 1: Line 6 metro viaduct)
     expect(Math.max(...viaduct.map((l) => new Set(l.map((q) => q.key)).size))).toBeGreaterThan(5);
   });
 
   it('leg destinations L1–L5 are not inside a building', () => {
-    const leg = read<{ steps: { id: string; destination?: { lat: number; lon: number } }[] }>('../../../worker/legs/bruxelles-demo.json', import.meta.url);
+    const leg = read<{ steps: { id: string; destination?: { lat: number; lon: number } }[] }>('../../../worker/legs/hanoi-demo.json', import.meta.url);
     const dests = leg.steps.filter((s) => /^L[1-6]$/.test(s.id) && s.destination);
     expect(dests.length).toBe(5);
     const walkable = new Set(['bridge', 'fountain', 'artwork', 'ruins']); // landmark outlines that are not buildings (L1 now stands at the foot of the Ruínas stair, leg2-fixes.md)

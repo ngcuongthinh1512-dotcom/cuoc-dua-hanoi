@@ -616,7 +616,7 @@ export function demoState(now = 1_000_000): HostState {
         s('PS', 'pit_stop', 'Về đích', pt(21.0187, 105.8436, 25, 'Hồ Thiền Quang')),
       ],
       vehicles: { corridorMeters: 150, minDistanceFromCheckpoint: 100, initialPerSegment: [0, 1], spawnIntervalMinutes: 3, spawnChance: 0.3, maxAvailablePerSegment: 1, decoyRatio: 0.4, noSpawnNearPlayerMeters: 120, abandonMeters: 200, abandonSeconds: 60, bikeParking: { offsetMeters: 20, maxBikes: 6 } },
-      bundled: ['bruxelles-demo', 'mini'],
+      bundled: ['hanoi-demo', 'hanoi-demo-filled', 'mini'],
       issues: [{ level: 'blank', where: 'Lộ trình 1', message: 'chưa có mật thư (ô trống)' }],
       media: ['test-gia.jpg', 'test-gia-2.jpg'], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45,
     },

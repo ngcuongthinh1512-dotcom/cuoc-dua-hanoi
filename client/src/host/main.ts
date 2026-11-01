@@ -53,7 +53,7 @@ function loginView() {
   };
   pwIn.addEventListener('keydown', (e) => e.key === 'Enter' && void go());
   app.replaceChildren(
-    el('h1', {}, 'Cuộc đua Bruxelles – Host'),
+    el('h1', {}, 'Cuộc đua Hà Nội – Host'),
     el('section', {}, el('label', {}, 'Mã cuộc đua ', raceIn), el('label', {}, 'Mật khẩu Host ', pwIn), el('button', { onclick: () => void go() }, 'Đăng nhập'), err),
   );
 }
@@ -159,7 +159,7 @@ function mainView() {
     if (k === 'run') requestAnimationFrame(() => state && render(state)); // the matrix was hidden: its sticky sizes are right again
   };
   app.replaceChildren(
-    el('div', { className: 'top' }, el('h1', {}, `Cuộc đua Bruxelles – Host · ${race}`),
+    el('div', { className: 'top' }, el('h1', {}, `Cuộc đua Hà Nội – Host · ${race}`),
       el('span', { className: 'link' }, 'Link người chơi: ', el('code', {}, link), ' ', el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(link) }, 'Sao chép'))),
     specBox,
     banner, noticeBox, err, queueWrap,

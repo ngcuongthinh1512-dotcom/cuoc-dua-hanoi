@@ -68,12 +68,12 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(chunkDir))('NpcRoads (road
   console.log(`NpcRoads: ${(performance.now() - t0).toFixed(0)} ms`);
   const npcEdges = [...r.car.keys()].filter((e) => r.car[e]);
 
-  it('largest strongly connected car network without service (Bruxelles: 10,243 nodes, 253.9 km; Macao 8,021 nodes, 187.8 km; Paris ≈ 10,921 nodes, 304.5 km, phase4b.md §2.1)', () => {
+  it('largest strongly connected car network without service (Hà Nội: 9,255 nodes, 289.5 km; Bruxelles: 10,243 nodes, 253.9 km; Macao 8,021 nodes, 187.8 km; Paris ≈ 10,921 nodes, 304.5 km, phase4b.md §2.1)', () => {
     const nodes = new Set(npcEdges.flatMap((e) => [g.edgeA[e]!, g.edgeB[e]!]));
     const km = npcEdges.reduce((s, e) => s + g.edgeLength[e]!, 0) / 1000;
-    expect(nodes.size).toBeGreaterThan(10_000);
-    expect(km).toBeGreaterThan(250);
-    expect(km).toBeLessThan(258);
+    expect(nodes.size).toBeGreaterThan(9_000);
+    expect(km).toBeGreaterThan(285);
+    expect(km).toBeLessThan(294);
     expect(npcEdges.every((e) => traffic.kinds.includes(r.kind(g.edgeWay[e]!)))).toBe(true);
     // strongly connected: every node is reached from the first one, forward and backward
     for (const forward of [true, false]) {
@@ -116,16 +116,16 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(chunkDir))('NpcRoads (road
     expect(Math.min(seen.roundabout, seen.onewayPrimary, seen.residential)).toBeGreaterThan(0);
   });
 
-  it('Place Aimé Dandoy (50.8312, 4.3965): NPC ring, 2 lanes one way, anticlockwise from above (traffic keeps right), ≥ 4 entries and exits', () => {
-    const name = g.file.names.indexOf('Place Aimé Dandoy - Aimé Dandoyplein');
+  it('Quảng trường Cách mạng Tháng Tám (21.0243, 105.8571): NPC ring, 2 lanes one way, anticlockwise from above (traffic keeps right), ≥ 4 entries and exits', () => {
+    const name = g.file.names.indexOf('Quảng trường Cách mạng Tháng Tám');
     const ring = [...g.edgeWay.keys()].filter((e) => g.file.ways[g.edgeWay[e]!]![3] === name && g.flags(e) & WayFlag.roundabout);
-    expect(ring.length).toBe(16);
+    expect(ring.length).toBe(19); // seven OSM ways make up the ring
     expect(ring.every((e) => r.car[e])).toBe(true);
     const w = g.edgeWay[ring[0]!]!;
-    expect([r.lanes(w, true), r.lanes(w, false), r.halfWidth(w)]).toEqual([2, 0, 3.5]);
+    expect([r.lanes(w, true), r.lanes(w, false), r.halfWidth(w)]).toEqual([2, 0, 3.25]);
     // shoelace in (east, north) = (x, −z): > 0 = anticlockwise seen from above (right-hand traffic, Leg 3); < 0 = clockwise (Macao: left-hand traffic)
     const area = ring.reduce((s, e) => s - (g.x[g.edgeA[e]!]! * g.z[g.edgeB[e]!]! - g.x[g.edgeB[e]!]! * g.z[g.edgeA[e]!]!) / 2, 0);
-    expect(area * (traffic.driveLeft ? -1 : 1)).toBeGreaterThan(500); // Leg 3: 551 m² (a small ring)
+    expect(area * (traffic.driveLeft ? -1 : 1)).toBeGreaterThan(500); // Leg 3 Hà Nội: 977 m² (Brussels: Place Aimé Dandoy 551)
     const onRing = new Set(ring.flatMap((e) => [g.edgeA[e]!, g.edgeB[e]!]));
     let entries = 0, exits = 0;
     for (const n of onRing) {
@@ -141,8 +141,8 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(chunkDir))('NpcRoads (road
 
   it('crossings on the NPC network (zebras, yielding, pedestrians)', () => {
     const kept = g.file.crossings.filter((c) => r.crossing[c]);
-    expect(kept.length).toBeGreaterThan(3_700); // Bruxelles 3,762 (Macao 788, Paris > 4000)
-    expect(kept.filter((c) => Math.hypot(g.x[c]!, g.z[c]!) < 250).length).toBeGreaterThanOrEqual(17); // around the Grand-Place (19)
+    expect(kept.length).toBeGreaterThan(1_300); // Hà Nội 1,350 (three districts only; Bruxelles 3,762, Macao 788, Paris > 4000)
+    expect(kept.filter((c) => Math.hypot(g.x[c]!, g.z[c]!) < 250).length).toBeGreaterThanOrEqual(20); // around the origin (26)
     expect(r.crossing.reduce((s, c) => s + c, 0)).toBe(kept.length);
   });
 });
@@ -155,10 +155,10 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(join(root, 'client/public/
   const g = RoadGraph.decode(JSON.parse(readFileSync(graphFile, 'utf8')) as RoadGraphFile);
   const r = new NpcRoads(g, (x, z) => heightAt(grid, x, z));
 
-  it('Place Sainctelette bridges (over the canal, NW corner): the deck stays > 5 m above the canal, the terrain under is the canal bed', () => {
-    const name = g.file.names.indexOf('Place Sainctelette - Saincteletteplaats');
+  it('Cầu Mai Động bridges (over the Sông Kim Ngưu): the deck stays > 5 m above the river, the terrain under is the river bed', () => {
+    const name = g.file.names.indexOf('Cầu Mai Động');
     const edges = [...g.edgeWay.keys()].filter((e) => g.file.ways[g.edgeWay[e]!]![3] === name && g.flags(e) & WayFlag.bridge && r.car[e]);
-    expect(edges.length).toBe(2); // Leg 3: edges 1297 and 1302, deck −3.6 m, canal −10.6 m, bed −13.6 m
+    expect(edges.length).toBe(2); // Leg 3 Hà Nội: edges 6245 and 6252, deck 0 m, river −7 m, bed −10 m (Brussels: Place Sainctelette, deck −3.6, canal −10.6)
     const level = riverLevel(grid, water);
     for (const e of edges) {
       const mid = r.heightOn(e, g.edgeLength[e]! / 2);
@@ -166,7 +166,7 @@ describe.skipIf(!existsSync(graphFile) || !existsSync(join(root, 'client/public/
       // the terrain under the middle is the river bed: the deck is what lifts the car
       const a = g.edgeA[e]!, b = g.edgeB[e]!;
       const ground = heightAt(grid, (g.x[a]! + g.x[b]!) / 2, (g.z[a]! + g.z[b]!) / 2);
-      console.log(`Sainctelette edge ${e}: deck ${mid.toFixed(2)} m, terrain ${ground.toFixed(2)} m, river ${level.toFixed(2)} m`);
+      console.log(`Cầu Mai Động edge ${e}: deck ${mid.toFixed(2)} m, terrain ${ground.toFixed(2)} m, river ${level.toFixed(2)} m`);
     }
   });
 

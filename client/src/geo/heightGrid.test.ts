@@ -74,15 +74,17 @@ describe('heightGrid', () => {
   });
 
   const dir = join(import.meta.dirname, '../../public/data');
-  it.skipIf(!existsSync(join(dir, 'elevation.bin')))('real DEM: Grand-Place (origin) y = 0, the Gare du Midi lies below it, the Place Royale is up the hill', () => {
+  it.skipIf(!existsSync(join(dir, 'elevation.bin')))('real DEM (Hà Nội, flat by design): origin y = 0, Hồ Thiền Quang / Gò Đống Đa / the Red River bank are 0 too', () => {
     const g = parseHeightGrid(JSON.parse(readFileSync(join(dir, 'elevation.json'), 'utf8')), readFileSync(join(dir, 'elevation.bin')));
     const at = (lat: number, lon: number) => {
       const p = latLonToWorld(lat, lon);
       return heightAt(g, p.x, p.z);
     };
-    expect(at(50.84675, 4.35247)).toBeCloseTo(0, 5);
-    expect(at(50.8355, 4.3365)).toBeLessThan(-2); // Leg 3: Gare du Midi, measured −3.1 m
-    expect(at(50.8419, 4.3623)).toBeGreaterThan(30); // Leg 3: Place Royale, measured 36.3 m
+    expect(at(21.03218, 105.85213)).toBeCloseTo(0, 5);
+    expect(at(21.0187, 105.8436)).toBeCloseTo(0, 5); // Hồ Thiền Quang
+    expect(at(21.012, 105.8273)).toBeCloseTo(0, 5); // Gò Đống Đa
+    expect(at(21.0417, 105.8553)).toBeCloseTo(0, 5); // the Red River bank (the river itself is carved by the terrain builder, not the DEM)
+    expect(g.h.every((v) => v === 0)).toBe(true); // Leg 3 Hà Nội: fetch-dem --flat
     expect(g.h.every(Number.isFinite)).toBe(true);
   });
 });
