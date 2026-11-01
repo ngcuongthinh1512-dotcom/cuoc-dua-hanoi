@@ -23,6 +23,7 @@
 // a neighbour in another chunk gets a facade + mansard slope there. Upgrade: build-chunks marks shared edges globally.
 import * as THREE from 'three';
 import { type BuildingRec, ringArea, type XZ } from '../geo/chunkData.ts';
+import { inRing } from '../geo/districts.ts';
 import { buildings as B, graphics8c } from '../config.ts';
 import { pbrMaps } from './textures.ts';
 import { facadeNightGlsl } from './night.ts';
@@ -204,6 +205,8 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
   let minEdge = Infinity;
   for (let i = 0; i < outer.length; i += 2) minEdge = Math.min(minEdge, Math.hypot(outer[(i + 2) % outer.length]! - outer[i]!, outer[(i + 3) % outer.length]! - outer[i + 1]!));
   const inset = Math.min(M.hip.inset, minEdge / 2);
+  const hipRise = (M.hip.rise * inset) / M.hip.inset;
+  const hipOk = hip && h - hipRise >= M.hip.minWall;
   const lift = (ROOF_PBR ? M.roofLift : 1) * rb;
   const windows = h > 5 && !M.blankKinds.includes(b.kind);
   const low = !tower && !tenement && windows;
@@ -211,8 +214,8 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
   const K = M.kttRoof;
   const ktt = tenement && !tower && minH === 0 && h <= K.maxHeight && r(21) < K.share;
   const kttInset = Math.min(K.inset, minEdge / 2);
-  const plots = low && !hip && minH === 0 && area <= P.maxArea && windows;
-  const roofBox = low && !hip && !(plots && untagged) && minH === 0 && h <= M.roofBox.maxHeight && r(14) < (french ? F.roofBoxChance : M.roofBox.chance);
+  const plots = low && !hipOk && minH === 0 && area <= P.maxArea && windows;
+  const roofBox = low && !hipOk && !(plots && untagged) && minH === 0 && h <= M.roofBox.maxHeight && r(14) < (french ? F.roofBoxChance : M.roofBox.chance);
   const ochre = french && r(16) < F.ochreShare;
   const palette = curtain ? M.glass : tower ? M.concrete : tenement ? M.tenement : ochre ? M.colonial.slice(0, F.ochreCount) : M.colonial;
   return {
@@ -220,14 +223,14 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
     face: curtain ? 'curtain' : tower || tenement ? 'tenement' : 'wall',
     windows,
     shop: minH === 0 && (windows ? h >= M.shopMinHeight && (!french || r(18) < F.shopShare) : h >= M.kioskShopMin && !M.blankKinds.includes(b.kind)),
-    ...(hip && { slope: [(M.hip.rise * inset) / M.hip.inset, inset] as const }),
+    ...(hipOk && { slope: [hipRise, inset] as const }),
     ...(ktt && { slope: [(K.rise * kttInset) / K.inset, kttInset] as const }),
     plant: tower && minH === 0,
     roofBox,
     tank: roofBox && r(15) < M.roofBox.tankShare,
     ...(plots && { plots: { extra: untagged && boxes ? P.extra : 0, flat: french ? F.plotFlat : P.flatShare, cols: french ? [6, 2] : [0, 6], palette } }),
     tint: pick(palette),
-    roofTint: hip ? (!french && r(23) < M.hip.tonShare ? pick(M.ton.colours, lift, 24) : linear(M.tileRoof, lift)) : ktt ? pick(K.colours, lift, 22) : pick(M.flatRoofs, lift, 17),
+    roofTint: hipOk ? (!french && r(23) < M.hip.tonShare ? pick(M.ton.colours, lift, 24) : linear(M.tileRoof, lift)) : ktt ? pick(K.colours, lift, 22) : pick(M.flatRoofs, lift, 17),
     // ponytail: flat caps, parapets and roof boxes go to the wall bucket's plain plaster texel (the lifted slate diffuse turns
     // every grey into an olive slab); upgrade: a concrete roof PBR map on its own material (+1 draw call per chunk)
     capTint: pick(low && area <= M.ton.maxArea && r(19) < M.ton.share ? M.ton.colours : M.flatRoofs, 1, 17),
@@ -321,25 +324,37 @@ export const buildBuildings: Builder = (chunk, ctx) => {
 
         const floorsV = (y: number) => (y - base) / B.levelHeight;
         const u0 = p.haussmann ? 0 : p.shift; // Hà Nội: the bays start at a per-building atlas column (wallCanvas / tenementCanvas)
+        // roof slope over this edge (inset ring q at top), street edges only: the neighbour's roof covers a party edge (d = 0 there)
+        const slopeQuad = () => {
+          if (slope && hidden[i] === -Infinity) roof.quad([ax, wallTop, az], [bx, wallTop, bz], [q[2 * j]!, top, q[2 * j + 1]!], [q[2 * i]!, top, q[2 * i + 1]!], 0, ROOF_PBR ? 0 : 0.25, ROOF_PBR ? len : bays, ROOF_PBR ? Math.hypot(top - wallTop, slope[1]) : 1);
+        };
         if (hidden[i] !== -Infinity || !p.windows) {
-          // party wall above the neighbour or a windowless building (no roof slope on this edge): a facade when a whole storey
-          // shows over the neighbour (Old Quarter: the OSM sliver in front is a 1-storey shop, the house behind keeps its front),
-          // a shop band on a low windowless box (quán), else a bare wall (tường hông)
+          // party wall above the neighbour or a windowless building: a facade when a whole storey shows over the neighbour
+          // (Old Quarter: the OSM sliver in front is a 1-storey shop, the house behind keeps its front), a shop band on a low
+          // windowless box (quán), else a bare wall (tường hông); the walls stop at wallTop under a roof slope
           const y0 = Math.max(bottom, hidden[i]!);
-          if (top <= y0 + 0.05) continue;
+          const yTop = hidden[i] === -Infinity ? wallTop : top;
+          if (yTop <= y0 + 0.05) {
+            slopeQuad();
+            continue;
+          }
           if (hidden[i] !== -Infinity && p.windows && !haussmann && top - y0 >= B.levelHeight) {
             wallQuad(face, y0, top, u0, floorsV(y0), u0 + bays, floorsV(top));
             continue;
           }
           let y1 = y0;
           if (!p.windows && p.shop && ri === 0 && hidden[i] === -Infinity) {
-            y1 = Math.min(top, shopTop);
+            y1 = Math.min(yTop, shopTop);
             wallQuad(shop, y0, y1, shopShift, (y0 - g) / B.shopfrontHeight, shopShift + bays, (y1 - g) / B.shopfrontHeight);
-            if (top <= y1 + 0.05) continue;
+            if (yTop <= y1 + 0.05) {
+              slopeQuad();
+              continue;
+            }
           }
           if (hidden[i] !== -Infinity && !haussmann) face.color = SIDE_TINT;
-          wallQuad(face, y1, top, PLAIN_WALL_UV[0], PLAIN_WALL_UV[1], PLAIN_WALL_UV[0], PLAIN_WALL_UV[1]);
+          wallQuad(face, y1, yTop, PLAIN_WALL_UV[0], PLAIN_WALL_UV[1], PLAIN_WALL_UV[0], PLAIN_WALL_UV[1]);
           face.color = p.tint;
+          slopeQuad();
           continue;
         }
         const shopHere = shopOn && ri === 0 && bottom < shopTop;
@@ -351,9 +366,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
         if (shopHere) wallQuad(face, shopTop, wallTop, u0, 0, u0 + bays, floorsV(wallTop));
         else wallQuad(face, bottom, wallTop, u0, floorsV(bottom), u0 + bays, floorsV(wallTop));
         if (!slope && !haussmann && ri === 0) parapet([ax, 0, az], [bx, 0, bz], top, (bz - az) / len, (ax - bx) / len);
-        if (slope) {
-          roof.quad([ax, wallTop, az], [bx, wallTop, bz], [q[2 * j]!, top, q[2 * j + 1]!], [q[2 * i]!, top, q[2 * i + 1]!], 0, ROOF_PBR ? 0 : 0.25, ROOF_PBR ? len : bays, ROOF_PBR ? Math.hypot(top - wallTop, slope[1]) : 1);
-        }
+        slopeQuad();
 
         if (haussmann && ri === 0 && len >= B.balconyMinEdge) {
           const ox = ((bz - az) / len) * -B.balconyDepth; // right of travel = outside
@@ -391,7 +404,10 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     };
     wall.color = p.capTint;
     flatFace(capRings, capIdx, top, 1, slope ? roof : wall);
-    if (bottom > g) flatFace(p.rings, ringIdx, bottom, -1, wall);
+    if (bottom > g) {
+      flatFace(p.rings, ringIdx, bottom, -1, wall);
+      posts(p.rings[0]!, g, bottom);
+    }
     if (p.plant) roofBlock(p.rings.flat(), ringIdx, top, B.macao.plantBox as [number, number, number, number], 0.75);
     else if (p.roofBox) roofBlock(p.rings.flat(), ringIdx, top, B.macao.roofBox.size as [number, number, number, number], 0.9, p.tank);
     // collider cap
@@ -435,12 +451,33 @@ export const buildBuildings: Builder = (chunk, ctx) => {
       across = Math.max(across, dist);
       if (dist > 0.3 && lat > -0.5 && lat < len + 0.5) notch = Math.min(notch, dist);
     }
-    const d = Math.min(P.depth, across / 2, notch - 0.1);
+    const dMax = Math.min(P.depth, across / 2, notch - 0.1);
+    // depth left inside the footprint from (px, pz) along n: the first ring edge the inward ray crosses (an acute corner or a
+    // concave notch would otherwise let the box poke out of the footprint and hang over the street / the neighbour)
+    const depthAt = (px: number, pz: number) => {
+      if (!inRing(px + nx * 0.3, pz + nz * 0.3, r)) return 0; // an acute corner: the ray starts on the adjacent edge and leaves the footprint at once
+      let best = dMax;
+      for (let k = 0; k < n; k++) {
+        if (k === i) continue;
+        const [qx, qz] = [r[2 * k]!, r[2 * k + 1]!];
+        const [ex, ez] = [r[2 * ((k + 1) % n)]! - qx, r[2 * ((k + 1) % n) + 1]! - qz];
+        const det = nx * ez - nz * ex;
+        if (Math.abs(det) < 1e-9) continue;
+        const [wx, wz] = [qx - px, qz - pz];
+        const sAlong = (wx * ez - wz * ex) / det;
+        const u = (wx * nz - wz * nx) / det;
+        if (u >= -1e-6 && u <= 1 + 1e-6 && sAlong > 0.05 && sAlong < best) best = sAlong;
+      }
+      return best;
+    };
     const count = Math.max(1, Math.round(len / P.width));
     const w = len / count;
     const bays = w > 4.6 ? 2 : 1;
     const heights: number[] = [];
+    const depths: number[] = [];
     for (let k = 0; k < count; k++) {
+      const d = Math.max(0, Math.min(dMax, depthAt(ax + tx * k * w, az + tz * k * w) - 0.1, depthAt(ax + tx * (k + 1) * w, az + tz * (k + 1) * w) - 0.1));
+      depths.push(d);
       const h = hash01(ax + tx * (k + 0.5) * w, az + tz * (k + 0.5) * w, 23);
       const extra = d < 1 || pl.extra === 0 || h < pl.flat ? 0 : 1 + Math.floor(((h - pl.flat) / (1 - pl.flat)) * pl.extra);
       heights.push(top + extra * B.levelHeight);
@@ -450,6 +487,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     const sideTint = SIDE_TINT;
     for (let k = 0; k < count; k++) {
       const hk = heights[k]!;
+      const d = depths[k]!;
       const px = ax + tx * k * w;
       const pz = az + tz * k * w;
       const rnd = (salt: number) => hash01(px, pz, salt);
@@ -492,6 +530,12 @@ export const buildBuildings: Builder = (chunk, ctx) => {
       if (hk > hNext) side(Bp, hNext, [tx, 0, tz], k === count - 1 && streetNext);
       face.color = sideTint;
       facing(face, at(Bp, top, d), at(A, top, d), at(A, hk, d), at(Bp, hk, d), [nx, 0, nz], col % 6, floorsV(top), (col % 6) + bays, floorsV(hk)); // back: plaster with windows
+      // flat cap (concrete) closing the box at hk: the terrace, or the ceiling the pitched cap and its gables stand on
+      wall.color = p.capTint;
+      const rc = wall.vertexCount;
+      for (const q of [at(A, hk), at(Bp, hk), at(Bp, hk, d), at(A, hk, d)]) wall.vertex(q[0], hk, q[2], 0, 1, 0, u, v);
+      wall.face(rc, rc + 1, rc + 2); // up: A→B→inner turns left (the inward normal is left of travel on the CCW ring)
+      wall.face(rc, rc + 2, rc + 3);
       const kind = rnd(29);
       if (kind < P.gableShare) {
         roof.color = rnd(30) < P.tileShare ? linear(B.macao.tileRoof, lift) : linear(B.macao.ton.colours[Math.floor(rnd(31) * B.macao.ton.colours.length)]!, lift);
@@ -500,15 +544,10 @@ export const buildBuildings: Builder = (chunk, ctx) => {
         const s = Math.hypot(d / 2, P.rise);
         facing(roof, at(A, hk), at(Bp, hk), rb, ra, [-nx, 1, -nz], 0, 0, ROOF_PBR ? w : 1, ROOF_PBR ? s : 1);
         facing(roof, at(Bp, hk, d), at(A, hk, d), ra, rb, [nx, 1, nz], 0, 0, ROOF_PBR ? w : 1, ROOF_PBR ? s : 1);
-        facing(roof, at(A, hk), ra, at(A, hk, d), at(A, hk, d), [-tx, 0, -tz], u, v, u, v); // gables (degenerate quads)
-        facing(roof, at(Bp, hk), rb, at(Bp, hk, d), at(Bp, hk, d), [tx, 0, tz], u, v, u, v);
+        roof.tri(at(A, hk), ra, at(A, hk, d), [u, v, u, v, u, v]); // gable ends: A's faces −t (A→ridge→inner is a left turn seen from −t)
+        roof.tri(at(Bp, hk), at(Bp, hk, d), rb, [u, v, u, v, u, v]);
         continue;
       }
-      wall.color = p.capTint;
-      const rc = wall.vertexCount;
-      for (const q of [at(A, hk), at(Bp, hk), at(Bp, hk, d), at(A, hk, d)]) wall.vertex(q[0], hk, q[2], 0, 1, 0, u, v);
-      wall.face(rc, rc + 2, rc + 1); // flat cap (concrete), up (A→B→inner is clockwise seen from above)
-      wall.face(rc, rc + 3, rc + 2);
       parapet(at(A, 0), at(Bp, 0), hk, nx, nz);
       if (kind < P.gableShare + P.tumShare) {
         const [side, up] = P.tum;
@@ -527,6 +566,34 @@ export const buildBuildings: Builder = (chunk, ctx) => {
         if (rnd(32) < P.tankShare) waterTank(cx, cz, hk + up, Math.min(B.macao.roofBox.tankRadius, sz * 0.4));
       }
     }
+  }
+
+  /** Square columns (wall bucket) from y0 up to y1 under a raised structure (OSM min_height, building=roof canopy): one at
+   *  every outer-ring vertex and every B.postSpacing m along longer edges, centred B.postSize / 2 inside the ring. */
+  function posts(r: XZ, ground: number, y1: number) {
+    const sz = B.postSize;
+    const n = r.length / 2;
+    const c = insetRing(r, Array.from({ length: n }, () => sz / 2));
+    const saved = wall.color;
+    wall.color = [saved[0] * 0.8, saved[1] * 0.8, saved[2] * 0.8];
+    const [u, v] = PLAIN_WALL_UV;
+    const post = (cx: number, cz: number) => {
+      const h = sz / 2;
+      const y0 = Math.min(ground, ctx.height(cx, cz)) - B.baseSink; // down to the ground under this post (a station deck over the carved river)
+      const ring: [number, number][] = [[-1, 1], [1, 1], [1, -1], [-1, -1]]; // counter-clockwise seen from above
+      for (let k = 0; k < 4; k++) {
+        const [e, f] = [ring[k]!, ring[(k + 1) % 4]!];
+        wall.quad([cx + e[0] * h, y0, cz + e[1] * h], [cx + f[0] * h, y0, cz + f[1] * h], [cx + f[0] * h, y1, cz + f[1] * h], [cx + e[0] * h, y1, cz + e[1] * h], u, v, u, v);
+      }
+    };
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const [ax, az, bx, bz] = [c[2 * i]!, c[2 * i + 1]!, c[2 * j]!, c[2 * j + 1]!];
+      const len = Math.hypot(bx - ax, bz - az);
+      const steps = Math.max(1, Math.round(len / B.postSpacing));
+      for (let k = 0; k < steps; k++) post(ax + ((bx - ax) * k) / steps, az + ((bz - az) * k) / steps);
+    }
+    wall.color = saved;
   }
 
   /** Concrete lip along a flat roof edge A→B at y (inward normal n): outer + inner face, wall bucket in bare plaster. */

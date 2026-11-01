@@ -3,10 +3,11 @@
 // Layering: every ribbon is draped on ctx.height + lift; overlapping carriageways of one material share world-space
 // uvs (so overlaps are invisible), different materials are ordered by polygonOffset (sidewalk < asphalt < pave <
 // marking). Sidewalks are raised slabs, cut where another carriageway crosses them, so crossing roads stay flat.
-import { CanvasTexture, type Material, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
-import { graphics8c, roads as C } from '../config.ts';
+import { CanvasTexture, Color, type Material, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
+import { graphics8c, look, roads as C } from '../config.ts';
 import type { RoadRec, XZ } from '../geo/chunkData.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
+import { mix as lookMix, vintage } from './look.ts';
 import { pbrMaps } from './textures.ts';
 import { hash01, MeshBuffer, offsetPolyline } from './geom.ts';
 
@@ -16,7 +17,15 @@ type WayLike = { kind: string; name?: string; width?: number; lanes?: number; on
 export function roadWidth(r: WayLike): number {
   const byName = r.name === undefined ? undefined : C.widthByName[r.name];
   if (byName !== undefined && (!r.oneway || r.roundabout)) return byName; // a oneway half keeps its own width
-  return r.width ?? (r.lanes ? r.lanes * C.laneWidth : (C.widthByKind[r.kind] ?? C.defaultWidth));
+  if (r.width) return r.width;
+  if (r.lanes) return r.lanes * C.laneWidth;
+  if (isAlley(r)) return C.alley.width;
+  return C.widthByKind[r.kind] ?? C.defaultWidth;
+}
+
+/** Hà Nội alley (ngõ / ngách / hẻm by name, or an unnamed residential way) without width / lanes tags: config roads.alley. */
+export function isAlley(r: WayLike): boolean {
+  return !r.roundabout && C.alley.kinds.includes(r.kind) && (r.name === undefined ? C.alley.unnamed : new RegExp(C.alley.pattern).test(r.name));
 }
 
 /** Raised sidewalk width (m) on each side; 0 for kinds without sidewalks. Like roadWidth, a oneway half of a dual
@@ -24,7 +33,8 @@ export function roadWidth(r: WayLike): number {
 export function sidewalkWidth(r: WayLike): number {
   if (!C.sidewalkKinds.includes(r.kind)) return 0;
   const byName = r.name === undefined ? undefined : C.sidewalkByName[r.name];
-  return byName !== undefined && (!r.oneway || r.roundabout) ? byName : C.sidewalkWidth;
+  if (byName !== undefined && (!r.oneway || r.roundabout)) return byName;
+  return !r.width && !r.lanes && isAlley(r) ? C.alley.sidewalk : C.sidewalkWidth;
 }
 
 /** Centre-line distance from the middle of p to the nearest roughly parallel (|cos| ≥ minCos) way of `others` on its
@@ -345,11 +355,78 @@ function paintSett(g: CanvasRenderingContext2D, n: number) {
 const withOffset = (m: MeshStandardMaterial, f: number) =>
   Object.assign(m, { polygonOffset: true, polygonOffsetFactor: f, polygonOffsetUnits: f });
 
-/** asphalt_02 PBR (Phase 8C T3, uv = world metres, repeat = 1 / tile) or the canvas texture when switched off. */
+/** Leg 3 look (config look.asphalt, sidewalk / pave): small square cement tiles (Hà Nội sidewalks), dark joints, per-tile
+ *  tint, a few stains. */
+function paintTiles(g: CanvasRenderingContext2D, n: number) {
+  const rows = 8;
+  const cell = n / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < rows; c++) {
+      const v = hash01(r, c, 21);
+      g.fillStyle = v < 0.5 ? `rgba(40,30,15,${0.22 * (0.5 - v)})` : `rgba(255,250,235,${0.2 * (v - 0.5)})`;
+      g.fillRect(c * cell, r * cell, cell, cell);
+    }
+  }
+  g.strokeStyle = 'rgba(30,24,14,0.5)';
+  g.lineWidth = 1.5;
+  for (let i = 0; i <= rows; i++) {
+    g.beginPath();
+    g.moveTo(i * cell, 0);
+    g.lineTo(i * cell, n);
+    g.moveTo(0, i * cell);
+    g.lineTo(n, i * cell);
+    g.stroke();
+  }
+  for (let k = 0; k < 7; k++) {
+    // stains: soft dark blotches (rain, oil, moss)
+    const [x, y, rad] = [hash01(k, 1, 23) * n, hash01(k, 2, 23) * n, 10 + hash01(k, 3, 23) * 28];
+    const blot = g.createRadialGradient(x, y, 0, x, y, rad);
+    blot.addColorStop(0, `rgba(${k % 3 ? '35,30,18' : '40,52,20'},${0.12 + 0.18 * hash01(k, 4, 23)})`);
+    blot.addColorStop(1, 'rgba(35,30,18,0)');
+    g.fillStyle = blot;
+    g.fillRect(x - rad, y - rad, 2 * rad, 2 * rad);
+  }
+}
+
+/** Leg 3 look (config look.asphalt): repair patches + wear in the asphalt's fragment shader, by world metres (uv = metres
+ *  × 1 / tile), so every ribbon agrees. A hashed `share` of `cell`-metre cells holds one darker rectangle (fresh patch) with
+ *  a soft edge; value noise over 2 cells lightens / darkens the rest by ±wear. Strength × vintage(); off at 0. */
+function patchAsphalt(m: MeshStandardMaterial, tile: number) {
+  const A = look.asphalt;
+  if (vintage() <= 0) return;
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uPatch = { value: [tile, A.cell, A.share, lookMix(A.dark), lookMix(A.wear, 0)] };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <map_pars_fragment>', `#include <map_pars_fragment>
+uniform float uPatch[5];
+float h21(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 q) { vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + 1.0), f.x), f.y); }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+{
+  vec2 pm = vMapUv * uPatch[0] / uPatch[1];
+  vec2 cell = floor(pm), f = fract(pm);
+  vec2 sz = vec2(0.3) + 0.55 * vec2(h21(cell + 1.7), h21(cell + 3.1));
+  vec2 o = (1.0 - sz) * vec2(h21(cell + 5.3), h21(cell + 7.9));
+  vec2 d = abs(f - o - 0.5 * sz) - 0.5 * sz;
+  float inside = (1.0 - smoothstep(-0.02, 0.01, max(d.x, d.y))) * step(1.0 - uPatch[2], h21(cell));
+  float wear = 1.0 + uPatch[4] * (vnoise(pm * 0.5) * 2.0 - 1.0);
+  float tone = mix(uPatch[3], 1.3, step(0.7, h21(cell + 9.1))); // dark fresh asphalt, or a lighter concrete fill
+  diffuseColor.rgb *= mix(wear, tone, inside);
+}`);
+  };
+}
+
+/** asphalt_02 PBR (Phase 8C T3, uv = world metres, repeat = 1 / tile) or the canvas texture when switched off; tinted by
+ *  roads.colours.asphalt (× the map) and patched (Leg 3 look). */
 function asphaltMaterial() {
-  if (!graphics8c.asphalt.enabled) return new MeshStandardMaterial({ map: canvasTexture(C.colours.asphalt, C.textureTile.asphalt, 0.35), roughness: 0.95 });
-  const m = new MeshStandardMaterial(pbrMaps('asphalt_02'));
-  for (const t of [m.map, m.normalMap, m.aoMap]) t?.repeat.set(1 / graphics8c.asphalt.tile, 1 / graphics8c.asphalt.tile);
+  const tile = graphics8c.asphalt.enabled ? graphics8c.asphalt.tile : C.textureTile.asphalt;
+  const m = graphics8c.asphalt.enabled ? new MeshStandardMaterial(pbrMaps('asphalt_02')) : new MeshStandardMaterial({ map: canvasTexture(C.colours.asphalt, tile, 0.35), roughness: 0.95 });
+  if (graphics8c.asphalt.enabled) {
+    for (const t of [m.map, m.normalMap, m.aoMap]) t?.repeat.set(1 / tile, 1 / tile);
+    m.color.multiply(new Color(C.colours.asphalt));
+  }
+  patchAsphalt(m, tile);
   return m;
 }
 
@@ -358,7 +435,7 @@ export function createRoadMaterials(): Partial<Record<MaterialId, Material>> {
   const { colours: K, textureTile: T, polygonOffset: O } = C;
   return {
     asphalt: withOffset(asphaltMaterial(), O.asphalt),
-    sidewalk: withOffset(new MeshStandardMaterial({ map: canvasTexture(K.sidewalk, T.sidewalk, 0.18), roughness: 0.9 }), O.sidewalk),
+    sidewalk: withOffset(new MeshStandardMaterial({ map: canvasTexture(K.sidewalk, T.sidewalk, 0.18, vintage() > 0 ? paintTiles : undefined), roughness: 0.9 }), O.sidewalk),
     pave: withOffset(new MeshStandardMaterial({ map: canvasTexture(K.pave, T.pave, 0.15, paintSett), roughness: 0.85 }), O.pave),
     marking: withOffset(new MeshStandardMaterial({ color: K.marking, roughness: 0.7 }), O.marking),
     bridge: new MeshStandardMaterial({ color: K.bridge, roughness: 0.85 }),

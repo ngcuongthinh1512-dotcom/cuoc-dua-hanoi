@@ -38,12 +38,12 @@ describe('NpcRoads (fixture)', () => {
   });
 
   it('widths = RoadBuilder, lanes per direction, lane offsets from the kerb', () => {
-    expect(r.halfWidth(0)).toBe(3.5); // residential 7 m
-    expect(r.sidewalk(0)).toBe(3.5);
+    expect(r.halfWidth(0)).toBe(2); // an unnamed residential way = Hà Nội alley (config roads.alley: 4 m, 1 m sidewalks)
+    expect(r.sidewalk(0)).toBe(1);
     expect(r.sidewalk(2)).toBe(0); // service
     expect([r.lanes(0, true), r.lanes(0, false)]).toEqual([1, 1]);
     const side = traffic.driveLeft ? -1 : 1; // lane offsets are + = right of travel; − when traffic keeps left (Leg 2 Macao)
-    expect(r.laneOffset(0, false, 0)).toBe(side * 1.75);
+    expect(r.laneOffset(0, false, 0)).toBe(side * 1); // half of the 4 m alley / 2 lanes
     expect(r.halfWidth(3)).toBe(18); // widthByName on a roundabout
     expect([r.lanes(3, true), r.lanes(3, false)]).toEqual([traffic.maxLanes, 0]);
     expect([0, 3, 9].map((l) => r.laneOffset(3, true, l))).toEqual([side * 13.5, side * -13.5, side * -13.5]);

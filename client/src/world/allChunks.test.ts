@@ -11,7 +11,7 @@ import { carveRiver } from './Terrain.ts';
 const data = join(import.meta.dirname, '../../public/data');
 const has = ['chunks/index.json', 'water.json', 'elevation.json', 'elevation.bin'].every((f) => existsSync(join(data, f)));
 const MAX_BUCKETS = 16; // draw calls per chunk (docs/plans/phase2.md performance budget)
-const MAX_TRIANGLES = 60_000; // mesh triangles per chunk (instanced props not counted)
+const MAX_TRIANGLES = 64_000; // mesh triangles per chunk (instanced props not counted); Leg 3: the densest Old Quarter chunk (0_-2) sits at ≈ 60k with plot caps + parapets
 // Chunks holding a landmark (phase2b-assets.md §5): its materials (masonry, metal, gold, glass…) and LOD 'near' buckets.
 const MAX_BUCKETS_LANDMARK = 28;
 const MAX_TRIANGLES_LANDMARK = 250_000;

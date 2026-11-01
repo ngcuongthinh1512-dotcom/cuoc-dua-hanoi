@@ -6,8 +6,8 @@ export { RACE_BBOX } from '@race/shared';
 export const render = {
   maxPixelRatio: 2,
   // Placeholder sun until the day/night sky (SPEC §14).
-  hemiLight: { sky: 0xdfeaff, ground: 0x5a5448, intensity: 1.2 },
-  sun: { color: 0xfff0d8, intensity: 2.6, position: { x: -260, y: 420, z: 180 } }, // south-west, afternoon-ish
+  hemiLight: { sky: 0xe5e6e4, ground: 0x625e56, intensity: 1.2 }, // Leg 3 look: pale warm sky fill (was 0xdfeaff / 0x5a5448)
+  sun: { color: 0xfff1de, intensity: 2.6, position: { x: -260, y: 420, z: 180 } }, // south-west, afternoon-ish; Leg 3 look: warmer (was 0xfff0d8)
   shadowMapSize: 2048,
   shadowRadius: 3, // PCF blur
   shadowBias: -0.0005,
@@ -25,6 +25,24 @@ export const render = {
   // Haze (STYLE_GUIDE): hides chunk edges (the load radius follows fog far, world/ChunkManager.ts). near/far grow by
   // altitudeFactor × height above ground, so the topdown view (3.8 km up) stays clear.
   fog: { near: 250, far: 700, altitudeFactor: 1.3 }, // m, m, per m
+};
+
+// Leg 3 "Hà Nội xưa" look (world/look.ts; owner 2026-11-02: the streets did not feel like Hà Nội, wanted an aged /
+// old-photograph tone). `vintage` 0 = off (the GTA-V daylight look as before), 1 = full; DEV `?vintage=0.5` overrides it.
+// It scales everything in this block; the aged colours in roads.colours / terrain.colours / render.sun / hemiLight are
+// plain values (edit them directly). The grade is CSS on the canvas + three fixed overlays under the HUD (Chrome's
+// compositor, no render pass: low and high quality look the same, ≈ 0 ms in the game loop).
+export const look = {
+  vintage: 1,
+  grade: { sepia: 0.12, saturate: 0.88, contrast: 0.92, brightness: 1.05 }, // canvas filter() at vintage 1
+  lift: '#1a1815', // lifted blacks: screen-blended over the frame (old print, no true black)
+  vignette: { colour: 'rgba(30, 27, 22, 0.40)', from: 50 }, // % of the radius where the corner darkening starts
+  grain: { opacity: 0.08, size: 96 }, // static noise tile (overlay-blended), px
+  // world/Sky.ts: fog = HDRI horizon × tint (milky warm haze); fog.near × near (more haze on the street)
+  haze: { tint: [1.03, 1.0, 0.95] as [number, number, number], near: 0.6 },
+  // world/RoadBuilder.ts asphaltMaterial: repair patches (world-metre cells, a hashed share of them holds one darker
+  // smoother rectangle) + low-frequency wear brightness (±wear) in the fragment shader
+  asphalt: { cell: 7, share: 0.35, dark: 0.6, wear: 0.22 }, // 3 in 10 patches are lighter (concrete fill) instead of dark
 };
 
 // Leg 2 (user 2026-10-06): the Macao leg runs in the evening. 'day' = the look above (render.sun / sky, the 8C HDRI) as
@@ -257,6 +275,8 @@ export const buildings = {
   canopyThickness: 0.3, // m, building=roof without min_height
   smallArea: 40, // m²: untagged footprints smaller than this (kiosks, vents, toilets) get smallHeight, not defaultHeight
   smallHeight: 4, // m
+  postSize: 0.4, // m: square columns under a raised structure (OSM min_height parts, building=roof canopies), at every outer vertex …
+  postSpacing: 8, // … and every this many m along longer edges, so nothing hangs in the air
   chimneyChance: 0.35, // per inset roof corner
   chimneySize: [1.1, 0.6, 1.5], // m: along the edge, across, above the roof
   colours: { limestone: '#e3d5b8', zinc: '#6f7c85', iron: '#2a2d30' },
@@ -275,7 +295,7 @@ export const buildings = {
     kioskShopMin: 3, // m: a windowless low box (untagged < smallArea: the Old Quarter's street-front slivers) at least this tall is a shop (quán) band
     // tiled hip / pitched roof (m, m², m above / in from the walls): chance outside the French quarter (Old Quarter tube houses
     // with a tile cap); the rise shrinks with the inset on plots narrower than 2 × inset (a 4 m tube house gets a low ridge)
-    hip: { chance: 0.12, smallChance: 0.6, tonShare: 0.45, maxHeight: 40, maxArea: 700, rise: 4.2, inset: 3.2 }, // smallChance: footprints under plots.minBoxArea (whole-house plots); tonShare of hips are tôn, the rest tile (bigger untagged blocks get per-plot caps instead, macao.plots)
+    hip: { chance: 0.12, smallChance: 0.6, tonShare: 0.45, maxHeight: 40, maxArea: 700, rise: 4.2, inset: 3.2, minWall: 2.6 }, // minWall: m of wall left under the slope, else the box stays flat (a 4 m kiosk is not a 1.4 m hut) // smallChance: footprints under plots.minBoxArea (whole-house plots); tonShare of hips are tôn, the rest tile (bigger untagged blocks get per-plot caps instead, macao.plots)
     // French quarter (world m [x0, z0, x1, z1]: south of Hoàn Kiếm lake to Hai Bà Trưng + the strip east of the lake, Lý Thái Tổ):
     // more hip roofs, ochre plaster. ponytail: axis-aligned boxes, upgrade: the district polygons of geo/districts.ts (the builder runs in a worker without them)
     // (ochreShare of buildings take their tint from the first ochreCount `colonial` colours), fewer rooftop boxes
@@ -302,7 +322,7 @@ export const buildings = {
     // ([min side, height, side as a share of √(largest roof triangle area), max side]); a water tank (bồn nước, hex prism)
     // stands on tankShare of the boxes
     roofBox: { chance: 0.55, maxHeight: 30, size: [1.8, 2.4, 0.3, 3.5], tankShare: 0.6, tankRadius: 0.55, tankHeight: 1, tank: '#d4d8dc' },
-    colonial: ['#e8c766', '#f0d68a', '#e3b94f', '#e9c97a', '#e9e2cf', '#f1ede2', '#e4d3b6', '#cfc8b8', '#e8c4ae', '#c3d2d4', '#bfcdb0', '#e2cc98', '#d2cec4', '#ead3a4', '#d4dccb', '#dcc6cb', '#bdb5a6', '#d8d2c6'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / off-white plaster, dusty pink, blue, green tube-house fronts, grey render
+    colonial: ['#dcc58a', '#e6d7a6', '#d6bd7a', '#e0cd98', '#e9e4d6', '#f1ede2', '#e4d3b6', '#cfc8b8', '#e8c4ae', '#c3d2d4', '#bfcdb0', '#dccfa6', '#d2cec4', '#e2d3b0', '#d4dccb', '#dcc6cb', '#bdb5a6', '#d8d2c6'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / off-white plaster, dusty pink, blue, green tube-house fronts, grey render
     tenement: ['#d6c58f', '#cdbd8a', '#c9c0a8', '#bdb6aa', '#d9cc9e', '#b8b5ad', '#c7b995', '#c2b89f'], // KTT: yellowed / grey stucco
     kttRoof: { share: 0.6, maxHeight: 22, rise: 1.6, inset: 2.5, colours: ['#5c8fc0', '#a04a30', '#7aa0c6', '#b05838'] }, // (rust = saturated red: a pink-brown tint goes olive over the blue-grey slate diffuse) // tôn 'mái che' pitched cap over KTT slabs (blue / rust), slope rise m over inset m
     concrete: ['#d8ccb2', '#c9c3b8', '#e1d9c9', '#bdb5a5'], // concrete-grid towers
@@ -323,11 +343,14 @@ export const roads = {
   curbHeight: 0.15, // m (STYLE_GUIDE)
   laneWidth: 3.25, // m; width = lanes × this when there is no width tag
   widthByKind: {
-    motorway: 14, trunk: 14, primary: 12, secondary: 10, tertiary: 9, unclassified: 7, residential: 7,
+    motorway: 14, trunk: 14, primary: 12, secondary: 10, tertiary: 9, unclassified: 7, residential: 6, // Hà Nội: residential streets are 5–7 m between house fronts
     living_street: 6, service: 4.5, pedestrian: 6, footway: 3, path: 2, cycleway: 2, steps: 3, track: 3,
     primary_link: 7, secondary_link: 7, tertiary_link: 6, subway: 4.5, rail: 4.5, light_rail: 4.5, tram: 4.5, // rail: 1 track
   } as Record<string, number>, // m, per highway=* / railway=* when neither width nor lanes is tagged
   defaultWidth: 6, // m, kind missing from widthByKind
+  // Hà Nội alleys: a residential way named Ngõ / Ngách / Hẻm (or unnamed) without width / lanes tags is a 3–5 m lane between
+  // house fronts, not a 7 m street with 3.5 m sidewalks (that cut 1–3 m into 1,500 houses): carriageway / sidewalk m
+  alley: { kinds: ['residential', 'unclassified', 'living_street'] as string[], pattern: '^(Ngõ|Ngách|Hẻm)\\b', unnamed: true, width: 4, sidewalk: 1 },
   // m carriageway; overrides everything except on a oneway half of a dual carriageway (the Concorde end of the Champs)
   // Pont Neuf 20.5 m = 11.5 + 2 × 4.5, Pont des Arts 11 m incl. railings (fr/en.wikipedia) — the landmark decks g2 details
   widthByName: { 'Place Charles de Gaulle': 36, 'Avenue des Champs-Élysées': 28, 'Pont Neuf': 11.5, 'Pont des Arts': 10.2 } as Record<string, number>,
@@ -353,7 +376,9 @@ export const roads = {
     endRamp: 15, // m of slab beyond a real chain end, blending down to the ground: covers the carved trench behind the quay wall
     rampGrade: 0.25, // max rise per m where the deck follows steep ground (the quay band's one-cell face); player.maxSlopeDeg 45
     bare: ['Pont Neuf', 'Pont des Arts'] as string[] }, // named decks without railings: world/landmarks/g2.ts draws their parapets
-  colours: { asphalt: '#3b3c40', sidewalk: '#bab5aa', pave: '#7f756a', marking: '#f0f0ec', bridge: '#b7aa8f', railing: '#26292c' },
+  // Leg 3 look (config `look`): asphalt = tint × asphalt_02 (warm dark grey, patched in the shader), sidewalk = small cement
+  // tiles with joints and stains (RoadBuilder paintTiles), markings sun-faded. Before: '#3b3c40' / '#bab5aa' / '#7f756a' / '#f0f0ec'
+  colours: { asphalt: '#c4b8a8', sidewalk: '#a39c8c', pave: '#857a6a', marking: '#d9d3c2', bridge: '#b7aa8f', railing: '#26292c' },
   textureTile: { asphalt: 4, sidewalk: 3, pave: 1.2 }, // m covered by one canvas texture (uv = world metres)
   polygonOffset: { sidewalk: -1, asphalt: -2, pave: -3, marking: -4 }, // factor = units; terrain (0) < … < marking
 };
@@ -374,7 +399,7 @@ export const terrain = {
   quayGrade: 0.04, // beyond the band the raised floor falls off this steeply until it meets the (smeared) DEM
   padBlend: 25, // m outside a flattened plaza (geo/landmarks PADS) over which the ground eases back to the DEM
   stoneSlope: 1, // |gradient| above this is coloured stone (quay walls: the band drop is ~2)
-  colours: { pavement: '#9a9892', park: '#b9a987', grass: '#6f8f4e', stone: '#b3a78f' }, // park = gravel paths
+  colours: { pavement: '#968e80', park: '#b3a37e', grass: '#788748', stone: '#b3a78f' }, // park = gravel paths; Leg 3 look: olive grass, warm dust (was '#9a9892' / '#b9a987' / '#6f8f4e')
 };
 
 export const water = {
@@ -452,6 +477,43 @@ export const props = {
     bouqStep: 9.4, bouqGapShare: 0.2, // one stretch (≈ 8.6 m) per step; hashed share of empty slots
     wallSearch: [1, 16], riverDrop: 2.5, wallDrop: 0.4, parapetInset: 0.6, bridgeGap: 14, // a river drop within wallSearch of the curb; the quay edge where the ground first falls wallDrop
   },
+};
+
+// ── Leg 3 Hà Nội: utility poles + overhead cables (world/PowerLines.ts, 'masonry' bucket, vertex-coloured). m unless noted. ──
+export const powerLines = {
+  enabled: true, // one switch for poles, cables, crossings, drops and the pole colliders
+  kinds: ['residential', 'tertiary', 'secondary', 'unclassified', 'service', 'living_street'] as string[], // streets that get a pole line (one kerb side, hashed per street)
+  spacing: 32, // m between poles along the kerb
+  curbOffset: 0.45, // m from the carriageway edge onto the pavement
+  junctionGap: 6, // m: no pole this close to a junction vertex / a landmark outline
+  lampGap: 1.6, // m: a pole this close to a StreetProps lamp slides lampShift m along the kerb
+  lampShift: 2.5,
+  height: [8, 9.2], // m, hashed per pole
+  radius: [0.17, 0.09], // m, concrete shaft at the foot / top (hexagonal)
+  armLength: 1.3, // m, steel cross-arm (across the street direction)
+  insulators: [2, 4], // per cross-arm, hashed
+  transformerOneIn: 6, // a pole-mounted transformer box on 1 in N poles
+  lightOneIn: 4, // a street-light arm on 1 in N poles with no StreetProps lamp within lightClear m
+  lightClear: 9,
+  // cables per span: power (on the cross-arm) + telecom bundles (on the shaft) by road kind; narrow streets (carriageway
+  // < narrowWidth m, the Old Quarter) add narrowBonus bundles; tangle: share of spans whose bundles cross each other
+  power: { residential: 2, tertiary: 3, secondary: 3, unclassified: 2, service: 1, living_street: 1 } as Record<string, number>,
+  telecom: { residential: 2, tertiary: 2, secondary: 1, unclassified: 1, service: 1, living_street: 2 } as Record<string, number>,
+  narrowWidth: 8, narrowBonus: 2,
+  telecomDrop: [1.5, 2.6], // m below the pole top: the telecom bundles' band
+  sag: 0.02, // m of sag per m of span (× 0.7–1.5 hashed per cable)
+  maxSpan: 70, // m: longer gaps (poles skipped at junctions / buildings) get no cable
+  segments: 6, // straight pieces per span
+  thickness: { power: 0.035, telecom: 0.075 }, // m, ribbon width (drawn at true size, both faces)
+  spliceOneIn: 3, // a dark splice box on 1 in N telecom bundles
+  crossOneIn: 3, // 1 in N poles sends 1–3 cables across the street to a facade on the other side
+  crossReach: 14, // m beyond the far kerb to look for that facade
+  dropOneIn: 2, // 1 in N poles sends a service drop to the facade behind it
+  dropReach: 9, // m behind the pole
+  dropHeight: [4.2, 5.6], // m at the facade end
+  minClearance: 5.5, // m over the carriageway for every crossing cable (ends lifted / crossing skipped otherwise)
+  collider: { radius: 0.15, height: 4 }, // hexagonal prism like props.colliders.lamp
+  colours: { concrete: ['#8e8e88', '#9a9892', '#7f7f7a', '#a3a19a'], steel: '#4a4c4e', insulator: '#d8d4c4', transformer: '#5f6366', cable: '#15161a', bundle: '#0e0f12', lamp: '#c9c9c0' },
 };
 
 // ── Phase 2B · landmarks (geo/landmarks.ts registry, world/landmarks/: index + parts renderer + g1…g5 details) ──
@@ -726,7 +788,7 @@ export const stairs = {
 // ── Foundation · shared NPC settings (npc/types.ts, npc/roads.ts) ──
 /** dims: m width × height × length the models are baked to (process-assets) and the sims use; share of the fleet
  *  (sums to 1); paint: own sRGB paints (else npc.paints); roads: highway kinds it may drive on (else traffic.kinds). */
-type NpcVehicle = { dims: readonly [number, number, number]; share: number; paint?: readonly string[]; roads?: readonly string[] };
+type NpcVehicle = { dims: readonly [number, number, number]; share: number; paint?: readonly string[]; roads?: readonly string[]; speed?: number; accel?: number };
 const npcVehicles = {
   city: { dims: [1.7, 1.5, 3.6], share: 0.14 },
   hatchback: { dims: [1.75, 1.45, 4.0], share: 0.16 },

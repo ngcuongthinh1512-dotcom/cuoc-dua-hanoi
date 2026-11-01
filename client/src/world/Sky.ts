@@ -12,6 +12,8 @@ import { Sky as SkyMesh } from 'three/examples/jsm/objects/Sky.js';
 import { graphics8c, lighting as L, render as R } from '../config.ts';
 import { hash01 } from './geom.ts';
 import { graphics } from './graphics.ts';
+import { mix as lookMix } from './look.ts';
+import { look } from '../config.ts';
 import { isNight, nightTime } from './night.ts';
 import { sceneEnvironmentOn, skyEnvironment } from './Water.ts';
 
@@ -232,7 +234,7 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
           scene.backgroundRotation.set(0, yaw, 0);
           if (envOn) scene.environment = tex; // the renderer turns an equirect environment into a PMREM once
           scene.environmentRotation.set(0, yaw, 0);
-          horizon = stats.horizon.map((v) => v * G.backgroundIntensity) as RGB;
+          horizon = stats.horizon.map((v, i) => v * G.backgroundIntensity * lookMix(look.haze.tint[i]!)) as RGB; // Leg 3 look: warm milky haze
           fog.color.setRGB(...fogColour(horizon, toneMappedLater), THREE.LinearSRGBColorSpace);
         },
         undefined,
@@ -301,7 +303,7 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
       }
       sun.position.set(t.x + s.position.x, t.y + s.position.y, t.z + s.position.z);
       const lift = Math.max(0, p.y - ground) * R.fog.altitudeFactor;
-      fog.near = R.fog.near + lift;
+      fog.near = R.fog.near * (night ? 1 : lookMix(look.haze.near)) + lift; // Leg 3 look: more haze on the street
       fog.far = R.fog.far + lift;
       const far = fog.far * 1.05; // nothing is visible beyond the fog anyway; tighter depth range
       if (camera.far !== far) {

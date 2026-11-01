@@ -10,6 +10,7 @@ import { buildBuildings } from './BuildingBuilder.ts';
 import { type BuildCtx, type Builder, type BuildOut, type MeshBucket, VERTEX_COLOR } from './buildTypes.ts';
 import { mergeBuckets, mergeTriMeshes, MeshBuffer } from './geom.ts';
 import { buildLandmarks } from './landmarks/index.ts';
+import { buildPowerLines } from './PowerLines.ts';
 import { mapBuffers, mapVectors } from './mapVectors.ts';
 import { buildRoads } from './RoadBuilder.ts';
 import { buildStairs } from './StairBuilder.ts';
@@ -26,6 +27,7 @@ export const BUILDERS: Record<string, Builder> = {
   vegetation: buildVegetation,
   props: buildStreetProps,
   landmarks: buildLandmarks,
+  powerLines: buildPowerLines, // Leg 3 Hà Nội: utility poles + overhead cables
 };
 
 export const emptyChunk = (key: ChunkKey): ChunkData => ({ v: 2, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });
