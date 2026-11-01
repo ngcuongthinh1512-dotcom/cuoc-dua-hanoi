@@ -51,6 +51,8 @@ export interface PlayerEnv {
   heightAt(x: number, z: number): number;
   /** Seine surface y (Terrain.riverLevel); null without water data (then nobody swims). */
   waterLevel: number | null;
+  /** Surface y of the swimmable lake under (x, z) (Terrain.lakeSurfaceAt), null on land / river / in a room; absent = no lakes. */
+  lakeAt?(x: number, z: number): number | null;
   /** River polygons (quay walls lie on their edges); undefined without water data. */
   water: WaterData | undefined;
 }

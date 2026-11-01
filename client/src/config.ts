@@ -381,7 +381,9 @@ export const water = {
   roughness: 0.15,
   otherLift: 0.1, // m: non-river water (lakes, ponds, basins) lies this far above its rim height (Terrain.carveRiver)
   lakeRim: 0.05, // rim height = this quantile of the heights along a lake's outer ring (the DEM's rims dip in places)
-  lakeDepth: 0.4, // m: every node inside a lake sinks at least this far under its surface (no DEM island pokes through)
+  lakeDepth: 0.4, // m: every node inside a pond / basin sinks at least this far under its surface (no DEM island pokes through)
+  swimMinArea: 600, // m²: a water polygon this big is a lake you can swim in (Hồ Gươm, Thiền Quang …): carved lakeSwimDepth deep, swim.enterDepth 1.2 + floatDepth 1.35 fit
+  lakeSwimDepth: 2.6, // m
   normalScroll: 0.02, // UV units per second
   colour: '#3d5a66',
   normalTile: 24, // m per normal-map repeat

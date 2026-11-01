@@ -9,7 +9,7 @@ import { chunkBounds, type WaterData } from '../geo/chunkData.ts';
 import { fixture } from '../geo/fixture.ts';
 import { type HeightGrid, heightAt, parseHeightGrid } from '../geo/heightGrid.ts';
 import { PADS } from '../geo/landmarks.ts';
-import { buildTerrain, carveRiver, createTerrainCollider, fillRings, flattenPads, quayMesh, riverLevel, waterLevelOf } from './Terrain.ts';
+import { buildTerrain, carveRiver, createTerrainCollider, fillRings, flattenPads, lakeSurfaceAt, quayMesh, riverLevel, waterLevelOf } from './Terrain.ts';
 import { createWater } from './Water.ts';
 
 const flat = (): HeightGrid => ({ minX: 0, minZ: 0, cell: 5, cols: 61, rows: 61, h: new Float32Array(61 * 61) });
@@ -227,5 +227,28 @@ describe.skipIf(!['elevation.json', 'elevation.bin', 'water.json'].every((f) => 
       expect(world.castRay(ray, 20, true), `wall across the deck at ${x}, ${z}`).toBeNull();
     }
     world.free();
+  });
+});
+
+describe('lakeSurfaceAt (Hà Nội: swimmable lakes)', () => {
+  it('a lake ≥ water.swimMinArea is carved lakeSwimDepth deep and reports its surface; a small pond keeps lakeDepth and reports null; river nodes and land report null', () => {
+    const g = flat();
+    const w: WaterData = {
+      v: 1,
+      polygons: [
+        { river: true, outer: [100, 0, 140, 0, 140, 300, 100, 300] }, // a river so carveRiver has something to carve
+        { river: false, outer: [180, 100, 240, 100, 240, 160, 180, 160] }, // 60 × 60 m lake
+        { river: false, outer: [20, 20, 30, 20, 30, 30, 20, 30] }, // 10 × 10 m pond
+      ],
+    };
+    carveRiver(g, w);
+    const lakeY = waterLevelOf(g, w, 1);
+    expect(lakeSurfaceAt(g, 210, 130)).toBeCloseTo(lakeY, 6);
+    expect(at(g, 42, 26)).toBeLessThanOrEqual(lakeY - W.lakeSwimDepth + 1e-6); // lake centre node
+    expect(lakeSurfaceAt(g, 25, 25)).toBeNull(); // pond
+    expect(at(g, 5, 5)).toBeLessThanOrEqual(waterLevelOf(g, w, 2) - W.lakeDepth + 1e-6);
+    expect(lakeSurfaceAt(g, 120, 100)).toBeNull(); // river
+    expect(lakeSurfaceAt(g, 290, 290)).toBeNull(); // land
+    expect(lakeSurfaceAt(g, -50, 10)).toBeNull(); // off the grid
   });
 });

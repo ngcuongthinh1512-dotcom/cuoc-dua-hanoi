@@ -56,7 +56,7 @@ import { createLandmarkModels } from './world/landmarks/models.ts';
 import { createRoadMaterials } from './world/RoadBuilder.ts';
 import { createSky } from './world/Sky.ts';
 import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
-import { carveRiver, createTerrainCollider, createTerrainMaterials, flattenPads, riverLevel } from './world/Terrain.ts';
+import { carveRiver, createTerrainCollider, createTerrainMaterials, flattenPads, lakeSurfaceAt, riverLevel } from './world/Terrain.ts';
 import { createWater } from './world/Water.ts';
 import { createPost } from './world/post.ts';
 import { initTimeOfDay } from './world/night.ts';
@@ -194,12 +194,12 @@ async function start() {
   const s = flyCamera.spawn;
   const [x, y, z, yawDeg, pitchDeg] = camOk ? cam : [s.x, s.y, s.z, s.yawDeg, s.pitchDeg];
   fly.setPose(x, y, z, yawDeg, pitchDeg);
-  const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water };
+  const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water, lakeAt: (x: number, z: number) => lakeSurfaceAt(grid, x, z) };
   const overrides = parseOverrides(query, !!session);
   // Leg 3 rooms (the Louvre room's critic C2): only the Player gets its OWN env (the room floor, no Seine while inside); `env`
   // stays the grid for the NPCs, the boxes, the overlays and the remote players' height filter.
   let roomFloor: number | null = null;
-  const playerEnv = { ...env, heightAt: (x: number, z: number) => roomFloor ?? env.heightAt(x, z), get waterLevel() { return roomFloor != null ? null : env.waterLevel; } };
+  const playerEnv = { ...env, heightAt: (x: number, z: number) => roomFloor ?? env.heightAt(x, z), get waterLevel() { return roomFloor != null ? null : env.waterLevel; }, lakeAt: (x: number, z: number) => (roomFloor != null ? null : env.lakeAt(x, z)) };
   const player = camOk || viewer ? undefined : await Player.create(scene, world, camera, playerEnv, overrides, session?.team);
   // D17: no spawn / clue box on top of a rail viaduct (the Bir-Hakeim metro deck over the leg start)
   const rails = new RailDecks(new Set(hasIndex ? index.keys : []), new URL('data/', location.href).href);

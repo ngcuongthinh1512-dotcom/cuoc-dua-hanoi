@@ -40,7 +40,17 @@ function riverMask(g: HeightGrid, water: WaterData): Uint8Array {
   return mask;
 }
 
-const carved = new WeakMap<HeightGrid, { level: number; water: WaterData; lakes: number[] }>();
+const carved = new WeakMap<HeightGrid, { level: number; water: WaterData; lakes: number[]; swim: Int16Array }>();
+
+/** Surface y of the swimmable lake (water.swimMinArea) whose carved grid node is nearest (x, z), else null (carveRiver ran on g). */
+export function lakeSurfaceAt(g: HeightGrid, x: number, z: number): number | null {
+  const st = carved.get(g);
+  if (!st) return null;
+  const [c, r] = [Math.round((x - g.minX) / g.cell), Math.round((z - g.minZ) / g.cell)];
+  if (c < 0 || r < 0 || c >= g.cols || r >= g.rows) return null;
+  const i = st.swim[r * g.cols + c]!;
+  return i >= 0 ? st.lakes[i]! : null;
+}
 
 /** Surface y of every other water polygon (lake, pond, basin; NaN for a river), index-aligned with water.polygons: the
  *  water.lakeRim quantile of the heights along its outer ring (no higher than the low part of its rim) + water.otherLift. */
@@ -200,13 +210,16 @@ export function carveRiver(g: HeightGrid, water: WaterData): void {
   // bumps and the quay band above stood out of the water as islands); every land node next to one, and every island
   // (hole), is raised to its rim height (no water sheet hanging over a low bank). Sea bed nodes stay.
   const lake = new Int16Array(g.h.length).fill(-1);
+  const swim = new Int16Array(g.h.length).fill(-1); // node → index of the swimmable lake it lies in (lakeSurfaceAt)
   water.polygons.forEach((p, i) => {
     if (p.river) return;
     const y = lakes[i]!;
+    const deep = Math.abs(ringArea(p.outer)) >= W.swimMinArea;
     fillRings([p.outer, ...(p.holes ?? [])], g.minX, g.minZ, cell, cols, rows, (c, r) => {
       const k = r * cols + c;
-      g.h[k] = Math.min(g.h[k]!, y - W.lakeDepth);
+      g.h[k] = Math.min(g.h[k]!, y - (deep ? W.lakeSwimDepth : W.lakeDepth));
       lake[k] = i;
+      if (deep) swim[k] = i;
     });
     for (const hole of p.holes ?? []) {
       fillRings([hole], g.minX, g.minZ, cell, cols, rows, (c, r) => {
@@ -227,7 +240,7 @@ export function carveRiver(g: HeightGrid, water: WaterData): void {
       }
     }
   }
-  carved.set(g, { level, water, lakes });
+  carved.set(g, { level, water, lakes, swim });
 }
 
 /** Ring oriented so the river is on its LEFT (outer counter-clockwise from above, holes clockwise). */

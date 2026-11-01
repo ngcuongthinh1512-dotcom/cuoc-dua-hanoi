@@ -316,8 +316,8 @@ export class CharacterController {
     if (this.bike) return this.rideStep(dt, intent, this.bike, sx, sz);
 
     const p = s.position;
-    const level = this.env.waterLevel ?? -Infinity;
-    const river = this.overRiver(p.x, p.z);
+    const level = this.surfaceY(p.x, p.z);
+    const river = level > -Infinity;
     const swimming = river && level - p.y > S.enterDepth;
     const [dx, dz] = locked ? [0, 0] : moveDirection(intent);
     const top = movement.footSpeed * (intent.sprint ? movement.sprintMultiplier : 1) * (swimming ? S.speedFactor : 1); // SPEC §17.29: Shift ×2, swimming too
@@ -407,8 +407,8 @@ export class CharacterController {
     s.grounded = this.kcc.computedGrounded();
     if (s.grounded) this.vy = 0;
     else this.vy = Math.min(this.vy, m.y / dt);
-    const level = this.env.waterLevel ?? -Infinity;
-    s.inWater = this.overRiver(p.x, p.z) && p.y < level;
+    const level = this.surfaceY(p.x, p.z);
+    s.inWater = level > -Infinity && p.y < level;
     if (p.y < P.respawnBelow || p.y < this.env.heightAt(p.x, p.z) - P.fellThrough) return this.respawn();
     if (s.inWater) {
       // Rode into the Seine: the bike stays on the last dry ground, the rider swims (next step).
@@ -490,6 +490,14 @@ export class CharacterController {
     return true;
   }
 
+  /** Water surface y over (x, z): a swimmable lake's own level, else the river level where the ground is carved under it,
+   *  else −Infinity (Hà Nội: Hồ Gươm, Thiền Quang … are lakes, not `river` polygons). */
+  private surfaceY(x: number, z: number): number {
+    const lake = this.env.lakeAt?.(x, z);
+    if (lake != null) return lake;
+    return this.overRiver(x, z) ? this.env.waterLevel! : -Infinity;
+  }
+
   /** Carved river bed under (x, z) (carveRiver lowers it to waterLevel − terrain.riverDepth). */
   private overRiver(x: number, z: number) {
     return this.env.waterLevel !== null && this.env.heightAt(x, z) < this.env.waterLevel - 1;
@@ -501,13 +509,13 @@ export class CharacterController {
   private surface(x: number, z: number, yHint?: number): number | null {
     const ground = this.env.heightAt(x, z);
     const rail = !!this.railAt(x, z);
-    const top = Math.max(ground, this.env.waterLevel ?? -Infinity) + P.spawnCastHeight + (rail ? RL.bridge.railLayerStep : 0);
+    const top = Math.max(ground, this.env.waterLevel ?? -Infinity, this.surfaceY(x, z)) + P.spawnCastHeight + (rail ? RL.bridge.railLayerStep : 0);
     // the hinted ray starts under any viaduct (the team never stood on one): a plain highest-surface pick there
     const cast = (from: number, r: boolean) => pickSurface(castColumn(this.world, x, z, from, from - ground + 10, r, WALKABLE, this.collider), r);
     const y = (yHint !== undefined && yHint < top ? cast(yHint + RC.hintAbove, false) : null) ?? cast(top, rail);
     if (y === null) return null;
-    const level = this.env.waterLevel ?? -Infinity;
-    return this.overRiver(x, z) && y < level - S.enterDepth ? level - S.floatDepth : y;
+    const level = this.surfaceY(x, z);
+    return level > -Infinity && y < level - S.enterDepth ? level - S.floatDepth : y;
   }
 
   /** The capsule with its feet at y would touch a collider (lifted so a 45° floor under it doesn't count). */
@@ -535,7 +543,7 @@ export class CharacterController {
   /** Exactly (x, z) or nothing: onto the walkable surface there if it is dry and free, else false (no spiral search). */
   private placeExact(x: number, z: number): boolean {
     const y = this.surface(x, z);
-    if (y === null || y < (this.env.waterLevel ?? -Infinity) || this.overlaps(x, y, z)) return false;
+    if (y === null || y < Math.max(this.env.waterLevel ?? -Infinity, this.surfaceY(x, z)) || this.overlaps(x, y, z)) return false;
     this.teleport(x, y, z);
     return true;
   }
@@ -570,7 +578,7 @@ export class CharacterController {
     const top = this.world.castRayAndGetNormal(down, S.climbHeight + 2, true, undefined, undefined, this.collider);
     if (!top || Math.abs(top.normal.y) < WALKABLE) return false;
     const y = from - top.timeOfImpact;
-    if (y < (this.env.waterLevel ?? -Infinity) || this.overlaps(x, y, z) || !this.startAction('climbOut')) return false;
+    if (y < Math.max(this.env.waterLevel ?? -Infinity, this.surfaceY(x, z)) || this.overlaps(x, y, z) || !this.startAction('climbOut')) return false;
     this.climb = { from: s.position.clone(), to: new Vector3(x, y, z) };
     return true;
   }
