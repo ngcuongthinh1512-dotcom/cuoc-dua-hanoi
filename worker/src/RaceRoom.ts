@@ -13,6 +13,7 @@ import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, readProgress, setMeta, type EventRow, type TeamRow } from './db.ts';
 import type { Env } from './index.ts';
 import { BikeService } from './race/BikeService.ts';
+import { Cetiqlo } from './race/cetiqlo/index.ts';
 import { NEW_TEAM_RACE, RaceEngine, type TeamRace } from './race/engine.ts';
 import { answersCsv, exportCsv, exportRace } from './race/export.ts';
 import { needsTick, tickEntries, tickKey, type Peer } from './race/presence.ts';
@@ -98,6 +99,8 @@ export class RaceRoom extends DurableObject<Env> {
   private readonly bikes: BikeService;
   /** Phase 7 race engine (leg, status, step_progress, ranking) behind one seam. */
   private readonly engine: RaceEngine;
+  /** Leg 3: the CETIQLO head-to-head room(s) (race/cetiqlo). */
+  private readonly cq: Cetiqlo;
   /** teams rows (read once, patched on write: no SELECT per message). */
   private teamRows: TeamRow[] | null = null;
   private snapSeq = 0;
@@ -174,6 +177,20 @@ export class RaceRoom extends DurableObject<Env> {
           this.send(ws, branch === undefined ? { t: 'box', op: 'hide', step } : { t: 'box', op: 'remove', step, branch });
         }
       },
+    });
+    this.cq = new Cetiqlo({
+      load: () => getMeta(this.sql, 'cq'),
+      save: (json) => {
+        setMeta(this.sql, 'cq', json);
+        this.counters.rows += 1;
+      },
+      send: (team, m) => this.sockets(team).forEach((ws) => this.send(ws, m)),
+      online: (team) => this.sockets(team).length > 0,
+      who: (team) => ({ slot: this.team(team)?.slot ?? -1, name: this.team(team)?.name ?? '' }),
+      stepOf: (team) => this.engine.cqStep(team),
+      win: (team, step, now) => this.engine.cqWin(team, step, now),
+      setAlarm: (at) => this.setAlarm(at),
+      event: (t, team, type, data) => this.event(t, team, type, data),
     });
     const engine = this.engine;
     this.bikes = new BikeService({
@@ -296,6 +313,7 @@ export class RaceRoom extends DurableObject<Env> {
       server.serializeAttachment({ role, team: role, since: now, box: null } satisfies Attachment);
     }
     this.send(server, this.welcome(role, team, race, now));
+    if (team) this.cq.online(team.id, now); // Leg 3 CETIQLO: back inside a room → its state again
     if (team) this.broadcast({ t: 'team', slot: team.slot, online: true, avatar }, server);
     else if (role === HOST) this.send(server, this.hostState(now));
     if (role === HOST || role === SPECTATOR) for (const [id, r] of this.rooms) this.send(server, { t: 'room', slot: this.team(id)?.slot ?? -1, room: r });
@@ -336,6 +354,7 @@ export class RaceRoom extends DurableObject<Env> {
     const now = Date.now();
     this.closeDead(now); // the tick loop may be asleep (nobody moving) while a socket died silently
     this.bikes.alarm(this.players(), now);
+    this.cq.tick(now); // Leg 3 CETIQLO: a match whose time is up, a result screen that ended, a disconnect grace that ran out
     this.engine.revealDue(now); // Leg 3: finish-line penalties that ended: those teams hear their place now
   }
 
@@ -454,6 +473,16 @@ export class RaceRoom extends DurableObject<Env> {
         this.setRoom(team, m.room);
         return;
       }
+      case 'cq.join':
+        return a.role === TEAM ? this.cq.join(a.team, now) : undefined;
+      case 'cq.leave':
+        return a.role === TEAM ? this.cq.leave(a.team, now) : undefined;
+      case 'cq.take':
+        return a.role === TEAM ? this.cq.take(a.team, m.id, m.x, m.z, now) : undefined;
+      case 'cq.drop':
+        return a.role === TEAM ? this.cq.drop(a.team, m.id, now) : undefined;
+      case 'cq.checkout':
+        return a.role === TEAM ? this.cq.checkout(a.team, m.x, m.z, now) : undefined;
       case 'watch': {
         // SPEC §17.40: remembered on the socket (hibernation); sendTicks honours it only while the team is over
         if (a.role !== TEAM) return;
@@ -531,6 +560,7 @@ export class RaceRoom extends DurableObject<Env> {
     this.saveTeamState(team, { ...this.teamState(team), lastSeen: now });
     this.event(now, team.id, 'disconnect');
     this.engine.left(team.id, now);
+    this.cq.offline(team.id, now);
     this.setRoom(team, null);
     if (l) Object.assign(l, { win: undefined, over: false });
     this.writeSnapshot(now); // SPEC §8.10: where it stood, at once
@@ -704,11 +734,12 @@ export class RaceRoom extends DurableObject<Env> {
       return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, flagWhy: s.flagWhy, flagAt: s.flagAt, startOrder, step, finishAt, penaltyMinutes, joinedAt, finishPenalty };
     });
     const race = this.engine.hostView(now);
+    const cetiqlo = this.cq.hostView();
     // ponytail: `steps` (Phase 6 corridor points: start + route / Pit Stop zones) stays until the Host page reads `leg`
     const steps = race.leg && [{ id: 'start', ...race.leg.start }, ...race.leg.steps.filter((s) => s.type === 'route_info' || s.type === 'pit_stop').map(({ id, x, z }) => ({ id, x, z }))];
     return {
       t: 'host.state', serverMs: now, status: this.engine.status, teams, counters: this.counters.toJSON(), bikes: this.bikes.list(), spawning: this.bikes.spawning,
-      spectatorCode: this.spectatorCode(), spectators: this.sockets(SPECTATOR).length, ...(steps ? { steps } : {}), ...race,
+      spectatorCode: this.spectatorCode(), spectators: this.sockets(SPECTATOR).length, ...(steps ? { steps } : {}), ...(cetiqlo.length ? { cetiqlo } : {}), ...race,
     };
   }
 

@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./cetiqlo": "./src/cetiqlo/index.ts",
     "./graph": "./src/graph/index.ts",
     "./leg": "./src/leg/index.ts",
     "./protocol": "./src/protocol/index.ts",

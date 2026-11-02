@@ -6,7 +6,7 @@ import graphUrl from '@race/shared/data/roadgraph.json?url';
 import { CLOSE, MEDIA, NET, type ClientMessage, type HostState, type LegIssueView, type ServerMessage } from '@race/shared/protocol';
 import { hostPage, net } from '../config.ts';
 import './host.css';
-import { withAutoDemo, missingFixedTeams, checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, finishPenaltyMessage, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, type ExportFormat, type ExportResult } from './hostView.ts';
+import { cetiqloLines, withAutoDemo, missingFixedTeams, checkMediaFile, corridorPoints, counterLines, demoExportText, demoState, exportConfirm, exportFileName, fetchExport, freshAlerts, freshQueue, legIssueLines, finishPenaltyMessage, legPenaltyLine, mediaErrorText, mediaNames, mediaPath, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, STATUS_LABEL, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings, type ExportFormat, type ExportResult } from './hostView.ts';
 import type { HostMap } from './hostMap.ts';
 import { demoTick, withMapDemo } from './hostMapData.ts';
 
@@ -117,6 +117,8 @@ const bikes = el('section');
 const candStatus = el('span', { className: 'note' }); // outlives render(): the status of the last "Tính hành lang" click
 /** SPEC §17.40: one line under the player link: the spectator code + Sao chép + Đổi mã + how many are watching (drawSpectators). */
 const specBox = el('p');
+/** Leg 3 CETIQLO: queue + running match per room (read-only, cetiqloLines). */
+const cqBox = el('div', { className: 'note' });
 let specSig = '';
 let computing = false;
 let lastAttempt = 0; // throttles automatic retries (D11: recomputed by itself whenever the server holds no candidates)
@@ -162,6 +164,7 @@ function mainView() {
     el('div', { className: 'top' }, el('h1', {}, `Cuộc đua Hà Nội – Host · ${race}`),
       el('span', { className: 'link' }, 'Link người chơi: ', el('code', {}, link), ' ', el('button', { className: 'small', onclick: () => void navigator.clipboard?.writeText(link) }, 'Sao chép'))),
     specBox,
+    cqBox,
     banner, noticeBox, err, queueWrap,
     el('nav', { className: 'tabs' }, ...tabBtns),
     ...Object.values(panels),
@@ -716,6 +719,7 @@ function render(s: State) {
     stat('warn', 'Cờ đỏ', s.teams.filter((t) => t.flagged).length),
   );
   drawSpectators(s);
+  cqBox.replaceChildren(...cetiqloLines(s, now).map((l) => el('div', {}, l)));
   drawStatus(s);
   drawLeg(s);
   drawMedia(s);

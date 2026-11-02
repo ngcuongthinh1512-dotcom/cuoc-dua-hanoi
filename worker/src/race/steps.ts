@@ -65,6 +65,9 @@ export type RaceInput =
   /** Leg 3 (`race room`, from anywhere): progress in the chosen + opened branch's room; done = total → a pending answer for the
    *  Host; skipped → the step completes, (total − done) × penaltyMinutesEach at the finish line. `pose` as for `answer`. */
   | { kind: 'room'; step: string; branch: string; done: number; skipped: boolean; pose: StandAt }
+  /** Leg 3 CETIQLO (server-internal, never from a socket): the team won its head-to-head match → the challenge step with `room: 'cetiqlo'`
+   *  completes like an approved answer. `pose` as for `answer`. */
+  | { kind: 'cqWin'; step: string; pose: StandAt }
   /** The Host approved step's answer: complete + settle like `open` (critic S3); `pose` = the team's trusted pose now: its
    *  bike goes to the rack only if it stands in the place on foot (S3 coverage). */
   | { kind: 'approve'; step: string; pose: StandAt }
@@ -252,6 +255,14 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     done(input.pose);
     return { p, effects: fx };
   }
+  if (input.kind === 'cqWin') {
+    if (s.type !== 'challenge' || s.room !== 'cetiqlo' || i !== p.step) return silent;
+    const a: AnswerRec = { id: p.lastAnswerId + 1, b: null, text: 'Thắng trận đối kháng CETIQLO', at: now, s: 'correct' };
+    p.lastAnswerId = a.id;
+    fx.push({ kind: 'answer', step: i, rec: a, verdict: 'correct' });
+    done(input.pose);
+    return { p, effects: fx };
+  }
   if (input.kind === 'accept') {
     if (s.type !== 'challenge' || s.teaser === '' || p.startedAt !== null) return silent;
     p.startedAt = now;
@@ -274,7 +285,8 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     p = { ...p, branch: input.branch, branchOpenedAt: null, startedAt: null, arrivedAt: null, lockedUntil, room: null }; // the old branch's room progress is lost too
     return { p, effects: [{ kind: 'switch', step: i, from, to: input.branch, lockedUntil }, { kind: 'hideBox', step: i, branch: from }] };
   }
-  // answer
+  // answer (a CETIQLO step is won in the room, never typed)
+  if (s.type === 'challenge' && s.room === 'cetiqlo') return silent;
   const state = stateOf(leg, i, p, now);
   if (state === 'teaser') return refuse('taskNotStarted');
   if (state === 'pending') return refuse('answerPending');
@@ -378,9 +390,9 @@ export function taskState(leg: Leg, i: number, row: StepProgressRow | undefined,
 const mediaView = (m: MediaItem): MediaView => ({ url: m.url, label: m.label, kind: m.url.startsWith(MEDIA.prefix) ? 'image' : 'link' });
 
 /** SPEC §10.1 task minus `answers` / `referenceAnswers` / `params`; its location only by name. */
-const taskView = (t: Task, room?: RoomRec | null): TaskView => ({
+const taskView = (t: Task, room?: RoomRec | null, noInput = false): TaskView => ({
   title: t.title, description: t.description, media: t.media.map(mediaView), kind: t.kind, verification: t.verification,
-  input: t.kind === 'free' ? 'proof' : t.parts ? 'parts' : t.pick ? 'seat' : 'text', proofInstruction: t.proofInstruction,
+  input: noInput ? 'none' : t.kind === 'free' ? 'proof' : t.parts ? 'parts' : t.pick ? 'seat' : 'text', proofInstruction: t.proofInstruction,
   timeLimitMinutes: t.timeLimitMinutes, ...(t.location ? { place: t.location.name } : {}),
   ...(t.parts ? { partLabels: t.parts.map((p) => p.label) } : {}), // SPEC §17.44
   ...(t.room ? { room: { ...t.room, done: room?.done ?? 0, skipped: room?.skipped ?? false } } : {}), // Leg 3: the 3D room + progress
@@ -434,7 +446,7 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
     case 'challenge':
       return {
         ...base, text: s.teaser, retryPenaltyMinutes: retryLockMinutes(leg, s.task), answers: answerViews(row, null, partsOf(s.task), s.task.showMarks),
-        ...(status === 'teaser' ? {} : { task: taskView(s.task) }),
+        ...(status === 'teaser' ? {} : { task: taskView(s.task, null, s.room === 'cetiqlo') }), // Leg 3: a CETIQLO step is won in the room: no input
         ...(s.room && status !== 'done' ? { room: s.room } : {}), // Leg 3 (v12): played inside the GardeRobe room
         ...(s.pickup && status !== 'done' ? { pickup: s.pickup } : {}), // Leg 3 (v14): held in the room until F at the stage
       };

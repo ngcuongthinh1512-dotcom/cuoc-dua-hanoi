@@ -96,6 +96,16 @@ export function counterLines(state: HostState): [string, string][] {
   ];
 }
 
+/** Leg 3 CETIQLO (read-only): one line per room in use: the queue and the running match (no bag contents, only how many items). */
+export function cetiqloLines(state: HostState, now: number = state.serverMs): string[] {
+  const label = (step: string) => state.leg?.steps.find((x) => x.id === step)?.label ?? step;
+  return (state.cetiqlo ?? []).map((r) => {
+    const m = r.match;
+    const match = m ? `đang đấu: ${m.teams.map((t) => `${t.name}${t.online ? '' : ' (mất mạng)'} ${t.locked ? 'đã chốt' : `${t.bagN} món`}`).join(' – ')} · còn ${fmtMinSec(Math.max(0, m.endsAt - now))}` : 'không có trận';
+    return `CETIQLO · ${label(r.step)}: ${match} · hàng chờ: ${r.queue.length ? r.queue.map((q) => q.name).join(', ') : 'trống'}`;
+  });
+}
+
 /** What the server accepts in one `host.createTeams` (shared/src/protocol/codec.ts isClientMessage): a name of 1–40 characters, ≤ 100 teams.
  *  One bad team makes it close the Host socket (4400) and create none, so the page checks first. */
 export const MAX_TEAM_NAME = 40;

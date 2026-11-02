@@ -106,7 +106,7 @@ async function post(body: object): Promise<Attempt> {
 }
 
 /** The code / password form; `submit` logs in (the caller closes the screen) or calls `error` with the line to show. */
-function form(race: string, remembered: string, submit: (host: boolean, value: string, error: (t: string, retryMs?: number) => void) => Promise<void>) {
+function form(race: string, remembered: string, submit: (host: boolean, value: string, error: (t: string, retryMs?: number) => void) => Promise<void>, auto = false) {
   const { root, k } = screen(FORM);
   const [input, submitBtn, error] = [k<HTMLInputElement>('input'), k<HTMLButtonElement>('submit'), k('error')];
   let host = false;
@@ -149,6 +149,7 @@ function form(race: string, remembered: string, submit: (host: boolean, value: s
     if (Date.now() >= lockedUntil) submitBtn.disabled = false;
   };
   mode();
+  if (auto && remembered.length === NET.codeLength) root.querySelector('form')!.requestSubmit(); // ?code=: straight in (a wrong code just shows the form)
 }
 
 /** SPEC §8.10 "Chào mừng trở lại": resolves on "Tiếp tục" (or Enter). */
@@ -163,10 +164,12 @@ function welcomeBack(name: string, s: Summary): Promise<void> {
 
 const close = () => document.getElementById('login')?.remove();
 
-/** Online start: the form until /api/login says yes (team: + "Chào mừng trở lại" when it played before). */
-export function login(race: string): Promise<Session> {
+/** Online start: the form until /api/login says yes (team: + "Chào mừng trở lại" when it played before). `code` (URL ?code=,
+ *  testing): pre-filled and submitted at once; a return visit then skips the "Chào mừng trở lại" click too. */
+export function login(race: string, code?: string): Promise<Session> {
+  const auto = code !== undefined;
   return new Promise((resolve) => {
-    form(race, readStoredCode(), async (host, value, error) => {
+    form(race, auto ? normalizeCode(code) : readStoredCode(), async (host, value, error) => {
       const r = await post(host ? { race, host: value } : { race, code: value });
       if (!r.ok) return error(errorText(r.error, r.retryMs), r.error === 'locked' ? r.retryMs : 0);
       if (host) return close(), resolve({ race, token: r.token, role: 'host' });
@@ -174,10 +177,10 @@ export function login(race: string): Promise<Session> {
       // SPEC §17.40: the spectator code goes through the same box; the server's answer decides the role
       if (r.role === 'spectator') return close(), resolve({ race, token: r.token, role: 'spectator' });
       const session: Session = { race, token: r.token, role: 'team', ...(r.team && { team: r.team }), ...(r.summary && { summary: r.summary }) };
-      if (r.summary && r.summary.reconnects > 0) await welcomeBack(r.team?.name ?? value, r.summary);
+      if (r.summary && r.summary.reconnects > 0 && !auto) await welcomeBack(r.team?.name ?? value, r.summary);
       close();
       resolve(session);
-    });
+    }, auto);
   });
 }
 

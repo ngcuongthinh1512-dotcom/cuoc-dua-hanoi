@@ -5,7 +5,7 @@ import { RoadGraph, type RoadGraphFile } from '@race/shared/graph';
 import { branchZone, normalizeAnswer, parseLeg, stepZones, type Task } from '@race/shared/leg';
 import { decodePose, type CardStatus, type ClueCard, type HostReview, type HostState, type RaceView, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { answersOf, type Bot, botMove, effectiveStatus, fastPenalties, legArg, legFailed, legRowBudget, legStats, playLeg, reviewsFor, runHostBot, runSim, scenarioFailed, SIM_PENALTIES } from './sim.ts';
+import { cqLonePass, answersOf, type Bot, botMove, effectiveStatus, fastPenalties, legArg, legFailed, legRowBudget, legStats, playLeg, reviewsFor, runHostBot, runSim, scenarioFailed, SIM_PENALTIES } from './sim.ts';
 
 // Real workerd + Durable Object (createTestHarness) and real WebSockets: 3 bots walk 30 simulated seconds on the A* road graph.
 // speedup 2 (10 msg/s per bot) leaves margin under the server's 15 msg/s socket limit (1 s window) and is the CLI maximum;
@@ -39,14 +39,14 @@ describe('sim bots (docs/plans/phase6.md §6 D)', () => {
 // content as in mini). Leg 2: in Paris that line was the Bir-Hakeim bridge; from Largo do Pagode da Barra it runs over the harbour
 // (the test server has no terrain: the bots walk the A* route to the nearest node, then straight to the zone), kept for fidelity.
 const mini = readFileSync(join(import.meta.dirname, '../worker/legs/test/mini.json'), 'utf8');
-function compactMini(): string {
+function compactMini(src: string = mini): string {
   const spots = new Map<string, number>();
   const at = (o: { lat: number; lon: number }) => {
     const k = `${o.lat},${o.lon}`;
     if (!spots.has(k)) spots.set(k, spots.size);
     return spots.get(k)!;
   };
-  const leg = JSON.parse(mini);
+  const leg = JSON.parse(src);
   const s0 = { lat: leg.start.lat as number, lon: leg.start.lon as number }; // spot 0 = the start, wherever mini.json puts it
   // NW along the bridge from the start: 35 m per spot
   const put = (o: { lat: number; lon: number }, i: number, extra = 0) => ((o.lat = s0.lat + 0.000262 * i + extra), (o.lon = s0.lon - 0.000263 * i + extra));
@@ -120,6 +120,24 @@ describe('bot moves (docs/plans/phase8.md D18, pure)', () => {
     expect(botMove(locked, 6500, role(0), ANS)).toBeNull();
     expect(botMove(locked, 7000, role(0), ANS)!.op).toMatchObject({ op: 'answer', text: '42' });
     expect(botMove(card({ status: 'done' }), 0, role(0), ANS)).toBeNull();
+  });
+});
+
+describe('Leg 3 CETIQLO Host bot (pure)', () => {
+  const team = (slot: number, step: number, finishAt: number | null = null) => ({ id: `t${slot}`, slot, step, finishAt }) as unknown as HostState['teams'][number];
+  const st = (queue: number[], teams: HostState['teams'], match: unknown = null) =>
+    ({ teams, leg: { steps: [{ id: 'L1' }, { id: 'CQ' }, { id: 'PS' }] }, cetiqlo: [{ step: 'CQ', queue: queue.map((slot) => ({ slot, name: `Đội ${slot}` })), match }] }) as unknown as HostState;
+  it('lets the lone team through after 6 s, only once, only when everybody else is past the step', () => {
+    const since = new Map<string, number>();
+    const done = [team(0, 1), team(1, 2), team(2, 3, 5)];
+    expect(cqLonePass(st([0], done), since, 1000)).toEqual([]);
+    expect(cqLonePass(st([0], done), since, 6999)).toEqual([]);
+    expect(cqLonePass(st([0], done), since, 7000)).toEqual([{ t: 'host.review', team: 't0', step: 'CQ', op: 'approve' }]);
+    expect(cqLonePass(st([0], done), since, 7001)).toEqual([]); // the clock starts again
+    const behind = [team(0, 1), team(1, 0)];
+    expect(cqLonePass(st([0], behind), since, 99_000)).toEqual([]); // team 1 has yet to arrive
+    expect(cqLonePass(st([0], done, { id: 'm1' }), since, 99_000)).toEqual([]); // a match is running
+    expect(cqLonePass(st([0, 1], done), since, 99_000)).toEqual([]); // two waiting: they pair
   });
 });
 
@@ -414,6 +432,15 @@ describe('sim --leg (Phase 7 / 8)', () => {
     expect(legFailed(r)).toBe(false);
     expect(scenarioFailed({ undone: 0, passed: 1, cleared: 1, flagged: 1, ended: true })).toBe(true);
     expect(scenarioFailed({ undone: 1, passed: 1, cleared: 0, flagged: 0, ended: true })).toBe(false); // nobody flagged: nothing to clear
+  });
+
+  // Leg 3 CETIQLO: 4 bots queue in the room, pair up, take the set they were sent, check out; losers re-queue; the one team left over is let through
+  // by the Host bot's "Cho qua" (cqLonePass). The compacted CETIQLO test leg: L1 → CQ (room cetiqlo) → L2 → Pit Stop.
+  it('Leg 3 CETIQLO: 4 bots play the head-to-head room and all reach the Pit Stop', { timeout: 300_000 }, async () => {
+    const cq = compactMini(readFileSync(join(import.meta.dirname, '../worker/legs/test/cetiqlo.json'), 'utf8'));
+    const r = await runSim({ bots: 4, seconds: 600, speedup: 2, rejoinGapMs: 0, race: 'sim-cetiqlo', password: 'test-secret', log: () => {}, leg: { json: cq } });
+    expect(r.leg).toMatchObject({ id: 'cetiqlo-test', steps: 4, finished: 4, ranked: 4 });
+    expect(legFailed(r)).toBe(false);
   });
 
   it('a long leg is not reported as LỖI for the shared rows: the budget counts per-team race rows (organiser review)', () => {

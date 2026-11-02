@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CETIQLO – cửa hàng (dev) – Cuộc đua Hà Nội</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #e9e6e0; font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; }
+      canvas { display: block; }
+      #cq-panel { position: fixed; top: 10px; left: 10px; background: rgba(255,255,255,.92); border-radius: 8px; padding: 8px 10px; display: flex; gap: 8px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+      #cq-panel select, #cq-panel button { font: inherit; }
+      #cq-label { position: fixed; left: 50%; bottom: 12%; transform: translateX(-50%); background: rgba(0,0,0,.6); color: #fff; padding: 6px 14px; border-radius: 8px; font-weight: 600; white-space: nowrap; }
+      #cq-label:empty { display: none; }
+    </style>
+  </head>
+  <body>
+    <!-- Dev-only store viewer (not in the production build: vite builds index.html + host.html only). Params: see src/cetiqlo/cetiqloDev.ts -->
+    <script type="module" src="/src/cetiqlo/cetiqloDev.ts"></script>
+  </body>
+</html>

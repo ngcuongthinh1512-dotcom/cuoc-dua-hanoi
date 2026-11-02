@@ -648,3 +648,27 @@ describe('boxesOf / cardOf', () => {
     expect(cardOf(mini, 5, undefined, 42)).toEqual({ step: 'PS', type: 'pit_stop', label: 'Về đích', text: '', media: [], status: 'active', lockedUntil: null, lockKind: null, answers: [], receivedAt: 42, completedAt: null });
   });
 });
+
+describe('Leg 3 CETIQLO challenge step', () => {
+  const cq = { ...miniRaw, id: 'cq', steps: [miniRaw.steps[0]!, { id: 'CQ', type: 'challenge', label: 'CQ', room: 'cetiqlo', task: { title: 'Đối đầu CETIQLO', description: 'd', verification: 'host_approval' } }, miniRaw.steps[4]!, miniRaw.steps[5]!] };
+  const r = parseLeg(cq);
+  if (!r.ok) throw new Error('cq leg');
+  const leg = r.leg;
+  const row = { ...emptyProgress('t', 'CQ'), clue_opened_at: 100, task_started_at: 100 };
+  it('the card has task.input "none" (no box, no send button) and room cetiqlo; the next card has neither', () => {
+    expect(cardOf(leg, 1, row, 0)).toMatchObject({ room: 'cetiqlo', status: 'active', task: { input: 'none', title: 'Đối đầu CETIQLO' } });
+    const next = cardOf(leg, 2, { ...emptyProgress('t', 'L3'), clue_opened_at: 200 }, 0);
+    expect(next.room).toBeUndefined();
+    expect(next.task).toBeUndefined();
+  });
+  it('typed answers are ignored; cqWin completes the step (a correct AnswerRec, next step) only on the current cetiqlo step', () => {
+    const zones = stepZones(leg);
+    const p: Progress = { step: 1, arrivedAt: null, startedAt: 100, branch: null, branchOpenedAt: null, lockedUntil: null, pendingId: null, lastAnswerId: 0, finishAt: null, penaltyMinutes: 0 };
+    expect(advance(leg, zones, p, { kind: 'answer', step: 'CQ', text: 'x', pose: null }, 500).effects).toEqual([]);
+    const win = advance(leg, zones, p, { kind: 'cqWin', step: 'CQ', pose: null }, 500);
+    expect(win.p.step).toBe(2);
+    expect(win.effects.map((e) => e.kind)).toEqual(expect.arrayContaining(['answer', 'complete']));
+    expect(advance(leg, zones, { ...p, step: 0 }, { kind: 'cqWin', step: 'CQ', pose: null }, 500).effects).toEqual([]);
+    expect(advance(leg, zones, { ...p, step: 2 }, { kind: 'cqWin', step: 'CQ', pose: null }, 500).effects).toEqual([]); // already past it
+  });
+});

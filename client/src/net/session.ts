@@ -64,5 +64,5 @@ export function fetchMedia(s: Pick<Session, 'race' | 'token'> | null | undefined
  *  DEV ?login / ?login=back: the form / the "Chào mừng trở lại" screen drawn over the offline world (p6-login presets). */
 export async function startSession(query: URLSearchParams): Promise<Session | null> {
   if (import.meta.env.DEV && query.has('login')) return previewLogin(query.get('login') === 'back'), null;
-  return isOnline(query) ? login(raceId(query)) : null;
+  return isOnline(query) ? login(raceId(query), query.get('code') ?? undefined) : null; // ?code=<team code>: pre-filled + submitted by itself (testing)
 }

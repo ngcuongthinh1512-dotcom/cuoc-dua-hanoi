@@ -23,8 +23,9 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { SPRINT_MULTIPLIER } from '@race/shared';
+import { ITEM_BY_ID, STORE } from '@race/shared/cetiqlo';
 import { RoadGraph, type RoadGraphFile, pathPolyline, shortestPath } from '@race/shared/graph';
-import { encodePose, NET, type CardStatus, type ClientMessage, type ClueCard, type HostReview, type HostState, type PoseSample, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
+import { encodePose, NET, type CardStatus, type ClientMessage, type ClueCard, type CqResult, type HostReview, type HostState, type PoseSample, type ServerMessage, type ServerNotice, type StepProgressView, type Welcome } from '@race/shared/protocol';
 
 export interface SimOptions {
   url?: string; // running server (wrangler dev); default: in-process createTestHarness
@@ -109,7 +110,7 @@ function rng(seed: number) {
 type Msg = Exclude<ServerMessage, number[]>;
 
 /** A socket with a message log: `until(pred)` resolves with the first matching message (already seen or not). */
-async function openSocket(base: string, race: string, token: string, stats: { sent: number; up: number; down: number }) {
+export async function openSocket(base: string, race: string, token: string, stats: { sent: number; up: number; down: number }) {
   const ws = new WebSocket(`${base.replace(/^http/, 'ws')}/api/race/${race}/ws?token=${encodeURIComponent(token)}`);
   const log: Msg[] = []; // everything but ticks (nobody waits for those; 5 Hz × peers would pile up in a long run)
   const waiters: { pred: (m: Msg) => boolean; resolve: (m: Msg) => void }[] = [];
@@ -166,7 +167,7 @@ const isWelcome = (m: Msg): m is Welcome => m.t === 'welcome';
 const isState = (m: Msg): m is HostState => m.t === 'host.state';
 
 /** HTTP logins are counted by the Durable Object itself (counters.http), not as WebSocket messages. */
-async function post(base: string, body: unknown) {
+export async function post(base: string, body: unknown) {
   const r = await fetch(`${base}/api/login`, { method: 'POST', body: JSON.stringify(body) });
   return (await r.json()) as { ok: boolean; token?: string; error?: string };
 }
@@ -254,6 +255,24 @@ export function reviewsFor(state: Pick<HostState, 'queue'>, sent: Map<string, nu
   return out;
 }
 
+/** Leg 3 CETIQLO: a team alone in a CETIQLO queue with every other team already past the step can never get an opponent (a match needs 2
+ *  teams, so exactly one team of any race is left over): the Host's "Cho qua" (approve without id) lets it through after `afterMs`.
+ *  `since` (team id → ms it was first seen alone) is the caller's memory. */
+export function cqLonePass(state: Pick<HostState, 'cetiqlo' | 'teams' | 'leg'>, since: Map<string, number>, now: number, afterMs = 6000): HostReview[] {
+  const out: HostReview[] = [];
+  for (const r of state.cetiqlo ?? []) {
+    const idx = state.leg?.steps.findIndex((x) => x.id === r.step) ?? -1;
+    const lone = r.match === null && r.queue.length === 1 ? state.teams.find((t) => t.slot === r.queue[0]!.slot) : undefined;
+    if (!lone || idx < 0 || state.teams.some((t) => t.id !== lone.id && t.finishAt === null && t.step <= idx)) {
+      if (lone) since.delete(lone.id);
+      continue;
+    }
+    const first = since.get(lone.id) ?? (since.set(lone.id, now), now);
+    if (now - first >= afterMs) (out.push({ t: 'host.review', team: lone.id, step: r.step, op: 'approve' }), since.delete(lone.id));
+  }
+  return out;
+}
+
 /** Phase 11 `--full` Host-bot plan: `undoKey` "team|step|id" = the Duyệt it takes back once (then approves again), `pass` = the
  *  team it lets through ("Cho qua": approve without id) once that team holds `step`, one red flag cleared. `done` is filled as it goes. */
 export interface HostScenario { undoKey: string | null; pass: { team: string; step: string; index: number } | null; done: { undone: string | null; passed: boolean; cleared: string | null } }
@@ -274,12 +293,13 @@ export function scenarioMoves(state: HostState, sc: HostScenario, sent: Map<stri
  *  what waits in its queue (reviewsFor; Phase 11: + scenarioMoves). Runs while `running()`. */
 export async function runHostBot(hs: Pick<Sock, 'log' | 'send'>, penalizeKey: string | null, running: () => boolean, pollMs = 150, scenario: HostScenario | null = null): Promise<void> {
   const sent = new Map<string, number>();
+  const alone = new Map<string, number>();
   let from = hs.log.length;
   let cur: HostState | undefined;
   while (running()) {
     cur = hs.log.slice(from).filter(isState).at(-1) ?? cur;
     from = hs.log.length;
-    if (cur) for (const m of [...reviewsFor(cur, sent, penalizeKey, Date.now()), ...(scenario ? scenarioMoves(cur, scenario, sent) : [])]) hs.send(m);
+    if (cur) for (const m of [...reviewsFor(cur, sent, penalizeKey, Date.now()), ...cqLonePass(cur, alone, Date.now()), ...(scenario ? scenarioMoves(cur, scenario, sent) : [])]) hs.send(m);
     await sleep(pollMs);
   }
 }
@@ -425,6 +445,35 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
     for (const m of sock.log.slice(mark)) if (m.t === 'notice' && REFUSALS.has(m.code)) o.refused.push(`${(op?.step as string | undefined) ?? '-'}: ${m.code}`);
   };
 
+  /** Leg 3 CETIQLO: join the queue, play every match it is paired into with the real set the server sent (walk-free: it reports the
+   *  shelf positions; 150 ms between actions = the server's cooldown), check out; a loser is re-queued by the server and waits for the next
+   *  match. Odd bots deliberately leave an item out in their first match (they lose it unless the opponent is as bad: then it re-queues). */
+  const cetiqlo = async (stepId: string) => {
+    const played = new Set<string>();
+    const from = sock.log.length;
+    let n = 0;
+    sock.send({ t: 'cq.join' });
+    while (!moved(stepId)) {
+      if (Date.now() > o.deadline) throw fail('hết giờ chạy chặng ở CETIQLO');
+      const m = sock.log.slice(from).find((x): x is Extract<Msg, { t: 'cq.state' }> => x.t === 'cq.state' && x.phase === 'match' && !!x.match && !played.has(x.match.id))?.match;
+      if (!m) {
+        await sleep(150);
+        continue;
+      }
+      played.add(m.id);
+      const mark = sock.log.length;
+      for (const id of bot.i % 2 === 1 && n === 0 ? m.set.slice(0, 3) : m.set) {
+        const at = ITEM_BY_ID.get(id)!.shelf;
+        await sleep(150);
+        sock.send({ t: 'cq.take', id, x: at.x, z: at.z });
+      }
+      await sleep(150);
+      sock.send({ t: 'cq.checkout', x: STORE.checkout.x, z: STORE.checkout.z });
+      n++;
+      await sock.until((x): x is CqResult => x.t === 'cq.result' && x.matchId === m.id, Math.max(1000, o.deadline - Date.now()), mark).catch(() => null);
+    }
+  };
+
   if (bot.welcome.view?.card?.step !== leg.steps[0]?.id) throw fail(`mật thư đầu là "${bot.welcome.view?.card?.step}", chặng bắt đầu ở "${leg.steps[0]?.id}"`);
   sendPose();
   for (const [i, st] of leg.steps.entries()) {
@@ -444,6 +493,10 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
       if (st.type === 'route_info' || st.type === 'pit_stop' || !card) {
         if (short) changedAt = Date.now(); // waits for the Host's "Kết thúc", not stuck
         await act(st.type === 'pit_stop' && !o.straggler ? { t: 'race', op: 'checkin' } : st.type === 'route_info' && next?.type !== 'pit_stop' ? { t: 'race', op: 'open', step: st.id } : null, true);
+        continue;
+      }
+      if (card.room === 'cetiqlo' && effectiveStatus(card, Date.now(), slack) === 'active' && role.passAt !== card.step) {
+        await cetiqlo(st.id);
         continue;
       }
       const move = botMove(card, Date.now(), role, answers, slack);

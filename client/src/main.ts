@@ -20,7 +20,9 @@ import { PitHost } from './race/PitStop.ts';
 import { boxInReach, RaceClient } from './race/RaceClient.ts';
 import { RaceHud } from './race/ui/RaceHud.ts';
 import { DEMO_ROOM_STATES, demoRoomResult, demoRoomViews, type DemoRoomState } from './rooms/roomDemo.ts';
-import { enterSpot, exitSpot, roomFrame } from './rooms/roomFrame.ts';
+import { enterSpot, exitSpot, roomFrame, toWorld } from './rooms/roomFrame.ts';
+import { type CqLink, raceLink } from './cetiqlo/cetiqloNet.ts';
+import type { CqDemoState, CqMock } from './cetiqlo/cetiqloMock.ts';
 import { hideRoomDone, showRoomDone } from './rooms/doneScreen.ts';
 import { ROOM_TEXT, RoomFlow, isFreeRoom, pickupView, roomOf, type RoomEvent, type RoomTarget } from './rooms/roomState.ts';
 import type { RoomHandle } from './rooms/types.ts';
@@ -186,6 +188,9 @@ async function start() {
   // autoTurn, ?cam=) are ignored. Offline (dev server without ?race=, ?offline=1): the test world as before.
   const session = await sessionP;
   const host = session?.role === 'host';
+  // Testing (docs/plans/cetiqlo.md "Chạy thử CETIQLO"): ?autoCq=1 with a team session = straight into the CETIQLO room: the world is
+  // "ready" at the welcome (the street streams in the background), F at the box by itself, the clue card closed by itself.
+  const autoCq = session?.role === 'team' && query.get('autoCq') === '1';
   // SPEC §17.40: the Host and a spectator (spectator code) have no body: the watch mode (Spectate) from the start. DEV
   // offline ?spectate=1 (+ ?peers= stand-ins): the same without a server (p9-watch).
   const viewer = (!!session && session.role !== 'team') || (import.meta.env.DEV && !session && query.has('spectate'));
@@ -225,7 +230,7 @@ async function start() {
   // Remote players: online, or DEV ?peers=slot,x,z,yawDeg,mode[,action];… stand-ins (p6-peers) offline.
   const peers = import.meta.env.DEV && !session ? parsePeers(query.get('peers')) : [];
   const assets = player?.assets ?? (viewer ? { character: await loadCharacterAsset(), bike: await loadBikeAsset() } : undefined);
-  const remote = assets && (session || peers.length) ? new RemotePlayers(scene, assets.character, assets.bike, remoteCfg.renderRadius) : undefined;
+  const remote = assets && (session || peers.length || (import.meta.env.DEV && query.get('roomDemo') === 'cetiqlo')) ? new RemotePlayers(scene, assets.character, assets.bike, remoteCfg.renderRadius) : undefined; // Leg 3: the CETIQLO mock's bot body
   if (peers.length) remote?.setTeams(fakeTeams(peers));
   let nextFakeTick = 0; // ms of the local clock below
   let demoClock = 0; // s since the world was ready, a viewer's clock (no Player.simTime): DEV fake ticks, ?wait=
@@ -296,17 +301,36 @@ async function start() {
   const keepInViewRoom = (o: THREE.Object3D) => o === vroom?.h.group || !!remote?.owns(o);
   const fadeEl = document.body.appendChild(Object.assign(document.createElement('div'), { className: 'room-fade' }));
   const fadeTo = (on: boolean) => new Promise<void>((r) => (fadeEl.classList.toggle('on', on), setTimeout(r, roomCfg.fadeMs)));
+  /** The room module of a kind (a dynamic import each: its own chunk). */
+  const roomModule = (kind: RoomAt['kind']) =>
+    kind === 'chocolate' ? import('./choco/chocoRoom.ts') : kind === 'garderobe' ? import('./garderobe/garderobeRoom.ts') : kind === 'hall' ? import('./hall/hallRoom.ts') : kind === 'cetiqlo' ? import('./cetiqlo/cetiqloRoom.ts') : import('./gallery/galleryRoom.ts');
+  // Leg 3 CETIQLO (cetiqlo/cetiqloRoom.ts): the room's `cq.*` link = RaceClient's cq* hooks in the race (raceLink; RaceDeps.onCq feeds the
+  // server's messages back), DEV offline `?roomDemo=cetiqlo` = cetiqloMock.ts (an in-page server + a bot body fed to RemotePlayers as ticks)
+  let cqLink: CqLink | undefined;
+  let cqMock: CqMock | undefined;
   const mountRoomFor = async (t: RoomTarget): Promise<RoomHandle> => {
-    const mod = t.room.kind === 'chocolate' ? await import('./choco/chocoRoom.ts') : t.room.kind === 'garderobe' ? await import('./garderobe/garderobeRoom.ts') : t.room.kind === 'hall' ? await import('./hall/hallRoom.ts') : await import('./gallery/galleryRoom.ts');
+    const mod = await roomModule(t.room.kind);
     const team = session?.team ?? { slot: Number(query.get('team')) || 1, name: playerSetup.teamName, colour: playerSetup.teamColour }; // offline: ?team=<slot>
     // under the branch box (the one being / just left: opened); a challenge room (GardeRobe): under the box just opened = the
     // last opened one (the step before); none known (a reload before the box came back) → under the feet
     const box = (isFreeRoom(t.room.kind) ? boxes.boxes.filter((b) => b.opened && !b.kind).at(-1) : boxes.boxes.find((b) => b.step === t.step && (t.branch ? b.branch === t.branch : b.opened && !!b.branch))) ?? { x: player!.position.x, z: player!.position.z, yaw: 0 };
     const frame = roomFrame(box, env.heightAt(box.x, box.z), mod.DOOR_Z);
+    if (t.room.kind === 'cetiqlo' && import.meta.env.DEV && !session) { // the mock server + bot; its onAdvance = what a win brings (the next card)
+      const { createCqMock, CQ_DEMO_STATES } = await import('./cetiqlo/cetiqloMock.ts');
+      const st = (CQ_DEMO_STATES as readonly string[]).includes(query.get('roomState') ?? '') ? (query.get('roomState') as CqDemoState) : 'match';
+      cqMock = createCqMock(team, st, (lx, ly, lz) => ({ ...toWorld(frame, lx, lz), y: frame.floorY + ly }));
+      cqMock.onAdvance = () => demoRoomView(demoRoomViews('cetiqlo', 'done').then!);
+      remote?.setTeams([cqMock.botTeam]);
+    }
     const r = await mod.mountRoom({
       renderer, q: query, scene, frame, world, camera, feet: () => ({ x: player!.position.x, z: player!.position.z }), frozen: modal, onClose: relock,
       team: { ...team, avatar: overrides.avatar },
-      teams: (session?.welcome?.teams ?? []).map(({ slot, name, colour }) => ({ slot, name, colour })),
+      teams: [...(session?.welcome?.teams ?? []), ...(cqMock ? [cqMock.botTeam] : [])].map(({ slot, name, colour }) => ({ slot, name, colour })),
+      cq: cqMock?.link ?? cqLink,
+      feetY: () => player!.position.y,
+      moveTo: (x, z, yaw) => player!.moveTo(x, z, yaw),
+      peerPose: (slot) => remote?.poseOf(slot) ?? null,
+      characterAsset: assets?.character,
       room: t.room,
       onPickup: () => {
         if (!roomFlow.pickedUp()) return;
@@ -336,6 +360,8 @@ async function start() {
     roomBusy = true;
     await fadeTo(true);
     room.dispose();
+    cqMock?.dispose();
+    cqMock = undefined;
     roomSent = null;
     sendRoomAt(null);
     hideRoomDone();
@@ -370,10 +396,10 @@ async function start() {
         showWorld(hiddenForRoom);
       }
       if (at && slot !== null) {
-        const mod = at.kind === 'chocolate' ? await import('./choco/chocoRoom.ts') : at.kind === 'garderobe' ? await import('./garderobe/garderobeRoom.ts') : at.kind === 'hall' ? await import('./hall/hallRoom.ts') : await import('./gallery/galleryRoom.ts');
+        const mod = await roomModule(at.kind);
         const teams = (session?.welcome?.teams ?? []).map(({ slot, name, colour }) => ({ slot, name, colour }));
         const frame = roomFrame(at, env.heightAt(at.x, at.z), mod.DOOR_Z);
-        const h = await mod.mountRoom({ renderer, q: query, scene, frame, camera, viewer: true, feet: () => ({ x: 1e6, z: 1e6 }), team: teams.find((t) => t.slot === slot), teams, room: { total: 0, penaltyMinutesEach: 0 } });
+        const h = await mod.mountRoom({ renderer, q: query, scene, frame, camera, viewer: true, feet: () => ({ x: 1e6, z: 1e6 }), team: teams.find((t) => t.slot === slot), teams, room: { total: 0, penaltyMinutesEach: 0 }, characterAsset: assets?.character });
         vroom = { at, h, floorY: frame.floorY };
       }
     } catch (err) {
@@ -390,7 +416,7 @@ async function start() {
     const [kind, x, z, yawDeg, slot] = vr;
     const at: RoomAt = { kind: kind as RoomAt['kind'], x: Number(x), z: Number(z), yaw: (Number(yawDeg) * Math.PI) / 180 };
     void (async () => {
-      const mod = at.kind === 'chocolate' ? await import('./choco/chocoRoom.ts') : at.kind === 'garderobe' ? await import('./garderobe/garderobeRoom.ts') : at.kind === 'hall' ? await import('./hall/hallRoom.ts') : await import('./gallery/galleryRoom.ts');
+      const mod = await roomModule(at.kind);
       const frame = roomFrame(at, env.heightAt(at.x, at.z), mod.DOOR_Z);
       const e = enterSpot(frame);
       const p = peers.find((q) => q.slot === Number(slot));
@@ -400,6 +426,7 @@ async function start() {
     })();
   }
   let roomPingAt = 0; // the team's own client repeats where its room is every 15 s (the server keeps it in memory only)
+  let autoAt = -Infinity; // autoCq: the last automatic F / card close
   const sendRoomAt = (t: RoomTarget | null, frame?: { x: number; z: number; yaw: number }) => {
     roomPingAt = performance.now();
     net?.send({ t: 'room', room: t && frame ? { kind: t.room.kind, x: frame.x, z: frame.z, yaw: frame.yaw - Math.PI } : null });
@@ -452,6 +479,7 @@ async function start() {
           },
           pose: () => net?.flushPose(poseOf()), // D9: a countdown ended (the branch box may be due)
           serverNow: () => (net ? net.serverNow() : Date.now()),
+          onCq: (m) => cqLink?.onMessage?.(m), // Leg 3 CETIQLO: the room's own messages (dropped while no room listens)
           finished: (fresh) => {
             if (over) return;
             over = true;
@@ -460,6 +488,7 @@ async function start() {
           },
         })
       : undefined;
+  if (race) cqLink = raceLink(race, () => (net ? net.serverNow() : Date.now()));
   if (player) {
     // D23: F on foot asks the current box first; offline (DEV ?boxes=) it opens locally (manual tests).
     player.onInteract = () => {
@@ -619,8 +648,8 @@ async function start() {
     // Leg 3 DEV offline: ?roomDemo=chocolate|comic|garderobe|hall&team=<slot>&roomState=in|pending|done|skipped|switch|left (rooms/roomDemo.ts,
     // p11-room-*): straight into the room with stand-in views; `then` once the room is up; `left` walks out by itself
     const kind = query.get('roomDemo');
-    if (import.meta.env.DEV && !session && raceHud && (kind === 'chocolate' || kind === 'comic' || kind === 'garderobe' || kind === 'hall')) {
-      const state = (DEMO_ROOM_STATES as readonly string[]).includes(query.get('roomState') ?? '') ? (query.get('roomState') as DemoRoomState) : 'in';
+    if (import.meta.env.DEV && !session && raceHud && (kind === 'chocolate' || kind === 'comic' || kind === 'garderobe' || kind === 'hall' || kind === 'cetiqlo')) {
+      const state = (DEMO_ROOM_STATES as readonly string[]).includes(query.get('roomState') ?? '') ? (query.get('roomState') as DemoRoomState) : 'in'; // cetiqlo: its states are the mock's (CQ_DEMO_STATES)
       const d = demoRoomViews(kind, state);
       demoRoomView(d.first);
       if (d.then) queueRoom(() => demoRoomView(d.then!));
@@ -631,7 +660,7 @@ async function start() {
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
-  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes, raceHud, menu } }); // for scratch test scripts, scripts/hud-check.ts
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes, raceHud, menu, room: () => room, cqMock: () => cqMock, cq: () => room?.cqDebug?.(), race, roomFlow } }); // for scratch test scripts, scripts/hud-check.ts
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing. SPEC §17.2: the menu opens
@@ -746,7 +775,7 @@ async function start() {
         /* the camera follows a team */
       } else if (flying || watching) fly.update(dt, input);
       if (player && player.simTime >= respawnAt) (respawnAt = Infinity), menu.actions.respawn?.();
-      player?.update(dt, bodyCam ? input : null, loop.alpha, modal() || cardClosed); // the Space that closed a card is no jump
+      player?.update(dt, bodyCam ? input : null, loop.alpha, modal() || cardClosed || !!room?.frozen?.()); // the Space that closed a card is no jump; Leg 3 CETIQLO: locked after the checkout (the intent halts, physics / the sim clock go on)
       // Leg 3: inside a room the game's body walks on the room's colliders; the room draws its prompt / ring and watches the exit
       // (after the Player placed the camera: the GardeRobe close-up glides it from there)
       if (room) {
@@ -754,10 +783,15 @@ async function start() {
         if (!roomBusy && room.exitHit()) void leaveRoom();
       }
       if (room && roomFloor != null && bodyCam) camera.position.y = Math.min(camera.position.y, roomFloor + room.ceiling - 0.3); // no ceiling collider: the camera stays under it
+      if (autoCq && player?.active && performance.now() - autoAt > 700) { // testing: F at the box once it is in reach, the card closed once the room is up
+        autoAt = performance.now();
+        if (!room && !roomBusy && !roomFlow.key && boxInReach(boxes.boxes, player.position.x, player.position.z)) player.onInteract?.();
+        else if (room && raceHud?.open) raceHud.toggleBook();
+      }
       if (player?.active && !room) bikeLink?.frame(dt, player.controller);
       if (net && player?.active && bodyCam) net.sendPose(poseOf()); // 5 Hz, only on change (NetClient decides); a finished team too (§17.39), not while watching; in a room too (the Host sees the team at the box, the room's teams see each other)
-      if (peers.length && (player ? player.active : worldReady) && localMs() >= nextFakeTick) {
-        remote?.apply(nextFakeTick, fakeTick(peers, nextFakeTick, (x, z) => demoRoomFloor ?? groundY(x, z) ?? env.heightAt(x, z))); // DEV: a server tick, simulated clock
+      if ((peers.length || cqMock) && (player ? player.active : worldReady) && localMs() >= nextFakeTick) {
+        remote?.apply(nextFakeTick, [...fakeTick(peers, nextFakeTick, (x, z) => demoRoomFloor ?? groundY(x, z) ?? env.heightAt(x, z)), ...(cqMock?.tick(nextFakeTick) ?? [])]); // DEV: a server tick, simulated clock (+ the CETIQLO mock's bot)
         nextFakeTick += 1000 / NET.tickHz;
       }
       remote?.update(dt, net ? net.serverNow() : localMs(), camera.position, bodyCam ? underground(player.position, env.heightAt) : undefined, env.heightAt); // Leg 3: a team in a room is no ghost on the street and the other way round
@@ -811,7 +845,7 @@ async function start() {
       edge.hidden = edgeDistance(p.x, p.z) >= bounds.warnDistance;
     },
     render: () => {
-      if (room || vroom) renderer.render(scene, camera); // Leg 3: plain render inside a room (no post / SMAA / bloom)
+      if (room || vroom) renderer.render(scene, camera), room?.afterRender?.(); // Leg 3: plain render inside a room (no post / SMAA / bloom); CETIQLO: + the mannequin PiP
       else if (post) post.render();
       else {
         if (!renderer.info.autoReset) renderer.info.reset(); // post.ts counts its passes by hand
@@ -862,7 +896,7 @@ async function start() {
       Object.assign(window, { __STATS__: { calls, triangles, frameMs: +loop.workMs.toFixed(2), chunks: cs.loaded, colliders, geometries: renderer.info.memory.geometries, ...npcStats } });
       // Signal for scripts/screenshot.ts: every chunk around the camera attached and a few frames drawn.
       if (!worldReady) loading.textContent = cs.pending || welcomed ? `Đang tải bản đồ… còn ${cs.pending} ô` : 'Đang kết nối máy chủ…';
-      if (!worldReady && loop.frames >= 3 && chunks.idle && models.idle && graphLoaded && welcomed && !roomQueue) { // Leg 3: a reload inside a room: its colliders first
+      if (!worldReady && loop.frames >= 3 && ((chunks.idle && models.idle) || autoCq) && graphLoaded && welcomed && !roomQueue) { // Leg 3: a reload inside a room: its colliders first; autoCq: the terrain collider is enough to stand on
         worldReady = true;
         loading.hidden = true;
         player?.activate(); // the chunk colliders around the spawn exist now

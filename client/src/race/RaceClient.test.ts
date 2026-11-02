@@ -196,3 +196,15 @@ describe('Leg 3 rooms', () => {
     expect(sent.length).toBe(1);
   });
 });
+
+describe('Leg 3 CETIQLO hooks (docs/plans/cetiqlo.md §9)', () => {
+  it('cq.* sends are typed, positions rounded to cm; every cq.* server message goes to onCq and is handled', () => {
+    const sent: ClientMessage[] = [], got: unknown[] = [];
+    const c = new RaceClient({ hud: undefined, send: (m) => sent.push(m), serverNow: () => 0, onCq: (m) => got.push(m) });
+    c.cqJoin(); c.cqTake('top.tee.white', 1.23456, -4.5); c.cqDrop('top.tee.white'); c.cqCheckout(0.004, 7.5); c.cqLeave();
+    expect(sent).toEqual([{ t: 'cq.join' }, { t: 'cq.take', id: 'top.tee.white', x: 1.23, z: -4.5 }, { t: 'cq.drop', id: 'top.tee.white' }, { t: 'cq.checkout', x: 0, z: 7.5 }, { t: 'cq.leave' }]);
+    expect(c.message({ t: 'cq.bag', bag: ['a'] })).toBe(true);
+    expect(got).toEqual([{ t: 'cq.bag', bag: ['a'] }]);
+    expect(c.message({ t: 'notice', code: 'approved' })).toBe(false);
+  });
+});

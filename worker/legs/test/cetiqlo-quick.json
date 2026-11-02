@@ -1,0 +1,83 @@
+{
+  "id": "cetiqlo-quick",
+  "title": "Thử CETIQLO ngay tại hòm (NỘI DUNG GIẢ): đội xuất phát đứng sẵn ở hòm L1",
+  "start": {
+    "name": "Hòm L1 trước Vincom Phạm Ngọc Thạch (GIẢ)",
+    "lat": 21.005942,
+    "lon": 105.831691,
+    "yawDeg": -45,
+    "spreadMeters": 0
+  },
+  "steps": [
+    {
+      "id": "L1",
+      "type": "route_info",
+      "label": "Lộ trình 1",
+      "clue": "(GIẢ) Đi tới cửa hàng thời trang có logo ô vuông đỏ chữ trắng (bản thử, không nêu tên điểm đến).",
+      "destination": {
+        "name": "Vincom Center Phạm Ngọc Thạch (GIẢ)",
+        "lat": 21.005942,
+        "lon": 105.831691,
+        "radius": 20,
+        "yawDeg": -45,
+        "bikeParking": {
+          "lat": 21.00593,
+          "lon": 105.83152
+        }
+      }
+    },
+    {
+      "id": "CQ",
+      "type": "challenge",
+      "label": "Thử thách CETIQLO",
+      "teaser": "",
+      "room": "cetiqlo",
+      "task": {
+        "title": "Đối đầu CETIQLO",
+        "description": "Hai đội đối đầu trong cửa hàng CETIQLO. Nhớ bộ 6 món trên người mẫu, nhặt đúng rồi chốt ở ô CHECKOUT trong 3 phút. Đội thắng nhận mật thư tiếp theo và lối ra; đội thua ở lại đấu với đội đến sau.",
+        "verification": "host_approval"
+      }
+    },
+    {
+      "id": "L2",
+      "type": "route_info",
+      "label": "Lộ trình 2",
+      "clue": "(GIẢ) Mật thư thưởng cho đội thắng CETIQLO (bản thử).",
+      "destination": {
+        "name": "Hồ Thiền Quang (GIẢ)",
+        "lat": 21.0187,
+        "lon": 105.8445,
+        "radius": 25,
+        "bikeParking": {
+          "lat": 21.0189,
+          "lon": 105.843594
+        }
+      }
+    },
+    {
+      "id": "PS",
+      "type": "pit_stop",
+      "label": "Về đích",
+      "destination": {
+        "name": "Hồ Thiền Quang (Thiền Quang Lake)",
+        "lat": 21.0187,
+        "lon": 105.8445,
+        "radius": 25
+      },
+      "announce": {
+        "npc": "(GIẢ) {tên đội} về đích thứ {n} tại Hồ Thiền Quang!",
+        "toast": "(GIẢ) Về đích thứ {n}/{tổng}",
+        "card": "(GIẢ) Chúc mừng {tên đội}: về đích thứ {n} trên {tổng} đội tại Hồ Thiền Quang.",
+        "first": {
+          "npc": "(GIẢ) {tên đội} về nhất tại Hồ Thiền Quang!",
+          "card": "(GIẢ) {tên đội} về nhất trên {tổng} đội."
+        },
+        "out": {
+          "npc": "(GIẢ) {tên đội}, rất tiếc, các bạn bị loại.",
+          "toast": "(GIẢ) BỊ LOẠI – hạng {n}/{tổng}",
+          "card": "(GIẢ) {tên đội} BỊ LOẠI, hạng cuối {n}/{tổng}."
+        }
+      }
+    }
+  ]
+}

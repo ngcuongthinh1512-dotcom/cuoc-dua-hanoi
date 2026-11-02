@@ -9,6 +9,8 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Object3D, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { RoomFrame } from './roomFrame.ts';
 import type { RoomPlayer } from './roomPlayer.ts';
+import type { CqLink } from '../cetiqlo/cetiqloNet.ts';
+import type { CharacterAsset } from '../player/CharacterModel.ts';
 
 export interface RoomTeam { slot: number; name: string; colour: string }
 
@@ -46,6 +48,25 @@ export interface RoomMountOptions {
   onPickup?: () => void;
   /** The overlay closed (the race re-takes the pointer lock inside this user gesture). */
   onClose?: () => void;
+  /** CETIQLO (cetiqlo/cetiqloRoom.ts): the `cq.*` link (cetiqlo/cetiqloNet.ts; the race: the socket, DEV: cetiqloMock.ts); the body's
+   *  feet height (floor 1 / 2); move the body inside the room (world x, z, yaw: Player.moveTo, no teleport flag); another team's
+   *  body as RemotePlayers last drew it (the minimap). */
+  cq?: CqLink;
+  feetY?: () => number;
+  moveTo?: (x: number, z: number, yaw: number) => void;
+  peerPose?: (slot: number) => { x: number; y: number; z: number } | null;
+  /** CETIQLO: the game's loaded Rocketbox asset (Player.assets.character) for the store's human mannequins: no second GLB load. */
+  characterAsset?: CharacterAsset;
+}
+
+/** CETIQLO test helpers (RoomHandle.cqDebug). Moves put the body at the shelf / the pad (Player.moveTo) and send the room-local spot. */
+export interface CqDebug {
+  state(): { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youPct: number; oppPct: number; reason: string } | null; exitLit: boolean };
+  /** Take `correct` items of the set (set order) + `wrong` items of the same slots but another id; ≥ 150 ms apart (the server's cooldown). */
+  takeSet(correct: number, wrong?: number): Promise<string[]>;
+  take(id: string): void;
+  drop(id: string): void;
+  checkout(): void;
 }
 
 export interface RoomHandle {
@@ -73,6 +94,12 @@ export interface RoomHandle {
   /** The feet stand inside the lit ring. */
   exitHit(): boolean;
   overlayOpen(): boolean;
+  /** CETIQLO: the body may not move (checked out / the result screen): main.ts blocks the Player's input (like a card open). */
+  frozen?(): boolean;
+  /** CETIQLO: right after the main render (the mannequin picture-in-picture: a scissor draw into the same frame). */
+  afterRender?(): void;
+  /** CETIQLO, DEV / tests (window.__GAME__.cq): the room's state and scripted moves against the real server (scripts/cq-e2e.ts). */
+  cqDebug?(): CqDebug;
   /** Rendered a few frames (and the mini-game iframe loaded if open): screenshots. */
   settled(): boolean;
   /** Draw calls etc. of the last frame (dev page __STATS__). */

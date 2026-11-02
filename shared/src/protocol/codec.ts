@@ -79,6 +79,9 @@ const text = (v: unknown, max: number): v is string => typeof v === 'string' && 
 const point = (m: Record<string, unknown>) =>
   num(m.x) && num(m.y) && num(m.z) && num(m.yaw) && Math.abs(m.x) <= MAX_XZ / CM && Math.abs(m.z) <= MAX_XZ / CM && m.y >= MIN_Y / CM && m.y <= MAX_Y / CM;
 
+/** CETIQLO room-local position (m): a room is a few tens of metres wide. */
+const roomXZ = (m: Record<string, unknown>) => num(m.x) && num(m.z) && Math.abs(m.x) <= 500 && Math.abs(m.z) <= 500;
+
 /** Shape check of a parsed player / Host JSON message (the server's trust boundary). Poses go through decodePose.
  *  A spectator (SPEC §17.40) never gets here: RaceRoom drops everything it sends. */
 export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator'): boolean {
@@ -93,8 +96,17 @@ export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator')
       if (role !== 'team') return false;
       if (o.room === null) return true;
       const r = o.room as Record<string, unknown> | undefined;
-      return typeof r === 'object' && r !== null && (r.kind === 'chocolate' || r.kind === 'comic' || r.kind === 'garderobe' || r.kind === 'hall') && num(r.x) && num(r.z) && num(r.yaw) && Math.abs(r.x) <= MAX_XZ / CM && Math.abs(r.z) <= MAX_XZ / CM;
+      return typeof r === 'object' && r !== null && (r.kind === 'chocolate' || r.kind === 'comic' || r.kind === 'garderobe' || r.kind === 'hall' || r.kind === 'cetiqlo') && num(r.x) && num(r.z) && num(r.yaw) && Math.abs(r.x) <= MAX_XZ / CM && Math.abs(r.z) <= MAX_XZ / CM;
     }
+    case 'cq.join':
+    case 'cq.leave':
+      return role === 'team';
+    case 'cq.take':
+      return role === 'team' && str(o.id, 64) && roomXZ(o);
+    case 'cq.drop':
+      return role === 'team' && str(o.id, 64);
+    case 'cq.checkout':
+      return role === 'team' && roomXZ(o);
     case 'host.spectator':
       return role === 'host' && o.op === 'rotate';
     case 'gesture':

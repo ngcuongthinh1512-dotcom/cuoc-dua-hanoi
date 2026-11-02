@@ -1304,3 +1304,16 @@ export const raceHud = {
   // Phase 8 (docs/plans/phase8.md D9 / D15). Typed-answer / history limits are NET.answerMax / NET.answerHistory (shared: the server cuts at the same numbers).
   mediaMaxHeight: 260, // px, tallest an image on a card / in the Sổ gets (click = full-screen)
 };
+
+// ── Leg 3 · CETIQLO head-to-head room HUD (cetiqlo/cetiqloRoom.ts, hud.ts; the rules live in worker/src/race/cetiqlo/config.ts) ──
+export const cetiqlo = {
+  labelRange: 3, // m: the nearest item within this gets the "[F] Lấy" label (the server allows takeRange 3.5 + slack)
+  nearEveryMs: 100, // ms between nearest-item scans while the feet stay within nearMoveM (the camera turn is picked up at this rate)
+  nearMoveM: 0.25,
+  warnMs: 30_000, // ms left when the clock turns red and beeps every second (= the server's warnMs)
+  pip: { left: 358, top: 16, width: 320, height: 480, fps: 15 }, // px: the mannequin picture-in-picture (2:3 like mannequin.ts PIP_SIZE, right of the clue card); re-rendered into its own render target at `fps`, blitted every frame
+  minimap: { width: 150, height: 190, hz: 10 }, // px, bottom-left; redrawn at most this often
+  lookbookKey: 'KeyT', // shows / hides the set lookbook (PiP + the 6 item cards); on by default
+  bagKey: 'KeyB', // opens the bag (pointer free: click an item to drop it); Digit1–9 drop item n directly
+  floor2Y: 2, // m: feet higher than this = floor 2 (minimap badge, label filter)
+};

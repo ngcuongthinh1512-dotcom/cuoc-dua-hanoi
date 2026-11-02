@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isClientMessage, MEDIA, NET, type HostState } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { ago, answerMatch, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, finishPenaltyMessage, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, withAutoDemo, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings } from './hostView.ts';
+import { cetiqloLines, ago, answerMatch, billableRequests, checkMediaFile, corridorPoints, counterLines, csvLine, demoExportText, demoState, exportConfirm, exportErrorText, exportFileName, exportPath, fetchExport, flagText, fmtMinSec, freshAlerts, freshQueue, finishPenaltyMessage, legPenaltyLine, MAX_TEAM_NAME, MAX_TEAMS_PER_BATCH, mediaErrorText, mediaNames, mediaPath, openBlanks, parseTeamLines, progressTable, queueRows, queueSig, reviewMessage, startRows, withAutoDemo, statusButtons, stuckAlerts, teamRows, undoMessage, undoRows, warnings } from './hostView.ts';
 
 describe('Host view', () => {
   it('billable requests = http + alarms + wsIn / 20 rounded up', () => {
@@ -628,5 +628,19 @@ describe('"Xuất dữ liệu thời gian" (SPEC §17.25)', () => {
     expect(json).toHaveLength(s.progress.length);
     expect(json[0]).toMatchObject({ 'Đội': 'Đội Xanh', 'Mã bước': 'L1', 'Tên bước': 'Lộ trình 1' });
     expect(csvLine(['Đội A, B', 'nói "chào"', 3, ''])).toBe('"Đội A, B","nói ""chào""",3,');
+  });
+});
+
+describe('Leg 3 CETIQLO block (read-only)', () => {
+  const base = demoState();
+  it('nothing without rooms; a line per room with the queue and the running match', () => {
+    expect(cetiqloLines(base)).toEqual([]);
+    const s: HostState = { ...base, cetiqlo: [{ step: 'T1', queue: [{ slot: 3, name: 'Đội C' }], match: { id: 'm1', endsAt: base.serverMs + 95_000, teams: [{ slot: 0, name: 'Đội A', locked: true, bagN: 7, online: true }, { slot: 1, name: 'Đội B', locked: false, bagN: 4, online: false }] } }] };
+    const [line] = cetiqloLines(s);
+    expect(line).toContain('Đội A đã chốt');
+    expect(line).toContain('Đội B (mất mạng) 4 món');
+    expect(line).toContain('còn 01:35');
+    expect(line).toContain('hàng chờ: Đội C');
+    expect(cetiqloLines({ ...s, cetiqlo: [{ step: 'T1', queue: [], match: null }] })[0]).toContain('không có trận · hàng chờ: trống');
   });
 });

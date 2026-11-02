@@ -1,9 +1,9 @@
 import type { RaceView } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { demoRoomResult, demoRoomViews, GARDEROBE_CARD, HALL_CARD, HALL_T3_CARD, NEXT_CARD, roomCard } from './roomDemo.ts';
+import { CETIQLO_CARD, demoRoomResult, demoRoomViews, GARDEROBE_CARD, HALL_CARD, HALL_T3_CARD, NEXT_CARD, roomCard } from './roomDemo.ts';
 import { rooms } from '../config.ts';
 import { devFrame, enterSpot, exitSpot, roomFrame, toLocal, toWorld } from './roomFrame.ts';
-import { RoomFlow, pickupView, roomOf } from './roomState.ts';
+import { RoomFlow, isFreeRoom, pickupView, roomOf } from './roomState.ts';
 
 const view = (card: RaceView['card']): RaceView => ({ status: 'running', finishAt: null, penaltyMinutes: 0, card, checkinAt: null, result: null });
 
@@ -153,6 +153,17 @@ describe('the GardeRobe challenge room (ClueCard.room): enter, walk out at will,
     expect(demoRoomViews('garderobe', 'in')).toEqual({ first: expect.objectContaining({ card: GARDEROBE_CARD }), then: null });
     expect(demoRoomViews('garderobe', 'done').then?.card?.step).toBe('L2');
     expect(demoRoomViews('garderobe', 'left').then?.card?.step).toBe('L2');
+  });
+});
+
+describe('the CETIQLO store (ClueCard.room cetiqlo): a free room; a win = the next card held until the ring', () => {
+  it('roomOf + isFreeRoom; the demo views: the card, then the next card on a win', () => {
+    expect(isFreeRoom('cetiqlo')).toBe(true);
+    expect(roomOf(view(CETIQLO_CARD))).toMatchObject({ step: 'T1', branch: null, room: { kind: 'cetiqlo', total: 0 } });
+    const f = new RoomFlow();
+    expect(f.onView(view(CETIQLO_CARD)).event).toBe('enter');
+    expect(f.onView(demoRoomViews('cetiqlo', 'done').then!)).toEqual({ event: 'exitReady', hold: true });
+    expect(demoRoomViews('cetiqlo', 'in').then).toBeNull();
   });
 });
 

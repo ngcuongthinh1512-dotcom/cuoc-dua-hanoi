@@ -2,7 +2,7 @@
 // (welcome.view, `race`, `book`, `zone`): drives the race HUD (track C's RaceHud), F on the current box (D23), the periodic
 // Pit Stop check-in (D19), the finish (SPEC §17.22 / §17.23 announcement, celebrate; the team keeps walking, §17.39: main.ts).
 import { onPitMat } from '@race/shared';
-import type { BoxInfo, ClientMessage, RaceOp, RaceView, ServerMessage, TeamInfo, TickArray, Welcome } from '@race/shared/protocol';
+import type { BoxInfo, ClientMessage, CqServerMessage, RaceOp, RaceView, ServerMessage, TeamInfo, TickArray, Welcome } from '@race/shared/protocol';
 import { raceClient as C } from '../config.ts';
 import { roomOf } from '../rooms/roomState.ts';
 import type { RaceHud } from './ui/RaceHud.ts';
@@ -22,6 +22,8 @@ export interface RaceDeps {
   /** Leg 3 rooms (rooms/roomState.ts): every view BEFORE the HUD sees it; true = hold it (the step completed inside a room:
    *  the next card waits until release(), when the body walked into the exit ring). */
   view?(v: RaceView | null): boolean;
+  /** Leg 3 CETIQLO (docs/plans/cetiqlo.md §9): every `cq.*` server message (state / bag / opp / result / advance / no). */
+  onCq?(m: CqServerMessage): void;
 }
 
 /** The current, unopened clue box whose zone holds (x, z): F opens it (D23). Mats are not opened. */
@@ -83,6 +85,7 @@ export class RaceClient {
     }
     if (m.t === 'book') return this.deps.hud?.showBook(m.cards), true;
     if (m.t === 'zone') return this.deps.hud?.zone(m.teams, this.teams), true;
+    if (m.t.startsWith('cq.')) return this.deps.onCq?.(m as CqServerMessage), true;
     return false;
   }
 
@@ -111,6 +114,23 @@ export class RaceClient {
       if (t && t.branch && r && v?.card?.lockKind === 'retry' && !r.skipped && r.done >= r.total) this.room(t.step, t.branch, r.done, false, true);
     }
     return { inZone: !riding && !!boxInReach(boxes, x, z) };
+  }
+
+  // Leg 3 CETIQLO (docs/plans/cetiqlo.md §9): x, z = the body's ROOM-LOCAL metres (RoomFrame.toLocal of the world pose).
+  cqJoin() {
+    this.deps.send({ t: 'cq.join' });
+  }
+  cqLeave() {
+    this.deps.send({ t: 'cq.leave' });
+  }
+  cqTake(id: string, x: number, z: number) {
+    this.deps.send({ t: 'cq.take', id, x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100 });
+  }
+  cqDrop(id: string) {
+    this.deps.send({ t: 'cq.drop', id });
+  }
+  cqCheckout(x: number, z: number) {
+    this.deps.send({ t: 'cq.checkout', x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100 });
   }
 
   // Phase 8 (docs/plans/phase8.md D8): from anywhere, so no pose first (only open / checkin are judged at the pose).

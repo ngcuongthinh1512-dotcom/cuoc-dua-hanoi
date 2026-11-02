@@ -182,6 +182,20 @@ describe('leg schema', () => {
     expect(parseLeg(bad).ok).toBe(false);
   });
 
+  it('Leg 3: a challenge step `room: "cetiqlo"` (head-to-head shop): like the hall, right after a step with a box, no own place; not on a route_info', () => {
+    const j = mini() as Mini;
+    Object.assign(j.steps[1]!, { room: 'cetiqlo' });
+    const r = parseLeg(j);
+    expect(r.ok && r.leg.steps[1]!.type === 'challenge' && r.leg.steps[1].room).toBe('cetiqlo');
+    expect(errors(j)).toEqual([]);
+    const k = mini() as Mini;
+    Object.assign(k.steps[1]!, { room: 'cetiqlo', task: { ...k.steps[1]!.task, location: { name: 'x', lat: 21.02963, lon: 105.851163, radius: 20 } } });
+    expect(errors(k)).toHaveLength(1);
+    const route = mini() as Mini;
+    Object.assign(route.steps[3]!, { room: 'cetiqlo' });
+    expect(parseLeg(route).ok).toBe(false);
+  });
+
   it('Leg 3: a route_info step `room: "hall"` (the BOZAR concert hall): right after a step with a box (not first, not after a challenge)', () => {
     const j = mini() as Mini;
     Object.assign(j.steps[3]!, { room: 'hall' }); // L2 right after the detour D1

@@ -19,8 +19,9 @@ export interface RoomTarget {
 }
 export type RoomEvent = 'enter' | 'exitReady' | 'switched' | 'resume' | 'pickup' | null;
 
-/** Rooms of a plain card (no tally, no table): the ring is always lit and the team may walk out and back in (GardeRobe, BOZAR hall). */
-export const isFreeRoom = (kind: RoomView['kind'] | undefined) => kind === 'garderobe' || kind === 'hall';
+/** Rooms of a plain card (no tally, no table): the ring is always lit and the team may walk out and back in (GardeRobe, BOZAR hall; the
+ *  CETIQLO store too: its ring lights only on a win = the step done, like the hall). */
+export const isFreeRoom = (kind: RoomView['kind'] | undefined) => kind === 'garderobe' || kind === 'hall' || kind === 'cetiqlo';
 
 export const ROOM_TEXT = {
   exit: 'Lối ra đã mở: đi tới vòng sáng ở cuối phòng để nhận mật thư kế',

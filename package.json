@@ -21,6 +21,8 @@
     "ride-check": "tsx scripts/ride-check.ts",
     "landmark-audit": "tsx scripts/landmark-audit.ts",
     "sim": "tsx scripts/sim.ts",
+    "cq-test": "tsx scripts/cq-test-setup.ts",
+    "cq-e2e": "tsx scripts/cq-e2e.ts",
     "leg:check": "tsx scripts/leg-check.ts",
     "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts --flat",
     "build-chunks": "tsx scripts/build-chunks.ts",

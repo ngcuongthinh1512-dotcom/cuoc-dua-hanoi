@@ -228,6 +228,19 @@ export class RaceEngine {
     this.step(team, input, now);
   }
 
+  /** Leg 3 CETIQLO: the team's current step id when it is a not-done challenge with `room: 'cetiqlo'` (the race running), else null. */
+  cqStep(team: string): string | null {
+    const r = this.io.team(team);
+    if (!r || this.statusV !== 'running' || r.finishAt !== null) return null;
+    const s = this.legV.steps[r.step];
+    return s?.type === 'challenge' && s.room === 'cetiqlo' && this.row(team, r.step, r)?.completed_at == null ? s.id : null;
+  }
+
+  /** Leg 3 CETIQLO: the team won its match → the step completes (answer row + next clue card, SQLite before the messages). */
+  cqWin(team: string, step: string, now: number): void {
+    this.step(team, { kind: 'cqWin', step, pose: stand(this.io.pose(team)) }, now);
+  }
+
   /** Host race ops; `reply` answers that Host socket (host.legResult / host.notice). */
   onHost(m: HostRaceMessage, reply: (m: ServerMessage) => void, now: number): void {
     const notice = (level: 'error' | 'warning', message: string) => reply({ t: 'host.notice', level, message });

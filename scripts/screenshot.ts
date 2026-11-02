@@ -488,6 +488,22 @@ Object.assign(PRESETS, {
   'p11-room-garderobe-exit': `${GARDEROBE_ROOM}&roomState=done`,
   'p11-room-garderobe-left': `${GARDEROBE_ROOM}&roomState=left`,
 });
+// Leg 3 CETIQLO head-to-head room (cetiqlo/cetiqloRoom.ts; `npm run screenshot -- p11-room-cetiqlo`): the real client with the box in front
+// of Vincom Center Phạm Ngọc Thạch (≈ x −2131, z 2881), the mock server + bot (cetiqlo/cetiqloMock.ts, `?roomState=` CQ_DEMO_STATES):
+// the lobby queue line, a match just started (bot walking), a 3-item bag, the item label beside the tees table, the last 30 s red,
+// locked after the checkout, the result screen won / lost / drawn.
+const CETIQLO_ROOM = `/?player=-2131,2883.2,0&boxes=L1,-2131,2881,opened,0&npc=0&wait=0&roomDemo=cetiqlo&team=3`;
+Object.assign(PRESETS, {
+  'p11-room-cetiqlo': CETIQLO_ROOM,
+  'p11-room-cetiqlo-lobby': `${CETIQLO_ROOM}&roomState=lobby`,
+  'p11-room-cetiqlo-bag': `${CETIQLO_ROOM}&roomState=bag`,
+  'p11-room-cetiqlo-label': `${CETIQLO_ROOM}&roomState=label`,
+  'p11-room-cetiqlo-warn': `${CETIQLO_ROOM}&roomState=warn`,
+  'p11-room-cetiqlo-checkout': `${CETIQLO_ROOM}&roomState=checkout`,
+  'p11-room-cetiqlo-result-win': `${CETIQLO_ROOM}&roomState=result-win`,
+  'p11-room-cetiqlo-result-lose': `${CETIQLO_ROOM}&roomState=result-lose`,
+  'p11-room-cetiqlo-result-draw': `${CETIQLO_ROOM}&roomState=result-draw`,
+});
 // Leg 3 dev room "Xưởng sô-cô-la" (client/choco.html, src/choco/choco.ts; `npm run screenshot -- choco`; not in the default run):
 // the workshop down the aisle, team 3's table from behind, the plan, the challenge overlay, the "Bỏ qua" confirm (3/5 done).
 Object.assign(PRESETS, {
@@ -531,6 +547,25 @@ Object.assign(PRESETS, {
   'hallroom-stalls': '/hallroom.html?view=stalls',
   'hallroom-exit': '/hallroom.html?view=exit',
   'hallroom-plan': '/hallroom.html?view=plan',
+  // CETIQLO store (client/cetiqlo.html, src/cetiqlo/cetiqloDev.ts): the Leg 3 Head-to-Head shop
+  'cetiqlo-overview': '/cetiqlo.html?view=overview',
+  'cetiqlo-floor1': '/cetiqlo.html?view=floor1&floor=1',
+  'cetiqlo-floor2': '/cetiqlo.html?view=floor2',
+  'cetiqlo-tops': '/cetiqlo.html?view=tops',
+  'cetiqlo-shoes': '/cetiqlo.html?view=shoes',
+  'cetiqlo-checkout': '/cetiqlo.html?view=checkout',
+  'cetiqlo-mannequin': '/cetiqlo.html?view=mannequin',
+  'cetiqlo-facade': '/cetiqlo.html?view=facade',
+  'cetiqlo-item': '/cetiqlo.html?item=top.shirt-flannel.red', // 1.5 m close-up: a flannel beside the oxford / linen shirts
+  'cetiqlo-walk': '/cetiqlo.html?walk=1&spawn=10,8.4,0&autoMove=walk', // the body climbing the stair
+  'cetiqlo-patterns': '/cetiqlo.html?view=patterns', // gingham / tartan / pinstripe / seersucker / floral shirts side by side
+  'cetiqlo-pants': '/cetiqlo.html?view=pants', // floor 2: tapered / chinos / wide / straight / bootcut / cargo
+  'cetiqlo-outer': '/cetiqlo.html?view=outer', // blazer / trench / coach / bomber / wool coat
+  'cetiqlo-floor1-wide': '/cetiqlo.html?view=floor1-wide&floor=1',
+  'cetiqlo-floor2-wide': '/cetiqlo.html?view=floor2-wide',
+  'cetiqlo-model-set': '/cetiqlo.html?view=model-set&models=1&cam=0,1.3,4.6,0,1.0,0', // three sets worn by the human model side by side
+  'cetiqlo-bench': '/cetiqlo.html?view=overview', // frame-time sample (the *-bench suffix)
+  'cetiqlo-cards': '/cetiqlo.html?view=cards&cards=1&set=top.shirt-gingham.white-blue,outer.bomber.olive,bottom.jeans-wide-wash.denim-lightdenim,shoes.sneaker.white,bag.crossbody.black,acc.bucket-hat.beige', // the 6 product cards next to the dressed model
 });
 const BENCH_MS = 15_000;
 /** In the page: frame intervals over `ms` of requestAnimationFrame → { avg, p5 } FPS (p5 = the slowest 5 % of frames). A
@@ -565,7 +600,7 @@ const jobs: Record<string, string> = opt.path
   ? { [custom]: opt.path.startsWith('/') ? opt.path : `/${opt.path}` }
   : positionals.length
     ? Object.fromEntries(positionals.flatMap(group).map((p) => [p, PRESETS[p]!]))
-    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c|p9|p10|p11|choco|gallery|garderobe|hallroom)-/.test(k))); // landmark / player / online / Phase 8 / 8C / 9 / 10 / 11 (rooms) / choco / gallery / garderobe / hallroom room views by name
+    : Object.fromEntries(Object.entries(PRESETS).filter(([k]) => !/^(lm|leg|p3|p6|p7|p8|p8c|p9|p10|p11|choco|gallery|garderobe|hallroom|cetiqlo)-/.test(k))); // landmark / player / online / Phase 8 / 8C / 9 / 10 / 11 (rooms) / choco / gallery / garderobe / hallroom room views by name
 
 const outDir = join(root, 'screenshots', opt.out ?? '');
 const errors: string[] = [];

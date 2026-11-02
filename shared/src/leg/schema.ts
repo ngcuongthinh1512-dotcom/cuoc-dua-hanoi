@@ -132,8 +132,9 @@ const challenge = z.strictObject({
   teaser: text().default(''),
   task: taskSchema.prefault({}),
   /** Leg 3: the challenge is played inside a 3D room built under the box just opened (the previous step's): the GardeRobe
-   *  MannekenPis museum (4 vitrines with the costume photos). No tally / penalty: the card itself is the challenge. */
-  room: z.enum(['garderobe', 'hall']).optional(),
+   *  MannekenPis museum (4 vitrines with the costume photos). No tally / penalty: the card itself is the challenge.
+   *  `"cetiqlo"` = the CETIQLO head-to-head shop: the step is done when the team WINS its match (server, worker/src/race/cetiqlo). */
+  room: z.enum(['garderobe', 'hall', 'cetiqlo']).optional(),
   /** Leg 3: the previous challenge ended in the same room (BOZAR hall: T2 → T3): this card is HELD until the team walks to the
    *  pick-up spot by the stage (`prompt` = "Bấm F để nhận mật thư thử thách 3"); meanwhile a stand-in card shows `clue`
    *  ("Đội chơi đi lại gần sân khấu để nhận mật thư tiếp theo"). Needs `room`. */

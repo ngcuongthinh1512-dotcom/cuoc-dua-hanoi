@@ -232,3 +232,13 @@ describe('Hoàn tác (Phase 10 V2): the card is what the latest `race` view says
     expect(p.history.map((h) => [h.status, h.label])).toEqual([['pending', 'Chờ Host duyệt']]);
   });
 });
+
+describe('Leg 3 CETIQLO card (input "none")', () => {
+  const task: TaskView = { title: 'Đối đầu CETIQLO', description: 'Hai đội đối đầu…', media: [], kind: 'answer', verification: 'host_approval', input: 'none', proofInstruction: '', timeLimitMinutes: null };
+  const c = card({ step: 'CQ', type: 'challenge', status: 'active', room: 'cetiqlo', task, answers: [{ id: 1, text: 'x', at: 1, status: 'pending' }] });
+  it('no answer box, no parts, no proof / Messenger block, no accept, no answer history; the title + description stay', () => {
+    const p = cardPanel(c, { now: 2000, teamName: 'Đội A', mode: 'card' });
+    expect(p).toMatchObject({ answerBox: false, parts: null, proof: null, accept: false, switchTo: [], history: [] });
+    expect(p.blocks[0]).toMatchObject({ title: 'Đối đầu CETIQLO' });
+  });
+});

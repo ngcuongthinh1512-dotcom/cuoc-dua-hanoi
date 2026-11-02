@@ -1,6 +1,7 @@
 import { latLonToWorld, RACE_BBOX } from '@race/shared';
 import { parseLeg } from '@race/shared/leg';
 import { describe, expect, it } from 'vitest';
+import cqLeg from '../legs/test/cetiqlo.json';
 import leg from '../legs/hanoi-demo.json';
 import { BUNDLED_LEGS, bundledLeg } from './race/leg.ts';
 import { gradeParts } from './race/tasks.ts';
@@ -26,6 +27,15 @@ describe('bundled legs (zod schema, docs/plans/phase7.md D11)', () => {
       const p = latLonToWorld(s.lat, s.lon);
       expect(Math.hypot(p.x - start.x, p.z - start.z)).toBeLessThan(25);
     }
+  });
+});
+
+describe('legs/test/cetiqlo.json (fake content: a CETIQLO head-to-head step)', () => {
+  it('parses with no error; the challenge has room cetiqlo and follows a route with a box', () => {
+    const r = parseLeg(cqLeg);
+    expect(r.ok).toBe(true);
+    expect(r.issues.filter((i) => i.level === 'error')).toEqual([]);
+    expect(cqLeg.steps.map((s) => [s.id, 'room' in s ? s.room : undefined])).toEqual([['L1', undefined], ['CQ', 'cetiqlo'], ['L2', undefined], ['PS', undefined]]);
   });
 });
 

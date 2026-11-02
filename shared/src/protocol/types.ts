@@ -2,6 +2,7 @@
 // (poses, ticks) are plain number arrays rounded to cm (SPEC §3); everything else is a small JSON object with a `t` tag.
 // Changing a shape = PROTOCOL_VERSION + 1. Leg literals come from the leg schema as types only (no zod in the client).
 import type { StepType, TaskKind, Transport, Verification, VehiclesConfig } from '../leg/schema.ts';
+import type { CqClientMessage, CqHostRoom, CqServerMessage } from './cetiqlo.ts';
 import type { FinishKind, FinishTexts } from './finish.ts';
 
 export type { StepType, TaskKind, Transport, Verification, VehiclesConfig };
@@ -124,10 +125,10 @@ export interface TaskView {
   media: MediaView[];
   kind: TaskKind;
   verification: Verification;
-  /** Phase 8: 'text' = an input box (answer typed in game); 'seat' = Leg 3: the answer is a seat picked in the BOZAR hall (F on it; no input box); 'proof' = a photo the team sends on Messenger, opened outside the
+  /** Phase 8: 'text' = an input box (answer typed in game); 'none' = Leg 3 CETIQLO: nothing to answer, the step is won in the room (no input box, no send button); 'seat' = Leg 3: the answer is a seat picked in the BOZAR hall (F on it; no input box); 'proof' = a photo the team sends on Messenger, opened outside the
    *  game (kind free, SPEC §17.17: no contact button): the card shows proofInstruction, the submission code and
    *  "Tôi đã gửi bài – chờ Host duyệt" (answer ''). */
-  input: 'text' | 'proof' | 'parts' | 'seat';
+  input: 'text' | 'proof' | 'parts' | 'seat' | 'none';
   /** SPEC §17.44: input 'parts' — one box per part, in leg order ('' = the client numbers it); the N strings go to the Host. */
   partLabels?: string[];
   proofInstruction: string;
@@ -143,7 +144,7 @@ export interface TaskView {
 export interface RoomView {
   /** 'garderobe' = the GardeRobe MannekenPis museum room of a CHALLENGE step, 'hall' = the BOZAR concert hall of a route_info
    *  step (leg step `room`; no tally: total 0). */
-  kind: 'chocolate' | 'comic' | 'garderobe' | 'hall';
+  kind: 'chocolate' | 'comic' | 'garderobe' | 'hall' | 'cetiqlo';
   total: number;
   penaltyMinutesEach: number;
   done: number;
@@ -193,7 +194,7 @@ export interface ClueCard {
   leftRoom?: RoomView['kind'];
   /** Leg 3 (v12): a challenge played inside a 3D room (leg step `room: 'garderobe'`): the team enters it when this card
    *  arrives (the previous box opened) and may walk out / back in at will; absent once the step is done. */
-  room?: 'garderobe' | 'hall';
+  room?: 'garderobe' | 'hall' | 'cetiqlo';
   /** Leg 3 (v14): this card is held in the room until F at the stage pick-up spot (leg step `pickup`): the stand-in card's text + the prompt. */
   pickup?: { clue: string; prompt: string };
   /** detour: minutes of one switch (the confirm text of "Đổi lựa chọn kép"). */
@@ -362,6 +363,7 @@ export type ClientMessage =
    *  Host and the spectators (`room` server message) so they can watch inside; every 15 s while inside (the server keeps it in memory). */
   | { t: 'room'; room: RoomAt | null }
   | RaceOp
+  | CqClientMessage
   | HostMessage;
 
 /** Race ops (SPEC §8): F on the current box (open; Phase 8: also the chosen branch's box, `branch`), standing on the Pit
@@ -487,7 +489,7 @@ export interface Welcome {
 }
 
 /** The room a team stands in: its kind and the door (the box above it: world x, z; yaw = the room frame's, rooms/roomFrame.ts). */
-export interface RoomAt { kind: 'chocolate' | 'comic' | 'garderobe' | 'hall'; x: number; z: number; yaw: number }
+export interface RoomAt { kind: RoomView['kind']; x: number; z: number; yaw: number }
 
 export type ServerMessage =
   | TickArray
@@ -521,6 +523,7 @@ export type ServerMessage =
   /** Phase 7: a Host op refused or worth a warning (start time in the future, host.leg after teams entered, a race
    *  status change that does not apply…), Vietnamese text shown on the Host page. */
   | { t: 'host.notice'; level: 'error' | 'warning'; message: string }
+  | CqServerMessage
   | HostState;
 
 /** Host screen state (every ≤ 1 s while it changes); Phase 6 shows codes, online status and the quota counters. */
@@ -584,6 +587,8 @@ export interface HostState {
    *  Always sent by the server; absent only in the Host page's `?demo=1` state. */
   spectatorCode?: string;
   spectators?: number;
+  /** Leg 3 CETIQLO: queue + running match per CETIQLO step (read-only; absent / empty = none). */
+  cetiqlo?: CqHostRoom[];
 }
 
 /** Estimated Cloudflare usage (SPEC §3: the Host debug view shows these). */

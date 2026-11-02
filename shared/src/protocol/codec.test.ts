@@ -266,11 +266,21 @@ describe('frames and JSON messages', () => {
   });
 
   it('Leg 2 (v10): avatar from the socket URL, 0 unless exactly 1; TeamInfo / team online carry it through JSON', () => {
-    expect(PROTOCOL_VERSION).toBe(14);
+    expect(PROTOCOL_VERSION).toBe(15);
     expect([avatarOf('1'), avatarOf(1), avatarOf('0'), avatarOf(null), avatarOf('2'), avatarOf('x'), avatarOf(undefined)]).toEqual([1, 1, 0, 0, 0, 0, 0]);
     const info: TeamInfo = { slot: 1, id: 't1', name: 'Đội Đỏ', colour: '#d8342c', online: true, racing: true, avatar: 1 };
     const online: ServerMessage = { t: 'team', slot: 1, online: true, avatar: 1 };
     expect(JSON.parse(JSON.stringify({ info, online }))).toEqual({ info, online });
+  });
+
+  it('v15 CETIQLO: cq.* client messages validated at the trust boundary (team only), room kind cetiqlo', () => {
+    const ok: unknown[] = [{ t: 'cq.join' }, { t: 'cq.leave' }, { t: 'cq.take', id: 'top.tee.white', x: -3.5, z: 12 }, { t: 'cq.drop', id: 'a' }, { t: 'cq.checkout', x: 0, z: 4 },
+      { t: 'room', room: { kind: 'cetiqlo', x: 1, z: 2, yaw: 0 } }];
+    for (const m of ok) expect(isClientMessage(m, 'team'), JSON.stringify(m)).toBe(true);
+    const bad: unknown[] = [{ t: 'cq.take', id: '', x: 0, z: 0 }, { t: 'cq.take', id: 'a', x: NaN, z: 0 }, { t: 'cq.take', id: 'a', x: 0 }, { t: 'cq.take', id: 'a', x: 9999, z: 0 },
+      { t: 'cq.take', id: 7, x: 0, z: 0 }, { t: 'cq.drop' }, { t: 'cq.checkout', x: 'a', z: 1 }];
+    for (const m of bad) expect(isClientMessage(m, 'team'), JSON.stringify(m)).toBe(false);
+    for (const role of ['host', 'spectator'] as const) expect(isClientMessage({ t: 'cq.join' }, role)).toBe(false);
   });
 
   it('Leg 2 (v9): the Louvre room ops are gone (pick / lock / view / credits refused)', () => {
