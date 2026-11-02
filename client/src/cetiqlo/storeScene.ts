@@ -13,6 +13,7 @@ import type { Box } from '../rooms/roomPlayer.ts';
 import { BRAND_RED } from './brand.ts';
 import { buildItems } from './items.ts';
 import { PIP_LAYER, type Mannequin, createMannequin } from './mannequin.ts';
+import { BRIEF_LAYER, type Brief, createBrief } from './brief.ts';
 import { type CharacterAsset, loadCharacterAsset } from '../player/CharacterModel.ts';
 import { type SignSpec, makeAtlas, signPlane } from './signage.ts';
 
@@ -35,9 +36,13 @@ export interface StoreHandle {
   startSpots: { x: number; z: number; yaw: number }[];
   lobby: { box: AABB; door: THREE.Vector3 };
   mannequin: Mannequin;
+  /** The brief: the set's six pieces on a slowly turning ring (brief.ts), standing large over the pedestal; `brief.renderPiP` for the HUD. */
+  brief: Brief;
   minimapBounds: Rect & { floor1: Rect; floor2: Rect; stairs: Rect };
-  /** Per frame: turns the mannequin. */
-  update(dt: number): void;
+  /** Per frame: turns the mannequin + the brief ring. With `camLocal` (room-local camera position) it also runs the LOD /
+   *  floor culling at ≤ 5 Hz: garments beyond LOD_DISTANCE draw their plain copy; under the floor-2 slab only that floor's
+   *  items and fixtures are drawn. */
+  update(dt: number, camLocal?: THREE.Vector3): void;
   /** Show only one floor (dev page): 1 hides floor 2 + its items, 2 hides floor 1's items; 0 = all. */
   showFloor(f: 0 | 1 | 2): void;
   /** Static scene budget as built (draw calls = meshes, triangles incl. instances). */
@@ -72,6 +77,17 @@ function woodTexture(): THREE.Texture | null {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+/** A 64² radial alpha falloff (white, alpha 1 → 0) for the contact-shadow blobs; a 1 × 1 clear texture without a DOM. */
+function blobTexture(): THREE.Texture {
+  if (typeof document === 'undefined') return new THREE.DataTexture(new Uint8Array([255, 255, 255, 0]), 1, 1);
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d')!, g = x.createRadialGradient(32, 32, 4, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.55, 'rgba(255,255,255,0.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
   return t;
 }
 const MAT = () => ({
@@ -200,10 +216,24 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
   for (const f of FIXTURES[1]) fixture(f, 0, false);
   for (const f of FIXTURES[2]) fixture(f, F2, true);
 
+  // ---- contact darkening: a soft blob under every fixture / pedestal / figure (one merged mesh, radial alpha canvas) ----
+  const blobs: THREE.BufferGeometry[] = [];
+  const blob = (x: number, y: number, z: number, w: number, d: number, yaw = 0) => blobs.push(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2).rotateY(yaw).translate(x, y + 0.006, z));
+  for (const f of FIXTURES[1]) blob(f.x, 0, f.z, f.len + 0.3, f.kind === 'table' ? 1.3 : f.double ? 1.0 : 0.8, f.yaw);
+  for (const f of FIXTURES[2]) blob(f.x, F2, f.z, f.len + 0.3, f.kind === 'table' ? 1.3 : f.double ? 1.0 : 0.8, f.yaw);
+  blob(PD.x, 0, PD.z, 2.6, 2.6); blob(PD.x + 2.6, 0, PD.z, 1.6, 1.6);
+  for (const d of S.displayMannequins) blob(d.x, 0, d.z, 1.5, 1.5);
+  for (const zm of S.zoneMannequins) blob(zm.x, zm.floor === 1 ? 0 : F2, zm.z, 1.5, 1.5);
+  const blobMesh = new THREE.Mesh(mergeGeometries(blobs, false)!, new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false, opacity: 0.32, color: '#000000' }));
+  blobMesh.name = 'contact-shadows';
+  blobMesh.renderOrder = 1;
+  blobMesh.matrixAutoUpdate = false;
+  group.add(blobMesh);
+
   // ---- signs: one atlas, one mesh ---------------------------------------------------------------------------------
   const specs: SignSpec[] = [{ id: 'logo', kind: 'logo' }, { id: 'wordmark', kind: 'wordmark' }, { id: 'checkout', kind: 'checkout' }, ...ZONES.map((z) => ({ id: z.id, kind: 'zone' as const, text: z.name, sub: z.nameEn }))];
   const atlas = makeAtlas(specs);
-  const signMat = new THREE.MeshBasicMaterial({ map: atlas.texture, side: THREE.DoubleSide, transparent: true, alphaTest: 0.5 });
+  const signMat = new THREE.MeshBasicMaterial({ map: atlas.texture, side: THREE.FrontSide, transparent: true, alphaTest: 0.5 }); // front faces only: two-sided signs are two planes, so no mirrored text shows through a transparent tile
   const signs: THREE.BufferGeometry[] = [], signs2: THREE.BufferGeometry[] = [];
   const sign = (id: string, w: number, x: number, y: number, z: number, yaw = 0, rx = 0, upper = false, twoSided = false) => {
     const r = atlas.rects.get(id)!;
@@ -214,7 +244,7 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
   };
   sign('logo', 2.6, -4.2, 5.9, D + 0.32); // facade
   sign('wordmark', 7, 2.9, 5.9, D + 0.32);
-  sign('wordmark', 3.2, 0, 3.75, L + 0.11); // over the lobby door, read from the lobby
+  sign('wordmark', 3.2, 0, 3.75, L + 0.11, 0, 0, false, true); // over the lobby door, read from the lobby (and from inside: not mirrored)
   sign('checkout', CK.half * 2 - 0.3, CK.x, 0.014, CK.z, 0, -Math.PI / 2); // flat on the pad
   sign('checkout', 1.6, CK.x, 2.25, CK.z - CK.half + 0.15, 0, 0, false, true); // on the post
   sign('logo', 0.6, CK.x, 1.6, CK.z - CK.half + 0.15, 0, 0, false, true);
@@ -243,9 +273,13 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
   group.add(built.group);
 
   // ---- mannequins -------------------------------------------------------------------------------------------------
-  const mannequin = createMannequin({ turn: true, discR: PD.r - 0.1 });
-  mannequin.object.position.set(PD.x, 0.25, PD.z);
+  const brief = createBrief({ turn: true });
+  brief.object.position.set(PD.x, 0.25, PD.z); // the ring floats over the pedestal, seen from the lobby through the glass
+  group.add(brief.object);
+  const mannequin = createMannequin({ turn: true, discR: 0.55 });
+  mannequin.object.position.set(PD.x + 2.6, 0, PD.z); // the dressed human beside the pedestal
   group.add(mannequin.object);
+  colliders.push({ x: PD.x + 2.6, y: 0.5, z: PD.z, hx: 0.55, hy: 0.5, hz: 0.55 });
   const zoneFigures = S.zoneMannequins.map((z, i) => {
     const m = createMannequin({ turn: false, discR: 0.5 });
     m.object.position.set(z.x, z.floor === 1 ? 0 : F2, z.z);
@@ -277,8 +311,9 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
   sun.position.set(-7, 14, 12);
   const fill = new THREE.DirectionalLight('#e8f0ff', 0.7);
   fill.position.set(9, 6, -10);
-  for (const l of [hemi, sun, fill]) { l.layers.enable(PIP_LAYER); group.add(l); }
+  for (const l of [hemi, sun, fill]) { l.layers.enable(PIP_LAYER); l.layers.enable(BRIEF_LAYER); group.add(l); }
 
+  let lodClock = 0, lodFloor: 0 | 1 | 2 = 0;
   group.updateMatrixWorld(true);
   const stairYAt = (z: number) => Math.min(ST.steps, Math.max(1, Math.floor((ST.zBottom - z) / ST.tread) + 1)) * ST.rise;
   const inStair = (x: number, z: number) => x >= ST.x0 && x <= ST.x1 && z <= ST.zBottom && z >= STAIR_TOP_Z - 1e-6;
@@ -296,7 +331,19 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
     return { meshes, triangles, lights };
   };
   return {
-    group, colliders, itemAnchors: built.anchors, setItemVisible: built.setVisible, mannequin, update: (dt) => mannequin.update(dt), budget,
+    group, colliders, itemAnchors: built.anchors, setItemVisible: built.setVisible, mannequin, brief, budget,
+    update: (dt, camLocal) => {
+      mannequin.update(dt); brief.update(dt);
+      if (!camLocal) return;
+      lodClock += dt;
+      if (lodClock < 0.2) return; // ≤ 5 Hz
+      lodClock = 0;
+      // the camera under the floor-2 slab sees only floor 1; on floor 2 (z ≤ edge) only floor 2; in the atrium / lobby both
+      const under = camLocal.z <= E && camLocal.y < F2 - S.slab, above = camLocal.z <= E && camLocal.y >= F2 - S.slab;
+      const floor: 0 | 1 | 2 = under ? 1 : above ? 2 : 0;
+      if (floor !== lodFloor) { lodFloor = floor; for (const mm of upperMeshes) mm.visible = floor !== 1; for (const z of zoneFigures) z.object.visible = floor === 0 || z.object.position.y < 1 === (floor === 1); }
+      built.updateLod(camLocal, floor);
+    },
     floorYAt(x, z, yNear) {
       if (inStair(x, z)) return stairYAt(z);
       if (z <= E && Math.abs(x) <= W) return yNear !== undefined && Math.abs(yNear - F2) < Math.abs(yNear) ? F2 : 0;
@@ -322,6 +369,7 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
       for (const m of Object.values(mats)) m.dispose();
       atlas.texture.dispose();
       mannequin.dispose();
+      brief.dispose();
       for (const d of [...displays, ...zoneFigures]) d.dispose();
     },
   };

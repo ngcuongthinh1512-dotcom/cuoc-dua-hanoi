@@ -95,8 +95,8 @@ describe('CETIQLO (workerd)', () => {
     await sleep(GAP);
     a!.send({ t: 'cq.checkout', x: CHECKOUT_ZONE.x, z: CHECKOUT_ZONE.z });
     const [ra, rb] = (await Promise.all([msg(a!, 'cq.result'), msg(b!, 'cq.result')])) as CqResult[];
-    expect(ra).toMatchObject({ winner: 'you', reason: 'score', you: { scorePct: 66, bag: [...set, decoyA1, decoyA2] }, opp: { correct: 3 } });
-    expect(rb).toMatchObject({ winner: 'opp', reason: 'score', you: { correct: 3, errors: 3, scorePct: 49 }, opp: { bag: [...set, decoyA1, decoyA2] } });
+    expect(ra).toMatchObject({ winner: 'you', reason: 'score', you: { score: 82, errors: 2, bag: [...set, decoyA1, decoyA2] }, opp: { correct: 3 } });
+    expect(rb).toMatchObject({ winner: 'opp', reason: 'score', you: { correct: 3, errors: 1, score: 41 }, opp: { bag: [...set, decoyA1, decoyA2] } });
     expect(ra.serverNow).toBe(rb.serverNow);
     // winner completes the step through the engine: next card, SQLite first
     const next = await card(a!, (c) => c.step === 'L3');

@@ -1,6 +1,6 @@
 // CETIQLO end-to-end against the REAL RaceRoom (`npm run dev:api` on :8787 must be running): a fresh race (cq-test-setup.ts), its own Vite
 // dev server (proxying /api to :8787), two headless Chrome pages log in with `?code=…&autoCq=1`, land in the CETIQLO lobby, get paired;
-// team A takes the 6 right items, team B 4 right + 1 wrong, both check out; both pages must get `cq.result` (A wins 100 % vs 66 %),
+// team A takes the 6 right items, team B 4 right + 1 wrong, both check out; both pages must get `cq.result` (A wins 100 điểm vs 57,7 điểm),
 // A sees the next card + the lit exit ring, B is back in the lobby; a third page joins and B is paired with it. Prints timings and
 // console errors; exit 1 on any failed check. `npm run cq-e2e [-- --port 8787 --password test1234]` (the dev server: `npm run dev:worker`).
 import { join } from 'node:path';
@@ -16,7 +16,7 @@ const t0 = Date.now();
 const at = () => `${((Date.now() - t0) / 1000).toFixed(1)} s`;
 const failures: string[] = [];
 const check = (ok: boolean, what: string) => { console.log(`${ok ? 'OK ' : 'FAIL'} ${at()}  ${what}`); if (!ok) failures.push(what); };
-type CqState = { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youPct: number; oppPct: number; reason: string } | null; exitLit: boolean };
+type CqState = { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youScore: number; oppScore: number; reason: string } | null; exitLit: boolean };
 const stateOf = (p: Page) => p.evaluate(() => (globalThis as unknown as { __GAME__?: { cq?: () => { state(): unknown } | undefined } }).__GAME__?.cq?.()?.state() ?? null) as Promise<CqState | null>;
 const cardOf = (p: Page) => p.evaluate(() => (globalThis as unknown as { __GAME__?: { race?: { view?: { card?: { step: string } | null } | null } } }).__GAME__?.race?.view?.card?.step ?? null);
 async function waitFor<T>(p: Page, read: (p: Page) => Promise<T>, pred: (v: T) => boolean, what: string, timeoutMs = 60_000): Promise<T | null> {
@@ -35,10 +35,13 @@ const setup = await setupRace({ url: URL_, race, teams: 3, password: v.password!
 console.log(`${at()}  race ${setup.race}: ${setup.teams.map((t) => `${t.name} ${t.code}`).join(' · ')}`);
 const server = await createServer({ root: join(import.meta.dirname, '../client'), logLevel: 'warn', server: { port: PORT, strictPort: true, proxy: { '/api': { target: URL_, ws: true } } } }); // the client's /api → the chosen dev server
 await server.listen();
-const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+// one Chrome per team: headless Chrome throttles every page but the front one (rAF ≈ 4 Hz), which would freeze the other client's game loop
+const browsers: Awaited<ReturnType<typeof chromium.launch>>[] = [];
 const errors: string[] = [];
 try {
   const open = async (i: number) => {
+    const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+    browsers.push(browser);
     const page = await browser.newPage();
     await page.setViewportSize({ width: 960, height: 540 });
     page.on('pageerror', (e) => void errors.push(`[${setup.teams[i]!.name}] ${e.message}`));
@@ -67,9 +70,9 @@ try {
   await B.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { checkout(): void } } }).__GAME__.cq().checkout());
   const ra = await waitFor(A, stateOf, (s) => !!s?.result, 'A nhận cq.result', 15_000);
   const rb = await waitFor(B, stateOf, (s) => !!s?.result, 'B nhận cq.result', 15_000);
-  // score = max(0, 100 − 17 × errors), errors = max(6, bag) − correct: A 6/6 → 100; B 5 items, 4 correct → errors 2 → 66
-  check(ra?.result?.winner === 'you' && ra.result.youPct === 100 && ra.result.oppPct === 66, `A: thắng, 100 % vs 66 % (có: ${JSON.stringify(ra?.result)})`);
-  check(rb?.result?.winner === 'opp' && rb.result.youPct === 66 && rb.result.oppPct === 100 && rb.result.reason === 'score', `B: thua vì điểm (có: ${JSON.stringify(rb?.result)})`);
+  // điểm = 16,67 × đúng − 9 × (sai hoặc thừa), 0–100: A 6/6 → 100; B 5 món, 4 đúng + 1 sai → 66,7 − 9 = 57,7
+  check(ra?.result?.winner === 'you' && ra.result.youScore === 100 && ra.result.oppScore === 57.7, `A: thắng, 100 điểm vs 57,7 điểm (có: ${JSON.stringify(ra?.result)})`);
+  check(rb?.result?.winner === 'opp' && rb.result.youScore === 57.7 && rb.result.oppScore === 100 && rb.result.reason === 'score', `B: thua vì điểm (có: ${JSON.stringify(rb?.result)})`);
   const cardA = await waitFor(A, cardOf, (c) => c === 'L2', 'A: thẻ kế L2 (bước xong)', 15_000);
   const exitA = await waitFor(A, stateOf, (s) => !!s?.exitLit, 'A: vòng ra sáng', 15_000);
   check(cardA === 'L2' && !!exitA, 'A: mật thư kế + vòng sáng thoát');
@@ -80,7 +83,7 @@ try {
   const mb2 = await waitFor(B, stateOf, (s) => !!s && s.phase === 'match' && s.matchId !== ma?.matchId, 'B: trận mới với C', 30_000);
   check(!!mc && !!mb2 && mc.matchId === mb2.matchId, `B ↔ C cùng trận ${mb2?.matchId}`);
 } finally {
-  await browser.close();
+  for (const b of browsers) await b.close();
   await server.close();
 }
 if (errors.length) console.log(`Lỗi console (${errors.length}):\n` + [...new Set(errors)].slice(0, 10).join('\n'));

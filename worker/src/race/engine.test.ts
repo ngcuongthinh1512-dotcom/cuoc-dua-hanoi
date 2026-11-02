@@ -4,6 +4,7 @@
 import { branchZone, stepZones, type Leg } from '@race/shared/leg';
 import { NET, type HostReview, type PoseSample, type RaceOp, type RaceView, type ServerMessage } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
+import cqLegRaw from '../../legs/test/cetiqlo.json';
 import { QuotaCounters } from '../counters.ts';
 import { bundledLeg } from './leg.ts';
 import { NEW_TEAM_RACE, RaceEngine, type TeamRace } from './engine.ts';
@@ -913,4 +914,28 @@ describe('RaceEngine', () => {
     review('t0', 'T1', 'approve', t30 + 4 * 60_000 + 5, { id: 3 });
     expect(card('t0')).toMatchObject({ step: 'L2' });
   });
+  it('Leg 3 CETIQLO: cqRelease completes the step like a win ("Chờ quá 10 phút, được rời đi"), cqWin too; the release is undoable by the Host, the win is not offered', () => {
+    const f = fake();
+    f.teams.set('t0', { ...NEW_TEAM_RACE });
+    const e = new RaceEngine(f.io);
+    const replies: ServerMessage[] = [];
+    e.onHost({ t: 'host.leg', json: JSON.stringify(cqLegRaw) }, (m) => replies.push(m), 0);
+    expect(replies).toEqual([{ t: 'host.legResult', ok: true, issues: expect.any(Array) }]);
+    f.teams.set('t0', { ...NEW_TEAM_RACE, startOrder: 1, joinedAt: 1, step: 1 });
+    e.onHost({ t: 'host.race', op: 'start' }, () => {}, 1);
+    expect(e.cqStep('t0')).toBe('CQ');
+    e.cqRelease('t0', 'CQ', 5000);
+    expect(f.teams.get('t0')!.step).toBe(2);
+    expect(e.cqStep('t0')).toBeNull();
+    expect(e.hostView(5001).progress.find((p) => p.team === 't0' && p.step === 'CQ')!.answers).toEqual([expect.objectContaining({ text: 'Chờ quá 10 phút, được rời đi', status: 'correct' })]);
+    expect(e.hostView(5001).undo).toEqual([expect.objectContaining({ team: 't0', step: 'CQ', id: 1, op: 'approve' })]);
+    const host: ServerMessage[] = [];
+    e.onHost({ t: 'host.review', team: 't0', step: 'CQ', op: 'undo', id: 1 }, (m) => host.push(m), 6000);
+    expect(f.teams.get('t0')!.step).toBe(1);
+    expect(e.cqStep('t0')).toBe('CQ');
+    e.cqWin('t0', 'CQ', 7000);
+    expect(f.teams.get('t0')!.step).toBe(2);
+    expect(e.hostView(7001).undo).toEqual([]); // a win is final
+  });
+
 });

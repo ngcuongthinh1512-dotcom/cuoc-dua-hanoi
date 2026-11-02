@@ -1307,13 +1307,12 @@ export const raceHud = {
 
 // ── Leg 3 · CETIQLO head-to-head room HUD (cetiqlo/cetiqloRoom.ts, hud.ts; the rules live in worker/src/race/cetiqlo/config.ts) ──
 export const cetiqlo = {
-  labelRange: 3, // m: the nearest item within this gets the "[F] Lấy" label (the server allows takeRange 3.5 + slack)
-  nearEveryMs: 100, // ms between nearest-item scans while the feet stay within nearMoveM (the camera turn is picked up at this rate)
-  nearMoveM: 0.25,
+  labelRange: 3, // m: items within this (horizontally) can be picked (the server allows takeRange 3.5 + slack)
+  pick: { range: 3, coneDeg: 30, margin: 0.15, holdMs: 120 }, // look-to-select (cetiqlo/logic.ts pickItem): the view cone's half-angle, the hysteresis margin / hold
   warnMs: 30_000, // ms left when the clock turns red and beeps every second (= the server's warnMs)
-  pip: { left: 358, top: 16, width: 320, height: 480, fps: 15 }, // px: the mannequin picture-in-picture (2:3 like mannequin.ts PIP_SIZE, right of the clue card); re-rendered into its own render target at `fps`, blitted every frame
-  minimap: { width: 150, height: 190, hz: 10 }, // px, bottom-left; redrawn at most this often
-  lookbookKey: 'KeyT', // shows / hides the set lookbook (PiP + the 6 item cards); on by default
+  pip: { left: 358, top: 16, maxWidth: 420, widthVw: 30, fps: 15 }, // px: the brief picture (store.brief, 4:3 ring of the set) right of the clue card, ≤ 30 vw; re-rendered into its render target at `fps`, blitted every frame
+  loserMaxWaitMs: 600_000, // ms a loser waits in the lobby before the server lets it go (= worker/src/race/cetiqlo/config.ts CETIQLO.loserMaxWaitMs: keep in sync; the HUD countdown only)
+  lookbookKey: 'KeyT', // shows / hides the brief picture; on by default
   bagKey: 'KeyB', // opens the bag (pointer free: click an item to drop it); Digit1–9 drop item n directly
-  floor2Y: 2, // m: feet higher than this = floor 2 (minimap badge, label filter)
+  floor2Y: 2, // m: feet higher than this = floor 2 (the pick's floor filter uses |dy| ≤ 2.2 around the feet)
 };

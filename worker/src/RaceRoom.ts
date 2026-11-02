@@ -189,6 +189,7 @@ export class RaceRoom extends DurableObject<Env> {
       who: (team) => ({ slot: this.team(team)?.slot ?? -1, name: this.team(team)?.name ?? '' }),
       stepOf: (team) => this.engine.cqStep(team),
       win: (team, step, now) => this.engine.cqWin(team, step, now),
+      release: (team, step, now) => this.engine.cqRelease(team, step, now),
       setAlarm: (at) => this.setAlarm(at),
       event: (t, team, type, data) => this.event(t, team, type, data),
     });
@@ -529,6 +530,7 @@ export class RaceRoom extends DurableObject<Env> {
       case 'host.review': // isClientMessage: Host sockets only
       case 'host.finishPenalty':
         this.engine.onHost(m, (r) => this.send(ws, r), now);
+        this.cq.tick(now); // a Host undo of a CETIQLO timeout release puts the team back in the queue
         return this.soon(now);
       case 'host.flag': {
         // Phase 10 (V3, plan §4.2 / M5): a mark only; the history stays in `events`; new evidence flags the team again
@@ -734,7 +736,7 @@ export class RaceRoom extends DurableObject<Env> {
       return { ...this.info(t, online), code: t.code, player: t.player, lastSeen: s.lastSeen, reconnects: s.reconnects, pose: this.live.get(t.id)?.pose ?? null, flagged: s.flagged, flagWhy: s.flagWhy, flagAt: s.flagAt, startOrder, step, finishAt, penaltyMinutes, joinedAt, finishPenalty };
     });
     const race = this.engine.hostView(now);
-    const cetiqlo = this.cq.hostView();
+    const cetiqlo = this.cq.hostView(now);
     // ponytail: `steps` (Phase 6 corridor points: start + route / Pit Stop zones) stays until the Host page reads `leg`
     const steps = race.leg && [{ id: 'start', ...race.leg.start }, ...race.leg.steps.filter((s) => s.type === 'route_info' || s.type === 'pit_stop').map(({ id, x, z }) => ({ id, x, z }))];
     return {

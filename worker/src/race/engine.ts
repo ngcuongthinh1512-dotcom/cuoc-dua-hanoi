@@ -241,6 +241,15 @@ export class RaceEngine {
     this.step(team, { kind: 'cqWin', step, pose: stand(this.io.pose(team)) }, now);
   }
 
+  /** Leg 3 CETIQLO: a waiting loser timed out (loserMaxWaitMs): the step completes like a win (note "Chờ quá 10 phút, được rời đi"), and the
+   *  Host may undo it within NET.undoMs like a "Cho qua". */
+  cqRelease(team: string, step: string, now: number): void {
+    const r = this.io.team(team);
+    if (!r) return;
+    const id = this.progress(team, r).lastAnswerId + 1;
+    this.step(team, { kind: 'cqWin', step, pose: stand(this.io.pose(team)), release: true }, now, { team, step, id, op: 'approve', at: now, race: raceOf(r) });
+  }
+
   /** Host race ops; `reply` answers that Host socket (host.legResult / host.notice). */
   onHost(m: HostRaceMessage, reply: (m: ServerMessage) => void, now: number): void {
     const notice = (level: 'error' | 'warning', message: string) => reply({ t: 'host.notice', level, message });
@@ -563,12 +572,12 @@ export class RaceEngine {
   }
 
   /** One input through the state machine; effects written (one transaction) BEFORE anything is sent. */
-  private step(team: string, input: RaceInput, now: number) {
+  private step(team: string, input: RaceInput, now: number, undo?: Omit<UndoRec, 'rows' | 'stepAfter'>) {
     const r = this.io.team(team);
     // SPEC §8.10: after the Host's "Kết thúc" the race is read-only (no arrival, no bike moved to a rack)
     if (!r || this.statusV === 'finished') return;
     const { p, effects } = advance(this.legV, this.zones, this.progress(team, r), input, now, this.statusV === 'running');
-    if (effects.length) this.apply(team, r, p, effects, now);
+    if (effects.length) this.apply(team, r, p, effects, now, undo);
   }
 
   /** `undo` (a Host Duyệt / Phạt / Cho qua): its undo record is written in the same transaction (meta 'undo', 1 row). */

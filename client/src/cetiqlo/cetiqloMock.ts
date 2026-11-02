@@ -9,7 +9,7 @@ import { CETIQLO, CHECKOUT_ZONE } from '../../../worker/src/race/cetiqlo/config.
 import { Cetiqlo, type CqIO } from '../../../worker/src/race/cetiqlo/index.ts';
 import type { CqLink } from './cetiqloNet.ts';
 
-export const CQ_DEMO_STATES = ['match', 'lobby', 'bag', 'label', 'warn', 'checkout', 'result-win', 'result-lose', 'result-draw'] as const;
+export const CQ_DEMO_STATES = ['match', 'lobby', 'bag', 'label', 'warn', 'checkout', 'result-win', 'result-lose', 'result-draw', 'timeout'] as const;
 export type CqDemoState = (typeof CQ_DEMO_STATES)[number];
 
 const YOU = 'you', BOT = 'bot';
@@ -31,9 +31,9 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
   const who = (t: string) => (t === YOU ? { slot: you.slot, name: you.name } : { slot: oppSlot, name: botTeam.name });
   // ponytail: the worker's Cfg is `as const` (literal numbers), so a demo override needs the cast; ask the server agent for `Cfg` with plain numbers
   const cfg = { ...CETIQLO, pickMs: state === 'warn' ? 27_000 : state === 'result-draw' ? 4_000 : CETIQLO.pickMs, resultHoldMs: 6_000 } as unknown as typeof CETIQLO;
-  const seen = { state: false, match: false, bag: 0, locked: false, result: false, botMoved: false };
+  const seen = { state: false, match: false, bag: 0, locked: false, result: false, botMoved: false, advance: false };
   /** The scripted state is on screen (screenshots wait for it). */
-  const ready = () => state === 'lobby' ? seen.state : state.startsWith('result') ? seen.result : state === 'checkout' ? seen.locked : state === 'bag' ? seen.bag >= 3 : state === 'warn' ? seen.match : seen.match && seen.botMoved;
+  const ready = () => state === 'lobby' ? seen.state : state === 'timeout' ? seen.advance : state.startsWith('result') ? seen.result : state === 'checkout' ? seen.locked : state === 'bag' ? seen.bag >= 3 : state === 'warn' ? seen.match : seen.match && seen.botMoved;
   const link: CqLink = { send: (m) => receive(m), onMessage: null, serverNow: () => Date.now(), ready };
   let alarm: ReturnType<typeof setTimeout> | undefined;
   let set: string[] = [];
@@ -47,15 +47,17 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
     who,
     stepOf: () => 'T1',
     win: () => {},
+    release: () => {},
     event: () => {},
     setAlarm: (at) => { clearTimeout(alarm); alarm = setTimeout(() => cq.tick(Date.now()), Math.max(0, at - Date.now()) + 5); },
     send: (team, m) => {
       if (team === YOU) {
         if (m.t === 'cq.state' && m.startSpot && state === 'label') m = { ...m, startSpot: { x: -8.3, z: 8.4, yaw: 0 } }; // beside the tees table, facing it
-        if (m.t === 'cq.advance') onAdvance();
+        if (m.t === 'cq.advance') (seen.advance = true), onAdvance();
         seen.state ||= m.t === 'cq.state';
         if (m.t === 'cq.state' && m.phase === 'match') (seen.match = true), (seen.locked ||= !!m.match?.yourLocked), (seen.bag = Math.max(seen.bag, m.match?.yourBag.length ?? 0));
         if (m.t === 'cq.bag') seen.bag = Math.max(seen.bag, m.bag.length);
+        if (m.t === 'cq.result' && state === 'timeout') { const id = m.matchId; setTimeout(() => io.send(YOU, { t: 'cq.advance', matchId: id, reason: 'timeout' }), cfg.resultHoldMs + 1500); } // the loser waited "10 minutes" (demo: right after the hold)
         seen.result ||= m.t === 'cq.result';
         link.onMessage?.(m);
       } else if (m.t === 'cq.state' && m.phase === 'match' && m.match) plan(m.match.set, m.match.startAt);
@@ -73,19 +75,19 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
     bot.targets = list.map((it, k) => ({ x: it.shelf.x, z: it.shelf.z, floor: it.floor, id: it.id, at: at + 6_000 + k * 12_000 }));
     bot.targets.push({ x: STORE.checkout.x, z: STORE.checkout.z, floor: 1, id: null, at: at + 60_000 });
     bot.i = 0; bot.done = false;
-    if (state === 'warn' || state === 'result-win' || state === 'result-lose') scriptedEnd(at);
+    if (state === 'warn' || state === 'result-win' || state === 'result-lose' || state === 'timeout') scriptedEnd(at);
   }
   /** Scripted endings for the presets: the bot (and the team) act at once so the HUD state is on screen within a second. */
   function scriptedEnd(at: number) {
     let t = at + 200;
     const take = (team: string, id: string) => { const it = ITEM_BY_ID.get(id)!; cq.take(team, id, it.shelf.x, it.shelf.z, (t += 150)); };
     const checkoutNow = (team: string) => cq.checkout(team, CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, (t += 150));
-    const botBag = state === 'result-lose' ? set : set.slice(0, 4);
+    const botBag = state === 'result-lose' || state === 'timeout' ? set : set.slice(0, 4);
     for (const id of botBag) take(BOT, id);
     checkoutNow(BOT);
     bot.targets = []; bot.done = true;
     if (state === 'result-win') { for (const id of set) take(YOU, id); checkoutNow(YOU); }
-    if (state === 'result-lose') { for (const id of set.slice(0, 3)) take(YOU, id); take(YOU, CATALOG.find((i) => i.slot === 'acc' && i.id !== set[5])!.id); checkoutNow(YOU); }
+    if (state === 'result-lose' || state === 'timeout') { for (const id of set.slice(0, 3)) take(YOU, id); take(YOU, CATALOG.find((i) => i.slot === 'acc' && i.id !== set[5])!.id); checkoutNow(YOU); }
   }
   function receive(m: Parameters<CqLink['send']>[0]) {
     const now = Date.now();

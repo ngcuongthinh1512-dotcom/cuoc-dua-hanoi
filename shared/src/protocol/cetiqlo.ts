@@ -38,8 +38,10 @@ export interface CqTeamResult {
   bag: string[];
   marks: CqMark[];
   correct: number;
+  /** Bag items that are not an exact set id (wrong variants + extras); missing ones are not counted. */
   errors: number;
-  scorePct: number;
+  /** Points, 0–100, 1 decimal (16.67 per correct item, −9 per wrong or extra one). */
+  score: number;
   /** Server epoch ms of the checkout (ms precision), null = never locked (not completed). */
   lockedAtMs: number | null;
 }
@@ -76,13 +78,14 @@ export type CqServerMessage =
   | { t: 'cq.bag'; bag: string[] }
   | { t: 'cq.opp'; locked: boolean }
   | CqResult
-  /** The team won: the step is done (the next clue card + exit ring come with the usual `race` view). */
-  | { t: 'cq.advance'; matchId: string }
+  /** The team won (or timed out as a loser): the step is done (the next clue card + exit ring come with the usual `race` view). */
+  | { t: 'cq.advance'; matchId: string; /** 'win' (default when absent) = won the match; 'timeout' = a loser waited more than loserMaxWaitMs and is let go. */ reason?: 'win' | 'timeout' }
   | { t: 'cq.no'; op: 'join' | 'take' | 'drop' | 'checkout'; why: CqRefusal };
 
 /** HostState.cetiqlo: read-only status per CETIQLO step. */
 export interface CqHostRoom {
   step: string;
-  queue: CqPlayer[];
+  /** `releaseInS`: a waiting loser is released (step done) after this many seconds. */
+  queue: (CqPlayer & { releaseInS?: number })[];
   match: { id: string; endsAt: number; teams: (CqPlayer & { locked: boolean; bagN: number; online: boolean })[] } | null;
 }

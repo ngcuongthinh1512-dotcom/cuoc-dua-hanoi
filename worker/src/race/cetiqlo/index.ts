@@ -5,7 +5,7 @@ import type { CatalogItem } from '@race/shared/cetiqlo';
 import type { CqHostRoom, CqMatchView, CqPlayer, CqResult, CqServerMessage, CqTeamResult } from '@race/shared/protocol';
 import { CATALOG_SOURCE } from './catalogSource.ts';
 import { CETIQLO, CHECKOUT_ZONE, START_SPOTS } from './config.ts';
-import { checkout, drop, finish, finished, join, leave, markGone, newRoom, settle, startNext, take, type Cfg, type Match, type Room, type Settlement } from './match.ts';
+import { checkout, drop, dueRelease, finish, finished, join, leave, markGone, newRoom, release, settle, startNext, take, type Cfg, type Match, type Room, type Settlement } from './match.ts';
 
 let injected: readonly CatalogItem[] | null = null;
 /** The catalog the server plays with; a test may inject a fixture (null = back to the real one). */
@@ -23,16 +23,20 @@ export interface CqIO {
   stepOf(team: string): string | null;
   /** The team won its match: complete the step (next clue card), through the engine's usual path. */
   win(team: string, step: string, now: number): void;
+  /** A waiting loser timed out (loserMaxWaitMs): complete the step like a win, with the note "Chờ quá 10 phút, được rời đi" (undoable by the Host). */
+  release(team: string, step: string, now: number): void;
   setAlarm(at: number): void;
   event(t: number, team: string | null, type: string, data: object): void;
 }
 
-interface Saved { rooms: Record<string, Room>; grace: Record<string, number> }
+interface Saved { rooms: Record<string, Room>; grace: Record<string, number>; released: Record<string, string> }
 
 export class Cetiqlo {
   private rooms: Record<string, Room> = {};
   /** team → ms its disconnect grace ends. */
   private grace: Record<string, number> = {};
+  /** team → step it was released from (timeout); it never re-queues there, unless the Host's undo puts it back on the step. */
+  private released: Record<string, string> = {};
   private readonly acted = new Map<string, number>();
   private byIdFor: { cat: readonly CatalogItem[]; map: Map<string, CatalogItem> } | null = null;
 
@@ -48,7 +52,7 @@ export class Cetiqlo {
   }
   private slotOf = (id: string) => this.byId.get(id)?.slot;
   private save() {
-    this.io.save(JSON.stringify({ rooms: this.rooms, grace: this.grace } satisfies Saved));
+    this.io.save(JSON.stringify({ rooms: this.rooms, grace: this.grace, released: this.released } satisfies Saved));
   }
   private eligible = (t: string) => this.io.online(t) && !(t in this.grace);
 
@@ -190,10 +194,36 @@ export class Cetiqlo {
       const ghosts = room.queue.filter((t) => this.io.stepOf(t) !== step); // the Host skipped the step / the team left it
       if (ghosts.length) (this.rooms[step] = { ...room, queue: room.queue.filter((t) => !ghosts.includes(t)) }, moved.add(step), dirty = true);
     }
+    // a Host undo of a timeout release: the team is on the step again → back in the queue as a waiting loser with a fresh clock
+    for (const [team, step] of Object.entries(this.released)) {
+      if (this.io.stepOf(team) !== step) continue;
+      delete this.released[team];
+      const room = this.rooms[step] ?? newRoom();
+      this.rooms[step] = { ...join(room, team), lost: { ...room.lost, [team]: { at: now, match: room.match?.id ?? '' } } };
+      moved.add(step);
+      dirty = true;
+    }
+    // waiting losers past loserMaxWaitMs: released (the step completes), queue renumbered
+    for (const [step, room] of Object.entries(this.rooms)) {
+      const due = dueRelease(room, now, this.cfg);
+      if (!due.length) continue;
+      this.rooms[step] = release(room, due);
+      for (const t of due) this.released[t] = step;
+      this.save();
+      for (const t of due) {
+        this.io.event(now, t, 'cq.release', { step, match: room.lost![t]!.match, waitedMs: now - room.lost![t]!.at });
+        this.io.release(t, step, now); // SQLite (engine) before the "advance" ack
+        this.io.send(t, { t: 'cq.advance', matchId: room.lost![t]!.match, reason: 'timeout' });
+      }
+      moved.add(step);
+      dirty = false;
+    }
     if (dirty) this.save();
     for (const step of Object.keys(this.rooms)) {
       const m = this.rooms[step]!.match;
       if (m && finished(m, now)) this.conclude(step, m, now);
+      const r = this.rooms[step]!;
+      if (r.lobbyDue && now >= r.holdUntil) (this.rooms[step] = { ...r, lobbyDue: false }, this.save(), moved.add(step)); // the result screen is over: the queue hears its place
       this.afterChange(step, now, moved.has(step));
     }
     this.schedule(now);
@@ -219,7 +249,7 @@ export class Cetiqlo {
   private result(m: Match, s: Settlement, team: string, now: number): CqResult {
     const of = (t: string): CqTeamResult => {
       const sc = s.scores.find((x) => x.team === t)!;
-      return { ...this.io.who(t), bag: sc.bag, marks: sc.marks, correct: sc.correct, errors: sc.errors, scorePct: sc.scorePct, lockedAtMs: sc.lockedAtMs };
+      return { ...this.io.who(t), bag: sc.bag, marks: sc.marks, correct: sc.correct, errors: sc.errors, score: sc.score, lockedAtMs: sc.lockedAtMs };
     };
     const opps = m.teams.filter((t) => t !== team).map(of);
     return {
@@ -233,11 +263,11 @@ export class Cetiqlo {
     const s = settle(m, this.slotOf, this.cfg);
     this.rooms[step] = finish(this.rooms[step]!, m, s, now, this.cfg);
     this.save();
-    this.io.event(now, null, 'cq.result', { step, match: m.id, winners: s.winners, draw: s.draw, reason: s.reason, scores: s.scores.map((x) => ({ team: x.team, pct: x.scorePct, lockedAt: x.lockedAtMs, bag: x.bag })) });
+    this.io.event(now, null, 'cq.result', { step, match: m.id, winners: s.winners, draw: s.draw, reason: s.reason, scores: s.scores.map((x) => ({ team: x.team, score: x.score, lockedAt: x.lockedAtMs, bag: x.bag })) });
     for (const t of m.teams) if (!m.gone.includes(t)) this.io.send(t, this.result(m, s, t, now));
     for (const w of s.winners) {
       this.io.win(w, step, now); // SQLite (engine) before the "advance" ack
-      this.io.send(w, { t: 'cq.advance', matchId: m.id });
+      this.io.send(w, { t: 'cq.advance', matchId: m.id, reason: 'win' });
     }
     this.sendQueue(step, now); // the losers: their place, behind the result screen
   }
@@ -246,17 +276,18 @@ export class Cetiqlo {
   private schedule(now: number) {
     const due: number[] = Object.values(this.grace);
     for (const r of Object.values(this.rooms)) {
+      for (const t of r.queue) if (r.lost?.[t]) due.push(r.lost[t]!.at + this.cfg.loserMaxWaitMs);
       if (r.match?.state === 'running') due.push(r.match.endsAt);
-      else if (r.queue.length >= this.cfg.teamsPerMatch) due.push(r.holdUntil);
+      else if (r.lobbyDue || r.queue.length >= this.cfg.teamsPerMatch) due.push(r.holdUntil);
     }
     const next = Math.min(...due.filter((t) => t > now), Infinity);
     if (next !== Infinity) this.io.setAlarm(next);
   }
 
   /** HostState.cetiqlo: read-only status of every room that has been used. */
-  hostView(): CqHostRoom[] {
+  hostView(now: number): CqHostRoom[] {
     return Object.entries(this.rooms).map(([step, r]) => ({
-      step, queue: r.queue.map((t) => this.io.who(t)),
+      step, queue: r.queue.map((t) => ({ ...this.io.who(t), ...(r.lost?.[t] ? { releaseInS: Math.max(0, Math.ceil((r.lost[t]!.at + this.cfg.loserMaxWaitMs - now) / 1000)) } : {}) })),
       match: r.match?.state === 'running' ? { id: r.match.id, endsAt: r.match.endsAt, teams: r.match.teams.map((t) => ({ ...this.io.who(t), locked: t in r.match!.locked, bagN: r.match!.bags[t]!.length, online: this.io.online(t) })) } : null,
     }));
   }

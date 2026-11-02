@@ -283,6 +283,11 @@ describe('frames and JSON messages', () => {
     for (const role of ['host', 'spectator'] as const) expect(isClientMessage({ t: 'cq.join' }, role)).toBe(false);
   });
 
+  it('v15 CETIQLO: cq.advance carries an optional reason (win by default, timeout for a released loser) and survives JSON', () => {
+    const msgs: ServerMessage[] = [{ t: 'cq.advance', matchId: 'm1' }, { t: 'cq.advance', matchId: 'm1', reason: 'win' }, { t: 'cq.advance', matchId: 'm2', reason: 'timeout' }];
+    expect(JSON.parse(JSON.stringify(msgs))).toEqual(msgs);
+  });
+
   it('Leg 2 (v9): the Louvre room ops are gone (pick / lock / view / credits refused)', () => {
     const gone: unknown[] = [
       { t: 'race', op: 'pick', step: 'T3', art: 'art-07', on: true },

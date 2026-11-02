@@ -13,14 +13,15 @@
 // render (`afterRender`): no second renderer, no extra pass over the store.
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { CATALOG, ITEM_BY_ID, STORE } from '@race/shared/cetiqlo';
+import { CATALOG, ITEM_BY_ID, STORE, displayShape } from '@race/shared/cetiqlo';
 import { cetiqlo as C } from '../config.ts';
 import { makeExitRing } from '../rooms/exitRing.ts';
 import { groupPose, toLocal, toWorld } from '../rooms/roomFrame.ts';
 import type { CqDebug, RoomHandle, RoomMountOptions } from '../rooms/types.ts';
 import type { CqMatchView, CqResult, CqServerMessage } from './contract.ts';
 import { CqHud } from './hud.ts';
-import { type Anchor, clockOffset, countdown, insideCheckout, labelText, nearestItem, queueText } from './logic.ts';
+import { type Anchor, NO_PICK, type PickState, clockOffset, countdown, insideCheckout, loserWaitText, pickItem, queueText } from './logic.ts';
+import { shapeGeometry } from './items.ts';
 import { ROOF_Y, buildStore } from './storeScene.ts';
 
 /** Room-local z of the door end = the storefront (shared STORE plan); the body enters at (0, DOOR_Z − rooms.enterInset) in the lobby. */
@@ -28,6 +29,7 @@ export const DOOR_Z = STORE.doorZ;
 /** The exit ring: in the lobby beside the storefront door (lit only once the step is done). */
 export const EXIT = { x: -4.5, z: 14.6, r: 0.9 };
 const CHECKOUT_TEXT = '[F] Chốt — kết thúc mua sắm';
+const GLOW = { pick: '#ff4d1f', taken: '#2ecc71' }; // CETIQLO-red rim around the item in the crosshair; green on the ones in the bag
 const REFUSAL: Record<string, string> = { far: 'Đứng gần kệ hơn mới lấy được', full: 'Túi đã đầy', dup: 'Món này đã có trong túi', locked: 'Đội đã chốt, không đổi được nữa', notRunning: 'Trận chưa bắt đầu', busy: 'Phòng đã đủ đội, thử lại sau', notInRoom: 'Không ở bước này' };
 
 /** The stair's ramp collider (room-local): a thin slab whose top is the line through the step NOSINGS (step i's front top edge:
@@ -106,6 +108,11 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   let result: CqResult | null = null;
   let gotState = false, lastSecond = -1, frames = 0;
   let queue: { pos?: number; len?: number } = {};
+  let holdEnds = Infinity; // server ms: a loser's result screen is over (then the lobby, even without a cq.state)
+  let lostAt: number | null = null; // server ms of the last lost match's result: the lobby's "chờ thêm mm:ss" line (loserMaxWaitMs)
+  let released: 'win' | 'timeout' | null = null; // cq.advance: the step is done (the ring lights through the usual race view)
+  let waitText: string | null = null;
+  let pick: PickState = NO_PICK; // look-to-select (logic.ts pickItem)
   const oppName = () => match?.opp.name ?? 'đối thủ';
   const bagItems = () => bag.map((id) => ITEM_BY_ID.get(id)).filter((i) => !!i);
   const closeResult = () => { if (!result) return; result = null; hud!.result(null, ITEM_BY_ID, colourOf, 0); o.onClose?.(); };
@@ -125,9 +132,11 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
         oppLocked = m.match.oppLocked;
         if (fresh) {
           closeResult();
+          lostAt = null;
+          hud.lobbyWait(null);
           store.mannequin.dress(m.match.set);
-          hud.cards(thumbnails(m.match.set)); // one-off per set, at the match start (not during play)
-          pipAt = -Infinity; // the next frame re-renders the PiP
+          store.brief.dress(m.match.set);
+          pipAt = -Infinity; // the next frame re-renders the brief picture
           if (m.startSpot) moveTo(m.startSpot);
           hud.toast(`Trận bắt đầu · đối thủ: ${oppName()}`);
         }
@@ -135,6 +144,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
         hud.match(true);
         hud.opponent(oppName(), colourOf(m.match.opp.slot), oppLocked);
         hud.bag(bagItems());
+        syncTaken();
         hud.locked(locked);
       } else {
         if (m.phase === 'lobby') {
@@ -144,15 +154,21 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
         } else hud.lobby(null);
         hud.match(false);
       }
-    } else if (m.t === 'cq.bag') (bag = m.bag), hud.bag(bagItems());
+    } else if (m.t === 'cq.bag') (bag = m.bag), hud.bag(bagItems()), syncTaken();
     else if (m.t === 'cq.opp') { if (m.locked && !oppLocked) hud.toast(`${oppName()} đã chốt`); oppLocked = m.locked; if (match) hud.opponent(oppName(), colourOf(match.opp.slot), oppLocked); }
     else if (m.t === 'cq.result') {
       result = m;
+      phase = 'result';
+      holdEnds = m.winner === 'you' ? Infinity : m.serverNow + m.holdMs + 500; // update(): the lone loser's way back to the lobby (the server also sends cq.state lobby at holdUntil: whichever comes first flips the phase, the other is a no-op)
+      lostAt = m.winner === 'you' ? null : m.serverNow;
       locked = false;
       openBag(false);
       hud.match(false);
       hud.result(m, ITEM_BY_ID, colourOf, m.startAt);
       document.exitPointerLock();
+    } else if (m.t === 'cq.advance') { // the step is done: the next card + the lit ring come with the `race` view (RoomFlow exitReady)
+      released = m.reason ?? 'win';
+      if (released === 'timeout') { hud.toast('Bạn đã chờ quá 10 phút, được rời đi'); hud.lobby('Được rời đi: ra vòng sáng cạnh cửa để nhận mật thư kế'); hud.lobbyWait(null); lostAt = null; }
     } else if (m.t === 'cq.no') hud.toast(REFUSAL[m.why] ?? 'Máy chủ từ chối');
   };
   if (cq) {
@@ -163,16 +179,39 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     hud.onDrop = (id) => { if (phase === 'match' && !locked) cq?.send({ t: 'cq.drop', id }); };
     hud.onContinue = closeResult;
   }
-  // the nearest item: scanned at most every nearEveryMs, or sooner when the feet moved > nearMoveM (600 anchors a frame is cheap, but
-  // the game loop has an 8 ms budget at 120 Hz: no per-frame scan, no per-frame allocation)
-  let nearAt = -Infinity, nearX = NaN, nearZ = NaN, nearHit: Anchor | null = null;
-  const near = (): Anchor | null => {
-    if (phase !== 'match' || locked || o.frozen?.()) return null;
-    const f = feet(), now = performance.now();
-    if (now - nearAt < C.nearEveryMs && Math.hypot(f.x - nearX, f.z - nearZ) < C.nearMoveM) return nearHit;
-    nearAt = now; nearX = f.x; nearZ = f.z;
-    fwd.set(0, 0, -1).applyQuaternion(camera.quaternion).applyAxisAngle(yAxis, -frame.yaw);
-    return (nearHit = nearestItem(f.x, feetY(), f.z, fwd.x, fwd.z, anchors, C.labelRange));
+  // ---- look-to-select: ONE reusable halo shell (the picked item's own low-poly shape, scaled up, additive BackSide) at the item's shelf
+  // pose inside the room group (room-local, so the frame transform is the group's); small green shells on the items in the bag ----
+  // a BackSide shell a bit larger than the item: its inner far faces show as a coloured rim around the garment's silhouette (normal
+  // blending: additive would vanish on the white shelves); flat folded slabs get a taller shell so the rim is seen from above
+  const haloMat = (color: string, opacity: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.BackSide, depthWrite: false });
+  const halo = new THREE.Mesh(new THREE.BufferGeometry(), haloMat(GLOW.pick, 0.85));
+  halo.visible = false;
+  g.add(halo);
+  const takenMat = haloMat(GLOW.taken, 0.5);
+  const taken = new Map<string, THREE.Mesh>();
+  const placeShell = (m: THREE.Mesh, id: string, k = 1.12) => { const it = ITEM_BY_ID.get(id)!; m.geometry = shapeGeometry(displayShape(it.shape, it.display)); m.position.set(it.shelf.x, it.shelf.y, it.shelf.z); m.rotation.y = it.shelf.yaw; m.scale.set(k, it.display === 'fold' ? k * 2.2 : k, k); };
+  /** The green shells follow the bag (a few meshes at most: bagMax 24). */
+  const syncTaken = () => {
+    for (const [id, m] of taken) if (!bag.includes(id)) (g.remove(m), taken.delete(id));
+    for (const id of bag) if (!taken.has(id) && ITEM_BY_ID.has(id)) { const m = new THREE.Mesh(new THREE.BufferGeometry(), takenMat); placeShell(m, id, 1.08); g.add(m); taken.set(id, m); }
+  };
+  const look = { x: 0, z: 0 }, feet3 = { x: 0, y: 0, z: 0 }, camLocal = new THREE.Vector3();
+  /** The item in the crosshair this frame (none while locked / frozen / outside a match); updates the halo. */
+  const updatePick = (now: number, t: number) => {
+    let next = NO_PICK;
+    if (phase === 'match' && !locked && !o.frozen?.()) {
+      const f = feet();
+      Object.assign(feet3, { x: f.x, y: feetY(), z: f.z });
+      fwd.set(0, 0, -1).applyQuaternion(camera.quaternion).applyAxisAngle(yAxis, -frame.yaw);
+      Object.assign(look, { x: fwd.x, z: fwd.z });
+      next = pickItem(look, feet3, anchors, pick, now, C.pick);
+    }
+    if (next.id !== pick.id) {
+      if (next.id) placeShell(halo, next.id);
+      halo.visible = !!next.id;
+    }
+    pick = next;
+    if (halo.visible && pick.id) { const k = 1.12 + 0.03 * Math.sin(t * 5), fold = ITEM_BY_ID.get(pick.id)!.display === 'fold'; halo.scale.set(k, fold ? k * 2.2 : k, k); }
   };
   const atCheckout = () => { if (phase !== 'match' || locked) return false; const f = feet(); return insideCheckout(f.x, f.z, checkout); };
   function interact(): boolean {
@@ -180,9 +219,8 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     if (!cq || phase !== 'match' || locked) return false;
     const f = feet();
     if (atCheckout()) return cq.send({ t: 'cq.checkout', x: +f.x.toFixed(2), z: +f.z.toFixed(2) }), true;
-    const a = near();
-    if (!a) return false;
-    cq.send({ t: 'cq.take', id: a.id, x: +f.x.toFixed(2), z: +f.z.toFixed(2) });
+    if (!pick.id) return false;
+    cq.send({ t: 'cq.take', id: pick.id, x: +f.x.toFixed(2), z: +f.z.toFixed(2) });
     return true;
   }
   const onKey = (e: KeyboardEvent) => {
@@ -195,20 +233,18 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     else if (/^Digit[1-9]$/.test(e.code) && !locked) { const id = bag[Number(e.code[5]) - 1]; if (id) cq?.send({ t: 'cq.drop', id }); }
   };
   if (!VIEWER) addEventListener('keydown', onKey);
-  const mapState = { bounds: store.minimapBounds, lobbyZ: store.lobby.box.min.z, checkout: { x: checkout.x, z: checkout.z, half: checkout.half ?? checkout.radius / Math.SQRT2 }, you: { x: 0, z: 0, yaw: 0, floor: 1 as 1 | 2, colour: o.team?.colour ?? '#fff' }, opp: null as { x: number; z: number; floor: 1 | 2; colour: string } | null };
-  const oppPose = { x: 0, z: 0, floor: 1 as 1 | 2, colour: '#f07f1d' };
   const clock = new THREE.Clock();
-  /** The lookbook cards' data: mannequin.thumbnails = each piece alone in a small canvas (cached per set; one-off at the match start). */
-  const thumbnails = (set: readonly string[]) => store.mannequin.thumbnails(set, renderer, 160);
-  // the PiP: the mannequin is rendered into its own render target at cetiqlo.pip.fps and blitted as a screen quad every frame
-  // (a skinned Rocketbox human every frame would cost a second character pass; a skipped scissor draw would show the store behind it)
-  const pipRT = new THREE.WebGLRenderTarget(C.pip.width, C.pip.height, { depthBuffer: true });
+  // the brief picture (store.brief: the set's six pieces on a turning ring, no text) is rendered into its own render target at
+  // cetiqlo.pip.fps and blitted as a screen quad every frame (a skipped scissor draw would show the store behind it)
+  const B = store.brief.size;
+  const pipRT = new THREE.WebGLRenderTarget(B.w, B.h, { depthBuffer: true });
   pipRT.texture.colorSpace = THREE.SRGBColorSpace;
   const pipQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: pipRT.texture, toneMapped: false, depthTest: false, depthWrite: false }));
-  const pipScene = new THREE.Scene().add(pipQuad), pipCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), pipBg = new THREE.Color('#f3efe6');
+  const pipScene = new THREE.Scene().add(pipQuad), pipCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   let pipAt = -Infinity;
-  const pipRect = { x: 0, y: 0, w: 0, h: 0 }, pipAim = new THREE.Vector3();
+  const pipRect = { x: 0, y: 0, w: 0, h: 0 };
   let pipRectAt = -Infinity;
+  hud?.pipAspect(B.w, B.h);
 
   /** DEV / tests: scripted moves against the real server (rooms/types.ts CqDebug; main.ts window.__GAME__.cq). */
   const cqDebug = (): CqDebug => {
@@ -223,7 +259,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     return {
-      state: () => ({ phase, matchId: match?.id ?? null, set: match?.set ?? [], bag: [...bag], locked, oppLocked, ...queue, exitLit: exit.on, result: result && { winner: result.winner, youPct: result.you.scorePct, oppPct: result.opp.scorePct, reason: result.reason } }),
+      state: () => ({ phase, matchId: match?.id ?? null, set: match?.set ?? [], bag: [...bag], locked, oppLocked, ...queue, exitLit: exit.on, picked: pick.id, released, result: result && { winner: result.winner, youScore: result.you.score, oppScore: result.opp.score, reason: result.reason } }),
       async takeSet(correct, wrong = 0) {
         const set = match?.set ?? [], ids = set.slice(0, correct);
         for (const id of set.slice(correct, correct + wrong)) { const it = ITEM_BY_ID.get(id)!; const other = CATALOG.find((c) => c.slot === it.slot && c.id !== id); if (other) ids.push(other.id); }
@@ -243,42 +279,38 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     update(dt) {
       clock.getDelta();
       const t = clock.elapsedTime, now = performance.now();
-      store.update(dt);
+      { // the room-local camera for the store's LOD / floor culling (viewer too); inline toLocal: no per-frame allocation
+        const dx = camera.position.x - frame.x, dz = camera.position.z - frame.z, sn = Math.sin(frame.yaw), cs = Math.cos(frame.yaw);
+        camLocal.set(dx * cs - dz * sn, camera.position.y - frame.floorY, dx * sn + dz * cs + frame.doorZ);
+      }
+      store.update(dt, camLocal);
       exit.update(t);
       frames++;
       if (!hud) return;
       hud.update(now);
+      // ponytail: a lone loser gets no `cq.state lobby` after the hold (the server's alarm only fires with ≥ 2 teams queued): once the hold
+      // is over the client puts itself in the lobby (no queue numbers until the next cq.state); frame-driven, not a timer (background tabs)
+      if (phase === 'result' && Date.now() + offset >= holdEnds) (holdEnds = Infinity), onMessage({ t: 'cq.state', phase: 'lobby', serverNow: Date.now() + offset });
+      if (phase === 'lobby' && lostAt !== null && !released) { const w = loserWaitText(lostAt, C.loserMaxWaitMs, Date.now() + offset); if (w !== waitText) hud.lobbyWait((waitText = w)); } // once a second (the text changes per second)
       if (phase === 'match' && match) {
         const c = countdown(match.endsAt, Date.now(), offset, C.warnMs);
         if (c.second !== lastSecond) { lastSecond = c.second; hud.clock(c.text, c.warn); if (c.warn && c.second > 0 && c.second <= C.warnMs / 1000) beep(); }
-        const go = atCheckout(), a = go ? null : near();
-        hud.label(go ? CHECKOUT_TEXT : a ? labelText(ITEM_BY_ID.get(a.id)!) : null, go);
-        const f = feet();
-        fwd.set(0, 0, -1).applyQuaternion(camera.quaternion).applyAxisAngle(yAxis, -frame.yaw);
-        Object.assign(mapState.you, { x: f.x, z: f.z, yaw: Math.atan2(-fwd.x, -fwd.z), floor: feetY() > C.floor2Y ? 2 : 1 });
-        const p = o.peerPose?.(match.opp.slot);
-        if (p) { const l = toLocal(frame, p.x, p.z); Object.assign(oppPose, { x: l.x, z: l.z, floor: p.y - frame.floorY > C.floor2Y ? 2 : 1, colour: colourOf(match.opp.slot) }); mapState.opp = oppPose; } else mapState.opp = null;
-        hud.map(mapState, now);
-      }
+        updatePick(now, t);
+        const go = atCheckout();
+        hud.label(go ? CHECKOUT_TEXT : pick.id ? '[F]' : null, go);
+      } else if (halo.visible) (halo.visible = false), (pick = NO_PICK);
     },
     afterRender() {
       if (VIEWER || !hud || phase !== 'match' || !hud.lookbookOn) return;
       const now = performance.now();
-      if (now - pipAt >= 1000 / C.pip.fps) { // the mannequin alone (its PiP camera, layer 1) into the render target
+      if (now - pipAt >= 1000 / C.pip.fps) { // the ring alone (brief.renderPiP: its own camera / layer) into the render target
         pipAt = now;
-        const bg = scene.background, pc = store.mannequin.pipCamera;
-        // ponytail: mannequin.ts `camAt` calls lookAt(0, y, 0) AFTER the camera is parented under the pedestal, and Object3D.lookAt takes a
-        // WORLD point: once the human asset lands the camera stares at the world origin. Re-aim at the figure (pedestal-local) each render.
-        pipAim.set(0, pc.position.y - 0.04, 0);
-        pc.lookAt(store.mannequin.object.localToWorld(pipAim));
-        scene.background = pipBg;
         renderer.setRenderTarget(pipRT);
-        renderer.render(scene, pc);
+        store.brief.renderPiP(renderer, { x: 0, y: 0, w: B.w, h: B.h });
         renderer.setRenderTarget(null);
-        scene.background = bg;
       }
       renderer.getSize(size); // pixelRatio is 1 inside a room: CSS px = renderer px (rect origin bottom-left)
-      if (now - pipRectAt > 500) { pipRectAt = now; Object.assign(pipRect, hud.pipRect()); } // the HUD frame's box (60vh cap): layout read twice a second
+      if (now - pipRectAt > 500) { pipRectAt = now; Object.assign(pipRect, hud.pipRect()); } // the HUD frame's box (scaled by the viewport): layout read twice a second
       const x = Math.round(pipRect.x), y = Math.round(size.y - pipRect.y - pipRect.h), w = Math.round(pipRect.w), h = Math.round(pipRect.h), auto = renderer.autoClear;
       renderer.autoClear = false;
       renderer.setScissorTest(true);
@@ -306,6 +338,8 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       pipRT.dispose();
       pipQuad.geometry.dispose();
       (pipQuad.material as THREE.Material).dispose();
+      (halo.material as THREE.Material).dispose();
+      takenMat.dispose();
       for (const c of colliders) o.world!.removeCollider(c, false);
       store.dispose();
       scene.remove(g);

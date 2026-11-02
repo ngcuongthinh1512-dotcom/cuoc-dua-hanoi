@@ -641,6 +641,7 @@ describe('Leg 3 CETIQLO block (read-only)', () => {
     expect(line).toContain('Đội B (mất mạng) 4 món');
     expect(line).toContain('còn 01:35');
     expect(line).toContain('hàng chờ: Đội C');
+    expect(cetiqloLines({ ...s, cetiqlo: [{ step: 'T1', queue: [{ slot: 3, name: 'Đội C', releaseInS: 125 }], match: null }] })[0]).toContain('hàng chờ: Đội C (rời sau 02:05)');
     expect(cetiqloLines({ ...s, cetiqlo: [{ step: 'T1', queue: [], match: null }] })[0]).toContain('không có trận · hàng chờ: trống');
   });
 });

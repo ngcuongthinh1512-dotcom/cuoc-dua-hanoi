@@ -329,7 +329,6 @@ async function start() {
       cq: cqMock?.link ?? cqLink,
       feetY: () => player!.position.y,
       moveTo: (x, z, yaw) => player!.moveTo(x, z, yaw),
-      peerPose: (slot) => remote?.poseOf(slot) ?? null,
       characterAsset: assets?.character,
       room: t.room,
       onPickup: () => {

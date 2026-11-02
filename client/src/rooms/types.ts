@@ -49,19 +49,17 @@ export interface RoomMountOptions {
   /** The overlay closed (the race re-takes the pointer lock inside this user gesture). */
   onClose?: () => void;
   /** CETIQLO (cetiqlo/cetiqloRoom.ts): the `cq.*` link (cetiqlo/cetiqloNet.ts; the race: the socket, DEV: cetiqloMock.ts); the body's
-   *  feet height (floor 1 / 2); move the body inside the room (world x, z, yaw: Player.moveTo, no teleport flag); another team's
-   *  body as RemotePlayers last drew it (the minimap). */
+   *  feet height (floor 1 / 2); move the body inside the room (world x, z, yaw: Player.moveTo, no teleport flag). */
   cq?: CqLink;
   feetY?: () => number;
   moveTo?: (x: number, z: number, yaw: number) => void;
-  peerPose?: (slot: number) => { x: number; y: number; z: number } | null;
   /** CETIQLO: the game's loaded Rocketbox asset (Player.assets.character) for the store's human mannequins: no second GLB load. */
   characterAsset?: CharacterAsset;
 }
 
 /** CETIQLO test helpers (RoomHandle.cqDebug). Moves put the body at the shelf / the pad (Player.moveTo) and send the room-local spot. */
 export interface CqDebug {
-  state(): { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youPct: number; oppPct: number; reason: string } | null; exitLit: boolean };
+  state(): { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youScore: number; oppScore: number; reason: string } | null; exitLit: boolean; picked: string | null; released: 'win' | 'timeout' | null };
   /** Take `correct` items of the set (set order) + `wrong` items of the same slots but another id; ≥ 150 ms apart (the server's cooldown). */
   takeSet(correct: number, wrong?: number): Promise<string[]>;
   take(id: string): void;

@@ -3,7 +3,7 @@
 // its fixtures' slots in order, so near-identical items (same shape, other colour; same colour, other material) sit side by
 // side. Pure data: the server reads id / slot / category, the client everything.
 import { FIXTURES, SHAPE_H, STORE, fixtureSlots } from './layout.ts';
-import type { CatalogItem, Category, Display, Finish, PatternId, ShapeId, SlotKind, Zone, ZoneId } from './types.ts';
+import type { CatalogItem, Category, Display, Finish, PatternId, RemovedPatternId, ShapeId, SlotKind, Zone, ZoneId } from './types.ts';
 
 export const COLOURS = {
   white: ['Trắng', '#F2F2F0'], black: ['Đen', '#1C1C1E'], grey: ['Xám', '#8E8E90'], lightgrey: ['Xám nhạt', '#C9C9C7'], charcoal: ['Than', '#3A3A3C'],
@@ -21,8 +21,9 @@ type ColourKey = keyof typeof COLOURS;
 type Way = ColourKey | [ColourKey, ColourKey];
 interface Family {
   zone: ZoneId; family: string; name: string; nameEn: string; shape: ShapeId; material?: string; finish?: Finish; colours: Way[];
-  pattern?: PatternId; scale?: number;
+  pattern?: PatternId | RemovedPatternId; scale?: number;
 }
+const REMOVED: ReadonlySet<string> = new Set<RemovedPatternId>(['tartan', 'houndstooth', 'camo', 'tiedye', 'geo', 'corduroy', 'seersucker']);
 // Zone → category / slot. Dresses, underwear, homewear, socks and umbrellas are decoys (no slot).
 const ZONE_CAT: Record<ZoneId, { category: Category; slot?: SlotKind; floor: 1 | 2; name: string; nameEn: string }> = {
   tees: { category: 'top', slot: 'top', floor: 1, name: 'Áo thun & UT', nameEn: 'T-shirts & UT' },
@@ -103,7 +104,7 @@ export const FAMILIES: Family[] = [
   { zone: 'joggers', family: 'sweatpants', name: 'Quần nỉ', nameEn: 'Sweatpants', shape: 'sweatpants', material: 'Nỉ', colours: ['grey', 'black'] },
   { zone: 'joggers', family: 'jogger', name: 'Quần jogger', nameEn: 'Jogger pants', shape: 'jogger', material: 'Cotton', colours: ['black', 'navy', 'olive'] },
   { zone: 'shorts', family: 'shorts-sport', name: 'Short thể thao', nameEn: 'Active shorts', shape: 'shorts', material: 'Dry-EX', colours: ['black', 'navy', 'blue', 'grey', 'red'] },
-  { zone: 'shorts', family: 'shorts-chino', name: 'Short kaki', nameEn: 'Chino shorts', shape: 'bermuda', material: 'Cotton', colours: ['beige', 'olive', 'navy'] },
+  { zone: 'shorts', family: 'shorts-chino', name: 'Short kaki', nameEn: 'Chino shorts', shape: 'shorts-chino', material: 'Cotton', colours: ['beige', 'olive', 'navy'] },
   { zone: 'shorts', family: 'shorts-linen', name: 'Short linen', nameEn: 'Linen shorts', shape: 'shorts', material: 'Linen', colours: ['white', 'beige'] },
   { zone: 'shorts', family: 'shorts-georgette', name: 'Short georgette', nameEn: 'Georgette shorts', shape: 'shorts', material: 'Georgette', finish: 'shiny', colours: ['black', 'pink'] },
   // ---- floor 2 · ĐẦM & CHÂN VÁY ----
@@ -140,44 +141,44 @@ export const FAMILIES: Family[] = [
   { zone: 'tees', family: 'tee-oversized', name: 'Áo thun oversize', nameEn: 'Oversized T-shirt', shape: 'tee-oversized', material: 'Cotton dày', colours: ['offwhite', 'black', 'sand', 'slate'] },
   { zone: 'tees', family: 'tee-breton', name: 'Áo thun kẻ ngang', nameEn: 'Breton stripe T-shirt', shape: 'tee', material: 'Cotton', pattern: 'breton', colours: [['white', 'navy'], ['white', 'red'], ['cream', 'black'], ['navy', 'white']] },
   { zone: 'tees', family: 'tee-border', name: 'Áo thun kẻ bản to', nameEn: 'Border stripe T-shirt', shape: 'tee', material: 'Cotton', pattern: 'border', colours: [['white', 'navy'], ['grey', 'black'], ['yellow', 'navy']] },
-  { zone: 'tees', family: 'ut-geo', name: 'Áo thun UT hình học', nameEn: 'UT geometric tee', shape: 'tee', material: 'Cotton', pattern: 'geo', colours: [['white', 'black'], ['black', 'white'], ['yellow', 'navy']] },
+  { zone: 'tees', family: 'ut-geo', name: 'Áo thun UT trơn', nameEn: 'UT plain tee', shape: 'tee', material: 'Cotton', pattern: 'geo', colours: [['white', 'black'], ['black', 'white'], ['yellow', 'navy']] },
   { zone: 'tees', family: 'ut-waves', name: 'Áo thun UT sóng', nameEn: 'UT waves tee', shape: 'tee', material: 'Cotton', pattern: 'waves', colours: [['skyblue', 'white'], ['navy', 'white'], ['white', 'teal']] },
   { zone: 'tees', family: 'ut-dot', name: 'Áo thun UT chấm bi', nameEn: 'UT polka dot tee', shape: 'tee', material: 'Cotton', pattern: 'dot', colours: [['white', 'black'], ['pink', 'white'], ['navy', 'white']] },
-  { zone: 'tees', family: 'tee-tiedye', name: 'Áo thun tie-dye', nameEn: 'Tie-dye T-shirt', shape: 'tee-oversized', material: 'Cotton', pattern: 'tiedye', colours: [['lavender', 'white'], ['mint', 'white'], ['coral', 'white']] },
-  { zone: 'tees', family: 'tee-camo', name: 'Áo thun rằn ri', nameEn: 'Camo T-shirt', shape: 'tee', material: 'Cotton', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
+  { zone: 'tees', family: 'tee-tiedye', name: 'Áo thun oversize mềm', nameEn: 'Soft oversized tee', shape: 'tee-oversized', material: 'Cotton', pattern: 'tiedye', colours: [['lavender', 'white'], ['mint', 'white'], ['coral', 'white']] },
+  { zone: 'tees', family: 'tee-camo', name: 'Áo thun Dry-EX cổ tròn', nameEn: 'Dry-EX crew tee', shape: 'tee', material: 'Cotton', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
   { zone: 'tees', family: 'tank-stripe', name: 'Áo ba lỗ kẻ', nameEn: 'Striped tank', shape: 'tank', material: 'Cotton', pattern: 'breton', colours: [['white', 'navy'], ['white', 'black']] },
   { zone: 'tees', family: 'tee-long-stripe', name: 'Áo thun dài tay kẻ', nameEn: 'Striped long-sleeve tee', shape: 'tee-long', material: 'Cotton', pattern: 'breton', colours: [['cream', 'navy'], ['white', 'red']] },
   { zone: 'polo', family: 'polo-long', name: 'Áo polo dài tay', nameEn: 'Long-sleeve polo', shape: 'polo-long', material: 'Cotton', colours: ['navy', 'black', 'wine', 'grey'] },
   { zone: 'polo', family: 'polo-stripe', name: 'Áo polo kẻ', nameEn: 'Striped polo', shape: 'polo', material: 'Pique', pattern: 'breton', colours: [['white', 'navy'], ['navy', 'white'], ['green', 'white']] },
   { zone: 'polo', family: 'polo-border', name: 'Áo polo viền', nameEn: 'Border polo', shape: 'polo', material: 'Dry-EX', pattern: 'border', colours: [['white', 'red'], ['navy', 'yellow']] },
   { zone: 'shirts', family: 'shirt-gingham', name: 'Sơ mi caro gingham', nameEn: 'Gingham shirt', shape: 'shirt', material: 'Cotton', pattern: 'gingham', colours: [['white', 'blue'], ['white', 'red'], ['white', 'black']] },
-  { zone: 'shirts', family: 'shirt-flannel-check', name: 'Sơ mi flannel caro', nameEn: 'Flannel check shirt', shape: 'shirt', material: 'Flannel', finish: 'knit', pattern: 'tartan', colours: [['red', 'black'], ['green', 'navy'], ['blue', 'black'], ['camel', 'brown']] },
+  { zone: 'shirts', family: 'shirt-flannel-check', name: 'Sơ mi flannel dày', nameEn: 'Heavy flannel shirt', shape: 'shirt', material: 'Flannel', finish: 'knit', pattern: 'tartan', colours: [['red', 'black'], ['green', 'navy'], ['blue', 'black'], ['camel', 'brown']] },
   { zone: 'shirts', family: 'shirt-short-linen', name: 'Sơ mi linen ngắn tay', nameEn: 'Short-sleeve linen shirt', shape: 'shirt-short', material: 'Linen', colours: ['white', 'sand', 'skyblue', 'olive'] },
   { zone: 'shirts', family: 'shirt-band', name: 'Sơ mi cổ trụ', nameEn: 'Band collar shirt', shape: 'shirt-band', material: 'Cotton', colours: ['white', 'olive', 'navy', 'beige'] },
   { zone: 'shirts', family: 'shirt-camp-aloha', name: 'Sơ mi cổ vest hoa', nameEn: 'Camp collar floral shirt', shape: 'shirt-camp', material: 'Rayon', finish: 'shiny', pattern: 'floral', colours: [['navy', 'cream'], ['teal', 'white'], ['wine', 'cream']] },
   { zone: 'shirts', family: 'shirt-camp', name: 'Sơ mi cổ vest', nameEn: 'Camp collar shirt', shape: 'shirt-camp', material: 'Linen', colours: ['white', 'black', 'sand'] },
   { zone: 'shirts', family: 'shirt-pinstripe', name: 'Sơ mi kẻ nhỏ', nameEn: 'Pinstripe shirt', shape: 'shirt', material: 'Cotton', pattern: 'pinstripe', colours: [['white', 'navy'], ['lightblue', 'navy'], ['white', 'grey']] },
-  { zone: 'shirts', family: 'shirt-seersucker', name: 'Sơ mi seersucker', nameEn: 'Seersucker shirt', shape: 'shirt-short', material: 'Seersucker', pattern: 'seersucker', colours: [['lightblue', 'white'], ['pink', 'white'], ['navy', 'white']] },
+  { zone: 'shirts', family: 'shirt-seersucker', name: 'Sơ mi cotton ngắn tay', nameEn: 'Short-sleeve cotton shirt', shape: 'shirt-short', material: 'Seersucker', pattern: 'seersucker', colours: [['lightblue', 'white'], ['pink', 'white'], ['navy', 'white']] },
   { zone: 'shirts', family: 'shirt-windowpane', name: 'Sơ mi kẻ ô', nameEn: 'Windowpane shirt', shape: 'shirt', material: 'Cotton', pattern: 'windowpane', colours: [['white', 'navy'], ['beige', 'brown']] },
   { zone: 'shirts', family: 'blouse-floral', name: 'Áo kiểu hoa', nameEn: 'Floral blouse', shape: 'blouse', material: 'Rayon', finish: 'shiny', pattern: 'floral', colours: [['pink', 'white'], ['black', 'cream'], ['navy', 'lightpink']] },
   { zone: 'shirts', family: 'blouse-dot', name: 'Áo kiểu chấm bi', nameEn: 'Polka dot blouse', shape: 'blouse', material: 'Rayon', finish: 'shiny', pattern: 'dot', colours: [['white', 'black'], ['navy', 'white']] },
   { zone: 'shirts', family: 'blouse-plain', name: 'Áo kiểu tay bồng', nameEn: 'Puff-sleeve blouse', shape: 'blouse', material: 'Cotton', colours: ['white', 'lightpink', 'sand'] },
   { zone: 'sweats', family: 'quarter-zip', name: 'Áo nỉ khóa 1/4', nameEn: 'Quarter-zip sweat', shape: 'quarter-zip', material: 'Nỉ', colours: ['grey', 'navy', 'olive'] },
   { zone: 'sweats', family: 'sweatshirt-border', name: 'Áo nỉ kẻ bản to', nameEn: 'Border stripe sweatshirt', shape: 'sweatshirt', material: 'Nỉ', pattern: 'border', colours: [['grey', 'navy'], ['white', 'black']] },
-  { zone: 'sweats', family: 'hoodie-camo', name: 'Hoodie rằn ri', nameEn: 'Camo hoodie', shape: 'hoodie', material: 'Nỉ', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
-  { zone: 'sweats', family: 'sweatshirt-geo', name: 'Áo nỉ in hình học', nameEn: 'Geometric sweatshirt', shape: 'sweatshirt', material: 'Nỉ', pattern: 'geo', colours: [['white', 'red'], ['black', 'white']] },
-  { zone: 'sweats', family: 'hoodie-geo', name: 'Hoodie in CETI', nameEn: 'CETI graphic hoodie', shape: 'hoodie', material: 'Nỉ', pattern: 'geo', colours: [['navy', 'white'], ['beige', 'black']] },
+  { zone: 'sweats', family: 'hoodie-camo', name: 'Hoodie dày', nameEn: 'Heavyweight hoodie', shape: 'hoodie', material: 'Nỉ', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
+  { zone: 'sweats', family: 'sweatshirt-geo', name: 'Áo nỉ oversize', nameEn: 'Oversized sweatshirt', shape: 'sweatshirt', material: 'Nỉ', pattern: 'geo', colours: [['white', 'red'], ['black', 'white']] },
+  { zone: 'sweats', family: 'hoodie-geo', name: 'Hoodie khóa kéo nhẹ', nameEn: 'Light zip hoodie', shape: 'hoodie', material: 'Nỉ', pattern: 'geo', colours: [['navy', 'white'], ['beige', 'black']] },
   { zone: 'knit', family: 'knit-v', name: 'Áo len cổ V', nameEn: 'V-neck sweater', shape: 'knit-v', material: 'Merino', finish: 'knit', colours: ['black', 'camel', 'navy', 'grey'] },
   { zone: 'knit', family: 'turtleneck', name: 'Áo len cổ lọ', nameEn: 'Turtleneck sweater', shape: 'turtleneck', material: 'Merino', finish: 'knit', colours: ['black', 'cream', 'wine', 'darkgreen'] },
   { zone: 'knit', family: 'mockneck', name: 'Áo len cổ cao nửa', nameEn: 'Mock neck sweater', shape: 'mockneck', material: 'Cashmere', finish: 'knit', colours: ['grey', 'navy', 'beige', 'rust', 'slate'] },
   { zone: 'knit', family: 'knit-vest', name: 'Áo gile len', nameEn: 'Knit vest', shape: 'knit-vest', material: 'Len', finish: 'knit', colours: ['navy', 'beige', 'darkgreen'] },
   { zone: 'knit', family: 'knit-breton', name: 'Áo len kẻ ngang', nameEn: 'Striped sweater', shape: 'sweater', material: 'Cotton', finish: 'knit', pattern: 'breton', colours: [['navy', 'white'], ['cream', 'navy']] },
-  { zone: 'knit', family: 'knit-houndstooth', name: 'Áo len răng sói', nameEn: 'Houndstooth sweater', shape: 'sweater', material: 'Len', finish: 'knit', pattern: 'houndstooth', colours: [['black', 'white'], ['brown', 'cream']] },
+  { zone: 'knit', family: 'knit-houndstooth', name: 'Áo len dày', nameEn: 'Chunky sweater', shape: 'sweater', material: 'Len', finish: 'knit', pattern: 'houndstooth', colours: [['black', 'white'], ['brown', 'cream']] },
   { zone: 'knit', family: 'knit-v-stripe', name: 'Áo len cổ V kẻ', nameEn: 'Striped V-neck', shape: 'knit-v', material: 'Len', finish: 'knit', pattern: 'border', colours: [['cream', 'wine'], ['navy', 'camel']] },
   // ---- floor 1 · ÁO KHOÁC ----
   { zone: 'uv', family: 'uv-zip', name: 'Áo chống nắng có mũ', nameEn: 'UV hooded zip', shape: 'uv-zip', material: 'AIRism', colours: ['white', 'black', 'navy', 'lavender'] },
   { zone: 'uv', family: 'uv-zip-mesh', name: 'Áo chống nắng lưới', nameEn: 'UV mesh zip', shape: 'uv-zip', material: 'Dry-EX', colours: ['grey', 'mint'] },
-  { zone: 'fleece', family: 'fleece-check', name: 'Áo fleece caro', nameEn: 'Check fleece', shape: 'fleece', material: 'Fleece', finish: 'knit', pattern: 'tartan', colours: [['red', 'black'], ['green', 'navy']] },
+  { zone: 'fleece', family: 'fleece-check', name: 'Áo fleece dày', nameEn: 'Heavy fleece', shape: 'fleece', material: 'Fleece', finish: 'knit', pattern: 'tartan', colours: [['red', 'black'], ['green', 'navy']] },
   { zone: 'fleece', family: 'fleece-border', name: 'Áo fleece phối màu', nameEn: 'Colour-block fleece', shape: 'quarter-zip', material: 'Fleece', finish: 'knit', pattern: 'border', colours: [['cream', 'navy'], ['grey', 'black']] },
   { zone: 'down', family: 'puffer-vest', name: 'Áo gile lông vũ', nameEn: 'Puffer vest', shape: 'puffer-vest', material: 'Lông vũ', finish: 'shiny', colours: ['black', 'navy', 'olive', 'red'] },
   { zone: 'padded', family: 'down-long', name: 'Áo lông vũ dài', nameEn: 'Long down coat', shape: 'down-long', material: 'Lông vũ', finish: 'shiny', colours: ['black', 'beige', 'navy', 'darkgreen'] },
@@ -187,18 +188,18 @@ export const FAMILIES: Family[] = [
   { zone: 'fashion-outer', family: 'blazer-windowpane', name: 'Blazer kẻ ô', nameEn: 'Windowpane blazer', shape: 'blazer', material: 'Len pha', pattern: 'windowpane', colours: [['grey', 'black'], ['navy', 'white']] },
   { zone: 'fashion-outer', family: 'blazer-pinstripe', name: 'Blazer kẻ nhỏ', nameEn: 'Pinstripe blazer', shape: 'blazer', material: 'Len pha', pattern: 'pinstripe', colours: [['navy', 'white'], ['charcoal', 'white']] },
   { zone: 'fashion-outer', family: 'denim-jacket-wash', name: 'Áo khoác denim bạc màu', nameEn: 'Washed denim jacket', shape: 'denim-jacket', material: 'Denim', finish: 'denim', pattern: 'wash', colours: [['lightdenim', 'white'], ['denim', 'lightdenim']] },
-  { zone: 'fashion-outer', family: 'coach-camo', name: 'Coach jacket rằn ri', nameEn: 'Camo coach jacket', shape: 'coach', material: 'Nylon', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
-  { zone: 'fashion-outer', family: 'cardigan-cord', name: 'Cardigan nhung tăm', nameEn: 'Corduroy cardigan', shape: 'cardigan', material: 'Nhung tăm', pattern: 'corduroy', colours: [['brown', 'camel'], ['darkgreen', 'olive']] },
+  { zone: 'fashion-outer', family: 'coach-camo', name: 'Coach jacket dày', nameEn: 'Heavy coach jacket', shape: 'coach', material: 'Nylon', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
+  { zone: 'fashion-outer', family: 'cardigan-cord', name: 'Cardigan dày', nameEn: 'Chunky cardigan', shape: 'cardigan', material: 'Nhung tăm', pattern: 'corduroy', colours: [['brown', 'camel'], ['darkgreen', 'olive']] },
   // ---- floor 1 · PHỤ KIỆN ----
   { zone: 'bags', family: 'crossbody', name: 'Túi đeo chéo nhỏ', nameEn: 'Crossbody bag', shape: 'crossbody', material: 'Nylon', colours: ['black', 'beige', 'navy', 'red'] },
-  { zone: 'bags', family: 'backpack-camo', name: 'Balo rằn ri', nameEn: 'Camo backpack', shape: 'backpack', material: 'Nylon', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
+  { zone: 'bags', family: 'backpack-camo', name: 'Balo lớn', nameEn: 'Large backpack', shape: 'backpack', material: 'Nylon', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
   { zone: 'bags', family: 'tote-stripe', name: 'Túi tote kẻ', nameEn: 'Striped tote', shape: 'tote', material: 'Canvas', pattern: 'breton', colours: [['cream', 'navy'], ['white', 'red']] },
   { zone: 'bags', family: 'crossbody-dot', name: 'Túi đeo chéo chấm bi', nameEn: 'Polka dot crossbody', shape: 'crossbody', material: 'Nylon', pattern: 'dot', colours: [['black', 'white'], ['navy', 'white']] },
   { zone: 'hats-scarves', family: 'bucket-hat', name: 'Mũ bucket', nameEn: 'Bucket hat', shape: 'bucket-hat', material: 'Cotton', colours: ['black', 'beige', 'navy', 'white'] },
   { zone: 'hats-scarves', family: 'cap-stripe', name: 'Mũ lưỡi trai kẻ', nameEn: 'Striped cap', shape: 'cap', material: 'Cotton', pattern: 'breton', colours: [['navy', 'white'], ['red', 'white']] },
-  { zone: 'hats-scarves', family: 'scarf-tartan', name: 'Khăn caro', nameEn: 'Tartan scarf', shape: 'scarf', material: 'Len', finish: 'knit', pattern: 'tartan', colours: [['red', 'black'], ['green', 'navy'], ['camel', 'brown']] },
-  { zone: 'hats-scarves', family: 'scarf-houndstooth', name: 'Khăn răng sói', nameEn: 'Houndstooth scarf', shape: 'scarf', material: 'Len', finish: 'knit', pattern: 'houndstooth', colours: [['black', 'white'], ['brown', 'cream']] },
-  { zone: 'hats-scarves', family: 'bucket-hat-camo', name: 'Mũ bucket rằn ri', nameEn: 'Camo bucket hat', shape: 'bucket-hat', material: 'Cotton', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
+  { zone: 'hats-scarves', family: 'scarf-tartan', name: 'Khăn len dày', nameEn: 'Chunky knit scarf', shape: 'scarf', material: 'Len', finish: 'knit', pattern: 'tartan', colours: [['red', 'black'], ['green', 'navy'], ['camel', 'brown']] },
+  { zone: 'hats-scarves', family: 'scarf-houndstooth', name: 'Khăn len mỏng', nameEn: 'Fine knit scarf', shape: 'scarf', material: 'Len', finish: 'knit', pattern: 'houndstooth', colours: [['black', 'white'], ['brown', 'cream']] },
+  { zone: 'hats-scarves', family: 'bucket-hat-camo', name: 'Mũ bucket vải dày', nameEn: 'Canvas bucket hat', shape: 'bucket-hat', material: 'Cotton', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
   { zone: 'sunglasses-umbrella', family: 'umbrella-dot', name: 'Ô gấp chấm bi', nameEn: 'Polka dot umbrella', shape: 'umbrella', material: 'Nylon', pattern: 'dot', colours: [['navy', 'white'], ['red', 'white']] },
   { zone: 'sunglasses-umbrella', family: 'sunglasses-round', name: 'Kính râm tròn', nameEn: 'Round sunglasses', shape: 'sunglasses', material: 'Kim loại', finish: 'shiny', colours: ['black', 'camel', 'teal'] },
   // ---- floor 2 · QUẦN ----
@@ -207,24 +208,24 @@ export const FAMILIES: Family[] = [
   { zone: 'pants', family: 'bootcut', name: 'Quần ống loe', nameEn: 'Bootcut pants', shape: 'bootcut', material: 'Polyester', colours: ['black', 'navy', 'brown'] },
   { zone: 'pants', family: 'pants-pinstripe', name: 'Quần tây kẻ nhỏ', nameEn: 'Pinstripe trousers', shape: 'straight', material: 'Len pha', pattern: 'pinstripe', colours: [['navy', 'white'], ['grey', 'white']] },
   { zone: 'pants', family: 'pants-windowpane', name: 'Quần tây kẻ ô', nameEn: 'Windowpane trousers', shape: 'wide', material: 'Len pha', pattern: 'windowpane', colours: [['grey', 'black'], ['beige', 'brown']] },
-  { zone: 'pants', family: 'pants-cord', name: 'Quần nhung tăm', nameEn: 'Corduroy pants', shape: 'straight', material: 'Nhung tăm', pattern: 'corduroy', colours: [['brown', 'camel'], ['olive', 'khaki'], ['navy', 'slate']] },
+  { zone: 'pants', family: 'pants-cord', name: 'Quần tây dày', nameEn: 'Heavy trousers', shape: 'straight', material: 'Nhung tăm', pattern: 'corduroy', colours: [['brown', 'camel'], ['olive', 'khaki'], ['navy', 'slate']] },
   { zone: 'pants', family: 'parachute', name: 'Quần parachute', nameEn: 'Parachute pants', shape: 'cargo', material: 'Nylon', finish: 'shiny', colours: ['black', 'khaki', 'olive'] },
   { zone: 'jeans', family: 'jeans-wide-wash', name: 'Jeans ống rộng bạc màu', nameEn: 'Washed wide jeans', shape: 'jeans-wide', material: 'Denim', finish: 'denim', pattern: 'wash', colours: [['denim', 'lightdenim'], ['darknavy', 'denim'], ['black', 'charcoal']] },
   { zone: 'jeans', family: 'jeans-straight-wash', name: 'Jeans ống suông bạc màu', nameEn: 'Washed straight jeans', shape: 'jeans-straight', material: 'Denim', finish: 'denim', pattern: 'wash', colours: [['denim', 'lightdenim'], ['lightdenim', 'white'], ['black', 'charcoal']] },
   { zone: 'jeans', family: 'jeans-bootcut', name: 'Jeans ống loe', nameEn: 'Bootcut jeans', shape: 'bootcut', material: 'Denim', finish: 'denim', colours: ['denim', 'lightdenim', 'black'] },
-  { zone: 'jeans', family: 'jeans-tapered', name: 'Jeans ống côn', nameEn: 'Tapered jeans', shape: 'pants', material: 'Denim', finish: 'denim', colours: ['denim', 'black', 'lightdenim'] },
+  { zone: 'jeans', family: 'jeans-tapered', name: 'Jeans ống côn', nameEn: 'Tapered jeans', shape: 'jeans-tapered', material: 'Denim', finish: 'denim', colours: ['denim', 'black', 'lightdenim'] },
   { zone: 'jeans', family: 'jeans-ripped', name: 'Jeans rách', nameEn: 'Ripped jeans', shape: 'jeans-straight', material: 'Denim', finish: 'denim', pattern: 'wash', scale: 2, colours: [['lightdenim', 'white'], ['denim', 'lightdenim']] },
-  { zone: 'jeans', family: 'jeans-cord', name: 'Quần nhung tăm jeans', nameEn: 'Corduroy jeans', shape: 'jeans-straight', material: 'Nhung tăm', pattern: 'corduroy', colours: [['brown', 'camel'], ['olive', 'khaki'], ['navy', 'slate'], ['wine', 'rust']] },
-  { zone: 'jeans', family: 'jeans-baggy', name: 'Jeans baggy', nameEn: 'Baggy jeans', shape: 'wide', material: 'Denim', finish: 'denim', colours: ['lightdenim', 'denim', 'beige'] },
+  { zone: 'jeans', family: 'jeans-cord', name: 'Jeans dày', nameEn: 'Heavy jeans', shape: 'jeans-straight', material: 'Nhung tăm', pattern: 'corduroy', colours: [['brown', 'camel'], ['olive', 'khaki'], ['navy', 'slate'], ['wine', 'rust']] },
+  { zone: 'jeans', family: 'jeans-baggy', name: 'Jeans baggy', nameEn: 'Baggy jeans', shape: 'jeans-baggy', material: 'Denim', finish: 'denim', colours: ['lightdenim', 'denim', 'beige'] },
   { zone: 'joggers', family: 'sweatpants-plain', name: 'Quần nỉ ống suông', nameEn: 'Straight sweatpants', shape: 'sweatpants', material: 'Nỉ', colours: ['grey', 'black', 'navy'] },
   { zone: 'joggers', family: 'jogger-border', name: 'Jogger sọc bên', nameEn: 'Side-stripe joggers', shape: 'jogger', material: 'Nỉ', pattern: 'border', colours: [['grey', 'navy'], ['black', 'white']] },
-  { zone: 'joggers', family: 'sweatpants-camo', name: 'Quần nỉ rằn ri', nameEn: 'Camo sweatpants', shape: 'sweatpants', material: 'Nỉ', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
+  { zone: 'joggers', family: 'sweatpants-camo', name: 'Quần nỉ dày', nameEn: 'Heavy sweatpants', shape: 'sweatpants', material: 'Nỉ', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
   { zone: 'shorts', family: 'bermuda', name: 'Short bermuda', nameEn: 'Bermuda shorts', shape: 'bermuda', material: 'Cotton', colours: ['beige', 'olive', 'navy', 'black'] },
   { zone: 'shorts', family: 'cycling', name: 'Quần đùi ôm', nameEn: 'Cycling shorts', shape: 'cycling', material: 'AIRism', colours: ['black', 'navy', 'grey'] },
   { zone: 'shorts', family: 'shorts-gingham', name: 'Short caro gingham', nameEn: 'Gingham shorts', shape: 'shorts', material: 'Cotton', pattern: 'gingham', colours: [['white', 'blue'], ['white', 'black']] },
   { zone: 'shorts', family: 'shorts-floral', name: 'Short hoa', nameEn: 'Floral shorts', shape: 'shorts', material: 'Rayon', pattern: 'floral', colours: [['navy', 'cream'], ['pink', 'white']] },
   { zone: 'shorts', family: 'shorts-stripe', name: 'Short kẻ', nameEn: 'Striped shorts', shape: 'shorts', material: 'Cotton', pattern: 'breton', colours: [['navy', 'white'], ['red', 'white']] },
-  { zone: 'shorts', family: 'shorts-camo', name: 'Short rằn ri', nameEn: 'Camo shorts', shape: 'bermuda', material: 'Cotton', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
+  { zone: 'shorts', family: 'shorts-camo', name: 'Short bermuda dày', nameEn: 'Heavy bermuda', shape: 'bermuda', material: 'Cotton', pattern: 'camo', colours: [['olive', 'khaki'], ['grey', 'black']] },
   { zone: 'shorts', family: 'bermuda-stripe', name: 'Bermuda kẻ nhỏ', nameEn: 'Pinstripe bermuda', shape: 'bermuda', material: 'Linen', pattern: 'pinstripe', colours: [['white', 'navy'], ['beige', 'brown']] },
   // ---- floor 2 · ĐẦM & CHÂN VÁY ----
   { zone: 'dresses', family: 'dress-slip', name: 'Đầm hai dây', nameEn: 'Slip dress', shape: 'dress-slip', material: 'Satin', finish: 'shiny', colours: ['black', 'wine', 'cream'] },
@@ -235,7 +236,7 @@ export const FAMILIES: Family[] = [
   { zone: 'skirts', family: 'skirt-tennis', name: 'Chân váy tennis', nameEn: 'Tennis skirt', shape: 'skirt-tennis', material: 'Dry-EX', colours: ['white', 'navy', 'black'] },
   { zone: 'skirts', family: 'skirt-wrap', name: 'Chân váy quấn', nameEn: 'Wrap skirt', shape: 'skirt-wrap', material: 'Rayon', colours: ['black', 'wine', 'olive'] },
   { zone: 'skirts', family: 'skirt-midi', name: 'Chân váy midi', nameEn: 'Midi skirt', shape: 'skirt-midi', material: 'Polyester', colours: ['beige', 'navy', 'black', 'darkgreen'] },
-  { zone: 'skirts', family: 'skirt-pleated-tartan', name: 'Chân váy xếp ly caro', nameEn: 'Tartan pleated skirt', shape: 'skirt-pleated', material: 'Len pha', pattern: 'tartan', colours: [['red', 'black'], ['green', 'navy'], ['grey', 'black']] },
+  { zone: 'skirts', family: 'skirt-pleated-tartan', name: 'Chân váy xếp ly len', nameEn: 'Wool pleated skirt', shape: 'skirt-pleated', material: 'Len pha', pattern: 'tartan', colours: [['red', 'black'], ['green', 'navy'], ['grey', 'black']] },
   { zone: 'skirts', family: 'skirt-gingham', name: 'Chân váy caro gingham', nameEn: 'Gingham skirt', shape: 'skirt-aline', material: 'Cotton', pattern: 'gingham', colours: [['white', 'black'], ['white', 'red']] },
   { zone: 'skirts', family: 'skirt-floral-midi', name: 'Chân váy midi hoa', nameEn: 'Floral midi skirt', shape: 'skirt-midi', material: 'Rayon', pattern: 'floral', colours: [['navy', 'cream'], ['black', 'pink']] },
   { zone: 'skirts', family: 'skirt-denim-wash', name: 'Chân váy denim bạc màu', nameEn: 'Washed denim skirt', shape: 'skirt-denim', material: 'Denim', finish: 'denim', pattern: 'wash', colours: [['lightdenim', 'white'], ['denim', 'lightdenim']] },
@@ -244,7 +245,7 @@ export const FAMILIES: Family[] = [
   { zone: 'bras-undies', family: 'briefs-stripe', name: 'Quần lót kẻ', nameEn: 'Striped briefs', shape: 'briefs', material: 'Cotton', pattern: 'breton', colours: [['navy', 'white'], ['grey', 'white']] },
   { zone: 'homewear', family: 'pyjama-stripe', name: 'Bộ pyjama kẻ', nameEn: 'Striped pyjama set', shape: 'pyjama', material: 'Cotton', pattern: 'pinstripe', colours: [['lightblue', 'white'], ['navy', 'white'], ['pink', 'white']] },
   { zone: 'homewear', family: 'pyjama-gingham', name: 'Bộ pyjama caro', nameEn: 'Gingham pyjama set', shape: 'pyjama', material: 'Cotton', pattern: 'gingham', colours: [['white', 'navy'], ['white', 'red']] },
-  { zone: 'homewear', family: 'lounge-check', name: 'Quần mặc nhà caro', nameEn: 'Check lounge pants', shape: 'lounge-pants', material: 'Flannel', pattern: 'tartan', colours: [['red', 'black'], ['navy', 'green']] },
+  { zone: 'homewear', family: 'lounge-check', name: 'Quần mặc nhà flannel', nameEn: 'Flannel lounge pants', shape: 'lounge-pants', material: 'Flannel', pattern: 'tartan', colours: [['red', 'black'], ['navy', 'green']] },
   // ---- floor 2 · GIÀY, DÉP, TẤT ----
   { zone: 'footwear-socks', family: 'boot', name: 'Giày boot', nameEn: 'Boots', shape: 'boot', material: 'Da', finish: 'shiny', colours: ['black', 'brown', 'camel'] },
   { zone: 'footwear-socks', family: 'socks-crew-stripe', name: 'Tất cổ cao kẻ', nameEn: 'Striped crew socks', shape: 'socks-crew', material: 'Cotton', finish: 'knit', pattern: 'breton', colours: [['white', 'navy'], ['white', 'red'], ['grey', 'black']] },
@@ -252,7 +253,7 @@ export const FAMILIES: Family[] = [
   { zone: 'footwear-socks', family: 'sneaker-stripe', name: 'Sneaker sọc', nameEn: 'Striped sneakers', shape: 'sneaker', material: 'Canvas', pattern: 'border', colours: [['white', 'navy'], ['white', 'red']] },
 ];
 
-const BOTTOMISH = new Set<ShapeId>(['pants', 'chinos', 'wide', 'straight', 'cargo', 'jogger', 'sweatpants', 'bootcut', 'bermuda', 'shorts', 'cycling', 'jeans-wide', 'jeans-straight', 'lounge-pants']);
+const BOTTOMISH = new Set<ShapeId>(['pants', 'chinos', 'wide', 'straight', 'cargo', 'jogger', 'sweatpants', 'bootcut', 'bermuda', 'shorts', 'cycling', 'jeans-wide', 'jeans-straight', 'jeans-baggy', 'jeans-tapered', 'shorts-chino', 'lounge-pants']);
 /** The shape actually drawn on the fixture: folded items on tables are slabs; everything else is itself. */
 export function displayShape(shape: ShapeId, display: Display): ShapeId {
   return display !== 'fold' ? shape : BOTTOMISH.has(shape) ? 'fold-bottom' : 'fold-top';
@@ -294,8 +295,8 @@ function build(): CatalogItem[] {
             colour: { name, hex }, material: fam.material, zone, floor, shelf: { x: s.x, y: s.y, z: s.z, yaw: s.yaw }, shape: fam.shape,
             display: s.display, finish: fam.finish ?? 'cotton',
           };
-          if (fam.pattern) {
-            item.pattern = fam.pattern;
+          if (fam.pattern && !REMOVED.has(fam.pattern)) {
+            item.pattern = fam.pattern as PatternId;
             const [n2, h2] = COLOURS[c2 ?? 'white'];
             item.colour2 = { name: n2, hex: h2 };
             item.colour = { name: c2 ? `${name} / ${n2}` : name, hex };

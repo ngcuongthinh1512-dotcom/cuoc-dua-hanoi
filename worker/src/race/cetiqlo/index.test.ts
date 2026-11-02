@@ -11,6 +11,8 @@ const STEP = 'T1';
 function rig(teams = ['A', 'B', 'C', 'D']) {
   const sent: { team: string; m: CqServerMessage }[] = [];
   const wins: string[] = [];
+  const released: string[] = [];
+  const undone = new Set<string>();
   const events: { type: string; data: object }[] = [];
   const alarms: number[] = [];
   const onlineSet = new Set(teams);
@@ -22,13 +24,14 @@ function rig(teams = ['A', 'B', 'C', 'D']) {
     send: (team, m) => void sent.push({ team, m }),
     online: (t) => onlineSet.has(t),
     who: (t) => ({ slot: teams.indexOf(t), name: `Đội ${t}` }),
-    stepOf: (t) => (wins.includes(t) ? null : STEP),
+    stepOf: (t) => (wins.includes(t) || (released.includes(t) && !undone.has(t)) ? null : STEP),
     win: (t) => void wins.push(t),
+    release: (t) => void released.push(t),
     setAlarm: (at) => void alarms.push(at),
     event: (_t, _team, type, data) => void events.push({ type, data }),
   };
   const make = () => new Cetiqlo(io, () => FIXTURE, CETIQLO, () => 99);
-  return { cq: make(), remake: make, sent, wins, events, alarms, onlineSet, writes: () => writes, io, of: (t: string) => sent.filter((s) => s.team === t).map((s) => s.m) };
+  return { cq: make(), remake: make, sent, wins, released, undone, events, alarms, onlineSet, writes: () => writes, io, of: (t: string) => sent.filter((s) => s.team === t).map((s) => s.m) };
 }
 const last = <T extends CqServerMessage['t']>(r: ReturnType<typeof rig>, team: string, t: T) => [...r.of(team)].reverse().find((m) => m.t === t) as Extract<CqServerMessage, { t: T }> | undefined;
 
@@ -111,8 +114,8 @@ describe('Cetiqlo service', () => {
     expect(last(r, 'B', 'cq.state')!.match).toMatchObject({ yourLocked: true });
     r.cq.checkout('A', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 6000);
     const ra = last(r, 'A', 'cq.result')!, rb = last(r, 'B', 'cq.result')!;
-    expect(ra).toMatchObject({ winner: 'you', reason: 'score', you: { scorePct: 100, correct: 6, errors: 0, lockedAtMs: now + 6000 }, opp: { scorePct: 66, correct: 4, errors: 2 } });
-    expect(rb).toMatchObject({ winner: 'opp', you: { scorePct: 66, lockedAtMs: now + 5000 }, opp: { bag: set } });
+    expect(ra).toMatchObject({ winner: 'you', reason: 'score', you: { score: 100, correct: 6, errors: 0, lockedAtMs: now + 6000 }, opp: { score: 66.7, correct: 4, errors: 0 } });
+    expect(rb).toMatchObject({ winner: 'opp', you: { score: 66.7, lockedAtMs: now + 5000 }, opp: { bag: set } });
     expect(ra.serverNow).toBe(rb.serverNow);
     expect(ra.opp.marks).toEqual(['ok', 'ok', 'ok', 'ok', 'missing', 'missing']);
     expect(r.wins).toEqual(['A']);
@@ -136,7 +139,7 @@ describe('Cetiqlo service', () => {
     expect(r.of('A').some((m) => m.t === 'cq.result')).toBe(false);
     expect(Math.max(...r.alarms)).toBe(now + CETIQLO.pickMs); // the alarm is armed at endsAt
     r.cq.tick(now + CETIQLO.pickMs);
-    expect(last(r, 'A', 'cq.result')).toMatchObject({ winner: 'opp', reason: 'completion', you: { scorePct: 100, lockedAtMs: null } });
+    expect(last(r, 'A', 'cq.result')).toMatchObject({ winner: 'opp', reason: 'completion', you: { score: 100, lockedAtMs: null } });
     expect(r.wins).toEqual(['B']);
     // a late checkout is refused, even before the tick (take ticks first)
   });
@@ -217,7 +220,160 @@ describe('Cetiqlo service', () => {
     const { r, set, now } = startMatch();
     r.cq.join('C', now + 1);
     fill(r, 'A', set.slice(0, 3), now + 100);
-    expect(r.cq.hostView()).toEqual([{ step: STEP, queue: [{ slot: 2, name: 'Đội C' }], match: { id: 'm1', endsAt: now + CETIQLO.pickMs, teams: [
+    expect(r.cq.hostView(now + 5000)).toEqual([{ step: STEP, queue: [{ slot: 2, name: 'Đội C' }], match: { id: 'm1', endsAt: now + CETIQLO.pickMs, teams: [
       { slot: 0, name: 'Đội A', locked: false, bagN: 3, online: true }, { slot: 1, name: 'Đội B', locked: false, bagN: 0, online: true }] } }]);
+  });
+});
+
+describe('Cetiqlo: the lobby state at the end of the result screen', () => {
+  const states = (r: ReturnType<typeof rig>, team: string, since: number) => r.of(team).slice(since).filter((m) => m.t === 'cq.state') as Extract<CqServerMessage, { t: 'cq.state' }>[];
+  /** A and B play; B (the loser) times out empty-handed vs A's full bag. Returns the end of the hold. */
+  function loserRound(r = rig()) {
+    const { set, now } = startMatch(r);
+    fill(r, 'A', set, now + 100);
+    r.cq.checkout('A', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 5000);
+    r.cq.tick(now + CETIQLO.pickMs);
+    return { r, hold: now + CETIQLO.pickMs + CETIQLO.resultHoldMs, at: now + CETIQLO.pickMs };
+  }
+
+  it('lone loser: result-hold phase first, an alarm is armed at holdUntil, then exactly one lobby state', () => {
+    const { r, hold, at } = loserRound();
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ phase: 'result', queuePos: 1, queueLen: 1 });
+    expect(r.alarms).toContain(hold);
+    const n = r.of('B').length;
+    r.cq.tick(hold - 1);
+    expect(r.of('B').length).toBe(n);
+    r.cq.tick(hold);
+    expect(states(r, 'B', n)).toEqual([expect.objectContaining({ phase: 'lobby', queuePos: 1, queueLen: 1 })]);
+    r.cq.tick(hold + 1000);
+    expect(states(r, 'B', n)).toHaveLength(1); // not twice
+    expect(at).toBeLessThan(hold);
+  });
+
+  it('draw: both teams hear a lobby state at holdUntil (queue places 1 and 2), and rematch', () => {
+    const r = rig();
+    const { now } = startMatch(r);
+    r.cq.tick(now + CETIQLO.pickMs);
+    const hold = now + CETIQLO.pickMs + CETIQLO.resultHoldMs;
+    const n = { A: r.of('A').length, B: r.of('B').length };
+    r.cq.tick(hold);
+    // alone in the room they are paired again at once (nobody else waits): the lobby state is replaced by the new match
+    expect(states(r, 'A', n.A).at(-1)).toMatchObject({ phase: 'match' });
+    expect(states(r, 'B', n.B).at(-1)).toMatchObject({ phase: 'match' });
+  });
+
+  it('two losers of a draw with a third team waiting: the third plays first; the pair gets lobby places at holdUntil', () => {
+    const r = rig();
+    const { now } = startMatch(r);
+    r.cq.join('C', now + 10);
+    r.cq.join('D', now + 11);
+    r.cq.tick(now + CETIQLO.pickMs);
+    const hold = now + CETIQLO.pickMs + CETIQLO.resultHoldMs;
+    const n = { A: r.of('A').length, C: r.of('C').length };
+    r.cq.tick(hold - 1);
+    expect(r.of('C').length).toBe(n.C);
+    r.cq.tick(hold);
+    expect(states(r, 'C', n.C).at(-1)).toMatchObject({ phase: 'match' });
+    expect(states(r, 'A', n.A)).toEqual([expect.objectContaining({ phase: 'lobby', queuePos: 1, queueLen: 2 })]);
+  });
+
+  it('loser, then a third team joins during the hold: lobby place at once, pairing only at holdUntil', () => {
+    const { r, hold, at } = loserRound();
+    r.cq.join('C', at + 1000);
+    expect(last(r, 'C', 'cq.state')).toMatchObject({ phase: 'lobby', queuePos: 2, queueLen: 2 });
+    r.cq.tick(hold - 1);
+    expect(last(r, 'C', 'cq.state')!.phase).toBe('lobby');
+    const n = r.of('B').length;
+    r.cq.tick(hold);
+    expect(states(r, 'B', n)).toEqual([expect.objectContaining({ phase: 'match' })]);
+    expect(last(r, 'C', 'cq.state')).toMatchObject({ phase: 'match' });
+  });
+
+  it('a loser reconnecting during the hold gets the result-hold phase back; the winner needs no lobby state', () => {
+    const { r, hold, at } = loserRound();
+    r.cq.offline('B', at + 100);
+    r.cq.online('B', at + 2000);
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ phase: 'result', queuePos: 1 });
+    const nA = r.of('A').length;
+    r.cq.tick(hold);
+    expect(states(r, 'A', nA)).toEqual([]);
+  });
+});
+
+describe('Cetiqlo: a waiting loser is released after loserMaxWaitMs (owner rule)', () => {
+  const W = CETIQLO.loserMaxWaitMs;
+  const advances = (r: ReturnType<typeof rig>, t: string) => r.of(t).filter((m) => m.t === 'cq.advance');
+  function lose(r = rig(), teams = { win: 'A', lose: 'B' }) {
+    const { set, now } = startMatch(r);
+    fill(r, teams.win, set, now + 100);
+    r.cq.checkout(teams.win, CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 5000);
+    r.cq.tick(now + CETIQLO.pickMs);
+    return { r, at: now + CETIQLO.pickMs };
+  }
+  it('the lone loser: released at exactly 10:00 after its result (step completes via io.release, advance reason timeout), never before; the winner got reason win', () => {
+    const { r, at } = lose();
+    expect(advances(r, 'A')).toEqual([{ t: 'cq.advance', matchId: 'm1', reason: 'win' }]);
+    r.cq.tick(at + CETIQLO.resultHoldMs); // the alarm chain: result hold first, then the 10-minute clock
+    expect(r.alarms.at(-1)).toBe(at + W);
+    r.cq.tick(at + W - 1);
+    expect(r.released).toEqual([]);
+    r.cq.tick(at + W);
+    expect(r.released).toEqual(['B']);
+    expect(advances(r, 'B')).toEqual([{ t: 'cq.advance', matchId: 'm1', reason: 'timeout' }]);
+    expect(r.cq.hostView(at + W)[0]!.queue).toEqual([]);
+    r.cq.tick(at + W + 5000);
+    expect(advances(r, 'B')).toHaveLength(1); // once
+    r.cq.join('B', at + W + 6000); // the step is done: not back in the queue
+    expect(r.of('B').at(-1)).toMatchObject({ t: 'cq.no', why: 'notInRoom' });
+  });
+  it('a team that never played is never released', () => {
+    const r = rig();
+    r.cq.join('A', 1000);
+    r.cq.tick(1000 + 10 * W);
+    expect(r.released).toEqual([]);
+    expect(r.cq.hostView(1000)[0]!.queue).toEqual([{ slot: 0, name: 'Đội A' }]); // no releaseInS
+  });
+  it('a draw: both released at 10:00 from their own result (they rematch only when the hold ended and nobody else waits: here the rematch resets the clock)', () => {
+    const r = rig();
+    const { now } = startMatch(r);
+    r.cq.join('C', now + 1); // a third team keeps A and B from rematching at once
+    r.cq.join('D', now + 2);
+    r.cq.tick(now + CETIQLO.pickMs); // draw (both empty)
+    const at = now + CETIQLO.pickMs;
+    expect(r.cq.hostView(at)[0]!.queue.map((q) => [q.name, q.releaseInS])).toEqual([['Đội C', undefined], ['Đội D', undefined], ['Đội A', W / 1000], ['Đội B', W / 1000]]);
+    r.cq.tick(at + CETIQLO.resultHoldMs); // C and D play; A, B keep their clock from the result
+    expect(r.cq.hostView(at + CETIQLO.resultHoldMs)[0]!.queue.map((q) => q.releaseInS)).toEqual([W / 1000 - CETIQLO.resultHoldMs / 1000, W / 1000 - CETIQLO.resultHoldMs / 1000]);
+    r.cq.tick(at + W);
+    expect(r.released.sort()).toEqual(['A', 'B']);
+  });
+  it('a loser who plays again gets a fresh clock (and is never released mid-match)', () => {
+    const r = rig();
+    const { set, now } = startMatch(r);
+    r.cq.join('C', now + 1);
+    fill(r, 'A', set, now + 100);
+    r.cq.checkout('A', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 5000);
+    r.cq.tick(now + CETIQLO.pickMs); // B lost; B (front) vs C starts at the end of the hold
+    const hold = now + CETIQLO.pickMs + CETIQLO.resultHoldMs;
+    r.cq.tick(hold);
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ phase: 'match' });
+    r.cq.tick(now + CETIQLO.pickMs + W + 1); // far past B's first clock: it is in a running match... which ended at hold + pickMs
+    expect(r.released).toEqual([]);
+  });
+  it('the queue renumbers when a loser is released and the others hear it', () => {
+    const { r, at } = lose();
+    r.cq.join('C', at + 1000);
+    r.cq.tick(at + W);
+    expect(last(r, 'C', 'cq.state')).toMatchObject({ queuePos: 1, queueLen: 1 });
+  });
+  it('a Host undo of the release puts the team back in the queue with a fresh clock', () => {
+    const { r, at } = lose();
+    r.cq.tick(at + W);
+    r.undone.add('B');
+    r.cq.tick(at + W + 3000);
+    expect(r.cq.hostView(at + W + 3000)[0]!.queue).toEqual([{ slot: 1, name: 'Đội B', releaseInS: W / 1000 }]);
+    r.cq.tick(at + 2 * W + 2999);
+    expect(r.released).toEqual(['B']); // not again yet
+    r.cq.tick(at + 2 * W + 3000);
+    expect(r.released).toEqual(['B', 'B']);
   });
 });

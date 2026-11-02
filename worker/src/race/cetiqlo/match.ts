@@ -29,6 +29,10 @@ export interface Room {
   match: Match | null;
   /** No new pairing before this (the result screen). */
   holdUntil: number;
+  /** The result screen ended nothing yet told the queue: at holdUntil every queued team gets its lobby state (index.ts tick), then false. */
+  lobbyDue?: boolean;
+  /** team → when (server ms) and in which match it last played without winning, while it waits in the queue (the loserMaxWaitMs clock). */
+  lost?: Record<string, { at: number; match: string }>;
   /** team → the opponents of its last match (no immediate rematch while somebody else waits). */
   last: Record<string, string[]>;
   seq: number;
@@ -75,7 +79,12 @@ export const join = (room: Room, team: string): Room => {
   const playing = room.match?.state === 'running' && room.match.teams.includes(team);
   return room.queue.includes(team) || playing ? room : { ...room, queue: [...room.queue, team] };
 };
-export const leave = (room: Room, team: string): Room => ({ ...room, queue: room.queue.filter((t) => t !== team) });
+export const leave = (room: Room, team: string): Room => ({ ...room, queue: room.queue.filter((t) => t !== team), lost: without(room.lost, [team]) });
+const without = (lost: Room['lost'], teams: readonly string[]): Room['lost'] => Object.fromEntries(Object.entries(lost ?? {}).filter(([t]) => !teams.includes(t)));
+/** Waiting losers whose clock ran out at `now` (they leave the queue and the step completes). */
+export const dueRelease = (room: Room, now: number, cfg: Cfg = CETIQLO): string[] => room.queue.filter((t) => room.lost?.[t] && now >= room.lost[t]!.at + cfg.loserMaxWaitMs);
+/** The room without these released teams. */
+export const release = (room: Room, teams: readonly string[]): Room => ({ ...room, queue: room.queue.filter((t) => !teams.includes(t)), lost: without(room.lost, teams) });
 
 /** Pairing due: no running match, the result screen over, n eligible teams. Returns the room with the match started, or null. */
 export function startNext(room: Room, now: number, seed: number, catalog: readonly CatalogItem[], eligible: (t: string) => boolean = () => true, cfg: Cfg = CETIQLO): Room | null {
@@ -88,7 +97,7 @@ export function startNext(room: Room, now: number, seed: number, catalog: readon
     id: `m${seq}`, teams, set: makeSet(seed, catalog), seed, startAt, endsAt: startAt + cfg.pickMs,
     bags: Object.fromEntries(teams.map((t) => [t, []])), locked: {}, gone: [], state: 'running',
   };
-  return { ...room, seq, match, queue: room.queue.filter((t) => !teams.includes(t)) };
+  return { ...room, seq, match, queue: room.queue.filter((t) => !teams.includes(t)), lost: without(room.lost, teams) }; // playing again resets the clock
 }
 
 // ── actions ──
@@ -132,13 +141,14 @@ export const markGone = (m: Match, team: string): Match => (m.teams.includes(tea
 export const finished = (m: Match, now: number): boolean => m.state === 'running' && (now >= m.endsAt || m.teams.every((t) => t in m.locked || m.gone.includes(t)));
 
 // ── score / rank ──
-export interface Score { correct: number; errors: number; scorePct: number; marks: CqMark[] }
-/** correct = bag items that are in the set; errors = max(itemsPerSet, bag size) − correct; score = max(0, 100 − penalty × errors).
+const round1 = (n: number) => Math.round(n * 10) / 10;
+export interface Score { correct: number; errors: number; score: number; marks: CqMark[] }
+/** correct = distinct set items in the bag; errors = bag size − correct (wrong variants + extras); score (points, 1 decimal) = clamp(0, 100, 16.67 × correct − 9 × errors).
  *  marks: one per set position ('ok' / 'wrong' = an item of that slot but not the right one / 'missing'), then 'extra' for every bag item
  *  that fills no slot. */
 export function score(set: readonly string[], bag: readonly string[], slotOf: (id: string) => SlotKind | undefined, cfg: Cfg = CETIQLO): Score {
   const correct = bag.filter((id, i) => set.includes(id) && bag.indexOf(id) === i).length;
-  const errors = Math.max(cfg.itemsPerSet, bag.length) - correct;
+  const errors = bag.length - correct; // wrong variants + extras
   const marks: CqMark[] = set.map((id) => (bag.includes(id) ? 'ok' : 'missing'));
   const extra: CqMark[] = [];
   for (const id of bag) {
@@ -148,14 +158,14 @@ export function score(set: readonly string[], bag: readonly string[], slotOf: (i
     if (j >= 0) marks[j] = 'wrong';
     else extra.push('extra');
   }
-  return { correct, errors, scorePct: Math.max(0, 100 - cfg.penaltyPerError * errors), marks: [...marks, ...extra] };
+  return { correct, errors, score: round1(Math.min(100, Math.max(0, cfg.pointsPerCorrect * correct - cfg.penaltyPerWrongOrExtra * errors))), marks: [...marks, ...extra] };
 }
 
 export interface TeamScore extends Score { team: string; bag: string[]; lockedAtMs: number | null }
 const cmp = (a: TeamScore, b: TeamScore): { d: number; why: CqReason } => {
   const ca = a.lockedAtMs !== null, cb = b.lockedAtMs !== null;
   if (ca !== cb) return { d: ca ? -1 : 1, why: 'completion' };
-  if (a.scorePct !== b.scorePct) return { d: b.scorePct - a.scorePct, why: 'score' };
+  if (a.score !== b.score) return { d: b.score - a.score, why: 'score' };
   if (ca && a.lockedAtMs !== b.lockedAtMs) return { d: a.lockedAtMs! - b.lockedAtMs!, why: 'speed' };
   return { d: 0, why: 'draw' };
 };
@@ -209,5 +219,7 @@ export function finish(room: Room, m: Match, s: Settlement, now: number, cfg: Cf
     queue: [...s.losers.filter((t) => !gone(t)), ...rest, ...s.draw.filter((t) => !gone(t))],
     last: { ...room.last, ...Object.fromEntries(m.teams.map((t) => [t, m.teams.filter((o) => o !== t)])) },
     holdUntil: now + cfg.resultHoldMs,
+    lobbyDue: true,
+    lost: { ...without(room.lost, m.teams), ...Object.fromEntries([...s.losers, ...s.draw].filter((t) => !gone(t)).map((t) => [t, { at: now, match: m.id }])) },
   };
 }

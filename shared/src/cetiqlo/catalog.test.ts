@@ -48,7 +48,7 @@ describe('cetiqlo catalog', () => {
       expect(i.shelf.z).toBeLessThan(STORE.lobbyZ);
       const floorY = i.floor === 1 ? 0 : STORE.floor2Y;
       expect(i.shelf.y).toBeGreaterThan(floorY);
-      expect(i.shelf.y).toBeLessThan(floorY + 2.2);
+      expect(i.shelf.y).toBeLessThan(floorY + 2.4);
       expect(SHAPE_H[i.shape]).toBeGreaterThan(0);
       expect(SHAPE_H[displayShape(i.shape, i.display)]).toBeGreaterThan(0);
     }

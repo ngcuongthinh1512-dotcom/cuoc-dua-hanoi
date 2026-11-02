@@ -20,7 +20,7 @@ export type ShapeId =
   | 'tote' | 'round-bag' | 'backpack' | 'crossbody' | 'cap' | 'bucket-hat' | 'beanie' | 'scarf' | 'sunglasses' | 'umbrella'
   // bottoms
   | 'pants' | 'chinos' | 'wide' | 'straight' | 'cargo' | 'jogger' | 'sweatpants' | 'bootcut' | 'bermuda' | 'shorts' | 'cycling'
-  | 'jeans-wide' | 'jeans-straight'
+  | 'jeans-wide' | 'jeans-straight' | 'jeans-baggy' | 'jeans-tapered' | 'shorts-chino'
   // dresses & skirts
   | 'dress-shirt' | 'dress-aline' | 'dress-maxi' | 'dress-slip'
   | 'skirt-pleated' | 'skirt-aline' | 'skirt-flare' | 'skirt-mini' | 'skirt-tennis' | 'skirt-denim' | 'skirt-wrap' | 'skirt-midi'
@@ -35,9 +35,9 @@ export type Display = 'hang' | 'fold' | 'stand';
 /** Surface family: per-instance roughness in items.ts, not a texture. */
 export type Finish = 'cotton' | 'denim' | 'knit' | 'shiny' | 'print';
 /** Original procedural patterns (one 512² atlas, client/src/cetiqlo/patterns.ts), drawn in `colour2` over `colour`. */
-export type PatternId =
-  | 'breton' | 'pinstripe' | 'border' | 'gingham' | 'tartan' | 'windowpane' | 'houndstooth' | 'dot'
-  | 'floral' | 'camo' | 'tiedye' | 'geo' | 'waves' | 'wash' | 'corduroy' | 'seersucker';
+export type PatternId = 'breton' | 'pinstripe' | 'border' | 'gingham' | 'windowpane' | 'dot' | 'floral' | 'waves' | 'wash';
+/** Patterns dropped after the owner's audit (noise / moiré / illegible at 3 m); catalog families that used them are plain now. */
+export type RemovedPatternId = 'tartan' | 'houndstooth' | 'camo' | 'tiedye' | 'geo' | 'corduroy' | 'seersucker';
 
 export interface Colour { name: string; hex: string }
 export interface CatalogItem {

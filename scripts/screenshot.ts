@@ -503,6 +503,7 @@ Object.assign(PRESETS, {
   'p11-room-cetiqlo-result-win': `${CETIQLO_ROOM}&roomState=result-win`,
   'p11-room-cetiqlo-result-lose': `${CETIQLO_ROOM}&roomState=result-lose`,
   'p11-room-cetiqlo-result-draw': `${CETIQLO_ROOM}&roomState=result-draw`,
+  'p11-room-cetiqlo-timeout': `${CETIQLO_ROOM}&roomState=timeout`, // lost, then let go after the 10-minute wait: toast + lobby line, the exit ring lit, the next card held
 });
 // Leg 3 dev room "Xưởng sô-cô-la" (client/choco.html, src/choco/choco.ts; `npm run screenshot -- choco`; not in the default run):
 // the workshop down the aisle, team 3's table from behind, the plan, the challenge overlay, the "Bỏ qua" confirm (3/5 done).
@@ -565,6 +566,23 @@ Object.assign(PRESETS, {
   'cetiqlo-floor2-wide': '/cetiqlo.html?view=floor2-wide',
   'cetiqlo-model-set': '/cetiqlo.html?view=model-set&models=1&cam=0,1.3,4.6,0,1.0,0', // three sets worn by the human model side by side
   'cetiqlo-bench': '/cetiqlo.html?view=overview', // frame-time sample (the *-bench suffix)
+  'cetiqlo-brief': '/cetiqlo.html?view=briefs&briefs=1', // three sets as turning rings side by side (no text)
+  'cetiqlo-brief-pip': '/cetiqlo.html?view=brief&brief=1&briefScale=2&set=top.tee-breton.white-navy,outer.trench.beige,bottom.skirt-pleated-tartan.red-black,shoes.boot.black,bag.tote-stripe.cream-navy,acc.cap-stripe.navy-white', // the ring over the pedestal + its PiP at 2× (840 × 630)
+  'cetiqlo-audit-bay': '/cetiqlo.html?cam=-9,1.7,6,-11.7,1.3,6', // audit: the folded tee stacks in the west bay at 2.7 m
+  'cetiqlo-audit-f2back': '/cetiqlo.html?cam=0,5.54,-6,0,4.5,3', // audit: floor 2 looking back at the atrium edge + lobby sign
+  'cetiqlo-audit-island': '/cetiqlo.html?cam=-5,1.7,3,-8.5,0.6,-1', // audit: contact shadows under the polo island / tables
+  'cetiqlo-audit-stair': '/cetiqlo.html?cam=10,1.7,9.6,10,3,3', // audit: the stair from its foot
+  'cetiqlo-pattern-board': '/cetiqlo.html?view=lineup&patternBoard=1', // all patterns on a navy tee at ≈ 3.5 m
+  'cetiqlo-pattern-board-close': '/cetiqlo.html?patternBoard=1&cam=-1.3,2.3,3.1,-1.3,2.3,1.3', // first five at 1.8 m
+  'cetiqlo-pattern-board-close2': '/cetiqlo.html?patternBoard=1&cam=1.3,1.9,3.1,1.3,1.9,1.3',
+  'cetiqlo-tops-lineup': '/cetiqlo.html?view=lineup-tops&lineup=tops', // 23 top families in beige, two rows
+  'cetiqlo-tops-close': '/cetiqlo.html?lineup=tops&cam=-3.0,3.0,4.3,-3.0,3.0,1.3', // 3 m: tee / V / long / tank / crop / oversized / polo
+  'cetiqlo-tops-close2': '/cetiqlo.html?lineup=tops&cam=-1.0,1.35,4.3,-1.0,1.35,1.3', // hoodie / zip / sweatshirt / quarter-zip / sweater / V / turtle
+  'cetiqlo-outer-lineup': '/cetiqlo.html?view=lineup-outer&lineup=outer', // 13 outer families in beige
+  'cetiqlo-outer-close': '/cetiqlo.html?lineup=outer&cam=-1.8,3.0,4.3,-1.8,3.0,1.3', // parka / uv / bomber / fleece / down / down-long
+  'cetiqlo-pants-lineup': '/cetiqlo.html?view=lineup&lineup=1', // 16 bottom cuts in two rows on a white wall (grey / navy): sweat, jogger, trousers, ankle, chino, cargo, wide, jeans straight / wide / bootcut / baggy / tapered, bermuda, sport short, chino short, cycling
+  'cetiqlo-pants-close': '/cetiqlo.html?lineup=1&cam=-1.3,2.3,3.1,-1.3,2.3,1.3', // close-up at 3 m: sweat / jogger / trousers / ankle / chino / cargo (top row)
+  'cetiqlo-pants-close2': '/cetiqlo.html?lineup=1&cam=1.3,1.5,3.1,1.3,1.5,1.3', // close-up: wide / jeans straight / wide / bootcut / baggy / tapered / shorts
   'cetiqlo-cards': '/cetiqlo.html?view=cards&cards=1&set=top.shirt-gingham.white-blue,outer.bomber.olive,bottom.jeans-wide-wash.denim-lightdenim,shoes.sneaker.white,bag.crossbody.black,acc.bucket-hat.beige', // the 6 product cards next to the dressed model
 });
 const BENCH_MS = 15_000;

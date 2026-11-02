@@ -24,24 +24,24 @@ export const STAIR_RUN = STORE.stair.steps * STORE.stair.tread; // 7.2 m
 export const STAIR_TOP_Z = STORE.stair.zBottom - STAIR_RUN; // 1.8 = floor2Edge
 
 /** Shape heights (m) — the geometry in items.ts is centred, so a shelf pose = tier y + h / 2; hanging = rail − h / 2. */
-export const SHAPE_H: Record<ShapeId, number> = {
-  tee: 0.64, 'tee-v': 0.64, 'tee-long': 0.66, tank: 0.6, crop: 0.42, 'tee-oversized': 0.78, polo: 0.66, 'polo-long': 0.68,
-  shirt: 0.76, 'shirt-short': 0.7, 'shirt-band': 0.76, 'shirt-camp': 0.7, blouse: 0.66,
-  hoodie: 0.72, 'hoodie-zip': 0.72, sweatshirt: 0.66, 'quarter-zip': 0.68,
-  sweater: 0.66, 'knit-v': 0.66, turtleneck: 0.74, mockneck: 0.7, cardigan: 0.72, 'knit-vest': 0.6,
-  parka: 0.8, 'uv-zip': 0.74, bomber: 0.62, fleece: 0.7, down: 0.7, 'down-long': 1.0, 'puffer-vest': 0.64, blazer: 0.78, trench: 1.08, coach: 0.66, 'denim-jacket': 0.6, 'wool-coat': 1.12, padded: 0.95,
-  tote: 0.48, 'round-bag': 0.3, backpack: 0.44, crossbody: 0.26, cap: 0.14, 'bucket-hat': 0.16, beanie: 0.22, scarf: 0.14, sunglasses: 0.06, umbrella: 0.3,
-  pants: 1.0, chinos: 1.0, wide: 1.02, straight: 1.0, cargo: 1.0, jogger: 0.95, sweatpants: 0.98, bootcut: 1.04, bermuda: 0.58, shorts: 0.44, cycling: 0.5,
-  'jeans-wide': 1.02, 'jeans-straight': 1.0,
+export const SHAPE_H: Record<ShapeId, number> = { // real size M lengths (sizes.ts GARMENT_SIZES): hung = full length on the hanger
+  tee: 0.70, 'tee-v': 0.70, 'tee-long': 0.70, tank: 0.66, crop: 0.46, 'tee-oversized': 0.78, polo: 0.70, 'polo-long': 0.70,
+  shirt: 0.74, 'shirt-short': 0.72, 'shirt-band': 0.74, 'shirt-camp': 0.70, blouse: 0.64,
+  hoodie: 0.70, 'hoodie-zip': 0.70, sweatshirt: 0.68, 'quarter-zip': 0.68,
+  sweater: 0.66, 'knit-v': 0.66, turtleneck: 0.74, mockneck: 0.70, cardigan: 0.70, 'knit-vest': 0.62,
+  parka: 0.90, 'uv-zip': 0.72, bomber: 0.64, fleece: 0.70, down: 0.68, 'down-long': 1.00, 'puffer-vest': 0.64, blazer: 0.76, trench: 1.05, coach: 0.68, 'denim-jacket': 0.62, 'wool-coat': 1.08, padded: 0.95,
+  tote: 0.58, 'round-bag': 0.30, backpack: 0.45, crossbody: 0.28, cap: 0.14, 'bucket-hat': 0.17, beanie: 0.21, scarf: 0.14, sunglasses: 0.06, umbrella: 0.30,
+  pants: 0.97, chinos: 1.05, wide: 1.07, straight: 1.07, cargo: 1.07, jogger: 1.05, sweatpants: 1.05, bootcut: 1.08, bermuda: 0.72, shorts: 0.47, cycling: 0.49,
+  'jeans-wide': 1.08, 'jeans-straight': 1.08, 'jeans-baggy': 1.10, 'jeans-tapered': 1.06, 'shorts-chino': 0.52,
   'dress-shirt': 1.0, 'dress-aline': 0.95, 'dress-maxi': 1.3, 'dress-slip': 1.1,
-  'skirt-pleated': 0.7, 'skirt-aline': 0.55, 'skirt-flare': 0.6, 'skirt-mini': 0.38, 'skirt-tennis': 0.4, 'skirt-denim': 0.5, 'skirt-wrap': 0.72, 'skirt-midi': 0.82,
-  bra: 0.14, briefs: 0.06, bratop: 0.42, pyjama: 0.9, 'lounge-pants': 0.95,
-  sneaker: 0.11, loafer: 0.09, sandal: 0.06, slipper: 0.08, boot: 0.2, 'socks-ankle': 0.1, 'socks-crew': 0.2,
-  'fold-top': 0.07, 'fold-bottom': 0.07,
+  'skirt-pleated': 0.7, 'skirt-aline': 0.55, 'skirt-flare': 0.62, 'skirt-mini': 0.4, 'skirt-tennis': 0.38, 'skirt-denim': 0.5, 'skirt-wrap': 0.7, 'skirt-midi': 0.7,
+  bra: 0.14, briefs: 0.06, bratop: 0.40, pyjama: 0.9, 'lounge-pants': 1.06,
+  sneaker: 0.11, loafer: 0.09, sandal: 0.05, slipper: 0.08, boot: 0.25, 'socks-ankle': 0.1, 'socks-crew': 0.22,
+  'fold-top': 0.21, 'fold-bottom': 0.21, // a stack of three folded pieces (GARMENT_SIZES.store.foldedH × 3)
 };
 
 export const RAIL_Y = 1.65; // hanging rail height; garments hang from it
-export const TABLE_Y = 0.75; // table top
+export const TABLE_Y = 0.85; // table top (GARMENT_SIZES.store.table)
 
 export interface Fixture {
   zone: ZoneId;
@@ -76,15 +76,15 @@ export const FIXTURES: Record<1 | 2, Fixture[]> = {
     { zone: 'knit', kind: 'bay', x: 6.5, z: -16.7, yaw: 0, len: 5, tiers: T4, pitch: 0.4 },
     { zone: 'knit', kind: 'table', x: -7.5, z: -13, yaw: 0, len: 1.8, pitch: 0.36 },
     { zone: 'uv', kind: 'rail', x: 11.7, z: -1.5, yaw: E, len: 4, pitch: 0.45 },
-    { zone: 'uv', kind: 'rail', x: 3.5, z: -1, yaw: 0, len: 3, pitch: 0.45, double: true },
+    { zone: 'uv', kind: 'rail', x: 3.0, z: -1, yaw: 0, len: 3, pitch: 0.45, double: true },
     { zone: 'fleece', kind: 'rail', x: 11.7, z: -6, yaw: E, len: 4, pitch: 0.45 },
-    { zone: 'fleece', kind: 'rail', x: 7.5, z: -1, yaw: 0, len: 3, pitch: 0.45, double: true },
+    { zone: 'fleece', kind: 'rail', x: 8.0, z: -1, yaw: 0, len: 3, pitch: 0.45, double: true },
     { zone: 'down', kind: 'rail', x: 11.7, z: -10.5, yaw: E, len: 4, pitch: 0.45 },
-    { zone: 'down', kind: 'rail', x: 3.5, z: -5, yaw: 0, len: 3, pitch: 0.45, double: true },
+    { zone: 'down', kind: 'rail', x: 3.0, z: -5, yaw: 0, len: 3, pitch: 0.45, double: true },
     { zone: 'padded', kind: 'rail', x: 11.7, z: -14.75, yaw: E, len: 3.5, pitch: 0.45 },
-    { zone: 'padded', kind: 'rail', x: 7.5, z: -5, yaw: 0, len: 3, pitch: 0.45, double: true },
-    { zone: 'fashion-outer', kind: 'rail', x: 3.5, z: -9, yaw: 0, len: 4, pitch: 0.45, double: true },
-    { zone: 'fashion-outer', kind: 'rail', x: 7.5, z: -9, yaw: 0, len: 4, pitch: 0.45, double: true },
+    { zone: 'padded', kind: 'rail', x: 8.0, z: -5, yaw: 0, len: 3, pitch: 0.45, double: true },
+    { zone: 'fashion-outer', kind: 'rail', x: 3.0, z: -9, yaw: 0, len: 4, pitch: 0.45, double: true },
+    { zone: 'fashion-outer', kind: 'rail', x: 8.0, z: -9, yaw: 0, len: 4, pitch: 0.45, double: true },
     { zone: 'fashion-outer', kind: 'rail', x: 5.5, z: -13, yaw: 0, len: 5, pitch: 0.45, double: true },
     { zone: 'bags', kind: 'shelf', x: -9, z: -16.7, yaw: 0, len: 5, tiers: [0.5, 0.95, 1.4], pitch: 0.5 },
     { zone: 'hats-scarves', kind: 'shelf', x: -3.5, z: -16.7, yaw: 0, len: 5, tiers: [0.55, 1.0, 1.45], pitch: 0.4 },

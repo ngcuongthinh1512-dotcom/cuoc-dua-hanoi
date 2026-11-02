@@ -6,30 +6,30 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { CATALOG, STORE } from '@race/shared/cetiqlo';
 import { physics } from '../config.ts';
 import { CharacterController, newIntent } from '../player/CharacterController.ts';
-import { SHAPE_IDS, shapeGeometry, triangleCount } from './items.ts';
+import { SHAPE_IDS, SPEC, shapeGeometry, triangleCount } from './items.ts';
 import { buildStore, FLOOR2_Y, type StoreHandle } from './storeScene.ts';
 
 let store: StoreHandle;
 beforeAll(() => { store = buildStore(new THREE.Scene()); });
 
 describe('cetiqlo store budget', () => {
-  it('≤ 150 draw calls, ≤ 200k triangles, ≤ 3 lights, no shadows, static matrices frozen', () => {
+  it('≤ 180 draw calls, ≤ 300k triangles, ≤ 3 lights, no shadows, static matrices frozen', () => {
     store.mannequin.dress(['top.tee-crew.white', 'outer.padded-coat.black', 'bottom.jeans-wide.denim', 'shoes.sneaker.red', 'bag.backpack.olive', 'acc.cap.navy']);
     const b = store.budget();
-    expect(b.meshes).toBeLessThanOrEqual(150);
-    expect(b.triangles).toBeLessThanOrEqual(200_000);
+    expect(b.meshes).toBeLessThanOrEqual(180);
+    expect(b.triangles).toBeLessThanOrEqual(300_000);
     expect(b.lights).toBeLessThanOrEqual(3);
     store.group.traverse((ob) => {
       if (ob instanceof THREE.Light) expect(ob.castShadow).toBe(false);
       if (ob instanceof THREE.Mesh && !ob.parent?.name.includes('mannequin') && ob.name) expect(ob.matrixAutoUpdate, ob.name).toBe(false);
     });
   });
-  it('every shape ≤ 200 triangles; items are InstancedMesh with instance colours', () => {
-    for (const id of SHAPE_IDS) expect(triangleCount(shapeGeometry(id)), id).toBeLessThanOrEqual(200); // round 2: distinct silhouettes (was 120)
+  it('every shape ≤ 700 triangles (LOD1 ≤ 30 %); items are InstancedMesh with instance colours', () => {
+    for (const id of SHAPE_IDS) { expect(triangleCount(shapeGeometry(id)), id).toBeLessThanOrEqual(700); if (SPEC[id].kind === 'garment') expect(triangleCount(shapeGeometry(id, true)), `${id} lod`).toBeLessThanOrEqual(triangleCount(shapeGeometry(id)) * 0.3); } // owner directive: detail over budget (700 per shelf shape, LOD1 ≤ 30 %)
     const inst = store.group.getObjectByName('items')!.children;
     expect(inst.length).toBeGreaterThan(30);
     for (const m of inst) { expect(m).toBeInstanceOf(THREE.InstancedMesh); if (m.name !== 'hangers') expect((m as THREE.InstancedMesh).instanceColor).not.toBeNull(); }
-    expect(inst.reduce((s, m) => s + (m as THREE.InstancedMesh).count, 0)).toBe(CATALOG.length + CATALOG.filter((i) => i.display === 'hang').length);
+    expect(inst.filter((m) => !m.name.endsWith('@lod')).reduce((s, m) => s + (m as THREE.InstancedMesh).count, 0)).toBe(CATALOG.length + CATALOG.filter((i) => i.display === 'hang').length); // LOD0 holds every item at build time
   });
 });
 
@@ -78,6 +78,39 @@ describe('cetiqlo mannequin PiP camera', () => {
     expect(maxY - minY).toBeGreaterThanOrEqual(1.4); // ≥ 70 % of the NDC height
     expect(Math.abs((minY + maxY) / 2)).toBeLessThan(0.25); // centred
     expect(Math.abs((minX + maxX) / 2)).toBeLessThan(0.25);
+  });
+});
+
+describe('cetiqlo brief ring', () => {
+  it('six pieces by slot, all inside the brief camera, no two overlapping > 5 % at any of 8 phases', () => {
+    const b = store.brief;
+    b.dress(['acc.cap.navy', 'shoes.sneaker.red', 'top.tee-crew.white', 'bag.backpack.olive', 'outer.padded-coat.black', 'bottom.jeans-wide.denim']);
+    expect(b.pieces.map((p) => p.children.length)).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(b.pieces[0]!.name).toBe('brief-top');
+    b.camera.aspect = b.size.w / b.size.h;
+    b.camera.updateProjectionMatrix();
+    for (let k = 0; k < 8; k++) {
+      b.phase = (k / 8) * Math.PI * 2;
+      store.group.updateMatrixWorld(true);
+      b.camera.updateMatrixWorld(true);
+      const rects = b.pieces.map((p) => {
+        const box = new THREE.Box3().setFromObject(p);
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const sx of [0, 1]) for (const sy of [0, 1]) for (const sz of [0, 1]) {
+          const v = new THREE.Vector3(sx ? box.max.x : box.min.x, sy ? box.max.y : box.min.y, sz ? box.max.z : box.min.z).project(b.camera);
+          expect(Math.abs(v.x), `phase ${k} ${p.name}`).toBeLessThanOrEqual(1);
+          expect(Math.abs(v.y), `phase ${k} ${p.name}`).toBeLessThanOrEqual(1);
+          x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+        }
+        return { x0, x1, y0, y1, area: (x1 - x0) * (y1 - y0) };
+      });
+      for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) {
+        const a = rects[i]!, c = rects[j]!;
+        const ov = Math.max(0, Math.min(a.x1, c.x1) - Math.max(a.x0, c.x0)) * Math.max(0, Math.min(a.y1, c.y1) - Math.max(a.y0, c.y0));
+        expect(ov / Math.min(a.area, c.area), `phase ${k}: ${b.pieces[i]!.name} vs ${b.pieces[j]!.name}`).toBeLessThanOrEqual(0.05);
+      }
+    }
+    expect(b.size).toEqual({ w: 420, h: 315 });
   });
 });
 

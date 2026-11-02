@@ -102,7 +102,7 @@ export function cetiqloLines(state: HostState, now: number = state.serverMs): st
   return (state.cetiqlo ?? []).map((r) => {
     const m = r.match;
     const match = m ? `đang đấu: ${m.teams.map((t) => `${t.name}${t.online ? '' : ' (mất mạng)'} ${t.locked ? 'đã chốt' : `${t.bagN} món`}`).join(' – ')} · còn ${fmtMinSec(Math.max(0, m.endsAt - now))}` : 'không có trận';
-    return `CETIQLO · ${label(r.step)}: ${match} · hàng chờ: ${r.queue.length ? r.queue.map((q) => q.name).join(', ') : 'trống'}`;
+    return `CETIQLO · ${label(r.step)}: ${match} · hàng chờ: ${r.queue.length ? r.queue.map((q) => (q.releaseInS === undefined ? q.name : `${q.name} (rời sau ${fmtMinSec(q.releaseInS * 1000)})`)).join(', ') : 'trống'}`;
   });
 }
 

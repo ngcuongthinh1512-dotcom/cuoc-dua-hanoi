@@ -67,7 +67,7 @@ export type RaceInput =
   | { kind: 'room'; step: string; branch: string; done: number; skipped: boolean; pose: StandAt }
   /** Leg 3 CETIQLO (server-internal, never from a socket): the team won its head-to-head match → the challenge step with `room: 'cetiqlo'`
    *  completes like an approved answer. `pose` as for `answer`. */
-  | { kind: 'cqWin'; step: string; pose: StandAt }
+  | { kind: 'cqWin'; step: string; pose: StandAt; /** A waiting loser timed out (note text). */ release?: boolean }
   /** The Host approved step's answer: complete + settle like `open` (critic S3); `pose` = the team's trusted pose now: its
    *  bike goes to the rack only if it stands in the place on foot (S3 coverage). */
   | { kind: 'approve'; step: string; pose: StandAt }
@@ -257,7 +257,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   }
   if (input.kind === 'cqWin') {
     if (s.type !== 'challenge' || s.room !== 'cetiqlo' || i !== p.step) return silent;
-    const a: AnswerRec = { id: p.lastAnswerId + 1, b: null, text: 'Thắng trận đối kháng CETIQLO', at: now, s: 'correct' };
+    const a: AnswerRec = { id: p.lastAnswerId + 1, b: null, text: input.release ? 'Chờ quá 10 phút, được rời đi' : 'Thắng trận đối kháng CETIQLO', at: now, s: 'correct' };
     p.lastAnswerId = a.id;
     fx.push({ kind: 'answer', step: i, rec: a, verdict: 'correct' });
     done(input.pose);
