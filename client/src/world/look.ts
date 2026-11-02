@@ -1,4 +1,4 @@
-// Leg 3 "Hà Nội xưa" grade (config `look`): the canvas gets a CSS filter (sepia / desaturate / soft contrast) and three
+// Leg 3 grade (config `look`: preset 'modern' by default, 'old' = "Hà Nội xưa"): the canvas gets a CSS filter (sepia / desaturate / soft contrast) and three
 // fixed overlays right after it in the DOM (under every HUD panel, no z-index): lifted blacks (screen), a vignette and a
 // static grain tile (overlay). Chrome's compositor does the work, so there is no render pass: low and high quality look
 // the same, the game loop pays nothing. The three-side part of the look (fog tint, asphalt patches) reads vintage() too.
@@ -23,12 +23,15 @@ export const mix = (x: number, base = 1) => base + (x - base) * vintage();
 export function applyLook(canvas: HTMLCanvasElement): void {
   const s = vintage();
   if (s <= 0) return;
-  const g = K.grade;
+  const q = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('grade'); // DEV override
+  const modern = (q === 'old' || q === 'modern' ? q : K.preset) === 'modern';
+  const g = modern ? K.modern : K.grade;
+  const [lift, vig, grain] = modern ? [K.modern.lift, K.modern.vignette, K.modern.grain] : [K.lift, 1, 1];
   canvas.style.filter = `sepia(${mix(g.sepia, 0).toFixed(3)}) saturate(${mix(g.saturate).toFixed(3)}) contrast(${mix(g.contrast).toFixed(3)}) brightness(${mix(g.brightness).toFixed(3)})`;
   const layers = [
-    `background:${K.lift};mix-blend-mode:screen;opacity:${s}`,
-    `background:radial-gradient(ellipse at center, transparent ${K.vignette.from}%, ${K.vignette.colour} 100%);opacity:${s}`,
-    `background:url(${grainTile()}) repeat;mix-blend-mode:overlay;opacity:${K.grain.opacity * s}`,
+    `background:${lift};mix-blend-mode:screen;opacity:${s}`,
+    `background:radial-gradient(ellipse at center, transparent ${K.vignette.from}%, ${K.vignette.colour} 100%);opacity:${s * vig}`,
+    `background:url(${grainTile()}) repeat;mix-blend-mode:overlay;opacity:${K.grain.opacity * s * grain}`,
   ];
   for (const css of layers.reverse()) {
     const d = document.createElement('div');

@@ -34,12 +34,14 @@ export const render = {
 // compositor, no render pass: low and high quality look the same, ≈ 0 ms in the game loop).
 export const look = {
   vintage: 1,
+  preset: 'modern' as 'modern' | 'old', // 'modern' = clean present-day Hà Nội (owner's pick 2026-11-02); 'old' = "Hà Nội xưa" (sepia, lifted blacks, grain); DEV ?grade=old|modern
+  modern: { sepia: 0.02, saturate: 1.05, contrast: 1.03, brightness: 1.0, lift: '#101214', vignette: 0.35, grain: 0.3 }, // grade of the 'modern' preset (vignette / grain = × the old layers' opacity)
   grade: { sepia: 0.12, saturate: 0.88, contrast: 0.92, brightness: 1.05 }, // canvas filter() at vintage 1
   lift: '#1a1815', // lifted blacks: screen-blended over the frame (old print, no true black)
   vignette: { colour: 'rgba(30, 27, 22, 0.40)', from: 50 }, // % of the radius where the corner darkening starts
   grain: { opacity: 0.08, size: 96 }, // static noise tile (overlay-blended), px
   // world/Sky.ts: fog = HDRI horizon × tint (milky warm haze); fog.near × near (more haze on the street)
-  haze: { tint: [1.03, 1.0, 0.95] as [number, number, number], near: 0.6 },
+  haze: { tint: [1.0, 1.0, 0.98] as [number, number, number], near: 0.6 },
   // world/RoadBuilder.ts asphaltMaterial: repair patches (world-metre cells, a hashed share of them holds one darker
   // smoother rectangle) + low-frequency wear brightness (±wear) in the fragment shader
   asphalt: { cell: 7, share: 0.35, dark: 0.6, wear: 0.22 }, // 3 in 10 patches are lighter (concrete fill) instead of dark
