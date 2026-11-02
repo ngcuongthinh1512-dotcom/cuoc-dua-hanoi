@@ -1,11 +1,11 @@
-// Leg 3 (Hà Nội) landmark details, group h3 = Đống Đa: Văn Miếu – Quốc Tử Giám, Gò Đống Đa, Vincom Nguyễn Chí Thanh.
+// Leg 3 (Hà Nội) landmark details, group h3 = Đống Đa: Văn Miếu – Quốc Tử Giám, Gò Đống Đa, Vincom Nguyễn Chí Thanh, Vincom Center Phạm Ngọc Thạch.
 // Built in code on top of the generic S3DB body (index.ts `generic`); see b.ts for the pattern. The Vietnamese temple kit
 // (`hall`, `hipRoof`, `gate3`, `monument`) lives here and h4.ts imports it. Ground is flat (y ≈ 0); details are never
 // solid (SPEC §5.9): colliders come from `h.renderPart` bodies only. Palette: ochre walls, brown-red tiles, brick, bronze.
 import type { BuildingRec, LandmarkId, PartRec } from '../../geo/chunkData.ts';
 import type { BuildOut } from '../buildTypes.ts';
 import { triangulate, type V3 } from '../geom.ts';
-import { cap, fbox, type Fr, P, rgb, UP } from './b.ts';
+import { cap, DOWN, fbox, type Fr, P, rgb, UP } from './b.ts';
 import { lathe } from './d.ts';
 import type { DetailFn, Helpers, LandmarkCtx } from './index.ts';
 import { footprintFrame, loft, quadOut, triOut } from './kit.ts';
@@ -281,8 +281,282 @@ const vincomNct: DetailFn = (rec, _parts, ctx, h) => {
   return s.out();
 };
 
+// ── Vincom Center Phạm Ngọc Thạch (way/136161117, Kim Liên): an 8-level mall, rounded-triangle plan (≈ 64 × 51 × 62 m) at the
+// Phạm Ngọc Thạch – Đông Tác – Chùa Bộc junction, built after three pictures (DP Architects render 2015, a 2020 photo from the
+// junction). Height ≈ 36 m (estimate: no published figure; retail floors ≈ 4.3 m + a 6 m ground floor). Facade: a glazed
+// shopfront podium (0–6 m) under a band of pale slats (6–12 m), then copper aluminium louvre fins (12 m to the roof, 0.5 m
+// rhythm) with a horizontal dark glazed band at 16–18.5 m; the junction corner carries the "V": a dark trapezoid frame (top
+// band at 29–31.5 m, legs widening to the podium) around a curved dark-glass atrium (20–29 m) over the big LED screen
+// (8–17 m). Signs: "VINCOM CENTER" on the fins of the Phạm Ngọc Thạch face, the red UNIQLO square on the Đông Tác face, the
+// café + mall fascias on the podium. Everything is laid out along the PERIMETER (arc length s from the corner apex) so the
+// rounded corners need no special case. LED / signs are one OffscreenCanvas atlas on 'mural' (as m.ts / n.ts); without
+// OffscreenCanvas (Node tests) they stay plain dark panels. Collider: the body prism only (h.renderPart). ──
+const JUNCTION: [number, number] = [-2154, 2903]; // Phạm Ngọc Thạch – Đông Tác (world)
+const H_MALL = 36;
+const COPPER = ['#d19c48', '#8f6128']; // fin front, fin flank (depth shading): copper-gold, warm but not orange
+const PALE = ['#ddd3c2', '#a89e8e'];
+const V = { yTop: 29, band: 2.5, yBot: 6, wTop: 11, wBot: 30 }; // the trapezoid cut-out: half-width (m along the perimeter) at its top / bottom
+/** Height of the V's diagonal edge at |s| from the corner: yTop inside wTop, yBot beyond wBot. */
+export const vEdge = (s: number) => V.yBot + (V.yTop - V.yBot) * Math.min(1, Math.max(0, (V.wBot - Math.abs(s)) / (V.wBot - V.wTop)));
+
+export interface Perimeter {
+  len: number;
+  cum: number[]; // arc length of every vertex from the apex (the last = len)
+  /** Point + outward (mitred at a vertex) normal + tangent at arc length s (any s: wraps). */
+  at(s: number): { x: number; z: number; nx: number; nz: number; tx: number; tz: number };
+}
+/** The outline as a closed path from the vertex nearest `from`; +s runs the way whose first face looks most to the south (+z). */
+export function perimeter(outer: number[], from: [number, number]): Perimeter {
+  const n = outer.length / 2;
+  const pt = (i: number): [number, number] => [outer[2 * (((i % n) + n) % n)]!, outer[2 * (((i % n) + n) % n) + 1]!];
+  let [i0, best] = [0, Infinity];
+  for (let i = 0; i < n; i++) {
+    const d = Math.hypot(pt(i)[0] - from[0], pt(i)[1] - from[1]);
+    if (d < best) [i0, best] = [i, d];
+  }
+  let [cx, cz] = [0, 0];
+  for (let i = 0; i < n; i++) [cx, cz] = [cx + pt(i)[0] / n, cz + pt(i)[1] / n];
+  const normal = (a: [number, number], b: [number, number]) => {
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    let [nx, nz] = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
+    if (((a[0] + b[0]) / 2 - cx) * nx + ((a[1] + b[1]) / 2 - cz) * nz < 0) [nx, nz] = [-nx, -nz];
+    return [nx, nz] as const;
+  };
+  const dir = normal(pt(i0), pt(i0 + 1))[1] >= normal(pt(i0), pt(i0 - 1))[1] ? 1 : -1;
+  const pts = Array.from({ length: n + 1 }, (_, k) => pt(i0 + dir * k));
+  const cum = [0];
+  for (let k = 0; k < n; k++) cum.push(cum[k]! + Math.hypot(pts[k + 1]![0] - pts[k]![0], pts[k + 1]![1] - pts[k]![1]));
+  const len = cum[n]!;
+  const at = (s: number) => {
+    s = ((s % len) + len) % len;
+    let k = 0;
+    while (k + 1 < n && cum[k + 1]! <= s) k++;
+    if (s >= cum[k + 1]! - 1e-6) [k, s] = [(k + 1) % n, k + 1 === n ? 0 : cum[k + 1]!]; // at the next vertex (float noise)
+    const [a, b] = [pts[k]!, pts[k + 1]!];
+    const l = cum[k + 1]! - cum[k]!;
+    const t = (s - cum[k]!) / l;
+    const [tx, tz] = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+    let [nx, nz] = normal(a, b);
+    if (t < 1e-6) { // vertex: mitred normal
+      const [px, pz] = normal(pts[(k + n - 1) % n]!, a);
+      const m = Math.hypot(nx + px, nz + pz) || 1;
+      [nx, nz] = [(nx + px) / m, (nz + pz) / m];
+    }
+    return { x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, nx, nz, tx, tz };
+  };
+  return { len, cum, at };
+}
+
+type Buf = Parameters<typeof quadOut>[0];
+type Cell = [number, number, number, number];
+const [AW, AH] = [1024, 1024];
+const LED: Cell = [0, 0, 1024, 300];
+const SIGN_BIG: Cell = [0, 300, 1024, 140];
+const UNIQLO: Cell = [0, 440, 200, 200];
+const CAFE: Cell = [200, 440, 824, 120];
+const SIGN_SMALL: Cell = [0, 640, 1024, 140];
+
+/** Vertical strip along the perimeter s0..s1 (broken at the vertices and every `step` m), bottom / top heights as functions
+ *  of s, `off` m proud of the wall; uv across the strip from an atlas cell (else 0..1). Pieces with top ≤ bottom are skipped. */
+function strip(buf: Buf, per: Perimeter, s0: number, s1: number, yb: (s: number) => number, yt: (s: number) => number, off: number, cell?: Cell, step = 1) {
+  const ss = new Set<number>([s0, s1]);
+  for (let s = s0 + step; s < s1; s += step) ss.add(s);
+  for (const c of per.cum) for (const w of [c - per.len, c, c + per.len]) if (w > s0 && w < s1) ss.add(w);
+  const list = [...ss].sort((a, b) => a - b);
+  const [u0, v0, u1, v1] = cell ? [cell[0] / AW, (cell[1] + cell[3]) / AH, (cell[0] + cell[2]) / AW, cell[1] / AH] : [0, 0, 1, 1];
+  const uAt = (s: number) => u0 + ((u1 - u0) * (s - s0)) / (s1 - s0);
+  for (let k = 0; k + 1 < list.length; k++) {
+    const [sa, sb] = [list[k]!, list[k + 1]!];
+    if (sb - sa < 1e-4) continue;
+    const [ba, ta, bb, tb] = [yb(sa), yt(sa), yb(sb), yt(sb)];
+    if (ta <= ba + 1e-3 && tb <= bb + 1e-3) continue;
+    const A = per.at(sa), B = per.at(sb); // mitred at the vertices: adjacent pieces share their edge
+    const a: V3 = [A.x + A.nx * off, ba, A.z + A.nz * off], b: V3 = [B.x + B.nx * off, bb, B.z + B.nz * off];
+    const c: V3 = [b[0], Math.max(tb, bb), b[2]], d: V3 = [a[0], Math.max(ta, ba), a[2]];
+    quadOut(buf, a, b, c, d, [A.nx + B.nx, 0, A.nz + B.nz], uAt(sa), v0, uAt(sb), v1);
+  }
+}
+
+/** Slab along the perimeter between offsets o0 < o1, `th` thick, top at y (a function of s: sloped), top / bottom / front faces. */
+function ledge(buf: Buf, per: Perimeter, s0: number, s1: number, yTop: number | ((s: number) => number), o0: number, o1: number, th: number, step = 2) {
+  const yAt = typeof yTop === 'number' ? () => yTop : yTop;
+  const ss = new Set<number>([s0, s1]);
+  for (let s = s0 + step; s < s1; s += step) ss.add(s);
+  for (const c of per.cum) for (const w of [c - per.len, c, c + per.len]) if (w > s0 && w < s1) ss.add(w);
+  const list = [...ss].sort((a, b) => a - b);
+  for (let k = 0; k + 1 < list.length; k++) {
+    const [A, B] = [per.at(list[k]!), per.at(list[k + 1]!)];
+    const [ya, yb] = [yAt(list[k]!), yAt(list[k + 1]!)];
+    const p = (q: typeof A, o: number, yy: number): V3 => [q.x + q.nx * o, yy, q.z + q.nz * o];
+    quadOut(buf, p(A, o0, ya), p(B, o0, yb), p(B, o1, yb), p(A, o1, ya), UP);
+    quadOut(buf, p(A, o0, ya - th), p(B, o0, yb - th), p(B, o1, yb - th), p(A, o1, ya - th), DOWN);
+    quadOut(buf, p(A, o1, ya - th), p(B, o1, yb - th), p(B, o1, yb), p(A, o1, ya), [A.nx + B.nx, 0, A.nz + B.nz]);
+  }
+}
+
+/** One louvre fin at s: a `w` wide, `depth` deep blade from y0 to y1, front face in `front`, flanks in `flank` (3 quads). */
+function fin(buf: Buf, per: Perimeter, s: number, y0: number, y1: number, w: number, depth: number, off: number, front: V3, flank: V3) {
+  if (y1 <= y0 + 0.05) return;
+  const q = per.at(s);
+  const p = (dt: number, o: number, y: number): V3 => [q.x + q.tx * dt + q.nx * o, y, q.z + q.tz * dt + q.nz * o];
+  buf.color = front;
+  quadOut(buf, p(-w / 2, off + depth, y0), p(w / 2, off + depth, y0), p(w / 2, off + depth, y1), p(-w / 2, off + depth, y1), [q.nx, 0, q.nz]);
+  buf.color = flank;
+  for (const sg of [-1, 1]) quadOut(buf, p(sg * w / 2, off, y0), p(sg * w / 2, off + depth, y0), p(sg * w / 2, off + depth, y1), p(sg * w / 2, off, y1), [q.tx * sg, 0, q.tz * sg]);
+}
+
+/** The LED + sign atlas; undefined without OffscreenCanvas. */
+function paintVincomAtlas(): ImageBitmap | undefined {
+  if (typeof OffscreenCanvas === 'undefined') return;
+  const c = new OffscreenCanvas(AW, AH);
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#0a0a0c';
+  g.fillRect(0, 0, AW, AH);
+  // LED: a dark screen with a cyan-magenta ad: glowing phone, bright blobs, big white numbers
+  const [lx, ly, lw, lh] = LED;
+  const grad = g.createLinearGradient(lx, ly, lx + lw, ly + lh);
+  grad.addColorStop(0, '#120c1e'), grad.addColorStop(0.5, '#1c2a4a'), grad.addColorStop(1, '#0d1830');
+  g.fillStyle = grad;
+  g.fillRect(lx, ly, lw, lh);
+  for (const [x, y, r, col] of [[180, 150, 110, '#ff3fa8'], [560, 120, 90, '#28d4ff'], [860, 200, 130, '#7a5cff']] as const) {
+    const rg = g.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, col), rg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rg;
+    g.fillRect(x - r, y - r, 2 * r, 2 * r);
+  }
+  g.fillStyle = '#e8f4ff';
+  g.fillRect(470, 40, 90, 220); // phone
+  g.fillStyle = '#2bd0ff';
+  g.fillRect(480, 52, 70, 196);
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 110px Arial, sans-serif';
+  g.fillText('5000', 600, 165);
+  g.fillStyle = '#39e0ff';
+  g.font = 'bold 54px Arial, sans-serif';
+  g.fillText('mAh', 870, 165);
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 34px Arial, sans-serif';
+  g.fillText('SẠC NHANH', 600, 225);
+  // "VINCOM CENTER" red letters on the copper fins (big) and on the dark podium fascia (small)
+  const letters = (cell: Cell, bg: string, fg: string, edge: string) => {
+    g.fillStyle = bg;
+    g.fillRect(cell[0], cell[1], cell[2], cell[3]);
+    g.font = 'bold 112px Georgia, "Times New Roman", serif';
+    g.textAlign = 'center';
+    g.lineWidth = 8;
+    g.strokeStyle = edge;
+    g.strokeText('VINCOM CENTER', cell[0] + cell[2] / 2, cell[1] + 108);
+    g.fillStyle = fg;
+    g.fillText('VINCOM CENTER', cell[0] + cell[2] / 2, cell[1] + 108);
+    g.textAlign = 'left';
+  };
+  letters(SIGN_BIG, COPPER[0]!, '#d7262b', '#fff6ea');
+  letters(SIGN_SMALL, '#1c1b1b', '#d7262b', '#ffffff');
+  // UNIQLO: red rounded square, white blocks (no logo)
+  const [ux, uy, uw] = UNIQLO;
+  g.fillStyle = '#d7262b';
+  g.beginPath(), g.roundRect(ux + 6, uy + 6, uw - 12, uw - 12, 18), g.fill();
+  g.fillStyle = '#ffffff';
+  for (const [bx, by, bw, bh] of [[40, 40, 50, 14], [58, 54, 14, 50], [110, 40, 50, 14], [110, 72, 50, 14], [110, 104, 50, 14], [40, 120, 50, 14]]) g.fillRect(ux + bx, uy + by, bw, bh);
+  // café fascia: dark green, white lettering
+  g.fillStyle = '#1e5c43';
+  g.fillRect(CAFE[0], CAFE[1], CAFE[2], CAFE[3]);
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 72px Arial, sans-serif';
+  g.textAlign = 'center';
+  g.fillText('STARBUCKS COFFEE', CAFE[0] + CAFE[2] / 2, CAFE[1] + 86);
+  g.textAlign = 'left';
+  return c.transferToImageBitmap();
+}
+
+const vincomPnt: DetailFn = (rec, _parts, ctx, h) => {
+  const s = new Sink();
+  const g = ctx.ground;
+  const top = g + H_MALL;
+  h.renderPart({ ...rec, kind: 'yes', height: H_MALL, colour: '#4f3a26', roofShape: 'flat', roofMaterial: 'concrete', roofColour: '#8d9298' },
+    { ground: g, height: ctx.height, fallbackTop: H_MALL }, s); // the body (collider): dark brown backing behind the fins
+  const per = perimeter(rec.outer, JUNCTION);
+  const L = per.len;
+  const image = paintVincomAtlas();
+  const mural = s.buf('mural');
+  const st = s.buf('masonry');
+  const mt = s.buf('metal');
+  const glow = s.buf('neon');
+  const half = (a: number) => Math.min(a, L / 2); // |s| wraps at the far side
+  const vIn = (sx: number) => half(Math.abs(sx)); // distance from the corner along the perimeter
+
+  // ── podium: lit shopfronts between dark mullions, dark fascia with the signs, entrance canopy at the corner ──
+  glow.color = rgb('#c9a673');
+  strip(glow, per, -L / 2, L / 2, () => g + 0.25, () => g + 4.4, 0.04, undefined, 3); // lit interior…
+  strip(s.buf('glass'), per, -L / 2, L / 2, () => g + 0.25, () => g + 4.4, 0.1, undefined, 3); // …behind the shopfront glazing
+  mt.color = rgb('#24262a');
+  strip(mt, per, -L / 2, L / 2, () => g, () => g + 0.25, 0.1); // plinth
+  for (let p = -L / 2 + 1.5; p < L / 2; p += 3) fin(mt, per, p, g, g + 4.4, 0.12, 0.14, 0.04, rgb('#24262a'), rgb('#1a1b1e')); // mullions
+  st.color = rgb('#1c1b1b');
+  strip(st, per, -L / 2, L / 2, () => g + 4.4, () => g + 6, 0.12); // fascia
+  mt.color = rgb('#2b2e33');
+  ledge(mt, per, -22, 22, g + 5.6, 0.12, 3.2, 0.3); // entrance canopy round the corner
+  if (image) {
+    strip(mural, per, 3, 15, () => g + 4.75, () => g + 5.85, 0.16, CAFE);
+    strip(mural, per, -16, -5, () => g + 4.75, () => g + 5.9, 0.16, SIGN_SMALL);
+    strip(mural, per, 40, 50, () => g + 4.75, () => g + 5.9, 0.16, SIGN_SMALL);
+  }
+
+  // ── pale slat band (6–12 m; inside the V it climbs to the atrium glass) and the copper fins (12 m to the roof, clipped
+  // by the V's diagonal, continuing above the top band). Every band's feet stand on a sill (ledge): nothing hangs. ──
+  mt.color = rgb('#2b2e33');
+  ledge(mt, per, -L / 2, L / 2, g + 6.1, 0, 0.45, 0.1, 3); // sill under the slats
+  ledge(mt, per, -L / 2, L / 2, g + 12.2, 0, 0.7, 0.3, 3); // sill under the copper fins
+  for (let p = -L / 2 + 0.25; p < L / 2; p += 0.5) {
+    const d = vIn(p);
+    const edge = vEdge(d);
+    const paleTop = d < V.wBot ? Math.min(20, edge) : 12;
+    fin(mt, per, p, g + 6.1, g + paleTop, 0.1, 0.3, 0.08, rgb(PALE[0]!), rgb(PALE[1]!));
+    if (d < V.wTop) fin(mt, per, p, g + V.yTop + V.band + 0.1, top, 0.16, 0.55, 0.1, rgb(COPPER[0]!), rgb(COPPER[1]!));
+    else fin(mt, per, p, g + Math.max(12.2, edge), top, 0.16, 0.55, 0.1, rgb(COPPER[0]!), rgb(COPPER[1]!));
+  }
+  mt.color = rgb('#2f3940');
+  ledge(mt, per, -L / 2, L / 2, g + 16, 0, 0.12, 0.05, 3);
+  strip(mt, per, -L / 2, L / 2, () => g + 16, () => g + 18.5, 0.04); // horizontal glazed band behind the fins
+
+  // ── the V: curved atrium glass + floor slabs, the LED screen, the dark trapezoid frame ──
+  const gl = (sx: number) => g + Math.max(20, vEdge(vIn(sx)));
+  mt.color = rgb('#3a4654');
+  ledge(mt, per, -18.5, 18.5, g + 20, 0, 0.3, 0.3, 0.5); // atrium floor
+  for (const y of [23, 26]) ledge(mt, per, -(V.wBot - ((y - V.yBot) * (V.wBot - V.wTop)) / (V.yTop - V.yBot)), V.wBot - ((y - V.yBot) * (V.wBot - V.wTop)) / (V.yTop - V.yBot), g + y + 0.35, 0.14, 0.5, 0.35, 0.5); // floor slabs seen through the glass
+  mt.color = rgb('#1f2a36');
+  strip(mt, per, -V.wBot, V.wBot, gl, () => g + V.yTop, 0.14, undefined, 0.5);
+  st.color = rgb('#0e0e10');
+  ledge(st, per, -16.5, 16.5, g + 6.3, 0, 0.6, 0.1, 0.5);
+  strip(st, per, -16.5, 16.5, () => g + 6.3, () => g + 15.6, 0.5); // LED screen frame
+  if (image) strip(mural, per, -16, 16, () => g + 6.6, () => g + 15.3, 0.56, LED);
+  st.color = rgb('#1e2024');
+  strip(st, per, -V.wBot - 1.5, V.wBot + 1.5, (sx) => g + vEdge(vIn(sx)), (sx) => g + Math.min(vEdge(vIn(sx)) + 2.6, V.yTop + V.band), 0.8, undefined, 0.5); // frame: top band + diagonal legs
+  ledge(st, per, -V.wTop - 1.5, V.wTop + 1.5, g + V.yTop + V.band, 0, 0.8, 0.05); // its top edge
+  ledge(st, per, -V.wBot - 1.5, V.wBot + 1.5, (sx) => g + vEdge(vIn(sx)) - 0.05, 0, 0.85, 0.05, 0.5); // its soffit: over the glass and under the legs (the clipped fins stand on it)
+
+  // ── signs on the fins: VINCOM CENTER on the Phạm Ngọc Thạch face, UNIQLO near the corner of the Đông Tác face ──
+  if (image) {
+    st.color = rgb('#1e2024');
+    for (const [s0, s1, y0, y1, cell] of [[-47, -18, 25, 29, SIGN_BIG], [16, 20, 32, 36, UNIQLO], [-56, -53, 27.5, 30.5, UNIQLO]] as const) {
+      ledge(st, per, s0, s1, g + y0, 0.3, 0.8, 0.08, 0.5); // sign rail
+      strip(mural, per, s0, s1, () => g + y0, () => g + y1, 0.75, cell, 0.5);
+    }
+  }
+
+  // ── roof: parapet cap, plant box ──
+  st.color = rgb('#3a3634');
+  ledge(st, per, -L / 2, L / 2, top + 0.9, -0.3, 0.75, 0.9, 3);
+  st.color = rgb('#5f8a46');
+  ledge(st, per, -L / 2, L / 2, top + 0.7, -1.6, -0.3, 0.6, 3);
+
+  const out = s.out();
+  return image ? { ...out, textures: [{ material: 'mural', image }] } : out;
+};
+
 export const details: Partial<Record<LandmarkId, DetailFn>> = {
   'van-mieu': vanMieu,
   'go-dong-da': goDongDa,
   'vincom-nct': vincomNct,
+  'vincom-pham-ngoc-thach': vincomPnt,
 };
