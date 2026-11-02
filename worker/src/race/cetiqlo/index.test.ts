@@ -1,6 +1,6 @@
 import type { CqServerMessage } from '@race/shared/protocol';
 import { describe, expect, it } from 'vitest';
-import { CETIQLO, CHECKOUT_ZONE } from './config.ts';
+import { CETIQLO, CHECKOUT_ZONE, START_SPOTS } from './config.ts';
 import { FIXTURE } from './fixture.ts';
 import { Cetiqlo, type CqIO } from './index.ts';
 
@@ -161,40 +161,68 @@ describe('Cetiqlo service', () => {
     expect(r.wins).toEqual([]);
   });
 
-  it('disconnect: grace keeps the place and the match; past it the team is gone (the other still wins by completion)', () => {
+  it('offline (no 20 s rule): the match runs to endsAt; the offline team is ranked by its bag and gets its result + lobby state when back', () => {
     const { r, set, now } = startMatch();
     fill(r, 'A', set, now + 100);
+    fill(r, 'B', set.slice(0, 2), now + 100);
     r.onlineSet.delete('B');
     r.cq.offline('B', now + 2000);
     r.cq.checkout('A', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 3000);
-    expect(r.of('A').some((m) => m.t === 'cq.result')).toBe(false); // B may still come back
-    r.cq.tick(now + 2000 + CETIQLO.graceReconnectMs);
-    expect(last(r, 'A', 'cq.result')).toMatchObject({ winner: 'you' });
-    expect(r.of('B').some((m) => m.t === 'cq.result')).toBe(false); // offline: not told
+    expect(r.of('A').some((m) => m.t === 'cq.result')).toBe(false); // B may still come back and check out
+    r.cq.tick(now + 60_000);
+    expect(r.of('A').some((m) => m.t === 'cq.result')).toBe(false); // nobody wins because the other is offline
+    r.cq.tick(now + CETIQLO.pickMs + 1); // time up: the normal rules
+    expect(last(r, 'A', 'cq.result')).toMatchObject({ winner: 'you', reason: 'completion' });
     expect(r.wins).toEqual(['A']);
+    r.onlineSet.add('B');
+    r.cq.online('B', now + CETIQLO.pickMs + 5000); // back during the hold: the result again, then the lobby state with its loser clock
+    expect(last(r, 'B', 'cq.result')).toMatchObject({ winner: 'opp', you: { correct: 2 } });
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ phase: 'result', queuePos: 1, loserWaitUntil: now + CETIQLO.pickMs + 1 + CETIQLO.loserMaxWaitMs });
   });
 
-  it('reconnect inside the grace gets its state back and the match goes on', () => {
+  it('reconnect inside a match (F5) gets the match back: same id, bag, lock; the clock goes on', () => {
     const { r, set, now } = startMatch();
     fill(r, 'B', set.slice(0, 1), now + 100);
+    r.cq.checkout('B', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 2000);
     r.onlineSet.delete('B');
-    r.cq.offline('B', now + 1000);
+    r.cq.offline('B', now + 2500);
     r.onlineSet.add('B');
-    r.cq.online('B', now + 5000);
-    expect(last(r, 'B', 'cq.state')!.match).toMatchObject({ yourBag: [set[0]] });
-    r.cq.tick(now + 1000 + CETIQLO.graceReconnectMs + 1);
-    expect(last(r, 'A', 'cq.result')).toBeUndefined();
+    r.cq.online('B', now + 50_000);
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ phase: 'match', match: { id: 'm1', yourBag: [set[0]], yourLocked: true, endsAt: now + CETIQLO.pickMs }, startSpot: START_SPOTS[1] });
+    expect(r.of('A').some((m) => m.t === 'cq.result')).toBe(false);
   });
 
-  it('an offline queued team is skipped by the pairing and dropped after the grace', () => {
+  it('an offline queued team keeps its place: skipped for the pairing while away, paired as soon as it is back, never dropped', () => {
     const r = rig();
     r.cq.join('A', 1000);
     r.onlineSet.delete('A');
     r.cq.offline('A', 1100);
     r.cq.join('B', 1200);
-    expect(last(r, 'B', 'cq.state')!.phase).toBe('lobby');
-    r.cq.tick(1100 + CETIQLO.graceReconnectMs);
-    expect(last(r, 'B', 'cq.state')).toMatchObject({ queuePos: 1, queueLen: 1 });
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ phase: 'lobby', queuePos: 2, queueLen: 2 }); // A still ahead
+    r.cq.tick(1100 + 120_000);
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ queuePos: 2, queueLen: 2 });
+    r.onlineSet.add('A');
+    r.cq.online('A', 130_000);
+    expect(last(r, 'A', 'cq.state')).toMatchObject({ phase: 'match', match: { opp: { name: 'Đội B' } } });
+  });
+
+  it('reconnect during the result hold re-sends cq.result; a new match clears it', () => {
+    const { r, set, now } = startMatch();
+    r.cq.join('C', now + 10);
+    fill(r, 'A', set, now + 100);
+    r.cq.checkout('A', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 3000);
+    r.cq.checkout('B', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 3100);
+    const n = r.of('B').filter((m) => m.t === 'cq.result').length;
+    r.cq.online('B', now + 4000);
+    expect(r.of('B').filter((m) => m.t === 'cq.result').length).toBe(n + 1);
+    r.cq.join('B', now + 4500); // F5: the client joins again → the result once more + the result-phase state
+    expect(r.of('B').filter((m) => m.t === 'cq.result').length).toBe(n + 2);
+    r.alarms.length = 0;
+    r.cq.tick(now + 3100 + CETIQLO.resultHoldMs); // B ↔ C
+    expect(last(r, 'B', 'cq.state')!.phase).toBe('match');
+    const before = r.of('B').filter((m) => m.t === 'cq.result').length;
+    r.cq.online('B', now + 3100 + CETIQLO.resultHoldMs + 100);
+    expect(r.of('B').filter((m) => m.t === 'cq.result').length).toBe(before); // the old result is gone with the new match
   });
 
   it('leave during a match forfeits it; leave in the queue frees the place', () => {

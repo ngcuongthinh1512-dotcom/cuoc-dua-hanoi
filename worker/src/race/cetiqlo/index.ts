@@ -29,12 +29,10 @@ export interface CqIO {
   event(t: number, team: string | null, type: string, data: object): void;
 }
 
-interface Saved { rooms: Record<string, Room>; grace: Record<string, number>; released: Record<string, string> }
+interface Saved { rooms: Record<string, Room>; released: Record<string, string> }
 
 export class Cetiqlo {
   private rooms: Record<string, Room> = {};
-  /** team → ms its disconnect grace ends. */
-  private grace: Record<string, number> = {};
   /** team → step it was released from (timeout); it never re-queues there, unless the Host's undo puts it back on the step. */
   private released: Record<string, string> = {};
   private readonly acted = new Map<string, number>();
@@ -52,9 +50,10 @@ export class Cetiqlo {
   }
   private slotOf = (id: string) => this.byId.get(id)?.slot;
   private save() {
-    this.io.save(JSON.stringify({ rooms: this.rooms, grace: this.grace, released: this.released } satisfies Saved));
+    this.io.save(JSON.stringify({ rooms: this.rooms, released: this.released } satisfies Saved));
   }
-  private eligible = (t: string) => this.io.online(t) && !(t in this.grace);
+  /** Pairing skips OFFLINE teams (they keep their place and pair as soon as they are back); no time limit (owner: no 20 s rule). */
+  private eligible = (t: string) => this.io.online(t);
 
   /** The room (step id) a team queues in or plays in. */
   private where(team: string): { step: string; room: Room } | null {
@@ -82,7 +81,14 @@ export class Cetiqlo {
     }
     const i = room.queue.indexOf(team);
     const hold = m?.state === 'done' && m.teams.includes(team) && now < room.holdUntil;
-    return { t: 'cq.state', phase: hold ? 'result' : 'lobby', serverNow: now, queuePos: i + 1, queueLen: room.queue.length };
+    const lost = room.lost?.[team];
+    return { t: 'cq.state', phase: hold ? 'result' : 'lobby', serverNow: now, queuePos: i + 1, queueLen: room.queue.length, ...(lost ? { loserWaitUntil: lost.at + this.cfg.loserMaxWaitMs } : {}) };
+  }
+  /** A (re)joining / reconnecting team: its result again while the screen still holds (then the state). */
+  private resend(step: string, team: string, now: number) {
+    const st = this.state(step, team, now), r = this.rooms[step]!.results?.[team];
+    if (st.t === 'cq.state' && st.phase === 'result' && r) this.io.send(team, r as CqResult);
+    this.io.send(team, st);
   }
   private sendQueue(step: string, now: number) {
     for (const t of this.rooms[step]!.queue) this.io.send(t, this.state(step, t, now));
@@ -96,11 +102,10 @@ export class Cetiqlo {
     const old = this.where(team);
     if (old && old.step !== step) this.rooms[old.step] = leave(old.room, team);
     const room = this.rooms[step] ?? newRoom();
-    delete this.grace[team];
     if (!old && room.queue.length + (room.match?.state === 'running' ? room.match.teams.length : 0) >= this.cfg.maxTeamsInRoom) return this.no(team, 'join', 'busy');
     this.rooms[step] = join(room, team);
     this.save();
-    this.io.send(team, this.state(step, team, now));
+    this.resend(step, team, now);
     this.afterChange(step, now);
   }
 
@@ -109,6 +114,7 @@ export class Cetiqlo {
     const w = this.where(team);
     if (!w) return;
     this.rooms[w.step] = leave(w.room, team);
+    if (this.rooms[w.step]!.results?.[team]) delete this.rooms[w.step]!.results![team];
     if (w.room.match?.state === 'running' && w.room.match.teams.includes(team)) this.rooms[w.step]!.match = markGone(w.room.match, team);
     this.save();
     this.afterChange(w.step, now);
@@ -159,37 +165,27 @@ export class Cetiqlo {
     this.save();
   }
 
-  // ── presence ──
-  /** The team's last socket closed: its place is kept for graceReconnectMs. */
+  // ── presence (owner, 2026-11-03: no 20 s grace rule — being offline never costs the place, the match, the bag or a result) ──
+  /** The team's last socket closed: nothing changes; it is only not paired into a NEW match while offline (eligible). */
   offline(team: string, now: number) {
-    if (!this.where(team)) return;
-    this.grace[team] = now + this.cfg.graceReconnectMs;
-    this.save();
-    this.schedule(now);
+    if (this.where(team)) this.schedule(now);
   }
-  /** The team has a socket again: grace ends, it gets the room's state (or the result still on screen). */
+  /** The team has a socket again (F5, a network drop): the room's state again — the running match with its bag / lock, the result
+   *  still on screen (re-sent), or the lobby with its place / loser clock; then the pairing it may have been skipped for. */
   online(team: string, now: number) {
     this.tick(now);
-    if (team in this.grace) (delete this.grace[team], this.save());
     const w = this.where(team);
     if (w) {
-      this.io.send(team, this.state(w.step, team, now));
+      this.resend(w.step, team, now);
       this.afterChange(w.step, now);
     }
   }
 
   // ── clock ──
-  /** Everything that is due at `now`: grace ends, queued teams that left the step, finished matches, the next pairing. Safe to call any time. */
+  /** Everything that is due at `now`: queued teams that left the step, finished matches, releases, the next pairing. Safe to call any time. */
   tick(now: number) {
     let dirty = false;
     const moved = new Set<string>();
-    for (const [team, until] of Object.entries(this.grace)) {
-      if (until > now) continue;
-      delete this.grace[team];
-      const w = this.where(team);
-      if (w) (this.rooms[w.step] = { ...leave(w.room, team), match: w.room.match && markGone(w.room.match, team) }, moved.add(w.step));
-      dirty = true;
-    }
     for (const [step, room] of Object.entries(this.rooms)) {
       const ghosts = room.queue.filter((t) => this.io.stepOf(t) !== step); // the Host skipped the step / the team left it
       if (ghosts.length) (this.rooms[step] = { ...room, queue: room.queue.filter((t) => !ghosts.includes(t)) }, moved.add(step), dirty = true);
@@ -237,8 +233,8 @@ export class Cetiqlo {
       if (notify) this.sendQueue(step, now);
       return this.schedule(now);
     }
-    this.rooms[step] = next;
     const m = next.match!;
+    this.rooms[step] = { ...next, results: Object.fromEntries(Object.entries(next.results ?? {}).filter(([t]) => !m.teams.includes(t))) }; // a new match: its teams' old results are over
     this.save();
     this.io.event(now, null, 'cq.start', { step, match: m.id, teams: m.teams, set: m.set, seed: m.seed, startAt: m.startAt, endsAt: m.endsAt });
     for (const t of m.teams) this.io.send(t, this.state(step, t, now));
@@ -264,7 +260,10 @@ export class Cetiqlo {
     this.rooms[step] = finish(this.rooms[step]!, m, s, now, this.cfg);
     this.save();
     this.io.event(now, null, 'cq.result', { step, match: m.id, winners: s.winners, draw: s.draw, reason: s.reason, scores: s.scores.map((x) => ({ team: x.team, score: x.score, lockedAt: x.lockedAtMs, bag: x.bag })) });
-    for (const t of m.teams) if (!m.gone.includes(t)) this.io.send(t, this.result(m, s, t, now));
+    const results = Object.fromEntries(m.teams.filter((t) => !m.gone.includes(t)).map((t) => [t, this.result(m, s, t, now)]));
+    this.rooms[step] = { ...this.rooms[step]!, results };
+    this.save();
+    for (const t of m.teams) if (!m.gone.includes(t)) this.io.send(t, results[t]!); // offline teams get it on reconnect (resend)
     for (const w of s.winners) {
       this.io.win(w, step, now); // SQLite (engine) before the "advance" ack
       this.io.send(w, { t: 'cq.advance', matchId: m.id, reason: 'win' });
@@ -272,9 +271,9 @@ export class Cetiqlo {
     this.sendQueue(step, now); // the losers: their place, behind the result screen
   }
 
-  /** Earliest moment something is due (the alarm): a match's end, the end of a result screen with teams waiting, a grace end. */
+  /** Earliest moment something is due (the alarm): a match's end, the end of a result screen with teams waiting, a loser's release. */
   private schedule(now: number) {
-    const due: number[] = Object.values(this.grace);
+    const due: number[] = [];
     for (const r of Object.values(this.rooms)) {
       for (const t of r.queue) if (r.lost?.[t]) due.push(r.lost[t]!.at + this.cfg.loserMaxWaitMs);
       if (r.match?.state === 'running') due.push(r.match.endsAt);

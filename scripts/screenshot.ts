@@ -583,6 +583,8 @@ Object.assign(PRESETS, {
   'cetiqlo-pants-lineup': '/cetiqlo.html?view=lineup&lineup=1', // 16 bottom cuts in two rows on a white wall (grey / navy): sweat, jogger, trousers, ankle, chino, cargo, wide, jeans straight / wide / bootcut / baggy / tapered, bermuda, sport short, chino short, cycling
   'cetiqlo-pants-close': '/cetiqlo.html?lineup=1&cam=-1.3,2.3,3.1,-1.3,2.3,1.3', // close-up at 3 m: sweat / jogger / trousers / ankle / chino / cargo (top row)
   'cetiqlo-pants-close2': '/cetiqlo.html?lineup=1&cam=1.3,1.5,3.1,1.3,1.5,1.3', // close-up: wide / jeans straight / wide / bootcut / baggy / tapered / shorts
+  'cetiqlo-hang-wide': '/cetiqlo.html?view=hang-wide', // a wide rail aisle at eye height: every piece separate
+  'cetiqlo-wall-shoes': '/cetiqlo.html?view=wall-shoes', // the bracketed shoe shelf, one pair per bracket, toe out
   'cetiqlo-cards': '/cetiqlo.html?view=cards&cards=1&set=top.shirt-gingham.white-blue,outer.bomber.olive,bottom.jeans-wide-wash.denim-lightdenim,shoes.sneaker.white,bag.crossbody.black,acc.bucket-hat.beige', // the 6 product cards next to the dressed model
 });
 const BENCH_MS = 15_000;

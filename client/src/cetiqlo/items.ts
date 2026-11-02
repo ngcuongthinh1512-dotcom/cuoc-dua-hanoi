@@ -330,7 +330,7 @@ const BUILD = (sp: Spec, lod = false): G => sp.kind === 'garment' ? garment(sp, 
 /** The hanger drawn over every hanging item (one extra InstancedMesh, fixed colour). */
 export const HANGER: G = merge(shade(box(0.012, 0.07, 0.012, 0, 0.055, 0), 0.4), shade(box(0.42, 0.014, 0.014, 0, 0.02, 0), 0.4));
 /** Standing items turned on their shelf so the silhouette reads (shoes three-quarter on). */
-const STAND_TURN: Partial<Record<ShapeId, number>> = { sneaker: 0.95, loafer: 0.95, sandal: 0.95, slipper: 0.95, boot: 0.95, 'socks-ankle': 0.7, 'socks-crew': 0.7, umbrella: 0.4 };
+const STAND_TURN: Partial<Record<ShapeId, number>> = { sneaker: 0.35, loafer: 0.35, sandal: 0.35, slipper: 0.35, boot: 0.35, 'socks-ankle': 0, 'socks-crew': 0, umbrella: 0 }; // shoes toe-out, slightly turned
 
 const cache = new Map<string, G>();
 /** Planar UVs in metres from the position, by face direction (1 unit = 0.5 m ≈ one garment face), so a pattern keeps the

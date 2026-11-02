@@ -2,41 +2,53 @@ import { describe, expect, it } from 'vitest';
 import type { CqTeamResult } from './contract.ts';
 import { NO_PICK, countdown, insideCheckout, lockTimeText, loserWaitText, pickItem, pointsText, queueText, resultRows } from './logic.ts';
 
+// a wall rail 2 m ahead (−z) with three tiers: low 0.6 m, middle 1.2 m, top 1.95 m; two neighbours 0.55 m apart on the middle tier
 const A = [
-  { id: 'a', x: 0, y: 1, z: -2 }, // 2 m ahead (looking −z)
-  { id: 'b', x: 0.5, y: 1, z: -2 }, // its neighbour, half a metre to the right
-  { id: 'behind', x: 0, y: 1, z: 1.5 },
-  { id: 'up', x: 0, y: 4.84, z: -1 }, // floor 2, right above
-  { id: 'far', x: 0, y: 1, z: -5 },
+  { id: 'low', x: 0, y: 0.6, z: -2 },
+  { id: 'mid', x: 0, y: 1.2, z: -2 },
+  { id: 'mid-right', x: 0.55, y: 1.2, z: -2 },
+  { id: 'top', x: 0, y: 1.95, z: -2 },
+  { id: 'too-high', x: 0, y: 2.8, z: -2 },
+  { id: 'far', x: 0, y: 1.2, z: -6 },
 ];
-const O = { range: 3, coneDeg: 28, margin: 0.15, holdMs: 120 };
-const feet = { x: 0, y: 0, z: 0 }, ahead = { x: 0, z: -1 };
-const pick = (dir: { x: number; z: number } = ahead, st = NO_PICK, now = 0, anchors = A) => pickItem(dir, feet, anchors, st, now, O);
+const O = { range: 3.5, coneDeg: 13, reachUp: 2.3, margin: 0.12, holdMs: 120 };
+const feet = { x: 0, y: 0, z: 0 };
+// a third-person camera 2 m behind and 1.6 m up, aimed at a point (tx, ty, tz)
+const eye = { x: 0, y: 1.6, z: 2 };
+const aimAt = (tx: number, ty: number, tz: number) => { const v = { x: tx - eye.x, y: ty - eye.y, z: tz - eye.z }, l = Math.hypot(v.x, v.y, v.z); return { x: v.x / l, y: v.y / l, z: v.z / l }; };
+const pick = (dir: { x: number; y: number; z: number }, st = NO_PICK, now = 0, anchors = A) => pickItem(eye, dir, feet, anchors, st, now, O);
 
-describe('pickItem: look-to-select with hysteresis', () => {
-  it('the item at the crosshair wins; behind / other floor / beyond reach never', () => {
-    expect(pick().id).toBe('a');
-    expect(pick({ x: 0, z: 1 }).id).toBe('behind'); // turning round: the one behind is now at the crosshair
-    expect(pick(ahead, NO_PICK, 0, [A[3]!, A[4]!]).id).toBeNull();
-    expect(pick(ahead, NO_PICK, 0, []).id).toBeNull();
+describe('pickItem: look-to-select along the real camera ray', () => {
+  it('looking up at the top rail picks the top item; level at the low one picks it; the floor picks nothing', () => {
+    expect(pick(aimAt(0, 1.95, -2)).id).toBe('top');
+    expect(pick(aimAt(0, 0.6, -2)).id).toBe('low');
+    expect(pick(aimAt(0, 1.2, -2)).id).toBe('mid');
+    expect(pick(aimAt(0, 0, -0.5)).id).toBeNull(); // pitched down at the floor in front of the feet
+    expect(pick(aimAt(0, 2.8, -2)).id).toBe('top'); // above reach: never 'too-high' (the top item under it is the nearest in the cone, if any)
+    expect(pick(aimAt(0, 1.2, -6), NO_PICK, 0, [A[5]!]).id).toBeNull(); // beyond range
+    expect(pick(aimAt(0, 1.2, -2), NO_PICK, 0, []).id).toBeNull();
   });
-  it('a neighbour takes over only when clearly better for holdMs; the held item drops at once when it leaves the cone', () => {
-    const right = { x: Math.sin(0.24), z: -Math.cos(0.24) }; // 14° right: b is at the view centre
-    let st = pick(); // a
+  it('neighbours 0.55 m apart on the same tier are separable at 2 m', () => {
+    expect(pick(aimAt(0, 1.2, -2)).id).toBe('mid');
+    expect(pick(aimAt(0.55, 1.2, -2)).id).toBe('mid-right');
+  });
+  it('hysteresis: the neighbour takes over only when clearly better for holdMs; a held item out of the cone drops at once', () => {
+    let st = pick(aimAt(0, 1.2, -2));
+    const right = aimAt(0.55, 1.2, -2);
     st = pick(right, st, 0);
-    expect(st).toMatchObject({ id: 'a', candidate: 'b' }); // noted, not switched
+    expect(st).toMatchObject({ id: 'mid', candidate: 'mid-right' });
     st = pick(right, st, 100);
-    expect(st.id).toBe('a');
+    expect(st.id).toBe('mid');
     st = pick(right, st, 130);
-    expect(st.id).toBe('b');
-    st = pick({ x: 1, z: 0 }, st, 200); // looking sideways: nothing in the cone
+    expect(st.id).toBe('mid-right');
+    st = pick(aimAt(3, 1.2, 2), st, 200); // looking away
     expect(st.id).toBeNull();
   });
   it('a small advantage (under the margin) keeps the held item', () => {
-    const slight = { x: Math.sin(0.04), z: -Math.cos(0.04) };
-    let st = pick();
+    let st = pick(aimAt(0, 1.2, -2));
+    const slight = aimAt(0.12, 1.2, -2);
     for (let t = 0; t < 1000; t += 50) st = pick(slight, st, t);
-    expect(st.id).toBe('a');
+    expect(st.id).toBe('mid');
   });
 });
 

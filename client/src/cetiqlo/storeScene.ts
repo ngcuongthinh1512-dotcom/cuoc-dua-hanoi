@@ -203,10 +203,18 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
       for (const t of f.tiers ?? []) lb('white', f.len + 0.1, 0.03, 0.36, 0, t - 0.015, -0.02);
       for (const sx of [-1, 1]) lb('white', 0.04, 2.0, 0.4, sx * (f.len / 2 + 0.05), 1.0, 0);
       [hy, hz, cz] = [1.0, 0.2, 0];
-    } else {
-      lb('tile', f.len + 0.1, 2.0, 0.03, 0, 1.0, -0.26);
-      for (const t of f.tiers ?? []) lb('white', f.len + 0.1, 0.03, 0.4, 0, t - 0.015, -0.06);
-      for (const sx of [-1, 1]) lb('white', 0.04, 2.0, 0.42, sx * (f.len / 2 + 0.05), 1.0, -0.05);
+    } else if (f.kind === 'hooks') { // a wall peg strip: one bar per tier, a peg per slot
+      const n = Math.floor(f.len / f.pitch + 1e-6), u0 = -((n - 1) * f.pitch) / 2;
+      for (const t of f.tiers ?? []) {
+        lb('tile', f.len + 0.1, 0.08, 0.03, 0, t + 0.02, -0.26);
+        for (let i = 0; i < n; i++) { lb('metal', 0.012, 0.012, 0.18, u0 + i * f.pitch, t, -0.17); lb('metal', 0.03, 0.03, 0.012, u0 + i * f.pitch, t + 0.01, -0.08); }
+      }
+      [hy, hz, cz] = [1.0, 0.16, -0.14];
+    } else { // shelf: wall-mounted single-row shoe shelves with a front lip, one pair per bracket
+      lb('tile', f.len + 0.1, 1.2, 0.03, 0, 1.0, -0.26);
+      for (const t of f.tiers ?? []) { lb('white', f.len + 0.1, 0.03, 0.4, 0, t - 0.015, -0.06); lb('metal', f.len + 0.1, 0.03, 0.012, 0, t + 0.012, 0.14); }
+      const n = Math.floor(f.len / f.pitch + 1e-6), u0 = -((n - 1) * f.pitch) / 2;
+      for (const t of f.tiers ?? []) for (let i = 0; i < n; i++) lb('metal', 0.02, 0.1, 0.3, u0 + i * f.pitch - f.pitch / 2, t - 0.08, -0.1); // brackets between pairs
       [hy, hz, cz] = [1.0, 0.24, -0.06];
     }
     const s = Math.sin(f.yaw), c = Math.cos(f.yaw);
@@ -222,7 +230,6 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
   for (const f of FIXTURES[1]) blob(f.x, 0, f.z, f.len + 0.3, f.kind === 'table' ? 1.3 : f.double ? 1.0 : 0.8, f.yaw);
   for (const f of FIXTURES[2]) blob(f.x, F2, f.z, f.len + 0.3, f.kind === 'table' ? 1.3 : f.double ? 1.0 : 0.8, f.yaw);
   blob(PD.x, 0, PD.z, 2.6, 2.6); blob(PD.x + 2.6, 0, PD.z, 1.6, 1.6);
-  for (const d of S.displayMannequins) blob(d.x, 0, d.z, 1.5, 1.5);
   for (const zm of S.zoneMannequins) blob(zm.x, zm.floor === 1 ? 0 : F2, zm.z, 1.5, 1.5);
   const blobMesh = new THREE.Mesh(mergeGeometries(blobs, false)!, new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false, opacity: 0.32, color: '#000000' }));
   blobMesh.name = 'contact-shadows';
@@ -295,15 +302,7 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
   const avatar = o.avatar === undefined ? (typeof document === 'undefined' ? null : loadCharacterAsset().catch(() => null)) : o.avatar;
   let disposed = false;
   if (avatar) Promise.resolve(avatar).then((a) => { if (a && !disposed) humans.forEach((m, i) => m.setHuman(a, (i % 2) as 0 | 1)); });
-  const displays = S.displayMannequins.map((d, i) => {
-    const m = createMannequin({ turn: false, discR: 0.5 });
-    m.object.position.set(d.x, 0, d.z);
-    m.object.rotation.y = d.yaw;
-    m.dress(SAMPLE_OUTFITS[i % SAMPLE_OUTFITS.length]!);
-    group.add(m.object);
-    colliders.push({ x: d.x, y: 0.5, z: d.z, hx: 0.5, hy: 0.5, hz: 0.5 });
-    return m;
-  });
+  const displays: Mannequin[] = []; // round 3: no stylised lobby figures (draw-call budget); the brief grid + the human model stand at the entrance
 
   // ---- lights (2) ---------------------------------------------------------------------------------------------------
   const hemi = new THREE.HemisphereLight('#ffffff', '#b9ae9c', o.hq ? 1.3 : 1.5);

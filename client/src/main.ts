@@ -659,7 +659,7 @@ async function start() {
   renderer.domElement.addEventListener('click', unlockAudio); // browsers only allow audio after a user gesture
   $('help-player').hidden = !player;
   $('help-fly').hidden = !!player;
-  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes, raceHud, menu, room: () => room, cqMock: () => cqMock, cq: () => room?.cqDebug?.(), race, roomFlow } }); // for scratch test scripts, scripts/hud-check.ts
+  if (import.meta.env.DEV) Object.assign(window, { __GAME__: { fly, player, graph, npcs: () => npcs, gps: () => gps, minimap, fullMap: () => fullMap, net, remote, boxes, raceHud, menu, room: () => room, cqMock: () => cqMock, cq: () => room?.cqDebug?.(), race, roomFlow, renderer, scene, camera } }); // for scratch test scripts, scripts/hud-check.ts
   const debug = createDebugOverlay(query.get('debug') === '1');
 
   // Esc releases the pointer (the browser eats the key), so "unlocked" = help/menu is showing. SPEC §17.2: the menu opens

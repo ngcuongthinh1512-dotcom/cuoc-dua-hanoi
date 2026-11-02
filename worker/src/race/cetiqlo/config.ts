@@ -26,8 +26,6 @@ export const CETIQLO = {
   maxTeamsInRoom: 12,
   /** The result screen stays this long: the next pairing waits for it. */
   resultHoldMs: 12_000,
-  /** A disconnected team keeps its place (queue or match) this long. */
-  graceReconnectMs: 20_000,
   /** A team that played at least one match without winning (lost, drew, was left behind) and has waited this long in the queue since
    *  its last result is released: the step completes as for a win (cq.advance reason 'timeout'). Never applies to a team that has not played. */
   loserMaxWaitMs: 600_000,

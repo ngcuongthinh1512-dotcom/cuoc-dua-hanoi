@@ -1308,7 +1308,7 @@ export const raceHud = {
 // ── Leg 3 · CETIQLO head-to-head room HUD (cetiqlo/cetiqloRoom.ts, hud.ts; the rules live in worker/src/race/cetiqlo/config.ts) ──
 export const cetiqlo = {
   labelRange: 3, // m: items within this (horizontally) can be picked (the server allows takeRange 3.5 + slack)
-  pick: { range: 3, coneDeg: 30, margin: 0.15, holdMs: 120 }, // look-to-select (cetiqlo/logic.ts pickItem): the view cone's half-angle, the hysteresis margin / hold
+  pick: { range: 3.5, coneDeg: 13, reachUp: 2.3, margin: 0.12, holdMs: 120 }, // look-to-select (cetiqlo/logic.ts pickItem): the camera ray's cone half-angle (angular: ×1.6 within 1.5 m), reach above the feet, hysteresis margin / hold
   warnMs: 30_000, // ms left when the clock turns red and beeps every second (= the server's warnMs)
   pip: { left: 358, top: 16, maxWidth: 420, widthVw: 30, fps: 15 }, // px: the brief picture (store.brief, 4:3 ring of the set) right of the clue card, ≤ 30 vw; re-rendered into its render target at `fps`, blitted every frame
   loserMaxWaitMs: 600_000, // ms a loser waits in the lobby before the server lets it go (= worker/src/race/cetiqlo/config.ts CETIQLO.loserMaxWaitMs: keep in sync; the HUD countdown only)

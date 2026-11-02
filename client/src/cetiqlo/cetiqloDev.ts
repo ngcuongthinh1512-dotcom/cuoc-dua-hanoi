@@ -35,23 +35,25 @@ store.brief.dress(SET);
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 200);
 const PD = STORE.pedestal, CK = STORE.checkout;
 const VIEWS: Record<string, [number[], number[]]> = {
-  overview: [[-22, 16, 32], [0, 2, -3]],
-  floor1: [[0, 15, 16], [0, 0, -5]],
-  floor2: [[0, 16, 6], [0, FLOOR2_Y, -8]],
-  tops: [[-9.0, 1.7, -3.4], [-11.7, 1.25, -5]],
-  shoes: [[1.5, FLOOR2_Y + 1.7, -14.2], [1, FLOOR2_Y + 0.9, -16.7]],
+  overview: [[-30, 22, 40], [0, 2, -8]],
+  floor1: [[0, 22, 20], [0, 0, -10]],
+  floor2: [[0, 24, 10], [0, FLOOR2_Y, -12]],
+  tops: [[-12.5, 1.7, 0.5], [-15.7, 1.25, -1.5]],
+  shoes: [[-7, FLOOR2_Y + 1.7, -27], [-7.5, FLOOR2_Y + 0.85, -29.7]],
   checkout: [[-1.2, 1.9, 12.2], [CK.x, 0.9, CK.z - 1]],
   mannequin: [[0.3, 1.6, 8.4], [PD.x, 1.25, PD.z]],
   facade: [[3, 3.5, 31], [0, 4, STORE.doorZ]],
-  patterns: [[-7.2, 1.7, -2.0], [-7, 1.2, -5.4]], // the shirts island: gingham / tartan / pinstripe / seersucker / floral side by side
-  pants: [[-8.8, FLOOR2_Y + 1.7, 1.6], [-11.7, FLOOR2_Y + 1.1, -2.5]], // floor 2 west wall: tapered / chinos / wide / straight / bootcut / cargo
-  outer: [[5.5, 1.7, -5.6], [5.5, 1.2, -9.4]], // fashion outerwear island: blazer / trench / coach / bomber / wool coat / denim
-  'floor1-wide': [[0, 20, 24], [0, 0, -6]],
-  'floor2-wide': [[0, 22, 14], [0, FLOOR2_Y, -8]],
+  patterns: [[0.5, 1.7, -1.6], [0, 1.2, -4.7]], // the shirts island: gingham / pinstripe / floral side by side
+  pants: [[-12.6, FLOOR2_Y + 1.7, -2.5], [-15.7, FLOOR2_Y + 1.1, -5.5]], // floor 2 west wall: the pants rail
+  outer: [[9.5, 1.7, -10.6], [9.5, 1.2, -13.7]], // fashion outerwear island
+  'floor1-wide': [[0, 28, 30], [0, 0, -10]],
+  'hang-wide': [[-4.5, 1.7, 2.5], [-4.5, 1.3, -12]], // a wide rail aisle at eye height (between the tees and shirts islands)
+  'wall-shoes': [[-9, FLOOR2_Y + 1.7, -26.5], [-9, FLOOR2_Y + 0.9, -29.7]],
+  'floor2-wide': [[0, 30, 16], [0, FLOOR2_Y, -12]],
   'model-set': [[0, 1.5, 4.2], [0, 1.0, 0]], // ?models=1: three dressed figures side by side at the origin
   cards: [[1.4, 1.5, 9.4], [PD.x + 0.3, 1.0, PD.z]], // ?cards=1: the lookbook grid beside the pedestal model
-  brief: [[0, 2.2, 9.6], [0, 1.3, PD.z]], // the ring over the pedestal (+ ?brief=1: its PiP); ?briefs=1: three rings at the origin
-  briefs: [[0, 2.6, 5.2], [0, 1.2, 0]],
+  brief: [[0, 2.0, 9.8], [0, 1.6, PD.z]], // the grid over the pedestal (+ ?brief=1: its PiP); ?briefs=1: three grids at the origin
+  briefs: [[0, 1.8, 7.4], [0, 1.4, 0]],
   lineup: [[0, 1.85, 4.9], [0, 1.85, 1.3]],
   'lineup-tops': [[0, 2.2, 6.6], [0, 2.15, 1.3]],
   'lineup-outer': [[0, 2.2, 5.6], [0, 2.15, 1.3]], // ?lineup=1: 16 bottoms in two rows on a white wall across the atrium (grey / navy where possible)
@@ -114,8 +116,8 @@ if (q.get('lineup') === '1') { // every bottom shape once, same colour where pos
 if (q.get('briefs') === '1') { // three sets as rings side by side at the origin
   const { createBrief } = await import('./brief.ts');
   MODEL_SETS.forEach((set, i) => {
-    const b = createBrief({ turn: true, y: 1.2 });
-    b.object.position.set((i - 1) * 2.6, 0, 0);
+    const b = createBrief({ turn: true, y: 1.45 });
+    b.object.position.set((i - 1) * 4.0, 0, 0);
     b.phase = i * 0.7;
     b.dress(set);
     scene.add(b.object);

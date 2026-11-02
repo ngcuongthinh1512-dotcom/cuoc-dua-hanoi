@@ -74,6 +74,8 @@ export type CqServerMessage =
       match?: CqMatchView;
       /** Room-local start spot (match start / reconnect inside a match). */
       startSpot?: { x: number; z: number; yaw: number };
+      /** lobby / result, a team that lost its last match: server ms when it is let go without an opponent (loserMaxWaitMs after the result). */
+      loserWaitUntil?: number;
     }
   | { t: 'cq.bag'; bag: string[] }
   | { t: 'cq.opp'; locked: boolean }

@@ -1,5 +1,5 @@
-// CETIQLO brief ("đề bài"): the six pieces of the set THEMSELVES, large, floating evenly on a slowly turning ring — no text,
-// no labels. Built from the exact shelf item meshes (items.ts itemMesh: same shape, colour, pattern), each normalised to a
+// CETIQLO brief ("đề bài"): the six pieces of the set THEMSELVES, large, at FIXED places in a 3 × 2 grid (top / outer / bottom
+// above, shoes / bag / acc below), each spinning slowly about its own axis (phases offset) — no orbiting, no text, no labels. Built from the exact shelf item meshes (items.ts itemMesh: same shape, colour, pattern), each normalised to a
 // consistent size per slot and kept facing the camera while the ring carries it round (tops / outers / bottoms front view,
 // shoes / bag / accessory three-quarter). Ring order is fixed by slot — top, outer, bottom, shoes, bag, acc — so players learn
 // the layout. `renderPiP(renderer, rect)` draws just the ring (layer BRIEF_LAYER) through the room's renderer into a
@@ -11,16 +11,16 @@ import { HANGER, itemMesh } from './items.ts';
 export const BRIEF_LAYER = 2;
 /** Recommended PiP rect (renderer px), 4:3 landscape: the whole ring with each piece ≈ a third of the frame height. */
 export const BRIEF_SIZE = { w: 420, h: 315 };
-export const BRIEF_TURN = 0.35; // rad/s
+export const BRIEF_TURN = 0.5; // rad/s, each piece about its own axis
 export const SLOT_ORDER: readonly SlotKind[] = ['top', 'outer', 'bottom', 'shoes', 'bag', 'acc'];
 /** Presented height (m) per slot — shoes and accessories blown up so they read as large as a jacket — and the facing (rotation.y). */
-const PRESENT: Record<SlotKind, { h: number; yaw: number }> = { top: { h: 0.6, yaw: 0 }, outer: { h: 0.64, yaw: 0 }, bottom: { h: 0.64, yaw: 0 }, shoes: { h: 0.5, yaw: 0.8 }, bag: { h: 0.52, yaw: 0.7 }, acc: { h: 0.5, yaw: 0.75 } };
-export const RING_R = 1.15; // m: six pieces ≤ 0.66 m wide never touch (chord 1.15 m)
+const PRESENT: Record<SlotKind, { h: number; yaw: number }> = { top: { h: 0.8, yaw: 0 }, outer: { h: 0.84, yaw: 0 }, bottom: { h: 0.84, yaw: 0 }, shoes: { h: 0.56, yaw: 0.6 }, bag: { h: 0.6, yaw: 0.5 }, acc: { h: 0.56, yaw: 0.5 } };
+export const GRID = { dx: 1.15, dy: 1.05 }; // m between piece centres: columns / rows of the 3 × 2 grid
 const BG = new THREE.Color('#e9e6df');
 const HANGER_MAT = new THREE.MeshStandardMaterial({ color: '#8a8a90', vertexColors: true, roughness: 0.4, metalness: 0.6 });
 
 export interface Brief {
-  /** The ring (origin = ring centre at the floor under it; pieces float RING_Y above). */
+  /** The grid (origin at the floor under it; the pieces' centre RING_Y above). */
   object: THREE.Object3D;
   /** Show these catalog ids, placed by slot (unknown ids / decoys ignored; previous pieces removed). */
   dress(setIds: readonly string[]): void;
@@ -30,12 +30,12 @@ export interface Brief {
   readonly size: { w: number; h: number };
   /** The PiP camera (a child of `object`: follows the room frame). */
   camera: THREE.PerspectiveCamera;
-  /** Ring phase (rad): set by tests to sample rotations. */
+  /** Spin phase (rad) of the pieces: set by tests to sample rotations. */
   phase: number;
   /** The six piece holders in slot order (empty when the slot is missing). */
   pieces: THREE.Group[];
 }
-export const RING_Y = 1.25; // the pieces' centre height above the object origin (the pedestal top)
+export const RING_Y = 1.45; // the grid's centre height above the object origin (the pedestal top)
 
 export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
   const object = new THREE.Group();
@@ -46,17 +46,17 @@ export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
   const pieces = SLOT_ORDER.map((slot, i) => {
     const g = new THREE.Group();
     g.name = `brief-${slot}`;
-    const a = (i / 6) * Math.PI * 2;
-    g.position.set(Math.sin(a) * RING_R, 0, Math.cos(a) * RING_R);
+    g.position.set((i % 3 - 1) * GRID.dx, i < 3 ? GRID.dy / 2 : -GRID.dy / 2, 0); // top row: top / outer / bottom; bottom row: shoes / bag / acc
+    g.rotation.y = i * 1.1; // phases offset so the spins are never in sync
     ring.add(g);
     return g;
   });
-  // camera: raised three-quarter view of the whole ring; aimed through the object's world matrix (lookAt takes a world point)
+  // camera: straight-on, a touch above, framing the 3 × 2 grid in the 4:3 picture; aimed through the object's world matrix
   const camera = new THREE.PerspectiveCamera(34, BRIEF_SIZE.w / BRIEF_SIZE.h, 0.1, 20);
-  const PITCH = 0.78, D = 5.1;
+  const PITCH = 0.12, D = 4.45;
   camera.position.set(0, (o.y ?? RING_Y) + Math.sin(PITCH) * D, Math.cos(PITCH) * D);
   object.add(camera);
-  const aimCamera = () => { object.updateWorldMatrix(true, false); camera.lookAt(object.localToWorld(new THREE.Vector3(0, (o.y ?? RING_Y) - 0.02, 0))); };
+  const aimCamera = () => { object.updateWorldMatrix(true, false); camera.lookAt(object.localToWorld(new THREE.Vector3(0, (o.y ?? RING_Y), 0))); };
   aimCamera();
   camera.layers.set(BRIEF_LAYER);
   object.traverse((ob) => ob.layers.enable(BRIEF_LAYER));
@@ -88,12 +88,13 @@ export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
       holder.traverse((ob) => ob.layers.enable(BRIEF_LAYER));
     }
   };
+  let spin = 0;
   const save = { vp: new THREE.Vector4(), sc: new THREE.Vector4() };
   const brief: Brief = {
     object, dress, camera, pieces, size: BRIEF_SIZE,
-    get phase() { return ring.rotation.y; },
-    set phase(v: number) { ring.rotation.y = v; for (const p of pieces) p.rotation.y = -v; }, // the pieces keep facing the camera
-    update(dt) { if (o.turn !== false) brief.phase = (brief.phase + BRIEF_TURN * dt) % (Math.PI * 2); },
+    get phase() { return spin; },
+    set phase(v: number) { spin = v; pieces.forEach((p, i) => { p.rotation.y = v + i * 1.1; }); }, // each piece spins in place, offset
+    update(dt) { if (o.turn !== false) brief.phase = (spin + BRIEF_TURN * dt) % (Math.PI * 2); },
     renderPiP(renderer, rect) {
       let scene: THREE.Object3D = object;
       while (scene.parent) scene = scene.parent;

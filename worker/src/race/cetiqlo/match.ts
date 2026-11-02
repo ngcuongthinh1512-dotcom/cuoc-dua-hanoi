@@ -19,7 +19,7 @@ export interface Match {
   bags: Record<string, string[]>;
   /** team → server epoch ms of its checkout (ms precision). */
   locked: Record<string, number>;
-  /** Teams that did not come back within the grace period: ranked as they stand, never rejoin this match. */
+  /** Teams that LEFT the match (cq.leave): ranked as they stand, never rejoin it. Being offline is not leaving (owner: no 20 s rule). */
   gone: string[];
   state: 'running' | 'done';
 }
@@ -33,6 +33,8 @@ export interface Room {
   lobbyDue?: boolean;
   /** team → when (server ms) and in which match it last played without winning, while it waits in the queue (the loserMaxWaitMs clock). */
   lost?: Record<string, { at: number; match: string }>;
+  /** team → its last cq.result (JSON), re-sent to a team that reconnects while the result screen holds (F5 keeps the progress). */
+  results?: Record<string, object>;
   /** team → the opponents of its last match (no immediate rematch while somebody else waits). */
   last: Record<string, string[]>;
   seq: number;

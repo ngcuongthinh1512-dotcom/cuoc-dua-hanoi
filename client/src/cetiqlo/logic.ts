@@ -6,8 +6,10 @@ export interface Anchor { id: string; x: number; y: number; z: number }
 export interface PickOpts {
   /** m, horizontal reach from the feet. */
   range: number;
-  /** degrees, half-angle of the cone around the view ray (widened up to ×2 within 1.5 m). */
+  /** degrees, half-angle of the cone around the camera ray (angular: far items stay hard, near ones easy; ×1.6 within 1.5 m). */
   coneDeg: number;
+  /** m above the feet an item may be and still be grabbed (upper rail tiers ≈ 1.95 m); below: −0.5 m (a low shelf from a step). */
+  reachUp: number;
   /** A neighbour must beat the held item's score by this much… */
   margin: number;
   /** …for this long (ms) before the highlight moves (no flicker between neighbours). */
@@ -15,22 +17,25 @@ export interface PickOpts {
 }
 export interface PickState { id: string | null; candidate: string | null; since: number }
 export const NO_PICK: PickState = { id: null, candidate: null, since: 0 };
-/** Look-to-select: among the items within reach (horizontal `range` from the feet, same floor: |dy| ≤ 2.2) and inside the facing cone
- *  (the camera's HORIZONTAL look direction from the feet: a third-person camera looks over a table, the body faces it), the one closest
- *  to the view centre (score = angle / cone + distance / range, lower = better), with hysteresis: the held item stays unless another
- *  beats it by `margin` for `holdMs`; a held item out of reach / cone drops at once. */
-export function pickItem(dir: { x: number; z: number }, feet: { x: number; y: number; z: number }, anchors: Iterable<Anchor>, st: PickState, now: number, o: PickOpts): PickState {
+/** Look-to-select with the REAL camera ray: among the items within reach (horizontal `range` from the feet, −0.5 m ≤ dy ≤ reachUp
+ *  above the feet), the one nearest the view centre = the smallest angle between the camera's forward vector (`dir`, unit, with pitch)
+ *  and the vector from the camera (`eye`) to the item's centre (`anchors` = bounding-box centres), inside the cone; score = angle / cone
+ *  + 0.3 × distance / range (lower = better). Hysteresis: the held item stays unless another beats it by `margin` for `holdMs`; a held
+ *  item that left the cone / reach drops at once. */
+export function pickItem(eye: { x: number; y: number; z: number }, dir: { x: number; y: number; z: number }, feet: { x: number; y: number; z: number }, anchors: Iterable<Anchor>, st: PickState, now: number, o: PickOpts): PickState {
   let best: Anchor | null = null, bestScore = Infinity, heldScore = Infinity;
-  const dl = Math.hypot(dir.x, dir.z) || 1e-6, dx = dir.x / dl, dz = dir.z / dl;
+  const dl = Math.hypot(dir.x, dir.y, dir.z) || 1e-6, dx = dir.x / dl, dy = dir.y / dl, dz = dir.z / dl;
   for (const a of anchors) {
-    if (Math.abs(a.y - feet.y) > 2.2) continue;
-    const vx = a.x - feet.x, vz = a.z - feet.z, d = Math.hypot(vx, vz);
+    const up = a.y - feet.y;
+    if (up < -0.5 || up > o.reachUp) continue;
+    const d = Math.hypot(a.x - feet.x, a.z - feet.z);
     if (d > o.range) continue;
-    const cos = (vx * dx + vz * dz) / (d || 1e-6);
-    const cone = (o.coneDeg * Math.PI / 180) * (1 + Math.max(0, (1.5 - d) / 1.5)); // wider when close: a garment fills the view
+    const vx = a.x - eye.x, vy = a.y - eye.y, vz = a.z - eye.z, len = Math.hypot(vx, vy, vz) || 1e-6;
+    const cos = (vx * dx + vy * dy + vz * dz) / len;
+    const cone = (o.coneDeg * Math.PI / 180) * (d < 1.5 ? 1.6 : 1);
     const ang = Math.acos(Math.max(-1, Math.min(1, cos)));
     if (ang > cone) continue;
-    const score = ang / cone + d / o.range;
+    const score = ang / cone + 0.3 * (d / o.range);
     if (a.id === st.id) heldScore = score;
     if (score < bestScore) (best = a), (bestScore = score);
   }
@@ -41,7 +46,6 @@ export function pickItem(dir: { x: number; z: number }, feet: { x: number; y: nu
   if (st.candidate !== best.id) return { id: st.id, candidate: best.id, since: now };
   return now - st.since >= o.holdMs ? { id: best.id, candidate: null, since: now } : st;
 }
-
 
 /** Feet inside the CHECKOUT square (half side `half`) or circle (`radius`). */
 export const insideCheckout = (x: number, z: number, c: { x: number; z: number; half?: number; radius: number }) =>

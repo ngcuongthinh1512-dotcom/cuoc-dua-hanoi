@@ -3,8 +3,8 @@
 import type { Display, ShapeId, ZoneId } from './types.ts';
 
 export const STORE = {
-  halfW: 12,            // x ∈ [−12, 12]
-  back: -17,            // z of the back wall
+  halfW: 16,            // x ∈ [−16, 16] (round 3: everything hangs with ≥ 0.55 m pitch → a 32 × 46 m store)
+  back: -30,            // z of the back wall
   lobbyZ: 10,           // glass partition lobby | sales floor
   doorZ: 16,            // the storefront / the room door end (roomFrame doorZ)
   floor2Y: 3.84,        // floor-to-floor
@@ -18,7 +18,7 @@ export const STORE = {
   lobbyDoor: { x: 0, z: 10, halfW: 1.3 },
   displayMannequins: [{ x: -4.5, z: 13, yaw: 0.5 }, { x: 4.5, z: 13, yaw: -0.5 }],
   /** Static dressed figures in the sales zones (outfits picked by storeScene from that floor's catalog). */
-  zoneMannequins: [{ x: 0, z: -12, yaw: 0.3, floor: 1 }, { x: 1.5, z: -9.5, yaw: -0.4, floor: 2 }],
+  zoneMannequins: [{ x: -5, z: 3.5, yaw: 0.3, floor: 1 }, { x: 4.75, z: 0.3, yaw: -0.4, floor: 2 }],
 } as const;
 export const STAIR_RUN = STORE.stair.steps * STORE.stair.tread; // 7.2 m
 export const STAIR_TOP_Z = STORE.stair.zBottom - STAIR_RUN; // 1.8 = floor2Edge
@@ -45,8 +45,9 @@ export const TABLE_Y = 0.85; // table top (GARMENT_SIZES.store.table)
 
 export interface Fixture {
   zone: ZoneId;
-  /** rail = hanging; table = folded slabs on top; shelf = standing items on tiers; bay = wall unit of folded stacks on tiers. */
-  kind: 'rail' | 'table' | 'shelf' | 'bay';
+  /** rail = hanging garments; shelf = standing items (shoes) on ≤ 2 tiers; hooks = a wall peg strip (bags, hats, scarves, glasses,
+   *  umbrellas, underwear, socks hang from pegs); table / bay are decoration only (no merchandise). */
+  kind: 'rail' | 'table' | 'shelf' | 'bay' | 'hooks';
   /** Centre of the fixture (floor-level y is implied by its floor); `yaw` = the items' facing (rotation.y; 0 = facing +z). */
   x: number; z: number; yaw: number;
   /** Length along the fixture's local x. */
@@ -60,52 +61,48 @@ export interface Fixture {
 }
 // facing: 0 = +z (toward the entrance), ±π/2 = ±x, π = −z
 const E = -Math.PI / 2, W = Math.PI / 2;
-const T4 = [0.45, 0.85, 1.25, 1.65];
 /** Fixtures per floor, in catalog fill order within each zone. Wall fixtures sit 0.3 m off the wall. */
-export const FIXTURES: Record<1 | 2, Fixture[]> = {
+export const FIXTURES: Record<1 | 2, Fixture[]> = { // islands: x −9.5 / 0 / 9.5, rows every 3 m (aisle 2.4 m); walls 0.3 m off; one tier
   1: [
-    { zone: 'tees', kind: 'bay', x: -11.7, z: 6, yaw: W, len: 5, tiers: T4, pitch: 0.36 },
-    { zone: 'tees', kind: 'table', x: -8.5, z: 6.8, yaw: 0, len: 1.8, pitch: 0.36 },
-    { zone: 'tees', kind: 'table', x: -8.5, z: 3.6, yaw: 0, len: 1.8, pitch: 0.36 },
-    { zone: 'polo', kind: 'rail', x: -7, z: -1, yaw: 0, len: 5, pitch: 0.45, double: true },
-    { zone: 'shirts', kind: 'rail', x: -11.7, z: -2.5, yaw: W, len: 8, pitch: 0.45 },
-    { zone: 'shirts', kind: 'rail', x: -7, z: -5, yaw: 0, len: 6, pitch: 0.45, double: true },
-    { zone: 'shirts', kind: 'rail', x: -1.5, z: -5, yaw: 0, len: 3, pitch: 0.45, double: true },
-    { zone: 'sweats', kind: 'rail', x: -11.7, z: -9.5, yaw: W, len: 5, pitch: 0.45 },
-    { zone: 'sweats', kind: 'rail', x: -7, z: -9, yaw: 0, len: 4, pitch: 0.45, double: true },
-    { zone: 'knit', kind: 'bay', x: 6.5, z: -16.7, yaw: 0, len: 5, tiers: T4, pitch: 0.4 },
-    { zone: 'knit', kind: 'table', x: -7.5, z: -13, yaw: 0, len: 1.8, pitch: 0.36 },
-    { zone: 'uv', kind: 'rail', x: 11.7, z: -1.5, yaw: E, len: 4, pitch: 0.45 },
-    { zone: 'uv', kind: 'rail', x: 3.0, z: -1, yaw: 0, len: 3, pitch: 0.45, double: true },
-    { zone: 'fleece', kind: 'rail', x: 11.7, z: -6, yaw: E, len: 4, pitch: 0.45 },
-    { zone: 'fleece', kind: 'rail', x: 8.0, z: -1, yaw: 0, len: 3, pitch: 0.45, double: true },
-    { zone: 'down', kind: 'rail', x: 11.7, z: -10.5, yaw: E, len: 4, pitch: 0.45 },
-    { zone: 'down', kind: 'rail', x: 3.0, z: -5, yaw: 0, len: 3, pitch: 0.45, double: true },
-    { zone: 'padded', kind: 'rail', x: 11.7, z: -14.75, yaw: E, len: 3.5, pitch: 0.45 },
-    { zone: 'padded', kind: 'rail', x: 8.0, z: -5, yaw: 0, len: 3, pitch: 0.45, double: true },
-    { zone: 'fashion-outer', kind: 'rail', x: 3.0, z: -9, yaw: 0, len: 4, pitch: 0.45, double: true },
-    { zone: 'fashion-outer', kind: 'rail', x: 8.0, z: -9, yaw: 0, len: 4, pitch: 0.45, double: true },
-    { zone: 'fashion-outer', kind: 'rail', x: 5.5, z: -13, yaw: 0, len: 5, pitch: 0.45, double: true },
-    { zone: 'bags', kind: 'shelf', x: -9, z: -16.7, yaw: 0, len: 5, tiers: [0.5, 0.95, 1.4], pitch: 0.5 },
-    { zone: 'hats-scarves', kind: 'shelf', x: -3.5, z: -16.7, yaw: 0, len: 5, tiers: [0.55, 1.0, 1.45], pitch: 0.4 },
-    { zone: 'sunglasses-umbrella', kind: 'shelf', x: 1.5, z: -16.7, yaw: 0, len: 4, tiers: [0.9, 1.35], pitch: 0.4 },
+    { zone: 'tees', kind: 'rail', x: -15.7, z: -1.5, yaw: W, len: 21, pitch: 0.75 },
+    { zone: 'tees', kind: 'rail', x: -9.5, z: -2, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'tees', kind: 'rail', x: -9.5, z: -5, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'tees', kind: 'rail', x: -9.5, z: -8, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'polo', kind: 'rail', x: 0, z: -2, yaw: 0, len: 7.5, pitch: 0.75, double: true },
+    { zone: 'shirts', kind: 'rail', x: 0, z: -5, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'shirts', kind: 'rail', x: 0, z: -8, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'shirts', kind: 'rail', x: 0, z: -11, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'sweats', kind: 'rail', x: -9.5, z: -11, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'sweats', kind: 'rail', x: -9.5, z: -14, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'knit', kind: 'rail', x: -9.5, z: -17, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'knit', kind: 'rail', x: -9.5, z: -20, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'knit', kind: 'rail', x: -15.7, z: -21, yaw: W, len: 16, pitch: 0.75 },
+    { zone: 'uv', kind: 'rail', x: 9.5, z: -2, yaw: 0, len: 7, pitch: 0.8, double: true },
+    { zone: 'fleece', kind: 'rail', x: 9.5, z: -5, yaw: 0, len: 7, pitch: 0.8, double: true },
+    { zone: 'down', kind: 'rail', x: 9.5, z: -8, yaw: 0, len: 7, pitch: 0.8, double: true },
+    { zone: 'padded', kind: 'rail', x: 9.5, z: -11, yaw: 0, len: 7, pitch: 0.8, double: true },
+    { zone: 'fashion-outer', kind: 'rail', x: 9.5, z: -14, yaw: 0, len: 7, pitch: 0.8, double: true },
+    { zone: 'fashion-outer', kind: 'rail', x: 9.5, z: -17, yaw: 0, len: 7, pitch: 0.8, double: true },
+    { zone: 'fashion-outer', kind: 'rail', x: 15.7, z: -9, yaw: E, len: 18, pitch: 0.8 },
+    { zone: 'bags', kind: 'hooks', x: -8.5, z: -29.7, yaw: 0, len: 13, tiers: [1.55], pitch: 0.5 },
+    { zone: 'hats-scarves', kind: 'hooks', x: 6, z: -29.7, yaw: 0, len: 14, tiers: [1.6], pitch: 0.45 },
+    { zone: 'sunglasses-umbrella', kind: 'hooks', x: 15.7, z: -23.5, yaw: E, len: 7, tiers: [1.45], pitch: 0.45 },
   ],
   2: [
-    { zone: 'pants', kind: 'rail', x: -11.7, z: -2.5, yaw: W, len: 7, pitch: 0.45 },
-    { zone: 'pants', kind: 'rail', x: -7, z: -1, yaw: 0, len: 5, pitch: 0.45, double: true },
-    { zone: 'jeans', kind: 'bay', x: -9.5, z: -16.7, yaw: 0, len: 4, tiers: T4, pitch: 0.4 },
-    { zone: 'jeans', kind: 'table', x: -7, z: -12, yaw: 0, len: 1.8, pitch: 0.36 },
-    { zone: 'joggers', kind: 'rail', x: -1.5, z: -1, yaw: 0, len: 3.5, pitch: 0.45, double: true },
-    { zone: 'shorts', kind: 'table', x: -7, z: -5, yaw: 0, len: 1.8, pitch: 0.36 },
-    { zone: 'shorts', kind: 'table', x: -4, z: -5, yaw: 0, len: 1.8, pitch: 0.36 },
-    { zone: 'shorts', kind: 'table', x: -7, z: -8, yaw: 0, len: 1.8, pitch: 0.36 },
-    { zone: 'dresses', kind: 'rail', x: -4, z: -11, yaw: 0, len: 5, pitch: 0.45, double: true },
-    { zone: 'skirts', kind: 'rail', x: -11.7, z: -10, yaw: W, len: 6, pitch: 0.45 },
-    { zone: 'skirts', kind: 'rail', x: -4, z: -14.5, yaw: 0, len: 5, pitch: 0.45, double: true },
-    { zone: 'bras-undies', kind: 'shelf', x: 11.7, z: -3, yaw: E, len: 4, tiers: [0.7, 1.1, 1.5], pitch: 0.35 },
-    { zone: 'homewear', kind: 'rail', x: 6, z: -5, yaw: 0, len: 4, pitch: 0.45, double: true },
-    { zone: 'homewear', kind: 'rail', x: 11.7, z: -8.25, yaw: E, len: 3.5, pitch: 0.45 },
-    { zone: 'footwear-socks', kind: 'shelf', x: 1, z: -16.7, yaw: 0, len: 12, tiers: [0.4, 0.85, 1.3], pitch: 0.5 },
+    { zone: 'pants', kind: 'rail', x: -15.7, z: -5.5, yaw: W, len: 13, pitch: 0.55 },
+    { zone: 'pants', kind: 'rail', x: -9.5, z: -2, yaw: 0, len: 7, pitch: 0.55, double: true },
+    { zone: 'jeans', kind: 'rail', x: -9.5, z: -5, yaw: 0, len: 7, pitch: 0.55, double: true },
+    { zone: 'jeans', kind: 'rail', x: -9.5, z: -8, yaw: 0, len: 7, pitch: 0.55, double: true },
+    { zone: 'joggers', kind: 'rail', x: 0, z: -2, yaw: 0, len: 7, pitch: 0.55, double: true },
+    { zone: 'shorts', kind: 'rail', x: 0, z: -5, yaw: 0, len: 7, pitch: 0.55, double: true },
+    { zone: 'shorts', kind: 'rail', x: 0, z: -8, yaw: 0, len: 7, pitch: 0.55, double: true },
+    { zone: 'dresses', kind: 'rail', x: 9.5, z: -2, yaw: 0, len: 7, pitch: 0.75, double: true },
+    { zone: 'skirts', kind: 'rail', x: 9.5, z: -5, yaw: 0, len: 7, pitch: 0.55, double: true },
+    { zone: 'skirts', kind: 'rail', x: 9.5, z: -8, yaw: 0, len: 7, pitch: 0.55, double: true },
+    { zone: 'bras-undies', kind: 'hooks', x: 15.7, z: -5, yaw: E, len: 10, tiers: [1.3], pitch: 0.45 },
+    { zone: 'homewear', kind: 'rail', x: 0, z: -11, yaw: 0, len: 7, pitch: 0.6, double: true },
+    { zone: 'footwear-socks', kind: 'shelf', x: -7.5, z: -29.7, yaw: 0, len: 12.15, tiers: [0.75], pitch: 0.45 },
+    { zone: 'footwear-socks', kind: 'hooks', x: 4, z: -29.7, yaw: 0, len: 6, tiers: [1.3], pitch: 0.45 },
   ],
 };
 
@@ -121,7 +118,8 @@ export function fixtureSlots(f: Fixture, floorY: number, h: number): Slot[] {
     const y = floorY + RAIL_Y - 0.05 - h / 2;
     for (let i = 0; i < n; i++) place(u0 + i * f.pitch, (f.double ? 0.22 : 0) + 0.01 * (i % 3), y, 'hang');
     if (f.double) for (let i = 0; i < n; i++) place(u0 + i * f.pitch, -0.22 - 0.01 * (i % 3), y, 'hang', f.yaw + Math.PI);
-  } else if (f.kind === 'table') for (const v of [-0.22, 0.22]) for (let i = 0; i < n; i++) place(u0 + i * f.pitch, v, floorY + TABLE_Y + h / 2, 'fold');
+  } else if (f.kind === 'hooks') for (const t of f.tiers!) for (let i = 0; i < n; i++) place(u0 + i * f.pitch, 0.06, floorY + t - h / 2 - 0.02, 'stand'); // hanging from the peg
+  else if (f.kind === 'table') for (const v of [-0.22, 0.22]) for (let i = 0; i < n; i++) place(u0 + i * f.pitch, v, floorY + TABLE_Y + h / 2, 'fold');
   else for (const t of f.tiers!) for (let i = 0; i < n; i++) place(u0 + i * f.pitch, 0, floorY + t + h / 2, f.kind === 'bay' ? 'fold' : 'stand');
   return out;
 }

@@ -16,7 +16,7 @@ const t0 = Date.now();
 const at = () => `${((Date.now() - t0) / 1000).toFixed(1)} s`;
 const failures: string[] = [];
 const check = (ok: boolean, what: string) => { console.log(`${ok ? 'OK ' : 'FAIL'} ${at()}  ${what}`); if (!ok) failures.push(what); };
-type CqState = { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youScore: number; oppScore: number; reason: string } | null; exitLit: boolean };
+type CqState = { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youScore: number; oppScore: number; reason: string } | null; exitLit: boolean; endsAt: number | null; oppSlot: number | null; waitUntil: number | null; feet: { x: number; y: number; z: number } };
 const stateOf = (p: Page) => p.evaluate(() => (globalThis as unknown as { __GAME__?: { cq?: () => { state(): unknown } | undefined } }).__GAME__?.cq?.()?.state() ?? null) as Promise<CqState | null>;
 const cardOf = (p: Page) => p.evaluate(() => (globalThis as unknown as { __GAME__?: { race?: { view?: { card?: { step: string } | null } | null } } }).__GAME__?.race?.view?.card?.step ?? null);
 async function waitFor<T>(p: Page, read: (p: Page) => Promise<T>, pred: (v: T) => boolean, what: string, timeoutMs = 60_000): Promise<T | null> {
@@ -49,15 +49,30 @@ try {
     await page.goto(setup.urls[i]!.url);
     return page;
   };
-  const [A, B] = await Promise.all([open(0), open(1)]);
   const inLobby = (s: CqState | null) => !!s && (s.phase === 'lobby' || s.phase === 'match');
+  const A = await open(0);
+  const la0 = await waitFor(A, stateOf, (s) => !!s && s.phase === 'lobby' && s.queuePos !== undefined, 'A ở sảnh một mình (cq.state)', 90_000);
+  // (a) F5 in the lobby: back in the lobby, the same place, no duplicate queue entry
+  await A.reload();
+  const la1 = await waitFor(A, stateOf, (s) => !!s && s.phase === 'lobby' && s.queuePos !== undefined, 'A: F5 ở sảnh → lại vào sảnh (cq.state)', 90_000);
+  check(!!la0 && !!la1 && la1.queuePos === 1 && la1.queueLen === 1, `(a) F5 ở sảnh: vị trí ${la1?.queuePos} / ${la1?.queueLen} (không nhân đôi)`);
+  const B = await open(1);
   const sa = await waitFor(A, stateOf, inLobby, 'A trong phòng CETIQLO (sảnh / trận)', 90_000);
   const sb = await waitFor(B, stateOf, inLobby, 'B trong phòng CETIQLO (sảnh / trận)', 90_000);
   check(!!sa && !!sb, `cả hai vào phòng (A ${sa?.phase}, B ${sb?.phase})`);
   const ma = await waitFor(A, stateOf, (s) => !!s && s.phase === 'match' && s.set.length === 6, 'A: trận bắt đầu (cq.state match, set 6 món)');
   const mb = await waitFor(B, stateOf, (s) => !!s && s.phase === 'match' && s.matchId === ma?.matchId, 'B: cùng trận với A');
   check(!!ma && !!mb && ma.set.join() === mb.set.join(), `cùng set: ${ma?.set.join(', ')}`);
-  const tookA = await A.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { takeSet(c: number, w?: number): Promise<string[]> } } }).__GAME__.cq().takeSet(6, 0));
+  // (b) F5 mid-match after 3 takes: same match / set / endsAt, the bag restored, the body back in the store at the start spot, the opponent drawn
+  await A.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { takeSet(c: number, w?: number): Promise<string[]> } } }).__GAME__.cq().takeSet(3, 0));
+  const pre = await waitFor(A, stateOf, (s) => !!s && s.bag.length === 3, 'A: túi 3 món trước F5', 15_000);
+  await A.reload();
+  const post = await waitFor(A, stateOf, (s) => !!s && s.phase === 'match' && s.bag.length === 3, 'A: F5 giữa trận → trận lại, túi 3 món', 90_000);
+  check(!!pre && !!post && post.matchId === pre.matchId && post.set.join() === pre.set.join() && post.endsAt === pre.endsAt, `(b) F5 giữa trận: cùng trận ${post?.matchId}, cùng set, endsAt giữ nguyên (${post?.endsAt === pre?.endsAt})`);
+  check(!!post && post.feet.z < 10 && Math.abs(post.feet.x + 2.4) < 1 && !post.locked, `(b) thân ở trong cửa hàng tại ô xuất phát (${JSON.stringify(post?.feet)}), chưa chốt`);
+  const oppSeen = await waitFor(A, (p) => p.evaluate(`!!__GAME__.remote && !!__GAME__.remote.poseOf(${post?.oppSlot ?? -1})`) as Promise<boolean>, (v) => v === true, 'A: thấy thân đối thủ sau F5', 15_000);
+  check(oppSeen === true, '(b) đối thủ vẫn hiện sau F5');
+  const tookA = await A.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { takeSet(c: number, w?: number): Promise<string[]> } } }).__GAME__.cq().takeSet(6, 0)); // the first 3 are refused as dup, the bag ends at 6
   const tookB = await B.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { takeSet(c: number, w?: number): Promise<string[]> } } }).__GAME__.cq().takeSet(4, 1));
   const bagA = await waitFor(A, stateOf, (s) => !!s && s.bag.length === 6, 'A: túi 6 món (cq.bag)', 15_000);
   const bagB = await waitFor(B, stateOf, (s) => !!s && s.bag.length === 5, 'B: túi 5 món (cq.bag)', 15_000);
@@ -76,8 +91,17 @@ try {
   const cardA = await waitFor(A, cardOf, (c) => c === 'L2', 'A: thẻ kế L2 (bước xong)', 15_000);
   const exitA = await waitFor(A, stateOf, (s) => !!s?.exitLit, 'A: vòng ra sáng', 15_000);
   check(cardA === 'L2' && !!exitA, 'A: mật thư kế + vòng sáng thoát');
+  // (c) F5 while the result screen holds: the server re-sends cq.result; the overlay shows again; then the lobby with the loser clock (e)
+  await B.reload();
+  const rb2 = await waitFor(B, stateOf, (s) => !!s?.result, 'B: F5 lúc kết quả → kết quả hiện lại', 90_000);
+  check(rb2?.result?.winner === 'opp' && rb2.result.youScore === 57.7, `(c) kết quả gửi lại sau F5 (${JSON.stringify(rb2?.result)})`);
   const lobbyB = await waitFor(B, stateOf, (s) => !!s && s.phase === 'lobby', 'B: về sảnh (cq.state lobby sau resultHoldMs)', 30_000);
   check(!!lobbyB, `B: sảnh, vị trí ${lobbyB?.queuePos} / ${lobbyB?.queueLen}`);
+  // (e) the loser's 10-minute clock survives F5 (cq.state.loserWaitUntil)
+  const w0 = lobbyB?.waitUntil ?? null;
+  await B.reload();
+  const lobbyB2 = await waitFor(B, stateOf, (s) => !!s && s.phase === 'lobby' && s.waitUntil !== null, 'B: F5 ở sảnh sau khi thua → đồng hồ chờ còn', 90_000);
+  check(!!lobbyB2 && w0 !== null && Math.abs((lobbyB2.waitUntil ?? 0) - w0) < 2000, `(e) đồng hồ 10 phút giữ nguyên qua F5 (${w0} → ${lobbyB2?.waitUntil})`);
   const C = await open(2);
   const mc = await waitFor(C, stateOf, (s) => !!s && s.phase === 'match', 'C: ghép trận', 90_000);
   const mb2 = await waitFor(B, stateOf, (s) => !!s && s.phase === 'match' && s.matchId !== ma?.matchId, 'B: trận mới với C', 30_000);

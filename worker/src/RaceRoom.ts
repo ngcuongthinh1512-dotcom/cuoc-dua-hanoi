@@ -355,7 +355,7 @@ export class RaceRoom extends DurableObject<Env> {
     const now = Date.now();
     this.closeDead(now); // the tick loop may be asleep (nobody moving) while a socket died silently
     this.bikes.alarm(this.players(), now);
-    this.cq.tick(now); // Leg 3 CETIQLO: a match whose time is up, a result screen that ended, a disconnect grace that ran out
+    this.cq.tick(now); // Leg 3 CETIQLO: a match whose time is up, a result screen that ended, a loser's release
     this.engine.revealDue(now); // Leg 3: finish-line penalties that ended: those teams hear their place now
   }
 

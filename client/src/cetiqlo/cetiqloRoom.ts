@@ -22,6 +22,7 @@ import type { CqMatchView, CqResult, CqServerMessage } from './contract.ts';
 import { CqHud } from './hud.ts';
 import { type Anchor, NO_PICK, type PickState, clockOffset, countdown, insideCheckout, loserWaitText, pickItem, queueText } from './logic.ts';
 import { shapeGeometry } from './items.ts';
+import { NPC_GROUPS } from '../npc/types.ts';
 import { ROOF_Y, buildStore } from './storeScene.ts';
 
 /** Room-local z of the door end = the storefront (shared STORE plan); the body enters at (0, DOOR_Z − rooms.enterInset) in the lobby. */
@@ -80,7 +81,12 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   if (o.world) {
     for (const b of store.colliders) {
       const p = toWorld(frame, b.x, b.z), yaw = (b.yaw ?? 0) + frame.yaw;
-      colliders.push(o.world.createCollider(RAPIER.ColliderDesc.cuboid(b.hx, b.hy, b.hz).setTranslation(p.x, frame.floorY + b.y, p.z).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })));
+      const desc = RAPIER.ColliderDesc.cuboid(b.hx, b.hy, b.hz).setTranslation(p.x, frame.floorY + b.y, p.z).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) });
+      // fixtures (tables, rails, shelves, balustrades, the pedestal: low boxes) block the body but NOT the camera's spring-arm cast
+      // (ThirdPersonCamera casts with IGNORE_NPC = everything but membership bit 1): the arm being pulled in and out by every shelf
+      // the camera brushed past was the "cà giựt" measured on the main aisle (camera speed ±37 % per frame vs ±3 % on the street)
+      if ((b.hy < 1 && b.y < 3) || b.hx < 0.1 || b.hz < 0.1) desc.setCollisionGroups(NPC_GROUPS); // low fixtures + thin panes (glass, balustrades, the stair's side wall)
+      colliders.push(o.world.createCollider(desc));
     }
     // the stair as ONE ramp on the nosing line (28°, under player.maxSlopeDeg): the body glides up instead of the KCC autostep
     // hopping 16 cm at every one of the 24 step boxes (13 hops a second at walking speed = the "giật giật"); the steps stay drawn
@@ -151,7 +157,8 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
           if (before !== 'lobby') (match = null), (bag = []), (locked = false), moveTo(lobbySpot);
           queue = { pos: m.queuePos, len: m.queueLen };
           hud.lobby(queueText(m.queuePos, m.queueLen));
-        } else hud.lobby(null);
+          if (m.loserWaitUntil !== undefined) lostAt = m.loserWaitUntil - C.loserMaxWaitMs; // F5 / reconnect: the loser clock goes on from the server's time
+        } else { hud.lobby(null); if (m.loserWaitUntil !== undefined) lostAt = m.loserWaitUntil - C.loserMaxWaitMs; }
         hud.match(false);
       }
     } else if (m.t === 'cq.bag') (bag = m.bag), hud.bag(bagItems()), syncTaken();
@@ -189,22 +196,22 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   g.add(halo);
   const takenMat = haloMat(GLOW.taken, 0.5);
   const taken = new Map<string, THREE.Mesh>();
-  const placeShell = (m: THREE.Mesh, id: string, k = 1.12) => { const it = ITEM_BY_ID.get(id)!; m.geometry = shapeGeometry(displayShape(it.shape, it.display)); m.position.set(it.shelf.x, it.shelf.y, it.shelf.z); m.rotation.y = it.shelf.yaw; m.scale.set(k, it.display === 'fold' ? k * 2.2 : k, k); };
+  const placeShell = (m: THREE.Mesh, id: string, k = 1.12) => { const it = ITEM_BY_ID.get(id)!, a = store.itemAnchors.get(id); m.geometry = shapeGeometry(displayShape(it.shape, it.display)); if (a) m.position.copy(a); else m.position.set(it.shelf.x, it.shelf.y, it.shelf.z); m.rotation.y = it.shelf.yaw; m.scale.set(k, it.display === 'fold' ? k * 2.2 : k, k); }; // the store's anchor = the item's centre (geometries are cached in items.ts: no clone / upload per selection)
   /** The green shells follow the bag (a few meshes at most: bagMax 24). */
   const syncTaken = () => {
     for (const [id, m] of taken) if (!bag.includes(id)) (g.remove(m), taken.delete(id));
     for (const id of bag) if (!taken.has(id) && ITEM_BY_ID.has(id)) { const m = new THREE.Mesh(new THREE.BufferGeometry(), takenMat); placeShell(m, id, 1.08); g.add(m); taken.set(id, m); }
   };
-  const look = { x: 0, z: 0 }, feet3 = { x: 0, y: 0, z: 0 }, camLocal = new THREE.Vector3();
+  const look = { x: 0, y: 0, z: 0 }, feet3 = { x: 0, y: 0, z: 0 }, camLocal = new THREE.Vector3();
   /** The item in the crosshair this frame (none while locked / frozen / outside a match); updates the halo. */
   const updatePick = (now: number, t: number) => {
     let next = NO_PICK;
     if (phase === 'match' && !locked && !o.frozen?.()) {
       const f = feet();
-      Object.assign(feet3, { x: f.x, y: feetY(), z: f.z });
-      fwd.set(0, 0, -1).applyQuaternion(camera.quaternion).applyAxisAngle(yAxis, -frame.yaw);
-      Object.assign(look, { x: fwd.x, z: fwd.z });
-      next = pickItem(look, feet3, anchors, pick, now, C.pick);
+      feet3.x = f.x; feet3.y = feetY(); feet3.z = f.z;
+      fwd.set(0, 0, -1).applyQuaternion(camera.quaternion).applyAxisAngle(yAxis, -frame.yaw); // the real camera ray (pitch included), room-local
+      look.x = fwd.x; look.y = fwd.y; look.z = fwd.z;
+      next = pickItem(camLocal, look, feet3, anchors, pick, now, C.pick); // camLocal = the camera, room-local (set in update() before)
     }
     if (next.id !== pick.id) {
       if (next.id) placeShell(halo, next.id);
@@ -259,7 +266,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     return {
-      state: () => ({ phase, matchId: match?.id ?? null, set: match?.set ?? [], bag: [...bag], locked, oppLocked, ...queue, exitLit: exit.on, picked: pick.id, released, result: result && { winner: result.winner, youScore: result.you.score, oppScore: result.opp.score, reason: result.reason } }),
+      state: () => ({ phase, matchId: match?.id ?? null, set: match?.set ?? [], bag: [...bag], locked, oppLocked, queuePos: queue.pos, queueLen: queue.len, exitLit: exit.on, picked: pick.id, endsAt: match?.endsAt ?? null, oppSlot: match?.opp.slot ?? null, waitUntil: lostAt === null ? null : lostAt + C.loserMaxWaitMs, feet: (() => { const f = feet(); return { x: +f.x.toFixed(2), y: +feetY().toFixed(2), z: +f.z.toFixed(2) }; })(), released, result: result && { winner: result.winner, youScore: result.you.score, oppScore: result.opp.score, reason: result.reason } }),
       async takeSet(correct, wrong = 0) {
         const set = match?.set ?? [], ids = set.slice(0, correct);
         for (const id of set.slice(correct, correct + wrong)) { const it = ITEM_BY_ID.get(id)!; const other = CATALOG.find((c) => c.slot === it.slot && c.id !== id); if (other) ids.push(other.id); }
