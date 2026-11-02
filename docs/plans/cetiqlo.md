@@ -27,6 +27,8 @@ Phòng "CETIQLO" = cửa hàng thời trang kiểu UNIQLO nhưng thương hiệu
 
 9. **Nhân vật = nhân vật có sẵn của game** (chủ dự án chốt): người chơi vẫn là thân Rocketbox nam / nữ của đội (`Player`, `CharacterModel`, màu áo đội, tên trên đầu), đội kia hiện qua `RemotePlayers` y như ngoài phố / các phòng khác; KHÔNG dựng nhân vật mới, không đổi avatar. Điều khiển, camera ngôi thứ ba, chạy Shift, animation, `moveMode`, pose 5 Hz đều dùng lại. Túi đồ là dữ liệu / HUD, không vẽ lên người; đồ trên manocanh là cái duy nhất "mặc đồ" (không mặc đồ lên nhân vật người chơi).
 
+10. **Người chơi như Leg 1 / Leg 2** (chủ dự án chốt): mỗi đội một người chơi / một thân, đúng như các chặng trước; cấu trúc = MỘT phòng như các phòng hiện có (hòm → vào phòng → vòng thoát), còn CƠ CHẾ = **Head-to-Head Challenge của The Amazing Race**: các đội đến phòng lần lượt, ghép cặp theo thứ tự đến, hai đội đối đầu trực tiếp, đội thắng đi tiếp (nhận mật thư), đội thua ở lại chờ đội đến sau và đấu lại (đúng quy tắc hàng chờ mục 1.3–1.4).
+
 ## 2. Dữ liệu (`shared/src/cetiqlo/`, chủ: agent cửa hàng; server đọc)
 ```ts
 export type SlotKind = 'top' | 'outer' | 'bottom' | 'shoes' | 'bag' | 'acc';
