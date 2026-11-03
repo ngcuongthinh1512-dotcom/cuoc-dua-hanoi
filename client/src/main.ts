@@ -320,12 +320,12 @@ async function start() {
       const st = (CQ_DEMO_STATES as readonly string[]).includes(query.get('roomState') ?? '') ? (query.get('roomState') as CqDemoState) : 'match';
       cqMock = createCqMock(team, st, (lx, ly, lz) => ({ ...toWorld(frame, lx, lz), y: frame.floorY + ly }));
       cqMock.onAdvance = () => demoRoomView(demoRoomViews('cetiqlo', 'done').then!);
-      remote?.setTeams([cqMock.botTeam]);
+      remote?.setTeams(cqMock.teams);
     }
     const r = await mod.mountRoom({
       renderer, q: query, scene, frame, world, camera, feet: () => ({ x: player!.position.x, z: player!.position.z }), frozen: modal, onClose: relock,
       team: { ...team, avatar: overrides.avatar },
-      teams: [...(session?.welcome?.teams ?? []), ...(cqMock ? [cqMock.botTeam] : [])].map(({ slot, name, colour }) => ({ slot, name, colour })),
+      teams: [...(session?.welcome?.teams ?? []), ...(cqMock?.teams ?? [])].map(({ slot, name, colour }) => ({ slot, name, colour })),
       cq: cqMock?.link ?? cqLink,
       feetY: () => player!.position.y,
       moveTo: (x, z, yaw) => player!.moveTo(x, z, yaw),

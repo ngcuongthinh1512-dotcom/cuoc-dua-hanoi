@@ -1,7 +1,9 @@
 // CETIQLO head-to-head room (docs/plans/cetiqlo.md §1, §6) as a Leg 3 race room (rooms/types.ts `mountRoom`, the BOZAR hall's contract):
 // the team opens the box at Vincom Phạm Ngọc Thạch, walks into the store's LOBBY (z 10..16, glass to the sales floor) and is queued
 // (`cq.join`); the server pairs it, dresses the mannequin with the set (`cq.state match`: set ids), moves the body to its start spot
-// (Player.moveTo through `o.moveTo`, no teleport flag) and the 4:00 clock runs on the server clock (endsAt − serverNow offset).
+// (Player.moveTo through `o.moveTo`, no teleport flag) and the 3:30 clock (CETIQLO.pickMs) runs on the server clock (endsAt − serverNow offset).
+// The lobby is the WAITING ROOM (board.ts): benches + a wall-mounted LIVE BOARD (arrival order 1..11, who plays / waits / lost / left),
+// redrawn only on `cq.board`; the same rows in the HUD panel; H opens the condensed rules (hud.ts RULES_HTML).
 // F near an item (≤ cetiqlo.labelRange, the one in front of the camera first) = `cq.take {id, x, z}` (room-local), the bag is HUD
 // data (bottom-right; B opens it, click = `cq.drop`, Digit1–9 drop item n), F inside the red CHECKOUT square = `cq.checkout` → the
 // body is locked (`frozen()`, main.ts). The opponent is a RemotePlayers body like anywhere else (plan §1.9); its bag is never shown.
@@ -20,9 +22,11 @@ import { makeExitRing } from '../rooms/exitRing.ts';
 import { groupPose, toLocal, toWorld } from '../rooms/roomFrame.ts';
 import type { CqDebug, RoomHandle, RoomMountOptions } from '../rooms/types.ts';
 import type { Box } from '../rooms/roomPlayer.ts';
-import type { CqMatchView, CqResult, CqServerMessage } from './contract.ts';
+import { CETIQLO } from '../../../worker/src/race/cetiqlo/config.ts'; // the server's rule numbers (maxWaitMs): no client copy to drift
+import { buildWaitingRoom } from './board.ts';
+import type { CqBoardRow, CqMatchView, CqResult, CqServerMessage } from './contract.ts';
 import { CqHud } from './hud.ts';
-import { type Anchor, NO_PICK, type PickState, clockOffset, countdown, insideCheckout, loserWaitText, pickItem, queueText } from './logic.ts';
+import { type Anchor, NO_PICK, type PickState, clockOffset, countdown, insideCheckout, pickItem, queueText, waitText } from './logic.ts';
 import { shapeGeometry } from './items.ts';
 import { NPC_GROUPS } from '../npc/types.ts';
 import { ROOF_Y, buildStore } from './storeScene.ts';
@@ -95,6 +99,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   scene.add(g);
   const store = buildStore(g, { hq: !!o.hq, ...(o.characterAsset ? { avatar: o.characterAsset } : {}) }); // the game's Rocketbox asset: no second GLB load
   const exit = makeExitRing(g, EXIT.x, EXIT.z, 3.2, EXIT.r);
+  const board = buildWaitingRoom(g); // the lobby's benches + LIVE BOARD (scenery for a viewer too; rows arrive with cq.board)
   const anchors: Anchor[] = [...store.itemAnchors].map(([id, v]) => ({ id, x: v.x, y: v.y, z: v.z }));
   const checkout = { x: store.checkout.centre.x, z: store.checkout.centre.z, radius: store.checkout.radius, half: store.checkout.halfExtents[0] };
   const lobbySpot = { x: store.lobby.door.x, z: (store.lobby.box.min.z + store.lobby.box.max.z) / 2, yaw: 0 }; // mid-lobby, facing the sales floor
@@ -138,9 +143,10 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   let gotState = false, lastSecond = -1, frames = 0;
   let queue: { pos?: number; len?: number } = {};
   let holdEnds = Infinity; // server ms: a loser's result screen is over (then the lobby, even without a cq.state)
-  let lostAt: number | null = null; // server ms of the last lost match's result: the lobby's "chờ thêm mm:ss" line (loserMaxWaitMs)
+  let waitFrom: number | null = null; // server ms the wait clock started (joined the queue / the last result without a win): the lobby's "còn chờ tối đa mm:ss" line (CETIQLO.maxWaitMs)
   let released: 'win' | 'timeout' | null = null; // cq.advance: the step is done (the ring lights through the usual race view)
-  let waitText: string | null = null;
+  let waitLine: string | null = null;
+  let boardRows: CqBoardRow[] = [];
   let pick: PickState = NO_PICK; // look-to-select (logic.ts pickItem)
   const oppName = () => match?.opp.name ?? 'đối thủ';
   const bagItems = () => bag.map((id) => ITEM_BY_ID.get(id)).filter((i) => !!i);
@@ -161,11 +167,11 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
         oppLocked = m.match.oppLocked;
         if (fresh) {
           closeResult();
-          lostAt = null;
+          waitFrom = null;
           hud.lobbyWait(null);
           store.mannequin.dress(m.match.set);
           store.brief.dress(m.match.set);
-          hud.brief(store.brief.snapshots(renderer, C.pip.snapPx)); // six stills, once per set (also after F5: a fresh match id)
+          hud.brief(store.brief.snapshots(renderer, C.pip.snapPx), renderer.domElement.style.filter); // six stills from the shop's own meshes / lights, once per set (also after F5: a fresh match id); the canvas's CSS grade on the <img>s too
           if (m.startSpot) moveTo(m.startSpot);
           hud.toast(`Trận bắt đầu · đối thủ: ${oppName()}`);
         }
@@ -180,17 +186,18 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
           if (before !== 'lobby') (match = null), (bag = []), (locked = false), moveTo(lobbySpot);
           queue = { pos: m.queuePos, len: m.queueLen };
           hud.lobby(queueText(m.queuePos, m.queueLen));
-          if (m.loserWaitUntil !== undefined) lostAt = m.loserWaitUntil - C.loserMaxWaitMs; // F5 / reconnect: the loser clock goes on from the server's time
-        } else { hud.lobby(null); if (m.loserWaitUntil !== undefined) lostAt = m.loserWaitUntil - C.loserMaxWaitMs; }
+        } else hud.lobby(null);
+        if (m.waitUntil !== undefined) waitFrom = m.waitUntil - CETIQLO.maxWaitMs; // the server's clock (also after F5 / reconnect)
         hud.match(false);
       }
-    } else if (m.t === 'cq.bag') (bag = m.bag), hud.bag(bagItems()), syncTaken();
+    } else if (m.t === 'cq.board') { boardRows = m.rows; board.draw(m.rows, o.team?.slot ?? null, colourOf); hud.board(m.rows, o.team?.slot ?? null, colourOf); } // the wall screen + the HUD panel, only now (no per-frame work)
+    else if (m.t === 'cq.bag') (bag = m.bag), hud.bag(bagItems()), syncTaken();
     else if (m.t === 'cq.opp') { if (m.locked && !oppLocked) hud.toast(`${oppName()} đã chốt`); oppLocked = m.locked; if (match) hud.opponent(oppName(), colourOf(match.opp.slot), oppLocked); }
     else if (m.t === 'cq.result') {
       result = m;
       phase = 'result';
       holdEnds = m.winner === 'you' ? Infinity : m.serverNow + m.holdMs + 500; // update(): the lone loser's way back to the lobby (the server also sends cq.state lobby at holdUntil: whichever comes first flips the phase, the other is a no-op)
-      lostAt = m.winner === 'you' ? null : m.serverNow;
+      waitFrom = m.winner === 'you' ? null : m.serverNow;
       locked = false;
       openBag(false);
       hud.match(false);
@@ -198,7 +205,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       document.exitPointerLock();
     } else if (m.t === 'cq.advance') { // the step is done: the next card + the lit ring come with the `race` view (RoomFlow exitReady)
       released = m.reason ?? 'win';
-      if (released === 'timeout') { hud.toast('Bạn đã chờ quá 10 phút, được rời đi'); hud.lobby('Được rời đi: ra vòng sáng cạnh cửa để nhận mật thư kế'); hud.lobbyWait(null); lostAt = null; }
+      if (released === 'timeout') { hud.toast(`Bạn đã chờ quá ${Math.round(CETIQLO.maxWaitMs / 60_000)} phút, được rời đi`); hud.lobby('Được rời đi: ra vòng sáng cạnh cửa để nhận mật thư kế'); hud.lobbyWait(null); waitFrom = null; }
     } else if (m.t === 'cq.no') hud.toast(REFUSAL[m.why] ?? 'Máy chủ từ chối');
   };
   if (cq) {
@@ -209,6 +216,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     hud.onDrop = (id) => { if (phase === 'match' && !locked) cq?.send({ t: 'cq.drop', id }); };
     hud.onContinue = closeResult;
     hud.onZoom = (open) => { if (open) document.exitPointerLock(); else if (!hud.bagOpen) o.onClose?.(); }; // the zoom frees the pointer like the bag; the clock / match go on
+    hud.onRules = (open) => { if (open) document.exitPointerLock(); else if (!hud.bagOpen && hud.zoom === null) o.onClose?.(); }; // the rules panel (H) likewise
   }
   // ---- look-to-select: ONE reusable halo shell (the picked item's own low-poly shape, scaled up, additive BackSide) at the item's shelf
   // pose inside the room group (room-local, so the frame transform is the group's); small green shells on the items in the bag ----
@@ -257,6 +265,8 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   const onKey = (e: KeyboardEvent) => {
     if (e.repeat || !hud) return;
     if (result) { if (e.code === 'Enter' || e.code === 'KeyF' || e.code === 'Escape') setTimeout(closeResult, 60); return; } // after the game loop polled this key: it opens no card
+    if (e.code === C.rulesKey) return hud.rules(!hud.rulesOpen); // the rules panel, any phase (the waiting room above all)
+    if (hud.rulesOpen) { if (e.code === 'Escape') hud.rules(false); return; }
     if (phase !== 'match') return;
     if (e.code === C.bagKey) openBag(!hud.bagOpen);
     else if (hud.zoom !== null && (e.code === 'Escape' || e.code === C.lookbookKey)) hud.setZoom(null);
@@ -280,7 +290,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     return {
-      state: () => ({ phase, matchId: match?.id ?? null, set: match?.set ?? [], bag: [...bag], locked, oppLocked, queuePos: queue.pos, queueLen: queue.len, exitLit: exit.on, picked: pick.id, endsAt: match?.endsAt ?? null, oppSlot: match?.opp.slot ?? null, waitUntil: lostAt === null ? null : lostAt + C.loserMaxWaitMs, feet: (() => { const f = feet(); return { x: +f.x.toFixed(2), y: +feetY().toFixed(2), z: +f.z.toFixed(2) }; })(), released, result: result && { winner: result.winner, youScore: result.you.score, oppScore: result.opp.score, reason: result.reason } }),
+      state: () => ({ phase, matchId: match?.id ?? null, set: match?.set ?? [], bag: [...bag], locked, oppLocked, queuePos: queue.pos, queueLen: queue.len, exitLit: exit.on, picked: pick.id, endsAt: match?.endsAt ?? null, oppSlot: match?.opp.slot ?? null, waitUntil: waitFrom === null ? null : waitFrom + CETIQLO.maxWaitMs, board: boardRows.map((r) => `${r.order}:${r.slot}:${r.status}`), feet: (() => { const f = feet(); return { x: +f.x.toFixed(2), y: +feetY().toFixed(2), z: +f.z.toFixed(2) }; })(), released, result: result && { winner: result.winner, youScore: result.you.score, oppScore: result.opp.score, reason: result.reason } }),
       async takeSet(correct, wrong = 0) {
         const set = match?.set ?? [], ids = set.slice(0, correct);
         for (const id of set.slice(correct, correct + wrong)) { const it = ITEM_BY_ID.get(id)!; const other = CATALOG.find((c) => c.slot === it.slot && c.id !== id); if (other) ids.push(other.id); }
@@ -293,6 +303,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     };
   };
 
+  if (import.meta.env.DEV) Object.assign(window, { __CQ_ROOM__: { store, scene, renderer, camera, frame, camLocal } }); // scratch scripts: brief still vs shelf colour checks
   return {
     group: g,
     ceiling: ROOF_Y,
@@ -312,7 +323,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       // ponytail: a lone loser gets no `cq.state lobby` after the hold (the server's alarm only fires with ≥ 2 teams queued): once the hold
       // is over the client puts itself in the lobby (no queue numbers until the next cq.state); frame-driven, not a timer (background tabs)
       if (phase === 'result' && Date.now() + offset >= holdEnds) (holdEnds = Infinity), onMessage({ t: 'cq.state', phase: 'lobby', serverNow: Date.now() + offset });
-      if (phase === 'lobby' && lostAt !== null && !released) { const w = loserWaitText(lostAt, C.loserMaxWaitMs, Date.now() + offset); if (w !== waitText) hud.lobbyWait((waitText = w)); } // once a second (the text changes per second)
+      if (phase === 'lobby' && waitFrom !== null && !released) { const w = waitText(waitFrom, CETIQLO.maxWaitMs, Date.now() + offset); if (w !== waitLine) hud.lobbyWait((waitLine = w)); } // once a second (the text changes per second)
       if (phase === 'match' && match) {
         const c = countdown(match.endsAt, Date.now(), offset, C.warnMs);
         if (c.second !== lastSecond) { lastSecond = c.second; hud.clock(c.text, c.warn); if (c.warn && c.second > 0 && c.second <= C.warnMs / 1000) beep(); }
@@ -326,7 +337,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     setExit: (on) => exit.set(on), // lit once the step is done (a win: main.ts 'exitReady')
     setLocked: () => {},
     exitHit: () => { const f = feet(); return exit.hit(f.x, f.z); },
-    overlayOpen: () => !!result || !!hud?.bagOpen || hud?.zoom != null,
+    overlayOpen: () => !!result || !!hud?.bagOpen || hud?.zoom != null || !!hud?.rulesOpen,
     frozen: () => locked || !!result,
     settled: () => frames >= 3 && (VIEWER || (gotState && (cq?.ready?.() ?? true))),
     stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
@@ -336,6 +347,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       hud?.dispose();
       (halo.material as THREE.Material).dispose();
       takenMat.dispose();
+      board.dispose();
       for (const c of colliders) o.world!.removeCollider(c, false);
       o.autostep?.(null);
       store.dispose();

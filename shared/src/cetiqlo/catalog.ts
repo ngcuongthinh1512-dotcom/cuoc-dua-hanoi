@@ -375,7 +375,7 @@ export const FAMILIES: Family[] = [
   { zone: 'footwear-socks', family: 'sneaker-dot', name: 'Sneaker chấm bi', nameEn: 'Polka dot sneakers', shape: 'sneaker', material: 'Canvas', pattern: 'dot', colours: [['white', 'black'], ['white', 'red']] },
   { zone: 'footwear-socks', family: 'socks-border', name: 'Tất cổ cao kẻ bản to', nameEn: 'Border stripe crew socks', shape: 'socks-crew', material: 'Cotton', finish: 'knit', pattern: 'border', colours: [['white', 'navy'], ['grey', 'black'], ['white', 'red']] },
   { zone: 'footwear-socks', family: 'socks-ankle-dot', name: 'Tất cổ ngắn chấm bi', nameEn: 'Polka dot ankle socks', shape: 'socks-ankle', material: 'Cotton', finish: 'knit', pattern: 'dot', colours: [['white', 'black'], ['pink', 'white']] },
-  { zone: 'footwear-socks', family: 'socks-crew-2', name: 'Tất cổ cao màu', nameEn: 'Crew socks (colours)', shape: 'socks-crew', material: 'Cotton', finish: 'knit', colours: ['grey', 'wine'] },
+  { zone: 'footwear-socks', family: 'socks-crew-2', name: 'Tất thể thao cổ cao', nameEn: 'Sports crew socks', shape: 'socks-sport', material: 'Cotton', finish: 'knit', colours: ['grey', 'wine'] },
 ];
 
 const BOTTOMISH = new Set<ShapeId>(['pants', 'chinos', 'wide', 'straight', 'cargo', 'jogger', 'sweatpants', 'bootcut', 'bermuda', 'shorts', 'cycling', 'jeans-wide', 'jeans-straight', 'jeans-baggy', 'jeans-tapered', 'shorts-chino', 'lounge-pants', 'jogger-cargo', 'track-pants', 'shorts-denim', 'shorts-cargo']);

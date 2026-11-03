@@ -2,7 +2,7 @@ import { CATALOG } from '@race/shared/cetiqlo';
 import { describe, expect, it } from 'vitest';
 import { CETIQLO } from './config.ts';
 import { FIXTURE } from './fixture.ts';
-import { checkout, drop, finish, finished, join, leave, makeSet, markGone, newRoom, pairNext, rank, score, settle, SLOTS, startNext, take, type Match, type TeamScore } from './match.ts';
+import { arrivalOrder, checkout, drop, dueRelease, finish, finished, join, leave, makeSet, markGone, newRoom, pairNext, rank, release, score, settle, SLOTS, startNext, take, waitSince, type Match, type TeamScore } from './match.ts';
 
 const byId = new Map(FIXTURE.map((i) => [i.id, i]));
 const slotOf = (id: string) => byId.get(id)?.slot;
@@ -62,6 +62,19 @@ describe('queue / pairing', () => {
     expect(r.queue).toEqual([]);
     expect(join(r, 'A')).toBe(r);
     expect(leave(join(r, 'C'), 'C').queue).toEqual([]);
+  });
+  it('arrival order + wait clock (owner 2026-11-03): join keeps the first arrival time, leave forgets it; the clock = last result, else arrival', () => {
+    let r = join(join(join(newRoom(), 'B', 20), 'A', 10), 'B', 99);
+    expect(arrivalOrder(r)).toEqual(['A', 'B']);
+    expect(r.arrived).toEqual({ B: 20, A: 10 });
+    expect(waitSince(r, 'A')).toBe(10);
+    expect(dueRelease(r, 10 + CETIQLO.maxWaitMs - 1)).toEqual([]);
+    expect(dueRelease(r, 10 + CETIQLO.maxWaitMs)).toEqual(['A']);
+    expect(dueRelease(r, 20 + CETIQLO.maxWaitMs)).toEqual(['B', 'A']); // queue order
+    r = { ...r, lost: { A: { at: 5000, match: 'm1' } } };
+    expect(waitSince(r, 'A')).toBe(5000);
+    expect(arrivalOrder(leave(r, 'A'))).toEqual(['B']);
+    expect(arrivalOrder(release(r, ['A']))).toEqual(['A', 'B']); // released: the board still lists it (done)
   });
   it('startNext: one match at a time, waits for the result hold, stores seed + set + endsAt', () => {
     const r0 = join(join(join(newRoom(), 'A'), 'B'), 'C');

@@ -1,5 +1,5 @@
 // CETIQLO room: the pure parts (tested in Node): the item to label, the server-synced clock, the queue line, the result rows.
-import type { CatalogItem, CqMark, CqTeamResult } from './contract.ts';
+import type { CatalogItem, CqBoardStatus, CqMark, CqTeamResult } from './contract.ts';
 export type { CatalogItem };
 
 export interface Anchor { id: string; x: number; y: number; z: number }
@@ -86,13 +86,15 @@ export function resultRows(set: readonly string[], r: CqTeamResult, nameOf: (id:
 
 /** Points (0–100, 1 decimal) as "74,3 điểm" / "100 điểm" (Vietnamese comma, no trailing ,0). */
 export const pointsText = (score: number) => `${(Math.round(score * 10) / 10).toString().replace('.', ',')} điểm`;
-/** "Chờ thêm mm:ss nữa nếu không có đối thủ thì được rời đi" for a loser waiting in the lobby; null once the wait is over. */
-export function loserWaitText(lostAt: number, maxWaitMs: number, serverNow: number): string | null {
-  const left = lostAt + maxWaitMs - serverNow;
+export const mmss = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+/** "Còn chờ tối đa mm:ss – không có đối thủ thì được rời đi" for any team waiting in the lobby (owner: everybody is let go after 10 min); null once the wait is over. */
+export function waitText(waitFrom: number, maxWaitMs: number, serverNow: number): string | null {
+  const left = waitFrom + maxWaitMs - serverNow;
   if (left <= 0) return null;
-  const s = Math.ceil(left / 1000);
-  return `Chờ thêm ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} nữa nếu không có đối thủ thì được rời đi`;
+  return `Còn chờ tối đa ${mmss(left)} – không có đối thủ thì được rời đi`;
 }
+/** The waiting-room board's status badges (cq.board rows). */
+export const BOARD_STATUS_TEXT: Record<CqBoardStatus, string> = { playing: 'ĐANG CHƠI', waiting: 'CHỜ', lost: 'ĐÃ THUA · chờ lượt', drew: 'HÒA · chờ lượt', won: 'ĐÃ THẮNG', done: 'ĐÃ XONG · đã đi' };
 /** "47.213 s" after the match start, or "Không hoàn thành". */
 export const lockTimeText = (lockedAtMs: number | null, startAt: number) => (lockedAtMs === null ? 'Không hoàn thành' : `${((lockedAtMs - startAt) / 1000).toFixed(3)} s`);
 

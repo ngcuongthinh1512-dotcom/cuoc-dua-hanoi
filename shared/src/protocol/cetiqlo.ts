@@ -75,20 +75,36 @@ export type CqServerMessage =
       match?: CqMatchView;
       /** Room-local start spot (match start / reconnect inside a match). */
       startSpot?: { x: number; z: number; yaw: number };
-      /** lobby / result, a team that lost its last match: server ms when it is let go without an opponent (loserMaxWaitMs after the result). */
-      loserWaitUntil?: number;
+      /** lobby / result, any queued team: server ms when it is let go without an opponent (maxWaitMs after it joined the queue / its last result). */
+      waitUntil?: number;
     }
   | { t: 'cq.bag'; bag: string[] }
   | { t: 'cq.opp'; locked: boolean }
   | CqResult
-  /** The team won (or timed out as a loser): the step is done (the next clue card + exit ring come with the usual `race` view). */
-  | { t: 'cq.advance'; matchId: string; /** 'win' (default when absent) = won the match; 'timeout' = a loser waited more than loserMaxWaitMs and is let go. */ reason?: 'win' | 'timeout' }
-  | { t: 'cq.no'; op: 'join' | 'take' | 'drop' | 'checkout'; why: CqRefusal };
+  /** The team won (or waited too long): the step is done (the next clue card + exit ring come with the usual `race` view). */
+  | { t: 'cq.advance'; matchId: string; /** 'win' (default when absent) = won the match; 'timeout' = waited more than maxWaitMs and is let go ('' matchId when it never played). */ reason?: 'win' | 'timeout' }
+  | { t: 'cq.no'; op: 'join' | 'take' | 'drop' | 'checkout'; why: CqRefusal }
+  /** The waiting-room LIVE BOARD (v16): every team that entered this room, FIFO by arrival (`order` 1..maxTeamsInRoom), sent to the whole
+   *  room (queue + match) on every queue / match change and to a (re)joining team. The two in the match are 'playing'; 'waiting' never
+   *  played yet; 'lost' / 'drew' played without winning (lost / a double draw) and waits for the next team; 'won' = the winner during the
+   *  result hold; 'done' = left the room (won / let go / passed by the Host). `waitUntil` only on queued rows (the maxWaitMs clock). */
+  | { t: 'cq.board'; rows: CqBoardRow[]; serverNow: number };
+
+export type CqBoardStatus = 'playing' | 'waiting' | 'lost' | 'drew' | 'won' | 'done';
+export interface CqBoardRow extends CqPlayer {
+  /** 1-based arrival order in this room. */
+  order: number;
+  status: CqBoardStatus;
+  /** 1-based place in the queue (waiting / lost rows). */
+  queuePos?: number;
+  /** Server ms when a queued team is let go without an opponent. */
+  waitUntil?: number;
+}
 
 /** HostState.cetiqlo: read-only status per CETIQLO step. */
 export interface CqHostRoom {
   step: string;
-  /** `releaseInS`: a waiting loser is released (step done) after this many seconds. */
+  /** `releaseInS`: a queued team is released (step done) after this many seconds without an opponent (maxWaitMs). */
   queue: (CqPlayer & { releaseInS?: number })[];
   match: { id: string; endsAt: number; teams: (CqPlayer & { locked: boolean; bagN: number; online: boolean })[] } | null;
 }

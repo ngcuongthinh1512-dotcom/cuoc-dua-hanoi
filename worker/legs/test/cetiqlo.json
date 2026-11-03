@@ -34,7 +34,7 @@
       "room": "cetiqlo",
       "task": {
         "title": "Đối đầu CETIQLO",
-        "description": "Hai đội đối đầu trong cửa hàng CETIQLO. Nhớ bộ 6 món trên người mẫu, nhặt đúng rồi chốt ở ô CHECKOUT trong 3 phút. Đội thắng nhận mật thư tiếp theo và lối ra; đội thua ở lại đấu với đội đến sau. Đội thua chờ quá 10 phút sẽ được rời đi.",
+        "description": "Hai đội đối đầu trong cửa hàng CETIQLO. Nhớ bộ 6 món trên người mẫu, nhặt đúng rồi chốt ở ô CHECKOUT trong 3 phút 30 giây. Đội thắng nhận mật thư tiếp theo và lối ra; đội thua ở lại phòng chờ, đấu với đội đến sau. Đội nào chờ quá 10 phút không có đối thủ sẽ được rời đi.",
         "verification": "host_approval"
       }
     },

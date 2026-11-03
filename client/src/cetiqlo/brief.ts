@@ -6,8 +6,8 @@
 // stands still; a click zooms it). `renderPiP(renderer, rect)` (the live grid, pieces turning) stays for the dev page / tests.
 // It is PiP-only (layer BRIEF_LAYER): nothing of it is drawn in the room.
 import * as THREE from 'three';
-import { type CatalogItem, ITEM_BY_ID, type SlotKind } from '@race/shared/cetiqlo';
-import { HANGER, itemMesh } from './items.ts';
+import { type CatalogItem, ITEM_BY_ID, type SlotKind, displayShape } from '@race/shared/cetiqlo';
+import { HANGER, itemMesh, shapeGeometry, shelfPiece } from './items.ts';
 
 export const BRIEF_LAYER = 2;
 /** Recommended PiP rect (renderer px), 4:3 landscape: the whole ring with each piece ≈ a third of the frame height. */
@@ -18,6 +18,8 @@ export const SLOT_ORDER: readonly SlotKind[] = ['top', 'outer', 'bottom', 'shoes
 const PRESENT: Record<SlotKind, { h: number; yaw: number }> = { top: { h: 0.8, yaw: 0 }, outer: { h: 0.84, yaw: 0 }, bottom: { h: 0.84, yaw: 0 }, shoes: { h: 0.56, yaw: 0.6 }, bag: { h: 0.6, yaw: 0.5 }, acc: { h: 0.56, yaw: 0.5 } };
 export const GRID = { dx: 1.15, dy: 1.05 }; // m between piece centres: columns / rows of the 3 × 2 grid
 const BG = new THREE.Color('#e9e6df');
+/** The stills' backdrop: neutral light grey (CSS), composited under the transparent render — never lit, never tinting. */
+export const STILL_BG = '#e6e6e6';
 const HANGER_MAT = new THREE.MeshStandardMaterial({ color: '#8a8a90', vertexColors: true, roughness: 0.4, metalness: 0.6 });
 
 export interface Brief {
@@ -35,9 +37,12 @@ export interface Brief {
   phase: number;
   /** The six piece holders in slot order (empty when the slot is missing). */
   pieces: THREE.Group[];
-  /** One still per slot (slot order; null = slot missing): the dressed piece, front-on (shoes / bag / acc ¾), cream backdrop, `px`² sharp,
-   *  rendered ONCE through a temporary scene + render target (both disposed) — the HUD shows these instead of a live PiP. */
-  snapshots(renderer: THREE.WebGLRenderer, px?: number): (HTMLCanvasElement | null)[];
+  /** One still per slot (slot order; null = slot missing): the piece EXACTLY as the shop shows it (items.ts shelfPiece: display shape,
+   *  shelf pose + stand turn, store hanger) seen from in front of its shelf, lit by the store's own lights + the scene environment,
+   *  through the renderer's tone mapping / output colour space (applied here: render targets skip them), on a neutral grey backdrop
+   *  (STILL_BG, composited in 2D: never lit). Rendered ONCE per set through a temporary scene + render target (both disposed).
+   *  `cams` (optional, out): the world-space camera of each still, for comparing against the store at the same angle. */
+  snapshots(renderer: THREE.WebGLRenderer, px?: number, cams?: (THREE.PerspectiveCamera | null)[]): (HTMLCanvasElement | null)[];
 }
 export const RING_Y = 1.45; // the grid's centre height above the object origin (the pedestal top)
 
@@ -65,14 +70,16 @@ export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
   camera.layers.set(BRIEF_LAYER);
   object.traverse((ob) => ob.layers.set(BRIEF_LAYER)); // PiP-only: the room camera (layer 0) never draws the brief
   const box = new THREE.Box3();
+  let setIds: readonly string[] = [];
   const dress = (ids: readonly string[]) => {
+    setIds = ids;
     for (const p of pieces) p.clear();
     for (const id of ids) {
       const it: CatalogItem | undefined = ITEM_BY_ID.get(id);
       if (!it?.slot) continue;
       const holder = pieces[SLOT_ORDER.indexOf(it.slot)]!;
       holder.clear();
-      const m = itemMesh(it);
+      const m = itemMesh(it, shapeGeometry(displayShape(it.shape, it.display)));
       m.geometry.computeBoundingBox();
       box.copy(m.geometry.boundingBox!);
       const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
@@ -122,45 +129,72 @@ export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
       renderer.setScissor(save.sc);
     },
     dispose() { for (const p of pieces) p.clear(); object.removeFromParent(); },
-    snapshots(renderer, px = 512) {
+    snapshots(renderer, px = 512, cams) {
+      // the store (brief.object's parent) and the room scene it is in: the pieces take their WORLD shelf pose, the store's lights
+      // (every visible light that lights layer 0 — inside the room the sky's lights are hidden, so these are the 3 store lights) are
+      // copied at their world positions / targets, the scene environment (the sky's IBL stays on in the room) is shared
+      const store = object.parent ?? object;
+      let root: THREE.Object3D = object;
+      while (root.parent) root = root.parent;
+      root.updateWorldMatrix(true, true);
       const scene = new THREE.Scene();
-      scene.background = BG;
-      const key = new THREE.DirectionalLight('#fff4e6', 2.4), fill = new THREE.DirectionalLight('#e8f0ff', 1.3), rim = new THREE.DirectionalLight('#ffffff', 1.0);
-      key.position.set(-1.2, 2, 2.5); fill.position.set(1.6, 0.3, 1.2); rim.position.set(0.4, -1, 1.5); // key high-left, fill low-right, rim from below: seams / pockets / plackets read on black cloth too
-      scene.add(new THREE.HemisphereLight('#ffffff', '#c9c0b0', 1.8), key, fill, rim);
-      const cam = new THREE.PerspectiveCamera(26, 1, 0.05, 20);
-      cam.layers.set(BRIEF_LAYER);
-      scene.traverse((ob) => ob.layers.set(BRIEF_LAYER)); // the lights too: a light on another layer than the camera does not light
-      const rt = new THREE.WebGLRenderTarget(px, px, { depthBuffer: true });
-      const saved = { target: renderer.getRenderTarget(), vp: renderer.getViewport(new THREE.Vector4()), sc: renderer.getScissor(new THREE.Vector4()), scissor: renderer.getScissorTest() };
+      if (root instanceof THREE.Scene) { scene.environment = root.environment; scene.environmentIntensity = root.environmentIntensity; scene.environmentRotation.copy(root.environmentRotation); }
+      root.traverseVisible((ob) => {
+        if (!(ob instanceof THREE.Light) || !ob.layers.isEnabled(0)) return;
+        const l = ob.clone() as THREE.Light;
+        ob.getWorldPosition(l.position);
+        if ('target' in ob && ob.target instanceof THREE.Object3D) (l as THREE.DirectionalLight).target.matrixWorld.copy(ob.target.matrixWorld); // not in a scene: the target keeps the store's world pose
+        scene.add(l);
+      });
+      const cam = new THREE.PerspectiveCamera(26, 1, 0.05, 50);
+      const rt = new THREE.WebGLRenderTarget(px, px, { depthBuffer: true, type: THREE.HalfFloatType, samples: 4 }); // half float: no banding before tone mapping; MSAA like the canvas
+      const saved = { target: renderer.getRenderTarget(), vp: renderer.getViewport(new THREE.Vector4()), sc: renderer.getScissor(new THREE.Vector4()), scissor: renderer.getScissorTest(), clear: renderer.getClearColor(new THREE.Color()), alpha: renderer.getClearAlpha() };
       renderer.setScissorTest(false);
-      const pxBuf = new Uint8Array(px * px * 4), bb = new THREE.Box3(), c = new THREE.Vector3(), sz = new THREE.Vector3();
-      const out = pieces.map((holder) => {
-        if (!holder.children.length) return null;
-        const spin = holder.rotation.y;
-        holder.rotation.y = 0; // front-on (the slot's own ¾ yaw is inside the holder)
-        scene.add(holder); // moved out of the grid: neighbours never intrude
-        bb.setFromObject(holder, true); bb.getCenter(c); bb.getSize(sz); // precise: the ¾-turned pieces' real extent, not the loose AABB
-        const half = Math.max(sz.y, sz.x) / 2 * 1.08, d = half / Math.tan((cam.fov / 2) * (Math.PI / 180)) + sz.z / 2;
-        cam.position.set(c.x, c.y + d * 0.1, c.z + d);
+      const aces = renderer.toneMapping === THREE.ACESFilmicToneMapping, exposure = renderer.toneMappingExposure;
+      const pxBuf = new Uint16Array(px * px * 4), bb = new THREE.Box3(), c = new THREE.Vector3(), sz = new THREE.Vector3(), fwd = new THREE.Vector3(), wq = new THREE.Quaternion();
+      const out = SLOT_ORDER.map((slot, i) => {
+        const it = setIds.map((id) => ITEM_BY_ID.get(id)).find((x) => x?.slot === slot);
+        if (!it) { if (cams) cams[i] = null; return null; }
+        const piece = shelfPiece(it); // the shop's own mesh / pose / hanger, room-local → placed in the store's world frame
+        store.getWorldQuaternion(wq);
+        piece.position.setFromMatrixPosition(store.matrixWorld);
+        piece.quaternion.copy(wq);
+        scene.add(piece);
+        piece.updateWorldMatrix(true, true);
+        bb.setFromObject(piece, true); bb.getCenter(c); bb.getSize(sz);
+        fwd.set(Math.sin(it.shelf.yaw), 0, Math.cos(it.shelf.yaw)).applyQuaternion(wq); // the shelf's facing: standing in front of it (shoes keep their shop turn)
+        const half = Math.max(sz.y, Math.max(sz.x, sz.z)) / 2 * 1.08, d = half / Math.tan((cam.fov / 2) * (Math.PI / 180)) + half;
+        cam.position.copy(c).addScaledVector(fwd, d);
+        cam.position.y += d * 0.1;
         cam.lookAt(c);
+        cam.updateMatrixWorld(true);
+        if (cams) cams[i] = cam.clone();
         renderer.setRenderTarget(rt);
+        renderer.setClearColor(0x000000, 0);
         renderer.render(scene, cam);
         renderer.readRenderTargetPixels(rt, 0, 0, px, px, pxBuf);
-        ring.add(holder);
-        holder.rotation.y = spin;
+        scene.remove(piece);
+        piece.traverse((ob) => { if (ob instanceof THREE.Mesh) ob.geometry.dispose(); });
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = px;
-        const ctx = canvas.getContext('2d')!, img = ctx.createImageData(px, px);
-        for (let y = 0; y < px; y++) for (let x = 0; x < px; x++) { // flip y; linear → sRGB (render targets are written linear)
+        const ctx = canvas.getContext('2d')!, img = ctx.createImageData(px, px), v = [0, 0, 0];
+        for (let y = 0; y < px; y++) for (let x = 0; x < px; x++) { // flip y; linear → tone mapping → sRGB, as the canvas pipeline does
           const s = ((px - 1 - y) * px + x) * 4, t = (y * px + x) * 4;
-          for (let k = 0; k < 3; k++) { const v = pxBuf[s + k]! / 255; img.data[t + k] = Math.round(255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)); }
-          img.data[t + 3] = 255;
+          for (let k = 0; k < 3; k++) v[k] = THREE.DataUtils.fromHalfFloat(pxBuf[s + k]!);
+          if (aces) acesFilmic(v, exposure);
+          for (let k = 0; k < 3; k++) { const u = Math.min(1, Math.max(0, v[k]!)); img.data[t + k] = Math.round(255 * (u <= 0.0031308 ? u * 12.92 : 1.055 * Math.pow(u, 1 / 2.4) - 0.055)); }
+          img.data[t + 3] = Math.round(255 * Math.min(1, THREE.DataUtils.fromHalfFloat(pxBuf[s + 3]!)));
         }
-        ctx.putImageData(img, 0, 0);
+        ctx.fillStyle = STILL_BG;
+        ctx.fillRect(0, 0, px, px);
+        const layer = document.createElement('canvas');
+        layer.width = layer.height = px;
+        layer.getContext('2d')!.putImageData(img, 0, 0);
+        ctx.drawImage(layer, 0, 0); // the garment over the neutral backdrop (alpha from the render: anti-aliased edges)
         return canvas;
       });
       renderer.setRenderTarget(saved.target);
+      renderer.setClearColor(saved.clear, saved.alpha);
       renderer.setScissorTest(saved.scissor);
       renderer.setViewport(saved.vp);
       renderer.setScissor(saved.sc);
@@ -169,4 +203,15 @@ export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
     },
   };
   return brief;
+}
+
+/** three's ACESFilmicToneMapping (tonemapping_pars_fragment.glsl) on a linear rgb triple, in place: the canvas applies it in the
+ *  shader, a render target does not, so the stills apply it here to come out the same colour as the shop. */
+function acesFilmic(v: number[], exposure: number): void {
+  const e = exposure / 0.6, r = v[0]! * e, g = v[1]! * e, b = v[2]! * e;
+  const x = [0.59719 * r + 0.35458 * g + 0.04823 * b, 0.076 * r + 0.90834 * g + 0.01566 * b, 0.0284 * r + 0.13383 * g + 0.83777 * b];
+  for (let k = 0; k < 3; k++) { const c = x[k]!; x[k] = (c * (c + 0.0245786) - 0.000090537) / (c * (0.983729 * c + 0.432951) + 0.238081); }
+  v[0] = 1.60475 * x[0]! - 0.53108 * x[1]! - 0.07367 * x[2]!;
+  v[1] = -0.10208 * x[0]! + 1.10813 * x[1]! - 0.00605 * x[2]!;
+  v[2] = -0.00327 * x[0]! - 0.07276 * x[1]! + 1.07602 * x[2]!;
 }

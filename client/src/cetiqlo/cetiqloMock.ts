@@ -9,15 +9,20 @@ import { CETIQLO, CHECKOUT_ZONE } from '../../../worker/src/race/cetiqlo/config.
 import { Cetiqlo, type CqIO } from '../../../worker/src/race/cetiqlo/index.ts';
 import type { CqLink } from './cetiqloNet.ts';
 
-export const CQ_DEMO_STATES = ['match', 'lobby', 'bag', 'label', 'warn', 'checkout', 'result-win', 'result-lose', 'result-draw', 'timeout'] as const;
+export const CQ_DEMO_STATES = ['match', 'lobby', 'bag', 'label', 'warn', 'checkout', 'result-win', 'result-lose', 'result-draw', 'timeout', 'board'] as const;
 export type CqDemoState = (typeof CQ_DEMO_STATES)[number];
 
 const YOU = 'you', BOT = 'bot';
 const BOT_SPEED = 2.6; // m/s, straight lines (the mock walks through fixtures)
+/** `?roomState=board`: nine more teams (no bodies) fill the waiting room to 11 so the LIVE BOARD is seen full: the first pair plays a 3 s match
+ *  (one wins and leaves = "đã đi", the loser goes offline and stays "đã thua · chờ lượt"), then the next pair plays a normal 3:30 match. */
+const EXTRAS = [['Đội Đỏ', '#d8342c'], ['Đội Xanh', '#2f6fde'], ['Đội Vàng', '#e2b43a'], ['Đội Lục', '#2e9e5b'], ['Đội Tím', '#8e5bd6'], ['Đội Hồng', '#e2679a'], ['Đội Nâu', '#8a5a2b'], ['Đội Xám', '#7a8290'], ['Đội Trắng', '#e8e8e8']] as const;
 
 export interface CqMock {
   link: CqLink;
   botTeam: TeamInfo;
+  /** Every mock team (the bot + the board state's extras): main.ts hands them to the room / RemotePlayers for names + colours. */
+  teams: TeamInfo[];
   /** The bot's pose for RemotePlayers at `ms` (the tick clock); `toWorld` maps room-local metres (the frame's). */
   tick(ms: number): TickEntry[];
   /** The team won: the step completes (main.ts shows the next card). */
@@ -28,12 +33,16 @@ export interface CqMock {
 export function createCqMock(you: { slot: number; name: string }, state: CqDemoState, toWorld: (lx: number, ly: number, lz: number) => { x: number; y: number; z: number }): CqMock {
   const oppSlot = you.slot === 5 ? 6 : 5;
   const botTeam: TeamInfo = { slot: oppSlot, id: BOT, name: 'Đội Cam', colour: '#f07f1d', online: true, avatar: 1 };
-  const who = (t: string) => (t === YOU ? { slot: you.slot, name: you.name } : { slot: oppSlot, name: botTeam.name });
+  const slots = [you.slot, oppSlot];
+  const extras: TeamInfo[] = state === 'board' ? EXTRAS.map(([name, colour], i) => { let s = 1; while (slots.includes(s)) s++; slots.push(s); return { slot: s, id: `e${i + 1}`, name, colour, online: true, avatar: (i % 2) as 0 | 1 }; }) : [];
+  const teams = [botTeam, ...extras];
+  const who = (t: string) => (t === YOU ? { slot: you.slot, name: you.name } : { slot: teams.find((x) => x.id === t)?.slot ?? oppSlot, name: teams.find((x) => x.id === t)?.name ?? botTeam.name });
   // ponytail: the worker's Cfg is `as const` (literal numbers), so a demo override needs the cast; ask the server agent for `Cfg` with plain numbers
-  const cfg = { ...CETIQLO, pickMs: state === 'warn' ? 27_000 : state === 'result-draw' ? 4_000 : CETIQLO.pickMs, resultHoldMs: 6_000 } as unknown as typeof CETIQLO;
-  const seen = { state: false, match: false, bag: 0, locked: false, result: false, botMoved: false, advance: false };
+  const cfg = { ...CETIQLO, pickMs: state === 'warn' ? 27_000 : state === 'result-draw' ? 4_000 : state === 'board' ? 3_000 : CETIQLO.pickMs, resultHoldMs: state === 'board' ? 2_000 : 6_000 } as unknown as { -readonly [K in keyof typeof CETIQLO]: (typeof CETIQLO)[K] };
+  const offline = new Set<string>(); // board state: the first loser stays offline (never paired again) so a "đã thua · chờ lượt" row stays on the board
+  const seen = { state: false, match: false, bag: 0, locked: false, result: false, botMoved: false, advance: false, boardLost: false };
   /** The scripted state is on screen (screenshots wait for it). */
-  const ready = () => state === 'lobby' ? seen.state : state === 'timeout' ? seen.advance : state.startsWith('result') ? seen.result : state === 'checkout' ? seen.locked : state === 'bag' ? seen.bag >= 3 : state === 'warn' ? seen.match : seen.match && seen.botMoved;
+  const ready = () => state === 'lobby' ? seen.state : state === 'board' ? seen.boardLost : state === 'timeout' ? seen.advance : state.startsWith('result') ? seen.result : state === 'checkout' ? seen.locked : state === 'bag' ? seen.bag >= 3 : state === 'warn' ? seen.match : seen.match && seen.botMoved;
   const link: CqLink = { send: (m) => receive(m), onMessage: null, serverNow: () => Date.now(), ready };
   let alarm: ReturnType<typeof setTimeout> | undefined;
   let set: string[] = [];
@@ -43,7 +52,7 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
   const io: CqIO = {
     load: () => undefined,
     save: () => {},
-    online: () => true,
+    online: (t) => !offline.has(t),
     who,
     stepOf: () => 'T1',
     win: () => {},
@@ -59,7 +68,16 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
         if (m.t === 'cq.bag') seen.bag = Math.max(seen.bag, m.bag.length);
         if (m.t === 'cq.result' && state === 'timeout') { const id = m.matchId; setTimeout(() => io.send(YOU, { t: 'cq.advance', matchId: id, reason: 'timeout' }), cfg.resultHoldMs + 1500); } // the loser waited "10 minutes" (demo: right after the hold)
         seen.result ||= m.t === 'cq.result';
+        if (m.t === 'cq.board') seen.boardLost ||= m.rows.length >= 11 && m.rows.some((r) => r.status === 'lost');
         link.onMessage?.(m);
+      } else if (state === 'board') {
+        if (m.t === 'cq.state' && m.phase === 'match' && m.match && team === 'e1' && !offline.size) { // e1 takes the whole set and checks out: it wins the 3 s match and leaves ("đã đi")
+          let t = Date.now() + 200;
+          for (const id of m.match.set) { const it = ITEM_BY_ID.get(id)!; cq.take(team, id, it.shelf.x, it.shelf.z, (t += 150)); }
+          cq.checkout(team, CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, (t += 150));
+        }
+        if (m.t === 'cq.result' && m.winner === 'opp' && !offline.size) { offline.add(team); cfg.pickMs = CETIQLO.pickMs; } // the first loser stays "chờ lượt" (offline: never paired); the next matches run the real 3:30
+        if (m.t === 'cq.state' && m.phase === 'match' && m.match && team === BOT) plan(m.match.set, m.match.startAt);
       } else if (m.t === 'cq.state' && m.phase === 'match' && m.match) plan(m.match.set, m.match.startAt);
     },
   };
@@ -93,6 +111,11 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
     const now = Date.now();
     switch (m.t) {
       case 'cq.join': {
+        if (state === 'board') { // 11 teams in arrival order: e1 ↔ e2 play (3 s), e3…e7 wait, the bot, you (9th), e8, e9
+          const order = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', BOT, YOU, 'e8', 'e9'];
+          order.forEach((t, i) => setTimeout(() => cq.join(t, Date.now()), 150 * i));
+          return;
+        }
         cq.join(YOU, now);
         if (state !== 'lobby') setTimeout(() => { cq.join(BOT, Date.now()); afterStart(); }, 1200);
         return;
@@ -113,7 +136,7 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
   }
 
   const mock: CqMock = {
-    link, botTeam,
+    link, botTeam, teams,
     tick(ms) {
       const dt = Number.isNaN(bot.lastMs) ? 0 : Math.min(0.5, (ms - bot.lastMs) / 1000);
       bot.lastMs = ms;

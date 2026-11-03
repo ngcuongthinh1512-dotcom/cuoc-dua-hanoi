@@ -61,7 +61,7 @@ export interface RoomMountOptions {
 
 /** CETIQLO test helpers (RoomHandle.cqDebug). Moves put the body at the shelf / the pad (Player.moveTo) and send the room-local spot. */
 export interface CqDebug {
-  state(): { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youScore: number; oppScore: number; reason: string } | null; exitLit: boolean; picked: string | null; released: 'win' | 'timeout' | null; endsAt: number | null; oppSlot: number | null; waitUntil: number | null; feet: { x: number; y: number; z: number } };
+  state(): { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youScore: number; oppScore: number; reason: string } | null; exitLit: boolean; picked: string | null; released: 'win' | 'timeout' | null; endsAt: number | null; oppSlot: number | null; waitUntil: number | null; /** cq.board rows as "order:slot:status". */ board: string[]; feet: { x: number; y: number; z: number } };
   /** Take `correct` items of the set (set order) + `wrong` items of the same slots but another id; ≥ 150 ms apart (the server's cooldown). */
   takeSet(correct: number, wrong?: number): Promise<string[]>;
   take(id: string): void;

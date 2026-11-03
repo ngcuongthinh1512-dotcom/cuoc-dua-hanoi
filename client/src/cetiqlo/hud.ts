@@ -1,11 +1,30 @@
 // CETIQLO room HUD (plan §6): one DOM root, every setter writes only when its value changed. Vietnamese texts; the clock text is the only
 // per-second write. The brief = six STILLS (brief.snapshots, once per set) in a 3 × 2 grid; a cell click / T opens the zoom lightbox.
+import { CETIQLO } from '../../../worker/src/race/cetiqlo/config.ts'; // the rule numbers (pick time, points, wait, teams): one source, never a copy
 import { cetiqlo as C, hud as H } from '../config.ts';
 import { bagIconDataUrl } from './brand.ts';
-import type { CatalogItem, CqResult } from './contract.ts';
-import { MARK_TEXT, REASON_TEXT, WINNER_TEXT, lockTimeText, pointsText, resultRows } from './logic.ts';
+import { STILL_BG } from './brief.ts';
+import type { CatalogItem, CqBoardRow, CqResult } from './contract.ts';
+import { BOARD_STATUS_TEXT, MARK_TEXT, REASON_TEXT, WINNER_TEXT, lockTimeText, mmss, pointsText, resultRows } from './logic.ts';
 
 const LOGO = `<span class="cq-logo"><b>CETI</b><b>QLO</b></span>`;
+const WAIT_MIN = Math.round(CETIQLO.maxWaitMs / 60_000);
+const pts = (n: number) => (Math.round(n * 100) / 100).toString().replace('.', ',');
+/** The condensed rules (the H panel; the full text: docs/CETIQLO_RULEBOOK.md). Every number comes from CETIQLO. */
+export const RULES_HTML = `<h2>${LOGO} Luật chơi · Đối đầu CETIQLO</h2>
+<ol>
+<li><b>Phòng chờ</b>: vào cửa hàng là xếp hàng theo thứ tự đến (bảng LIVE trên tường, tối đa ${CETIQLO.maxTeamsInRoom} đội). Hai đội đầu hàng đấu một trận; các đội khác chờ trong sảnh.</li>
+<li><b>Đề bài</b>: ${CETIQLO.itemsPerSet} món (áo, áo khoác, quần / váy, giày, túi, phụ kiện) hiện bằng ảnh tĩnh góc trên trái — bấm vào ảnh hoặc <kbd>T</kbd> để phóng to. Mỗi món trong cửa hàng là một thiết kế duy nhất: tìm đúng món, đúng màu.</li>
+<li><b>Thời gian</b>: ${mmss(CETIQLO.pickMs)} theo đồng hồ máy chủ; ${CETIQLO.warnMs / 1000} s cuối đồng hồ đỏ + bíp.</li>
+<li><b>Lấy đồ</b>: nhìn vào món (viền đỏ) và bấm <kbd>F</kbd>. <kbd>B</kbd> mở túi, nhấp món để bỏ; <kbd>1</kbd>–<kbd>9</kbd> bỏ món số n.</li>
+<li><b>Chốt</b>: đứng trong ô đỏ CHECKOUT và bấm <kbd>F</kbd> trước khi hết giờ. Đã chốt thì khóa túi và đứng yên. Hết giờ chưa chốt = <b>không hoàn thành</b> (vẫn chấm túi).</li>
+<li><b>Điểm</b>: +${pts(CETIQLO.pointsPerCorrect)} mỗi món đúng, −${CETIQLO.penaltyPerWrongOrExtra} mỗi món sai hoặc thừa, kẹp 0–100, túi rỗng 0.</li>
+<li><b>Thắng</b>: hoàn thành thắng không hoàn thành → điểm cao hơn → chốt sớm hơn. Hòa cả hai → cả hai xuống cuối hàng.</li>
+<li><b>Sau trận</b>: đội thắng nhận mật thư kế + vòng sáng cạnh cửa để ra. Đội thua về phòng chờ, đấu với đội kế tiếp.</li>
+<li><b>Chờ quá ${WAIT_MIN} phút</b> (từ lúc vào hàng, hoặc từ kết quả trận vừa thua) mà không có đối thủ → được rời đi với mật thư kế.</li>
+<li><b>Mất mạng / F5</b>: chỗ trong hàng, trận, túi, kết quả đều giữ nguyên.</li>
+</ol>
+<p>Đóng: <kbd>Esc</kbd> hoặc <kbd>H</kbd></p>`;
 const BAG = () => `<img class="cq-bagicon" src="${bagIconDataUrl(64)}" alt="">`;
 const CSS = `
 #cq { position: fixed; inset: 0; pointer-events: none; font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.85); z-index: 1; }
@@ -16,7 +35,7 @@ body.cq-room .hud-box, body.cq-room .hud-hand { visibility: hidden; } /* the str
 .cq-bagicon { width: 34px; height: 34px; vertical-align: middle; }
 #cq { --cq-pip-w: min(${C.pip.maxWidth}px, ${C.pip.widthVw}vw); }
 .cq-pip { position: absolute; left: ${C.pip.left}px; top: ${C.pip.top}px; width: var(--cq-pip-w); display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; background: rgba(255,255,255,.85); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.5); box-sizing: border-box; pointer-events: auto; }
-.cq-pip img, .cq-zoom img { display: block; width: 100%; aspect-ratio: 1; background: #e9e6df; border-radius: 2px; cursor: zoom-in; }
+.cq-pip img, .cq-zoom img { display: block; width: 100%; aspect-ratio: 1; background: ${STILL_BG}; border-radius: 2px; cursor: zoom-in; }
 .cq-pip img[src=""] { visibility: hidden; }
 .cq-lookhint { position: absolute; left: ${C.pip.left}px; top: calc(${C.pip.top}px + var(--cq-pip-w) * 2 / 3 + 6px); font-size: 11px; color: rgba(255,255,255,.7); }
 .cq-zoom { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; pointer-events: auto; cursor: zoom-out; }
@@ -61,14 +80,35 @@ body.cq-room .hud-box, body.cq-room .hud-hand { visibility: hidden; } /* the str
 .cq-cols li { padding: 4px 8px; border-bottom: 1px solid #0001; display: flex; justify-content: space-between; gap: 8px; }
 .cq-cols li.ok { background: #e8f5e9; } .cq-cols li.wrong { background: #fdecea; } .cq-cols li.missing { background: #f1f1f1; color: #666; }
 .cq-result button { margin: 16px auto 0; display: block; padding: 10px 28px; border: 0; border-radius: 8px; background: #E60012; color: #fff; font: 700 17px system-ui, sans-serif; cursor: pointer; }
+.cq-board { position: absolute; right: 16px; top: 16px; width: 312px; border-radius: 8px; background: rgba(0,0,0,.7); overflow: hidden; pointer-events: auto; }
+.cq-board h3 { margin: 0; padding: 6px 10px; background: #E60012; font: 800 13px/1.3 system-ui, sans-serif; letter-spacing: .5px; display: flex; align-items: center; gap: 8px; text-shadow: none; }
+.cq-board h3 button { margin-left: auto; border: 0; border-radius: 4px; padding: 2px 8px; background: rgba(255,255,255,.92); color: #E60012; font: 700 12px system-ui, sans-serif; cursor: pointer; }
+.cq-board ol { margin: 0; padding: 4px 0; list-style: none; max-height: 60vh; overflow: hidden; }
+.cq-board li { display: grid; grid-template-columns: 22px 14px 1fr auto; align-items: center; gap: 6px; padding: 3px 10px; font-size: 13px; line-height: 1.3; border-top: 1px solid rgba(255,255,255,.06); }
+.cq-board li.you { background: rgba(230,0,18,.25); }
+.cq-board li.done { color: rgba(255,255,255,.45); }
+.cq-board li > b { text-align: right; font-variant-numeric: tabular-nums; }
+.cq-board li > i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.7); }
+.cq-board li > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cq-board li > em { font: 800 10px/1 system-ui, sans-serif; font-style: normal; padding: 3px 6px; border-radius: 4px; text-shadow: none; white-space: nowrap; }
+.cq-board li.playing > em { background: #d8342c; color: #fff; } .cq-board li.waiting > em { background: #e9ecef; color: #333; } .cq-board li.lost > em, .cq-board li.drew > em { background: #f6c343; color: #3a2a00; } .cq-board li.won > em { background: #1d8a3a; color: #fff; } .cq-board li.done > em { background: #8a8f98; color: #fff; }
+.cq-board p { margin: 0; padding: 5px 10px 7px; font-size: 11px; color: rgba(255,255,255,.65); }
+.cq-rules { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+.cq-rules > div { width: min(760px, 92vw); max-height: 90vh; overflow: auto; background: #faf8f4; color: #1a1a1a; text-shadow: none; border-radius: 12px; padding: 16px 24px 12px; box-shadow: 0 8px 30px rgba(0,0,0,.6); font-size: 15px; line-height: 1.45; }
+.cq-rules h2 { margin: 0 0 10px; font: 800 22px/1.2 system-ui, sans-serif; display: flex; align-items: center; gap: 10px; }
+.cq-rules ol { margin: 0; padding-left: 22px; } .cq-rules li { margin: 4px 0; }
+.cq-rules kbd { display: inline-block; padding: 0 6px; border: 1px solid #bbb; border-bottom-width: 2px; border-radius: 4px; background: #fff; font: 700 12px/1.6 system-ui, sans-serif; }
+.cq-rules p { margin: 10px 0 0; color: #666; font-size: 13px; text-align: right; }
 `;
 const HTML = `<style>${CSS}</style>
 <div class="cq-pip" hidden>${'<img src="" alt="">'.repeat(6)}</div>
 <div class="cq-lookhint" hidden>bấm để phóng to · T</div>
 <div class="cq-zoom" hidden><div>${'<img src="" alt="">'.repeat(6)}</div></div>
-<div class="cq-clock" hidden>4:00</div>
+<div class="cq-clock" hidden>${mmss(CETIQLO.pickMs)}</div>
 <div class="cq-opp" hidden><i></i><span></span><em hidden>đã chốt</em></div>
-<div class="cq-lobby" hidden><h2>Đang chờ đối thủ…</h2><p>Đứng chờ ở sảnh. Trận bắt đầu khi có đội kế tiếp vào phòng.</p><p class="cq-wait" hidden></p></div>
+<div class="cq-lobby" hidden><h2>Đang chờ đối thủ…</h2><p>Đứng chờ ở phòng chờ. Trận bắt đầu khi có đội kế tiếp vào phòng.</p><p class="cq-wait" hidden></p></div>
+<div class="cq-board" hidden><h3>${LOGO}<span>THỨ TỰ THI ĐẤU</span><button type="button">Luật chơi (H)</button></h3><ol></ol><p>Thứ tự = thứ tự đến. Đội thua xếp lại hàng, đấu với đội kế tiếp. Chờ quá ${WAIT_MIN} phút không có đối thủ thì được đi.</p></div>
+<div class="cq-rules" hidden><div>${RULES_HTML}</div></div>
 <div class="cq-label" hidden></div>
 <div class="cq-locked" hidden>Đã chốt · chờ đối thủ…</div>
 <div class="cq-bag" hidden><h3>${BAG()}<span>Túi đồ</span><span></span></h3><ol></ol><p>B: mở túi, nhấp món để bỏ · 1–9: bỏ món số n</p></div>
@@ -77,7 +117,12 @@ const HTML = `<style>${CSS}</style>
 
 export class CqHud {
   private readonly root = document.createElement('div');
-  private readonly el: Record<'pip' | 'lookhint' | 'zoom' | 'clock' | 'opp' | 'lobby' | 'label' | 'locked' | 'bag' | 'toast' | 'result', HTMLElement>;
+  private readonly el: Record<'pip' | 'lookhint' | 'zoom' | 'clock' | 'opp' | 'lobby' | 'board' | 'rules' | 'label' | 'locked' | 'bag' | 'toast' | 'result', HTMLElement>;
+  private boardKey = '';
+  /** The rules panel (H) is open. */
+  rulesOpen = false;
+  /** The rules panel opened (true: the room frees the pointer) / closed. */
+  onRules?: (open: boolean) => void;
   private readonly bagList: HTMLOListElement;
   private clockText = '';
   private clockWarn = false;
@@ -104,8 +149,10 @@ export class CqHud {
     document.body.append(this.root);
     document.body.classList.add('cq-room');
     const q = (s: string) => this.root.querySelector<HTMLElement>(s)!;
-    this.el = { pip: q('.cq-pip'), lookhint: q('.cq-lookhint'), zoom: q('.cq-zoom'), clock: q('.cq-clock'), opp: q('.cq-opp'), lobby: q('.cq-lobby'), label: q('.cq-label'), locked: q('.cq-locked'), bag: q('.cq-bag'), toast: q('.cq-toast'), result: q('.cq-result') };
+    this.el = { pip: q('.cq-pip'), lookhint: q('.cq-lookhint'), zoom: q('.cq-zoom'), clock: q('.cq-clock'), opp: q('.cq-opp'), lobby: q('.cq-lobby'), board: q('.cq-board'), rules: q('.cq-rules'), label: q('.cq-label'), locked: q('.cq-locked'), bag: q('.cq-bag'), toast: q('.cq-toast'), result: q('.cq-result') };
     this.bagList = this.el.bag.querySelector('ol')!;
+    this.el.board.querySelector('button')!.addEventListener('click', () => this.rules(true));
+    this.el.rules.addEventListener('click', (e) => { if (e.target === this.el.rules) this.rules(false); }); // a click outside the sheet closes
     this.bagList.addEventListener('click', (e) => { const li = (e.target as HTMLElement).closest('li'); if (li?.dataset.id && this.bagOpen) this.onDrop?.(li.dataset.id); });
     this.el.result.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName === 'BUTTON') this.onContinue?.(); });
     // the brief: a cell click (pointer free) zooms that piece; in the lightbox a cell toggles one piece ⇄ the grid, anything else closes
@@ -114,10 +161,11 @@ export class CqHud {
     this.el.zoom.addEventListener('click', (e) => { const i = cellIndex(e); this.setZoom(i < 0 ? null : this.zoom === 'grid' ? i : 'grid'); });
   }
 
-  /** The six stills (brief.snapshots, slot order; null = slot missing): the HUD grid + the lightbox share them as data URLs. */
-  brief(stills: readonly (HTMLCanvasElement | null)[]) {
+  /** The six stills (brief.snapshots, slot order; null = slot missing): the HUD grid + the lightbox share them as data URLs.
+   *  `filter` = the game canvas's CSS grade (world/look.ts), so the stills go through the same filter as the shop behind them. */
+  brief(stills: readonly (HTMLCanvasElement | null)[], filter = '') {
     this.pipSrc = stills.map((c) => c?.toDataURL() ?? '');
-    for (const grid of [this.el.pip, this.el.zoom.firstElementChild!]) grid.querySelectorAll('img').forEach((img, i) => { img.src = this.pipSrc[i] ?? ''; });
+    for (const grid of [this.el.pip, this.el.zoom.firstElementChild!]) grid.querySelectorAll('img').forEach((img, i) => { img.src = this.pipSrc[i] ?? ''; img.style.filter = filter; });
     this.setZoom(null);
   }
   private pipSrc: string[] = [];
@@ -131,10 +179,26 @@ export class CqHud {
     if (was !== (z !== null)) this.onZoom?.(z !== null);
   }
 
-  /** The lobby: the queue line (null = hide). */
+  /** The lobby: the queue line (null = hide); the board panel shows with it. */
   lobby(text: string | null) {
     this.show('lobby', text !== null);
+    this.show('board', text !== null);
     if (text !== null && text !== this.lobbyText) (this.lobbyText = text), (this.el.lobby.querySelector('h2')!.textContent = text);
+  }
+  /** The waiting-room board (cq.board rows, arrival order); rewritten only when the rows changed. */
+  board(rows: readonly CqBoardRow[], you: number | null, colourOf: (slot: number) => string) {
+    const key = rows.map((r) => `${r.slot}:${r.status}:${r.queuePos ?? ''}`).join('|');
+    if (key === this.boardKey) return;
+    this.boardKey = key;
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    this.el.board.querySelector('ol')!.innerHTML = rows.map((r) => `<li class="${r.status}${r.slot === you ? ' you' : ''}"><b>${r.order}</b><i style="background:${colourOf(r.slot)}"></i><span>${esc(r.name)}${r.slot === you ? ' (bạn)' : ''}</span><em>${r.status === 'waiting' && r.queuePos ? `${BOARD_STATUS_TEXT.waiting} · thứ ${r.queuePos}` : BOARD_STATUS_TEXT[r.status]}</em></li>`).join('');
+  }
+  /** Open / close the rules panel (H / the board's button; Esc closes). */
+  rules(open: boolean) {
+    if (open === this.rulesOpen) return;
+    this.rulesOpen = open;
+    this.show('rules', open);
+    this.onRules?.(open);
   }
   /** The loser's wait line under the queue text (null = hidden); written once a second at most by the room. */
   lobbyWait(text: string | null) {
@@ -183,7 +247,7 @@ export class CqHud {
       <p class="stat"><b>${pointsText(t.score)}</b> · Đúng ${t.correct}/${r.set.length} · Sai ${t.errors} · chốt: ${lockTimeText(t.lockedAtMs, startAt)}</p>
       <ul>${resultRows(r.set, t, nameOf, slotOf).map((row) => `<li class="${row.mark}"><span>${row.text}</span><span>${MARK_TEXT[row.mark]}</span></li>`).join('')}</ul></div>`;
     this.el.result.firstElementChild!.innerHTML = `<h1 class="${r.winner}">${LOGO}${WINNER_TEXT[r.winner]}</h1>
-      <p class="why">${r.winner === 'draw' ? `Hòa: ${REASON_TEXT.draw}.` : `${r.winner === 'you' ? 'Thắng' : 'Đội kia thắng'} nhờ ${REASON_TEXT[r.reason]}.`}${r.winner === 'you' ? ' Mật thư kế đã có: ra vòng sáng cạnh cửa.' : r.winner === 'opp' ? ' Đội bạn quay lại sảnh chờ đối thủ kế tiếp. Đội thua chờ quá 10 phút sẽ được rời đi.' : ''}</p>
+      <p class="why">${r.winner === 'draw' ? `Hòa: ${REASON_TEXT.draw}.` : `${r.winner === 'you' ? 'Thắng' : 'Đội kia thắng'} nhờ ${REASON_TEXT[r.reason]}.`}${r.winner === 'you' ? ' Mật thư kế đã có: ra vòng sáng cạnh cửa.' : r.winner === 'opp' ? ` Đội bạn quay lại phòng chờ, đấu với đội kế tiếp. Chờ quá ${WAIT_MIN} phút không có đối thủ sẽ được rời đi.` : ''}</p>
       <div class="cq-cols">${col(r.you, 'Đội bạn')}${r.opps.map((o) => col(o, 'Đối thủ')).join('')}</div>
       <button type="button">Tiếp tục (Enter)</button>`;
   }

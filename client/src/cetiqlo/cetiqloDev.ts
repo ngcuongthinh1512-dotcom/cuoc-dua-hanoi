@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { CATALOG, ITEM_BY_ID, STORE } from '@race/shared/cetiqlo';
+import { CATALOG, COLOURS, ITEM_BY_ID, SHAPE_H, STORE } from '@race/shared/cetiqlo';
 import { createRoomPlayer, type RoomPlayer } from '../rooms/roomPlayer.ts';
 import { buildStore, FLOOR2_Y } from './storeScene.ts';
 
@@ -60,7 +60,8 @@ const VIEWS: Record<string, [number[], number[]]> = {
   briefs: [[0, 1.8, 7.4], [0, 1.4, 0]],
   lineup: [[0, 1.85, 4.9], [0, 1.85, 1.3]],
   'lineup-tops': [[0, 2.2, 6.6], [0, 2.15, 1.3]],
-  'lineup-outer': [[0, 2.2, 5.6], [0, 2.15, 1.3]], // ?lineup=1: 16 bottoms in two rows on a white wall across the atrium (grey / navy where possible)
+  'lineup-outer': [[0, 2.2, 5.6], [0, 2.15, 1.3]],
+  'lineup-shoes': [[0, 1.45, 6.2], [0, 1.35, 1.3]], // ?lineup=shoes: 9 shoes + 3 socks, white row over black row // ?lineup=1: 16 bottoms in two rows on a white wall across the atrium (grey / navy where possible)
 };
 const label = document.createElement('div');
 label.id = 'cq-label';
@@ -74,6 +75,8 @@ const MODEL_SETS = [
   ['top.turtleneck.wine', 'outer.down.red', 'bottom.cargo.olive', 'shoes.loafer.brown', 'bag.backpack-camo.khaki-olive', 'acc.scarf-houndstooth.black-white'],
 ];
 if (q.get('lineup') || q.get('patternBoard') === '1') store.mannequin.object.visible = false; // the wall boards stand in front of the pedestal
+/** `&colour=<COLOURS key>` recolours a lineup (tops / outer / bottoms): the dark-garment detail check (black, navy, charcoal…). */
+const lineupColour = ((): { name: string; hex: string } | null => { const k = q.get('colour') as keyof typeof COLOURS | null; const c = k && COLOURS[k]; return c ? { name: c[0], hex: c[1] } : null; })();
 if (q.get('patternBoard') === '1') { // every pattern on the same navy / white tee, two rows on a white wall: the pattern audit
   const { itemMesh } = await import('./items.ts');
   const { PATTERN_IDS } = await import('./patterns.ts');
@@ -98,9 +101,28 @@ if (q.get('lineup') === 'tops' || q.get('lineup') === 'outer') { // every top / 
     const pick = CATALOG.filter((it) => it.shape === shape && !it.pattern);
     const it = pick.find((x) => x.colour.name === 'Xám') ?? pick.find((x) => x.colour.name === 'Be') ?? pick.find((x) => x.colour.name === 'Xanh navy') ?? pick[0];
     if (!it) return;
-    const m = itemMesh({ ...it, colour: { name: 'Be', hex: '#D8C9A8' } });
+    const m = itemMesh({ ...it, colour: lineupColour ?? { name: 'Be', hex: '#D8C9A8' } });
     m.position.set((i % cols - (cols - 1) / 2) * (shapes.length > 16 ? 0.7 : 0.9), i < cols ? 3.0 : 1.35, 1.3);
     scene.add(m);
+  });
+}
+if (q.get('lineup') === 'shoes') { // every shoe / sock shape in white AND black on two boards: same colour, the silhouette + details alone must tell them apart
+  const { itemMesh, SHAPE_IDS } = await import('./items.ts');
+  const shapes = SHAPE_IDS.filter((s) => s.startsWith('socks') || /^(sneaker|running-shoe|slip-on|sneaker-hi|loafer|boot-chelsea|boot|sandal|slipper)$/.test(s));
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(10, 3.2), new THREE.MeshStandardMaterial({ color: '#f7f7f4' }));
+  wall.position.set(0, 1.6, 1.0); scene.add(wall);
+  const base = CATALOG.find((it) => it.id === 'shoes.sneaker.white')!;
+  [{ name: 'Trắng', hex: '#F4F2EE' }, { name: 'Đen', hex: '#2A2A2E' }].forEach((colour, row) => {
+    const y = row ? 0.95 : 1.75;
+    scene.add(new THREE.Mesh(new THREE.BoxGeometry(9, 0.03, 0.6), new THREE.MeshStandardMaterial({ color: '#ffffff' })).translateY(y - 0.015).translateZ(1.3));
+    shapes.forEach((shape, i) => {
+      const m = itemMesh({ ...base, id: `lineup.${shape}.${row}`, shape, colour, pattern: undefined, finish: shape.startsWith('socks') ? 'knit' : shape === 'loafer' || shape.startsWith('boot') ? 'shiny' : 'cotton' });
+      const sock = shape.startsWith('socks');
+      m.scale.setScalar(1.6);
+      m.position.set((i - (shapes.length - 1) / 2) * 0.72, y + SHAPE_H[shape] * 0.8 + 0.005, 1.3); // standing on the board (centre = SHAPE_H / 2 × scale)
+      m.rotation.y = sock ? 0 : -0.5; // shoes three-quarter, toe toward the camera's right
+      scene.add(m);
+    });
   });
 }
 if (q.get('lineup') === '1') { // every bottom shape once, same colour where possible, hung on a clean wall: the silhouettes alone must differ
@@ -112,7 +134,7 @@ if (q.get('lineup') === '1') { // every bottom shape once, same colour where pos
     const pick = CATALOG.filter((it) => it.shape === shape && !it.pattern);
     const it = pick.find((x) => x.colour.name === 'Xám') ?? pick.find((x) => x.colour.name === 'Xanh navy') ?? pick.find((x) => x.colour.name === 'Đen') ?? pick[0];
     if (!it) return;
-    const m = itemMesh(it);
+    const m = itemMesh(lineupColour ? { ...it, colour: lineupColour } : it);
     m.position.set((i % 8 - 3.5) * 0.74, i < 8 ? 2.5 : 1.15, 1.3);
     scene.add(m);
   });

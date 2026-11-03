@@ -177,7 +177,7 @@ describe('Cetiqlo service', () => {
     r.onlineSet.add('B');
     r.cq.online('B', now + CETIQLO.pickMs + 5000); // back during the hold: the result again, then the lobby state with its loser clock
     expect(last(r, 'B', 'cq.result')).toMatchObject({ winner: 'opp', you: { correct: 2 } });
-    expect(last(r, 'B', 'cq.state')).toMatchObject({ phase: 'result', queuePos: 1, loserWaitUntil: now + CETIQLO.pickMs + 1 + CETIQLO.loserMaxWaitMs });
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ phase: 'result', queuePos: 1, waitUntil: now + CETIQLO.pickMs + 1 + CETIQLO.maxWaitMs });
   });
 
   it('reconnect inside a match (F5) gets the match back: same id, bag, lock; the clock goes on', () => {
@@ -328,8 +328,8 @@ describe('Cetiqlo: the lobby state at the end of the result screen', () => {
   });
 });
 
-describe('Cetiqlo: a waiting loser is released after loserMaxWaitMs (owner rule)', () => {
-  const W = CETIQLO.loserMaxWaitMs;
+describe('Cetiqlo: a waiting team is released after maxWaitMs (owner rule: losers since their result, newcomers since their arrival)', () => {
+  const W = CETIQLO.maxWaitMs;
   const advances = (r: ReturnType<typeof rig>, t: string) => r.of(t).filter((m) => m.t === 'cq.advance');
   function lose(r = rig(), teams = { win: 'A', lose: 'B' }) {
     const { set, now } = startMatch(r);
@@ -354,12 +354,33 @@ describe('Cetiqlo: a waiting loser is released after loserMaxWaitMs (owner rule)
     r.cq.join('B', at + W + 6000); // the step is done: not back in the queue
     expect(r.of('B').at(-1)).toMatchObject({ t: 'cq.no', why: 'notInRoom' });
   });
-  it('a team that never played is never released', () => {
+  it('a team that never played is released 10:00 after it joined (no opponent came): advance with an empty matchId; the alarm is armed for it', () => {
     const r = rig();
     r.cq.join('A', 1000);
-    r.cq.tick(1000 + 10 * W);
+    expect(last(r, 'A', 'cq.state')).toMatchObject({ phase: 'lobby', waitUntil: 1000 + W });
+    expect(r.alarms.at(-1)).toBe(1000 + W);
+    expect(r.cq.hostView(1000)[0]!.queue).toEqual([{ slot: 0, name: 'Đội A', releaseInS: W / 1000 }]);
+    r.cq.tick(1000 + W - 1);
     expect(r.released).toEqual([]);
-    expect(r.cq.hostView(1000)[0]!.queue).toEqual([{ slot: 0, name: 'Đội A' }]); // no releaseInS
+    r.cq.tick(1000 + W);
+    expect(r.released).toEqual(['A']);
+    expect(advances(r, 'A')).toEqual([{ t: 'cq.advance', matchId: '', reason: 'timeout' }]);
+    expect(r.events.find((e) => e.type === 'cq.release')!.data).toMatchObject({ match: '', waitedMs: W });
+  });
+  it('the arrival clock never fires inside a match; the loser then counts from the result', () => {
+    const r = rig();
+    r.cq.join('A', 1000);
+    const now = 1000 + W - 10_000; // B arrives when A has 10 s left: they play
+    r.cq.join('B', now);
+    const set = last(r, 'A', 'cq.state')!.match!.set;
+    fill(r, 'A', set, now + 100);
+    r.cq.checkout('A', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 5000);
+    r.cq.tick(1000 + W + 5); // past A's arrival clock: the match is running, nobody is released
+    expect(r.released).toEqual([]);
+    expect(last(r, 'A', 'cq.result')).toBeUndefined();
+    r.cq.tick(now + CETIQLO.pickMs); // time up: A won; B waits from this result
+    expect(r.wins).toEqual(['A']);
+    expect(last(r, 'B', 'cq.state')).toMatchObject({ waitUntil: now + CETIQLO.pickMs + W });
   });
   it('a draw: both released at 10:00 from their own result (they rematch only when the hold ended and nobody else waits: here the rematch resets the clock)', () => {
     const r = rig();
@@ -368,7 +389,8 @@ describe('Cetiqlo: a waiting loser is released after loserMaxWaitMs (owner rule)
     r.cq.join('D', now + 2);
     r.cq.tick(now + CETIQLO.pickMs); // draw (both empty)
     const at = now + CETIQLO.pickMs;
-    expect(r.cq.hostView(at)[0]!.queue.map((q) => [q.name, q.releaseInS])).toEqual([['Đội C', undefined], ['Đội D', undefined], ['Đội A', W / 1000], ['Đội B', W / 1000]]);
+    const fresh = (joinedAt: number) => Math.ceil((joinedAt + W - at) / 1000); // C / D count from their arrival
+    expect(r.cq.hostView(at)[0]!.queue.map((q) => [q.name, q.releaseInS])).toEqual([['Đội C', fresh(now + 1)], ['Đội D', fresh(now + 2)], ['Đội A', W / 1000], ['Đội B', W / 1000]]);
     r.cq.tick(at + CETIQLO.resultHoldMs); // C and D play; A, B keep their clock from the result
     expect(r.cq.hostView(at + CETIQLO.resultHoldMs)[0]!.queue.map((q) => q.releaseInS)).toEqual([W / 1000 - CETIQLO.resultHoldMs / 1000, W / 1000 - CETIQLO.resultHoldMs / 1000]);
     r.cq.tick(at + W);
@@ -403,5 +425,45 @@ describe('Cetiqlo: a waiting loser is released after loserMaxWaitMs (owner rule)
     expect(r.released).toEqual(['B']); // not again yet
     r.cq.tick(at + 2 * W + 3000);
     expect(r.released).toEqual(['B', 'B']);
+  });
+});
+
+describe('Cetiqlo: the waiting-room board (cq.board)', () => {
+  const boards = (r: ReturnType<typeof rig>, t: string) => r.of(t).filter((m) => m.t === 'cq.board') as Extract<CqServerMessage, { t: 'cq.board' }>[];
+  const rows = (r: ReturnType<typeof rig>, t: string) => boards(r, t).at(-1)!.rows.map((x) => [x.order, x.name, x.status, x.queuePos]);
+  it('arrival order 1..n, the pair playing, the queue waiting with places; sent to the whole room on every change and to a joiner', () => {
+    const r = rig();
+    const { now } = startMatch(r); // A (1000), B (1001) play
+    r.cq.join('C', now + 1);
+    r.cq.join('D', now + 2);
+    expect(rows(r, 'D')).toEqual([[1, 'Đội A', 'playing', undefined], [2, 'Đội B', 'playing', undefined], [3, 'Đội C', 'waiting', 1], [4, 'Đội D', 'waiting', 2]]);
+    expect(boards(r, 'A').at(-1)!.rows).toEqual(boards(r, 'D').at(-1)!.rows); // the players hear it too
+    expect(boards(r, 'C').at(-1)!.rows[2]).toMatchObject({ slot: 2, waitUntil: now + 1 + CETIQLO.maxWaitMs });
+    expect(boards(r, 'D').at(-1)!.serverNow).toBe(now + 2);
+  });
+  it('after the match: the winner is "won" during the hold then "done" (its row stays), the loser "lost" at the queue front; a leaver drops out', () => {
+    const r = rig();
+    const { set, now } = startMatch(r);
+    r.cq.join('C', now + 1);
+    fill(r, 'A', set, now + 100);
+    r.cq.checkout('A', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 5000);
+    r.cq.checkout('B', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, now + 6000);
+    expect(rows(r, 'C')).toEqual([[1, 'Đội A', 'won', undefined], [2, 'Đội B', 'lost', 1], [3, 'Đội C', 'waiting', 2]]);
+    r.cq.tick(now + 6000 + CETIQLO.resultHoldMs); // B ↔ C
+    expect(rows(r, 'C')).toEqual([[1, 'Đội A', 'done', undefined], [2, 'Đội B', 'playing', undefined], [3, 'Đội C', 'playing', undefined]]);
+    r.cq.join('D', now + 20_000);
+    r.cq.leave('D', now + 21_000);
+    r.cq.join('E', now + 22_000);
+    expect(rows(r, 'E').map((x) => x[1])).toEqual(['Đội A', 'Đội B', 'Đội C', 'Đội E']); // D left before playing: no row
+  });
+  it('F5 / reconnect gets the board again; a released team is "done"', () => {
+    const r = rig();
+    r.cq.join('A', 1000);
+    r.cq.join('B', 1000 + CETIQLO.maxWaitMs + 1); // A was let go just now (tick inside join), B is alone
+    expect(r.released).toEqual(['A']);
+    expect(rows(r, 'B')).toEqual([[1, 'Đội A', 'done', undefined], [2, 'Đội B', 'waiting', 1]]);
+    const n = boards(r, 'B').length;
+    r.cq.online('B', 1000 + CETIQLO.maxWaitMs + 500);
+    expect(boards(r, 'B').length).toBe(n + 1);
   });
 });

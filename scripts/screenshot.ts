@@ -504,6 +504,7 @@ Object.assign(PRESETS, {
   'p11-room-cetiqlo-result-lose': `${CETIQLO_ROOM}&roomState=result-lose`,
   'p11-room-cetiqlo-result-draw': `${CETIQLO_ROOM}&roomState=result-draw`,
   'p11-room-cetiqlo-timeout': `${CETIQLO_ROOM}&roomState=timeout`, // lost, then let go after the 10-minute wait: toast + lobby line, the exit ring lit, the next card held
+  'p11-room-cetiqlo-board': `${CETIQLO_ROOM}&roomState=board`, // the waiting room with 11 teams: the LIVE BOARD on the glass (1 đã đi, 1 đã thua · chờ lượt, 2 đang chơi, 7 chờ) + the HUD panel, benches
 });
 // Leg 3 dev room "Xưởng sô-cô-la" (client/choco.html, src/choco/choco.ts; `npm run screenshot -- choco`; not in the default run):
 // the workshop down the aisle, team 3's table from behind, the plan, the challenge overlay, the "Bỏ qua" confirm (3/5 done).
@@ -585,6 +586,10 @@ Object.assign(PRESETS, {
   'cetiqlo-pants-close2': '/cetiqlo.html?lineup=1&cam=1.3,1.5,3.1,1.3,1.5,1.3', // close-up: wide / jeans straight / wide / bootcut / baggy / tapered / shorts
   'cetiqlo-hang-wide': '/cetiqlo.html?view=hang-wide', // a wide rail aisle at eye height: every piece separate
   'cetiqlo-wall-shoes': '/cetiqlo.html?view=wall-shoes', // the bracketed shoe shelf, one pair per bracket, toe out
+  'cetiqlo-shoes-lineup': '/cetiqlo.html?view=lineup-shoes&lineup=shoes', // 9 shoe + 3 sock shapes, white row over black row: same colour, different shoe
+  'cetiqlo-shoes-close': '/cetiqlo.html?lineup=shoes&cam=-2.5,1.95,3.2,-2.5,1.8,1.3', // 1.9 m: sneaker / runner / slip-on / high-top / loafer (white)
+  'cetiqlo-shoes-close2': '/cetiqlo.html?lineup=shoes&cam=0.4,1.15,3.2,0.4,1.0,1.3', // 1.9 m: chelsea / boot / sandal / slipper + socks (black)
+  'cetiqlo-socks-close': '/cetiqlo.html?lineup=shoes&cam=3.3,1.95,2.9,3.3,1.85,1.3', // the three socks (white)
   'cetiqlo-cards': '/cetiqlo.html?view=cards&cards=1&set=top.shirt-gingham.white-blue,outer.bomber.olive,bottom.jeans-wide-wash.denim-lightdenim,shoes.sneaker.white,bag.crossbody.black,acc.bucket-hat.beige', // the 6 product cards next to the dressed model
 });
 const BENCH_MS = 15_000;

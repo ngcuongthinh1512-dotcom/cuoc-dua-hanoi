@@ -16,7 +16,7 @@
 // 9 = Leg 2 (Macao): everything 4 added (the Louvre room) removed.
 // 10 = Leg 2 player avatars: the socket URL carries `avatar` (0 = Nam, 1 = Nữ, once per connection), TeamInfo.avatar,
 //      `team` online {avatar}. No per-tick byte.
-export const PROTOCOL_VERSION = 15; // Leg 3: ClueCard.leftRoom (v11), ClueCard.room = a challenge played in the GardeRobe room (v12), + a route_info card in the BOZAR hall (v13), ClueCard.pickup (v14), v15 = CETIQLO: ClueCard.room / RoomAt 'cetiqlo', `cq.*` messages, HostState.cetiqlo
+export const PROTOCOL_VERSION = 16; // Leg 3: ClueCard.leftRoom (v11), ClueCard.room = a challenge played in the GardeRobe room (v12), + a route_info card in the BOZAR hall (v13), ClueCard.pickup (v14), v15 = CETIQLO: ClueCard.room / RoomAt 'cetiqlo', `cq.*` messages, HostState.cetiqlo; v16 = CETIQLO waiting room: `cq.board`, cq.state.waitUntil (was loserWaitUntil, now for every queued team)
 
 export const NET = {
   /** Client → server pose rate (SPEC §3: 5 Hz, only when the rounded pose changed). */

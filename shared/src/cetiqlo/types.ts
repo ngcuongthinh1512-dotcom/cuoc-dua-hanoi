@@ -29,7 +29,7 @@ export type ShapeId =
   // underwear / homewear
   | 'bra' | 'briefs' | 'bratop' | 'pyjama' | 'lounge-pants' | 'robe'
   // footwear
-  | 'sneaker' | 'loafer' | 'sandal' | 'slipper' | 'boot' | 'running-shoe' | 'slip-on' | 'sneaker-hi' | 'boot-chelsea' | 'socks-ankle' | 'socks-crew'
+  | 'sneaker' | 'loafer' | 'sandal' | 'slipper' | 'boot' | 'running-shoe' | 'slip-on' | 'sneaker-hi' | 'boot-chelsea' | 'socks-ankle' | 'socks-crew' | 'socks-sport'
   // folded slabs (table / bay display)
   | 'fold-top' | 'fold-bottom';
 /** How the item sits on its fixture: hanging on a rail, folded (a slab) on a table / wall bay, or standing on a shelf. */

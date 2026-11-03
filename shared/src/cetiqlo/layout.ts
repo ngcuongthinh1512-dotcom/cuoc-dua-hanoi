@@ -46,7 +46,7 @@ export const SHAPE_H: Record<ShapeId, number> = { // real size M lengths (sizes.
   'dress-shirt': 1.0, 'dress-aline': 0.95, 'dress-maxi': 1.3, 'dress-slip': 1.1, 'dress-wrap': 1.05, 'dress-tee': 0.9,
   'skirt-pleated': 0.7, 'skirt-aline': 0.55, 'skirt-flare': 0.62, 'skirt-mini': 0.4, 'skirt-tennis': 0.38, 'skirt-denim': 0.5, 'skirt-wrap': 0.7, 'skirt-midi': 0.7, 'skirt-pencil': 0.6, 'skirt-cargo': 0.5,
   bra: 0.14, briefs: 0.06, bratop: 0.40, pyjama: 0.9, 'lounge-pants': 1.06, robe: 1.1,
-  sneaker: 0.11, loafer: 0.09, sandal: 0.05, slipper: 0.08, boot: 0.25, 'running-shoe': 0.12, 'slip-on': 0.08, 'sneaker-hi': 0.16, 'boot-chelsea': 0.18, 'socks-ankle': 0.1, 'socks-crew': 0.22,
+  sneaker: 0.11, loafer: 0.09, sandal: 0.05, slipper: 0.08, boot: 0.25, 'running-shoe': 0.12, 'slip-on': 0.08, 'sneaker-hi': 0.16, 'boot-chelsea': 0.18, 'socks-ankle': 0.1, 'socks-crew': 0.22, 'socks-sport': 0.22,
   'fold-top': 0.21, 'fold-bottom': 0.21, // a stack of three folded pieces (GARMENT_SIZES.store.foldedH × 3)
 };
 

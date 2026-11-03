@@ -2,10 +2,10 @@
 // Object (RaceRoom owns the sockets, SQLite and the alarm; this class gets them through CqIO). One Room per CETIQLO step id. Every
 // transition: state saved (1 meta row) BEFORE any message goes out; messages only on actions (no per-tick traffic).
 import type { CatalogItem } from '@race/shared/cetiqlo';
-import type { CqHostRoom, CqMatchView, CqPlayer, CqResult, CqServerMessage, CqTeamResult } from '@race/shared/protocol';
+import type { CqBoardRow, CqHostRoom, CqMatchView, CqPlayer, CqResult, CqServerMessage, CqTeamResult } from '@race/shared/protocol';
 import { CATALOG_SOURCE } from './catalogSource.ts';
 import { CETIQLO, CHECKOUT_ZONE, START_SPOTS } from './config.ts';
-import { checkout, drop, dueRelease, finish, finished, join, leave, markGone, newRoom, release, settle, startNext, take, type Cfg, type Match, type Room, type Settlement } from './match.ts';
+import { arrivalOrder, checkout, drop, dueRelease, finish, finished, join, leave, markGone, newRoom, release, settle, startNext, take, waitSince, type Cfg, type Match, type Room, type Settlement } from './match.ts';
 
 let injected: readonly CatalogItem[] | null = null;
 /** The catalog the server plays with; a test may inject a fixture (null = back to the real one). */
@@ -23,7 +23,7 @@ export interface CqIO {
   stepOf(team: string): string | null;
   /** The team won its match: complete the step (next clue card), through the engine's usual path. */
   win(team: string, step: string, now: number): void;
-  /** A waiting loser timed out (loserMaxWaitMs): complete the step like a win, with the note "Chờ quá 10 phút, được rời đi" (undoable by the Host). */
+  /** A queued team waited maxWaitMs without an opponent: complete the step like a win, with the note "Chờ quá 10 phút, được rời đi" (undoable by the Host). */
   release(team: string, step: string, now: number): void;
   setAlarm(at: number): void;
   event(t: number, team: string | null, type: string, data: object): void;
@@ -81,17 +81,31 @@ export class Cetiqlo {
     }
     const i = room.queue.indexOf(team);
     const hold = m?.state === 'done' && m.teams.includes(team) && now < room.holdUntil;
-    const lost = room.lost?.[team];
-    return { t: 'cq.state', phase: hold ? 'result' : 'lobby', serverNow: now, queuePos: i + 1, queueLen: room.queue.length, ...(lost ? { loserWaitUntil: lost.at + this.cfg.loserMaxWaitMs } : {}) };
+    return { t: 'cq.state', phase: hold ? 'result' : 'lobby', serverNow: now, queuePos: i + 1, queueLen: room.queue.length, ...(i >= 0 ? { waitUntil: waitSince(room, team) + this.cfg.maxWaitMs } : {}) };
   }
-  /** A (re)joining / reconnecting team: its result again while the screen still holds (then the state). */
+  /** The waiting-room board: every team that entered the room in arrival order, with its status (protocol `cq.board`). */
+  private board(step: string, now: number): Extract<CqServerMessage, { t: 'cq.board' }> {
+    const room = this.rooms[step]!, m = room.match;
+    const rows: CqBoardRow[] = arrivalOrder(room).map((t, k) => {
+      const q = room.queue.indexOf(t);
+      const status = m?.state === 'running' && m.teams.includes(t) && !m.gone.includes(t) ? 'playing' : q >= 0 ? (room.lost?.[t] ? (room.lost[t]!.draw ? 'drew' : 'lost') : 'waiting') : m?.state === 'done' && m.teams.includes(t) && now < room.holdUntil ? 'won' : 'done';
+      return { ...this.io.who(t), order: k + 1, status, ...(q >= 0 ? { queuePos: q + 1, waitUntil: waitSince(room, t) + this.cfg.maxWaitMs } : {}) };
+    });
+    return { t: 'cq.board', rows, serverNow: now };
+  }
+  /** A (re)joining / reconnecting team: its result again while the screen still holds (then the state), and the board. */
   private resend(step: string, team: string, now: number) {
     const st = this.state(step, team, now), r = this.rooms[step]!.results?.[team];
     if (st.t === 'cq.state' && st.phase === 'result' && r) this.io.send(team, r as CqResult);
     this.io.send(team, st);
+    this.io.send(team, this.board(step, now));
   }
+  /** Something moved: the queue hears its places, the whole room (queue + match) the board. */
   private sendQueue(step: string, now: number) {
-    for (const t of this.rooms[step]!.queue) this.io.send(t, this.state(step, t, now));
+    const room = this.rooms[step]!;
+    for (const t of room.queue) this.io.send(t, this.state(step, t, now));
+    const b = this.board(step, now);
+    for (const t of [...room.queue, ...(room.match?.state === 'running' ? room.match.teams.filter((t) => !room.match!.gone.includes(t)) : [])]) this.io.send(t, b);
   }
 
   // ── client messages ──
@@ -103,7 +117,7 @@ export class Cetiqlo {
     if (old && old.step !== step) this.rooms[old.step] = leave(old.room, team);
     const room = this.rooms[step] ?? newRoom();
     if (!old && room.queue.length + (room.match?.state === 'running' ? room.match.teams.length : 0) >= this.cfg.maxTeamsInRoom) return this.no(team, 'join', 'busy');
-    this.rooms[step] = join(room, team);
+    this.rooms[step] = join(room, team, now);
     this.save();
     this.resend(step, team, now);
     this.afterChange(step, now);
@@ -195,11 +209,11 @@ export class Cetiqlo {
       if (this.io.stepOf(team) !== step) continue;
       delete this.released[team];
       const room = this.rooms[step] ?? newRoom();
-      this.rooms[step] = { ...join(room, team), lost: { ...room.lost, [team]: { at: now, match: room.match?.id ?? '' } } };
+      this.rooms[step] = { ...join(room, team, now), lost: { ...room.lost, [team]: { at: now, match: room.match?.id ?? '' } } };
       moved.add(step);
       dirty = true;
     }
-    // waiting losers past loserMaxWaitMs: released (the step completes), queue renumbered
+    // queued teams past maxWaitMs (since their arrival, or their last result without a win): released (the step completes), queue renumbered
     for (const [step, room] of Object.entries(this.rooms)) {
       const due = dueRelease(room, now, this.cfg);
       if (!due.length) continue;
@@ -207,9 +221,10 @@ export class Cetiqlo {
       for (const t of due) this.released[t] = step;
       this.save();
       for (const t of due) {
-        this.io.event(now, t, 'cq.release', { step, match: room.lost![t]!.match, waitedMs: now - room.lost![t]!.at });
+        const matchId = room.lost?.[t]?.match ?? ''; // '' = never played
+        this.io.event(now, t, 'cq.release', { step, match: matchId, waitedMs: now - waitSince(room, t) });
         this.io.release(t, step, now); // SQLite (engine) before the "advance" ack
-        this.io.send(t, { t: 'cq.advance', matchId: room.lost![t]!.match, reason: 'timeout' });
+        this.io.send(t, { t: 'cq.advance', matchId, reason: 'timeout' });
       }
       moved.add(step);
       dirty = false;
@@ -271,11 +286,11 @@ export class Cetiqlo {
     this.sendQueue(step, now); // the losers: their place, behind the result screen
   }
 
-  /** Earliest moment something is due (the alarm): a match's end, the end of a result screen with teams waiting, a loser's release. */
+  /** Earliest moment something is due (the alarm): a match's end, the end of a result screen with teams waiting, a queued team's release. */
   private schedule(now: number) {
     const due: number[] = [];
     for (const r of Object.values(this.rooms)) {
-      for (const t of r.queue) if (r.lost?.[t]) due.push(r.lost[t]!.at + this.cfg.loserMaxWaitMs);
+      for (const t of r.queue) due.push(waitSince(r, t) + this.cfg.maxWaitMs);
       if (r.match?.state === 'running') due.push(r.match.endsAt);
       else if (r.lobbyDue || r.queue.length >= this.cfg.teamsPerMatch) due.push(r.holdUntil);
     }
@@ -286,7 +301,7 @@ export class Cetiqlo {
   /** HostState.cetiqlo: read-only status of every room that has been used. */
   hostView(now: number): CqHostRoom[] {
     return Object.entries(this.rooms).map(([step, r]) => ({
-      step, queue: r.queue.map((t) => ({ ...this.io.who(t), ...(r.lost?.[t] ? { releaseInS: Math.max(0, Math.ceil((r.lost[t]!.at + this.cfg.loserMaxWaitMs - now) / 1000)) } : {}) })),
+      step, queue: r.queue.map((t) => ({ ...this.io.who(t), releaseInS: Math.max(0, Math.ceil((waitSince(r, t) + this.cfg.maxWaitMs - now) / 1000)) })),
       match: r.match?.state === 'running' ? { id: r.match.id, endsAt: r.match.endsAt, teams: r.match.teams.map((t) => ({ ...this.io.who(t), locked: t in r.match!.locked, bagN: r.match!.bags[t]!.length, online: this.io.online(t) })) } : null,
     }));
   }

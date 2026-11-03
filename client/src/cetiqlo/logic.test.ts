@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CqTeamResult } from './contract.ts';
-import { NO_PICK, countdown, insideCheckout, lockTimeText, loserWaitText, pickItem, pointsText, queueText, resultRows } from './logic.ts';
+import { NO_PICK, countdown, insideCheckout, lockTimeText, pickItem, pointsText, queueText, resultRows, waitText } from './logic.ts';
 
 // a wall rail 2 m ahead (−z) with three tiers: low 0.6 m, middle 1.2 m, top 1.95 m; two neighbours 0.55 m apart on the middle tier
 const A = [
@@ -55,7 +55,7 @@ describe('pickItem: look-to-select along the real camera ray', () => {
 describe('countdown', () => {
   it('counts from endsAt on the server clock, warns in the last 30 s, clamps at 0', () => {
     const offset = 1000; // the server is 1 s ahead
-    expect(countdown(10_000 + 241_000, 10_000, offset, 30_000)).toMatchObject({ text: '4:00', warn: false, second: 240 });
+    expect(countdown(10_000 + 211_000, 10_000, offset, 30_000)).toMatchObject({ text: '3:30', warn: false, second: 210 });
     expect(countdown(10_000 + 26_000, 10_000, offset, 30_000)).toMatchObject({ text: '0:25', warn: true });
     expect(countdown(0, 10_000, offset, 30_000)).toMatchObject({ leftMs: 0, text: '0:00', warn: true });
   });
@@ -70,8 +70,8 @@ describe('queue / checkout / lock time', () => {
     expect(pointsText(100)).toBe('100 điểm');
     expect(pointsText(74.3)).toBe('74,3 điểm');
     expect(pointsText(57.66)).toBe('57,7 điểm');
-    expect(loserWaitText(1000, 600_000, 1000 + 61_000)).toBe('Chờ thêm 8:59 nữa nếu không có đối thủ thì được rời đi');
-    expect(loserWaitText(1000, 600_000, 1000 + 600_000)).toBeNull();
+    expect(waitText(1000, 600_000, 1000 + 61_000)).toBe('Còn chờ tối đa 8:59 – không có đối thủ thì được rời đi');
+    expect(waitText(1000, 600_000, 1000 + 600_000)).toBeNull();
   });
   it('insideCheckout: the square when half is given, else the circle', () => {
     const c = { x: -4.5, z: 7.5, half: 1.5, radius: 2.1 };

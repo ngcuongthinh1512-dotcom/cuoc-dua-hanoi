@@ -241,7 +241,7 @@ export class RaceEngine {
     this.step(team, { kind: 'cqWin', step, pose: stand(this.io.pose(team)) }, now);
   }
 
-  /** Leg 3 CETIQLO: a waiting loser timed out (loserMaxWaitMs): the step completes like a win (note "Chờ quá 10 phút, được rời đi"), and the
+  /** Leg 3 CETIQLO: a waiting team timed out (maxWaitMs): the step completes like a win (note "Chờ quá 10 phút, được rời đi"), and the
    *  Host may undo it within NET.undoMs like a "Cho qua". */
   cqRelease(team: string, step: string, now: number): void {
     const r = this.io.team(team);

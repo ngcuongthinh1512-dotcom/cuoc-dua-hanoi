@@ -228,13 +228,101 @@ const skirt = (h: number, rt: number, rb: number, seg = 8, o: SkirtOpts = {}): G
   if (o.pockets) for (const sgn of [-1, 1]) parts.push(shade(box(0.006, 0.09, 0.006, sgn * 0.085, h / 2 - 0.1, rt + 0.004, sgn * 1.0), 0.6));
   return merge(...parts);
 };
-/** Sole (dark) + heel counter + toe box; the shoe points +z, origin centred on the SHAPE_H box. */
-const shoe = (len: number, soleH: number, upperH: number, h: number, toe = true, lace = false): G => {
-  const parts = [shade(box(0.11, soleH, len, 0, -h / 2 + soleH / 2, 0), 0.55), box(0.1, upperH, len * 0.55, 0, -h / 2 + soleH + upperH / 2, -len * 0.2)];
-  if (toe) parts.push(box(0.095, upperH * 0.55, len * 0.42, 0, -h / 2 + soleH + upperH * 0.28, len * 0.28));
-  if (lace) parts.push(shade(box(0.04, 0.006, len * 0.3, 0, -h / 2 + soleH + upperH + 0.003, 0.02), 0.6));
-  return merge(...parts);
+/** A part in a FIXED neutral grey `v` (0..1) whatever the instance colour: rubber soles, foam midsoles, white laces, metal
+ *  buckles — so a black sneaker still has its white sole (colour attribute = (v, v, −1); itemMaterial reads the flag). */
+export function fixed(g: G, v: number): G {
+  const n = g.getAttribute('position').count, c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { c[i * 3] = c[i * 3 + 1] = v; c[i * 3 + 2] = -1; }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return g;
+}
+/** Narrow a part toward +z (a pointed / tapered toe): x scaled from 1 at `z0` to `k` at `z1`. */
+const taper = (g: G, z0: number, z1: number, k: number): G => {
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) { const t = Math.min(1, Math.max(0, (p.getZ(i) - z0) / (z1 - z0))); p.setX(i, p.getX(i) * (1 - (1 - k) * t)); }
+  g.computeVertexNormals();
+  return g;
 };
+/** A box tilted about x (a diagonal side panel, a sloping instep). */
+const slab = (w: number, h: number, d: number, x: number, y: number, z: number, rx: number): G => new THREE.BoxGeometry(w, h, d).rotateX(rx).translate(x, y, z);
+export interface Shoe {
+  /** SHAPE_H, length, width (m). */
+  h: number; len?: number; w?: number;
+  /** Outsole thickness; dark rubber (`soleShade`) or a fixed neutral rubber (`soleFixed` grey 0..1: cream canvas sole, white foam). */
+  sole: number; soleShade?: number; soleFixed?: number;
+  /** Thick foam midsole over the outsole (fixed white); `wedge` = thicker at the heel. Stacked heel block under the back (leather). */
+  midsole?: number; wedge?: boolean; heel?: number;
+  /** Upper height at the instep; the back / collar height (high-top, boot), default = upper; round shaft on top (boots). */
+  upper: number; back?: number; shaft?: number;
+  toe?: 'round' | 'pointed' | 'cap';
+  /** Eyelet pairs on the instep + up the collar front; white (fixed) or same-colour laces. */
+  lace?: number; laceUp?: number; laceWhite?: boolean;
+  strap?: 'penny' | 'velcro';
+  /** Elastic side gussets, heel pull tab, diagonal side overlay panel, foxing band round the sole, darker heel counter, padded
+   *  collar roll, welt ledge (boots). */
+  gusset?: boolean; tab?: boolean; panel?: boolean; foxing?: boolean; counter?: boolean; collar?: boolean; welt?: boolean;
+}
+/** A closed shoe: sole stack + quarter + toe box + the construction details that tell sneaker / runner / loafer / boot apart
+ *  at a glance even in the same colour. Toe +z, origin centred on the SHAPE_H box. */
+function shoe(o: Shoe): G {
+  const len = o.len ?? 0.3, W = o.w ?? 0.105, y0 = -o.h / 2, parts: G[] = [];
+  let y = y0;
+  if (o.heel) { parts.push(shade(box(W, o.heel, len * 0.3, 0, y + o.heel / 2, -len * 0.34), 0.35)); y += o.heel; }
+  parts.push(o.soleFixed !== undefined ? fixed(box(W + 0.006, o.sole, len, 0, y + o.sole / 2, 0), o.soleFixed) : shade(box(W + 0.006, o.sole, len, 0, y + o.sole / 2, 0), o.soleShade ?? 0.35));
+  y += o.sole;
+  if (o.welt) { parts.push(shade(box(W + 0.014, 0.008, len + 0.008, 0, y + 0.004, 0), 0.72)); y += 0.008; }
+  if (o.midsole) {
+    parts.push(fixed(box(W + 0.004, o.midsole, len * 0.98, 0, y + o.midsole / 2, 0), 0.93));
+    if (o.wedge) parts.push(fixed(box(W + 0.004, 0.014, len * 0.42, 0, y + o.midsole + 0.007, -len * 0.28), 0.93));
+    y += o.midsole;
+  }
+  if (o.foxing) parts.push(shade(box(W + 0.012, 0.007, len + 0.006, 0, y - 0.004, 0), 0.4));
+  const yB = y + (o.wedge ? 0.014 : 0), back = o.back ?? o.upper, up = o.upper;
+  parts.push(box(W, back, len * 0.56, 0, yB + back / 2, -len * 0.22)); // the quarter (back half)
+  const toeZ = len * 0.27, toeD = len * 0.46;
+  const toe = box(W - 0.004, up * 0.58, toeD, 0, y + up * 0.29, toeZ);
+  if (o.toe === 'pointed') taper(toe, len * 0.2, len * 0.5, 0.3);
+  else { taper(toe, len * 0.3, len * 0.5, 0.75); parts.push(new THREE.CylinderGeometry(up * 0.26, up * 0.26, W - 0.03, 8).rotateZ(Math.PI / 2).translate(0, y + up * 0.29, len * 0.47)); }
+  parts.push(toe);
+  if (o.toe === 'cap') parts.push(fixed(taper(box(W - 0.002, up * 0.42, len * 0.14, 0, y + up * 0.21, len * 0.44), len * 0.4, len * 0.5, 0.8), 0.9)); // rubber toe cap
+  parts.push(slab(W - 0.02, 0.012, len * 0.3, 0, y + up * 0.76, len * 0.02, 0.35)); // the instep slope down from the quarter to the toe box
+  if (o.lace || o.laceUp) {
+    parts.push(shade(slab(0.046, 0.01, len * 0.3, 0, y + up * 0.82, len * 0.02, 0.35), 0.92)); // tongue
+    const L = (g: G) => (o.laceWhite ? fixed(g, 0.92) : shade(g, 0.45));
+    for (let i = 0; i < (o.lace ?? 0); i++) { // instep pairs along the slope
+      const t = i / Math.max(1, (o.lace ?? 1) - 1), z = len * 0.16 - t * len * 0.26, yy = y + up * 0.62 + t * up * 0.36;
+      parts.push(L(box(0.05, 0.006, 0.012, 0, yy + 0.008, z)));
+      for (const sg of [-1, 1]) parts.push(shade(box(0.008, 0.004, 0.008, sg * 0.024, yy + 0.009, z), 0.3));
+    }
+    for (let i = 0; i < (o.laceUp ?? 0); i++) { // pairs up the collar / shaft front
+      const yy = yB + up + 0.02 + i * ((back + (o.shaft ?? 0) - up - 0.035) / Math.max(1, (o.laceUp ?? 1) - 1)), z = -len * 0.1 + (o.shaft && yy > yB + back ? 0.04 : 0.004);
+      parts.push(L(box(0.05, 0.012, 0.006, 0, yy, z)));
+      for (const sg of [-1, 1]) parts.push(shade(box(0.008, 0.008, 0.004, sg * 0.024, yy, z + 0.002), 0.3));
+    }
+  }
+  if (o.shaft) { parts.push(cyl(0.05, 0.054, o.shaft, 8, 0, yB + back + o.shaft / 2, -len * 0.2)); parts.push(shade(cyl(0.053, 0.053, 0.014, 8, 0, yB + back + o.shaft - 0.007, -len * 0.2, true), 0.8)); } // round shaft + top binding
+  if (o.collar) parts.push(shade(box(W + 0.006, 0.022, len * 0.5, 0, yB + back - 0.011, -len * 0.24), 0.8)); // padded collar roll
+  if (o.counter) parts.push(shade(box(W + 0.004, back * 0.55, len * 0.22, 0, yB + back * 0.275, -len * 0.39), 0.78)); // darker heel counter
+  if (o.gusset) for (const sg of [-1, 1]) parts.push(shade(box(0.006, back * 0.62, len * 0.2, sg * (W / 2), yB + back * 0.62, -len * 0.12), 0.45)); // elastic side panels
+  if (o.tab) parts.push(shade(box(0.022, 0.03, 0.008, 0, yB + back + (o.shaft ?? 0) + 0.012, -len * 0.5 + 0.004), 0.4)); // heel pull tab
+  if (o.panel) for (const sg of [-1, 1]) parts.push(shade(slab(0.006, 0.02, len * 0.42, sg * (W / 2), y + up * 0.4, -len * 0.04, sg * 0.32), 0.7)); // diagonal side overlay (no brand)
+  if (o.strap === 'penny') { parts.push(shade(box(W + 0.004, 0.014, 0.032, 0, y + up * 0.58 + 0.006, len * 0.1), 0.78)); parts.push(shade(box(0.022, 0.018, 0.012, 0, y + up * 0.58 + 0.006, len * 0.1), 0.3)); } // strap over the vamp + slit
+  if (o.strap === 'velcro') { parts.push(shade(box(W + 0.006, 0.026, 0.04, 0, y + up * 0.72, len * 0.02), 0.82)); parts.push(fixed(box(0.03, 0.028, 0.012, W / 2 - 0.01, y + up * 0.72, len * 0.02), 0.5)); }
+  return merge(...parts);
+}
+/** A sock hanging flat: foot + heel + leg tube + cuff; contrast (darker) heel / toe, ribbed cuff lines, sport bands. */
+function sock(h: number, leg: number, cuff: number, o: { bands?: number; tab?: boolean; rib?: boolean } = {}): G {
+  const y0 = -h / 2, zl = -0.045, parts: G[] = [box(0.07, 0.038, 0.17, 0, y0 + 0.019, 0.045), new THREE.CylinderGeometry(0.019, 0.019, 0.068, 8).rotateZ(Math.PI / 2).translate(0, y0 + 0.019, 0.13)];
+  parts.push(shade(box(0.072, 0.04, 0.036, 0, y0 + 0.019, 0.11), 0.7)); // toe
+  parts.push(shade(box(0.072, 0.05, 0.05, 0, y0 + 0.025, zl), 0.7)); // heel
+  parts.push(cyl(0.034, 0.036, leg, 8, 0, y0 + 0.04 + leg / 2, zl, true));
+  const yc = y0 + 0.04 + leg;
+  parts.push(shade(cyl(0.038, 0.037, cuff, 8, 0, yc + cuff / 2, zl), 0.82)); // cuff
+  if (o.rib) for (const t of [0.3, 0.65]) parts.push(shade(cyl(0.0395, 0.0395, 0.004, 8, 0, yc + cuff * t, zl, true), 0.6)); // rib lines
+  for (let i = 0; i < (o.bands ?? 0); i++) parts.push(shade(cyl(0.037, 0.037, 0.014, 8, 0, yc - 0.018 - i * 0.026, zl, true), 0.45)); // sport bands below the cuff
+  if (o.tab) parts.push(shade(box(0.02, 0.022, 0.006, 0, yc + cuff + 0.008, zl - 0.036), 0.6)); // heel tab
+  return merge(...parts);
+}
 
 const H = SHAPE_H;
 export type Spec =
@@ -363,17 +451,22 @@ export const SPEC: Record<ShapeId, Spec> = {
   robe: { kind: 'garment', w: 0.6, h: H.robe, d: 0.1, shoulder: 0.5, sleeve: 'long', sleeveLen: 0.5, sleeveW: 0.18, neck: 'camp', front: 'open', buttons: 0, hem: 'belt', flare: 0.08, drape: 0.02 },
   'lounge-pants': { kind: 'legs', w: 0.37, h: H['lounge-pants'], top: 0.1, knee: 0.1, bottom: 0.105, waist: 'rib', drawstring: true, band: 0.85 },
   // ---- footwear ----
-  sneaker: { kind: 'custom', build: () => shoe(0.3, 0.035, 0.09, H.sneaker, true, true) },
-  loafer: { kind: 'custom', build: () => shoe(0.3, 0.02, 0.065, H.loafer, false) },
-  sandal: { kind: 'custom', build: () => merge(shade(box(0.11, 0.02, 0.28, 0, -0.02, 0), 0.7), box(0.11, 0.015, 0.035, 0, 0, 0.03), box(0.11, 0.015, 0.035, 0, 0, -0.05)) },
-  slipper: { kind: 'custom', build: () => merge(shade(box(0.11, 0.02, 0.28, 0, -0.03, 0), 0.7), box(0.11, 0.055, 0.12, 0, 0.0075, 0.06)) },
-  'running-shoe': { kind: 'custom', build: () => merge(shoe(0.3, 0.045, 0.075, H['running-shoe'], true, true), shade(box(0.1, 0.03, 0.08, 0, -H['running-shoe'] / 2 + 0.06, -0.1), 0.6), shade(box(0.11, 0.012, 0.3, 0, -H['running-shoe'] / 2 + 0.006, 0), 0.9)) }, // thick two-tone sole, heel wedge
-  'slip-on': { kind: 'custom', build: () => merge(shoe(0.29, 0.02, 0.06, H['slip-on'], true, false), shade(box(0.05, 0.03, 0.03, 0, -H['slip-on'] / 2 + 0.065, 0.02), 0.55)) }, // elastic gusset
-  'sneaker-hi': { kind: 'custom', build: () => merge(shade(box(0.11, 0.035, 0.3, 0, -H['sneaker-hi'] / 2 + 0.0175, 0), 0.55), box(0.1, 0.12, 0.17, 0, -H['sneaker-hi'] / 2 + 0.095, -0.06), box(0.095, 0.05, 0.13, 0, -H['sneaker-hi'] / 2 + 0.06, 0.085), shade(box(0.04, 0.006, 0.12, 0, -H['sneaker-hi'] / 2 + 0.158, -0.02), 0.6), shade(box(0.102, 0.03, 0.172, 0, -H['sneaker-hi'] / 2 + 0.145, -0.06), 0.8)) }, // high ankle collar
-  'boot-chelsea': { kind: 'custom', build: () => merge(shade(box(0.11, 0.03, 0.3, 0, -H['boot-chelsea'] / 2 + 0.015, 0), 0.55), box(0.1, 0.06, 0.3, 0, -H['boot-chelsea'] / 2 + 0.06, 0), cyl(0.05, 0.055, 0.08, 8, 0, H['boot-chelsea'] / 2 - 0.04, -0.075), shade(box(0.01, 0.06, 0.05, 0.05, H['boot-chelsea'] / 2 - 0.045, -0.075), 0.45), shade(box(0.02, 0.025, 0.008, 0, H['boot-chelsea'] / 2 - 0.02, -0.02), 0.4)) }, // elastic side panel, pull tab
-  boot: { kind: 'custom', build: () => merge(shade(box(0.11, 0.03, 0.3, 0, -H.boot / 2 + 0.015, 0), 0.55), shade(box(0.09, 0.03, 0.08, 0, -H.boot / 2 + 0.045, -0.1), 0.55), box(0.1, 0.06, 0.3, 0, -H.boot / 2 + 0.065, 0), cyl(0.05, 0.055, 0.12, 8, 0, H.boot / 2 - 0.06, -0.075), shade(box(0.03, 0.02, 0.012, 0, H.boot / 2 - 0.03, -0.018), 0.4)) }, // sole, heel, foot, round shaft, pull tab
-  'socks-ankle': { kind: 'custom', build: () => merge(box(0.07, 0.04, 0.2, 0, -0.03, 0.02), shade(box(0.07, 0.07, 0.07, 0, 0.015, -0.045), 0.85)) },
-  'socks-crew': { kind: 'custom', build: () => merge(box(0.07, 0.04, 0.2, 0, -0.08, 0.02), shade(box(0.07, 0.17, 0.07, 0, 0.015, -0.045), 0.85)) },
+  // ---- footwear: same colour, different shoe — each one has its own sole stack, toe, closure and at least one more tell ----
+  sneaker: { kind: 'custom', build: () => shoe({ h: H.sneaker, sole: 0.022, soleFixed: 0.9, foxing: true, upper: 0.08, toe: 'cap', lace: 4, laceWhite: true, counter: true }) }, // low canvas: cream rubber sole + foxing band, rubber toe cap, 4 white lace pairs
+  'running-shoe': { kind: 'custom', build: () => shoe({ h: H['running-shoe'], len: 0.31, sole: 0.012, soleShade: 0.3, midsole: 0.03, wedge: true, upper: 0.065, toe: 'pointed', lace: 3, laceWhite: true, panel: true, tab: true, counter: true }) }, // thick white foam wedge over a dark outsole, low tapered toe, diagonal side panel, heel tab
+  'slip-on': { kind: 'custom', build: () => shoe({ h: H['slip-on'], sole: 0.02, soleFixed: 0.9, foxing: true, upper: 0.06, toe: 'round', gusset: true, collar: true }) }, // no laces: elastic side gussets, padded collar, cream sole
+  'sneaker-hi': { kind: 'custom', build: () => shoe({ h: H['sneaker-hi'], sole: 0.022, soleFixed: 0.9, foxing: true, upper: 0.08, back: 0.135, toe: 'cap', lace: 3, laceUp: 3, laceWhite: true, collar: true }) }, // ankle collar with 3 more lace pairs up the front
+  loafer: { kind: 'custom', build: () => shoe({ h: H.loafer, sole: 0.012, soleShade: 0.3, heel: 0.018, upper: 0.055, toe: 'pointed', strap: 'penny' }) }, // sleek: thin leather sole + stacked heel, pointed toe, penny strap with slit
+  'boot-chelsea': { kind: 'custom', build: () => shoe({ h: H['boot-chelsea'], sole: 0.014, soleShade: 0.3, heel: 0.022, upper: 0.06, back: 0.14, toe: 'pointed', gusset: true, tab: true }) }, // smooth tall shaft, elastic side panels, pull tab, stacked heel
+  boot: { kind: 'custom', build: () => shoe({ h: H.boot, sole: 0.028, soleShade: 0.3, welt: true, heel: 0.012, upper: 0.07, back: 0.1, shaft: 0.1, toe: 'round', lace: 2, laceUp: 4, tab: true }) }, // lug sole + welt ledge, round toe, laces up the shaft, round shaft with binding
+  sandal: { kind: 'custom', build: () => merge(shade(box(0.106, 0.012, 0.28, 0, -0.019, 0), 0.4), shade(box(0.1, 0.014, 0.276, 0, -0.006, 0), 0.8), shade(box(0.096, 0.004, 0.27, 0, 0.003, 0), 0.95),
+    box(0.108, 0.01, 0.026, 0, 0.012, 0.06), box(0.108, 0.01, 0.022, 0, 0.012, -0.01), shade(box(0.012, 0.03, 0.012, -0.046, 0.016, 0.12), 0.9), // contoured footbed (dark base, lighter top), toe-post + two cross straps
+    box(0.1, 0.01, 0.006, 0, 0.02, -0.135), box(0.006, 0.02, 0.07, -0.047, 0.015, -0.1), box(0.006, 0.02, 0.07, 0.047, 0.015, -0.1), fixed(box(0.014, 0.012, 0.01, 0.05, 0.02, -0.07), 0.55)) }, // open heel strap + metal buckle
+  slipper: { kind: 'custom', build: () => merge(fixed(box(0.108, 0.022, 0.28, 0, -0.029, 0), 0.9), shade(box(0.096, 0.004, 0.27, 0, -0.016, 0), 0.8), // thick cream felt sole, fleece lining showing at the open heel
+    new THREE.CylinderGeometry(0.054, 0.054, 0.15, 8, 1, false, Math.PI / 2, Math.PI).rotateX(Math.PI / 2).scale(1, 0.72, 1).translate(0, -0.016, 0.055), shade(box(0.11, 0.012, 0.012, 0, 0.016, -0.02), 0.8), shade(box(0.03, 0.012, 0.03, 0, 0.026, 0.07), 0.6)) }, // puffy rounded vamp, binding at the mouth, a small bow
+  'socks-ankle': { kind: 'custom', build: () => sock(H['socks-ankle'], 0.025, 0.02, { tab: true }) }, // short: heel tab, plain cuff
+  'socks-crew': { kind: 'custom', build: () => sock(H['socks-crew'], 0.13, 0.04, { rib: true }) }, // tall ribbed cuff
+  'socks-sport': { kind: 'custom', build: () => sock(H['socks-sport'], 0.13, 0.03, { rib: true, bands: 2 }) }, // tube: two dark bands under the cuff
   // ---- folded slabs ----
   'fold-top': { kind: 'custom', build: () => merge(...[0, 1, 2].map((i) => shade(box(Z.store.foldedW - i * 0.004, 0.064, Z.store.foldedD - i * 0.01, 0, -H['fold-top'] / 2 + 0.032 + i * 0.068, i * 0.004), 1 - i * 0.03)), ...[0, 1, 2].map((i) => shade(box(Z.store.foldedW + 0.002, 0.008, 0.01, 0, -H['fold-top'] / 2 + 0.068 * (i + 1) - 0.004, Z.store.foldedD / 2 - 0.003 + i * 0.004), 0.72)), shade(cyl(0.06, 0.06, 0.012, 8, 0, H['fold-top'] / 2, -0.09, true), 0.8), shade(box(0.26, 0.005, 0.006, 0, H['fold-top'] / 2, 0.02), 0.85)) }, // a stack of three folded pieces: fold edges front, collar on top
   'fold-bottom': { kind: 'custom', build: () => merge(...[0, 1, 2].map((i) => shade(box(Z.store.foldedW - 0.04 - i * 0.004, 0.064, Z.store.foldedD - i * 0.01, 0, -H['fold-bottom'] / 2 + 0.032 + i * 0.068, i * 0.004), 1 - i * 0.03)), ...[0, 1, 2].map((i) => shade(box(Z.store.foldedW - 0.04, 0.008, 0.01, 0, -H['fold-bottom'] / 2 + 0.068 * (i + 1) - 0.004, Z.store.foldedD / 2 - 0.003 + i * 0.004), 0.7)), shade(box(0.006, 0.005, 0.3, 0, H['fold-bottom'] / 2, 0), 0.8), shade(box(0.22, 0.03, 0.006, 0, H['fold-bottom'] / 2 - 0.02, -Z.store.foldedD / 2 + 0.002), 0.78)) }, // three folded pairs, waistband at the back
@@ -382,7 +475,7 @@ const BUILD = (sp: Spec, lod = false): G => sp.kind === 'garment' ? garment(sp, 
 /** The hanger drawn over every hanging item (one extra InstancedMesh, fixed colour). */
 export const HANGER: G = merge(shade(box(0.012, 0.07, 0.012, 0, 0.055, 0), 0.4), shade(box(0.42, 0.014, 0.014, 0, 0.02, 0), 0.4));
 /** Standing items turned on their shelf so the silhouette reads (shoes three-quarter on). */
-const STAND_TURN: Partial<Record<ShapeId, number>> = { sneaker: 0.35, loafer: 0.35, sandal: 0.35, slipper: 0.35, boot: 0.35, 'running-shoe': 0.35, 'slip-on': 0.35, 'sneaker-hi': 0.35, 'boot-chelsea': 0.35, 'socks-ankle': 0, 'socks-crew': 0, umbrella: 0 }; // shoes toe-out, slightly turned
+const STAND_TURN: Partial<Record<ShapeId, number>> = { sneaker: 0.35, loafer: 0.35, sandal: 0.35, slipper: 0.35, boot: 0.35, 'running-shoe': 0.35, 'slip-on': 0.35, 'sneaker-hi': 0.35, 'boot-chelsea': 0.35, 'socks-ankle': 0, 'socks-crew': 0, 'socks-sport': 0, umbrella: 0 }; // shoes toe-out, slightly turned
 
 const cache = new Map<string, G>();
 /** Planar UVs in metres from the position, by face direction (1 unit = 0.5 m ≈ one garment face), so a pattern keeps the
@@ -445,6 +538,12 @@ export function setInstanceItem(mesh: THREE.InstancedMesh, i: number, it: Catalo
   for (const a of [p, c2, sc, r]) a.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 }
+/** Dark-garment details (shader rule in itemMaterial): a garment whose LINEAR luminance is ≤ `lumOn` lightens its detail parts
+ *  (full), ≥ `lumOff` keeps the usual darker details; the band sits in the catalog's gap between rust (0.163) and teal / grey
+ *  (0.27) so no colourway is half-way. `tone` = the light grey (linear ≈ sRGB #d0d0d0) the details go toward; a part's darkening
+ *  below `shadeMax` × `gain` is its lightening: buttons / zip pulls (shade ≤ 0.45) come out pearl / silver, plackets / pocket bags
+ *  (0.84) a step lighter than the cloth, the torso's own knit ribs / creases (≥ 0.92) untouched so a black sweater stays black. */
+export const DARK_DETAIL = { lumOn: '0.19', lumOff: '0.24', tone: 'vec3(0.62)', shadeMax: '0.92', gain: '1.8' } as const;
 let shared: THREE.MeshStandardMaterial | null = null;
 /** The one material every item mesh shares (one shader program for the whole catalog). */
 export function itemMaterial(): THREE.MeshStandardMaterial {
@@ -455,12 +554,21 @@ export function itemMaterial(): THREE.MeshStandardMaterial {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.patternAtlas = { value: atlas };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float iPattern; attribute vec3 iColour2; attribute float iScale; attribute float iRough;\nvarying float vPattern; varying vec3 vColour2; varying float vScale; varying float vRough; varying float vShade;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvPattern = iPattern; vColour2 = iColour2; vScale = iScale; vRough = iRough; vShade = color.r;');
+      .replace('#include <common>', '#include <common>\nattribute float iPattern; attribute vec3 iColour2; attribute float iScale; attribute float iRough;\nvarying float vPattern; varying vec3 vColour2; varying float vScale; varying float vRough; varying float vShade; varying float vFixed; varying vec3 vBase;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvPattern = iPattern; vColour2 = iColour2; vScale = iScale; vRough = iRough; vShade = color.r; vFixed = color.b < 0.0 ? color.r : -1.0;\n#ifdef USE_INSTANCING_COLOR\nvBase = instanceColor.rgb;\n#else\nvBase = vec3(1.0);\n#endif');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform sampler2D patternAtlas; varying float vPattern; varying vec3 vColour2; varying float vScale; varying float vRough; varying float vShade;`)
-      .replace('#include <color_fragment>', `#include <color_fragment>
-\tif (vPattern >= 0.0) {
+      .replace('#include <common>', `#include <common>\nuniform sampler2D patternAtlas; varying float vPattern; varying vec3 vColour2; varying float vScale; varying float vRough; varying float vShade; varying float vFixed; varying vec3 vBase;`)
+      .replace('#include <color_fragment>', `
+\tif (vFixed >= 0.0) diffuseColor.rgb = vec3(vFixed); // items.ts fixed(): neutral parts (soles, laces, buckles) ignore the instance colour
+\telse { // DARK_DETAIL rule (owner 2026-11-03): on a dark garment every detail part (vertex shade < 1: buttons, plackets, zips, welts, seams,
+\t\t// bands, hood lining) is LIGHTENED toward a light grey tinted by the garment's hue instead of darkened, so the construction reads
+\t\tfloat lum = dot(vBase, vec3(0.2126, 0.7152, 0.0722)); // linear luminance of the instance colour
+\t\tfloat dark = 1.0 - smoothstep(${DARK_DETAIL.lumOn}, ${DARK_DETAIL.lumOff}, lum);
+\t\tvec3 light = ${DARK_DETAIL.tone} * (0.7 + 0.3 * vBase / max(max(vBase.r, max(vBase.g, vBase.b)), 1e-4)); // black → grey, navy → grey-blue
+\t\tvec3 lit = mix(vBase, light, clamp((${DARK_DETAIL.shadeMax} - vShade) * ${DARK_DETAIL.gain}, 0.0, 1.0)); // shade 0.45 (button) → ≈ full light; 0.84 (placket) → a step; ≥ 0.92 (knit ribs, cloth) → none
+\t\tdiffuseColor.rgb *= mix(vColor.rgb, lit, dark);
+\t}
+\tif (vPattern >= 0.0 && vFixed < 0.0) {
 \t\tvec2 t = clamp(fract(vUv * vScale), 0.012, 0.988);
 \t\tvec2 tile = vec2(mod(vPattern, ${TILES}.0), ${TILES - 1}.0 - floor(vPattern / ${TILES}.0));
 \t\tfloat m = texture2D(patternAtlas, (tile + t) / ${TILES}.0).r;
@@ -574,6 +682,23 @@ export function buildItems(items: readonly CatalogItem[]): ItemsHandle {
       }
     },
   };
+}
+
+/** One item EXACTLY as the store shows it (display shape, shelf pose incl. the stand turn, the store hanger), room-local:
+ *  the brief stills draw this so the brief and the shelf are the same picture. */
+export function shelfPiece(it: CatalogItem): THREE.Group {
+  const g = new THREE.Group(), shape = displayShape(it.shape, it.display);
+  const m = itemMesh(it, shapeGeometry(shape));
+  m.position.set(it.shelf.x, it.shelf.y, it.shelf.z);
+  m.rotation.y = it.shelf.yaw + (STAND_TURN[shape] ?? 0);
+  g.add(m);
+  if (it.display === 'hang') {
+    const h = new THREE.Mesh(HANGER, HANGER_MAT);
+    h.position.set(it.shelf.x, it.shelf.y + SHAPE_H[it.shape] / 2 + 0.01, it.shelf.z);
+    h.rotation.y = it.shelf.yaw;
+    g.add(h);
+  }
+  return g;
 }
 
 /** A single-instance mesh of an item in its colour + pattern: its own shape, or a tailored geometry (the mannequin's clothes). */

@@ -31,8 +31,11 @@ export interface Room {
   holdUntil: number;
   /** The result screen ended nothing yet told the queue: at holdUntil every queued team gets its lobby state (index.ts tick), then false. */
   lobbyDue?: boolean;
-  /** team → when (server ms) and in which match it last played without winning, while it waits in the queue (the loserMaxWaitMs clock). */
-  lost?: Record<string, { at: number; match: string }>;
+  /** team → when (server ms) and in which match it last played without winning, while it waits in the queue (restarts the maxWaitMs clock). */
+  lost?: Record<string, { at: number; match: string; /** that match was a draw (the board says "hòa", not "thua") */ draw?: true }>;
+  /** team → server ms it first joined this room (the board's FIFO order 1..n and the maxWaitMs clock of a team that never played). Kept
+   *  after the team won / was let go / was passed (the board's 'done' rows); dropped only by cq.leave. */
+  arrived?: Record<string, number>;
   /** team → its last cq.result (JSON), re-sent to a team that reconnects while the result screen holds (F5 keeps the progress). */
   results?: Record<string, object>;
   /** team → the opponents of its last match (no immediate rematch while somebody else waits). */
@@ -76,15 +79,20 @@ export function pairNext(queue: readonly string[], last: Readonly<Record<string,
   return [first, ...[...rest.filter(fresh), ...rest.filter((t) => !fresh(t))].slice(0, n - 1)];
 }
 
-/** Queue a team at the back (no-op when it already waits or plays). */
-export const join = (room: Room, team: string): Room => {
+/** Queue a team at the back (no-op when it already waits or plays); its arrival time (`now`) is kept for the board / the wait clock. */
+export const join = (room: Room, team: string, now = 0): Room => {
   const playing = room.match?.state === 'running' && room.match.teams.includes(team);
-  return room.queue.includes(team) || playing ? room : { ...room, queue: [...room.queue, team] };
+  if (room.queue.includes(team) || playing) return room;
+  return { ...room, queue: [...room.queue, team], arrived: { ...room.arrived, [team]: room.arrived?.[team] ?? now } };
 };
-export const leave = (room: Room, team: string): Room => ({ ...room, queue: room.queue.filter((t) => t !== team), lost: without(room.lost, [team]) });
-const without = (lost: Room['lost'], teams: readonly string[]): Room['lost'] => Object.fromEntries(Object.entries(lost ?? {}).filter(([t]) => !teams.includes(t)));
-/** Waiting losers whose clock ran out at `now` (they leave the queue and the step completes). */
-export const dueRelease = (room: Room, now: number, cfg: Cfg = CETIQLO): string[] => room.queue.filter((t) => room.lost?.[t] && now >= room.lost[t]!.at + cfg.loserMaxWaitMs);
+export const leave = (room: Room, team: string): Room => ({ ...room, queue: room.queue.filter((t) => t !== team), lost: without(room.lost, [team]), arrived: without(room.arrived, [team]) });
+const without = <T>(map: Record<string, T> | undefined, teams: readonly string[]): Record<string, T> => Object.fromEntries(Object.entries(map ?? {}).filter(([t]) => !teams.includes(t)));
+/** When a queued team's wait clock started: its last result without a win, else its arrival (owner 2026-11-03: everybody is let go after maxWaitMs). */
+export const waitSince = (room: Room, team: string): number => room.lost?.[team]?.at ?? room.arrived?.[team] ?? 0;
+/** Queued teams whose wait clock ran out at `now` (they leave the queue and the step completes). */
+export const dueRelease = (room: Room, now: number, cfg: Cfg = CETIQLO): string[] => room.queue.filter((t) => now >= waitSince(room, t) + cfg.maxWaitMs);
+/** Every team that entered this room, in arrival order (the board). */
+export const arrivalOrder = (room: Room): string[] => Object.entries(room.arrived ?? {}).sort((a, b) => a[1] - b[1]).map(([t]) => t);
 /** The room without these released teams. */
 export const release = (room: Room, teams: readonly string[]): Room => ({ ...room, queue: room.queue.filter((t) => !teams.includes(t)), lost: without(room.lost, teams) });
 
@@ -221,6 +229,6 @@ export function finish(room: Room, m: Match, s: Settlement, now: number, cfg: Cf
     last: { ...room.last, ...Object.fromEntries(m.teams.map((t) => [t, m.teams.filter((o) => o !== t)])) },
     holdUntil: now + cfg.resultHoldMs,
     lobbyDue: true,
-    lost: { ...without(room.lost, m.teams), ...Object.fromEntries([...s.losers, ...s.draw].filter((t) => !gone(t)).map((t) => [t, { at: now, match: m.id }])) },
+    lost: { ...without(room.lost, m.teams), ...Object.fromEntries([...s.losers, ...s.draw].filter((t) => !gone(t)).map((t) => [t, { at: now, match: m.id, ...(s.draw.includes(t) ? { draw: true as const } : {}) }])) },
   };
 }
