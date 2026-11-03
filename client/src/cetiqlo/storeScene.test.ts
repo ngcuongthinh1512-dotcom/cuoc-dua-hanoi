@@ -13,10 +13,10 @@ let store: StoreHandle;
 beforeAll(() => { store = buildStore(new THREE.Scene()); });
 
 describe('cetiqlo store budget', () => {
-  it('≤ 180 draw calls, ≤ 300k triangles, ≤ 3 lights, no shadows, static matrices frozen', () => {
+  it('≤ 190 draw calls, ≤ 300k triangles, ≤ 3 lights, no shadows, static matrices frozen', () => {
     store.mannequin.dress(['top.tee-crew.white', 'outer.padded-coat.black', 'bottom.jeans-wide.denim', 'shoes.sneaker.red', 'bag.backpack.olive', 'acc.cap.navy']);
     const b = store.budget();
-    expect(b.meshes).toBeLessThanOrEqual(180);
+    expect(b.meshes).toBeLessThanOrEqual(190); // round 4: +5 top shapes (×2 with LOD), LED / porcelain materials
     expect(b.triangles).toBeLessThanOrEqual(300_000);
     expect(b.lights).toBeLessThanOrEqual(3);
     store.group.traverse((ob) => {
@@ -39,6 +39,7 @@ describe('cetiqlo store contract', () => {
     for (const i of CATALOG) expect(store.itemAnchors.get(i.id)!.toArray()).toEqual([i.shelf.x, i.shelf.y, i.shelf.z]);
     expect(store.startSpots.length).toBeGreaterThanOrEqual(2);
     for (const s of store.startSpots) expect(Math.hypot(s.x - store.checkout.centre.x, s.z - store.checkout.centre.z)).toBeLessThan(8);
+    expect(store.mannequin.object.position.x).toBe(STORE.pedestal.x); // the human model on the entrance axis, no big pedestal
     expect(store.lobby.box.min.z).toBe(STORE.lobbyZ);
     expect(store.lobby.box.max.z).toBe(STORE.doorZ);
     expect(store.lobby.door.z).toBe(STORE.lobbyZ);
@@ -112,31 +113,32 @@ describe('cetiqlo brief grid', () => {
       }
     }
     expect(b.size).toEqual({ w: 420, h: 315 });
+    b.object.traverse((ob) => expect(ob.layers.mask & 1, `${ob.name} drawn by the room camera`).toBe(0)); // PiP-only: no entrance copy
   });
 });
 
 describe('cetiqlo hanging layout (round 3)', () => {
-  it('nothing folded; every rail pitch ≥ 0.55 m, hooks / shelves ≥ 0.45 m; one tier per rail; item centres reachable (≤ 1.95 m over the floor)', () => {
+  it('nothing folded; every rail pitch ≥ 0.55 m, hooks / shelves ≥ 0.45 m; wall fixtures ≤ 3 tiers; item centres reachable (≤ 2.1 m over the floor: look-ray picking)', () => {
     expect(CATALOG.some((i) => i.display === 'fold')).toBe(false);
     for (const f of [...FIXTURES[1], ...FIXTURES[2]]) {
       expect(f.kind === 'table' || f.kind === 'bay', `${f.zone} ${f.kind}`).toBe(false);
       expect(f.pitch, f.zone).toBeGreaterThanOrEqual(f.kind === 'rail' ? 0.55 : 0.45);
-      if (f.kind !== 'rail') expect(f.tiers!.length).toBeLessThanOrEqual(2);
+      if (f.kind !== 'rail') expect(f.tiers!.length).toBeLessThanOrEqual(3);
     }
     for (const i of CATALOG) {
       const floorY = i.floor === 1 ? 0 : STORE.floor2Y;
-      expect(i.shelf.y - floorY, i.id).toBeLessThanOrEqual(1.95);
+      expect(i.shelf.y - floorY, i.id).toBeLessThanOrEqual(2.1);
       expect(i.shelf.y - floorY, i.id).toBeGreaterThan(0.2);
     }
   });
-  it('aisles between island rows and to the walls are ≥ 1.4 m (the 0.35 m capsule walks everywhere)', () => {
+  it('aisles between island rows ≥ 1.4 m and to the wall rails ≥ 1.2 m (the 0.35 m capsule walks everywhere)', () => {
     for (const floor of [1, 2] as const) {
       const islands = FIXTURES[floor].filter((f) => f.double);
       for (const a of islands) for (const b of islands) {
         if (a === b || a.x !== b.x) continue;
         expect(Math.abs(a.z - b.z) - 0.6, `${a.zone}/${b.zone}`).toBeGreaterThanOrEqual(1.4);
       }
-      for (const a of islands) expect(STORE.halfW - 0.6 - (Math.abs(a.x) + a.len / 2), a.zone).toBeGreaterThanOrEqual(1.4); // to the wall rails
+      for (const a of islands) expect(STORE.halfW - 0.6 - (Math.abs(a.x) + a.len / 2), a.zone).toBeGreaterThanOrEqual(1.2); // to the wall rails (0.3 off the wall + 0.3 of garment)
     }
   });
 });

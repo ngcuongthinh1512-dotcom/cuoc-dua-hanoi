@@ -49,18 +49,21 @@ const LOOPED = new Set<AnimState>(['idle', 'walk', 'jog', 'air', 'swimIdle', 'sw
 const hSpeed = (p: Readonly<PlayerState>) => Math.hypot(p.velocity.x, p.velocity.z);
 
 /** Next state. `prev` / `prevTime` = current state and s spent in it; `jumped` = PlayerState.jumps changed this frame. */
-export function pickState(p: Readonly<PlayerState>, prev: AnimState, prevTime: number, jumped: boolean): AnimState {
+export function pickState(p: Readonly<PlayerState>, prev: AnimState, prevTime: number, jumped: boolean, speed = hSpeed(p)): AnimState {
   if (p.action !== 'none' && p.action !== 'wave') return p.action; // openBox / celebrate / crash / climbOut (wave = arm layer)
   if (p.moveMode === 'bike') return 'cycle'; // Phase 4 track A: + leg / arm IK onto the bike (vehicle/BikeModel.ts)
-  const moving = hSpeed(p) >= C.moveThreshold;
+  const moving = speed >= C.moveThreshold;
   if (p.moveMode === 'swim') return moving ? 'swimFwd' : 'swimIdle';
   if (jumped) return 'jumpStart';
   if (p.moveMode === 'air') return prev === 'jumpStart' && prevTime < C.jump.startSeconds ? 'jumpStart' : 'air'; // air without a jump = fall
   const landing = prev === 'air' || prev === 'jumpStart' || (prev === 'land' && prevTime < C.land.seconds);
   if (!moving) return landing ? 'land' : 'idle';
   // By speed too: a part-tilted stick or sliding along a wall must not skate a running stride (C.jogFrom).
-  return hSpeed(p) >= C.jogFrom[prev === 'jog' ? 0 : 1] ? 'jog' : 'walk';
+  return speed >= C.jogFrom[prev === 'jog' ? 0 : 1] ? 'jog' : 'walk';
 }
+/** The ground speed the clips follow: the physics speed smoothed over ~C.speedSmoothing s (a capsule brushing a shelf, a step onto a kerb or
+ *  one slow physics step must not re-time the stride or crossfade walk ⇄ jog every frame: Leg 3 CETIQLO "nhân vật giật"). */
+export const smoothSpeed = (prev: number, now: number, dt: number) => prev + (now - prev) * (1 - Math.exp(-dt / C.speedSmoothing));
 
 /** Locomotion playback speed: proportional to the ground speed, 1 at the clip's own speed, clamped. */
 export const locomotionScale = (speed: number, clipSpeed: number) => MathUtils.clamp(speed / clipSpeed, C.timeScale.min, C.timeScale.max);
@@ -131,6 +134,7 @@ export function reach(chain: readonly Object3D[], target: Vector3, pole: Vector3
 export class CharacterAnimator {
   state: AnimState = 'idle';
   private time = 0; // s in `state`
+  private speed = 0; // smoothed ground speed (smoothSpeed)
   private jumps: number | undefined;
   private current: AnimationAction | undefined;
   private readonly actions = new Map<string, AnimationAction>();
@@ -193,7 +197,8 @@ export class CharacterAnimator {
     for (const [bone, q] of this.unposed) bone.quaternion.copy(q);
     const jumped = this.jumps !== undefined && p.jumps !== this.jumps;
     this.jumps = p.jumps;
-    const next = pickState(p, this.state, this.time, jumped);
+    this.speed = smoothSpeed(this.speed, hSpeed(p), dt);
+    const next = pickState(p, this.state, this.time, jumped, this.speed);
     this.time = next === this.state && !jumped ? this.time + dt : 0;
     this.state = next;
     if (next === p.action) {
@@ -214,7 +219,7 @@ export class CharacterAnimator {
       if (a && next === 'jumpStart' && this.time === 0) a.time = C.jump.startAt;
       if (a && next === 'land') a.timeScale = C.land.speed;
       const own = C.clipSpeed[name];
-      if (a && own) a.timeScale = locomotionScale(hSpeed(p), own * this.model.stride);
+      if (a && own) a.timeScale = locomotionScale(this.speed, own * this.model.stride);
     }
     this.model.mixer.update(dt);
     let lift = 0;

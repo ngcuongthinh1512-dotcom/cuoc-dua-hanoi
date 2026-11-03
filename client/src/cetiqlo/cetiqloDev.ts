@@ -39,20 +39,24 @@ const VIEWS: Record<string, [number[], number[]]> = {
   floor1: [[0, 22, 20], [0, 0, -10]],
   floor2: [[0, 24, 10], [0, FLOOR2_Y, -12]],
   tops: [[-12.5, 1.7, 0.5], [-15.7, 1.25, -1.5]],
-  shoes: [[-7, FLOOR2_Y + 1.7, -27], [-7.5, FLOOR2_Y + 0.85, -29.7]],
+  shoes: [[-6, FLOOR2_Y + 1.7, -27], [-6, FLOOR2_Y + 1.1, -29.7]],
   checkout: [[-1.2, 1.9, 12.2], [CK.x, 0.9, CK.z - 1]],
-  mannequin: [[0.3, 1.6, 8.4], [PD.x, 1.25, PD.z]],
+  mannequin: [[0.3, 1.6, 8.6], [PD.x, 1.1, PD.z]],
   facade: [[3, 3.5, 31], [0, 4, STORE.doorZ]],
   patterns: [[0.5, 1.7, -1.6], [0, 1.2, -4.7]], // the shirts island: gingham / pinstripe / floral side by side
   pants: [[-12.6, FLOOR2_Y + 1.7, -2.5], [-15.7, FLOOR2_Y + 1.1, -5.5]], // floor 2 west wall: the pants rail
   outer: [[9.5, 1.7, -10.6], [9.5, 1.2, -13.7]], // fashion outerwear island
   'floor1-wide': [[0, 28, 30], [0, 0, -10]],
   'hang-wide': [[-4.5, 1.7, 2.5], [-4.5, 1.3, -12]], // a wide rail aisle at eye height (between the tees and shirts islands)
-  'wall-shoes': [[-9, FLOOR2_Y + 1.7, -26.5], [-9, FLOOR2_Y + 0.9, -29.7]],
+  'wall-shoes': [[-6, FLOOR2_Y + 1.7, -26.5], [-6, FLOOR2_Y + 1.0, -29.7]],
   'floor2-wide': [[0, 30, 16], [0, FLOOR2_Y, -12]],
+  'wall-acc': [[-3, 1.7, -28.2], [-1, 1.45, -29.7]], // floor 1 back wall: hats / scarves on three tiers, from the back aisle
+  'wall-bags': [[-10.5, 1.7, -28.2], [-9, 1.3, -29.7]],
+  checkout2: [[-2.6, 1.7, 11.6], [-4.5, 1.3, 6.0]], // the checkout counter + slat wall from the lobby door
+  fitting: [[-10, FLOOR2_Y + 1.7, -18.6], [-14.6, FLOOR2_Y + 1.3, -20.4]], // floor 2: the fitting cabins + bench
   'model-set': [[0, 1.5, 4.2], [0, 1.0, 0]], // ?models=1: three dressed figures side by side at the origin
   cards: [[1.4, 1.5, 9.4], [PD.x + 0.3, 1.0, PD.z]], // ?cards=1: the lookbook grid beside the pedestal model
-  brief: [[0, 2.0, 9.8], [0, 1.6, PD.z]], // the grid over the pedestal (+ ?brief=1: its PiP); ?briefs=1: three grids at the origin
+  brief: [[0, 1.7, 9.8], [0, 1.1, PD.z]], // the entrance (+ ?brief=1: the HUD PiP); ?briefs=1: three grids at the origin (dev only)
   briefs: [[0, 1.8, 7.4], [0, 1.4, 0]],
   lineup: [[0, 1.85, 4.9], [0, 1.85, 1.3]],
   'lineup-tops': [[0, 2.2, 6.6], [0, 2.15, 1.3]],
@@ -67,9 +71,9 @@ const extras: { update(dt: number): void }[] = [];
 const MODEL_SETS = [
   ['top.shirt-gingham.white-blue', 'outer.bomber.olive', 'bottom.jeans-wide-wash.denim-lightdenim', 'shoes.sneaker.white', 'bag.crossbody.black', 'acc.bucket-hat.beige'],
   ['top.tee-breton.white-navy', 'outer.trench.beige', 'bottom.skirt-pleated-tartan.red-black', 'shoes.boot.black', 'bag.tote-stripe.cream-navy', 'acc.cap-stripe.navy-white'],
-  ['top.turtleneck.wine', 'outer.down.red', 'bottom.cargo.olive', 'shoes.loafer.brown', 'bag.backpack-camo.olive-khaki', 'acc.scarf-houndstooth.black-white'],
+  ['top.turtleneck.wine', 'outer.down.red', 'bottom.cargo.olive', 'shoes.loafer.brown', 'bag.backpack-camo.khaki-olive', 'acc.scarf-houndstooth.black-white'],
 ];
-if (q.get('lineup') || q.get('patternBoard') === '1') { store.brief.object.visible = false; store.mannequin.object.visible = false; } // the wall boards stand in front of the pedestal
+if (q.get('lineup') || q.get('patternBoard') === '1') store.mannequin.object.visible = false; // the wall boards stand in front of the pedestal
 if (q.get('patternBoard') === '1') { // every pattern on the same navy / white tee, two rows on a white wall: the pattern audit
   const { itemMesh } = await import('./items.ts');
   const { PATTERN_IDS } = await import('./patterns.ts');
@@ -84,8 +88,8 @@ if (q.get('patternBoard') === '1') { // every pattern on the same navy / white t
 }
 if (q.get('lineup') === 'tops' || q.get('lineup') === 'outer') { // every top / outer family once, one neutral colour, on a clean wall
   const { itemMesh } = await import('./items.ts');
-  const tops = ['tee', 'tee-v', 'tee-long', 'tank', 'crop', 'tee-oversized', 'polo', 'polo-long', 'shirt', 'shirt-short', 'shirt-band', 'shirt-camp', 'blouse', 'hoodie', 'hoodie-zip', 'sweatshirt', 'quarter-zip', 'sweater', 'knit-v', 'turtleneck', 'mockneck', 'cardigan', 'knit-vest'] as const;
-  const outer = ['parka', 'uv-zip', 'bomber', 'fleece', 'down', 'down-long', 'puffer-vest', 'blazer', 'trench', 'coach', 'denim-jacket', 'wool-coat', 'padded'] as const;
+  const tops = ['tee', 'tee-v', 'tee-long', 'tank', 'crop', 'tee-oversized', 'tee-raglan', 'tee-pocket', 'tee-henley', 'polo', 'polo-long', 'shirt', 'shirt-short', 'shirt-band', 'shirt-camp', 'blouse', 'hoodie', 'hoodie-zip', 'sweatshirt', 'quarter-zip', 'sweater', 'sweater-chunky', 'knit-v', 'turtleneck', 'mockneck', 'cardigan', 'knit-vest'] as const;
+  const outer = ['parka', 'uv-zip', 'bomber', 'fleece', 'fleece-pullover', 'down', 'down-long', 'puffer-vest', 'blazer', 'trench', 'coach', 'denim-jacket', 'wool-coat', 'padded'] as const;
   const shapes: readonly string[] = q.get('lineup') === 'tops' ? tops : outer;
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(16, 4.4), new THREE.MeshStandardMaterial({ color: '#f7f7f4' }));
   wall.position.set(0, 2.2, 1.0); scene.add(wall);
@@ -118,6 +122,7 @@ if (q.get('briefs') === '1') { // three sets as rings side by side at the origin
   MODEL_SETS.forEach((set, i) => {
     const b = createBrief({ turn: true, y: 1.45 });
     b.object.position.set((i - 1) * 4.0, 0, 0);
+    b.object.traverse((ob) => ob.layers.enable(0)); // dev: show the grids in the room too
     b.phase = i * 0.7;
     b.dress(set);
     scene.add(b.object);

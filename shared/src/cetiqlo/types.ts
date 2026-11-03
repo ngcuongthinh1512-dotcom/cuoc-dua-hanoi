@@ -10,12 +10,12 @@ export type ZoneId =
 /** Low-poly mesh ids built in client/src/cetiqlo/items.ts (one InstancedMesh each). Every id is a distinct silhouette. */
 export type ShapeId =
   // tops
-  | 'tee' | 'tee-v' | 'tee-long' | 'tank' | 'crop' | 'tee-oversized' | 'polo' | 'polo-long'
+  | 'tee' | 'tee-v' | 'tee-long' | 'tank' | 'crop' | 'tee-oversized' | 'tee-raglan' | 'tee-pocket' | 'tee-henley' | 'polo' | 'polo-long'
   | 'shirt' | 'shirt-short' | 'shirt-band' | 'shirt-camp' | 'blouse'
   | 'hoodie' | 'hoodie-zip' | 'sweatshirt' | 'quarter-zip'
-  | 'sweater' | 'knit-v' | 'turtleneck' | 'mockneck' | 'cardigan' | 'knit-vest'
+  | 'sweater' | 'sweater-chunky' | 'knit-v' | 'turtleneck' | 'mockneck' | 'cardigan' | 'knit-vest'
   // outerwear
-  | 'parka' | 'uv-zip' | 'bomber' | 'fleece' | 'down' | 'down-long' | 'puffer-vest' | 'blazer' | 'trench' | 'coach' | 'denim-jacket' | 'wool-coat' | 'padded'
+  | 'parka' | 'uv-zip' | 'bomber' | 'fleece' | 'fleece-pullover' | 'down' | 'down-long' | 'puffer-vest' | 'blazer' | 'trench' | 'coach' | 'denim-jacket' | 'wool-coat' | 'padded'
   // bags & accessories
   | 'tote' | 'round-bag' | 'backpack' | 'crossbody' | 'cap' | 'bucket-hat' | 'beanie' | 'scarf' | 'sunglasses' | 'umbrella'
   // bottoms

@@ -86,13 +86,13 @@ describe('resultRows', () => {
   const slotOf = (id: string) => id.split('.')[0];
   const nameOf = (id: string) => id.toUpperCase();
   const team = (bag: string[], marks: CqTeamResult['marks']): CqTeamResult => ({ slot: 1, name: 'x', bag, marks, correct: 0, errors: 0, score: 0, lockedAtMs: null });
-  it('set order with the wrong item of a slot shown in its row, extras after', () => {
-    const rows = resultRows(set, team(['top.a', 'outer.z', 'acc.q'], ['ok', 'wrong', 'missing', 'extra']), nameOf, slotOf);
+  it('set order with the wrong item of a slot shown in its row, further bag items after as wrong', () => {
+    const rows = resultRows(set, team(['top.a', 'outer.z', 'acc.q'], ['ok', 'wrong', 'missing', 'wrong']), nameOf, slotOf);
     expect(rows).toEqual([
       { text: 'TOP.A', mark: 'ok' },
       { text: 'OUTER.Z', mark: 'wrong' },
       { text: 'BOTTOM.C', mark: 'missing' },
-      { text: 'ACC.Q', mark: 'extra' },
+      { text: 'ACC.Q', mark: 'wrong' },
     ]);
   });
 });

@@ -85,7 +85,7 @@ try {
   await B.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { checkout(): void } } }).__GAME__.cq().checkout());
   const ra = await waitFor(A, stateOf, (s) => !!s?.result, 'A nhận cq.result', 15_000);
   const rb = await waitFor(B, stateOf, (s) => !!s?.result, 'B nhận cq.result', 15_000);
-  // điểm = 16,67 × đúng − 9 × (sai hoặc thừa), 0–100: A 6/6 → 100; B 5 món, 4 đúng + 1 sai → 66,7 − 9 = 57,7
+  // điểm = 16,67 × đúng − 9 × sai (món thừa cũng là sai), 0–100: A 6/6 → 100; B 5 món, 4 đúng + 1 sai → 66,7 − 9 = 57,7
   check(ra?.result?.winner === 'you' && ra.result.youScore === 100 && ra.result.oppScore === 57.7, `A: thắng, 100 điểm vs 57,7 điểm (có: ${JSON.stringify(ra?.result)})`);
   check(rb?.result?.winner === 'opp' && rb.result.youScore === 57.7 && rb.result.oppScore === 100 && rb.result.reason === 'score', `B: thua vì điểm (có: ${JSON.stringify(rb?.result)})`);
   const cardA = await waitFor(A, cardOf, (c) => c === 'L2', 'A: thẻ kế L2 (bước xong)', 15_000);

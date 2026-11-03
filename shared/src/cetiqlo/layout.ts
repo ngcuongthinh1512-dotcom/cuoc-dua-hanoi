@@ -3,7 +3,7 @@
 import type { Display, ShapeId, ZoneId } from './types.ts';
 
 export const STORE = {
-  halfW: 16,            // x ∈ [−16, 16] (round 3: everything hangs with ≥ 0.55 m pitch → a 32 × 46 m store)
+  halfW: 16,            // x ∈ [−16, 16] (round 3: everything hangs with ≥ 0.55 m pitch → a 32 × 46 m store; owner 2026-11-03: keep this footprint)
   back: -30,            // z of the back wall
   lobbyZ: 10,           // glass partition lobby | sales floor
   doorZ: 16,            // the storefront / the room door end (roomFrame doorZ)
@@ -19,17 +19,19 @@ export const STORE = {
   displayMannequins: [{ x: -4.5, z: 13, yaw: 0.5 }, { x: 4.5, z: 13, yaw: -0.5 }],
   /** Static dressed figures in the sales zones (outfits picked by storeScene from that floor's catalog). */
   zoneMannequins: [{ x: -5, z: 3.5, yaw: 0.3, floor: 1 }, { x: 4.75, z: 0.3, yaw: -0.4, floor: 2 }],
+  /** Floor 2 fitting cabins (decor + colliders) along the west wall behind the pants rail. */
+  fittingRooms: { x: -15.25, z: [-19, -20.4, -21.8], w: 1.3, d: 1.4, h: 2.3 },
 } as const;
 export const STAIR_RUN = STORE.stair.steps * STORE.stair.tread; // 7.2 m
 export const STAIR_TOP_Z = STORE.stair.zBottom - STAIR_RUN; // 1.8 = floor2Edge
 
 /** Shape heights (m) — the geometry in items.ts is centred, so a shelf pose = tier y + h / 2; hanging = rail − h / 2. */
 export const SHAPE_H: Record<ShapeId, number> = { // real size M lengths (sizes.ts GARMENT_SIZES): hung = full length on the hanger
-  tee: 0.70, 'tee-v': 0.70, 'tee-long': 0.70, tank: 0.66, crop: 0.46, 'tee-oversized': 0.78, polo: 0.70, 'polo-long': 0.70,
+  tee: 0.70, 'tee-v': 0.70, 'tee-long': 0.70, tank: 0.66, crop: 0.46, 'tee-oversized': 0.78, 'tee-raglan': 0.70, 'tee-pocket': 0.70, 'tee-henley': 0.72, polo: 0.70, 'polo-long': 0.70,
   shirt: 0.74, 'shirt-short': 0.72, 'shirt-band': 0.74, 'shirt-camp': 0.70, blouse: 0.64,
   hoodie: 0.70, 'hoodie-zip': 0.70, sweatshirt: 0.68, 'quarter-zip': 0.68,
-  sweater: 0.66, 'knit-v': 0.66, turtleneck: 0.74, mockneck: 0.70, cardigan: 0.70, 'knit-vest': 0.62,
-  parka: 0.90, 'uv-zip': 0.72, bomber: 0.64, fleece: 0.70, down: 0.68, 'down-long': 1.00, 'puffer-vest': 0.64, blazer: 0.76, trench: 1.05, coach: 0.68, 'denim-jacket': 0.62, 'wool-coat': 1.08, padded: 0.95,
+  sweater: 0.66, 'sweater-chunky': 0.70, 'knit-v': 0.66, turtleneck: 0.74, mockneck: 0.70, cardigan: 0.70, 'knit-vest': 0.62,
+  parka: 0.90, 'uv-zip': 0.72, bomber: 0.64, fleece: 0.70, 'fleece-pullover': 0.70, down: 0.68, 'down-long': 1.00, 'puffer-vest': 0.64, blazer: 0.76, trench: 1.05, coach: 0.68, 'denim-jacket': 0.62, 'wool-coat': 1.08, padded: 0.95,
   tote: 0.58, 'round-bag': 0.30, backpack: 0.45, crossbody: 0.28, cap: 0.14, 'bucket-hat': 0.17, beanie: 0.21, scarf: 0.14, sunglasses: 0.06, umbrella: 0.30,
   pants: 0.97, chinos: 1.05, wide: 1.07, straight: 1.07, cargo: 1.07, jogger: 1.05, sweatpants: 1.05, bootcut: 1.08, bermuda: 0.72, shorts: 0.47, cycling: 0.49,
   'jeans-wide': 1.08, 'jeans-straight': 1.08, 'jeans-baggy': 1.10, 'jeans-tapered': 1.06, 'shorts-chino': 0.52,
@@ -62,7 +64,10 @@ export interface Fixture {
 // facing: 0 = +z (toward the entrance), ±π/2 = ±x, π = −z
 const E = -Math.PI / 2, W = Math.PI / 2;
 /** Fixtures per floor, in catalog fill order within each zone. Wall fixtures sit 0.3 m off the wall. */
-export const FIXTURES: Record<1 | 2, Fixture[]> = { // islands: x −9.5 / 0 / 9.5, rows every 3 m (aisle 2.4 m); walls 0.3 m off; one tier
+// Islands x −9.5 / 0 / 9.5 (7 m double rails), rows every 3 m (aisle 2.4 m), wall rails 0.3 m off the walls; the back / side
+// walls carry the accessories on 2–3 TIERS (0.9–1.2 / 1.5 / 1.9–2.1 m: look-ray picking reaches any height; every tier within
+// the 3.5 m take range from the aisle). Round 4: every catalog item is a unique design (catalog.ts designKey).
+export const FIXTURES: Record<1 | 2, Fixture[]> = {
   1: [
     { zone: 'tees', kind: 'rail', x: -15.7, z: -1.5, yaw: W, len: 21, pitch: 0.75 },
     { zone: 'tees', kind: 'rail', x: -9.5, z: -2, yaw: 0, len: 7, pitch: 0.75, double: true },
@@ -84,9 +89,9 @@ export const FIXTURES: Record<1 | 2, Fixture[]> = { // islands: x −9.5 / 0 / 9
     { zone: 'fashion-outer', kind: 'rail', x: 9.5, z: -14, yaw: 0, len: 7, pitch: 0.8, double: true },
     { zone: 'fashion-outer', kind: 'rail', x: 9.5, z: -17, yaw: 0, len: 7, pitch: 0.8, double: true },
     { zone: 'fashion-outer', kind: 'rail', x: 15.7, z: -9, yaw: E, len: 18, pitch: 0.8 },
-    { zone: 'bags', kind: 'hooks', x: -8.5, z: -29.7, yaw: 0, len: 13, tiers: [1.55], pitch: 0.5 },
-    { zone: 'hats-scarves', kind: 'hooks', x: 6, z: -29.7, yaw: 0, len: 14, tiers: [1.6], pitch: 0.45 },
-    { zone: 'sunglasses-umbrella', kind: 'hooks', x: 15.7, z: -23.5, yaw: E, len: 7, tiers: [1.45], pitch: 0.45 },
+    { zone: 'bags', kind: 'hooks', x: -9, z: -29.7, yaw: 0, len: 6.5, tiers: [1.0, 1.7], pitch: 0.5 }, // back wall, two tiers
+    { zone: 'hats-scarves', kind: 'hooks', x: -1, z: -29.7, yaw: 0, len: 5, tiers: [1.1, 1.55, 2.0], pitch: 0.45 }, // three tiers
+    { zone: 'sunglasses-umbrella', kind: 'hooks', x: 5, z: -29.7, yaw: 0, len: 2.3, tiers: [1.15, 1.6, 2.05], pitch: 0.45 },
   ],
   2: [
     { zone: 'pants', kind: 'rail', x: -15.7, z: -5.5, yaw: W, len: 13, pitch: 0.55 },
@@ -99,10 +104,10 @@ export const FIXTURES: Record<1 | 2, Fixture[]> = { // islands: x −9.5 / 0 / 9
     { zone: 'dresses', kind: 'rail', x: 9.5, z: -2, yaw: 0, len: 7, pitch: 0.75, double: true },
     { zone: 'skirts', kind: 'rail', x: 9.5, z: -5, yaw: 0, len: 7, pitch: 0.55, double: true },
     { zone: 'skirts', kind: 'rail', x: 9.5, z: -8, yaw: 0, len: 7, pitch: 0.55, double: true },
-    { zone: 'bras-undies', kind: 'hooks', x: 15.7, z: -5, yaw: E, len: 10, tiers: [1.3], pitch: 0.45 },
+    { zone: 'bras-undies', kind: 'hooks', x: 15.7, z: -5, yaw: E, len: 4.95, tiers: [1.15, 1.65], pitch: 0.45 }, // east wall, two tiers
     { zone: 'homewear', kind: 'rail', x: 0, z: -11, yaw: 0, len: 7, pitch: 0.6, double: true },
-    { zone: 'footwear-socks', kind: 'shelf', x: -7.5, z: -29.7, yaw: 0, len: 12.15, tiers: [0.75], pitch: 0.45 },
-    { zone: 'footwear-socks', kind: 'hooks', x: 4, z: -29.7, yaw: 0, len: 6, tiers: [1.3], pitch: 0.45 },
+    { zone: 'footwear-socks', kind: 'shelf', x: -6, z: -29.7, yaw: 0, len: 4.1, tiers: [0.7, 1.25, 1.8], pitch: 0.45 }, // 27 pairs on three tiers
+    { zone: 'footwear-socks', kind: 'hooks', x: 0, z: -29.7, yaw: 0, len: 3.15, tiers: [1.25, 1.75], pitch: 0.45 }, // 13 socks on two
   ],
 };
 

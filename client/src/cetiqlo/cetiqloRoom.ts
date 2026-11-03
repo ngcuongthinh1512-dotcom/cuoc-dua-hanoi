@@ -9,8 +9,9 @@
 // brings the next card + `exitReady` (the lit exit ring beside the door, the card held until the body walks into it, like the hall);
 // a loss / draw: the server queues the team again and the next `cq.state lobby` puts the body back in the lobby.
 // Scene: the store agent's `buildStore` (storeScene.ts; contract.ts names the types). Minimal graphics (no shadows / post, pixelRatio 1
-// by main.ts). The mannequin PiP = `mannequin.renderPiP` (its own camera, layer 1 only) into a scissor rectangle right after the main
-// render (`afterRender`): no second renderer, no extra pass over the store.
+// by main.ts). The brief ("đề bài") = six STILLS (`store.brief.snapshots`, one render-target pass per set when the match starts / is
+// restored, then disposed) in the HUD's 3 × 2 grid; a cell click / T opens the zoom lightbox (pointer freed, relocked on close): no
+// per-frame PiP at all.
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { CATALOG, ITEM_BY_ID, STORE, displayShape } from '@race/shared/cetiqlo';
@@ -18,6 +19,7 @@ import { cetiqlo as C } from '../config.ts';
 import { makeExitRing } from '../rooms/exitRing.ts';
 import { groupPose, toLocal, toWorld } from '../rooms/roomFrame.ts';
 import type { CqDebug, RoomHandle, RoomMountOptions } from '../rooms/types.ts';
+import type { Box } from '../rooms/roomPlayer.ts';
 import type { CqMatchView, CqResult, CqServerMessage } from './contract.ts';
 import { CqHud } from './hud.ts';
 import { type Anchor, NO_PICK, type PickState, clockOffset, countdown, insideCheckout, loserWaitText, pickItem, queueText } from './logic.ts';
@@ -28,7 +30,7 @@ import { ROOF_Y, buildStore } from './storeScene.ts';
 /** Room-local z of the door end = the storefront (shared STORE plan); the body enters at (0, DOOR_Z − rooms.enterInset) in the lobby. */
 export const DOOR_Z = STORE.doorZ;
 /** The exit ring: in the lobby beside the storefront door (lit only once the step is done). */
-export const EXIT = { x: -4.5, z: 14.6, r: 0.9 };
+export const EXIT = { x: -4.5, z: STORE.doorZ - 1.4, r: 0.9 };
 const CHECKOUT_TEXT = '[F] Chốt — kết thúc mua sắm';
 const GLOW = { pick: '#ff4d1f', taken: '#2ecc71' }; // CETIQLO-red rim around the item in the crosshair; green on the ones in the bag
 const REFUSAL: Record<string, string> = { far: 'Đứng gần kệ hơn mới lấy được', full: 'Túi đã đầy', dup: 'Món này đã có trong túi', locked: 'Đội đã chốt, không đổi được nữa', notRunning: 'Trận chưa bắt đầu', busy: 'Phòng đã đủ đội, thử lại sau', notInRoom: 'Không ở bước này' };
@@ -42,6 +44,26 @@ export function stairRamp(st = STORE.stair, thick = 0.1) {
 }
 /** The ramp's top surface height at room-local z (for tests). */
 export const rampYAt = (z: number, st = STORE.stair) => Math.min(st.steps * st.rise, Math.max(0, ((st.zBottom + st.tread - z) / st.tread) * st.rise));
+
+/** The owner's "sàn nhà bằng phẳng" (2026-11-03): the KCC must never step on, brush or catch anything at foot height. From the store's
+ *  boxes (room-local cuboids): the two floor slabs stay as they are (one big cuboid each, 1 m thick); every other box standing on a floor
+ *  (bottom within 0.1 m of 0 or floor2Y) is dropped when its top is under `FLAT.minTop` above that floor (zone markers, rack feet, the
+ *  pedestal, the checkout pad: nothing to autostep onto), else embedded `FLAT.embed` m into the slab (no coplanar bottom face at the slab
+ *  top = no ghost contacts) and shortened `FLAT.trim` m at both ends (the capsule slides past corners instead of catching them). */
+export const FLAT = { minTop: 0.5, embed: 0.05, trim: 0.03 };
+export function flatFloorBoxes(boxes: readonly Box[], floor2Y = STORE.floor2Y): Box[] {
+  const out: Box[] = [];
+  for (const b of boxes) {
+    const bottom = b.y - b.hy, top = b.y + b.hy;
+    if (b.hx >= 10 && b.hz >= 10 && b.hy >= 0.1) { out.push(b); continue; } // a floor slab (floor 1 / floor 2)
+    const level = Math.abs(bottom) <= 0.1 ? 0 : Math.abs(bottom - floor2Y) <= 0.1 ? floor2Y : null;
+    if (level === null) { out.push(b); continue; } // not standing on a floor (the roof, the floor-2 balustrade top, hanging things)
+    if (top - level < FLAT.minTop) continue;
+    const lo = level - FLAT.embed;
+    out.push({ ...b, y: (top + lo) / 2, hy: (top - lo) / 2, hx: Math.max(0.02, b.hx - FLAT.trim), hz: Math.max(0.02, b.hz - FLAT.trim) });
+  }
+  return out;
+}
 
 let audio: AudioContext | null = null;
 /** A short beep (the last 30 s): WebAudio, created on first use (after the click that locked the pointer). */
@@ -79,7 +101,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   // colliders (the race only): the store's cuboids at the frame (the hall's way)
   const colliders: RAPIER.Collider[] = [];
   if (o.world) {
-    for (const b of store.colliders) {
+    for (const b of flatFloorBoxes(store.colliders)) {
       const p = toWorld(frame, b.x, b.z), yaw = (b.yaw ?? 0) + frame.yaw;
       const desc = RAPIER.ColliderDesc.cuboid(b.hx, b.hy, b.hz).setTranslation(p.x, frame.floorY + b.y, p.z).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) });
       // fixtures (tables, rails, shelves, balustrades, the pedestal: low boxes) block the body but NOT the camera's spring-arm cast
@@ -88,6 +110,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       if ((b.hy < 1 && b.y < 3) || b.hx < 0.1 || b.hz < 0.1) desc.setCollisionGroups(NPC_GROUPS); // low fixtures + thin panes (glass, balustrades, the stair's side wall)
       colliders.push(o.world.createCollider(desc));
     }
+    o.autostep?.(C.autostepM); // a flat shop floor: no stepping onto anything (the stair is a ramp); the street's step height is back on dispose
     // the stair as ONE ramp on the nosing line (28°, under player.maxSlopeDeg): the body glides up instead of the KCC autostep
     // hopping 16 cm at every one of the 24 step boxes (13 hops a second at walking speed = the "giật giật"); the steps stay drawn
     if (!(import.meta.env.DEV && o.q.get('noRamp') === '1')) { // DEV ?noRamp=1: the bare steps (scripts/room-smooth.ts A/B)
@@ -101,7 +124,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   const feetY = () => (o.feetY?.() ?? frame.floorY) - frame.floorY;
   const moveTo = (s: { x: number; z: number; yaw: number }) => { const p = toWorld(frame, s.x, s.z); o.moveTo?.(p.x, p.z, frame.yaw + s.yaw); };
   const colourOf = (slot: number) => o.teams?.find((t) => t.slot === slot)?.colour ?? (slot === o.team?.slot ? o.team.colour : '#f07f1d');
-  const yAxis = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(), size = new THREE.Vector2();
+  const yAxis = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3();
 
   // ---- state (from the server only) ----
   const hud = VIEWER ? null : new CqHud();
@@ -142,7 +165,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
           hud.lobbyWait(null);
           store.mannequin.dress(m.match.set);
           store.brief.dress(m.match.set);
-          pipAt = -Infinity; // the next frame re-renders the brief picture
+          hud.brief(store.brief.snapshots(renderer, C.pip.snapPx)); // six stills, once per set (also after F5: a fresh match id)
           if (m.startSpot) moveTo(m.startSpot);
           hud.toast(`Trận bắt đầu · đối thủ: ${oppName()}`);
         }
@@ -185,6 +208,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   if (hud) {
     hud.onDrop = (id) => { if (phase === 'match' && !locked) cq?.send({ t: 'cq.drop', id }); };
     hud.onContinue = closeResult;
+    hud.onZoom = (open) => { if (open) document.exitPointerLock(); else if (!hud.bagOpen) o.onClose?.(); }; // the zoom frees the pointer like the bag; the clock / match go on
   }
   // ---- look-to-select: ONE reusable halo shell (the picked item's own low-poly shape, scaled up, additive BackSide) at the item's shelf
   // pose inside the room group (room-local, so the frame transform is the group's); small green shells on the items in the bag ----
@@ -235,23 +259,13 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     if (result) { if (e.code === 'Enter' || e.code === 'KeyF' || e.code === 'Escape') setTimeout(closeResult, 60); return; } // after the game loop polled this key: it opens no card
     if (phase !== 'match') return;
     if (e.code === C.bagKey) openBag(!hud.bagOpen);
+    else if (hud.zoom !== null && (e.code === 'Escape' || e.code === C.lookbookKey)) hud.setZoom(null);
     else if (hud.bagOpen && e.code === 'Escape') openBag(false);
-    else if (e.code === C.lookbookKey) hud.lookbook(!hud.lookbookOn);
+    else if (e.code === C.lookbookKey) hud.setZoom('grid');
     else if (/^Digit[1-9]$/.test(e.code) && !locked) { const id = bag[Number(e.code[5]) - 1]; if (id) cq?.send({ t: 'cq.drop', id }); }
   };
   if (!VIEWER) addEventListener('keydown', onKey);
   const clock = new THREE.Clock();
-  // the brief picture (store.brief: the set's six pieces on a turning ring, no text) is rendered into its own render target at
-  // cetiqlo.pip.fps and blitted as a screen quad every frame (a skipped scissor draw would show the store behind it)
-  const B = store.brief.size;
-  const pipRT = new THREE.WebGLRenderTarget(B.w, B.h, { depthBuffer: true });
-  pipRT.texture.colorSpace = THREE.SRGBColorSpace;
-  const pipQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: pipRT.texture, toneMapped: false, depthTest: false, depthWrite: false }));
-  const pipScene = new THREE.Scene().add(pipQuad), pipCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  let pipAt = -Infinity;
-  const pipRect = { x: 0, y: 0, w: 0, h: 0 };
-  let pipRectAt = -Infinity;
-  hud?.pipAspect(B.w, B.h);
 
   /** DEV / tests: scripted moves against the real server (rooms/types.ts CqDebug; main.ts window.__GAME__.cq). */
   const cqDebug = (): CqDebug => {
@@ -307,34 +321,12 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
         hud.label(go ? CHECKOUT_TEXT : pick.id ? '[F]' : null, go);
       } else if (halo.visible) (halo.visible = false), (pick = NO_PICK);
     },
-    afterRender() {
-      if (VIEWER || !hud || phase !== 'match' || !hud.lookbookOn) return;
-      const now = performance.now();
-      if (now - pipAt >= 1000 / C.pip.fps) { // the ring alone (brief.renderPiP: its own camera / layer) into the render target
-        pipAt = now;
-        renderer.setRenderTarget(pipRT);
-        store.brief.renderPiP(renderer, { x: 0, y: 0, w: B.w, h: B.h });
-        renderer.setRenderTarget(null);
-      }
-      renderer.getSize(size); // pixelRatio is 1 inside a room: CSS px = renderer px (rect origin bottom-left)
-      if (now - pipRectAt > 500) { pipRectAt = now; Object.assign(pipRect, hud.pipRect()); } // the HUD frame's box (scaled by the viewport): layout read twice a second
-      const x = Math.round(pipRect.x), y = Math.round(size.y - pipRect.y - pipRect.h), w = Math.round(pipRect.w), h = Math.round(pipRect.h), auto = renderer.autoClear;
-      renderer.autoClear = false;
-      renderer.setScissorTest(true);
-      renderer.setViewport(x, y, w, h);
-      renderer.setScissor(x, y, w, h);
-      renderer.render(pipScene, pipCam); // 1 draw call: the cached texture
-      renderer.setScissorTest(false);
-      renderer.setViewport(0, 0, size.x, size.y);
-      renderer.setScissor(0, 0, size.x, size.y);
-      renderer.autoClear = auto;
-    },
     interact,
     setProgress: () => {},
     setExit: (on) => exit.set(on), // lit once the step is done (a win: main.ts 'exitReady')
     setLocked: () => {},
     exitHit: () => { const f = feet(); return exit.hit(f.x, f.z); },
-    overlayOpen: () => !!result || !!hud?.bagOpen,
+    overlayOpen: () => !!result || !!hud?.bagOpen || hud?.zoom != null,
     frozen: () => locked || !!result,
     settled: () => frames >= 3 && (VIEWER || (gotState && (cq?.ready?.() ?? true))),
     stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
@@ -342,12 +334,10 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       if (!VIEWER) removeEventListener('keydown', onKey);
       if (cq) { cq.send({ t: 'cq.leave' }); cq.onMessage = null; }
       hud?.dispose();
-      pipRT.dispose();
-      pipQuad.geometry.dispose();
-      (pipQuad.material as THREE.Material).dispose();
       (halo.material as THREE.Material).dispose();
       takenMat.dispose();
       for (const c of colliders) o.world!.removeCollider(c, false);
+      o.autostep?.(null);
       store.dispose();
       scene.remove(g);
       scene.background = was.background;

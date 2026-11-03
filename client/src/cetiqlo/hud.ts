@@ -1,5 +1,5 @@
 // CETIQLO room HUD (plan §6): one DOM root, every setter writes only when its value changed. Vietnamese texts; the clock text is the only
-// per-second write. The mannequin PiP is drawn by the room into the canvas (scissor); the HUD only frames that spot.
+// per-second write. The brief = six STILLS (brief.snapshots, once per set) in a 3 × 2 grid; a cell click / T opens the zoom lightbox.
 import { cetiqlo as C, hud as H } from '../config.ts';
 import { bagIconDataUrl } from './brand.ts';
 import type { CatalogItem, CqResult } from './contract.ts';
@@ -14,9 +14,16 @@ body.cq-room .hud-box, body.cq-room .hud-hand { visibility: hidden; } /* the str
 .cq-logo { display: inline-flex; flex-direction: column; width: 34px; height: 34px; background: #E60012; color: #fff; border-radius: 3px; font: 900 11px/1 system-ui, sans-serif; letter-spacing: .5px; align-items: center; justify-content: center; gap: 2px; text-shadow: none; vertical-align: middle; }
 .cq-logo b { display: block; }
 .cq-bagicon { width: 34px; height: 34px; vertical-align: middle; }
-.cq-pip { position: absolute; left: ${C.pip.left}px; top: ${C.pip.top}px; width: var(--cq-pip-w); aspect-ratio: var(--cq-pip-ar); border: 2px solid rgba(255,255,255,.85); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.5); box-sizing: border-box; }
-#cq { --cq-pip-w: min(${C.pip.maxWidth}px, ${C.pip.widthVw}vw); --cq-pip-ar: 4 / 3; }
-.cq-lookhint { position: absolute; left: ${C.pip.left}px; top: calc(${C.pip.top}px + var(--cq-pip-w) / (var(--cq-pip-ar)) + 4px); font-size: 11px; color: rgba(255,255,255,.7); }
+#cq { --cq-pip-w: min(${C.pip.maxWidth}px, ${C.pip.widthVw}vw); }
+.cq-pip { position: absolute; left: ${C.pip.left}px; top: ${C.pip.top}px; width: var(--cq-pip-w); display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; background: rgba(255,255,255,.85); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.5); box-sizing: border-box; pointer-events: auto; }
+.cq-pip img, .cq-zoom img { display: block; width: 100%; aspect-ratio: 1; background: #e9e6df; border-radius: 2px; cursor: zoom-in; }
+.cq-pip img[src=""] { visibility: hidden; }
+.cq-lookhint { position: absolute; left: ${C.pip.left}px; top: calc(${C.pip.top}px + var(--cq-pip-w) * 2 / 3 + 6px); font-size: 11px; color: rgba(255,255,255,.7); }
+.cq-zoom { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; pointer-events: auto; cursor: zoom-out; }
+.cq-zoom > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 6px; width: ${C.pip.zoomVmin * 1.5}vmin; max-width: 96vw; background: rgba(255,255,255,.9); border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,.6); }
+.cq-zoom.one > div { grid-template-columns: 1fr; width: ${C.pip.zoomVmin}vmin; }
+.cq-zoom.one img:not(.on) { display: none; }
+.cq-zoom.one img { cursor: zoom-out; }
 .cq-clock { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); padding: 4px 22px; border-radius: 8px; background: rgba(0,0,0,.6); font: 700 44px/1.1 system-ui, sans-serif; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
 .cq-clock.warn { color: #ff4a3d; background: rgba(60,0,0,.7); animation: cq-blink 1s steps(2, start) infinite; }
 @keyframes cq-blink { to { opacity: .55; } }
@@ -52,12 +59,13 @@ body.cq-room .hud-box, body.cq-room .hud-hand { visibility: hidden; } /* the str
 .cq-cols .stat { margin: 0 0 8px; font-size: 15px; } .cq-cols .stat b { font-size: 22px; }
 .cq-cols ul { margin: 0; padding: 0; list-style: none; }
 .cq-cols li { padding: 4px 8px; border-bottom: 1px solid #0001; display: flex; justify-content: space-between; gap: 8px; }
-.cq-cols li.ok { background: #e8f5e9; } .cq-cols li.wrong { background: #fdecea; } .cq-cols li.extra { background: #fff3e0; } .cq-cols li.missing { background: #f1f1f1; color: #666; }
+.cq-cols li.ok { background: #e8f5e9; } .cq-cols li.wrong { background: #fdecea; } .cq-cols li.missing { background: #f1f1f1; color: #666; }
 .cq-result button { margin: 16px auto 0; display: block; padding: 10px 28px; border: 0; border-radius: 8px; background: #E60012; color: #fff; font: 700 17px system-ui, sans-serif; cursor: pointer; }
 `;
 const HTML = `<style>${CSS}</style>
-<div class="cq-pip" hidden></div>
-<div class="cq-lookhint" hidden>T: ẩn / hiện ảnh set mẫu</div>
+<div class="cq-pip" hidden>${'<img src="" alt="">'.repeat(6)}</div>
+<div class="cq-lookhint" hidden>bấm để phóng to · T</div>
+<div class="cq-zoom" hidden><div>${'<img src="" alt="">'.repeat(6)}</div></div>
 <div class="cq-clock" hidden>3:00</div>
 <div class="cq-opp" hidden><i></i><span></span><em hidden>đã chốt</em></div>
 <div class="cq-lobby" hidden><h2>Đang chờ đối thủ…</h2><p>Đứng chờ ở sảnh. Trận bắt đầu khi có đội kế tiếp vào phòng.</p><p class="cq-wait" hidden></p></div>
@@ -69,7 +77,7 @@ const HTML = `<style>${CSS}</style>
 
 export class CqHud {
   private readonly root = document.createElement('div');
-  private readonly el: Record<'pip' | 'lookhint' | 'clock' | 'opp' | 'lobby' | 'label' | 'locked' | 'bag' | 'toast' | 'result', HTMLElement>;
+  private readonly el: Record<'pip' | 'lookhint' | 'zoom' | 'clock' | 'opp' | 'lobby' | 'label' | 'locked' | 'bag' | 'toast' | 'result', HTMLElement>;
   private readonly bagList: HTMLOListElement;
   private clockText = '';
   private clockWarn = false;
@@ -78,8 +86,8 @@ export class CqHud {
   private lobbyText = '';
   private waitText: string | null = null;
   private bagIds = '';
-  lookbookOn = true;
-  private inMatch = false;
+  /** The brief zoom (lightbox): closed, the whole 3 × 2 grid large, or one piece (slot index). */
+  zoom: null | 'grid' | number = null;
   private oppText = '';
   private oppLocked = false;
   private toastAt = 0;
@@ -87,6 +95,8 @@ export class CqHud {
   /** A bag item clicked (its id) / the result's continue button. */
   onDrop?: (id: string) => void;
   onContinue?: () => void;
+  /** The brief zoom opened (true: the room frees the pointer) / closed (false: it locks it again). */
+  onZoom?: (open: boolean) => void;
 
   constructor() {
     this.root.id = 'cq';
@@ -94,10 +104,31 @@ export class CqHud {
     document.body.append(this.root);
     document.body.classList.add('cq-room');
     const q = (s: string) => this.root.querySelector<HTMLElement>(s)!;
-    this.el = { pip: q('.cq-pip'), lookhint: q('.cq-lookhint'), clock: q('.cq-clock'), opp: q('.cq-opp'), lobby: q('.cq-lobby'), label: q('.cq-label'), locked: q('.cq-locked'), bag: q('.cq-bag'), toast: q('.cq-toast'), result: q('.cq-result') };
+    this.el = { pip: q('.cq-pip'), lookhint: q('.cq-lookhint'), zoom: q('.cq-zoom'), clock: q('.cq-clock'), opp: q('.cq-opp'), lobby: q('.cq-lobby'), label: q('.cq-label'), locked: q('.cq-locked'), bag: q('.cq-bag'), toast: q('.cq-toast'), result: q('.cq-result') };
     this.bagList = this.el.bag.querySelector('ol')!;
     this.bagList.addEventListener('click', (e) => { const li = (e.target as HTMLElement).closest('li'); if (li?.dataset.id && this.bagOpen) this.onDrop?.(li.dataset.id); });
     this.el.result.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName === 'BUTTON') this.onContinue?.(); });
+    // the brief: a cell click (pointer free) zooms that piece; in the lightbox a cell toggles one piece ⇄ the grid, anything else closes
+    const cellIndex = (e: Event) => { const img = (e.target as HTMLElement).closest('img'); return img ? [...img.parentElement!.children].indexOf(img) : -1; };
+    this.el.pip.addEventListener('click', (e) => { const i = cellIndex(e); if (i >= 0 && this.pipSrc[i]) this.setZoom(i); });
+    this.el.zoom.addEventListener('click', (e) => { const i = cellIndex(e); this.setZoom(i < 0 ? null : this.zoom === 'grid' ? i : 'grid'); });
+  }
+
+  /** The six stills (brief.snapshots, slot order; null = slot missing): the HUD grid + the lightbox share them as data URLs. */
+  brief(stills: readonly (HTMLCanvasElement | null)[]) {
+    this.pipSrc = stills.map((c) => c?.toDataURL() ?? '');
+    for (const grid of [this.el.pip, this.el.zoom.firstElementChild!]) grid.querySelectorAll('img').forEach((img, i) => { img.src = this.pipSrc[i] ?? ''; });
+    this.setZoom(null);
+  }
+  private pipSrc: string[] = [];
+  /** Open / change / close the brief zoom (T toggles the grid; Esc closes). */
+  setZoom(z: null | 'grid' | number) {
+    const was = this.zoom !== null;
+    this.zoom = z;
+    this.show('zoom', z !== null);
+    this.el.zoom.classList.toggle('one', typeof z === 'number');
+    this.el.zoom.querySelectorAll('img').forEach((img, i) => img.classList.toggle('on', i === z));
+    if (was !== (z !== null)) this.onZoom?.(z !== null);
   }
 
   /** The lobby: the queue line (null = hide). */
@@ -113,14 +144,8 @@ export class CqHud {
     el.hidden = text === null;
     if (text !== null) el.textContent = text;
   }
-  /** The match widgets (clock, bag, map, pip, opponent) on / off together. */
-  match(on: boolean) { this.inMatch = on; for (const k of ['clock', 'bag', 'opp', 'lookhint'] as const) this.show(k, on); this.show('pip', on && this.lookbookOn); if (!on) (this.show('label', false), this.show('locked', false)); }
-  /** T: the brief picture shown / hidden; the room skips the PiP blit while hidden. */
-  lookbook(on: boolean) { this.lookbookOn = on; this.show('pip', on && this.inMatch); }
-  /** The brief picture's aspect (store.brief.size): the frame keeps it at any viewport width. */
-  pipAspect(w: number, h: number) { this.root.style.setProperty('--cq-pip-ar', `${w} / ${h}`); }
-  /** The PiP's on-screen rectangle (CSS px = renderer px inside a room): where the room blits it. */
-  pipRect() { const r = this.el.pip.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }
+  /** The match widgets (clock, bag, brief, opponent) on / off together. */
+  match(on: boolean) { for (const k of ['clock', 'bag', 'opp', 'lookhint', 'pip'] as const) this.show(k, on); if (!on) (this.show('label', false), this.show('locked', false), this.setZoom(null)); }
   clock(text: string, warn: boolean) {
     if (text !== this.clockText) (this.clockText = text), (this.el.clock.textContent = text);
     if (warn !== this.clockWarn) (this.clockWarn = warn), this.el.clock.classList.toggle('warn', warn);
@@ -155,7 +180,7 @@ export class CqHud {
     const nameOf = (id: string) => { const it = byId.get(id); return it ? `${it.name} · ${it.colour.name}` : id; };
     const slotOf = (id: string) => byId.get(id)?.slot;
     const col = (t: CqResult['you'], title: string) => `<div><h2><i style="background:${colourOf(t.slot)}"></i>${title}: ${t.name}</h2>
-      <p class="stat"><b>${pointsText(t.score)}</b> · Đúng ${t.correct}/${r.set.length} · Sai / thừa ${t.errors} · chốt: ${lockTimeText(t.lockedAtMs, startAt)}</p>
+      <p class="stat"><b>${pointsText(t.score)}</b> · Đúng ${t.correct}/${r.set.length} · Sai ${t.errors} · chốt: ${lockTimeText(t.lockedAtMs, startAt)}</p>
       <ul>${resultRows(r.set, t, nameOf, slotOf).map((row) => `<li class="${row.mark}"><span>${row.text}</span><span>${MARK_TEXT[row.mark]}</span></li>`).join('')}</ul></div>`;
     this.el.result.firstElementChild!.innerHTML = `<h1 class="${r.winner}">${LOGO}${WINNER_TEXT[r.winner]}</h1>
       <p class="why">${r.winner === 'draw' ? `Hòa: ${REASON_TEXT.draw}.` : `${r.winner === 'you' ? 'Thắng' : 'Đội kia thắng'} nhờ ${REASON_TEXT[r.reason]}.`}${r.winner === 'you' ? ' Mật thư kế đã có: ra vòng sáng cạnh cửa.' : r.winner === 'opp' ? ' Đội bạn quay lại sảnh chờ đối thủ kế tiếp. Đội thua chờ quá 10 phút sẽ được rời đi.' : ''}</p>

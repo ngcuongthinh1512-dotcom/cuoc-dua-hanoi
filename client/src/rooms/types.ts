@@ -53,6 +53,8 @@ export interface RoomMountOptions {
   cq?: CqLink;
   feetY?: () => number;
   moveTo?: (x: number, z: number, yaw: number) => void;
+  /** CETIQLO: the body's KCC autostep height while inside (null = the street's again on dispose). */
+  autostep?: (maxStep: number | null) => void;
   /** CETIQLO: the game's loaded Rocketbox asset (Player.assets.character) for the store's human mannequins: no second GLB load. */
   characterAsset?: CharacterAsset;
 }

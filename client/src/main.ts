@@ -330,6 +330,7 @@ async function start() {
       feetY: () => player!.position.y,
       moveTo: (x, z, yaw) => player!.moveTo(x, z, yaw),
       characterAsset: assets?.character,
+      autostep: (m) => player!.controller.setAutostep(m),
       room: t.room,
       onPickup: () => {
         if (!roomFlow.pickedUp()) return;

@@ -152,14 +152,14 @@ describe('score', () => {
     expect(score(SET, [...SET.slice(0, 5), wrongOf(SET[5]!), decoys[0]!], slotOf)).toMatchObject({ correct: 5, errors: 2, score: 65.3 });
     expect(score(SET, [...SET.slice(0, 4), wrongOf(SET[4]!), wrongOf(SET[5]!)], slotOf)).toMatchObject({ correct: 4, errors: 2, score: 48.7 });
   });
-  it('marks: ok / wrong / missing per set position, then extras', () => {
+  it('marks: ok / wrong / missing per set position, then every further bag item as wrong', () => {
     const bag = [SET[0]!, wrongOf(SET[1]!), decoys[0]!, wrongOf(SET[1]!) === decoys[0] ? 'x' : SET[3]!];
-    expect(score(SET, bag, slotOf).marks).toEqual(['ok', 'wrong', 'missing', 'ok', 'missing', 'missing', 'extra']);
+    expect(score(SET, bag, slotOf).marks).toEqual(['ok', 'wrong', 'missing', 'ok', 'missing', 'missing', 'wrong']);
   });
-  it('a second wrong pick of an already-wrong slot is an extra', () => {
+  it('a second wrong pick of an already-wrong slot is wrong too', () => {
     const others = FIXTURE.filter((i) => i.slot === slotOf(SET[0]!) && i.id !== SET[0]);
     const bag = [others[0]!.id, others[1]!.id];
-    expect(score(SET, bag, slotOf).marks).toEqual(['wrong', 'missing', 'missing', 'missing', 'missing', 'missing', 'extra']);
+    expect(score(SET, bag, slotOf).marks).toEqual(['wrong', 'missing', 'missing', 'missing', 'missing', 'missing', 'wrong']);
   });
 });
 

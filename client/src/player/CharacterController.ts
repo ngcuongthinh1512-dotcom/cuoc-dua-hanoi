@@ -141,6 +141,8 @@ export class CharacterController {
   readonly collider: RAPIER.Collider;
   private readonly body: RAPIER.RigidBody;
   private readonly kcc: RAPIER.KinematicCharacterController;
+  /** Leg 3 CETIQLO: the autostep height inside a room (null = player.maxStep again). */
+  setAutostep!: (maxStep: number | null) => void;
   private readonly shape = new RAPIER.Capsule(HALF - P.radius, P.radius);
   /** Feet and heading at the previous step (renderPosition / renderYaw blend from them). */
   private readonly prev = new Vector3();
@@ -188,6 +190,7 @@ export class CharacterController {
     const slope = (P.maxSlopeDeg * Math.PI) / 180;
     k.setSlideEnabled(true);
     k.enableAutostep(P.maxStep, P.minStepWidth, false);
+    this.setAutostep = (maxStep) => k.enableAutostep(maxStep ?? P.maxStep, P.minStepWidth, false); // Leg 3 rooms: a flat shop floor wants no stepping onto fixture feet
     k.setMaxSlopeClimbAngle(slope);
     k.setMinSlopeSlideAngle(slope);
     k.enableSnapToGround(P.snapToGround);

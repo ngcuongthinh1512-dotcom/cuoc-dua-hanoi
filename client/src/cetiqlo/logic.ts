@@ -64,9 +64,9 @@ export function countdown(endsAt: number, localNow: number, offset: number, warn
 export const queueText = (pos: number | undefined, len: number | undefined) =>
   pos && len ? `Đang chờ đối thủ · vị trí ${pos} / ${len} trong hàng chờ` : 'Đang chờ đối thủ…';
 
-export const MARK_TEXT: Record<CqMark, string> = { ok: '✅ đúng', wrong: '❌ sai', extra: '➕ thừa', missing: '⬜ thiếu' };
+export const MARK_TEXT: Record<CqMark, string> = { ok: '✅ đúng', wrong: '❌ sai', missing: '⬜ thiếu' };
 export interface ResultRow { text: string; mark: CqMark }
-/** One row per set position (the set item, or the wrong item of that slot the team took), then the extras: set order, then bag order. */
+/** One row per set position (the set item, or the wrong item of that slot the team took), then every further bag item as a wrong row: set order, then bag order. */
 export function resultRows(set: readonly string[], r: CqTeamResult, nameOf: (id: string) => string, slotOf: (id: string) => string | undefined): ResultRow[] {
   const rows: ResultRow[] = [];
   const used = new Set<string>();
@@ -80,7 +80,7 @@ export function resultRows(set: readonly string[], r: CqTeamResult, nameOf: (id:
     if (mark === 'ok') used.add(id);
     rows.push({ text: nameOf(shown), mark });
   });
-  for (const b of r.bag) if (!used.has(b) && !set.includes(b)) (used.add(b), rows.push({ text: nameOf(b), mark: 'extra' }));
+  for (const b of r.bag) if (!used.has(b) && !set.includes(b)) (used.add(b), rows.push({ text: nameOf(b), mark: 'wrong' }));
   return rows;
 }
 

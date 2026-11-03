@@ -146,19 +146,18 @@ export const finished = (m: Match, now: number): boolean => m.state === 'running
 const round1 = (n: number) => Math.round(n * 10) / 10;
 export interface Score { correct: number; errors: number; score: number; marks: CqMark[] }
 /** correct = distinct set items in the bag; errors = bag size − correct (wrong variants + extras); score (points, 1 decimal) = clamp(0, 100, 16.67 × correct − 9 × errors).
- *  marks: one per set position ('ok' / 'wrong' = an item of that slot but not the right one / 'missing'), then 'extra' for every bag item
- *  that fills no slot. */
+ *  marks: one per set position ('ok' / 'wrong' = an item of that slot but not the right one / 'missing'), then 'wrong' for every further bag item (an extra = a wrong item, owner 2026-11-03). */
 export function score(set: readonly string[], bag: readonly string[], slotOf: (id: string) => SlotKind | undefined, cfg: Cfg = CETIQLO): Score {
   const correct = bag.filter((id, i) => set.includes(id) && bag.indexOf(id) === i).length;
   const errors = bag.length - correct; // wrong variants + extras
   const marks: CqMark[] = set.map((id) => (bag.includes(id) ? 'ok' : 'missing'));
-  const extra: CqMark[] = [];
+  const extra: CqMark[] = []; // further bag items (no free slot of their kind): wrong too
   for (const id of bag) {
     if (set.includes(id)) continue;
     const k = slotOf(id);
     const j = k ? set.findIndex((s, i) => slotOf(s) === k && marks[i] === 'missing') : -1;
     if (j >= 0) marks[j] = 'wrong';
-    else extra.push('extra');
+    else extra.push('wrong');
   }
   return { correct, errors, score: round1(Math.min(100, Math.max(0, cfg.pointsPerCorrect * correct - cfg.penaltyPerWrongOrExtra * errors))), marks: [...marks, ...extra] };
 }

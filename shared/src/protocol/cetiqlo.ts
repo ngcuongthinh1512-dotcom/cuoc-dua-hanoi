@@ -10,9 +10,10 @@ export type CqClientMessage =
   | { t: 'cq.drop'; id: string }
   | { t: 'cq.checkout'; x: number; z: number };
 
-/** 'ok' right item, 'wrong' a wrong item picked in that set slot, 'missing' nothing for that slot, 'extra' a bag item beyond the set.
- *  CqTeamResult.marks = one mark per set position (set order), then one 'extra' per extra bag item. */
-export type CqMark = 'ok' | 'wrong' | 'extra' | 'missing';
+/** 'ok' right item, 'wrong' a bag item that is not an exact set id (a wrong variant of that slot, or anything beyond the 6 slots: the
+ *  owner's "chuyển thừa = sai"), 'missing' nothing for that slot. CqTeamResult.marks = one mark per set position (set order), then one
+ *  'wrong' per further bag item. */
+export type CqMark = 'ok' | 'wrong' | 'missing';
 /** Why the winner won (the first criterion that told the teams apart). */
 export type CqReason = 'completion' | 'score' | 'speed' | 'draw';
 
@@ -38,9 +39,9 @@ export interface CqTeamResult {
   bag: string[];
   marks: CqMark[];
   correct: number;
-  /** Bag items that are not an exact set id (wrong variants + extras); missing ones are not counted. */
+  /** Bag items that are not an exact set id (all counted as wrong); missing ones are not counted. */
   errors: number;
-  /** Points, 0–100, 1 decimal (16.67 per correct item, −9 per wrong or extra one). */
+  /** Points, 0–100, 1 decimal (16.67 per correct item, −9 per wrong one). */
   score: number;
   /** Server epoch ms of the checkout (ms precision), null = never locked (not completed). */
   lockedAtMs: number | null;

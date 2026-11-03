@@ -608,6 +608,7 @@ export const character = {
   // an upright swimmer (swim.floatDepth keeps the head of Swim_Idle_Loop out), which would sink the whole crawl.
   clipLift: { Swim_Fwd_Loop: 0.3 } as Readonly<Record<string, number>>,
   moveThreshold: 0.25, // m/s horizontal: below = idle / swimIdle / land
+  speedSmoothing: 0.12, // s: the ground speed the clips follow is smoothed this much (Animation.ts smoothSpeed): no per-frame stride re-timing / walk ⇄ jog crossfades from one slow physics step
   // m/s: on foot Jog_Fwd_Loop from jogFrom[1], back to Walk_Loop below jogFrom[0]; in between both
   // clips slide a little (Walk_Loop tops out at 0.94 × 1.6 = 1.50 m/s, Jog_Fwd_Loop starts at 5.68 × 0.4 = 2.27 m/s)
   jogFrom: [1.8, 2.1] as const,
@@ -1192,8 +1193,11 @@ export const spectate = {
   snapDistance: 10, // m: a jump of the goal longer than this (respawn, a new team) is not smoothed
 };
 export const remote = {
-  interpolationMs: 200, // render this far behind the server clock (SPEC §7: buffer ~200 ms; ticks every 200 ms)
-  extrapolateMs: 150, // keep moving at the last velocity this long after the newest sample, then hold
+  // The client sends at sendHz and the server ticks at tickHz (both 5 Hz, unsynchronised): a server tick window holds 0 or 2 client poses
+  // every few ticks, so a peer's samples arrive 200 / 400 ms apart. Measured (Leg 3 CETIQLO, two real clients): with 200 / 150 the opponent
+  // avatar froze in 48 % of the frames while sprinting ("lag lag"). 320 ms behind + 300 ms of extrapolation bridges every 400 ms gap.
+  interpolationMs: 320, // render this far behind the server clock (SPEC §7: buffer ≥ a tick; ticks every 200 ms, gaps up to 400 ms)
+  extrapolateMs: 300, // keep moving at the last velocity this long after the newest sample, then hold
   snapDistance: 10, // m: a jump longer than this (respawn, reconnect) is not interpolated
   bufferSamples: 10, // ticks kept per remote player (2 s at 5 Hz)
   clockSlewMs: 1, // ms the server-clock offset estimate sinks per tick (≈ 5 ms/s): drift and one lucky fast tick wear off
@@ -1310,9 +1314,10 @@ export const cetiqlo = {
   labelRange: 3, // m: items within this (horizontally) can be picked (the server allows takeRange 3.5 + slack)
   pick: { range: 3.5, coneDeg: 13, reachUp: 2.3, margin: 0.12, holdMs: 120 }, // look-to-select (cetiqlo/logic.ts pickItem): the camera ray's cone half-angle (angular: ×1.6 within 1.5 m), reach above the feet, hysteresis margin / hold
   warnMs: 30_000, // ms left when the clock turns red and beeps every second (= the server's warnMs)
-  pip: { left: 358, top: 16, maxWidth: 420, widthVw: 30, fps: 15 }, // px: the brief picture (store.brief, 4:3 ring of the set) right of the clue card, ≤ 30 vw; re-rendered into its render target at `fps`, blitted every frame
+  pip: { left: 358, top: 16, maxWidth: 420, widthVw: 30, snapPx: 640, zoomVmin: 70 }, // px: the brief (store.brief: 3 × 2 stills of the set) right of the clue card, ≤ 30 vw; each still rendered once per set at snapPx²; the zoom lightbox spans zoomVmin % of the screen
+  autostepM: 0.05, // m: the KCC autostep inside the store (the street's player.maxStep 0.4 is back on leaving); the stair is a ramp
   loserMaxWaitMs: 600_000, // ms a loser waits in the lobby before the server lets it go (= worker/src/race/cetiqlo/config.ts CETIQLO.loserMaxWaitMs: keep in sync; the HUD countdown only)
-  lookbookKey: 'KeyT', // shows / hides the brief picture; on by default
+  lookbookKey: 'KeyT', // opens / closes the brief zoom (lightbox; the pointer is freed while open, a click on a cell zooms one piece)
   bagKey: 'KeyB', // opens the bag (pointer free: click an item to drop it); Digit1–9 drop item n directly
   floor2Y: 2, // m: feet higher than this = floor 2 (the pick's floor filter uses |dy| ≤ 2.2 around the feet)
 };

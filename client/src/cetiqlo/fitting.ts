@@ -71,25 +71,28 @@ function wornGarment(o: Garment, f: Fit, shape: ShapeId, outer: boolean): G {
     const r0 = f.armR + ease + 0.01, r1 = f.armR + ease + 0.004;
     const out = S.clone().sub(v(0, S.y, 0)).normalize().multiplyScalar(0.0); // (shoulder joint already at the torso edge)
     const s0 = S.clone().add(out).add(v(0, 0.03, 0));
+    const n0 = parts.length;
     if (sl === 'cap') parts.push(tube(s0, s0.clone().lerp(E, 0.3), r0, r0));
     else if (sl === 'short' || sl === 'puff') { parts.push(tube(s0, s0.clone().lerp(E, Math.min(1, (o.sleeveLen ?? 0.2) / 0.3)), r0 * (sl === 'puff' ? 1.4 : 1), r0)); if (o.sleeve === 'rolled') parts.push(tube(s0.clone().lerp(E, 0.7), s0.clone().lerp(E, 0.82), r0 + 0.012, r0 + 0.012, 8, 0.82)); }
     else if (sl === 'long') { parts.push(tube(s0, E.clone().lerp(s0, -0.1), r0, r1 + 0.005)); parts.push(tube(E.clone().lerp(s0, 0.1), W, r1 + 0.005, r1 * (o.sleeveFlare ?? 1))); if (o.hem === 'rib') parts.push(tube(W.clone().lerp(E, 0.08), W, r1 + 0.004, r1 + 0.004, 8, 0.8)); }
     else if (sl === 'strap') parts.push(shade(box(0.03, 0.08, 0.025, S.x * 0.55, ySh - 0.02, 0.0), 0.9));
+    if (o.raglan) for (let i = n0; i < parts.length; i++) if (!parts[i]!.getAttribute('color')) parts[i] = shade(parts[i]!, 0.74);
   }
   // neck
   const nr = f.neckR + 0.012, ny = f.neckY - 0.02, fz0 = dT + 0.004;
   switch (o.neck) {
-    case 'crew': case 'rib': parts.push(ring(ny, nr + 0.015, nr + 0.01, 0.03, 0.8, 10)); break;
+    case 'crew': case 'rib': parts.push(ring(ny, nr + 0.015, nr + 0.01, o.knit ? 0.045 : 0.03, 0.8, 10)); break;
+    case 'henley': parts.push(ring(ny, nr + 0.015, nr + 0.01, 0.03, 0.8, 10)); parts.push(shade(box(0.03, 0.17, 0.008, 0, ySh - 0.12, fz0), 0.84)); for (let i = 0; i < 3; i++) parts.push(shade(box(0.02, 0.02, 0.008, 0, ySh - 0.06 - i * 0.055, fz0 + 0.005), 0.45)); break;
     case 'shirt': parts.push(ring(ny + 0.015, nr + 0.03, nr + 0.025, 0.06, 0.9, 10)); for (const s of [-1, 1]) { parts.push(shade(box(0.1, 0.085, 0.012, s * 0.065, ySh - 0.045, dT + 0.006, -s * 0.55), 0.9)); parts.push(shade(box(0.03, 0.03, 0.01, s * 0.11, ySh - 0.09, dT + 0.008, -s * 0.55), 0.9)); } break;
     case 'band': parts.push(ring(ny + 0.01, nr + 0.012, nr + 0.008, 0.035, 0.85, 10)); break;
     case 'mock': parts.push(ring(ny + 0.03, nr + 0.012, nr + 0.01, 0.07, 0.85, 10)); break;
     case 'turtle': parts.push(ring(ny + 0.06, nr + 0.014, nr + 0.012, 0.13, 0.85, 10)); break;
     case 'stand': parts.push(ring(ny + 0.015, nr + 0.03, nr + 0.025, 0.06, 0.9, 10)); break;
     case 'polo': parts.push(ring(ny + 0.015, nr + 0.03, nr + 0.025, 0.06, 0.9, 10)); for (const s of [-1, 1]) parts.push(shade(box(0.09, 0.09, 0.012, s * 0.055, ySh - 0.045, dT + 0.006, -s * 0.5), 0.9)); break;
-    case 'camp': for (const s of [-1, 1]) parts.push(shade(box(0.12, 0.1, 0.012, s * 0.09, ySh - 0.05, dT + 0.006, -s * 0.7), 0.9)); break;
+    case 'camp': for (const s of [-1, 1]) parts.push(shade(box(0.12, 0.1, 0.012, s * 0.09, ySh - 0.05, dT + 0.006, -s * 0.7), 0.9)); if (o.notch) parts.push(shade(box(0.07, 0.1, 0.008, 0, ySh - 0.07, dT + 0.002), 0.35)); break;
     case 'lapel': for (const s of [-1, 1]) parts.push(shade(box(0.075, 0.3, 0.012, s * 0.085, ySh - 0.17, dT + 0.006, -s * 0.35), 0.85)); break;
     case 'hood': parts.push(new THREE.SphereGeometry(0.16, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.1, 0.95).rotateX(-0.6).translate(0, ySh - 0.04, -dT - 0.03)); if (o.drawstrings) for (const s of [-1, 1]) { parts.push(shade(box(0.008, 0.16, 0.008, s * 0.04, ySh - 0.16, fz0 + 0.006, s * 0.12), 0.4)); parts.push(shade(box(0.012, 0.025, 0.012, s * 0.055, ySh - 0.245, fz0 + 0.006), 0.3)); } break;
-    case 'v': for (const s of [-1, 1]) parts.push(shade(box(0.025, 0.17, 0.01, s * 0.05, ySh - 0.085, dT + 0.004, -s * 0.5), 0.5)); break;
+    case 'v': { const vl = o.deepV ? 0.23 : 0.17; for (const s of [-1, 1]) parts.push(shade(box(0.025, vl, 0.01, s * (0.028 + vl * 0.13), ySh - vl / 2, dT + 0.004, -s * 0.5), 0.5)); break; }
     case 'scoop': break;
   }
   if (sl === 'strap' || o.neck === 'scoop') parts.push(shade(box(0.13, 0.05, dT * 2 + 0.004, 0, ySh - 0.03, 0), 0.4));
@@ -103,7 +106,9 @@ function wornGarment(o: Garment, f: Fit, shape: ShapeId, outer: boolean): G {
   }
   if (outer) for (const s of [-1, 1]) parts.push(shade(box(0.03, len - 0.02, 0.012, s * Math.sin(gap / 2) * (wT + wB) / 2, mid, Math.cos(gap / 2) * (dT + dB) / 2 + 0.004), o.front === 'zip' ? 0.5 : 0.85)); // front edges of the opening
   if (o.front === 'double') for (const s of [-1, 1]) for (let i = 0; i < 3; i++) parts.push(shade(box(0.03, 0.03, 0.008, s * 0.075, ySh - 0.22 - i * 0.15, fz + 0.004), 0.45));
-  switch (o.pocket) {
+  if (o.vstitch) parts.push(shade(box(0.05, 0.05, 0.006, 0, ySh - 0.08, fz + 0.002, Math.PI / 4), 0.68));
+  if (o.raglan) for (const s of [-1, 1]) parts.push(shade(box(0.012, 0.26, 0.012, s * 0.11, ySh - 0.1, dT * 0.6, s * 0.75), 0.6));
+  for (const pk of [o.pocket, o.pocket2]) switch (pk) {
     case 'kangaroo': parts.push(shade(box(0.3, 0.15, 0.012, 0, hem + 0.15, dB + 0.006), 0.86)); break;
     case 'chest': parts.push(shade(box(0.11, 0.1, 0.01, 0.12, ySh - 0.2, fz + 0.002), 0.86)); break;
     case 'chest2': for (const s of [-1, 1]) parts.push(shade(box(0.11, 0.1, 0.01, s * 0.12, ySh - 0.2, fz + 0.002), 0.86)); break;
@@ -115,7 +120,7 @@ function wornGarment(o: Garment, f: Fit, shape: ShapeId, outer: boolean): G {
   if (o.epaulettes) for (const s of [-1, 1]) parts.push(shade(box(0.1, 0.025, 0.05, s * (f.chestHalfW - 0.02), ySh + 0.01, 0), 0.8));
   if (o.stormFlap) parts.push(shade(box(0.16, 0.2, 0.012, 0.1, ySh - 0.17, fz + 0.004), 0.84));
   if (o.hem === 'drawcord') for (const s of [-1, 1]) parts.push(shade(box(0.008, 0.08, 0.008, s * 0.03, hem + 0.03, dB + 0.004), 0.4));
-  if (o.hem === 'rib') parts.push(ring(hem + 0.03, wB + 0.006, dB + 0.006, 0.06, 0.8));
+  if (o.hem === 'rib') { parts.push(ring(hem + 0.03, wB + 0.006, dB + 0.006, 0.06, 0.8)); if (o.ribLines) for (const yy of [0.02, 0.045]) parts.push(ring(hem + yy, wB + 0.009, dB + 0.009, 0.004, 0.55)); }
   if (o.hem === 'belt') parts.push(ring(f.waistY - 0.02, wB + 0.012, dB + 0.012, 0.05, 0.6));
   if (o.quilt) for (let i = 1; i <= o.quilt; i++) parts.push(ring(ySh - (i * len) / (o.quilt + 1), (wT + wB) / 2 + 0.006, (dT + dB) / 2 + 0.006, 0.007, 0.72));
   void shape;

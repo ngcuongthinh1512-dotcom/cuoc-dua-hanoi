@@ -30,14 +30,18 @@ export interface Garment {
   w: number; h: number; d: number; shoulder?: number;
   sleeve: 'none' | 'cap' | 'short' | 'long' | 'strap' | 'puff' | 'rolled';
   sleeveLen?: number; sleeveW?: number; sleeveFlare?: number;
-  neck?: 'crew' | 'v' | 'turtle' | 'mock' | 'polo' | 'shirt' | 'band' | 'camp' | 'hood' | 'lapel' | 'scoop' | 'stand' | 'rib';
+  neck?: 'crew' | 'v' | 'turtle' | 'mock' | 'polo' | 'shirt' | 'band' | 'camp' | 'hood' | 'lapel' | 'scoop' | 'stand' | 'rib' | 'henley';
   /** Front: button placket (n buttons), zip (tape + pull), half zip, open front (cardigan), double-breasted, snap row. */
   front?: 'placket' | 'zip' | 'halfzip' | 'open' | 'double' | 'buttons' | 'snaps';
   buttons?: number;
   pocket?: 'kangaroo' | 'chest' | 'chest2' | 'side2' | 'flap2' | 'flapLow2' | 'breast' | 'chestFlap2';
+  /** A second pocket kind (a chest zip welt over side welts, say). */
+  pocket2?: Garment['pocket'];
   hem?: 'rib' | 'belt' | 'drawcord' | 'straight';
   /** Puffy baffles (count), hood drawstrings, epaulettes, storm flap, yoke seam line, elbow bend, drop shoulder, knit ribbing. */
   quilt?: number; drawstrings?: boolean; epaulettes?: boolean; stormFlap?: boolean; yoke?: boolean; dropShoulder?: boolean; knit?: boolean; gathers?: boolean;
+  /** Round 4 glance details: contrast (darker) raglan sleeves, the sweatshirt's V-stitch at the neck, an open-collar notch (camp), horizontal rib lines on knit bands, a deeper V. */
+  raglan?: boolean; vstitch?: boolean; notch?: boolean; ribLines?: boolean; deepV?: boolean;
   /** Hem flare (A-line / bell, 0..0.2) and drape wave amplitude at the hem (m). */
   flare?: number; drape?: number;
 }
@@ -98,19 +102,21 @@ const disc = (x: number, y: number, z: number, r = 0.011, s = 0.45): G => shade(
 function garment(o: Garment, lod = false): G {
   const { w, h, d } = o, parts: G[] = [torso(o, lod)];
   const fz = d / 2 + 0.004, top = h / 2;
-  for (const sgn of [-1, 1]) parts.push(...sleeve(o, sgn, lod));
+  for (const sgn of [-1, 1]) parts.push(...sleeve(o, sgn, lod).map((g) => o.raglan && !g.getAttribute('color') ? shade(g, 0.74) : g)); // raglan: contrast sleeves
+  if (o.raglan && !lod) for (const sgn of [-1, 1]) parts.push(shade(box(0.012, 0.3, d + 0.006, sgn * 0.13, top - 0.1, 0, sgn * 0.75), 0.6)); // the diagonal raglan seams
   if (o.sleeve === 'strap') for (const sgn of [-1, 1]) parts.push(shade(box(0.03, 0.09, 0.02, sgn * 0.1, top - 0.045, 0), 0.9));
   if (o.sleeve === 'strap' || o.neck === 'scoop') parts.push(shade(box(0.16, 0.06, d + 0.004, 0, top - 0.03, 0), 0.4)); // the open neckline
   if (!lod) switch (o.neck) {
-    case 'crew': case 'rib': parts.push(shade(cyl(0.1, 0.1, 0.035, 10, 0, top, 0, true), 0.78)); break;
-    case 'v': parts.push(shade(cyl(0.1, 0.1, 0.02, 10, 0, top, 0, true), 0.78)); for (const sg of [-1, 1]) parts.push(shade(box(0.022, 0.19, 0.01, sg * 0.055, top - 0.085, fz, -sg * 0.5), 0.5)); break;
+    case 'crew': case 'rib': parts.push(shade(cyl(0.1, 0.1, o.knit ? 0.05 : 0.035, 10, 0, top, 0, true), 0.78)); break;
+    case 'henley': parts.push(shade(cyl(0.1, 0.1, 0.035, 10, 0, top, 0, true), 0.78)); parts.push(shade(box(0.034, 0.19, 0.008, 0, top - 0.11, fz), 0.84)); for (let i = 0; i < 3; i++) parts.push(disc(0, top - 0.05 - i * 0.06, fz + 0.008, 0.01)); break; // short buttoned placket
+    case 'v': { const vl = o.deepV ? 0.25 : 0.19; parts.push(shade(cyl(0.1, 0.1, 0.02, 10, 0, top, 0, true), 0.78)); for (const sg of [-1, 1]) parts.push(shade(box(0.022, vl, 0.01, sg * (0.03 + vl * 0.13), top - vl * 0.45, fz, -sg * 0.5), 0.5)); break; }
     case 'turtle': parts.push(shade(cyl(0.095, 0.105, 0.14, 10, 0, top + 0.05, 0, true), 0.85)); parts.push(shade(cyl(0.108, 0.108, 0.05, 10, 0, top + 0.1, 0, true), 0.78)); break; // rolled
     case 'mock': parts.push(shade(cyl(0.095, 0.1, 0.07, 10, 0, top + 0.025, 0, true), 0.85)); break;
     case 'stand': parts.push(shade(cyl(0.1, 0.095, 0.06, 10, 0, top + 0.02, 0, true), 0.9)); break;
     case 'band': parts.push(shade(cyl(0.098, 0.098, 0.035, 10, 0, top + 0.01, 0, true), 0.84)); break;
-    case 'polo': parts.push(shade(cyl(0.098, 0.09, 0.04, 10, 0, top + 0.01, 0, true), 0.9)); for (const sg of [-1, 1]) parts.push(shade(box(0.09, 0.075, 0.012, sg * 0.055, top - 0.03, fz + 0.006, -sg * 0.6), 0.88)); break; // flat folded collar
+    case 'polo': parts.push(shade(cyl(0.1, 0.092, 0.045, 10, 0, top + 0.012, 0, true), 0.9)); for (const sg of [-1, 1]) parts.push(shade(box(0.105, 0.09, 0.014, sg * 0.062, top - 0.035, fz + 0.008, -sg * 0.55), 0.86)); break; // flat folded collar, wider than the shirt's
     case 'shirt': parts.push(shade(cyl(0.1, 0.095, 0.045, 10, 0, top + 0.015, 0, true), 0.9)); for (const sg of [-1, 1]) { parts.push(shade(box(0.1, 0.085, 0.012, sg * 0.065, top - 0.03, fz + 0.006, -sg * 0.55), 0.9)); parts.push(shade(box(0.03, 0.03, 0.01, sg * 0.11, top - 0.075, fz + 0.008, -sg * 0.55), 0.9)); } break; // pointed collar + stand
-    case 'camp': for (const sg of [-1, 1]) parts.push(shade(box(0.13, 0.1, 0.012, sg * 0.09, top - 0.045, fz + 0.006, -sg * 0.75), 0.9)); break;
+    case 'camp': for (const sg of [-1, 1]) parts.push(shade(box(0.13, 0.1, 0.012, sg * 0.09, top - 0.045, fz + 0.006, -sg * 0.75), 0.9)); if (o.notch) parts.push(shade(box(0.07, 0.11, 0.008, 0, top - 0.06, fz + 0.002), 0.35)); break; // the open neck shows dark
     case 'lapel': for (const sg of [-1, 1]) { parts.push(shade(box(0.075, 0.3, 0.012, sg * 0.08, top - 0.17, fz + 0.006, -sg * 0.32), 0.85)); parts.push(shade(box(0.06, 0.05, 0.012, sg * 0.1, top - 0.04, fz + 0.007, -sg * 0.9), 0.85)); } break; // notch lapels
     case 'hood': { parts.push(new THREE.SphereGeometry(0.17, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.1, 0.95).rotateX(-0.55).translate(0, top - 0.02, -d / 2 - 0.04)); if (o.drawstrings) for (const sg of [-1, 1]) { parts.push(shade(box(0.008, 0.16, 0.008, sg * 0.04, top - 0.14, fz + 0.006, sg * 0.12), 0.4)); parts.push(shade(box(0.012, 0.025, 0.012, sg * 0.055, top - 0.225, fz + 0.006), 0.3)); } break; }
     case 'scoop': break;
@@ -118,14 +124,15 @@ function garment(o: Garment, lod = false): G {
   const len = h, mid = 0;
   if (!lod) switch (o.front) {
     case 'placket': parts.push(shade(box(0.028, len * 0.92, 0.008, 0, mid - len * 0.02, fz), 0.84)); for (let i = 0; i < (o.buttons ?? 6); i++) parts.push(disc(0, top - 0.1 - i * ((len * 0.82) / ((o.buttons ?? 6) - 1 || 1)), fz + 0.008)); break;
-    case 'buttons': parts.push(shade(box(0.02, len * 0.9, 0.006, 0, mid - len * 0.02, fz - 0.001), 0.84)); for (let i = 0; i < (o.buttons ?? 3); i++) parts.push(disc(0, top - 0.12 - i * 0.15, fz + 0.007)); break;
+    case 'buttons': if (o.neck === 'polo') { parts.push(shade(box(0.036, 0.2, 0.01, 0, top - 0.11, fz + 0.002), 0.8)); for (let i = 0; i < (o.buttons ?? 3); i++) parts.push(disc(0, top - 0.06 - i * 0.055, fz + 0.01, 0.01)); break; } // the polo's short placket
+      parts.push(shade(box(0.02, len * 0.9, 0.006, 0, mid - len * 0.02, fz - 0.001), 0.84)); for (let i = 0; i < (o.buttons ?? 3); i++) parts.push(disc(0, top - 0.12 - i * 0.15, fz + 0.007)); break;
     case 'zip': parts.push(shade(box(0.022, len * 0.94, 0.008, 0, mid - len * 0.02, fz), 0.55)); parts.push(shade(box(0.014, 0.035, 0.012, 0, top - 0.04, fz + 0.008), 0.3)); break; // tape + pull
     case 'halfzip': parts.push(shade(box(0.022, len * 0.32, 0.008, 0, top - len * 0.19, fz), 0.55)); parts.push(shade(box(0.014, 0.03, 0.012, 0, top - 0.04, fz + 0.008), 0.3)); break;
     case 'open': parts.push(shade(box(0.05, len * 0.92, 0.01, 0, mid - len * 0.02, fz), 0.45)); for (let i = 0; i < (o.buttons ?? 5); i++) parts.push(disc(-0.04, top - 0.14 - i * 0.11, fz + 0.008)); break;
     case 'double': parts.push(shade(box(0.02, len * 0.9, 0.006, 0.04, mid - len * 0.02, fz - 0.001), 0.84)); for (const sg of [-1, 1]) for (let i = 0; i < 3; i++) parts.push(disc(sg * 0.075, top - 0.24 - i * 0.14, fz + 0.007, 0.015)); break;
     case 'snaps': parts.push(shade(box(0.024, len * 0.9, 0.008, 0, mid - len * 0.02, fz), 0.86)); for (let i = 0; i < 6; i++) parts.push(disc(0, top - 0.09 - i * ((len * 0.75) / 5), fz + 0.008, 0.009, 0.5)); break;
   }
-  if (!lod) switch (o.pocket) {
+  if (!lod) for (const pk of [o.pocket, o.pocket2]) switch (pk) {
     case 'kangaroo': parts.push(shade(box(0.32, 0.17, 0.014, 0, -top + 0.17, fz + 0.006), 0.88)); for (const sg of [-1, 1]) parts.push(shade(box(0.006, 0.17, 0.016, sg * 0.14, -top + 0.17, fz + 0.007, sg * 0.3), 0.6)); break;
     case 'chest': parts.push(shade(box(0.12, 0.12, 0.01, 0.13, top - 0.22, fz + 0.004), 0.88)); parts.push(shade(box(0.12, 0.006, 0.012, 0.13, top - 0.16, fz + 0.006), 0.6)); break;
     case 'chest2': for (const sg of [-1, 1]) parts.push(shade(box(0.12, 0.12, 0.01, sg * 0.13, top - 0.22, fz + 0.004), 0.88)); break;
@@ -136,7 +143,8 @@ function garment(o: Garment, lod = false): G {
     case 'breast': parts.push(shade(box(0.1, 0.012, 0.012, -0.13, top - 0.2, fz + 0.006), 0.55)); break;
   }
   if (!lod) {
-    if (o.hem === 'rib') { parts.push(shade(box(w * (1 + (o.flare ?? 0.06)) + 0.012, 0.06, d + 0.014, 0, -top + 0.03, 0), 0.72)); parts.push(shade(box(w * (1 + (o.flare ?? 0.06)) + 0.014, 0.004, d + 0.016, 0, -top + 0.06, 0), 0.55)); }
+    if (o.hem === 'rib') { const rh = o.ribLines ? 0.08 : 0.06; parts.push(shade(box(w * (1 + (o.flare ?? 0.06)) + 0.012, rh, d + 0.014, 0, -top + rh / 2, 0), 0.72)); parts.push(shade(box(w * (1 + (o.flare ?? 0.06)) + 0.014, 0.004, d + 0.016, 0, -top + rh, 0), 0.55)); if (o.ribLines) for (const yy of [0.025, 0.05]) parts.push(shade(box(w * (1 + (o.flare ?? 0.06)) + 0.016, 0.004, d + 0.018, 0, -top + yy, 0), 0.55)); } // knit: ribbed band with visible rib lines
+    if (o.vstitch) parts.push(shade(box(0.05, 0.05, 0.006, 0, top - 0.075, fz + 0.002, Math.PI / 4), 0.68)); // the sweatshirt's V-stitch under the neckband
     if (o.hem === 'straight') parts.push(shade(box(w * (1 + (o.flare ?? 0.06)) + 0.006, 0.012, d + 0.008, 0, -top + 0.006, 0), 0.8)); // double-fold hem
     if (o.hem === 'belt') { parts.push(shade(box(w + 0.03, 0.05, d + 0.03, 0, 0.02, 0), 0.6)); parts.push(shade(box(0.05, 0.06, 0.012, 0.0, 0.02, fz + 0.02), 0.35)); parts.push(shade(box(0.014, 0.3, 0.01, 0.07, -0.14, fz + 0.012), 0.6)); } // belt, buckle, hanging end
     if (o.hem === 'drawcord') for (const sg of [-1, 1]) parts.push(shade(box(0.008, 0.08, 0.008, sg * 0.03, -top + 0.03, fz + 0.004), 0.4));
@@ -232,7 +240,10 @@ export const SPEC: Record<ShapeId, Spec> = {
   // ---- tops ----
   tee: { kind: 'garment', w: Z.tops.tee.chest, h: Z.tops.tee.length, d: 0.07, shoulder: Z.tops.tee.shoulder, sleeve: 'short', sleeveLen: Z.tops.tee.sleeveShort, neck: 'crew', hem: 'straight' },
   'tee-v': { kind: 'garment', w: Z.tops.tee.chest, h: Z.tops.tee.length, d: 0.07, shoulder: Z.tops.tee.shoulder, sleeve: 'short', sleeveLen: Z.tops.tee.sleeveShort, neck: 'v', hem: 'straight' },
-  'tee-long': { kind: 'garment', w: Z.tops.tee.chest, h: Z.tops.tee.length, d: 0.07, shoulder: Z.tops.tee.shoulder, sleeve: 'long', sleeveLen: Z.tops.tee.sleeveLong, sleeveW: 0.12, neck: 'crew', hem: 'rib' },
+  'tee-long': { kind: 'garment', w: Z.tops.tee.chest, h: Z.tops.tee.length, d: 0.07, shoulder: Z.tops.tee.shoulder, sleeve: 'long', sleeveLen: Z.tops.tee.sleeveLong, sleeveW: 0.12, neck: 'crew', hem: 'straight' }, // plain hem + slim sleeves (the sweatshirt is the ribbed one)
+  'tee-raglan': { kind: 'garment', w: Z.tops.tee.chest, h: Z.tops.tee.length, d: 0.07, shoulder: Z.tops.tee.shoulder, sleeve: 'short', sleeveLen: Z.tops.tee.sleeveShort + 0.03, neck: 'crew', hem: 'straight', raglan: true },
+  'tee-pocket': { kind: 'garment', w: Z.tops.tee.chest, h: Z.tops.tee.length, d: 0.07, shoulder: Z.tops.tee.shoulder, sleeve: 'short', sleeveLen: Z.tops.tee.sleeveShort, neck: 'crew', pocket: 'chest', hem: 'straight' },
+  'tee-henley': { kind: 'garment', w: Z.tops.tee.chest, h: Z.tops.tee.length + 0.02, d: 0.07, shoulder: Z.tops.tee.shoulder, sleeve: 'short', sleeveLen: Z.tops.tee.sleeveShort, neck: 'henley', hem: 'straight' },
   tank: { kind: 'garment', w: Z.tops.tank.chest, h: Z.tops.tank.length, d: 0.06, shoulder: Z.tops.tank.shoulder, sleeve: 'strap', hem: 'straight' },
   crop: { kind: 'garment', w: Z.tops.crop.chest, h: Z.tops.crop.length, d: 0.06, shoulder: Z.tops.crop.shoulder, sleeve: 'short', sleeveLen: Z.tops.crop.sleeveShort, neck: 'crew', hem: 'rib' },
   'tee-oversized': { kind: 'garment', w: Z.tops.oversized.chest, h: Z.tops.oversized.length, d: 0.09, shoulder: Z.tops.oversized.shoulder, sleeve: 'short', sleeveLen: Z.tops.oversized.sleeveShort, sleeveW: 0.2, neck: 'crew', dropShoulder: true, hem: 'straight', flare: 0.02 },
@@ -240,24 +251,26 @@ export const SPEC: Record<ShapeId, Spec> = {
   'polo-long': { kind: 'garment', w: Z.tops.polo.chest, h: Z.tops.polo.length, d: 0.07, shoulder: Z.tops.polo.shoulder, sleeve: 'long', sleeveLen: Z.tops.polo.sleeveLong, sleeveW: 0.12, neck: 'polo', front: 'buttons', buttons: 3, hem: 'rib' },
   shirt: { kind: 'garment', w: Z.tops.shirt.chest, h: Z.tops.shirt.length, d: 0.07, shoulder: Z.tops.shirt.shoulder, sleeve: 'long', sleeveLen: Z.tops.shirt.sleeveLong, sleeveW: 0.12, neck: 'shirt', front: 'placket', buttons: 7, pocket: 'chest', yoke: true, hem: 'straight' },
   'shirt-short': { kind: 'garment', w: Z.tops.shirt.chest + 0.02, h: Z.tops.shirt.length - 0.02, d: 0.07, shoulder: Z.tops.shirt.shoulder, sleeve: 'rolled', sleeveLen: Z.tops.shirt.sleeveShort, sleeveW: 0.15, neck: 'shirt', front: 'placket', buttons: 6, pocket: 'chest', hem: 'straight', drape: 0.02 },
-  'shirt-band': { kind: 'garment', w: Z.tops.shirt.chest, h: Z.tops.shirt.length, d: 0.07, shoulder: Z.tops.shirt.shoulder, sleeve: 'long', sleeveLen: Z.tops.shirt.sleeveLong, sleeveW: 0.12, neck: 'band', front: 'placket', buttons: 6, hem: 'straight' },
-  'shirt-camp': { kind: 'garment', w: Z.tops.shirt.chest + 0.04, h: Z.tops.shirt.length - 0.04, d: 0.07, shoulder: Z.tops.shirt.shoulder + 0.03, sleeve: 'short', sleeveLen: Z.tops.shirt.sleeveShort, sleeveW: 0.16, neck: 'camp', front: 'buttons', buttons: 4, pocket: 'chest', hem: 'straight', flare: 0.0 },
+  'shirt-band': { kind: 'garment', w: Z.tops.shirt.chest, h: Z.tops.shirt.length, d: 0.07, shoulder: Z.tops.shirt.shoulder, sleeve: 'long', sleeveLen: Z.tops.shirt.sleeveLong, sleeveW: 0.12, neck: 'band', front: 'placket', buttons: 6, pocket: 'chest2', hem: 'straight' }, // two patch pockets
+  'shirt-camp': { kind: 'garment', w: Z.tops.shirt.chest + 0.04, h: Z.tops.shirt.length - 0.04, d: 0.07, shoulder: Z.tops.shirt.shoulder + 0.03, sleeve: 'short', sleeveLen: Z.tops.shirt.sleeveShort, sleeveW: 0.16, neck: 'camp', front: 'buttons', buttons: 4, pocket: 'chest', hem: 'straight', flare: 0.0, notch: true },
   blouse: { kind: 'garment', w: Z.tops.blouse.chest, h: Z.tops.blouse.length, d: 0.07, shoulder: Z.tops.blouse.shoulder, sleeve: 'puff', sleeveLen: 0.22, sleeveW: 0.12, neck: 'band', gathers: true, hem: 'straight', flare: 0.1, drape: 0.02 },
   hoodie: { kind: 'garment', w: Z.tops.hoodie.chest, h: Z.tops.hoodie.length, d: 0.1, shoulder: Z.tops.hoodie.shoulder, sleeve: 'long', sleeveLen: Z.tops.hoodie.sleeveLong, sleeveW: 0.15, neck: 'hood', drawstrings: true, pocket: 'kangaroo', hem: 'rib' },
   'hoodie-zip': { kind: 'garment', w: Z.tops.hoodie.chest, h: Z.tops.hoodie.length, d: 0.1, shoulder: Z.tops.hoodie.shoulder, sleeve: 'long', sleeveLen: Z.tops.hoodie.sleeveLong, sleeveW: 0.15, neck: 'hood', drawstrings: true, front: 'zip', pocket: 'side2', hem: 'rib' },
-  sweatshirt: { kind: 'garment', w: Z.tops.sweatshirt.chest, h: Z.tops.sweatshirt.length, d: 0.1, shoulder: Z.tops.sweatshirt.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweatshirt.sleeveLong, sleeveW: 0.15, neck: 'crew', hem: 'rib' },
+  sweatshirt: { kind: 'garment', w: Z.tops.sweatshirt.chest, h: Z.tops.sweatshirt.length, d: 0.1, shoulder: Z.tops.sweatshirt.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweatshirt.sleeveLong, sleeveW: 0.15, neck: 'crew', hem: 'rib', vstitch: true, dropShoulder: true },
   'quarter-zip': { kind: 'garment', w: Z.tops.sweatshirt.chest, h: Z.tops.sweatshirt.length, d: 0.1, shoulder: Z.tops.sweatshirt.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweatshirt.sleeveLong, sleeveW: 0.15, neck: 'stand', front: 'halfzip', hem: 'rib' },
-  sweater: { kind: 'garment', w: Z.tops.sweater.chest, h: Z.tops.sweater.length, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.14, neck: 'crew', hem: 'rib', knit: true },
-  'knit-v': { kind: 'garment', w: Z.tops.sweater.chest, h: Z.tops.sweater.length, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.14, neck: 'v', hem: 'rib', knit: true },
+  sweater: { kind: 'garment', w: Z.tops.sweater.chest, h: Z.tops.sweater.length, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.13, neck: 'crew', hem: 'rib', knit: true, ribLines: true, flare: -0.02 },
+  'sweater-chunky': { kind: 'garment', w: Z.tops.sweater.chest + 0.07, h: Z.tops.sweater.length + 0.04, d: 0.12, shoulder: Z.tops.sweater.shoulder + 0.08, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong - 0.04, sleeveW: 0.18, neck: 'crew', hem: 'rib', knit: true, ribLines: true, dropShoulder: true, flare: 0.0 },
+  'knit-v': { kind: 'garment', w: Z.tops.sweater.chest, h: Z.tops.sweater.length, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.13, neck: 'v', deepV: true, hem: 'rib', knit: true, ribLines: true, flare: -0.02 },
   turtleneck: { kind: 'garment', w: Z.tops.sweater.chest - 0.03, h: Z.tops.sweater.length, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.13, neck: 'turtle', hem: 'rib', knit: true },
   mockneck: { kind: 'garment', w: Z.tops.sweater.chest, h: Z.tops.sweater.length + 0.04, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.14, neck: 'mock', hem: 'rib', knit: true },
   cardigan: { kind: 'garment', w: Z.outer.cardigan.chest, h: Z.outer.cardigan.length, d: 0.09, shoulder: Z.outer.cardigan.shoulder, sleeve: 'long', sleeveLen: Z.outer.cardigan.sleeveLong, sleeveW: 0.14, neck: 'v', front: 'open', buttons: 5, pocket: 'chest2', hem: 'rib', knit: true },
   'knit-vest': { kind: 'garment', w: Z.tops.vest.chest, h: Z.tops.vest.length, d: 0.08, shoulder: 0.36, sleeve: 'none', neck: 'v', hem: 'rib', knit: true },
   // ---- outerwear ----
-  parka: { kind: 'garment', w: Z.outer.parka.chest, h: Z.outer.parka.length, d: 0.11, shoulder: Z.outer.parka.shoulder, sleeve: 'long', sleeveLen: Z.outer.parka.sleeveLong, sleeveW: 0.16, neck: 'hood', drawstrings: true, front: 'zip', pocket: 'flapLow2', hem: 'drawcord' },
-  'uv-zip': { kind: 'garment', w: Z.outer.uvZip.chest, h: Z.outer.uvZip.length, d: 0.08, shoulder: Z.outer.uvZip.shoulder, sleeve: 'long', sleeveLen: Z.outer.uvZip.sleeveLong, sleeveW: 0.13, neck: 'hood', front: 'zip', hem: 'rib' },
+  parka: { kind: 'garment', w: Z.outer.parka.chest, h: Z.outer.parka.length, d: 0.11, shoulder: Z.outer.parka.shoulder, sleeve: 'long', sleeveLen: Z.outer.parka.sleeveLong, sleeveW: 0.16, neck: 'hood', drawstrings: true, front: 'zip', pocket: 'flapLow2', hem: 'drawcord', stormFlap: true },
+  'uv-zip': { kind: 'garment', w: Z.outer.uvZip.chest, h: Z.outer.uvZip.length, d: 0.08, shoulder: Z.outer.uvZip.shoulder, sleeve: 'long', sleeveLen: Z.outer.uvZip.sleeveLong, sleeveW: 0.11, neck: 'hood', front: 'zip', pocket: 'breast', hem: 'straight' }, // slim, plain hem, one chest zip
   bomber: { kind: 'garment', w: Z.outer.bomber.chest, h: Z.outer.bomber.length, d: 0.12, shoulder: Z.outer.bomber.shoulder, sleeve: 'long', sleeveLen: Z.outer.bomber.sleeveLong, sleeveW: 0.17, neck: 'rib', front: 'zip', pocket: 'side2', hem: 'rib', flare: -0.04 },
-  fleece: { kind: 'garment', w: Z.outer.fleece.chest, h: Z.outer.fleece.length, d: 0.12, shoulder: Z.outer.fleece.shoulder, sleeve: 'long', sleeveLen: Z.outer.fleece.sleeveLong, sleeveW: 0.16, neck: 'stand', front: 'zip', pocket: 'chest', hem: 'straight' },
+  fleece: { kind: 'garment', w: Z.outer.fleece.chest, h: Z.outer.fleece.length, d: 0.12, shoulder: Z.outer.fleece.shoulder, sleeve: 'long', sleeveLen: Z.outer.fleece.sleeveLong, sleeveW: 0.16, neck: 'stand', front: 'zip', pocket: 'side2', pocket2: 'breast', hem: 'straight' },
+  'fleece-pullover': { kind: 'garment', w: Z.outer.fleece.chest, h: Z.outer.fleece.length, d: 0.12, shoulder: Z.outer.fleece.shoulder, sleeve: 'long', sleeveLen: Z.outer.fleece.sleeveLong, sleeveW: 0.16, neck: 'stand', front: 'halfzip', pocket: 'chest', hem: 'straight' }, // snap-T style: half zip + patch chest pocket, plain hem
   down: { kind: 'garment', w: Z.outer.down.chest, h: Z.outer.down.length, d: 0.14, shoulder: Z.outer.down.shoulder, sleeve: 'long', sleeveLen: Z.outer.down.sleeveLong, sleeveW: 0.17, neck: 'stand', front: 'zip', quilt: 5, pocket: 'side2', hem: 'straight' },
   'down-long': { kind: 'garment', w: Z.outer.downLong.chest, h: Z.outer.downLong.length, d: 0.16, shoulder: Z.outer.downLong.shoulder, sleeve: 'long', sleeveLen: Z.outer.downLong.sleeveLong, sleeveW: 0.18, neck: 'hood', front: 'zip', quilt: 7, pocket: 'side2', hem: 'straight' },
   'puffer-vest': { kind: 'garment', w: Z.outer.pufferVest.chest, h: Z.outer.pufferVest.length, d: 0.14, shoulder: 0.4, sleeve: 'none', neck: 'stand', front: 'zip', quilt: 5, pocket: 'side2' },
@@ -266,7 +279,7 @@ export const SPEC: Record<ShapeId, Spec> = {
   coach: { kind: 'garment', w: Z.outer.coach.chest, h: Z.outer.coach.length, d: 0.09, shoulder: Z.outer.coach.shoulder, sleeve: 'long', sleeveLen: Z.outer.coach.sleeveLong, sleeveW: 0.15, neck: 'camp', front: 'snaps', pocket: 'side2', hem: 'drawcord' },
   'denim-jacket': { kind: 'garment', w: Z.outer.denimJacket.chest, h: Z.outer.denimJacket.length, d: 0.09, shoulder: Z.outer.denimJacket.shoulder, sleeve: 'long', sleeveLen: Z.outer.denimJacket.sleeveLong, sleeveW: 0.14, neck: 'shirt', front: 'placket', buttons: 5, pocket: 'chestFlap2', yoke: true, hem: 'rib', flare: -0.03 },
   'wool-coat': { kind: 'garment', w: Z.outer.woolCoat.chest, h: Z.outer.woolCoat.length, d: 0.11, shoulder: Z.outer.woolCoat.shoulder, sleeve: 'long', sleeveLen: Z.outer.woolCoat.sleeveLong, sleeveW: 0.15, neck: 'lapel', front: 'buttons', buttons: 3, pocket: 'flapLow2', hem: 'straight', flare: 0.1 },
-  padded: { kind: 'garment', w: Z.outer.padded.chest, h: Z.outer.padded.length, d: 0.16, shoulder: Z.outer.padded.shoulder, sleeve: 'long', sleeveLen: Z.outer.padded.sleeveLong, sleeveW: 0.18, neck: 'hood', drawstrings: true, front: 'zip', pocket: 'flapLow2', hem: 'drawcord', quilt: 3 },
+  padded: { kind: 'garment', w: Z.outer.padded.chest, h: Z.outer.padded.length, d: 0.16, shoulder: Z.outer.padded.shoulder, sleeve: 'long', sleeveLen: Z.outer.padded.sleeveLong, sleeveW: 0.18, neck: 'hood', drawstrings: true, front: 'zip', pocket: 'flapLow2', hem: 'drawcord', quilt: 4 },
   // ---- bags & accessories ----
   tote: { kind: 'custom', build: () => merge(box(0.36, 0.36, 0.1, 0, -0.06, 0), shade(box(0.02, 0.12, 0.02, -0.1, 0.18, 0), 0.7), shade(box(0.02, 0.12, 0.02, 0.1, 0.18, 0), 0.7), shade(box(0.22, 0.02, 0.02, 0, 0.23, 0), 0.7)) },
   'round-bag': { kind: 'custom', build: () => merge(cyl(0.12, 0.12, 0.07, 10, 0, -0.03, 0).rotateX(Math.PI / 2), shade(box(0.015, 0.14, 0.015, -0.1, 0.07, 0), 0.6), shade(box(0.015, 0.14, 0.015, 0.1, 0.07, 0), 0.6), shade(box(0.215, 0.015, 0.015, 0, 0.14, 0), 0.6), shade(box(0.2, 0.012, 0.004, 0, -0.03, 0.037), 0.5)) },

@@ -1,9 +1,10 @@
-// CETIQLO brief ("đề bài"): the six pieces of the set THEMSELVES, large, at FIXED places in a 3 × 2 grid (top / outer / bottom
-// above, shoes / bag / acc below), each spinning slowly about its own axis (phases offset) — no orbiting, no text, no labels. Built from the exact shelf item meshes (items.ts itemMesh: same shape, colour, pattern), each normalised to a
-// consistent size per slot and kept facing the camera while the ring carries it round (tops / outers / bottoms front view,
-// shoes / bag / accessory three-quarter). Ring order is fixed by slot — top, outer, bottom, shoes, bag, acc — so players learn
-// the layout. `renderPiP(renderer, rect)` draws just the ring (layer BRIEF_LAYER) through the room's renderer into a
-// scissored viewport, cream backdrop, the store's lights: ≤ 8 draw calls. The same object also stands large on the pedestal.
+// CETIQLO brief ("đề bài"): the six pieces of the set THEMSELVES at FIXED places in a 3 × 2 grid (top / outer / bottom above,
+// shoes / bag / acc below) — no text, no labels. Built from the exact shelf item meshes (items.ts itemMesh: same shape, colour,
+// pattern), each normalised to a consistent size per slot (tops / outers / bottoms front view, shoes / bag / accessory
+// three-quarter). Order is fixed by slot — top, outer, bottom, shoes, bag, acc — so players learn the layout.
+// The room's HUD uses `snapshots(renderer, px)`: one sharp STILL per piece rendered once per set (owner 2026-11-03: the brief
+// stands still; a click zooms it). `renderPiP(renderer, rect)` (the live grid, pieces turning) stays for the dev page / tests.
+// It is PiP-only (layer BRIEF_LAYER): nothing of it is drawn in the room.
 import * as THREE from 'three';
 import { type CatalogItem, ITEM_BY_ID, type SlotKind } from '@race/shared/cetiqlo';
 import { HANGER, itemMesh } from './items.ts';
@@ -34,6 +35,9 @@ export interface Brief {
   phase: number;
   /** The six piece holders in slot order (empty when the slot is missing). */
   pieces: THREE.Group[];
+  /** One still per slot (slot order; null = slot missing): the dressed piece, front-on (shoes / bag / acc ¾), cream backdrop, `px`² sharp,
+   *  rendered ONCE through a temporary scene + render target (both disposed) — the HUD shows these instead of a live PiP. */
+  snapshots(renderer: THREE.WebGLRenderer, px?: number): (HTMLCanvasElement | null)[];
 }
 export const RING_Y = 1.45; // the grid's centre height above the object origin (the pedestal top)
 
@@ -59,7 +63,7 @@ export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
   const aimCamera = () => { object.updateWorldMatrix(true, false); camera.lookAt(object.localToWorld(new THREE.Vector3(0, (o.y ?? RING_Y), 0))); };
   aimCamera();
   camera.layers.set(BRIEF_LAYER);
-  object.traverse((ob) => ob.layers.enable(BRIEF_LAYER));
+  object.traverse((ob) => ob.layers.set(BRIEF_LAYER)); // PiP-only: the room camera (layer 0) never draws the brief
   const box = new THREE.Box3();
   const dress = (ids: readonly string[]) => {
     for (const p of pieces) p.clear();
@@ -85,7 +89,7 @@ export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
         inner.add(hg);
       }
       holder.add(inner);
-      holder.traverse((ob) => ob.layers.enable(BRIEF_LAYER));
+      holder.traverse((ob) => ob.layers.set(BRIEF_LAYER));
     }
   };
   let spin = 0;
@@ -118,6 +122,51 @@ export function createBrief(o: { turn?: boolean; y?: number } = {}): Brief {
       renderer.setScissor(save.sc);
     },
     dispose() { for (const p of pieces) p.clear(); object.removeFromParent(); },
+    snapshots(renderer, px = 512) {
+      const scene = new THREE.Scene();
+      scene.background = BG;
+      const key = new THREE.DirectionalLight('#fff4e6', 2.4), fill = new THREE.DirectionalLight('#e8f0ff', 1.3), rim = new THREE.DirectionalLight('#ffffff', 1.0);
+      key.position.set(-1.2, 2, 2.5); fill.position.set(1.6, 0.3, 1.2); rim.position.set(0.4, -1, 1.5); // key high-left, fill low-right, rim from below: seams / pockets / plackets read on black cloth too
+      scene.add(new THREE.HemisphereLight('#ffffff', '#c9c0b0', 1.8), key, fill, rim);
+      const cam = new THREE.PerspectiveCamera(26, 1, 0.05, 20);
+      cam.layers.set(BRIEF_LAYER);
+      scene.traverse((ob) => ob.layers.set(BRIEF_LAYER)); // the lights too: a light on another layer than the camera does not light
+      const rt = new THREE.WebGLRenderTarget(px, px, { depthBuffer: true });
+      const saved = { target: renderer.getRenderTarget(), vp: renderer.getViewport(new THREE.Vector4()), sc: renderer.getScissor(new THREE.Vector4()), scissor: renderer.getScissorTest() };
+      renderer.setScissorTest(false);
+      const pxBuf = new Uint8Array(px * px * 4), bb = new THREE.Box3(), c = new THREE.Vector3(), sz = new THREE.Vector3();
+      const out = pieces.map((holder) => {
+        if (!holder.children.length) return null;
+        const spin = holder.rotation.y;
+        holder.rotation.y = 0; // front-on (the slot's own ¾ yaw is inside the holder)
+        scene.add(holder); // moved out of the grid: neighbours never intrude
+        bb.setFromObject(holder, true); bb.getCenter(c); bb.getSize(sz); // precise: the ¾-turned pieces' real extent, not the loose AABB
+        const half = Math.max(sz.y, sz.x) / 2 * 1.08, d = half / Math.tan((cam.fov / 2) * (Math.PI / 180)) + sz.z / 2;
+        cam.position.set(c.x, c.y + d * 0.1, c.z + d);
+        cam.lookAt(c);
+        renderer.setRenderTarget(rt);
+        renderer.render(scene, cam);
+        renderer.readRenderTargetPixels(rt, 0, 0, px, px, pxBuf);
+        ring.add(holder);
+        holder.rotation.y = spin;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = px;
+        const ctx = canvas.getContext('2d')!, img = ctx.createImageData(px, px);
+        for (let y = 0; y < px; y++) for (let x = 0; x < px; x++) { // flip y; linear → sRGB (render targets are written linear)
+          const s = ((px - 1 - y) * px + x) * 4, t = (y * px + x) * 4;
+          for (let k = 0; k < 3; k++) { const v = pxBuf[s + k]! / 255; img.data[t + k] = Math.round(255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)); }
+          img.data[t + 3] = 255;
+        }
+        ctx.putImageData(img, 0, 0);
+        return canvas;
+      });
+      renderer.setRenderTarget(saved.target);
+      renderer.setScissorTest(saved.scissor);
+      renderer.setViewport(saved.vp);
+      renderer.setScissor(saved.sc);
+      rt.dispose();
+      return out;
+    },
   };
   return brief;
 }
