@@ -5,7 +5,7 @@
 // Metric UVs keep patterns at shelf scale. Pure geometry: no three objects besides BufferGeometry.
 import * as THREE from 'three';
 import { SHAPE_H, type ShapeId } from '@race/shared/cetiqlo';
-import { type Garment, type Legs, SPEC, type SkirtOpts, box, cyl, dome, merge, metricUV, shade } from './items.ts';
+import { type Garment, type Legs, SPEC, type SkirtOpts, box, cyl, dome, hood, merge, metricUV, shade } from './items.ts';
 
 type G = THREE.BufferGeometry;
 export type V3 = THREE.Vector3;
@@ -91,7 +91,7 @@ function wornGarment(o: Garment, f: Fit, shape: ShapeId, outer: boolean): G {
     case 'polo': parts.push(ring(ny + 0.015, nr + 0.03, nr + 0.025, 0.06, 0.9, 10)); for (const s of [-1, 1]) parts.push(shade(box(0.09, 0.09, 0.012, s * 0.055, ySh - 0.045, dT + 0.006, -s * 0.5), 0.9)); break;
     case 'camp': for (const s of [-1, 1]) parts.push(shade(box(0.12, 0.1, 0.012, s * 0.09, ySh - 0.05, dT + 0.006, -s * 0.7), 0.9)); if (o.notch) parts.push(shade(box(0.07, 0.1, 0.008, 0, ySh - 0.07, dT + 0.002), 0.35)); break;
     case 'lapel': for (const s of [-1, 1]) parts.push(shade(box(0.075, 0.3, 0.012, s * 0.085, ySh - 0.17, dT + 0.006, -s * 0.35), 0.85)); break;
-    case 'hood': parts.push(new THREE.SphereGeometry(0.16, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.1, 0.95).rotateX(-0.6).translate(0, ySh - 0.04, -dT - 0.03)); if (o.drawstrings) for (const s of [-1, 1]) { parts.push(shade(box(0.008, 0.16, 0.008, s * 0.04, ySh - 0.16, fz0 + 0.006, s * 0.12), 0.4)); parts.push(shade(box(0.012, 0.025, 0.012, s * 0.055, ySh - 0.245, fz0 + 0.006), 0.3)); } break;
+    case 'hood': parts.push(...hood(0.16, ySh - 0.02, -dT - 0.06)); /* opening toward the face, the dome down the back */ if (o.drawstrings) for (const s of [-1, 1]) { parts.push(shade(box(0.008, 0.16, 0.008, s * 0.04, ySh - 0.16, fz0 + 0.006, s * 0.12), 0.4)); parts.push(shade(box(0.012, 0.025, 0.012, s * 0.055, ySh - 0.245, fz0 + 0.006), 0.3)); } break;
     case 'v': { const vl = o.deepV ? 0.23 : 0.17; for (const s of [-1, 1]) parts.push(shade(box(0.025, vl, 0.01, s * (0.028 + vl * 0.13), ySh - vl / 2, dT + 0.004, -s * 0.5), 0.5)); break; }
     case 'scoop': break;
   }

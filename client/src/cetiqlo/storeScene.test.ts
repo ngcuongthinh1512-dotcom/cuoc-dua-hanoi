@@ -13,11 +13,11 @@ let store: StoreHandle;
 beforeAll(() => { store = buildStore(new THREE.Scene()); });
 
 describe('cetiqlo store budget', () => {
-  it('≤ 190 draw calls, ≤ 300k triangles, ≤ 3 lights, no shadows, static matrices frozen', () => {
+  it('≤ 250 draw calls, ≤ 420k triangles, ≤ 3 lights, no shadows, static matrices frozen', () => {
     store.mannequin.dress(['top.tee-crew.white', 'outer.padded-coat.black', 'bottom.jeans-wide.denim', 'shoes.sneaker.red', 'bag.backpack.olive', 'acc.cap.navy']);
     const b = store.budget();
-    expect(b.meshes).toBeLessThanOrEqual(190); // round 4: +5 top shapes (×2 with LOD), LED / porcelain materials
-    expect(b.triangles).toBeLessThanOrEqual(300_000);
+    expect(b.meshes).toBeLessThanOrEqual(250); // round 5: 965 items over ~110 shapes (garments ×2 with LOD), 4 dressed figures, LED / porcelain / plant materials
+    expect(b.triangles).toBeLessThanOrEqual(420_000);
     expect(b.lights).toBeLessThanOrEqual(3);
     store.group.traverse((ob) => {
       if (ob instanceof THREE.Light) expect(ob.castShadow).toBe(false);
@@ -118,12 +118,12 @@ describe('cetiqlo brief grid', () => {
 });
 
 describe('cetiqlo hanging layout (round 3)', () => {
-  it('nothing folded; every rail pitch ≥ 0.55 m, hooks / shelves ≥ 0.45 m; wall fixtures ≤ 3 tiers; item centres reachable (≤ 2.1 m over the floor: look-ray picking)', () => {
+  it('nothing folded; every rail pitch ≥ 0.55 m, hooks / shelves ≥ 0.45 m; ONE tier per fixture at hand height; item centres ≤ 2.1 m over the floor', () => {
     expect(CATALOG.some((i) => i.display === 'fold')).toBe(false);
     for (const f of [...FIXTURES[1], ...FIXTURES[2]]) {
       expect(f.kind === 'table' || f.kind === 'bay', `${f.zone} ${f.kind}`).toBe(false);
       expect(f.pitch, f.zone).toBeGreaterThanOrEqual(f.kind === 'rail' ? 0.55 : 0.45);
-      if (f.kind !== 'rail') expect(f.tiers!.length).toBeLessThanOrEqual(3);
+      if (f.kind !== 'rail') { expect(f.tiers!.length).toBe(1); expect(f.tiers![0]!, f.zone).toBeGreaterThanOrEqual(0.6); expect(f.tiers![0]!, f.zone).toBeLessThanOrEqual(1.3); } // owner: one row, seen whole from the aisle
     }
     for (const i of CATALOG) {
       const floorY = i.floor === 1 ? 0 : STORE.floor2Y;

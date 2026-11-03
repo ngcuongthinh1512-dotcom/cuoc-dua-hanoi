@@ -57,8 +57,8 @@ describe('cetiqlo catalog', () => {
       expect(Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z), `${CATALOG[a]!.id} vs ${CATALOG[b]!.id}`).toBeGreaterThanOrEqual(0.25);
     }
   });
-  it('22 zones, bilingual, signs under their floor\'s ceiling', () => {
-    expect(ZONES.length).toBe(22);
+  it('24 zones, bilingual, signs under their floor\'s ceiling', () => {
+    expect(ZONES.length).toBe(24);
     for (const z of ZONES) {
       const floorY = z.floor === 1 ? 0 : STORE.floor2Y;
       expect(z.sign.y).toBeGreaterThan(floorY + 2.4);

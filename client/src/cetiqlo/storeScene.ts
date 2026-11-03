@@ -63,17 +63,15 @@ function woodTexture(): THREE.Texture | null {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const x = c.getContext('2d')!;
-  x.fillStyle = '#d9c3a0';
+  x.fillStyle = '#e4d7c0';
   x.fillRect(0, 0, 256, 256);
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let row = 0; row < 8; row++) {
-    const off = Math.floor(rnd() * 128);
-    for (let k = -1; k < 3; k++) {
-      const x0 = off + k * 128, l = 0.86 + rnd() * 0.14;
-      x.fillStyle = `rgb(${Math.round(217 * l)},${Math.round(195 * l)},${Math.round(160 * l)})`;
-      x.fillRect(x0 + 1, row * 32 + 1, 126, 30);
-    }
+  for (let row = 0; row < 8; row++) { // pale ash: full-width planks, faint tonal variation, a thin joint line (no brick bond)
+    const l = 0.95 + rnd() * 0.05;
+    x.fillStyle = `rgb(${Math.round(236 * l)},${Math.round(226 * l)},${Math.round(206 * l)})`;
+    x.fillRect(0, row * 32 + 1, 256, 30);
+    x.fillStyle = 'rgba(120,100,70,0.12)'; for (let g = 0; g < 3; g++) x.fillRect(0, row * 32 + 6 + g * 9 + Math.floor(rnd() * 3), 256, 1); // grain
   }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -110,17 +108,18 @@ function tileTexture(): THREE.Texture | null {
 }
 const MAT = () => ({
   floor: new THREE.MeshStandardMaterial({ color: '#f0eee9', roughness: 0.22, metalness: 0.02, map: tileTexture() }), // glossy porcelain: the 3 lights glint on it
-  wood: new THREE.MeshStandardMaterial({ color: '#e2cfae', roughness: 0.6, map: woodTexture() }), // light oak: slat wall, feature walls
+  wood: new THREE.MeshStandardMaterial({ color: '#f1e8d8', roughness: 0.6, map: woodTexture() }), // pale ash oak (owner: nothing brick / terracotta): slat wall, benches
   white: new THREE.MeshStandardMaterial({ color: '#f7f7f4', roughness: 0.8 }),
   wall: new THREE.MeshStandardMaterial({ color: '#f3efe8', roughness: 0.88 }), // warm white plaster
   metal: new THREE.MeshStandardMaterial({ color: '#c9c9cd', roughness: 0.3, metalness: 0.75 }),
   glass: new THREE.MeshStandardMaterial({ color: '#d6e9f1', roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide }),
   red: new THREE.MeshStandardMaterial({ color: BRAND_RED, roughness: 0.55 }),
   dark: new THREE.MeshStandardMaterial({ color: '#2f2f31', roughness: 0.7 }),
+  plant: new THREE.MeshStandardMaterial({ color: '#4f7a4a', roughness: 0.9 }),
   led: new THREE.MeshBasicMaterial({ color: '#fff6e4' }), // emissive-looking light strips / spot lenses (unlit, no real light)
 });
 type MatKey = keyof ReturnType<typeof MAT>;
-const KEYS: MatKey[] = ['floor', 'wood', 'white', 'wall', 'metal', 'glass', 'red', 'dark', 'led'];
+const KEYS: MatKey[] = ['floor', 'wood', 'white', 'wall', 'metal', 'glass', 'red', 'dark', 'led', 'plant'];
 
 export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreHandle {
   const items = o.items ?? CATALOG;
@@ -160,7 +159,7 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
   plane('white', 2 * W, D - B, 0, ROOF_Y, (B + D) / 2, Math.PI / 2); // roof underside
   // walls (inner faces): the back wall is a light-oak feature wall (behind the accessory hooks / shoe shelves), the side walls warm
   // white plaster with brushed-aluminium panel joints every 2.5 m; the lobby's side walls carry red CETIQLO brand panels
-  plane('wood', 2 * W, ROOF_Y, 0, ROOF_Y / 2, B, 0);
+  plane('wall', 2 * W, ROOF_Y, 0, ROOF_Y / 2, B, 0); // back wall: warm white like the sides (the plank wall read as brick)
   plane('wall', D - B, ROOF_Y, -W, ROOF_Y / 2, (B + D) / 2, 0, Math.PI / 2);
   plane('wall', D - B, ROOF_Y, W, ROOF_Y / 2, (B + D) / 2, 0, -Math.PI / 2);
   for (let z = B + 2.5; z < L - 0.5; z += 2.5) for (const sx of [-1, 1]) {
@@ -275,6 +274,12 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
       for (const t of f.tiers ?? []) lb('white', f.len + 0.1, 0.03, 0.36, 0, t - 0.015, -0.02);
       for (const sx of [-1, 1]) lb('white', 0.04, 2.0, 0.4, sx * (f.len / 2 + 0.05), 1.0, 0);
       [hy, hz, cz] = [1.0, 0.2, 0];
+    } else if (f.kind === 'hooks' && f.double) { // a free-standing gondola: a white panel on a plinth with pegs on both faces
+      const n = Math.floor(f.len / f.pitch + 1e-6), u0 = -((n - 1) * f.pitch) / 2, t = f.tiers![0]!, top = t + 0.55;
+      lb('white', f.len + 0.1, top, 0.06, 0, top / 2, 0);
+      lb('white', f.len + 0.3, 0.08, 0.5, 0, 0.04, 0); // plinth
+      for (const sv of [-1, 1]) { lb('metal', f.len + 0.1, 0.03, 0.02, 0, t + 0.06, sv * 0.04); for (let i = 0; i < n; i++) { lb('metal', 0.012, 0.012, 0.18, u0 + i * f.pitch, t, sv * 0.12); lb('metal', 0.03, 0.03, 0.012, u0 + i * f.pitch, t + 0.01, sv * 0.21); } }
+      [hy, hz, cz] = [top / 2, 0.3, 0];
     } else if (f.kind === 'hooks') { // a wall peg strip: one bar per tier, a peg per slot
       const n = Math.floor(f.len / f.pitch + 1e-6), u0 = -((n - 1) * f.pitch) / 2;
       for (const t of f.tiers ?? []) {
@@ -282,6 +287,12 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
         for (let i = 0; i < n; i++) { lb('metal', 0.012, 0.012, 0.18, u0 + i * f.pitch, t, -0.17); lb('metal', 0.03, 0.03, 0.012, u0 + i * f.pitch, t + 0.01, -0.08); }
       }
       [hy, hz, cz] = [1.0, 0.16, -0.14];
+    } else if (f.double) { // shoe gondola: a low two-sided unit, one shelf row per face
+      const n = Math.floor(f.len / f.pitch + 1e-6), u0 = -((n - 1) * f.pitch) / 2, t = f.tiers![0]!;
+      lb('white', f.len + 0.1, t + 0.25, 0.06, 0, (t + 0.25) / 2, 0);
+      lb('white', f.len + 0.3, 0.08, 0.9, 0, 0.04, 0);
+      for (const sv of [-1, 1]) { lb('white', f.len + 0.1, 0.03, 0.4, 0, t - 0.015, sv * 0.2); lb('metal', f.len + 0.1, 0.03, 0.012, 0, t + 0.012, sv * 0.4); for (let i = 0; i < n; i++) lb('metal', 0.02, 0.1, 0.3, u0 + i * f.pitch - f.pitch / 2, t - 0.08, sv * 0.18); }
+      [hy, hz, cz] = [(t + 0.25) / 2, 0.45, 0];
     } else { // shelf: wall-mounted single-row shoe shelves with a front lip, one pair per bracket
       const topT = Math.max(...(f.tiers ?? [0.75])) + 0.4;
       lb('white', f.len + 0.1, topT, 0.03, 0, topT / 2, -0.26);
@@ -296,6 +307,11 @@ export function buildStore(parent: THREE.Object3D, o: StoreOptions = {}): StoreH
   };
   for (const f of FIXTURES[1]) fixture(f, 0, false);
   for (const f of FIXTURES[2]) fixture(f, F2, true);
+  // ---- decor (round 5): display plinths, planters, standing mirrors (low boxes: no colliders after flatFloorBoxes) ----
+  const DC = S.decor, fy = (fl: 1 | 2) => (fl === 1 ? 0 : F2);
+  for (const p of DC.plinths) { bx('white', 1.4, 0.15, 1.4, p.x, fy(p.floor) + 0.075, p.z, 0, p.floor === 2); bx('metal', 1.44, 0.012, 1.44, p.x, fy(p.floor) + 0.156, p.z, 0, p.floor === 2); }
+  for (const p of DC.planters) { cy('dark', 0.28, 0.5, p.x, fy(p.floor) + 0.25, p.z, p.floor === 2); add('plant', new THREE.SphereGeometry(0.42, 7, 5).scale(1, 1.25, 1).translate(p.x, fy(p.floor) + 0.95, p.z), p.floor === 2); add('plant', new THREE.ConeGeometry(0.3, 0.5, 6).translate(p.x, fy(p.floor) + 1.5, p.z), p.floor === 2); }
+  for (const m of DC.mirrors) { bx('metal', 0.9, 2.0, 0.03, m.x - Math.sin(m.yaw) * 0.0, fy(m.floor) + 1.05, m.z, m.yaw, m.floor === 2); bx('dark', 0.98, 2.08, 0.02, m.x, fy(m.floor) + 1.05, m.z, m.yaw, m.floor === 2); }
 
   // ---- contact darkening: a soft blob under every fixture / pedestal / figure (one merged mesh, radial alpha canvas) ----
   const blobs: THREE.BufferGeometry[] = [];

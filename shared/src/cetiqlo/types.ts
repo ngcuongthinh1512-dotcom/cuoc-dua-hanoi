@@ -5,7 +5,7 @@ export type Category = SlotKind | 'dress' | 'underwear' | 'homewear' | 'socks' |
 export type ZoneId =
   | 'tees' | 'polo' | 'shirts' | 'sweats' | 'knit'
   | 'uv' | 'fleece' | 'down' | 'padded' | 'fashion-outer'
-  | 'bags' | 'hats-scarves' | 'sunglasses-umbrella'
+  | 'bags' | 'hats-scarves' | 'sunglasses-umbrella' | 'belts-wallets' | 'gloves-watches'
   | 'pants' | 'jeans' | 'joggers' | 'shorts' | 'dresses' | 'skirts' | 'bras-undies' | 'homewear' | 'footwear-socks';
 /** Low-poly mesh ids built in client/src/cetiqlo/items.ts (one InstancedMesh each). Every id is a distinct silhouette. */
 export type ShapeId =
@@ -13,21 +13,23 @@ export type ShapeId =
   | 'tee' | 'tee-v' | 'tee-long' | 'tank' | 'crop' | 'tee-oversized' | 'tee-raglan' | 'tee-pocket' | 'tee-henley' | 'polo' | 'polo-long'
   | 'shirt' | 'shirt-short' | 'shirt-band' | 'shirt-camp' | 'blouse'
   | 'hoodie' | 'hoodie-zip' | 'sweatshirt' | 'quarter-zip'
-  | 'sweater' | 'sweater-chunky' | 'knit-v' | 'turtleneck' | 'mockneck' | 'cardigan' | 'knit-vest'
+  | 'sweater' | 'sweater-chunky' | 'knit-v' | 'turtleneck' | 'mockneck' | 'cardigan' | 'knit-vest' | 'knit-polo' | 'knit-halfzip'
   // outerwear
-  | 'parka' | 'uv-zip' | 'bomber' | 'fleece' | 'fleece-pullover' | 'down' | 'down-long' | 'puffer-vest' | 'blazer' | 'trench' | 'coach' | 'denim-jacket' | 'wool-coat' | 'padded'
+  | 'parka' | 'uv-zip' | 'bomber' | 'fleece' | 'fleece-pullover' | 'down' | 'down-long' | 'puffer-vest' | 'blazer' | 'trench' | 'coach' | 'denim-jacket' | 'wool-coat' | 'padded' | 'anorak' | 'varsity' | 'quilted'
   // bags & accessories
-  | 'tote' | 'round-bag' | 'backpack' | 'crossbody' | 'cap' | 'bucket-hat' | 'beanie' | 'scarf' | 'sunglasses' | 'umbrella'
+  | 'tote' | 'round-bag' | 'backpack' | 'crossbody' | 'duffel' | 'waist-bag' | 'laptop-bag' | 'shoulder-bag'
+  | 'cap' | 'bucket-hat' | 'beanie' | 'beret' | 'visor' | 'bandana' | 'scarf' | 'sunglasses' | 'umbrella' | 'umbrella-long'
+  | 'belt' | 'wallet' | 'cardholder' | 'watch' | 'gloves'
   // bottoms
   | 'pants' | 'chinos' | 'wide' | 'straight' | 'cargo' | 'jogger' | 'sweatpants' | 'bootcut' | 'bermuda' | 'shorts' | 'cycling'
-  | 'jeans-wide' | 'jeans-straight' | 'jeans-baggy' | 'jeans-tapered' | 'shorts-chino'
+  | 'jeans-wide' | 'jeans-straight' | 'jeans-baggy' | 'jeans-tapered' | 'shorts-chino' | 'jogger-cargo' | 'track-pants' | 'shorts-denim' | 'shorts-cargo'
   // dresses & skirts
-  | 'dress-shirt' | 'dress-aline' | 'dress-maxi' | 'dress-slip'
-  | 'skirt-pleated' | 'skirt-aline' | 'skirt-flare' | 'skirt-mini' | 'skirt-tennis' | 'skirt-denim' | 'skirt-wrap' | 'skirt-midi'
+  | 'dress-shirt' | 'dress-aline' | 'dress-maxi' | 'dress-slip' | 'dress-wrap' | 'dress-tee'
+  | 'skirt-pleated' | 'skirt-aline' | 'skirt-flare' | 'skirt-mini' | 'skirt-tennis' | 'skirt-denim' | 'skirt-wrap' | 'skirt-midi' | 'skirt-pencil' | 'skirt-cargo'
   // underwear / homewear
-  | 'bra' | 'briefs' | 'bratop' | 'pyjama' | 'lounge-pants'
+  | 'bra' | 'briefs' | 'bratop' | 'pyjama' | 'lounge-pants' | 'robe'
   // footwear
-  | 'sneaker' | 'loafer' | 'sandal' | 'slipper' | 'boot' | 'socks-ankle' | 'socks-crew'
+  | 'sneaker' | 'loafer' | 'sandal' | 'slipper' | 'boot' | 'running-shoe' | 'slip-on' | 'sneaker-hi' | 'boot-chelsea' | 'socks-ankle' | 'socks-crew'
   // folded slabs (table / bay display)
   | 'fold-top' | 'fold-bottom';
 /** How the item sits on its fixture: hanging on a rail, folded (a slab) on a table / wall bay, or standing on a shelf. */

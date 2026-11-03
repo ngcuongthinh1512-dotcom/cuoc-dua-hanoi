@@ -35,7 +35,7 @@ export function makeAtlas(signs: readonly SignSpec[]): { texture: THREE.Texture;
       x.fillStyle = '#fff'; x.font = `900 ${h * 0.62}px ${FONT}`; x.textAlign = 'center'; x.textBaseline = 'middle';
       x.fillText('CHECKOUT', w / 2, h / 2 + 4);
     });
-    else cell(s.id, 340, 72, (x, w, h) => {
+    else cell(s.id, 320, 64, (x, w, h) => {
       x.fillStyle = '#fff'; x.fillRect(0, 0, w, h);
       x.fillStyle = BRAND_RED; x.fillRect(0, 0, 8, h);
       x.fillStyle = '#1c1c1e'; x.textAlign = 'left'; x.textBaseline = 'middle';

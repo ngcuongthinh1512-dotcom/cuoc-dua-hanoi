@@ -97,6 +97,14 @@ function sleeve(o: Garment, sgn: number, lod: boolean): G[] {
   if (kind === 'short' && (o.neck === 'polo') && !lod) parts.push(shade(new THREE.CylinderGeometry(r1 + 0.004, r1 + 0.004, 0.03, seg, 1, true).translate(0, -L + 0.015, 0).rotateZ(sgn * ang).translate(shX, shY, 0), 0.8)); // ribbed polo cuff
   return parts;
 }
+/** A hood hanging down the BACK of the garment with its opening toward the FRONT (owner 2026-11-03: "hướng mũ phải quay cùng
+ *  hướng với mặt trước"): an outer dome tilted back ≈ 65° so the cut edge faces +z / up, plus a darker inner shell (flipped
+ *  winding) so the opening reads as the hood's inside instead of a hole. `y` = the neck line, `z` = behind the collar. */
+export function hood(r: number, y: number, z: number): G[] {
+  const outer = new THREE.SphereGeometry(r, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.15, 0.9);
+  const inner = shade(new THREE.SphereGeometry(r * 0.94, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(-1, 1.1, 0.9), 0.62); // negative x scale flips the faces inward
+  return [outer, inner].map((g) => g.rotateX(-1.15).translate(0, y, z));
+}
 const disc = (x: number, y: number, z: number, r = 0.011, s = 0.45): G => shade(new THREE.CylinderGeometry(r, r, 0.006, 6).rotateX(Math.PI / 2).translate(x, y, z), s);
 /** Torso + sleeves + neck + front + pockets + hem + extras; origin = the garment's centre, top edge at +h/2, front +z. */
 function garment(o: Garment, lod = false): G {
@@ -118,7 +126,7 @@ function garment(o: Garment, lod = false): G {
     case 'shirt': parts.push(shade(cyl(0.1, 0.095, 0.045, 10, 0, top + 0.015, 0, true), 0.9)); for (const sg of [-1, 1]) { parts.push(shade(box(0.1, 0.085, 0.012, sg * 0.065, top - 0.03, fz + 0.006, -sg * 0.55), 0.9)); parts.push(shade(box(0.03, 0.03, 0.01, sg * 0.11, top - 0.075, fz + 0.008, -sg * 0.55), 0.9)); } break; // pointed collar + stand
     case 'camp': for (const sg of [-1, 1]) parts.push(shade(box(0.13, 0.1, 0.012, sg * 0.09, top - 0.045, fz + 0.006, -sg * 0.75), 0.9)); if (o.notch) parts.push(shade(box(0.07, 0.11, 0.008, 0, top - 0.06, fz + 0.002), 0.35)); break; // the open neck shows dark
     case 'lapel': for (const sg of [-1, 1]) { parts.push(shade(box(0.075, 0.3, 0.012, sg * 0.08, top - 0.17, fz + 0.006, -sg * 0.32), 0.85)); parts.push(shade(box(0.06, 0.05, 0.012, sg * 0.1, top - 0.04, fz + 0.007, -sg * 0.9), 0.85)); } break; // notch lapels
-    case 'hood': { parts.push(new THREE.SphereGeometry(0.17, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.1, 0.95).rotateX(-0.55).translate(0, top - 0.02, -d / 2 - 0.04)); if (o.drawstrings) for (const sg of [-1, 1]) { parts.push(shade(box(0.008, 0.16, 0.008, sg * 0.04, top - 0.14, fz + 0.006, sg * 0.12), 0.4)); parts.push(shade(box(0.012, 0.025, 0.012, sg * 0.055, top - 0.225, fz + 0.006), 0.3)); } break; }
+    case 'hood': { parts.push(...hood(0.17, top + 0.01, -d / 2 - 0.07)); if (o.drawstrings) for (const sg of [-1, 1]) { parts.push(shade(box(0.008, 0.16, 0.008, sg * 0.04, top - 0.14, fz + 0.006, sg * 0.12), 0.4)); parts.push(shade(box(0.012, 0.025, 0.012, sg * 0.055, top - 0.225, fz + 0.006), 0.3)); } break; }
     case 'scoop': break;
   }
   const len = h, mid = 0;
@@ -265,6 +273,8 @@ export const SPEC: Record<ShapeId, Spec> = {
   mockneck: { kind: 'garment', w: Z.tops.sweater.chest, h: Z.tops.sweater.length + 0.04, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.14, neck: 'mock', hem: 'rib', knit: true },
   cardigan: { kind: 'garment', w: Z.outer.cardigan.chest, h: Z.outer.cardigan.length, d: 0.09, shoulder: Z.outer.cardigan.shoulder, sleeve: 'long', sleeveLen: Z.outer.cardigan.sleeveLong, sleeveW: 0.14, neck: 'v', front: 'open', buttons: 5, pocket: 'chest2', hem: 'rib', knit: true },
   'knit-vest': { kind: 'garment', w: Z.tops.vest.chest, h: Z.tops.vest.length, d: 0.08, shoulder: 0.36, sleeve: 'none', neck: 'v', hem: 'rib', knit: true },
+  'knit-polo': { kind: 'garment', w: Z.tops.sweater.chest, h: Z.tops.sweater.length + 0.02, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.13, neck: 'polo', front: 'buttons', buttons: 3, hem: 'rib', knit: true, ribLines: true },
+  'knit-halfzip': { kind: 'garment', w: Z.tops.sweater.chest, h: Z.tops.sweater.length + 0.02, d: 0.09, shoulder: Z.tops.sweater.shoulder, sleeve: 'long', sleeveLen: Z.tops.sweater.sleeveLong, sleeveW: 0.13, neck: 'stand', front: 'halfzip', hem: 'rib', knit: true, ribLines: true },
   // ---- outerwear ----
   parka: { kind: 'garment', w: Z.outer.parka.chest, h: Z.outer.parka.length, d: 0.11, shoulder: Z.outer.parka.shoulder, sleeve: 'long', sleeveLen: Z.outer.parka.sleeveLong, sleeveW: 0.16, neck: 'hood', drawstrings: true, front: 'zip', pocket: 'flapLow2', hem: 'drawcord', stormFlap: true },
   'uv-zip': { kind: 'garment', w: Z.outer.uvZip.chest, h: Z.outer.uvZip.length, d: 0.08, shoulder: Z.outer.uvZip.shoulder, sleeve: 'long', sleeveLen: Z.outer.uvZip.sleeveLong, sleeveW: 0.11, neck: 'hood', front: 'zip', pocket: 'breast', hem: 'straight' }, // slim, plain hem, one chest zip
@@ -279,12 +289,28 @@ export const SPEC: Record<ShapeId, Spec> = {
   coach: { kind: 'garment', w: Z.outer.coach.chest, h: Z.outer.coach.length, d: 0.09, shoulder: Z.outer.coach.shoulder, sleeve: 'long', sleeveLen: Z.outer.coach.sleeveLong, sleeveW: 0.15, neck: 'camp', front: 'snaps', pocket: 'side2', hem: 'drawcord' },
   'denim-jacket': { kind: 'garment', w: Z.outer.denimJacket.chest, h: Z.outer.denimJacket.length, d: 0.09, shoulder: Z.outer.denimJacket.shoulder, sleeve: 'long', sleeveLen: Z.outer.denimJacket.sleeveLong, sleeveW: 0.14, neck: 'shirt', front: 'placket', buttons: 5, pocket: 'chestFlap2', yoke: true, hem: 'rib', flare: -0.03 },
   'wool-coat': { kind: 'garment', w: Z.outer.woolCoat.chest, h: Z.outer.woolCoat.length, d: 0.11, shoulder: Z.outer.woolCoat.shoulder, sleeve: 'long', sleeveLen: Z.outer.woolCoat.sleeveLong, sleeveW: 0.15, neck: 'lapel', front: 'buttons', buttons: 3, pocket: 'flapLow2', hem: 'straight', flare: 0.1 },
+  anorak: { kind: 'garment', w: Z.outer.uvZip.chest + 0.04, h: 0.72, d: 0.1, shoulder: Z.outer.uvZip.shoulder + 0.02, sleeve: 'long', sleeveLen: Z.outer.uvZip.sleeveLong, sleeveW: 0.15, neck: 'hood', drawstrings: true, front: 'halfzip', pocket: 'kangaroo', hem: 'drawcord' },
+  varsity: { kind: 'garment', w: Z.outer.bomber.chest, h: 0.64, d: 0.11, shoulder: Z.outer.bomber.shoulder, sleeve: 'long', sleeveLen: Z.outer.bomber.sleeveLong, sleeveW: 0.16, neck: 'rib', front: 'snaps', pocket: 'side2', hem: 'rib', raglan: true, flare: -0.03 },
+  quilted: { kind: 'garment', w: 0.56, h: 0.72, d: 0.12, shoulder: 0.48, sleeve: 'long', sleeveLen: 0.63, sleeveW: 0.15, neck: 'stand', front: 'snaps', quilt: 7, pocket: 'flap2', hem: 'straight' },
   padded: { kind: 'garment', w: Z.outer.padded.chest, h: Z.outer.padded.length, d: 0.16, shoulder: Z.outer.padded.shoulder, sleeve: 'long', sleeveLen: Z.outer.padded.sleeveLong, sleeveW: 0.18, neck: 'hood', drawstrings: true, front: 'zip', pocket: 'flapLow2', hem: 'drawcord', quilt: 4 },
   // ---- bags & accessories ----
+  duffel: { kind: 'custom', build: () => merge(cyl(0.15, 0.15, 0.44, 10, 0, -0.03, 0).rotateZ(Math.PI / 2), shade(box(0.02, 0.14, 0.02, -0.08, 0.1, 0), 0.6), shade(box(0.02, 0.14, 0.02, 0.08, 0.1, 0), 0.6), shade(box(0.18, 0.015, 0.02, 0, 0.165, 0), 0.6), shade(box(0.46, 0.03, 0.006, 0, -0.03, 0.152), 0.5)) },
+  'waist-bag': { kind: 'custom', build: () => merge(box(0.26, 0.13, 0.08, 0, -0.02, 0), shade(box(0.26, 0.05, 0.085, 0, 0.02, 0), 0.82), shade(box(0.012, 0.1, 0.012, -0.12, 0.09, 0), 0.5), shade(box(0.012, 0.1, 0.012, 0.12, 0.09, 0), 0.5), shade(box(0.25, 0.012, 0.012, 0, 0.14, 0), 0.5), shade(box(0.06, 0.012, 0.01, 0.06, -0.02, 0.042), 0.4)) },
+  'laptop-bag': { kind: 'custom', build: () => merge(box(0.36, 0.27, 0.05, 0, -0.04, 0), shade(box(0.36, 0.1, 0.055, 0, 0.04, 0), 0.84), shade(box(0.016, 0.1, 0.016, -0.07, 0.14, 0), 0.6), shade(box(0.016, 0.1, 0.016, 0.07, 0.14, 0), 0.6), shade(box(0.16, 0.016, 0.016, 0, 0.19, 0), 0.6), shade(box(0.03, 0.03, 0.008, 0, 0.0, 0.03), 0.45)) },
+  'shoulder-bag': { kind: 'custom', build: () => merge(box(0.28, 0.2, 0.08, 0, -0.1, 0), shade(box(0.28, 0.09, 0.085, 0, 0.0, 0), 0.84), shade(box(0.012, 0.3, 0.012, -0.12, 0.05, 0), 0.5), shade(box(0.012, 0.3, 0.012, 0.12, 0.05, 0), 0.5), shade(box(0.25, 0.012, 0.012, 0, 0.195, 0), 0.5), shade(box(0.02, 0.02, 0.01, 0, -0.04, 0.045), 0.4)) },
   tote: { kind: 'custom', build: () => merge(box(0.36, 0.36, 0.1, 0, -0.06, 0), shade(box(0.02, 0.12, 0.02, -0.1, 0.18, 0), 0.7), shade(box(0.02, 0.12, 0.02, 0.1, 0.18, 0), 0.7), shade(box(0.22, 0.02, 0.02, 0, 0.23, 0), 0.7)) },
   'round-bag': { kind: 'custom', build: () => merge(cyl(0.12, 0.12, 0.07, 10, 0, -0.03, 0).rotateX(Math.PI / 2), shade(box(0.015, 0.14, 0.015, -0.1, 0.07, 0), 0.6), shade(box(0.015, 0.14, 0.015, 0.1, 0.07, 0), 0.6), shade(box(0.215, 0.015, 0.015, 0, 0.14, 0), 0.6), shade(box(0.2, 0.012, 0.004, 0, -0.03, 0.037), 0.5)) },
   backpack: { kind: 'custom', build: () => merge(box(0.3, 0.4, 0.15, 0, -0.02, 0), box(0.3, 0.1, 0.16, 0, 0.17, -0.005), shade(box(0.06, 0.34, 0.015, -0.08, -0.05, -0.08), 0.7), shade(box(0.06, 0.34, 0.015, 0.08, -0.05, -0.08), 0.7), shade(box(0.22, 0.12, 0.012, 0, -0.1, 0.08), 0.85)) },
   crossbody: { kind: 'custom', build: () => merge(box(0.22, 0.14, 0.07, 0, -0.05, 0), shade(box(0.22, 0.05, 0.075, 0, 0.03, 0), 0.85), shade(box(0.012, 0.12, 0.012, -0.1, 0.07, 0), 0.6), shade(box(0.012, 0.12, 0.012, 0.1, 0.07, 0), 0.6), shade(box(0.21, 0.012, 0.012, 0, 0.125, 0), 0.6)) },
+  beret: { kind: 'custom', build: () => merge(dome(0.14, 0, -0.03, 0, 8).scale(1, 0.4, 1), shade(cyl(0.1, 0.1, 0.02, 8, 0, -0.035, 0, true), 0.75), shade(box(0.01, 0.025, 0.01, 0, 0.035, 0), 0.6)) },
+  visor: { kind: 'custom', build: () => merge(shade(cyl(0.1, 0.1, 0.035, 8, 0, 0, 0, true), 0.95), shade(box(0.17, 0.012, 0.11, 0, -0.01, 0.12), 0.85)) },
+  bandana: { kind: 'custom', build: () => merge(new THREE.CylinderGeometry(0.15, 0.15, 0.008, 3).rotateX(Math.PI / 2).rotateZ(Math.PI).translate(0, -0.02, 0), shade(box(0.26, 0.012, 0.012, 0, 0.11, 0), 0.8)) },
+  'umbrella-long': { kind: 'custom', build: () => merge(cyl(0.035, 0.015, 0.7, 6, 0, -0.03, 0), shade(box(0.016, 0.12, 0.016, 0, 0.36, 0), 0.5), shade(box(0.08, 0.016, 0.016, 0.035, 0.42, 0), 0.5), shade(box(0.016, 0.06, 0.016, 0.07, 0.4, 0), 0.5), shade(cyl(0.006, 0.006, 0.06, 4, 0, -0.41, 0), 0.4)) },
+  belt: { kind: 'custom', build: () => merge(new THREE.TorusGeometry(0.085, 0.016, 5, 12).scale(1, 1, 0.5), shade(box(0.04, 0.035, 0.02, 0, 0.09, 0), 0.5), shade(box(0.02, 0.12, 0.014, 0.06, -0.03, 0.005), 0.9)) },
+  wallet: { kind: 'custom', build: () => merge(box(0.11, 0.09, 0.025), shade(box(0.11, 0.04, 0.027, 0, 0.02, 0), 0.84), shade(box(0.014, 0.014, 0.008, 0, -0.01, 0.015), 0.45)) },
+  cardholder: { kind: 'custom', build: () => merge(box(0.1, 0.07, 0.012), shade(box(0.1, 0.004, 0.014, 0, 0.012, 0), 0.5), shade(box(0.1, 0.004, 0.014, 0, -0.012, 0), 0.5)) },
+  watch: { kind: 'custom', build: () => merge(shade(box(0.022, 0.12, 0.006, 0, 0, 0), 0.5), new THREE.TorusGeometry(0.02, 0.006, 5, 12), shade(new THREE.CircleGeometry(0.017, 12).translate(0, 0, 0.004), 0.9), shade(box(0.005, 0.005, 0.006, 0.023, 0, 0.002), 0.5)) },
+  gloves: { kind: 'custom', build: () => merge(box(0.085, 0.2, 0.025, -0.05, -0.02, 0), box(0.085, 0.2, 0.025, 0.05, -0.02, 0), box(0.03, 0.07, 0.024, -0.1, -0.01, 0, 0.5), box(0.03, 0.07, 0.024, 0.1, -0.01, 0, -0.5), shade(box(0.09, 0.05, 0.027, -0.05, 0.1, 0), 0.75), shade(box(0.09, 0.05, 0.027, 0.05, 0.1, 0), 0.75)) },
   cap: { kind: 'custom', build: () => merge(dome(0.11, 0, -0.07, 0, 7), shade(box(0.16, 0.012, 0.11, 0, -0.065, 0.13), 0.85)) },
   'bucket-hat': { kind: 'custom', build: () => merge(cyl(0.1, 0.11, 0.1, 8, 0, -0.03, 0), shade(cyl(0.17, 0.17, 0.012, 8, 0, -0.075, 0), 0.9)) },
   beanie: { kind: 'custom', build: () => merge(dome(0.11, 0, -0.04, 0, 7).scale(1, 1.3, 1), shade(cyl(0.115, 0.115, 0.07, 7, 0, -0.075, 0, true), 0.85)) },
@@ -306,6 +332,10 @@ export const SPEC: Record<ShapeId, Spec> = {
   'jeans-wide': { kind: 'legs', w: 0.4, h: H['jeans-wide'], top: 0.1, knee: 0.11, bottom: 0.12, waist: 'flat', loops: true, fly: true, button: true, pockets: 'five', coin: true, rivets: true, seam: true, band: 0.8 },
   'jeans-baggy': { kind: 'legs', w: 0.42, h: H['jeans-baggy'], top: 0.12, knee: 0.12, bottom: 0.11, waist: 'flat', loops: true, fly: true, button: true, pockets: 'five', rivets: true, seam: true, lowCrotch: true, stack: true, band: 0.8 },
   'jeans-tapered': { kind: 'legs', w: 0.34, h: H['jeans-tapered'], top: 0.092, knee: 0.07, bottom: 0.052, waist: 'flat', loops: true, fly: true, button: true, pockets: 'five', coin: true, rivets: true, seam: true, band: 0.8 },
+  'jogger-cargo': { kind: 'legs', w: 0.35, h: H['jogger-cargo'], top: 0.1, knee: 0.08, bottom: 0.052, waist: 'rib', drawstring: true, cuff: 'rib', pockets: 'cargo' },
+  'track-pants': { kind: 'legs', w: 0.35, h: H['track-pants'], top: 0.095, knee: 0.085, bottom: 0.085, waist: 'rib', drawstring: true, stripe: true, split: true, band: 0.85 },
+  'shorts-denim': { kind: 'legs', w: 0.36, h: H['shorts-denim'], top: 0.1, knee: 0.1, bottom: 0.1, waist: 'flat', loops: true, fly: true, button: true, pockets: 'five', coin: true, rivets: true, cuff: 'roll', band: 0.8 },
+  'shorts-cargo': { kind: 'legs', w: 0.37, h: H['shorts-cargo'], top: 0.105, knee: 0.1, bottom: 0.1, waist: 'flat', loops: true, fly: true, pockets: 'cargo', band: 0.9 },
   'shorts-chino': { kind: 'legs', w: 0.36, h: H['shorts-chino'], top: 0.1, knee: 0.1, bottom: 0.1, waist: 'flat', loops: true, fly: true, button: true, pockets: 'curved', coin: true, band: 0.9 },
   'jeans-straight': { kind: 'legs', w: 0.34, h: H['jeans-straight'], top: 0.088, knee: 0.082, bottom: 0.08, waist: 'flat', loops: true, fly: true, button: true, pockets: 'five', coin: true, rivets: true, seam: true, cuff: 'roll', band: 0.8 },
   // ---- dresses & skirts ----
@@ -313,6 +343,8 @@ export const SPEC: Record<ShapeId, Spec> = {
   'dress-aline': { kind: 'custom', build: () => dress(H['dress-aline'], 0.16, 0.32, 'cap', 'crew') },
   'dress-maxi': { kind: 'dress', h: H['dress-maxi'], rt: 0.16, rb: 0.36, sleeve: 'short', neck: 'v' },
   'dress-slip': { kind: 'custom', build: () => dress(H['dress-slip'], 0.15, 0.24, 'strap') },
+  'dress-wrap': { kind: 'dress', h: H['dress-wrap'], rt: 0.16, rb: 0.3, sleeve: 'short', neck: 'v', belt: true },
+  'dress-tee': { kind: 'dress', h: H['dress-tee'], rt: 0.17, rb: 0.22, sleeve: 'short', neck: 'crew' },
   'skirt-pleated': { kind: 'skirt', h: H['skirt-pleated'], rt: 0.16, rb: 0.27, seg: 14, opts: { pleats: 14 } },
   'skirt-aline': { kind: 'skirt', h: H['skirt-aline'], rt: 0.16, rb: 0.27, seg: 8, opts: { zip: true } },
   'skirt-flare': { kind: 'skirt', h: H['skirt-flare'], rt: 0.15, rb: 0.4, seg: 12, opts: { band: 0.9 } },
@@ -321,17 +353,24 @@ export const SPEC: Record<ShapeId, Spec> = {
   'skirt-denim': { kind: 'skirt', h: H['skirt-denim'], rt: 0.16, rb: 0.22, seg: 8, opts: { band: 0.8, buttons: true, pockets: true } },
   'skirt-wrap': { kind: 'skirt', h: H['skirt-wrap'], rt: 0.16, rb: 0.26, seg: 8, opts: { wrap: true, tie: true } },
   'skirt-midi': { kind: 'skirt', h: H['skirt-midi'], rt: 0.16, rb: 0.3, seg: 10, opts: { slit: true } },
+  'skirt-pencil': { kind: 'skirt', h: H['skirt-pencil'], rt: 0.16, rb: 0.145, seg: 8, opts: { slit: true, zip: true, band: 0.8 } },
+  'skirt-cargo': { kind: 'skirt', h: H['skirt-cargo'], rt: 0.16, rb: 0.21, seg: 8, opts: { pockets: true, buttons: true, band: 0.85, tie: true } },
   // ---- underwear / homewear ----
   bra: { kind: 'custom', build: () => merge(dome(0.065, -0.07, -0.05, 0), dome(0.065, 0.07, -0.05, 0), shade(box(0.3, 0.025, 0.02, 0, -0.055, 0), 0.85)) },
   briefs: { kind: 'custom', build: () => merge(box(0.26, H.briefs, 0.2), shade(box(0.26, H.briefs + 0.004, 0.03, 0, 0, -0.085), 0.8)) },
   bratop: { kind: 'custom', build: () => merge(box(0.3, 0.3, 0.05, 0, -0.06, 0), shade(box(0.03, 0.14, 0.02, -0.09, 0.14, 0), 0.85), shade(box(0.03, 0.14, 0.02, 0.09, 0.14, 0), 0.85)) },
   pyjama: { kind: 'custom', build: () => merge(garment({ w: 0.42, h: 0.42, d: 0.07, sleeve: 'long', neck: 'camp', front: 'buttons', sleeveW: 0.11 }).translate(0, 0.24, 0), box(0.12, 0.42, 0.11, -0.085, -0.23, 0.02), box(0.12, 0.42, 0.11, 0.085, -0.23, 0.02)) },
+  robe: { kind: 'garment', w: 0.6, h: H.robe, d: 0.1, shoulder: 0.5, sleeve: 'long', sleeveLen: 0.5, sleeveW: 0.18, neck: 'camp', front: 'open', buttons: 0, hem: 'belt', flare: 0.08, drape: 0.02 },
   'lounge-pants': { kind: 'legs', w: 0.37, h: H['lounge-pants'], top: 0.1, knee: 0.1, bottom: 0.105, waist: 'rib', drawstring: true, band: 0.85 },
   // ---- footwear ----
   sneaker: { kind: 'custom', build: () => shoe(0.3, 0.035, 0.09, H.sneaker, true, true) },
   loafer: { kind: 'custom', build: () => shoe(0.3, 0.02, 0.065, H.loafer, false) },
   sandal: { kind: 'custom', build: () => merge(shade(box(0.11, 0.02, 0.28, 0, -0.02, 0), 0.7), box(0.11, 0.015, 0.035, 0, 0, 0.03), box(0.11, 0.015, 0.035, 0, 0, -0.05)) },
   slipper: { kind: 'custom', build: () => merge(shade(box(0.11, 0.02, 0.28, 0, -0.03, 0), 0.7), box(0.11, 0.055, 0.12, 0, 0.0075, 0.06)) },
+  'running-shoe': { kind: 'custom', build: () => merge(shoe(0.3, 0.045, 0.075, H['running-shoe'], true, true), shade(box(0.1, 0.03, 0.08, 0, -H['running-shoe'] / 2 + 0.06, -0.1), 0.6), shade(box(0.11, 0.012, 0.3, 0, -H['running-shoe'] / 2 + 0.006, 0), 0.9)) }, // thick two-tone sole, heel wedge
+  'slip-on': { kind: 'custom', build: () => merge(shoe(0.29, 0.02, 0.06, H['slip-on'], true, false), shade(box(0.05, 0.03, 0.03, 0, -H['slip-on'] / 2 + 0.065, 0.02), 0.55)) }, // elastic gusset
+  'sneaker-hi': { kind: 'custom', build: () => merge(shade(box(0.11, 0.035, 0.3, 0, -H['sneaker-hi'] / 2 + 0.0175, 0), 0.55), box(0.1, 0.12, 0.17, 0, -H['sneaker-hi'] / 2 + 0.095, -0.06), box(0.095, 0.05, 0.13, 0, -H['sneaker-hi'] / 2 + 0.06, 0.085), shade(box(0.04, 0.006, 0.12, 0, -H['sneaker-hi'] / 2 + 0.158, -0.02), 0.6), shade(box(0.102, 0.03, 0.172, 0, -H['sneaker-hi'] / 2 + 0.145, -0.06), 0.8)) }, // high ankle collar
+  'boot-chelsea': { kind: 'custom', build: () => merge(shade(box(0.11, 0.03, 0.3, 0, -H['boot-chelsea'] / 2 + 0.015, 0), 0.55), box(0.1, 0.06, 0.3, 0, -H['boot-chelsea'] / 2 + 0.06, 0), cyl(0.05, 0.055, 0.08, 8, 0, H['boot-chelsea'] / 2 - 0.04, -0.075), shade(box(0.01, 0.06, 0.05, 0.05, H['boot-chelsea'] / 2 - 0.045, -0.075), 0.45), shade(box(0.02, 0.025, 0.008, 0, H['boot-chelsea'] / 2 - 0.02, -0.02), 0.4)) }, // elastic side panel, pull tab
   boot: { kind: 'custom', build: () => merge(shade(box(0.11, 0.03, 0.3, 0, -H.boot / 2 + 0.015, 0), 0.55), shade(box(0.09, 0.03, 0.08, 0, -H.boot / 2 + 0.045, -0.1), 0.55), box(0.1, 0.06, 0.3, 0, -H.boot / 2 + 0.065, 0), cyl(0.05, 0.055, 0.12, 8, 0, H.boot / 2 - 0.06, -0.075), shade(box(0.03, 0.02, 0.012, 0, H.boot / 2 - 0.03, -0.018), 0.4)) }, // sole, heel, foot, round shaft, pull tab
   'socks-ankle': { kind: 'custom', build: () => merge(box(0.07, 0.04, 0.2, 0, -0.03, 0.02), shade(box(0.07, 0.07, 0.07, 0, 0.015, -0.045), 0.85)) },
   'socks-crew': { kind: 'custom', build: () => merge(box(0.07, 0.04, 0.2, 0, -0.08, 0.02), shade(box(0.07, 0.17, 0.07, 0, 0.015, -0.045), 0.85)) },
@@ -343,7 +382,7 @@ const BUILD = (sp: Spec, lod = false): G => sp.kind === 'garment' ? garment(sp, 
 /** The hanger drawn over every hanging item (one extra InstancedMesh, fixed colour). */
 export const HANGER: G = merge(shade(box(0.012, 0.07, 0.012, 0, 0.055, 0), 0.4), shade(box(0.42, 0.014, 0.014, 0, 0.02, 0), 0.4));
 /** Standing items turned on their shelf so the silhouette reads (shoes three-quarter on). */
-const STAND_TURN: Partial<Record<ShapeId, number>> = { sneaker: 0.35, loafer: 0.35, sandal: 0.35, slipper: 0.35, boot: 0.35, 'socks-ankle': 0, 'socks-crew': 0, umbrella: 0 }; // shoes toe-out, slightly turned
+const STAND_TURN: Partial<Record<ShapeId, number>> = { sneaker: 0.35, loafer: 0.35, sandal: 0.35, slipper: 0.35, boot: 0.35, 'running-shoe': 0.35, 'slip-on': 0.35, 'sneaker-hi': 0.35, 'boot-chelsea': 0.35, 'socks-ankle': 0, 'socks-crew': 0, umbrella: 0 }; // shoes toe-out, slightly turned
 
 const cache = new Map<string, G>();
 /** Planar UVs in metres from the position, by face direction (1 unit = 0.5 m ≈ one garment face), so a pattern keeps the
