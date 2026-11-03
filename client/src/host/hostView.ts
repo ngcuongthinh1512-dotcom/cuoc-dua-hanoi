@@ -101,7 +101,7 @@ export function cetiqloLines(state: HostState, now: number = state.serverMs): st
   const label = (step: string) => state.leg?.steps.find((x) => x.id === step)?.label ?? step;
   return (state.cetiqlo ?? []).map((r) => {
     const m = r.match;
-    const match = m ? `đang đấu: ${m.teams.map((t) => `${t.name}${t.online ? '' : ' (mất mạng)'} ${t.locked ? 'đã chốt' : `${t.bagN} món`}`).join(' – ')} · còn ${fmtMinSec(Math.max(0, m.endsAt - now))}` : 'không có trận';
+    const match = m ? `đang đấu: ${m.teams.map((t) => `${t.name}${t.online ? '' : ' (mất mạng)'} ${t.locked ? 'đã chốt' : `${t.bagN} món`}`).join(' – ')} · ${m.startAt !== undefined && now < m.startAt ? `đếm ngược ${Math.ceil((m.startAt - now) / 1000)} s` : `còn ${fmtMinSec(Math.max(0, m.endsAt - now))}`}` : 'không có trận';
     return `CETIQLO · ${label(r.step)}: ${match} · hàng chờ: ${r.queue.length ? r.queue.map((q) => (q.releaseInS === undefined ? q.name : `${q.name} (rời sau ${fmtMinSec(q.releaseInS * 1000)})`)).join(', ') : 'trống'}`;
   });
 }

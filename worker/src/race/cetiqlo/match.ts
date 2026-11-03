@@ -5,7 +5,8 @@ import type { CqMark, CqReason, CqRefusal } from '@race/shared/protocol';
 import { CETIQLO } from './config.ts';
 
 export const SLOTS: readonly SlotKind[] = ['top', 'outer', 'bottom', 'shoes', 'bag', 'acc'];
-export type Cfg = typeof CETIQLO;
+/** The config shape with plain numbers (CETIQLO is `as const`): tests / the DEV mock override single values. */
+export type Cfg = { readonly [K in keyof typeof CETIQLO]: number };
 export interface Zone { x: number; z: number; radius: number }
 
 export interface Match {
@@ -101,7 +102,7 @@ export function startNext(room: Room, now: number, seed: number, catalog: readon
   if (room.match?.state === 'running' || now < room.holdUntil) return null;
   const teams = pairNext(room.queue, room.last, cfg.teamsPerMatch, eligible);
   if (!teams) return null;
-  const startAt = now + cfg.memorizeMs;
+  const startAt = now + cfg.countdownMs; // the pair is placed on the mat now; the brief + the pick clock start at startAt
   const seq = room.seq + 1;
   const match: Match = {
     id: `m${seq}`, teams, set: makeSet(seed, catalog), seed, startAt, endsAt: startAt + cfg.pickMs,

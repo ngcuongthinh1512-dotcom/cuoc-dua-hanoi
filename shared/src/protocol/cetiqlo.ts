@@ -106,5 +106,6 @@ export interface CqHostRoom {
   step: string;
   /** `releaseInS`: a queued team is released (step done) after this many seconds without an opponent (maxWaitMs). */
   queue: (CqPlayer & { releaseInS?: number })[];
-  match: { id: string; endsAt: number; teams: (CqPlayer & { locked: boolean; bagN: number; online: boolean })[] } | null;
+  /** `startAt`: the pick phase starts (the 5-4-3-2-1 countdown runs before it). */
+  match: { id: string; startAt?: number; endsAt: number; teams: (CqPlayer & { locked: boolean; bagN: number; online: boolean })[] } | null;
 }

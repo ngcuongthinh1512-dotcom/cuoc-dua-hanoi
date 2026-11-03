@@ -9,8 +9,9 @@ const slotOf = (id: string) => byId.get(id)?.slot;
 const ZONE = { x: -4.5, z: 7.5, radius: 2.1 };
 const at = (id: string) => ({ x: byId.get(id)!.shelf.x, z: byId.get(id)!.shelf.z });
 
+const NO_COUNTDOWN = { ...CETIQLO, countdownMs: 0 }; // the action tests act right after the pairing
 function running(teams = ['A', 'B'], now = 1000): Match {
-  const room = startNext({ ...newRoom(), queue: teams }, now, 7, FIXTURE)!;
+  const room = startNext({ ...newRoom(), queue: teams }, now, 7, FIXTURE, undefined, NO_COUNTDOWN)!;
   return { ...room.match!, teams, bags: Object.fromEntries(teams.map((t) => [t, []])) }; // (N teams whatever teamsPerMatch is)
 }
 /** a bag with `ok` right items, then `wrong` items (the same slot, other colour) and `extra` decoys */
@@ -79,7 +80,9 @@ describe('queue / pairing', () => {
   it('startNext: one match at a time, waits for the result hold, stores seed + set + endsAt', () => {
     const r0 = join(join(join(newRoom(), 'A'), 'B'), 'C');
     const r1 = startNext(r0, 5000, 42, FIXTURE)!;
-    expect(r1.match).toMatchObject({ id: 'm1', teams: ['A', 'B'], seed: 42, startAt: 5000, endsAt: 5000 + CETIQLO.pickMs, state: 'running' });
+    expect(r1.match).toMatchObject({ id: 'm1', teams: ['A', 'B'], seed: 42, startAt: 5000 + CETIQLO.countdownMs, endsAt: 5000 + CETIQLO.countdownMs + CETIQLO.pickMs, state: 'running' }); // 5-4-3-2-1 first
+    expect(take(r1.match!, 'A', SET[0]!, at(SET[0]!), byId, 5000 + CETIQLO.countdownMs - 1)).toEqual({ ok: false, why: 'notRunning' }); // nothing during the countdown
+    expect(take(r1.match!, 'A', r1.match!.set[0]!, at(r1.match!.set[0]!), byId, 5000 + CETIQLO.countdownMs).ok).toBe(true);
     expect(r1.match!.set).toEqual(makeSet(42, FIXTURE));
     expect(r1.queue).toEqual(['C']);
     expect(startNext(join(r1, 'D'), 6000, 1, FIXTURE)).toBeNull(); // one at a time

@@ -7,9 +7,10 @@ import type { TeamInfo, TickEntry } from '@race/shared/protocol';
 import { CATALOG, ITEM_BY_ID, STORE } from '@race/shared/cetiqlo';
 import { CETIQLO, CHECKOUT_ZONE } from '../../../worker/src/race/cetiqlo/config.ts';
 import { Cetiqlo, type CqIO } from '../../../worker/src/race/cetiqlo/index.ts';
+import type { Cfg } from '../../../worker/src/race/cetiqlo/match.ts';
 import type { CqLink } from './cetiqloNet.ts';
 
-export const CQ_DEMO_STATES = ['match', 'lobby', 'bag', 'label', 'warn', 'checkout', 'result-win', 'result-lose', 'result-draw', 'timeout', 'board'] as const;
+export const CQ_DEMO_STATES = ['match', 'lobby', 'bag', 'label', 'warn', 'checkout', 'result-win', 'result-lose', 'result-draw', 'timeout', 'board', 'countdown'] as const;
 export type CqDemoState = (typeof CQ_DEMO_STATES)[number];
 
 const YOU = 'you', BOT = 'bot';
@@ -37,18 +38,17 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
   const extras: TeamInfo[] = state === 'board' ? EXTRAS.map(([name, colour], i) => { let s = 1; while (slots.includes(s)) s++; slots.push(s); return { slot: s, id: `e${i + 1}`, name, colour, online: true, avatar: (i % 2) as 0 | 1 }; }) : [];
   const teams = [botTeam, ...extras];
   const who = (t: string) => (t === YOU ? { slot: you.slot, name: you.name } : { slot: teams.find((x) => x.id === t)?.slot ?? oppSlot, name: teams.find((x) => x.id === t)?.name ?? botTeam.name });
-  // ponytail: the worker's Cfg is `as const` (literal numbers), so a demo override needs the cast; ask the server agent for `Cfg` with plain numbers
-  const cfg = { ...CETIQLO, pickMs: state === 'warn' ? 27_000 : state === 'result-draw' ? 4_000 : state === 'board' ? 3_000 : CETIQLO.pickMs, resultHoldMs: state === 'board' ? 2_000 : 6_000 } as unknown as { -readonly [K in keyof typeof CETIQLO]: (typeof CETIQLO)[K] };
+  const cfg: { -readonly [K in keyof Cfg]: number } = { ...CETIQLO, pickMs: state === 'warn' ? 27_000 : state === 'result-draw' ? 4_000 : state === 'board' ? 3_000 : CETIQLO.pickMs, resultHoldMs: state === 'board' ? 2_000 : 6_000, countdownMs: state === 'countdown' ? 3_600_000 : state === 'board' ? 0 : CETIQLO.countdownMs }; // 'countdown' holds the 5-4-3-2-1 (the number stays huge); 'board' skips it for its quick first match
   const offline = new Set<string>(); // board state: the first loser stays offline (never paired again) so a "đã thua · chờ lượt" row stays on the board
   const seen = { state: false, match: false, bag: 0, locked: false, result: false, botMoved: false, advance: false, boardLost: false };
   /** The scripted state is on screen (screenshots wait for it). */
-  const ready = () => state === 'lobby' ? seen.state : state === 'board' ? seen.boardLost : state === 'timeout' ? seen.advance : state.startsWith('result') ? seen.result : state === 'checkout' ? seen.locked : state === 'bag' ? seen.bag >= 3 : state === 'warn' ? seen.match : seen.match && seen.botMoved;
+  const ready = () => state === 'lobby' ? seen.state : state === 'board' ? seen.boardLost : state === 'countdown' ? seen.match : state === 'timeout' ? seen.advance : state.startsWith('result') ? seen.result : state === 'checkout' ? seen.locked : state === 'bag' ? seen.bag >= 3 : state === 'warn' ? seen.match : seen.match && seen.botMoved;
   const link: CqLink = { send: (m) => receive(m), onMessage: null, serverNow: () => Date.now(), ready };
   let alarm: ReturnType<typeof setTimeout> | undefined;
   let set: string[] = [];
   let startAt = 0;
   // the bot: in the lobby, then its script (targets → checkout), then back to the lobby
-  const bot = { x: 3, y: 0, z: 13, yaw: 0, floor: 1 as 1 | 2, targets: [] as { x: number; z: number; floor: 1 | 2; id: string | null; at: number }[], i: 0, wait: 0, done: true, lastMs: NaN };
+  const bot = { x: 3, y: 0, z: 24, yaw: 0, floor: 1 as 1 | 2, targets: [] as { x: number; z: number; floor: 1 | 2; id: string | null; at: number }[], i: 0, wait: 0, done: true, lastMs: NaN };
   const io: CqIO = {
     load: () => undefined,
     save: () => {},
@@ -128,10 +128,10 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
   }
   /** Right after the pairing: the team's scripted bag / checkout / draw bags. */
   function afterStart() {
-    let t = Date.now() + 300;
+    let t = Date.now() + cfg.countdownMs + 300; // after the 5-4-3-2-1 (takes before startAt are refused)
     const take = (team: string, id: string) => { const it = ITEM_BY_ID.get(id)!; setTimeout(() => cq.take(team, id, it.shelf.x, it.shelf.z, Date.now()), (t += 160) - Date.now()); };
     if (state === 'bag' || state === 'checkout') for (const id of [set[0]!, set[3]!, CATALOG.find((i) => i.family === ITEM_BY_ID.get(set[1]!)!.family && i.id !== set[1])!.id]) take(YOU, id);
-    if (state === 'checkout') setTimeout(() => cq.checkout(YOU, CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, Date.now()), 1500);
+    if (state === 'checkout') setTimeout(() => cq.checkout(YOU, CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, Date.now()), cfg.countdownMs + 1500);
     if (state === 'result-draw') for (const team of [YOU, BOT]) for (const id of set.slice(0, 3)) take(team, id); // nobody checks out, same bag → time up → draw
   }
 
@@ -141,7 +141,7 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
       const dt = Number.isNaN(bot.lastMs) ? 0 : Math.min(0.5, (ms - bot.lastMs) / 1000);
       bot.lastMs = ms;
       const now = Date.now();
-      let target: { x: number; z: number; floor: 1 | 2 } = { x: 3, z: 13, floor: 1 };
+      let target: { x: number; z: number; floor: 1 | 2 } = { x: 3, z: 24, floor: 1 }; // the forecourt (the waiting area outside the shop)
       let moving = false;
       if (!bot.done) {
         const tg = bot.targets[bot.i];
@@ -161,7 +161,7 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
         bot.x += (dx / d) * step; bot.z += (dz / d) * step;
         bot.yaw = Math.atan2(-dx, -dz);
         moving = true;
-        seen.botMoved ||= step > 0 && Math.hypot(bot.x - 3, bot.z - 13) > 3;
+        seen.botMoved ||= step > 0 && Math.hypot(bot.x - 3, bot.z - 24) > 3;
       }
       const wantY = target.floor === 2 ? STORE.floor2Y : 0;
       bot.y += Math.sign(wantY - bot.y) * Math.min(Math.abs(wantY - bot.y), 1.2 * dt);

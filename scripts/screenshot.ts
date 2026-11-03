@@ -504,7 +504,8 @@ Object.assign(PRESETS, {
   'p11-room-cetiqlo-result-lose': `${CETIQLO_ROOM}&roomState=result-lose`,
   'p11-room-cetiqlo-result-draw': `${CETIQLO_ROOM}&roomState=result-draw`,
   'p11-room-cetiqlo-timeout': `${CETIQLO_ROOM}&roomState=timeout`, // lost, then let go after the 10-minute wait: toast + lobby line, the exit ring lit, the next card held
-  'p11-room-cetiqlo-board': `${CETIQLO_ROOM}&roomState=board`, // the waiting room with 11 teams: the LIVE BOARD on the glass (1 đã đi, 1 đã thua · chờ lượt, 2 đang chơi, 7 chờ) + the HUD panel, benches
+  'p11-room-cetiqlo-countdown': `${CETIQLO_ROOM}&roomState=countdown`, // the pair on the CHECKOUT mat, the 5-4-3-2-1 held (no brief yet)
+  'p11-room-cetiqlo-board': `${CETIQLO_ROOM}&roomState=board`, // the forecourt (waiting area outside the shop) with 11 teams: the LIVE BOARD pylon beside the door (1 đã đi, 1 đã thua · chờ lượt, 2 đang chơi, 7 chờ) + the HUD panel, benches, canopy
 });
 // Leg 3 dev room "Xưởng sô-cô-la" (client/choco.html, src/choco/choco.ts; `npm run screenshot -- choco`; not in the default run):
 // the workshop down the aisle, team 3's table from behind, the plan, the challenge overlay, the "Bỏ qua" confirm (3/5 done).

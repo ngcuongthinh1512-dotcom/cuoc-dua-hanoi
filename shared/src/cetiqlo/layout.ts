@@ -14,7 +14,7 @@ export const STORE = {
   stair: { x0: 8.5, x1: 11.5, zBottom: 9.0, rise: 0.16, tread: 0.3, steps: 24 }, // climbs toward −z, lands at floor2Edge
   checkout: { x: -4.5, z: 7.5, half: 1.5 },
   pedestal: { x: 0, z: 5.2, r: 0.9 },
-  startSpots: [{ x: -2.4, z: 9.0, yaw: 0 }, { x: 2.4, z: 9.0, yaw: 0 }], // body yaw 0 = facing −z, into the store
+  startSpots: [{ x: -5.2, z: 7.5, yaw: 0 }, { x: -3.8, z: 7.5, yaw: 0 }], // ON the CHECKOUT mat, side by side (owner 2026-11-03: the pair is placed on the mat for the 5-4-3-2-1 countdown); body yaw 0 = facing −z, into the store
   lobbyDoor: { x: 0, z: 10, halfW: 1.3 },
   displayMannequins: [{ x: -4.5, z: 13, yaw: 0.5 }, { x: 4.5, z: 13, yaw: -0.5 }],
   /** Static dressed figures in the sales zones (outfits picked by storeScene from that floor's catalog). */

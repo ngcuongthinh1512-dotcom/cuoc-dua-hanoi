@@ -302,7 +302,7 @@ export class Cetiqlo {
   hostView(now: number): CqHostRoom[] {
     return Object.entries(this.rooms).map(([step, r]) => ({
       step, queue: r.queue.map((t) => ({ ...this.io.who(t), releaseInS: Math.max(0, Math.ceil((waitSince(r, t) + this.cfg.maxWaitMs - now) / 1000)) })),
-      match: r.match?.state === 'running' ? { id: r.match.id, endsAt: r.match.endsAt, teams: r.match.teams.map((t) => ({ ...this.io.who(t), locked: t in r.match!.locked, bagN: r.match!.bags[t]!.length, online: this.io.online(t) })) } : null,
+      match: r.match?.state === 'running' ? { id: r.match.id, startAt: r.match.startAt, endsAt: r.match.endsAt, teams: r.match.teams.map((t) => ({ ...this.io.who(t), locked: t in r.match!.locked, bagN: r.match!.bags[t]!.length, online: this.io.online(t) })) } : null,
     }));
   }
 }

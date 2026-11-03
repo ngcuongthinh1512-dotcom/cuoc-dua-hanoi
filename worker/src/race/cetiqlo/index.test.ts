@@ -7,6 +7,7 @@ import { Cetiqlo, type CqIO } from './index.ts';
 const byId = new Map(FIXTURE.map((i) => [i.id, i]));
 const near = (id: string) => ({ x: byId.get(id)!.shelf.x, z: byId.get(id)!.shelf.z });
 const STEP = 'T1';
+const NO_COUNTDOWN = { ...CETIQLO, countdownMs: 0 };
 
 function rig(teams = ['A', 'B', 'C', 'D']) {
   const sent: { team: string; m: CqServerMessage }[] = [];
@@ -30,7 +31,7 @@ function rig(teams = ['A', 'B', 'C', 'D']) {
     setAlarm: (at) => void alarms.push(at),
     event: (_t, _team, type, data) => void events.push({ type, data }),
   };
-  const make = () => new Cetiqlo(io, () => FIXTURE, CETIQLO, () => 99);
+  const make = () => new Cetiqlo(io, () => FIXTURE, NO_COUNTDOWN, () => 99); // the timing tests act right after the pairing; the countdown has its own test
   return { cq: make(), remake: make, sent, wins, released, undone, events, alarms, onlineSet, writes: () => writes, io, of: (t: string) => sent.filter((s) => s.team === t).map((s) => s.m) };
 }
 const last = <T extends CqServerMessage['t']>(r: ReturnType<typeof rig>, team: string, t: T) => [...r.of(team)].reverse().find((m) => m.t === t) as Extract<CqServerMessage, { t: T }> | undefined;
@@ -465,5 +466,29 @@ describe('Cetiqlo: the waiting-room board (cq.board)', () => {
     const n = boards(r, 'B').length;
     r.cq.online('B', 1000 + CETIQLO.maxWaitMs + 500);
     expect(boards(r, 'B').length).toBe(n + 1);
+  });
+});
+
+describe('Cetiqlo: the 5-4-3-2-1 countdown (owner 2026-11-03)', () => {
+  it('the pair is placed on the mat at once (startSpots on the CHECKOUT pad), startAt = pairing + countdownMs, nothing is accepted before it; the board says playing', () => {
+    const sent: { team: string; m: CqServerMessage }[] = [];
+    const base = rig();
+    const cq = new Cetiqlo({ ...base.io, send: (team, m) => void sent.push({ team, m }) }, () => FIXTURE, CETIQLO, () => 99);
+    cq.join('A', 1000);
+    cq.join('B', 1001);
+    const st = [...sent].reverse().find((s) => s.team === 'A' && s.m.t === 'cq.state')!.m as Extract<CqServerMessage, { t: 'cq.state' }>;
+    expect(st).toMatchObject({ phase: 'match', match: { startAt: 1001 + CETIQLO.countdownMs, endsAt: 1001 + CETIQLO.countdownMs + CETIQLO.pickMs, serverNow: 1001 }, startSpot: START_SPOTS[0] });
+    for (const s of START_SPOTS) expect(Math.abs(s.x - CHECKOUT_ZONE.x) <= 1.5 && Math.abs(s.z - CHECKOUT_ZONE.z) <= 1.5).toBe(true); // on the mat
+    expect(Math.hypot(START_SPOTS[0]!.x - START_SPOTS[1]!.x, START_SPOTS[0]!.z - START_SPOTS[1]!.z)).toBeGreaterThanOrEqual(1);
+    const id = st.match!.set[0]!;
+    cq.take('A', id, near(id).x, near(id).z, 1001 + CETIQLO.countdownMs - 1);
+    expect(sent.at(-1)!.m).toEqual({ t: 'cq.no', op: 'take', why: 'notRunning' });
+    cq.checkout('A', CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, 1001 + CETIQLO.countdownMs - 1);
+    expect(sent.at(-1)!.m).toEqual({ t: 'cq.no', op: 'checkout', why: 'notRunning' });
+    cq.take('A', id, near(id).x, near(id).z, 1001 + CETIQLO.countdownMs + 200);
+    expect(sent.at(-1)!.m).toEqual({ t: 'cq.bag', bag: [id] });
+    const board = [...sent].reverse().find((s) => s.m.t === 'cq.board')!.m as Extract<CqServerMessage, { t: 'cq.board' }>;
+    expect(board.rows.map((r) => r.status)).toEqual(['playing', 'playing']);
+    expect(cq.hostView(1002)[0]!.match).toMatchObject({ startAt: 1001 + CETIQLO.countdownMs });
   });
 });

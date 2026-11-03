@@ -73,6 +73,7 @@ describe('CETIQLO (workerd)', () => {
     const st = (await host.until((m) => m.t === 'host.state' && !!m.cetiqlo?.[0]?.match)) as unknown as HostState;
     expect(st.cetiqlo![0]).toMatchObject({ step: 'CQ', queue: [], match: { teams: [{ locked: false, bagN: 0 }, { locked: false, bagN: 0 }] } });
 
+    await sleep(Math.max(0, sa.match.startAt - Date.now() + 50)); // the 5-4-3-2-1 countdown: nothing is accepted before startAt
     // far take refused; a (wrong) decoy for b so that b's bag differs from a's
     const [decoyA1, decoyA2, decoy] = CATALOG.filter((i) => !i.slot).map((i) => i.id);
     a!.send({ t: 'cq.take', id: set[0], x: 500, z: 500 });

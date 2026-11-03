@@ -462,6 +462,7 @@ export async function playLeg(bot: Bot, leg: LegState, answers: Map<string, stri
       }
       played.add(m.id);
       const mark = sock.log.length;
+      await sleep(Math.max(0, m.startAt - Date.now() + 100)); // the 5-4-3-2-1 countdown on the mat
       for (const id of bot.i % 2 === 1 && n === 0 ? m.set.slice(0, 3) : m.set) {
         const at = ITEM_BY_ID.get(id)!.shelf;
         await sleep(150);

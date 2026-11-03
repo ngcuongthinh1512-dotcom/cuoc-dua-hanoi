@@ -1,5 +1,5 @@
 // CETIQLO end-to-end against the REAL RaceRoom (`npm run dev:api` on :8787 must be running): a fresh race (cq-test-setup.ts), its own Vite
-// dev server (proxying /api to :8787), two headless Chrome pages log in with `?code=…&autoCq=1`, land in the CETIQLO lobby, get paired;
+// dev server (proxying /api to :8787), two headless Chrome pages log in with `?code=…&autoCq=1`, land on the CETIQLO forecourt (the waiting area outside the shop), get paired;
 // team A takes the 6 right items, team B 4 right + 1 wrong, both check out; both pages must get `cq.result` (A wins 100 điểm vs 58,7 điểm),
 // A sees the next card + the lit exit ring, B is back in the lobby; a third page joins and B is paired with it. Prints timings and
 // console errors; exit 1 on any failed check. `npm run cq-e2e [-- --port 8787 --password test1234]` (the dev server: `npm run dev:worker`).
@@ -16,7 +16,7 @@ const t0 = Date.now();
 const at = () => `${((Date.now() - t0) / 1000).toFixed(1)} s`;
 const failures: string[] = [];
 const check = (ok: boolean, what: string) => { console.log(`${ok ? 'OK ' : 'FAIL'} ${at()}  ${what}`); if (!ok) failures.push(what); };
-type CqState = { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youScore: number; oppScore: number; reason: string } | null; exitLit: boolean; endsAt: number | null; oppSlot: number | null; waitUntil: number | null; board: string[]; feet: { x: number; y: number; z: number } };
+type CqState = { phase: string; matchId: string | null; set: string[]; bag: string[]; locked: boolean; oppLocked: boolean; queuePos?: number; queueLen?: number; result: { winner: string; youScore: number; oppScore: number; reason: string } | null; exitLit: boolean; endsAt: number | null; oppSlot: number | null; waitUntil: number | null; board: string[]; countdown: boolean; feet: { x: number; y: number; z: number } };
 const stateOf = (p: Page) => p.evaluate(() => (globalThis as unknown as { __GAME__?: { cq?: () => { state(): unknown } | undefined } }).__GAME__?.cq?.()?.state() ?? null) as Promise<CqState | null>;
 const cardOf = (p: Page) => p.evaluate(() => (globalThis as unknown as { __GAME__?: { race?: { view?: { card?: { step: string } | null } | null } } }).__GAME__?.race?.view?.card?.step ?? null);
 async function waitFor<T>(p: Page, read: (p: Page) => Promise<T>, pred: (v: T) => boolean, what: string, timeoutMs = 60_000): Promise<T | null> {
@@ -64,13 +64,15 @@ try {
   const ma = await waitFor(A, stateOf, (s) => !!s && s.phase === 'match' && s.set.length === 6, 'A: trận bắt đầu (cq.state match, set 6 món)');
   const mb = await waitFor(B, stateOf, (s) => !!s && s.phase === 'match' && s.matchId === ma?.matchId, 'B: cùng trận với A');
   check(!!ma && !!mb && ma.set.join() === mb.set.join(), `cùng set: ${ma?.set.join(', ')}`);
+  check(!!ma && ma.countdown && Math.abs(ma.feet.x + 5.2) < 1 && Math.abs(ma.feet.z - 7.5) < 1, `A: đếm ngược trên thảm CHECKOUT (${JSON.stringify(ma?.feet)}, countdown ${ma?.countdown})`);
+  await waitFor(A, stateOf, (s) => !!s && !s.countdown, 'A: hết đếm ngược 5-4-3-2-1 (startAt)', 15_000);
   // (b) F5 mid-match after 3 takes: same match / set / endsAt, the bag restored, the body back in the store at the start spot, the opponent drawn
   await A.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { takeSet(c: number, w?: number): Promise<string[]> } } }).__GAME__.cq().takeSet(3, 0));
   const pre = await waitFor(A, stateOf, (s) => !!s && s.bag.length === 3, 'A: túi 3 món trước F5', 15_000);
   await A.reload();
   const post = await waitFor(A, stateOf, (s) => !!s && s.phase === 'match' && s.bag.length === 3, 'A: F5 giữa trận → trận lại, túi 3 món', 90_000);
   check(!!pre && !!post && post.matchId === pre.matchId && post.set.join() === pre.set.join() && post.endsAt === pre.endsAt, `(b) F5 giữa trận: cùng trận ${post?.matchId}, cùng set, endsAt giữ nguyên (${post?.endsAt === pre?.endsAt})`);
-  check(!!post && post.feet.z < 10 && Math.abs(post.feet.x + 2.4) < 1 && !post.locked, `(b) thân ở trong cửa hàng tại ô xuất phát (${JSON.stringify(post?.feet)}), chưa chốt`);
+  check(!!post && post.feet.z < 10 && Math.abs(post.feet.x + 5.2) < 1 && !post.locked, `(b) thân ở trong cửa hàng tại ô xuất phát trên thảm (${JSON.stringify(post?.feet)}), chưa chốt`);
   const oppSeen = await waitFor(A, (p) => p.evaluate(`!!__GAME__.remote && !!__GAME__.remote.poseOf(${post?.oppSlot ?? -1})`) as Promise<boolean>, (v) => v === true, 'A: thấy thân đối thủ sau F5', 15_000);
   check(oppSeen === true, '(b) đối thủ vẫn hiện sau F5');
   const tookA = await A.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { takeSet(c: number, w?: number): Promise<string[]> } } }).__GAME__.cq().takeSet(6, 0)); // the first 3 are refused as dup, the bag ends at 6

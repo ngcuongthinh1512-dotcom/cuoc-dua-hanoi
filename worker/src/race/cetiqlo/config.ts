@@ -12,8 +12,9 @@ export const CETIQLO = {
   teamsPerMatch: 2,
   /** Items in the sample set (one per SlotKind: this must equal SLOTS.length). Also the floor of the `errors` formula. */
   itemsPerSet: ITEMS_PER_SET,
-  /** Delay between the pairing and the start of the pick phase. 0 = the mannequin shows the set the whole time. */
-  memorizeMs: 0,
+  /** The 5-4-3-2-1 countdown (owner 2026-11-03): the pair stands frozen on the CHECKOUT mat from the pairing until startAt = pairing +
+   *  countdownMs; the brief is shown and take / drop / checkout accepted only from startAt (before: 'notRunning'). */
+  countdownMs: 5_000,
   /** The pick phase (3:30, owner 2026-11-03); the client counts it down from endsAt − serverNow. */
   pickMs: 210_000,
   /** The client turns the clock red + beeps this long before the end (client reads it from the same number; server ignores). */

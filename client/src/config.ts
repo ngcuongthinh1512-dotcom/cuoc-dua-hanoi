@@ -1319,7 +1319,7 @@ export const cetiqlo = {
   // the wait clock (10 min) / pick time / points come straight from worker/src/race/cetiqlo/config.ts CETIQLO (hud.ts, cetiqloRoom.ts): no copy to drift
   lookbookKey: 'KeyT', // opens / closes the brief zoom (lightbox; the pointer is freed while open, a click on a cell zooms one piece)
   rulesKey: 'KeyH', // opens / closes the "Luật chơi" panel (waiting room; the pointer is freed while open, Esc closes)
-  board: { x: 4.5, z: 10, w: 3.5, h: 2, y: 1.85, px: 1024 }, // m, room-local: the waiting room's LIVE BOARD screen on the lobby side of the glass partition (east of the opening), canvas width px (redrawn only on cq.board)
+  board: { x: 6.8, z: 19.2, w: 3.2, h: 1.85, y: 2.05, px: 1024 }, // m, room-local: the waiting area's LIVE BOARD on a pylon in the forecourt outside the shop (east of the door, facing the street side), canvas width px (redrawn only on cq.board)
   bagKey: 'KeyB', // opens the bag (pointer free: click an item to drop it); Digit1–9 drop item n directly
   floor2Y: 2, // m: feet higher than this = floor 2 (the pick's floor filter uses |dy| ≤ 2.2 around the feet)
 };

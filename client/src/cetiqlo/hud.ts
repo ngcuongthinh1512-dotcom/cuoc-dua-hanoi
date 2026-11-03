@@ -13,14 +13,14 @@ const pts = (n: number) => (Math.round(n * 100) / 100).toString().replace('.', '
 /** The condensed rules (the H panel; the full text: docs/CETIQLO_RULEBOOK.md). Every number comes from CETIQLO. */
 export const RULES_HTML = `<h2>${LOGO} Luật chơi · Đối đầu CETIQLO</h2>
 <ol>
-<li><b>Phòng chờ</b>: vào cửa hàng là xếp hàng theo thứ tự đến (bảng LIVE trên tường, tối đa ${CETIQLO.maxTeamsInRoom} đội). Hai đội đầu hàng đấu một trận; các đội khác chờ trong sảnh.</li>
+<li><b>Phòng chờ = sân trước cửa hàng</b>: đến nơi là xếp hàng theo thứ tự đến (bảng LIVE cạnh cửa, tối đa ${CETIQLO.maxTeamsInRoom} đội). Hai đội đầu hàng được đưa vào trong đấu một trận; các đội khác chờ ngoài sân trước cửa kính.</li>
 <li><b>Đề bài</b>: ${CETIQLO.itemsPerSet} món (áo, áo khoác, quần / váy, giày, túi, phụ kiện) hiện bằng ảnh tĩnh góc trên trái — bấm vào ảnh hoặc <kbd>T</kbd> để phóng to. Mỗi món trong cửa hàng là một thiết kế duy nhất: tìm đúng món, đúng màu.</li>
 <li><b>Thời gian</b>: ${mmss(CETIQLO.pickMs)} theo đồng hồ máy chủ; ${CETIQLO.warnMs / 1000} s cuối đồng hồ đỏ + bíp.</li>
 <li><b>Lấy đồ</b>: nhìn vào món (viền đỏ) và bấm <kbd>F</kbd>. <kbd>B</kbd> mở túi, nhấp món để bỏ; <kbd>1</kbd>–<kbd>9</kbd> bỏ món số n.</li>
 <li><b>Chốt</b>: đứng trong ô đỏ CHECKOUT và bấm <kbd>F</kbd> trước khi hết giờ. Đã chốt thì khóa túi và đứng yên. Hết giờ chưa chốt = <b>không hoàn thành</b> (vẫn chấm túi).</li>
 <li><b>Điểm</b>: +${pts(CETIQLO.pointsPerCorrect)} mỗi món đúng, −${CETIQLO.penaltyPerWrongOrExtra} mỗi món sai hoặc thừa, kẹp 0–100, túi rỗng 0.</li>
 <li><b>Thắng</b>: hoàn thành thắng không hoàn thành → điểm cao hơn → chốt sớm hơn. Hòa cả hai → cả hai xuống cuối hàng.</li>
-<li><b>Sau trận</b>: đội thắng nhận mật thư kế + vòng sáng cạnh cửa để ra. Đội thua về phòng chờ, đấu với đội kế tiếp.</li>
+<li><b>Sau trận</b>: đội thắng nhận mật thư kế + vòng sáng ngoài sân để ra. Đội thua ra lại sân trước cửa hàng, đấu với đội kế tiếp.</li>
 <li><b>Chờ quá ${WAIT_MIN} phút</b> (từ lúc vào hàng, hoặc từ kết quả trận vừa thua) mà không có đối thủ → được rời đi với mật thư kế.</li>
 <li><b>Mất mạng / F5</b>: chỗ trong hàng, trận, túi, kết quả đều giữ nguyên.</li>
 </ol>
@@ -45,6 +45,11 @@ body.cq-room .hud-box, body.cq-room .hud-hand { visibility: hidden; } /* the str
 .cq-zoom.one img { cursor: zoom-out; }
 .cq-clock { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); padding: 4px 22px; border-radius: 8px; background: rgba(0,0,0,.6); font: 700 44px/1.1 system-ui, sans-serif; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
 .cq-clock.warn { color: #ff4a3d; background: rgba(60,0,0,.7); animation: cq-blink 1s steps(2, start) infinite; }
+.cq-count { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; }
+.cq-count b { display: block; font: 900 160px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 0 24px rgba(230,0,18,.9), 0 4px 10px rgba(0,0,0,.8); animation: cq-pop .9s ease-out; }
+.cq-count b.go { font-size: 96px; color: #ffd23c; }
+.cq-count span { display: block; margin-top: 8px; padding: 4px 14px; border-radius: 8px; background: rgba(0,0,0,.6); font: 600 16px/1.3 system-ui, sans-serif; }
+@keyframes cq-pop { from { transform: scale(1.5); opacity: .4; } to { transform: scale(1); opacity: 1; } }
 @keyframes cq-blink { to { opacity: .55; } }
 .cq-opp { position: absolute; right: 16px; top: 16px; padding: 6px 10px; border-radius: 6px; background: rgba(0,0,0,.6); }
 .cq-opp i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(255,255,255,.7); }
@@ -105,8 +110,9 @@ const HTML = `<style>${CSS}</style>
 <div class="cq-lookhint" hidden>bấm để phóng to · T</div>
 <div class="cq-zoom" hidden><div>${'<img src="" alt="">'.repeat(6)}</div></div>
 <div class="cq-clock" hidden>${mmss(CETIQLO.pickMs)}</div>
+<div class="cq-count" hidden><b>5</b><span>Đứng yên trên thảm CHECKOUT · đề bài hiện khi hết đếm ngược</span></div>
 <div class="cq-opp" hidden><i></i><span></span><em hidden>đã chốt</em></div>
-<div class="cq-lobby" hidden><h2>Đang chờ đối thủ…</h2><p>Đứng chờ ở phòng chờ. Trận bắt đầu khi có đội kế tiếp vào phòng.</p><p class="cq-wait" hidden></p></div>
+<div class="cq-lobby" hidden><h2>Đang chờ đối thủ…</h2><p>Đứng chờ trước cửa hàng. Trận bắt đầu khi có đội kế tiếp đến; máy chủ sẽ đưa bạn vào trong.</p><p class="cq-wait" hidden></p></div>
 <div class="cq-board" hidden><h3>${LOGO}<span>THỨ TỰ THI ĐẤU</span><button type="button">Luật chơi (H)</button></h3><ol></ol><p>Thứ tự = thứ tự đến. Đội thua xếp lại hàng, đấu với đội kế tiếp. Chờ quá ${WAIT_MIN} phút không có đối thủ thì được đi.</p></div>
 <div class="cq-rules" hidden><div>${RULES_HTML}</div></div>
 <div class="cq-label" hidden></div>
@@ -117,7 +123,8 @@ const HTML = `<style>${CSS}</style>
 
 export class CqHud {
   private readonly root = document.createElement('div');
-  private readonly el: Record<'pip' | 'lookhint' | 'zoom' | 'clock' | 'opp' | 'lobby' | 'board' | 'rules' | 'label' | 'locked' | 'bag' | 'toast' | 'result', HTMLElement>;
+  private readonly el: Record<'pip' | 'lookhint' | 'zoom' | 'clock' | 'count' | 'opp' | 'lobby' | 'board' | 'rules' | 'label' | 'locked' | 'bag' | 'toast' | 'result', HTMLElement>;
+  private countText = '';
   private boardKey = '';
   /** The rules panel (H) is open. */
   rulesOpen = false;
@@ -149,7 +156,7 @@ export class CqHud {
     document.body.append(this.root);
     document.body.classList.add('cq-room');
     const q = (s: string) => this.root.querySelector<HTMLElement>(s)!;
-    this.el = { pip: q('.cq-pip'), lookhint: q('.cq-lookhint'), zoom: q('.cq-zoom'), clock: q('.cq-clock'), opp: q('.cq-opp'), lobby: q('.cq-lobby'), board: q('.cq-board'), rules: q('.cq-rules'), label: q('.cq-label'), locked: q('.cq-locked'), bag: q('.cq-bag'), toast: q('.cq-toast'), result: q('.cq-result') };
+    this.el = { pip: q('.cq-pip'), lookhint: q('.cq-lookhint'), zoom: q('.cq-zoom'), clock: q('.cq-clock'), count: q('.cq-count'), opp: q('.cq-opp'), lobby: q('.cq-lobby'), board: q('.cq-board'), rules: q('.cq-rules'), label: q('.cq-label'), locked: q('.cq-locked'), bag: q('.cq-bag'), toast: q('.cq-toast'), result: q('.cq-result') };
     this.bagList = this.el.bag.querySelector('ol')!;
     this.el.board.querySelector('button')!.addEventListener('click', () => this.rules(true));
     this.el.rules.addEventListener('click', (e) => { if (e.target === this.el.rules) this.rules(false); }); // a click outside the sheet closes
@@ -208,8 +215,19 @@ export class CqHud {
     el.hidden = text === null;
     if (text !== null) el.textContent = text;
   }
-  /** The match widgets (clock, bag, brief, opponent) on / off together. */
-  match(on: boolean) { for (const k of ['clock', 'bag', 'opp', 'lookhint', 'pip'] as const) this.show(k, on); if (!on) (this.show('label', false), this.show('locked', false), this.setZoom(null)); }
+  /** The match widgets (clock, bag, opponent) on / off together; the brief grid comes with `brief()` / `showBrief()` (after the countdown). */
+  match(on: boolean) { for (const k of ['clock', 'bag', 'opp'] as const) this.show(k, on); if (!on) (this.showBrief(false), this.show('label', false), this.show('locked', false), this.show('count', false), this.setZoom(null)); }
+  showBrief(on: boolean) { this.show('pip', on); this.show('lookhint', on); }
+  /** The 5-4-3-2-1 before the brief (null = hidden): the number, or 'BẮT ĐẦU!' at 0; the element is re-rendered per value so the pop animation replays. */
+  countdown(text: string | null) {
+    this.show('count', text !== null);
+    if (text === null || text === this.countText) return;
+    this.countText = text;
+    const b = this.el.count.querySelector('b')!, fresh = b.cloneNode(false) as HTMLElement;
+    fresh.textContent = text;
+    fresh.classList.toggle('go', text.length > 1);
+    b.replaceWith(fresh);
+  }
   clock(text: string, warn: boolean) {
     if (text !== this.clockText) (this.clockText = text), (this.el.clock.textContent = text);
     if (warn !== this.clockWarn) (this.clockWarn = warn), this.el.clock.classList.toggle('warn', warn);
@@ -247,7 +265,7 @@ export class CqHud {
       <p class="stat"><b>${pointsText(t.score)}</b> · Đúng ${t.correct}/${r.set.length} · Sai ${t.errors} · chốt: ${lockTimeText(t.lockedAtMs, startAt)}</p>
       <ul>${resultRows(r.set, t, nameOf, slotOf).map((row) => `<li class="${row.mark}"><span>${row.text}</span><span>${MARK_TEXT[row.mark]}</span></li>`).join('')}</ul></div>`;
     this.el.result.firstElementChild!.innerHTML = `<h1 class="${r.winner}">${LOGO}${WINNER_TEXT[r.winner]}</h1>
-      <p class="why">${r.winner === 'draw' ? `Hòa: ${REASON_TEXT.draw}.` : `${r.winner === 'you' ? 'Thắng' : 'Đội kia thắng'} nhờ ${REASON_TEXT[r.reason]}.`}${r.winner === 'you' ? ' Mật thư kế đã có: ra vòng sáng cạnh cửa.' : r.winner === 'opp' ? ` Đội bạn quay lại phòng chờ, đấu với đội kế tiếp. Chờ quá ${WAIT_MIN} phút không có đối thủ sẽ được rời đi.` : ''}</p>
+      <p class="why">${r.winner === 'draw' ? `Hòa: ${REASON_TEXT.draw}.` : `${r.winner === 'you' ? 'Thắng' : 'Đội kia thắng'} nhờ ${REASON_TEXT[r.reason]}.`}${r.winner === 'you' ? ' Mật thư kế đã có: ra vòng sáng ngoài sân trước cửa hàng.' : r.winner === 'opp' ? ` Đội bạn ra lại sân trước cửa hàng, đấu với đội kế tiếp. Chờ quá ${WAIT_MIN} phút không có đối thủ sẽ được rời đi.` : ''}</p>
       <div class="cq-cols">${col(r.you, 'Đội bạn')}${r.opps.map((o) => col(o, 'Đối thủ')).join('')}</div>
       <button type="button">Tiếp tục (Enter)</button>`;
   }

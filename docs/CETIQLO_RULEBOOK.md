@@ -3,8 +3,9 @@
 Tài liệu cho người chơi và Host. Mọi con số dưới đây là hằng số máy chủ trong `worker/src/race/cetiqlo/config.ts` (`CETIQLO`); bảng luật trong game (phím **H** ở phòng chờ) đọc từ cùng một chỗ. Kế hoạch kỹ thuật: `docs/plans/cetiqlo.md`.
 
 > ## Tóm tắt nhanh
-> - **Thể thức**: Head-to-Head – hai đội vào cùng cửa hàng CETIQLO, đấu trực tiếp một trận. **Thắng = đi tiếp** (nhận mật thư kế). **Thua = ở lại**, đấu với đội đến sau.
+> - **Thể thức**: Head-to-Head – các đội chờ ở **sân trước cửa hàng CETIQLO** (bảng LIVE thứ tự thi đấu cạnh cửa); hai đội đầu hàng được đưa vào trong đấu trực tiếp một trận. **Thắng = đi tiếp** (nhận mật thư kế). **Thua = ra lại sân chờ**, đấu với đội đến sau.
 > - **Đề bài**: 6 món (áo · áo khoác · quần / chân váy · giày · túi · phụ kiện), hiện bằng 6 ảnh tĩnh góc trên trái màn hình. Mỗi món trong cửa hàng là một thiết kế **duy nhất**: đúng dáng + đúng màu + đúng họa tiết.
+> - **Bắt đầu**: hai đội được đưa vào đứng trên **thảm CHECKOUT**, đếm ngược **5-4-3-2-1** (đứng yên, chưa có đề), rồi đề bài hiện và đồng hồ chạy.
 > - **Thời gian**: **3 phút 30 giây** theo đồng hồ máy chủ; 30 giây cuối đồng hồ đỏ + bíp.
 > - **Chốt**: đứng trong **ô đỏ CHECKOUT** cạnh cửa và bấm **F** trước khi hết giờ. Hết giờ chưa chốt = **không hoàn thành**.
 > - **Điểm**: **+16,67** mỗi món đúng · **−8** mỗi món sai hoặc thừa · kẹp 0–100 · túi rỗng = 0.
@@ -19,12 +20,13 @@ Mỗi đội một người chơi, một thân nhân vật (như các chặng tr
 
 ## 2. Diễn biến từng bước
 1. **Nhận hòm mật thư** của bước trước (trước Vincom Center Phạm Ngọc Thạch): bấm **F** ở hòm → nhận thẻ thử thách CETIQLO **và** bước vào cửa hàng (dựng ngay dưới hòm).
-2. **Vào phòng chờ** (sảnh sau cửa kính, trước tấm kính ngăn với sàn bán hàng): đội được xếp vào hàng theo thứ tự đến. Trong sảnh có ghế ngồi và **bảng LIVE "PHÒNG CHỜ · THỨ TỰ THI ĐẤU"** treo trên kính; cùng bảng đó ở góc phải màn hình. Dòng giữa màn hình: "Đang chờ đối thủ · vị trí n / m" và "Còn chờ tối đa mm:ss".
-3. **Ghép trận**: khi có ≥ 2 đội trong hàng và không có trận nào đang chạy, hai đội đầu hàng được ghép. Máy chủ đặt hai đội vào hai ô xuất phát cạnh ô CHECKOUT, gửi đề bài, đồng hồ 3:30 bắt đầu chạy.
-4. **Tìm đồ**: xem 6 ảnh đề bài (bấm một ảnh hoặc **T** để phóng to), đi tìm trên hai tầng (cầu thang phía đông). Nhìn vào món (món được chọn có **viền đỏ**) và bấm **F** để lấy; món đã trong túi viền xanh lá. **B** mở túi (nhấp món để bỏ), **1–9** bỏ món số n. Túi tối đa 24 món.
-5. **Chốt**: về ô đỏ CHECKOUT, đứng trong ô, bấm **F** ("[F] Chốt — kết thúc mua sắm"). Máy chủ ghi giờ chốt chính xác đến mili-giây; sau khi chốt túi bị khóa và thân đứng yên. Đội kia được báo "<đội> đã chốt" (không biết túi, không biết giờ).
-6. **Kết quả** (gửi cả hai máy cùng lúc, giữ 12 giây): đề bài so với túi từng đội (✅ đúng / ❌ sai / ⬜ thiếu), điểm, giờ chốt, đội thắng và lý do.
-7. **Sau trận**: đội thắng nhận **mật thư kế** và **vòng sáng cạnh cửa** để ra khỏi phòng (thẻ giữ tới khi đi vào vòng). Đội thua về phòng chờ, bảng cập nhật, chờ đội kế tiếp.
+2. **Phòng chờ = sân trước cửa hàng** (ngoài mặt kính, dưới mái hiên CETIQLO, trước cổng ra vào): đội đứng ngoài sân và được xếp vào hàng theo thứ tự đến. Ngoài sân có ghế băng, chậu cây và **bảng LIVE "PHÒNG CHỜ · THỨ TỰ THI ĐẤU"** trên trụ cạnh cửa; cùng bảng đó ở góc phải màn hình. Dòng giữa màn hình: "Đang chờ đối thủ · vị trí n / m" và "Còn chờ tối đa mm:ss". Đội chờ không vào trong cửa hàng (sảnh sau cửa kính chỉ là lối vào).
+3. **Ghép trận**: khi có ≥ 2 đội trong hàng và không có trận nào đang chạy, hai đội đầu hàng được ghép. Máy chủ **đưa hai đội vào trong, đứng cạnh nhau ngay trên thảm đỏ CHECKOUT**. Đội đang chờ không vào được cửa hàng (cửa kính đóng với đội chờ).
+4. **Đếm ngược 5-4-3-2-1**: hai đội đứng yên trên thảm, số đếm to giữa màn hình (bíp mỗi giây), chưa có đề bài, chưa lấy được gì. Hết đếm ngược: "BẮT ĐẦU!" — đề bài hiện, đồng hồ **3:30** bắt đầu chạy, hai đội được chạy đi tìm đồ.
+5. **Tìm đồ**: xem 6 ảnh đề bài (bấm một ảnh hoặc **T** để phóng to), đi tìm trên hai tầng (cầu thang phía đông). Nhìn vào món (món được chọn có **viền đỏ**) và bấm **F** để lấy; món đã trong túi viền xanh lá. **B** mở túi (nhấp món để bỏ), **1–9** bỏ món số n. Túi tối đa 24 món.
+6. **Chốt**: về ô đỏ CHECKOUT, đứng trong ô, bấm **F** ("[F] Chốt — kết thúc mua sắm"). Máy chủ ghi giờ chốt chính xác đến mili-giây; sau khi chốt túi bị khóa và thân đứng yên. Đội kia được báo "<đội> đã chốt" (không biết túi, không biết giờ).
+7. **Kết quả** (gửi cả hai máy cùng lúc, giữ 12 giây): đề bài so với túi từng đội (✅ đúng / ❌ sai / ⬜ thiếu), điểm, giờ chốt, đội thắng và lý do.
+8. **Sau trận**: đội thắng nhận **mật thư kế** và **vòng sáng ngoài sân** (phía phố) để rời đi (thẻ giữ tới khi đi vào vòng). Đội thua được đưa ra lại sân trước cửa hàng, bảng cập nhật, chờ đội kế tiếp.
 
 ## 3. Điều khiển
 | Phím | Tác dụng |
@@ -71,12 +73,13 @@ So sánh hai đội theo thứ tự:
 Màn kết quả ghi lý do: "hoàn thành trước khi hết giờ", "điểm cao hơn", "chốt sớm hơn", hoặc "Hòa".
 
 ## 7. Ai đi tiếp, ai ở lại
-- **Đội thắng**: bước hoàn thành ngay; thẻ mật thư kế hiện, vòng sáng "Ra khỏi phòng" cạnh cửa bật; đi vào vòng để ra phố.
-- **Đội thua**: quay về phòng chờ, lên **đầu hàng** (đội thua giữ ưu tiên cao hơn đội mới đến), đấu với đội kế tiếp — nhưng không đấu lại ngay đội vừa thắng mình nếu còn đội khác chờ.
+- **Đội thắng**: bước hoàn thành ngay; thẻ mật thư kế hiện, vòng sáng "Ra khỏi phòng" ngoài sân bật; đi vào vòng để ra phố.
+- **Đội thua**: ra lại sân trước cửa hàng, lên **đầu hàng** (đội thua giữ ưu tiên cao hơn đội mới đến), đấu với đội kế tiếp — nhưng không đấu lại ngay đội vừa thắng mình nếu còn đội khác chờ.
 - **Hòa**: cả hai xuống cuối hàng (mục 6).
 - Đội thắng ra rồi, hàng chờ đánh số lại và bảng LIVE cập nhật.
 
-## 8. Phòng chờ và bảng LIVE
+## 8. Phòng chờ (sân trước cửa hàng) và bảng LIVE
+- Phòng chờ là **sân ngoài cổng ra vào** của cửa hàng: nền gạch, mái hiên CETIQLO, ghế băng, chậu cây, phố Hà Nội phía sau. Chỉ hai đội đang đấu ở trong cửa hàng.
 - Tối đa **11 đội** trong phòng (đang chờ + đang đấu); đội thứ 12 bị từ chối "Phòng đã đủ đội, thử lại sau".
 - Bảng "THỨ TỰ THI ĐẤU" liệt kê mọi đội đã vào phòng theo **thứ tự đến** (1 → 11), mỗi dòng: số thứ tự, chấm màu đội, tên, trạng thái:
   - **ĐANG CHƠI** (đỏ): hai đội trong trận.
