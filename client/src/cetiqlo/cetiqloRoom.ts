@@ -1,9 +1,9 @@
 // CETIQLO head-to-head room (docs/plans/cetiqlo.md §1, §6) as a Leg 3 race room (rooms/types.ts `mountRoom`, the BOZAR hall's contract):
 // the team opens the box at Vincom Phạm Ngọc Thạch, walks into the store's LOBBY (z 10..16, glass to the sales floor) and is queued
 // (`cq.join`); the server pairs it, dresses the mannequin with the set (`cq.state match`: set ids), moves the body to its start spot
-// (Player.moveTo through `o.moveTo`, no teleport flag) and the 3:30 clock runs on the server clock (endsAt − serverNow offset).
+// (Player.moveTo through `o.moveTo`, no teleport flag) and the 4:00 clock runs on the server clock (endsAt − serverNow offset).
 // F near an item (≤ cetiqlo.labelRange, the one in front of the camera first) = `cq.take {id, x, z}` (room-local), the bag is HUD
-// data (bottom-right; B opens it, click = `cq.drop`, Digit1–9 drop item n), the bag's "Chốt" button = `cq.checkout` → the
+// data (bottom-right; B opens it, click = `cq.drop`, Digit1–9 drop item n), F inside the red CHECKOUT square = `cq.checkout` → the
 // body is locked (`frozen()`, main.ts). The opponent is a RemotePlayers body like anywhere else (plan §1.9); its bag is never shown.
 // `cq.result` = the result screen (Enter / button closes it); a win makes the server complete the step, so the usual `race` view
 // brings the next card + `exitReady` (the lit exit ring beside the door, the card held until the body walks into it, like the hall);
@@ -22,7 +22,7 @@ import type { CqDebug, RoomHandle, RoomMountOptions } from '../rooms/types.ts';
 import type { Box } from '../rooms/roomPlayer.ts';
 import type { CqMatchView, CqResult, CqServerMessage } from './contract.ts';
 import { CqHud } from './hud.ts';
-import { type Anchor, NO_PICK, type PickState, clockOffset, countdown, loserWaitText, pickItem, queueText } from './logic.ts';
+import { type Anchor, NO_PICK, type PickState, clockOffset, countdown, insideCheckout, loserWaitText, pickItem, queueText } from './logic.ts';
 import { shapeGeometry } from './items.ts';
 import { NPC_GROUPS } from '../npc/types.ts';
 import { ROOF_Y, buildStore } from './storeScene.ts';
@@ -31,6 +31,7 @@ import { ROOF_Y, buildStore } from './storeScene.ts';
 export const DOOR_Z = STORE.doorZ;
 /** The exit ring: in the lobby beside the storefront door (lit only once the step is done). */
 export const EXIT = { x: -4.5, z: STORE.doorZ - 1.4, r: 0.9 };
+const CHECKOUT_TEXT = '[F] Chốt — kết thúc mua sắm';
 const GLOW = { pick: '#ff4d1f', taken: '#2ecc71' }; // CETIQLO-red rim around the item in the crosshair; green on the ones in the bag
 const REFUSAL: Record<string, string> = { far: 'Đứng gần kệ hơn mới lấy được', full: 'Túi đã đầy', dup: 'Món này đã có trong túi', locked: 'Đội đã chốt, không đổi được nữa', notRunning: 'Trận chưa bắt đầu', busy: 'Phòng đã đủ đội, thử lại sau', notInRoom: 'Không ở bước này' };
 
@@ -205,7 +206,6 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     cq.send({ t: 'cq.join' });
   }
   if (hud) {
-    hud.onCheckout = () => { if (phase === 'match' && !locked) { const f = feet(); cq?.send({ t: 'cq.checkout', x: +f.x.toFixed(2), z: +f.z.toFixed(2) }); openBag(false); } };
     hud.onDrop = (id) => { if (phase === 'match' && !locked) cq?.send({ t: 'cq.drop', id }); };
     hud.onContinue = closeResult;
     hud.onZoom = (open) => { if (open) document.exitPointerLock(); else if (!hud.bagOpen) o.onClose?.(); }; // the zoom frees the pointer like the bag; the clock / match go on
@@ -244,10 +244,12 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     pick = next;
     if (halo.visible && pick.id) { const k = 1.12 + 0.03 * Math.sin(t * 5), fold = ITEM_BY_ID.get(pick.id)!.display === 'fold'; halo.scale.set(k, fold ? k * 2.2 : k, k); }
   };
+  const atCheckout = () => { if (phase !== 'match' || locked) return false; const f = feet(); return insideCheckout(f.x, f.z, checkout); };
   function interact(): boolean {
     if (result) return closeResult(), true;
     if (!cq || phase !== 'match' || locked) return false;
     const f = feet();
+    if (atCheckout()) return cq.send({ t: 'cq.checkout', x: +f.x.toFixed(2), z: +f.z.toFixed(2) }), true;
     if (!pick.id) return false;
     cq.send({ t: 'cq.take', id: pick.id, x: +f.x.toFixed(2), z: +f.z.toFixed(2) });
     return true;
@@ -315,7 +317,8 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
         const c = countdown(match.endsAt, Date.now(), offset, C.warnMs);
         if (c.second !== lastSecond) { lastSecond = c.second; hud.clock(c.text, c.warn); if (c.warn && c.second > 0 && c.second <= C.warnMs / 1000) beep(); }
         updatePick(now, t);
-        hud.label(pick.id ? '[F]' : null);
+        const go = atCheckout();
+        hud.label(go ? CHECKOUT_TEXT : pick.id ? '[F]' : null, go);
       } else if (halo.visible) (halo.visible = false), (pick = NO_PICK);
     },
     interact,

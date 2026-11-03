@@ -55,7 +55,7 @@ describe('pickItem: look-to-select along the real camera ray', () => {
 describe('countdown', () => {
   it('counts from endsAt on the server clock, warns in the last 30 s, clamps at 0', () => {
     const offset = 1000; // the server is 1 s ahead
-    expect(countdown(10_000 + 211_000, 10_000, offset, 30_000)).toMatchObject({ text: '3:30', warn: false, second: 210 });
+    expect(countdown(10_000 + 241_000, 10_000, offset, 30_000)).toMatchObject({ text: '4:00', warn: false, second: 240 });
     expect(countdown(10_000 + 26_000, 10_000, offset, 30_000)).toMatchObject({ text: '0:25', warn: true });
     expect(countdown(0, 10_000, offset, 30_000)).toMatchObject({ leftMs: 0, text: '0:00', warn: true });
   });

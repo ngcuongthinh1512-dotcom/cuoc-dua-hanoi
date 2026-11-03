@@ -46,8 +46,6 @@ body.cq-room .hud-box, body.cq-room .hud-hand { visibility: hidden; } /* the str
 .cq-bag li i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; border: 1px solid rgba(255,255,255,.6); vertical-align: -1px; }
 .cq-bag.open li { cursor: pointer; }
 .cq-bag.open li:hover { color: #ff8a80; text-decoration: line-through; }
-.cq-checkout { display: none; width: 100%; margin-top: 8px; padding: 8px; border: 0; border-radius: 6px; background: #E60012; color: #fff; font: 700 14px system-ui, sans-serif; cursor: pointer; }
-.cq-bag.open .cq-checkout { display: block; }
 .cq-bag p { margin: 6px 0 0; font-size: 12px; color: rgba(255,255,255,.65); }
 .cq-toast { position: absolute; left: ${H.margin}px; bottom: ${H.margin}px; padding: 6px 12px; border-radius: 6px; background: rgba(120,0,10,.85); font-weight: 600; transition: opacity .4s; }
 .cq-result { position: absolute; inset: 0; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
@@ -68,12 +66,12 @@ const HTML = `<style>${CSS}</style>
 <div class="cq-pip" hidden>${'<img src="" alt="">'.repeat(6)}</div>
 <div class="cq-lookhint" hidden>bấm để phóng to · T</div>
 <div class="cq-zoom" hidden><div>${'<img src="" alt="">'.repeat(6)}</div></div>
-<div class="cq-clock" hidden>3:30</div>
+<div class="cq-clock" hidden>4:00</div>
 <div class="cq-opp" hidden><i></i><span></span><em hidden>đã chốt</em></div>
 <div class="cq-lobby" hidden><h2>Đang chờ đối thủ…</h2><p>Đứng chờ ở sảnh. Trận bắt đầu khi có đội kế tiếp vào phòng.</p><p class="cq-wait" hidden></p></div>
 <div class="cq-label" hidden></div>
 <div class="cq-locked" hidden>Đã chốt · chờ đối thủ…</div>
-<div class="cq-bag" hidden><h3>${BAG()}<span>Túi đồ</span><span></span></h3><ol></ol><p>B: mở túi, nhấp món để bỏ · 1–9: bỏ món số n</p><button class="cq-checkout" type="button">Chốt — kết thúc mua sắm</button></div>
+<div class="cq-bag" hidden><h3>${BAG()}<span>Túi đồ</span><span></span></h3><ol></ol><p>B: mở túi, nhấp món để bỏ · 1–9: bỏ món số n</p></div>
 <div class="cq-toast" hidden></div>
 <div class="cq-result" hidden><div></div></div>`;
 
@@ -96,8 +94,6 @@ export class CqHud {
   bagOpen = false;
   /** A bag item clicked (its id) / the result's continue button. */
   onDrop?: (id: string) => void;
-  /** The bag's "Chốt" button (the shopping ends, anywhere in the room). */
-  onCheckout?: () => void;
   onContinue?: () => void;
   /** The brief zoom opened (true: the room frees the pointer) / closed (false: it locks it again). */
   onZoom?: (open: boolean) => void;
@@ -110,7 +106,6 @@ export class CqHud {
     const q = (s: string) => this.root.querySelector<HTMLElement>(s)!;
     this.el = { pip: q('.cq-pip'), lookhint: q('.cq-lookhint'), zoom: q('.cq-zoom'), clock: q('.cq-clock'), opp: q('.cq-opp'), lobby: q('.cq-lobby'), label: q('.cq-label'), locked: q('.cq-locked'), bag: q('.cq-bag'), toast: q('.cq-toast'), result: q('.cq-result') };
     this.bagList = this.el.bag.querySelector('ol')!;
-    this.el.bag.querySelector('.cq-checkout')!.addEventListener('click', () => this.onCheckout?.());
     this.bagList.addEventListener('click', (e) => { const li = (e.target as HTMLElement).closest('li'); if (li?.dataset.id && this.bagOpen) this.onDrop?.(li.dataset.id); });
     this.el.result.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName === 'BUTTON') this.onContinue?.(); });
     // the brief: a cell click (pointer free) zooms that piece; in the lightbox a cell toggles one piece ⇄ the grid, anything else closes

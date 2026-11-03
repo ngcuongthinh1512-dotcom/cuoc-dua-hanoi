@@ -14,8 +14,8 @@ export const CETIQLO = {
   itemsPerSet: ITEMS_PER_SET,
   /** Delay between the pairing and the start of the pick phase. 0 = the mannequin shows the set the whole time. */
   memorizeMs: 0,
-  /** The pick phase (3:30); the client counts it down from endsAt − serverNow. */
-  pickMs: 210_000,
+  /** The pick phase (4:00); the client counts it down from endsAt − serverNow. */
+  pickMs: 240_000,
   /** The client turns the clock red + beeps this long before the end (client reads it from the same number; server ignores). */
   warnMs: 30_000,
   /** Owner rule (2026-11-02), in POINTS (100 = a perfect bag): each correct item earns pointsPerCorrect (100 / 6 = 16.67); each bag item that is

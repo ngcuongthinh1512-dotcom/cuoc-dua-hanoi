@@ -130,10 +130,11 @@ export function drop(m: Match, team: string, id: string, now: number): Done<{ ma
   return { ok: true, match: { ...m, bags: { ...m.bags, [team]: bag.filter((x) => x !== id) } } };
 }
 
-/** The checkout (anywhere in the room since round 6, no square): before endsAt; locks the bag, the time is `now` to the ms. */
-export function checkout(m: Match, team: string, _at: { x: number; z: number }, _zone: Zone, now: number, _cfg: Cfg = CETIQLO): Done<{ match: Match }> {
+/** The checkout: inside the CHECKOUT square (+ slack), before endsAt; locks the bag, the time is `now` to the ms. */
+export function checkout(m: Match, team: string, at: { x: number; z: number }, zone: Zone, now: number, cfg: Cfg = CETIQLO): Done<{ match: Match }> {
   const why = active(m, team, now);
   if (why) return refuse(why);
+  if (dist(at, zone) > zone.radius + cfg.checkoutSlackM) return refuse('far');
   return { ok: true, match: { ...m, locked: { ...m.locked, [team]: now } } };
 }
 

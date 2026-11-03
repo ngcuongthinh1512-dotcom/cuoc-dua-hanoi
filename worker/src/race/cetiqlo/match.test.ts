@@ -113,7 +113,7 @@ describe('take / drop / checkout validation', () => {
     expect(l.ok && drop(l.match, 'A', id, 2003)).toEqual({ ok: false, why: 'locked' });
   });
   it('checkout: inside the zone (+ slack) only, records the ms, once', () => {
-    expect(checkout(m, 'A', { x: 0, z: 20 }, ZONE, 2000).ok).toBe(true); // anywhere in the room
+    expect(checkout(m, 'A', { x: 0, z: 20 }, ZONE, 2000)).toEqual({ ok: false, why: 'far' });
     const c = checkout(m, 'A', { x: ZONE.x + ZONE.radius + CETIQLO.checkoutSlackM - 0.1, z: ZONE.z }, ZONE, 123_456);
     expect(c.ok && c.match.locked).toEqual({ A: 123_456 });
     expect(c.ok && checkout(c.match, 'A', ZONE, ZONE, 123_457)).toEqual({ ok: false, why: 'locked' });
