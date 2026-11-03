@@ -65,7 +65,7 @@ describe('CETIQLO (workerd)', () => {
     const [sa, sb] = await Promise.all([stateOf(a!, 'match'), stateOf(b!, 'match')]);
     expect(sa.match.set).toEqual(sb.match.set);
     expect(sa.match.set).toHaveLength(6);
-    expect(sa.match.endsAt - sa.match.startAt).toBe(180_000);
+    expect(sa.match.endsAt - sa.match.startAt).toBe(210_000);
     expect(Math.abs(sa.serverNow - Date.now())).toBeLessThan(3000);
     const set: string[] = sa.match.set;
 

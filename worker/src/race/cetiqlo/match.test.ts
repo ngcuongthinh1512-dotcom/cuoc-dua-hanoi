@@ -113,7 +113,7 @@ describe('take / drop / checkout validation', () => {
     expect(l.ok && drop(l.match, 'A', id, 2003)).toEqual({ ok: false, why: 'locked' });
   });
   it('checkout: inside the zone (+ slack) only, records the ms, once', () => {
-    expect(checkout(m, 'A', { x: 0, z: 20 }, ZONE, 2000)).toEqual({ ok: false, why: 'far' });
+    expect(checkout(m, 'A', { x: 0, z: 20 }, ZONE, 2000).ok).toBe(true); // anywhere in the room
     const c = checkout(m, 'A', { x: ZONE.x + ZONE.radius + CETIQLO.checkoutSlackM - 0.1, z: ZONE.z }, ZONE, 123_456);
     expect(c.ok && c.match.locked).toEqual({ A: 123_456 });
     expect(c.ok && checkout(c.match, 'A', ZONE, ZONE, 123_457)).toEqual({ ok: false, why: 'locked' });
@@ -132,7 +132,7 @@ describe('take / drop / checkout validation', () => {
 });
 
 describe('score', () => {
-  it('+16.67 points per correct item, −9 per wrong or extra one (0–100, 1 decimal): the table', () => {
+  it('+16.67 points per correct item, −8 per wrong or extra one (0–100, 1 decimal): the table', () => {
     const right = (n: number) => SET.slice(0, n);
     const pct = (bag: string[]) => score(SET, bag, slotOf).score;
     expect(pct(SET)).toBe(100);
@@ -142,15 +142,15 @@ describe('score', () => {
     expect(pct(right(2))).toBe(33.3);
     expect(pct(right(1))).toBe(16.7);
     expect(pct([])).toBe(0); // an empty bag is 0, not negative
-    expect(pct([...SET, decoys[0]!])).toBe(91); // 6 correct + 1 extra: 100 − 9
-    expect(pct([...SET, ...decoys.slice(0, 6)])).toBe(46);
-    expect(pct([SET[0]!, ...[1, 2, 3, 4, 5].map((i) => wrongOf(SET[i]!))])).toBe(0); // 16.7 − 45 → clamped
+    expect(pct([...SET, decoys[0]!])).toBe(92); // 6 correct + 1 extra: 100 − 8
+    expect(pct([...SET, ...decoys.slice(0, 6)])).toBe(52);
+    expect(pct([SET[0]!, ...[1, 2, 3, 4, 5].map((i) => wrongOf(SET[i]!))])).toBe(0); // 16.7 − 40 → clamped
   });
-  it('errors = bag size − correct: 5 correct + 1 wrong = 74.3, + an extra = 65.3, 4 correct + 2 wrong = 48.7', () => {
+  it('errors = bag size − correct: 5 correct + 1 wrong = 75.3, + an extra = 67.3, 4 correct + 2 wrong = 50.7', () => {
     const bag = [...SET.slice(0, 5), wrongOf(SET[5]!)];
-    expect(score(SET, bag, slotOf)).toMatchObject({ correct: 5, errors: 1, score: 74.3 });
-    expect(score(SET, [...SET.slice(0, 5), wrongOf(SET[5]!), decoys[0]!], slotOf)).toMatchObject({ correct: 5, errors: 2, score: 65.3 });
-    expect(score(SET, [...SET.slice(0, 4), wrongOf(SET[4]!), wrongOf(SET[5]!)], slotOf)).toMatchObject({ correct: 4, errors: 2, score: 48.7 });
+    expect(score(SET, bag, slotOf)).toMatchObject({ correct: 5, errors: 1, score: 75.3 });
+    expect(score(SET, [...SET.slice(0, 5), wrongOf(SET[5]!), decoys[0]!], slotOf)).toMatchObject({ correct: 5, errors: 2, score: 67.3 });
+    expect(score(SET, [...SET.slice(0, 4), wrongOf(SET[4]!), wrongOf(SET[5]!)], slotOf)).toMatchObject({ correct: 4, errors: 2, score: 50.7 });
   });
   it('marks: ok / wrong / missing per set position, then every further bag item as wrong', () => {
     const bag = [SET[0]!, wrongOf(SET[1]!), decoys[0]!, wrongOf(SET[1]!) === decoys[0] ? 'x' : SET[3]!];

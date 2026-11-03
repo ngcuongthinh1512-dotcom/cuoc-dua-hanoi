@@ -14,14 +14,14 @@ export const CETIQLO = {
   itemsPerSet: ITEMS_PER_SET,
   /** Delay between the pairing and the start of the pick phase. 0 = the mannequin shows the set the whole time. */
   memorizeMs: 0,
-  /** The pick phase (3:00); the client counts it down from endsAt − serverNow. */
-  pickMs: 180_000,
+  /** The pick phase (3:30); the client counts it down from endsAt − serverNow. */
+  pickMs: 210_000,
   /** The client turns the clock red + beeps this long before the end (client reads it from the same number; server ignores). */
   warnMs: 30_000,
   /** Owner rule (2026-11-02), in POINTS (100 = a perfect bag): each correct item earns pointsPerCorrect (100 / 6 = 16.67); each bag item that is
    *  NOT an exact id of the set (a wrong variant or an extra) costs penaltyPerWrongOrExtra; missing items just earn nothing. Clamped 0–100. */
   pointsPerCorrect: 100 / ITEMS_PER_SET,
-  penaltyPerWrongOrExtra: 9,
+  penaltyPerWrongOrExtra: 8,
   /** Teams allowed in the queue of one room (more `cq.join` are refused 'busy'). */
   maxTeamsInRoom: 12,
   /** The result screen stays this long: the next pairing waits for it. */

@@ -130,11 +130,10 @@ export function drop(m: Match, team: string, id: string, now: number): Done<{ ma
   return { ok: true, match: { ...m, bags: { ...m.bags, [team]: bag.filter((x) => x !== id) } } };
 }
 
-/** The checkout: inside the CHECKOUT square (+ slack), before endsAt; locks the bag, the time is `now` to the ms. */
-export function checkout(m: Match, team: string, at: { x: number; z: number }, zone: Zone, now: number, cfg: Cfg = CETIQLO): Done<{ match: Match }> {
+/** The checkout (anywhere in the room since round 6, no square): before endsAt; locks the bag, the time is `now` to the ms. */
+export function checkout(m: Match, team: string, _at: { x: number; z: number }, _zone: Zone, now: number, _cfg: Cfg = CETIQLO): Done<{ match: Match }> {
   const why = active(m, team, now);
   if (why) return refuse(why);
-  if (dist(at, zone) > zone.radius + cfg.checkoutSlackM) return refuse('far');
   return { ok: true, match: { ...m, locked: { ...m.locked, [team]: now } } };
 }
 
@@ -145,7 +144,7 @@ export const finished = (m: Match, now: number): boolean => m.state === 'running
 // ── score / rank ──
 const round1 = (n: number) => Math.round(n * 10) / 10;
 export interface Score { correct: number; errors: number; score: number; marks: CqMark[] }
-/** correct = distinct set items in the bag; errors = bag size − correct (wrong variants + extras); score (points, 1 decimal) = clamp(0, 100, 16.67 × correct − 9 × errors).
+/** correct = distinct set items in the bag; errors = bag size − correct (wrong variants + extras); score (points, 1 decimal) = clamp(0, 100, 16.67 × correct − 8 × errors).
  *  marks: one per set position ('ok' / 'wrong' = an item of that slot but not the right one / 'missing'), then 'wrong' for every further bag item (an extra = a wrong item, owner 2026-11-03). */
 export function score(set: readonly string[], bag: readonly string[], slotOf: (id: string) => SlotKind | undefined, cfg: Cfg = CETIQLO): Score {
   const correct = bag.filter((id, i) => set.includes(id) && bag.indexOf(id) === i).length;

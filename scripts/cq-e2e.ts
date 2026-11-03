@@ -1,6 +1,6 @@
 // CETIQLO end-to-end against the REAL RaceRoom (`npm run dev:api` on :8787 must be running): a fresh race (cq-test-setup.ts), its own Vite
 // dev server (proxying /api to :8787), two headless Chrome pages log in with `?code=…&autoCq=1`, land in the CETIQLO lobby, get paired;
-// team A takes the 6 right items, team B 4 right + 1 wrong, both check out; both pages must get `cq.result` (A wins 100 điểm vs 57,7 điểm),
+// team A takes the 6 right items, team B 4 right + 1 wrong, both check out; both pages must get `cq.result` (A wins 100 điểm vs 58,7 điểm),
 // A sees the next card + the lit exit ring, B is back in the lobby; a third page joins and B is paired with it. Prints timings and
 // console errors; exit 1 on any failed check. `npm run cq-e2e [-- --port 8787 --password test1234]` (the dev server: `npm run dev:worker`).
 import { join } from 'node:path';
@@ -85,16 +85,16 @@ try {
   await B.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { checkout(): void } } }).__GAME__.cq().checkout());
   const ra = await waitFor(A, stateOf, (s) => !!s?.result, 'A nhận cq.result', 15_000);
   const rb = await waitFor(B, stateOf, (s) => !!s?.result, 'B nhận cq.result', 15_000);
-  // điểm = 16,67 × đúng − 9 × sai (món thừa cũng là sai), 0–100: A 6/6 → 100; B 5 món, 4 đúng + 1 sai → 66,7 − 9 = 57,7
-  check(ra?.result?.winner === 'you' && ra.result.youScore === 100 && ra.result.oppScore === 57.7, `A: thắng, 100 điểm vs 57,7 điểm (có: ${JSON.stringify(ra?.result)})`);
-  check(rb?.result?.winner === 'opp' && rb.result.youScore === 57.7 && rb.result.oppScore === 100 && rb.result.reason === 'score', `B: thua vì điểm (có: ${JSON.stringify(rb?.result)})`);
+  // điểm = 16,67 × đúng − 8 × sai (món thừa cũng là sai), 0–100: A 6/6 → 100; B 5 món, 4 đúng + 1 sai → 66,7 − 8 = 58,7
+  check(ra?.result?.winner === 'you' && ra.result.youScore === 100 && ra.result.oppScore === 58.7, `A: thắng, 100 điểm vs 58,7 điểm (có: ${JSON.stringify(ra?.result)})`);
+  check(rb?.result?.winner === 'opp' && rb.result.youScore === 58.7 && rb.result.oppScore === 100 && rb.result.reason === 'score', `B: thua vì điểm (có: ${JSON.stringify(rb?.result)})`);
   const cardA = await waitFor(A, cardOf, (c) => c === 'L2', 'A: thẻ kế L2 (bước xong)', 15_000);
   const exitA = await waitFor(A, stateOf, (s) => !!s?.exitLit, 'A: vòng ra sáng', 15_000);
   check(cardA === 'L2' && !!exitA, 'A: mật thư kế + vòng sáng thoát');
   // (c) F5 while the result screen holds: the server re-sends cq.result; the overlay shows again; then the lobby with the loser clock (e)
   await B.reload();
   const rb2 = await waitFor(B, stateOf, (s) => !!s?.result, 'B: F5 lúc kết quả → kết quả hiện lại', 90_000);
-  check(rb2?.result?.winner === 'opp' && rb2.result.youScore === 57.7, `(c) kết quả gửi lại sau F5 (${JSON.stringify(rb2?.result)})`);
+  check(rb2?.result?.winner === 'opp' && rb2.result.youScore === 58.7, `(c) kết quả gửi lại sau F5 (${JSON.stringify(rb2?.result)})`);
   const lobbyB = await waitFor(B, stateOf, (s) => !!s && s.phase === 'lobby', 'B: về sảnh (cq.state lobby sau resultHoldMs)', 30_000);
   check(!!lobbyB, `B: sảnh, vị trí ${lobbyB?.queuePos} / ${lobbyB?.queueLen}`);
   // (e) the loser's 10-minute clock survives F5 (cq.state.loserWaitUntil)

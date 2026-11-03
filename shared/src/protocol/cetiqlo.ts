@@ -41,7 +41,7 @@ export interface CqTeamResult {
   correct: number;
   /** Bag items that are not an exact set id (all counted as wrong); missing ones are not counted. */
   errors: number;
-  /** Points, 0–100, 1 decimal (16.67 per correct item, −9 per wrong one). */
+  /** Points, 0–100, 1 decimal (16.67 per correct item, −8 per wrong one). */
   score: number;
   /** Server epoch ms of the checkout (ms precision), null = never locked (not completed). */
   lockedAtMs: number | null;
