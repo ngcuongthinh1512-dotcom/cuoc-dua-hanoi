@@ -28,7 +28,7 @@ import { details as n } from './n.ts';
 import { details as hn1 } from './h1.ts';
 import { details as hn2 } from './h2.ts';
 import { details as hn3 } from './h3.ts';
-import { details as hn4 } from './h4.ts';
+import { details as hn4, placed } from './h4.ts';
 import * as kit from './kit.ts';
 import { parseColour, partHeights, partRings, pickMaterial, recordGround, renderPart, roofShape, Sink } from './parts.ts';
 
@@ -111,6 +111,16 @@ export const buildLandmarks: Builder = (chunk, ctx) => {
     } catch (err) {
       console.warn(`landmarks ${ctx.key}: ${rec.landmark} details failed, generic instead:`, err);
       outs.push(generic(rec, parts, lctx));
+    }
+  }
+  // Code-only details over a world box (the Thống Nhất gate + park): built by every chunk overlapping it, so colliders are near.
+  const b = ctx.bounds;
+  for (const p of placed) {
+    if (p.maxX < b.minX || p.minX >= b.maxX || p.maxZ < b.minZ || p.minZ >= b.maxZ) continue;
+    try {
+      outs.push(p.build(chunk, ctx));
+    } catch (err) {
+      console.warn(`landmarks ${ctx.key}: placed detail ${p.minX}, ${p.minZ} failed:`, err);
     }
   }
   return {
