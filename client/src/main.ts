@@ -61,7 +61,7 @@ import { createPropMaterials, createPropMeshes } from './world/StreetProps.ts';
 import { carveRiver, createTerrainCollider, createTerrainMaterials, flattenPads, lakeSurfaceAt, riverLevel } from './world/Terrain.ts';
 import { createWater } from './world/Water.ts';
 import { createPost } from './world/post.ts';
-import { applyLook } from './world/look.ts';
+import { applyLook, setLookActive } from './world/look.ts';
 import { initTimeOfDay } from './world/night.ts';
 import { FpsWatch, graphics } from './world/graphics.ts';
 
@@ -126,7 +126,8 @@ async function start() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // r186 removed PCFSoftShadowMap; PCF is soft via light.shadow.radius
   document.body.prepend(renderer.domElement);
-  applyLook(renderer.domElement); // Leg 3 'Hà Nội xưa' grade (config look)
+  applyLook(renderer.domElement); // Leg 3 'vintage hiện đại' grade (config look); off inside rooms
+  let lookOn = true;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(R.fov, 1, R.near, R.far);
@@ -801,6 +802,7 @@ async function start() {
         vroom.h.update(dt);
         if (!flying) camera.position.y = Math.min(camera.position.y, vroom.floorY + vroom.h.ceiling - 0.3); // no ceiling collider: the camera stays under it
       }
+      if (lookOn === !!(room || vroom)) setLookActive((lookOn = !(room || vroom))); // plain colours inside a room, the vintage grade on the street
       if (room || vroom) hideWorld(scene.children, vroom ? keepInViewRoom : keepInRoom, hiddenForRoom); // every frame: streamed chunks / NPCs added meanwhile too
       else {
         boxes.update(camera.position);

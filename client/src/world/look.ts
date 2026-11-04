@@ -20,6 +20,17 @@ export function vintage(): number {
 /** base → x by vintage(). */
 export const mix = (x: number, base = 1) => base + (x - base) * vintage();
 
+let grade = '';
+let gradeCanvas: HTMLCanvasElement | undefined;
+const overlays: HTMLElement[] = [];
+
+/** The grade on / off (off = plain colours: the rooms): the canvas filter + the three overlays. */
+export function setLookActive(on: boolean): void {
+  if (!gradeCanvas) return;
+  gradeCanvas.style.filter = on ? grade : '';
+  for (const d of overlays) d.style.display = on ? '' : 'none';
+}
+
 export function applyLook(canvas: HTMLCanvasElement): void {
   const s = vintage();
   if (s <= 0) return;
@@ -27,7 +38,9 @@ export function applyLook(canvas: HTMLCanvasElement): void {
   const modern = (q === 'old' || q === 'modern' ? q : K.preset) === 'modern';
   const g = modern ? K.modern : K.grade;
   const [lift, vig, grain] = modern ? [K.modern.lift, K.modern.vignette, K.modern.grain] : [K.lift, 1, 1];
-  canvas.style.filter = `sepia(${mix(g.sepia, 0).toFixed(3)}) saturate(${mix(g.saturate).toFixed(3)}) contrast(${mix(g.contrast).toFixed(3)}) brightness(${mix(g.brightness).toFixed(3)})`;
+  gradeCanvas = canvas;
+  grade = `sepia(${mix(g.sepia, 0).toFixed(3)}) saturate(${mix(g.saturate).toFixed(3)}) contrast(${mix(g.contrast).toFixed(3)}) brightness(${mix(g.brightness).toFixed(3)})`;
+  canvas.style.filter = grade;
   const layers = [
     `background:${lift};mix-blend-mode:screen;opacity:${s}`,
     `background:radial-gradient(ellipse at center, transparent ${K.vignette.from}%, ${K.vignette.colour} 100%);opacity:${s * vig}`,
@@ -37,6 +50,7 @@ export function applyLook(canvas: HTMLCanvasElement): void {
     const d = document.createElement('div');
     d.className = 'look';
     d.style.cssText = `position:fixed;inset:0;pointer-events:none;${css}`;
+    overlays.push(d);
     canvas.after(d);
   }
 }

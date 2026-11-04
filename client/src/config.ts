@@ -35,7 +35,7 @@ export const render = {
 export const look = {
   vintage: 1,
   preset: 'modern' as 'modern' | 'old', // 'modern' = clean present-day Hà Nội (owner's pick 2026-11-02); 'old' = "Hà Nội xưa" (sepia, lifted blacks, grain); DEV ?grade=old|modern
-  modern: { sepia: 0.02, saturate: 1.05, contrast: 1.03, brightness: 1.0, lift: '#101214', vignette: 0.35, grain: 0.3 }, // grade of the 'modern' preset (vignette / grain = × the old layers' opacity)
+  modern: { sepia: 0.09, saturate: 0.94, contrast: 1.04, brightness: 1.02, lift: '#17140f', vignette: 0.6, grain: 0.5 }, // grade of the 'modern' preset = "vintage hiện đại" (owner 2026-11-04): warm faded film tone on a clean modern city; off inside rooms (main.ts setLookActive). vignette / grain = × the old layers' opacity
   grade: { sepia: 0.12, saturate: 0.88, contrast: 0.92, brightness: 1.05 }, // canvas filter() at vintage 1
   lift: '#1a1815', // lifted blacks: screen-blended over the frame (old print, no true black)
   vignette: { colour: 'rgba(30, 27, 22, 0.40)', from: 50 }, // % of the radius where the corner darkening starts
