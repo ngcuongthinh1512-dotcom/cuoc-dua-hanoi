@@ -33,7 +33,8 @@ const IRON = '#1b2420';
 const HEDGE = '#3f6b36';
 const [BW, BH] = [1024, 352]; // board atlas px ≙ 5 × 1.72 m
 
-function paintBoard(): ImageBitmap | undefined {
+/** Dark-green board: a big serif line, a smaller second line, a tiny note bottom-right. */
+function paintBoard(line1: string, line2: string, note: string): ImageBitmap | undefined {
   if (typeof OffscreenCanvas === 'undefined') return;
   const c = new OffscreenCanvas(BW, BH);
   const g = c.getContext('2d');
@@ -46,13 +47,56 @@ function paintBoard(): ImageBitmap | undefined {
   g.fillStyle = '#ffffff';
   g.textAlign = 'center';
   g.font = 'bold 112px Georgia, "Times New Roman", serif';
-  g.fillText('CÔNG VIÊN THỐNG NHẤT', BW / 2, 150, BW - 80);
+  g.fillText(line1, BW / 2, 150, BW - 80);
   g.font = 'bold 64px Georgia, "Times New Roman", serif';
-  g.fillText('THONG NHAT PARK', BW / 2, 250, BW - 200);
-  g.textAlign = 'right';
-  g.font = '30px Georgia, "Times New Roman", serif';
-  g.fillText('SINCE 1958', BW - 40, 318);
+  g.fillText(line2, BW / 2, 250, BW - 200);
+  if (note) {
+    g.textAlign = 'right';
+    g.font = '30px Georgia, "Times New Roman", serif';
+    g.fillText(note, BW - 40, 318);
+  }
   return c.transferToImageBitmap();
+}
+
+/** Pale-yellow square column (half-size `half`, top at y0 + h) on a terracotta base band; solid. */
+function column(s: Sink, f: Fr, y0: number, a: number, w: number, half: number, h: number) {
+  const st = s.buf('masonry');
+  st.color = rgb(YELLOW);
+  fbox(st, f, a - half, a + half, w - half, w + half, y0 + 1, y0 + h);
+  st.color = rgb(BASE);
+  fbox(st, f, a - half - 0.04, a + half + 0.04, w - half - 0.04, w + half + 0.04, y0, y0 + 1);
+  s.prism([[P(f, a - half, 0, w - half), P(f, a + half, 0, w - half), P(f, a + half, 0, w + half), P(f, a - half, 0, w + half)].flatMap((p) => [p[0], p[2]])], y0, y0 + h);
+}
+
+/** Black iron fence (posts every 2 m, two rails, pickets every 0.16 m), 1.6 m tall, along (a0, w0) → (a1, w1); solid. */
+function rail(s: Sink, f: Fr, y0: number, a0: number, a1: number, w0: number, w1: number) {
+  const iron = s.buf('metal');
+  iron.color = rgb(IRON);
+  const len = Math.hypot(a1 - a0, w1 - w0);
+  const [ua, uw] = [(a1 - a0) / len, (w1 - w0) / len];
+  const at = (t: number, y: number, o = 0): V3 => P(f, a0 + ua * t - uw * o, y, w0 + uw * t + ua * o);
+  const bar = (t0: number, t1: number, y0_: number, y1: number, th: number) => {
+    const r = (y: number): V3[] => [at(t0, y, -th), at(t1, y, -th), at(t1, y, th), at(t0, y, th)];
+    loft(iron, [r(y0_), r(y1)]);
+    cap(iron, r(y1), UP);
+  };
+  for (let t = 0; t <= len + 0.01; t += 2) bar(t - 0.04, t + 0.04, y0, y0 + 1.7, 0.04);
+  for (const y of [0.35, 1.45]) bar(0, len, y0 + y, y0 + y + 0.05, 0.025);
+  for (let t = 0.2; t < len; t += 0.16) bar(t - 0.012, t + 0.012, y0 + 0.1, y0 + 1.6, 0.012);
+  s.prism([[at(0, 0, -0.05), at(len, 0, -0.05), at(len, 0, 0.05), at(0, 0, 0.05)].flatMap((p) => [p[0], p[2]])], y0, y0 + 1.7);
+}
+
+/** The lettered board on both faces between a = ±hw, y0..y1, at w = 0 (front = −w: the viewer's left is +a). */
+function board(s: Sink, f: Fr, hw: number, y0: number, y1: number, image: ImageBitmap | undefined) {
+  const st = s.buf('masonry');
+  st.color = rgb('#2a2a28');
+  fbox(st, f, -hw, hw, -0.08, 0.08, y0, y1); // the board's edge / back plate
+  const b = image ? s.buf('mural') : s.buf('masonry');
+  if (!image) b.color = rgb('#163f2b');
+  for (const sg of [-1, 1]) {
+    const [l, r] = [-sg * hw, sg * hw];
+    quadOut(b, P(f, l, y0, sg * 0.09), P(f, r, y0, sg * 0.09), P(f, r, y1, sg * 0.09), P(f, l, y1, sg * 0.09), [-f.uz * sg, 0, f.ux * sg], 0, 1, 1, 0);
+  }
 }
 
 /** Pale-yellow beam frame on a frame: two beams along a at w = ±wb, rafter ends across (±wr) every 0.6 m. */
@@ -107,17 +151,8 @@ const thongNhatGate = (_chunk: ChunkData, ctx: BuildCtx): BuildOut => {
   const st = s.buf('masonry'); // one buffer: set `st.color` right before each write
   const glow = s.buf('neon');
   glow.color = rgb('#fbfbf2');
-  const iron = s.buf('metal');
-  iron.color = rgb(IRON);
-  const column = (a: number, w: number, half: number, h: number) => {
-    st.color = rgb(YELLOW);
-    fbox(st, f, a - half, a + half, w - half, w + half, g + 1, g + h);
-    st.color = rgb(BASE);
-    fbox(st, f, a - half - 0.04, a + half + 0.04, w - half - 0.04, w + half + 0.04, g, g + 1);
-    s.prism([[P(f, a - half, 0, w - half), P(f, a + half, 0, w - half), P(f, a + half, 0, w + half), P(f, a - half, 0, w + half)].flatMap((p) => [p[0], p[2]])], g, g + h);
-  };
   // portal: 2 × 2 columns per side (1.2 m square), beam frame on top
-  for (const sa of [-1, 1]) for (const [a, w] of [[3.1, -0.9], [3.1, 0.9], [5.3, -0.9], [5.3, 0.9]] as const) column(sa * a, w, 0.6, 6.2);
+  for (const sa of [-1, 1]) for (const [a, w] of [[3.1, -0.9], [3.1, 0.9], [5.3, -0.9], [5.3, 0.9]] as const) column(s, f, g, sa * a, w, 0.6, 6.2);
   pergola(st, f, -5.9, 5.9, 1.1, 1.8, g + 6.2, 0.7, 0.4);
   for (const sa of [-1, 1]) for (const w of [-0.9, 0.9]) { // globe lamps on the inner faces
     st.color = rgb(YELLOW);
@@ -126,20 +161,13 @@ const thongNhatGate = (_chunk: ChunkData, ctx: BuildCtx): BuildOut => {
   }
   // wings: single row of 0.8 m columns every 3 m, lower pergola, a short plain post at each end
   for (const sa of [-1, 1]) {
-    for (const a of [8.5, 11.5, 14.5, 17.5]) column(sa * a, 0, 0.4, 4.0);
+    for (const a of [8.5, 11.5, 14.5, 17.5]) column(s, f, g, sa * a, 0, 0.4, 4.0);
     pergola(st, f, Math.min(sa * 6.5, sa * 18.5), Math.max(sa * 6.5, sa * 18.5), 0.6, 1.0, g + 4.0, 0.5, 0.3);
-    column(sa * 19.6, 0, 0.3, 2.6);
+    column(s, f, g, sa * 19.6, 0, 0.3, 2.6);
   }
   // sign board between the inner columns, both faces lettered
-  const image = paintBoard();
-  const board = image ? s.buf('mural') : s.buf('masonry');
-  if (!image) board.color = rgb('#163f2b');
-  st.color = rgb('#2a2a28');
-  fbox(st, f, -2.5, 2.5, -0.08, 0.08, g + 4.3, g + 6.02); // the board's edge / back plate
-  for (const sg of [-1, 1]) { // front (street, −w): the viewer's left is +a; back: −a
-    const [l, r] = [-sg * 2.5, sg * 2.5];
-    quadOut(board, P(f, l, g + 4.3, sg * 0.09), P(f, r, g + 4.3, sg * 0.09), P(f, r, g + 6.02, sg * 0.09), P(f, l, g + 6.02, sg * 0.09), [-f.uz * sg, 0, f.ux * sg], 0, 1, 1, 0);
-  }
+  const image = paintBoard('CÔNG VIÊN THỐNG NHẤT', 'THONG NHAT PARK', 'SINCE 1958');
+  board(s, f, 2.5, g + 4.3, g + 6.02, image);
   // paved approach from the sidewalk through the opening into the park
   const pave = s.buf('pave');
   quadOut(pave, P(f, -6, g + 0.06, -8), P(f, 6, g + 0.06, -8), P(f, 6, g + 0.06, 26), P(f, -6, g + 0.06, 26), UP, 0, 0, 12, 34);
@@ -150,29 +178,51 @@ const thongNhatGate = (_chunk: ChunkData, ctx: BuildCtx): BuildOut => {
   }
   signboard(s, GATE[0] - 8.5, GATE[1] + 30, g, 0); // park map board facing the approach
   // black iron fences beyond the wings (posts, two rails, pickets), the first leaf swung open into the park
-  const rail = (a0: number, a1: number, w0: number, w1: number) => { // along the segment (a0, w0) → (a1, w1), 1.6 m tall
-    const len = Math.hypot(a1 - a0, w1 - w0);
-    const [ua, uw] = [(a1 - a0) / len, (w1 - w0) / len];
-    const at = (t: number, y: number, o = 0): V3 => P(f, a0 + ua * t - uw * o, y, w0 + uw * t + ua * o);
-    const bar = (t0: number, t1: number, y0: number, y1: number, th: number) => {
-      const r = (y: number): V3[] => [at(t0, y, -th), at(t1, y, -th), at(t1, y, th), at(t0, y, th)];
-      loft(iron, [r(y0), r(y1)]);
-      cap(iron, r(y1), UP);
-    };
-    for (let t = 0; t <= len + 0.01; t += 2) bar(t - 0.04, t + 0.04, g, g + 1.7, 0.04);
-    for (const y of [0.35, 1.45]) bar(0, len, g + y, g + y + 0.05, 0.025);
-    for (let t = 0.2; t < len; t += 0.16) bar(t - 0.012, t + 0.012, g + 0.1, g + 1.6, 0.012);
-    s.prism([[at(0, 0, -0.05), at(len, 0, -0.05), at(len, 0, 0.05), at(0, 0, 0.05)].flatMap((p) => [p[0], p[2]])], g, g + 1.7);
-  };
   for (const sa of [-1, 1]) {
-    rail(sa * 20.2, sa * 20.2, 0, 2.4); // the open leaf, hinged at the end post
-    rail(sa * 22.8, sa * 34, 0, 0);
+    rail(s, f, g, sa * 20.2, sa * 20.2, 0, 2.4); // the open leaf, hinged at the end post
+    rail(s, f, g, sa * 22.8, sa * 34, 0, 0);
   }
   // low hedges: inside the fences, and along the approach
   st.color = rgb(HEDGE);
   for (const sa of [-1, 1]) {
     fbox(st, f, Math.min(sa * 22.8, sa * 34), Math.max(sa * 22.8, sa * 34), 0.6, 1.4, g, g + 0.7);
     fbox(st, f, sa * 6.6 - 0.4, sa * 6.6 + 0.4, 3, 20, g, g + 0.6);
+  }
+  const out = s.out();
+  return image ? { ...out, textures: [{ material: 'mural', image }] } : out;
+};
+
+// ── Cổng Lê Duẩn: the west gate on Đường Lê Duẩn (21.0111 N, 105.8411 E), where the OSM footway from the Lê Duẩn kerb
+// (x −1121) runs east along z = 2336 through the park edge (x −1102) to the footbridge onto đảo Thống Nhất (bridge
+// way −1062 → −1023). A smaller cousin of the main gate: a 7 m portal of two 1 m columns per side (5.9 m) round a
+// 4 m opening, the board "CÔNG VIÊN THỐNG NHẤT / CỔNG LÊ DUẨN", two globe lamps, iron fence wings with an open leaf, a
+// paved approach from the kerb onto that footway. Frame: a = north, w = east into the park; the street is −w. ──
+const GATE_W: [number, number] = [-1103, 2336];
+
+const leDuanGate = (_chunk: ChunkData, ctx: BuildCtx): BuildOut => {
+  const g = ctx.height(GATE_W[0], GATE_W[1]);
+  const s = new Sink();
+  const f = frameAt(GATE_W[0], GATE_W[1], 0, -1); // P: x = cx + w, z = cz − a
+  const st = s.buf('masonry');
+  const glow = s.buf('neon');
+  glow.color = rgb('#fbfbf2');
+  for (const sa of [-1, 1]) for (const w of [-0.8, 0.8]) column(s, f, g, sa * 2.6, w, 0.5, 5.2);
+  pergola(st, f, -3.3, 3.3, 1.0, 1.6, g + 5.2, 0.6, 0.35);
+  for (const sa of [-1, 1]) { // one globe lamp per side on the inner faces
+    st.color = rgb(YELLOW);
+    fbox(st, f, Math.min(sa * 2.1, sa * 1.7), Math.max(sa * 2.1, sa * 1.7), -0.05, 0.05, g + 3.3, g + 3.4);
+    globe(glow, f, sa * 1.75, 0, g + 3.65, 0.2);
+  }
+  const image = paintBoard('CÔNG VIÊN THỐNG NHẤT', 'CỔNG LÊ DUẨN', '');
+  board(s, f, 2.0, g + 3.9, g + 5.08, image);
+  const pave = s.buf('pave');
+  quadOut(pave, P(f, -3, g + 0.06, -9), P(f, 3, g + 0.06, -9), P(f, 3, g + 0.06, 14), P(f, -3, g + 0.06, 14), UP, 0, 0, 6, 23);
+  for (const sa of [-1, 1]) {
+    rail(s, f, g, sa * 3.3, sa * 3.3, 0, 2.2); // open leaf
+    rail(s, f, g, sa * 5.6, sa * 16, 0, 0);
+    st.color = rgb(HEDGE);
+    fbox(st, f, Math.min(sa * 5.6, sa * 16), Math.max(sa * 5.6, sa * 16), 0.6, 1.4, g, g + 0.7);
+    lampPost(s, GATE_W[0] + 6, GATE_W[1] - sa * 4.5, g, Math.PI / 2);
   }
   const out = s.out();
   return image ? { ...out, textures: [{ material: 'mural', image }] } : out;
@@ -186,9 +236,10 @@ const thongNhatGate = (_chunk: ChunkData, ctx: BuildCtx): BuildOut => {
 // at path junctions (pave disc, flowerbed, benches); lake-shore railings, reed clumps and lily pads where a path runs
 // along the water; lawn tone patches. Hand-placed decor on the open lawns north of the lake (checked against the chunk
 // data on 2026-11-03: ≥ 8 m from every path, no building, no water): playground, outdoor gym, stage, two café kiosks
-// with terraces (InstanceSet 'cafe'), a pergola walk, the fountain basin + flowerbeds, a footbridge to the east island
-// with a pavilion. Solid: trunks are not (as the street trees), lamp posts / lanterns / pavilions / kiosk counters /
-// pergola columns / stage / bridge deck are (Sink.prism); benches, railings, reeds, play items are not. ──
+// with terraces (InstanceSet 'cafe'), a pergola walk, the fountain basin + flowerbeds. The only lake bridge is OSM's
+// footbridge from the Lê Duẩn shore onto đảo Thống Nhất (BridgeBuilder); đảo Hòa Bình (east) has none, as in reality.
+// Solid: trunks are not (as the street trees), lamp posts / lanterns / pavilions / kiosk counters / pergola columns /
+// stage are (Sink.prism); benches, railings, reeds, play items are not. ──
 const PARK = { minX: -1110, maxX: -470, minZ: 1660, maxZ: 2695 };
 const PATH_KINDS = new Set(['footway', 'path', 'cycleway', 'pedestrian']);
 const LAWNS = ['#6a8a48', '#7a9c54', '#5e7e43', '#88a35c'];
@@ -336,25 +387,6 @@ function pergolaWalk(s: Sink, x: number, z: number, g: number, len: number, yaw:
   for (let a = -len / 2 + 1; a < len / 2; a += 4) lathe(st, f, a, (hash(a + x) - 0.5) * 2, [[1.2, g + 3.4], [0.9, g + 3.8], [0, g + 4.0]], 6); // vines over the top
 }
 
-/** Footbridge from (x0, z0) to (x1, z1): stone deck 2.6 m wide at +0.3 m (walkable), iron railings, round piers. */
-function footbridge(s: Sink, x0: number, z0: number, x1: number, z1: number, g: number) {
-  const L = Math.hypot(x1 - x0, z1 - z0);
-  const f = frameAt((x0 + x1) / 2, (z0 + z1) / 2, (x1 - x0) / L, (z1 - z0) / L);
-  const st = s.buf('masonry');
-  st.color = rgb('#b8b0a0');
-  fbox(st, f, -L / 2, L / 2, -1.3, 1.3, g - 0.1, g + 0.3);
-  st.color = rgb('#8d877c');
-  for (const a of [-L / 3, 0, L / 3]) lathe(st, f, a, 0, [[0.6, g - 3], [0.6, g - 0.1]], 8);
-  const iron = s.buf('metal');
-  iron.color = rgb(IRON);
-  for (const w of [-1.2, 1.2]) {
-    fbox(iron, f, -L / 2, L / 2, w - 0.03, w + 0.03, g + 1.25, g + 1.3);
-    fbox(iron, f, -L / 2, L / 2, w - 0.02, w + 0.02, g + 0.75, g + 0.78);
-    for (let a = -L / 2 + 0.1; a < L / 2; a += 2) fbox(iron, f, a - 0.03, a + 0.03, w - 0.03, w + 0.03, g + 0.3, g + 1.3);
-  }
-  s.prism([[P(f, -L / 2, 0, -1.3), P(f, L / 2, 0, -1.3), P(f, L / 2, 0, 1.3), P(f, -L / 2, 0, 1.3)].flatMap((p) => [p[0], p[2]])], g - 0.1, g + 0.3);
-}
-
 /** Hand-placed decor: world point (built by its chunk), keep-clear radius for the scatter, builder. */
 const DECOR: readonly { x: number; z: number; r: number; build: (s: Sink, g: number, cafes: number[]) => void }[] = [
   { x: -680, z: 1712, r: 16, build: (s, g) => playground(s, -680, 1712, g) },
@@ -371,8 +403,6 @@ const DECOR: readonly { x: number; z: number; r: number; build: (s: Sink, g: num
       stoneLantern(s, -825 + Math.cos(t + Math.PI / 6) * 12, 1844 + Math.sin(t + Math.PI / 6) * 12, g);
     }
   } },
-  { x: -745, z: 2338.8, r: 0, build: (s, g) => footbridge(s, -745, 2338.8, -786.8, 2317.1, g) }, // shore → Đảo (east island); g = the bank's height, not the lake bed
-  { x: -814, z: 2291, r: 6, build: (s, g) => pavilion(s, -814, 2291, g) }, // on the island
 ];
 
 const thongNhatPark = (chunk: ChunkData, ctx: BuildCtx): BuildOut => {
@@ -395,7 +425,7 @@ const thongNhatPark = (chunk: ChunkData, ctx: BuildCtx): BuildOut => {
     return m;
   };
   const inBld = (x: number, z: number) => chunk.buildings.some((b) => inRing(x, z, b.outer));
-  const taken: [number, number, number][] = DECOR.map((d) => [d.x, d.z, d.r]);
+  const taken: [number, number, number][] = [...DECOR.map((d): [number, number, number] => [d.x, d.z, d.r]), [GATE[0], GATE[1] + 14, 38], [GATE_W[0] + 4, GATE_W[1], 18]]; // + the two gates' approaches
   const clear = (x: number, z: number, r = 0) => !taken.some(([tx, tz, tr]) => Math.hypot(tx - x, tz - z) < tr + r);
   const open = (x: number, z: number, gap: number) => inPark(x, z) && !water(x, z) && !inBld(x, z) && dPath(x, z) > gap && clear(x, z);
   const h = (x: number, z: number, k: number) => hash(x * 0.37 + z * 1.13 + k);
@@ -424,6 +454,7 @@ const thongNhatPark = (chunk: ChunkData, ctx: BuildCtx): BuildOut => {
 
   // along the paths: tree rows, benches (+ bins), lamp posts, lake-shore railings / reeds / lily pads
   const plazas = new Set<string>();
+  const joins = paths.flatMap((r) => r.junctions.map((j) => [r.pts[2 * j]!, r.pts[2 * j + 1]!] as const)); // path junctions: no shore railing across a joining path
   for (const r of paths) {
     let s0 = 0;
     for (let i = 0; i + 3 < r.pts.length; i += 2) {
@@ -441,7 +472,7 @@ const thongNhatPark = (chunk: ChunkData, ctx: BuildCtx): BuildOut => {
         // shore: water within 9 m to one side → railing at the bank, reeds and lily pads in the water
         for (const side of [1, -1]) {
           const d = [3, 5, 7, 9].find((o) => water(...at(side, o)));
-          if (d === undefined || !step(7)) continue;
+          if (d === undefined || !step(7) || joins.some(([jx, jz]) => Math.hypot(jx - px, jz - pz) < 6)) continue;
           const [rx, rz] = at(side, d - 1.2);
           const f = frameAt(rx, rz, tx, tz);
           const iron = s.buf('metal');
@@ -525,6 +556,7 @@ type InstanceKind = BuildOut['instances'][number]['kind'];
 /** Code-only details over a world box, built by every chunk that overlaps it (index.ts buildLandmarks). */
 export const placed: readonly { minX: number; maxX: number; minZ: number; maxZ: number; build: (chunk: ChunkData, ctx: BuildCtx) => BuildOut }[] = [
   { minX: GATE[0], maxX: GATE[0], minZ: GATE[1], maxZ: GATE[1], build: thongNhatGate },
+  { minX: GATE_W[0], maxX: GATE_W[0], minZ: GATE_W[1], maxZ: GATE_W[1], build: leDuanGate },
   { ...PARK, build: thongNhatPark },
 ];
 

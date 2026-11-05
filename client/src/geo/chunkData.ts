@@ -78,6 +78,7 @@ export interface BuildingRec extends S3dFacts {
   outer: XZ;
   holes?: XZ[];
   kind: string; // building=*; landmark outlines that are not buildings: 'bridge' | 'fountain' | 'artwork'
+  gen?: 1; // procedural infill house (scripts/infill-houses.ts); dropped + regenerated on every run, lost on a build-chunks rebuild
   landmark?: LandmarkId; // set by build-chunks from the registry; BuildingBuilder skips these
   parts?: PartRec[]; // landmark only: building:part whose centroid lies inside this outline (smallest one wins)
   points?: LandmarkPoint[]; // landmark only: zone nodes whose nearest landmark outline is this one
