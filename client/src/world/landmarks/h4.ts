@@ -10,6 +10,7 @@ import { hash, lathe } from './d.ts';
 import { BRICK, CREAM, DARK, EMPTY, frameAt, gate3, hall, monument, OCHRE, opening, STONE, TILE, tiledBody } from './h3.ts';
 import type { DetailFn } from './index.ts';
 import { footprintFrame, loft, quadOut, triOut } from './kit.ts';
+import { bacHoBacTon, STATUE } from './hoton.ts';
 import { Sink } from './parts.ts';
 
 // ── Công viên Thống Nhất: the park polygon (kind artwork, 60 ha, mostly lawn and trees: the lawn is lost with the outline, see
@@ -425,7 +426,7 @@ const thongNhatPark = (chunk: ChunkData, ctx: BuildCtx): BuildOut => {
     return m;
   };
   const inBld = (x: number, z: number) => chunk.buildings.some((b) => inRing(x, z, b.outer));
-  const taken: [number, number, number][] = [...DECOR.map((d): [number, number, number] => [d.x, d.z, d.r]), [GATE[0], GATE[1] + 14, 38], [GATE_W[0] + 4, GATE_W[1], 18]]; // + the two gates' approaches
+  const taken: [number, number, number][] = [...DECOR.map((d): [number, number, number] => [d.x, d.z, d.r]), [GATE[0], GATE[1] + 14, 38], [GATE_W[0] + 4, GATE_W[1], 18], [STATUE[0], STATUE[1], 13]]; // + the two gates' approaches, the Bác Hồ – Bác Tôn plaza
   const clear = (x: number, z: number, r = 0) => !taken.some(([tx, tz, tr]) => Math.hypot(tx - x, tz - z) < tr + r);
   const open = (x: number, z: number, gap: number) => inPark(x, z) && !water(x, z) && !inBld(x, z) && dPath(x, z) > gap && clear(x, z);
   const h = (x: number, z: number, k: number) => hash(x * 0.37 + z * 1.13 + k);
@@ -557,6 +558,7 @@ type InstanceKind = BuildOut['instances'][number]['kind'];
 export const placed: readonly { minX: number; maxX: number; minZ: number; maxZ: number; build: (chunk: ChunkData, ctx: BuildCtx) => BuildOut }[] = [
   { minX: GATE[0], maxX: GATE[0], minZ: GATE[1], maxZ: GATE[1], build: thongNhatGate },
   { minX: GATE_W[0], maxX: GATE_W[0], minZ: GATE_W[1], maxZ: GATE_W[1], build: leDuanGate },
+  { minX: STATUE[0], maxX: STATUE[0], minZ: STATUE[1], maxZ: STATUE[1], build: bacHoBacTon }, // hoton.ts
   { ...PARK, build: thongNhatPark },
 ];
 
@@ -586,7 +588,7 @@ const thongNhat: DetailFn = (rec, _parts, ctx) => {
     lathe(jet, f, 0, 0, [[0.6, g - 0.3], [0.25, g + 2.6], [0.06, g + 4.6], [0, g + 5.2]], 8);
     for (let k = 0; k < 6; k++) lathe(jet, f, 3.5 * Math.cos((k * Math.PI) / 3), 3.5 * Math.sin((k * Math.PI) / 3), [[0.2, g - 0.3], [0.08, g + 1.4], [0, g + 1.9]], 6);
   }
-  for (const p of rec.points ?? []) if (p.kind === 'artwork') monument(s, frameAt(p.x, p.z, 0, -1), g, p.sub === 'statue' ? 3.2 : 1.6, p.sub === 'statue' ? 4.5 : 2.2); // facing north
+  for (const p of rec.points ?? []) if (p.kind === 'artwork' && Math.hypot(p.x - STATUE[0], p.z - STATUE[1]) > 6) monument(s, frameAt(p.x, p.z, 0, -1), g, p.sub === 'statue' ? 3.2 : 1.6, p.sub === 'statue' ? 4.5 : 2.2); // facing north
   return s.out();
 };
 

@@ -66,6 +66,15 @@ Object.assign(PRESETS, {
   'hn-nhathoLon': cam(21.0270, 105.8490, 90, 0, -30),
   'hn-vanmieu': cam(21.0293, 105.8355, 300, 0, -90),
   'hn-thongnhat': cam(21.0145, 105.8445, 600, 0, -90),
+  // Tượng đài Bác Hồ – Bác Tôn (landmarks/hoton.ts, (−1003, 2323), front faces west): the owner's photo view (front left, eye
+  // 1.6 m, looking up), the handshake close up, both faces, the south side, wide from the bridge head, and from above
+  'hn-hoton-front': '/?cam=-1008.2,1.6,2321.2,-109,18',
+  'hn-hoton-hands': '/?cam=-1006.2,3.3,2322.7,-96,0',
+  'hn-hoton-face-ton': '/?cam=-1003.53,4.2,2322.33,-158,0',
+  'hn-hoton-face-ho': '/?cam=-1003.28,4.9,2323.82,-12,-20',
+  'hn-hoton-side': '/?cam=-1004,2.6,2331.5,-7,8',
+  'hn-hoton-wide': '/?cam=-1024,2.0,2334,-62,3',
+  'hn-hoton-top': '/?cam=-1016,16,2323,-90,-45',
   'hn-street': cam(21.0252, 105.8555, 1.7, yawTo(21.0252, 105.8555, 21.0242, 105.8576), 2),
   // Leg 3 building styles (BuildingBuilder): street level on Hàng Gai (Old Quarter), Lý Thái Tổ (French quarter), Xã Đàn (Đống Đa),
   // Bạch Mai / Lò Đúc (Hai Bà Trưng, KTT), and obliques over the Old Quarter / Bạch Mai (road-graph midpoints, 1.7 m eye)
