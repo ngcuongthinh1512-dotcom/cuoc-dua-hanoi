@@ -21,6 +21,8 @@ export interface LandmarkDef {
   /** Outside the map (skyline): position, altitude of the ground above sea level (m). */
   at?: [number, number];
   groundAsl?: number;
+  /** Code-only detail without an OSM outline: world (x, z) of its `placed` entry (world/landmarks/h4.ts). */
+  placed?: [number, number];
   /** Screenshot preset lm-<id>: camera azimuth seen from the landmark (compass deg, 0 = north), distance (m) and,
    *  for a street-level view, the eye height (m above the ground at the camera; omitted = oblique from ≥ 45 m up). */
   view: [number, number, number?];
@@ -55,6 +57,7 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   { id: 'go-dong-da', name: 'Gò Đống Đa', group: 'h3', osm: ['way/29133247', 'way/838426608'], near: 40, view: [200, 110] }, // gò (park) + Đền thờ Quang Trung; tượng đài = node/5485636741
   { id: 'vincom-nct', name: 'Vincom Nguyễn Chí Thanh / Vinhomes / ROX Tower', group: 'h3', osm: ['way/1231417560', 'way/840562572', 'way/840562573'], near: 25, view: [200, 200] },
   { id: 'vincom-pham-ngoc-thach', name: 'Vincom Center Phạm Ngọc Thạch', group: 'h3', osm: ['way/136161117'], near: 25, height: 36, /* OSM: 8 retail levels, no height; ≈ 36 m estimated from the photos (facade ≈ 0.55 × its 64 m Đông Tác front) */ view: [255, 100, 22] }, // from the Phạm Ngọc Thạch – Đông Tác – Chùa Bộc junction onto the V-cut corner
+  { id: 'cafe-hmm', name: 'Quán cà phê hmm… (13 Khương Thượng)', group: 'h3', osm: [], placed: [-2941.7, 2840.1], view: [296, 6, 1.5] }, // no OSM number 13: the west face of the 'university' L-block off the lane from Phố Khương Thượng near Tây Sơn (landmarks/cafe.ts); presets hn-cafe-*
   // ── Hai Bà Trưng ──
   { id: 'cv-thong-nhat', name: 'Công viên Thống Nhất', group: 'h4', osm: ['way/37933849'], near: 20, view: [200, 200] }, // park (kind artwork); hồ Bảy Mẫu = water
   { id: 'den-hai-ba-trung', name: 'Đền Hai Bà Trưng', group: 'h4', osm: ['relation/19179452'], near: 20, view: [200, 80] },

@@ -92,7 +92,7 @@ describe.skipIf(!hasData)('real map data', () => {
     const marks = all('buildings').filter((b) => b.landmark);
     const found = new Set(marks.map((b) => b.landmark));
     expect(LANDMARKS.filter((d) => (d.osm.length || d.zone) && !found.has(d.id)).map((d) => d.id)).toEqual([]);
-    expect(LANDMARKS.filter((d) => !d.osm.length && !d.zone && !(d.at && d.height)).map((d) => d.id)).toEqual([]); // skyline
+    expect(LANDMARKS.filter((d) => !d.osm.length && !d.zone && !(d.at && d.height) && !d.placed).map((d) => d.id)).toEqual([]); // skyline / code-only details
     expect([...found].filter((id) => !LANDMARKS.some((d) => d.id === id))).toEqual([]);
     const sky = read<SkylineData>('skyline.json');
     expect(sky.towers.length).toBeGreaterThan(20);

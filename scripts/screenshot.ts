@@ -75,6 +75,14 @@ Object.assign(PRESETS, {
   'hn-hoton-side': '/?cam=-1004,2.6,2331.5,-7,8',
   'hn-hoton-wide': '/?cam=-1024,2.0,2334,-62,3',
   'hn-hoton-top': '/?cam=-1016,16,2323,-90,-45',
+  // Quán cà phê hmm… (landmarks/cafe.ts, (−2941.7, 2840.1), the front looks WNW at the lane): the owner's photo 1 view (6 m in
+  // front, eye 1.5 m), photo 2 (the pet bench under the window), the sign, 3/4 from the lane, from the left, from above
+  'hn-cafe-front': '/?cam=-2947.00,1.5,2836.83,-116,4',
+  'hn-cafe-bench': '/?cam=-2944.05,1,2837.16,-116,-2',
+  'hn-cafe-sign': '/?cam=-2944.79,2,2839.14,-116,0',
+  'hn-cafe-lane': '/?cam=-2953.32,1.6,2842.20,-74,2',
+  'hn-cafe-left': '/?cam=-2943.77,1.6,2831.84,-169,2',
+  'hn-cafe-top': '/?cam=-2955.3,9,2834.3,-116,-30', // from above the yard (the upper floors cover the terrace, so no straight-down view)
   'hn-street': cam(21.0252, 105.8555, 1.7, yawTo(21.0252, 105.8555, 21.0242, 105.8576), 2),
   // Leg 3 building styles (BuildingBuilder): street level on Hàng Gai (Old Quarter), Lý Thái Tổ (French quarter), Xã Đàn (Đống Đa),
   // Bạch Mai / Lò Đúc (Hai Bà Trưng, KTT), and obliques over the Old Quarter / Bạch Mai (road-graph midpoints, 1.7 m eye)

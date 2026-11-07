@@ -109,7 +109,7 @@ function tube(secs: Sec[], side: V3, segs: number, e = 2, cap0 = 0.8, cap1 = 0.8
 }
 
 /** Octahedron (a flower head / blossom dot) of radius r at world point c. */
-function gem(buf: Buf, c: V3, r: number) {
+export function gem(buf: Buf, c: V3, r: number) {
   const v = ([[r, 0, 0], [-r, 0, 0], [0, r, 0], [0, -r * 0.6, 0], [0, 0, r], [0, 0, -r]] as V3[]).map((d) => add(c, d));
   for (const x of [0, 1]) for (const y of [2, 3]) for (const z of [4, 5]) {
     const [a, b, d] = [v[x]!, v[y]!, v[z]!];
