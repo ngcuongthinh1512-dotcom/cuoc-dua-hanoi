@@ -10,7 +10,7 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lighting as LT, npc as NPC, npcRender as R, roads as RC, traffic } from '../config.ts';
 import { additive, nightHdr } from '../world/glow.ts';
-import { isNight } from '../world/night.ts';
+import { glowOn } from '../world/night.ts';
 import type { NpcAssets } from './NpcAssets.ts';
 import type { NpcRoads } from './roads.ts';
 import type { CarKind, CarPose, LightQuery, Seat, SignalHead } from './types.ts';
@@ -152,11 +152,11 @@ export class NpcRenderer {
   readonly bulbs: InstancedMesh;
   readonly zebras: InstancedMesh;
   readonly chairs: InstancedMesh;
-  /** Night only (lighting.cars): head / tail / taxi roof lamps (unlit HDR boxes, instance colour) and the road glow ahead. */
+  /** Dusk and night only (lighting.cars): head / tail / taxi roof lamps (unlit HDR boxes, instance colour) and the road glow ahead. */
   readonly lamps?: InstancedMesh;
   readonly cones?: InstancedMesh;
   private readonly spots = new Map<CarKind, LampSpots>();
-  private readonly lampColour = isNight()
+  private readonly lampColour = glowOn()
     ? { head: nightHdr(LT.cars.head.colour, LT.cars.head.intensity), tail: nightHdr(LT.cars.tail.colour, LT.cars.tail.intensity),
         brake: nightHdr(LT.cars.tail.colour, LT.cars.tail.brake), roof: nightHdr(LT.cars.roof.colour, LT.cars.roof.intensity) }
     : undefined;

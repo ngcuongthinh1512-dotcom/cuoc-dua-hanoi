@@ -3,11 +3,13 @@
 //
 // Per building: ground g = min terrain over the outer ring, but at most groundSpan below its max (a footprint reaching
 // into the carved Seine or over a DEM bump, e.g. the Louvre, is not buried); walls from min − baseSink to top = g + height.
-// Leg 3 Hà Nội (config buildings.macao, picked per building by hash01): plaster low-rise ('wall': nhà ống / French fronts,
-// 8-column atlas: 0–5 nhà ống fronts, 6–7 French colonial; optional tile hip roof, rooftop box + water tank on flat roofs),
+// Leg 3 Hà Nội (config buildings.macao, picked per building by hash01; style catalogue docs/reports/hanoi-houses.md): plaster
+// low-rise ('wall': WALL_COLS-column atlas: 0–5 nhà ống fronts, 6–7 French colonial, 8–9 nhà phố Pháp cũ, 10 mặt phố mới,
+// 11 narrow house with stacked signs, 12 tân cổ điển, 13 mid-century block; plots pick from macao.recipes and never repeat
+// their left neighbour's column / tint; tôn / tile awnings (macao.awning) over a share of shop plots; optional tile hip roof, rooftop box + water tank on flat roofs),
 // khu tập thể slabs and concrete-grid towers ('tenement': small windows, sunshades, loggia grilles, laundry, stair core; a tôn
 // pitched 'mái che' on a share of slabs), glass towers ('curtain', flat roof + plant box); a shop band 0–4.5 m ('shopfront':
-// sign boards, roller shutters, goods) on street faces. French quarter box (macao.french): ochre tints, more hip roofs, the
+// sign boards, roller shutters, goods) on street faces (SHOP_COLS fronts with Vietnamese shop words). French quarter box (macao.french): ochre tints, more hip roofs, the
 // French atlas columns. Plots (macao.plots, see emitPlots): every street edge of a low-rise front is cut into ≈ 4 m plots with
 // their own facade column, plaster tint and (untagged footprints) height: ragged roof lines with bare side walls, pitched tile /
 // tôn caps and 'tum' stair boxes on the raised ones. Haussmann (Leg 1,
@@ -30,6 +32,9 @@ import { facadeNightGlsl } from './night.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
 import { hash01, MeshBuffer, mergeBuckets, triangulate, type V3 } from './geom.ts';
 
+/** Columns of the wall facade atlas (wallCanvas): 0–5 nhà ống, 6–7 French colonial, 8–9 nhà phố Pháp cũ, 10 mặt phố mới
+ *  (dark cladding), 11 narrow house with stacked signs, 12 tân cổ điển pastiche, 13 mid-century block. */
+const WALL_COLS = 14;
 const PLAIN_WALL_UV = [4, 2.5] as const; // plain plaster texel, in bays / floors (× the facade repeat): wall atlas column 4 left edge, mid floor 2; tenement / curtain column 0 edge
 // Phase 8C T3: with graphics8c.roofs.enabled the roof uv is WORLD METRES (slope: along the edge × up the slope, caps: x, z;
 // material.map.repeat = 1 / tile) for the roof_slates_03 slates, instead of the canvas bay layout below (dormers dropped).
@@ -119,7 +124,7 @@ interface Prep {
   roofBox: boolean; // nhà ống: a stair-head box on the flat roof (config buildings.macao.roofBox)
   tank: boolean; // … with a water tank on it
   shift: number; // facade atlas column the first bay of every edge starts at (per building, so a row of plots differs)
-  plots?: { extra: number; flat: number; cols: readonly [number, number]; palette: string[] }; // emitPlots: max extra storeys, share kept flat, atlas column range, tint palette
+  plots?: { extra: number; flat: number; cols: readonly number[]; palette: string[] }; // emitPlots: max extra storeys, share kept flat, atlas column range, tint palette
   tint: V3;
   roofTint: V3; // roof bucket (slates, lifted): slopes
   capTint: V3; // wall bucket (plain plaster texel, unlifted): flat caps, parapets, tum / stair boxes
@@ -180,7 +185,7 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
   const rb = 0.8 + 0.25 * r(3);
   const M = B.macao;
   const lit = r(10) < M.litShare ? 0.01 + 0.99 * r(11) : 0;
-  const shift = Math.floor(r(13) * 24); // 24 = lcm of the wall (8) and tenement (4) atlas column counts
+  const shift = Math.floor(r(13) * 28); // 28 = lcm of the wall (WALL_COLS 14) and tenement (4) atlas column counts
   const housing = B.haussmannKinds.includes(b.kind);
   if (minH === 0 && housing && h >= B.haussmannHeight[0]! && h <= B.haussmannHeight[1]!) {
     const k = r(1);
@@ -219,7 +224,7 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
   const ochre = french && r(16) < F.ochreShare;
   const palette = curtain ? M.glass : tower ? M.concrete : tenement ? M.tenement : ochre ? M.colonial.slice(0, F.ochreCount) : M.colonial;
   return {
-    rings: [outer, ...holes], g, bottom, top, lit, haussmann: false, shift: french ? 6 + (shift % 2) : shift,
+    rings: [outer, ...holes], g, bottom, top, lit, haussmann: false, shift: french ? 6 + (shift % 4) : shift,
     face: curtain ? 'curtain' : tower || tenement ? 'tenement' : 'wall',
     windows,
     shop: minH === 0 && (windows ? h >= M.shopMinHeight && (!french || r(18) < F.shopShare) : h >= M.kioskShopMin && !M.blankKinds.includes(b.kind)),
@@ -228,7 +233,7 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
     plant: tower && minH === 0,
     roofBox,
     tank: roofBox && r(15) < M.roofBox.tankShare,
-    ...(plots && { plots: { extra: untagged && boxes ? P.extra : 0, flat: french ? F.plotFlat : P.flatShare, cols: french ? [6, 2] : [0, 6], palette } }),
+    ...(plots && { plots: { extra: untagged && boxes ? P.extra : 0, flat: french ? F.plotFlat : P.flatShare, cols: french ? M.recipes.french : h >= M.recipes.tallFrom ? M.recipes.tall : M.recipes.street, palette } }),
     tint: pick(palette),
     roofTint: hipOk ? (!french && r(23) < M.hip.tonShare ? pick(M.ton.colours, lift, 24) : linear(M.tileRoof, lift)) : ktt ? pick(K.colours, lift, 22) : pick(M.flatRoofs, lift, 17),
     // ponytail: flat caps, parapets and roof boxes go to the wall bucket's plain plaster texel (the lifted slate diffuse turns
@@ -294,7 +299,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     shop.lit = p.lit || 0.01 + 0.99 * hash01(p.rings[0]![0]!, p.rings[0]![1]!, 5); // shops: always a seed (night open / closed)
     roof.color = p.roofTint;
     const insets: XZ[] = [];
-    const shopShift = Math.floor(hash01(p.rings[0]![0]!, p.rings[0]![1]!, 4) * 4);
+    const shopShift = Math.floor(hash01(p.rings[0]![0]!, p.rings[0]![1]!, 4) * SHOP_COLS);
 
     p.rings.forEach((r, ri) => {
       const n = r.length / 2;
@@ -485,19 +490,44 @@ export const buildBuildings: Builder = (chunk, ctx) => {
     const lift = (ROOF_PBR ? B.macao.roofLift : 1) * (0.85 + 0.2 * hash01(ax, az, 24));
     const [u, v] = PLAIN_WALL_UV;
     const sideTint = SIDE_TINT;
+    let prevTint = '';
+    let prevCol = -1;
+    /** Index i of list, moved on (by a hashed step) while its entry equals `prev`. */
+    const differ = <T,>(i: number, list: readonly T[], prev: T, h: number) => {
+      for (let t = 0, step = 1 + Math.floor(h * (list.length - 1)); t < list.length && list[i] === prev; t++) i = (i + step) % list.length;
+      return i;
+    };
     for (let k = 0; k < count; k++) {
       const hk = heights[k]!;
       const d = depths[k]!;
       const px = ax + tx * k * w;
       const pz = az + tz * k * w;
       const rnd = (salt: number) => hash01(px, pz, salt);
-      const tint = linear(pl.palette[Math.floor(rnd(25) * pl.palette.length)]!, 0.88 + 0.12 * rnd(26));
-      const col = pl.cols[0] + Math.floor(rnd(27) * (pl.cols[1] - bays + 1));
+      // interleaving rule (docs/reports/hanoi-houses.md): a plot never repeats its left neighbour's facade column or tint
+      const ti = differ(Math.floor(rnd(25) * pl.palette.length), pl.palette, prevTint, rnd(35));
+      const ci = differ(Math.floor(rnd(27) * pl.cols.length), pl.cols, prevCol, rnd(37));
+      [prevTint, prevCol] = [pl.palette[ti]!, pl.cols[ci]!];
+      const tint = linear(prevTint, 0.88 + 0.12 * rnd(26));
+      const col = prevCol;
       const A: V3 = [px, 0, pz];
       const Bp: V3 = [px + tx * w, 0, pz + tz * w];
       const at = (q: V3, y: number, depth = 0): V3 => [q[0] + nx * depth, y, q[2] + nz * depth];
       face.color = tint;
       face.quad(at(A, y0), at(Bp, y0), at(Bp, hk), at(A, hk), col, floorsV(y0), col + bays, floorsV(hk));
+      const AW = B.macao.awning;
+      if (y0 > p.g + 1 && rnd(36) < AW.share) { // mái hiên: a tôn / tile lean-to over the shop opening, under its sign board
+        const [ya, yb] = [p.g + AW.y, p.g + AW.y - AW.drop];
+        const [i0, i1] = [at([A[0] + tx * 0.1, 0, A[2] + tz * 0.1], ya), at([Bp[0] - tx * 0.1, 0, Bp[2] - tz * 0.1], ya)];
+        const [o0, o1] = [at(i0, yb, -AW.depth), at(i1, yb, -AW.depth)];
+        const lift = (ROOF_PBR ? B.macao.roofLift : 1) * (0.85 + 0.2 * rnd(38));
+        const savedRoof = roof.color;
+        roof.color = linear(AW.colours[Math.floor(rnd(39) * AW.colours.length)]!, lift);
+        const sl = Math.hypot(AW.depth, AW.drop);
+        facing(roof, i0, i1, o1, o0, [-nx, 1, -nz], 0, 0, ROOF_PBR ? w : 1, ROOF_PBR ? sl : 0.2);
+        wall.color = [0.5, 0.49, 0.46];
+        facing(wall, i0, i1, o1, o0, [0, -1, 0], u, v, u, v); // shaded underside
+        roof.color = savedRoof;
+      }
       if (P.slabCols.includes(col) && hk - y0 > B.levelHeight * 1.5 && d >= 1) { // projecting balcony slab under the painted railing
         const ys = y0 + P.slabUp;
         const [sd, so] = [P.slabDepth, 0.08 * w];
@@ -794,16 +824,74 @@ function sunshade(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.fillRect(x + 2, y + 9, w - 2, 7);
 }
 
-/** Sign board (saturated ground, bars of "lettering"); vertical = the bars stack as short lines down the board. */
-function sign(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, ground: string, text: string, vertical: boolean) {
+const SIGN_FONT = '"Arial Narrow", "Helvetica Neue", Arial, sans-serif';
+
+/** Sign board with real lettering (Vietnamese shop words, no brands): text fitted to the board; vertical = one letter per
+ *  line down a tall narrow board (the stacked biển dọc of the Old Quarter). */
+function textSign(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, ground: string, ink: string, text: string, vertical = false, small?: string) {
   paint(ctx, ground, A_TRIM, rect(x, y, w, h));
+  paint(ctx, ink, A_TRIM, rect(x + 3, y + 3, w - 6, 2)); // thin border line
+  paint(ctx, ink, A_TRIM, rect(x + 3, y + h - 5, w - 6, 2));
+  ctx.save();
+  ctx.globalAlpha = A_TRIM;
+  ctx.fillStyle = ink;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   if (vertical) {
-    for (let yy = y + 10; yy < y + h - 14; yy += 20) paint(ctx, text, A_TRIM, rect(x + w * 0.2, yy, w * 0.6, 11));
+    const chars = [...text.replace(/ /g, '')];
+    const step = (h - 12) / chars.length;
+    ctx.font = `bold ${Math.min(step * 0.85, w * 0.8)}px ${SIGN_FONT}`;
+    chars.forEach((ch, i) => ctx.fillText(ch, x + w / 2, y + 6 + step * (i + 0.55)));
   } else {
-    paint(ctx, text, A_TRIM, rect(x + w * 0.08, y + h * 0.28, w * 0.5, h * 0.2));
-    paint(ctx, text, A_TRIM, rect(x + w * 0.64, y + h * 0.28, w * 0.26, h * 0.2));
-    paint(ctx, text, A_TRIM, rect(x + w * 0.22, y + h * 0.62, w * 0.56, h * 0.1));
+    const big = small ? h * 0.5 : h * 0.68;
+    ctx.font = `bold ${big}px ${SIGN_FONT}`;
+    const k = Math.min(1, (w * 0.9) / ctx.measureText(text).width);
+    ctx.setTransform(k, 0, 0, 1, x + w / 2 - k * (x + w / 2), 0);
+    ctx.fillText(text, x + w / 2, y + (small ? h * 0.38 : h * 0.54));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (small) {
+      ctx.font = `bold ${h * 0.2}px ${SIGN_FONT}`;
+      ctx.fillText(small, x + w / 2, y + h * 0.78);
+    }
   }
+  ctx.restore();
+}
+
+/** Vietnamese flag (red, yellow five-point star) on a short bracket pole leaning out of the wall at (x, y). */
+function vnFlag(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
+  paint(ctx, '#3a3a38', A_TRIM, (q) => { q.moveTo(x, y); q.lineTo(x + s * 0.9, y - s * 0.5); q.lineTo(x + s * 0.9 + 3, y - s * 0.5 + 3); q.lineTo(x + 3, y + 3); q.closePath(); });
+  const [fx, fy, fw, fh] = [x + s * 0.12, y - s * 0.46, s * 0.8, s * 0.54];
+  paint(ctx, '#d42a1e', A_TRIM, (q) => { q.moveTo(fx, fy + fw * 0.12); q.lineTo(fx + fw, fy); q.lineTo(fx + fw, fy + fh); q.lineTo(fx, fy + fh + fw * 0.12); q.closePath(); });
+  const [cx, cy, r] = [fx + fw / 2, fy + fh / 2 + fw * 0.06, fh * 0.32];
+  paint(ctx, '#f6d824', A_TRIM, (q) => {
+    for (let k = 0; k < 10; k++) {
+      const a = -Math.PI / 2 + (k * Math.PI) / 5;
+      const rr = k % 2 ? r * 0.4 : r;
+      if (k) q.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a));
+      else q.moveTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a));
+    }
+    q.closePath();
+  });
+}
+
+/** A string of small triangular pennants (cờ dây: red / yellow) sagging from x0 to x1 at y. */
+function bunting(ctx: CanvasRenderingContext2D, x0: number, x1: number, y: number) {
+  paint(ctx, '#55524c', A_TRIM, rect(x0, y, x1 - x0, 2));
+  for (let x = x0 + 4, k = 0; x < x1 - 14; x += 18, k++) {
+    const sag = 6 * Math.sin((Math.PI * (x - x0)) / (x1 - x0));
+    paint(ctx, k % 3 === 2 ? '#f2d02a' : '#d42a1e', A_TRIM, (q) => { q.moveTo(x, y + sag); q.lineTo(x + 13, y + sag); q.lineTo(x + 6.5, y + sag + 15); q.closePath(); });
+  }
+}
+
+/** Green louvred timber door / tall shutter pair (cửa chớp), closed or one leaf open onto dark glass. */
+function louvreDoors(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, green: string, dark: string, open: boolean, rand: () => number) {
+  paint(ctx, '#ece5d2', A_TRIM, rect(x - 10, y - 10, w + 20, h + 10)); // moulded surround
+  paint(ctx, '#ece5d2', A_TRIM, rect(x - 16, y - 18, w + 32, 9)); // cornice over the opening
+  glass(ctx, x, y, w, h, rand, [-4, 6, 8]);
+  shutter(ctx, x, y, w / 2 - 1, h, green, dark);
+  if (open) paint(ctx, dark, A_TRIM, rect(x + w / 2 + 1, y, 3, h));
+  else shutter(ctx, x + w / 2 + 1, y, w / 2 - 1, h, green, dark);
+  paint(ctx, dark, A_TRIM, rect(x, y + h * 0.5, w, 3)); // mid rail
 }
 
 /** Rain streaks, black-green mould blotches and a grime band above the floor slab (tinted wall: alpha stays). */
@@ -839,7 +927,7 @@ function weather(ctx: CanvasRenderingContext2D, x0: number, y0: number, S: numbe
  *  margin at x = 0 (PLAIN_WALL_UV). */
 function wallCanvas() {
   const S = 256;
-  const [COLS, ROWS] = [8, 4];
+  const [COLS, ROWS] = [WALL_COLS, 4];
   const [W, H] = [COLS * S, ROWS * S];
   const [c, ctx] = canvas(W, H);
   const rand = rng(11);
@@ -872,6 +960,7 @@ function wallCanvas() {
       if (floor === 2) shutter(ctx, wx + ww / 2, wy - 4, sw, wh + 4, g, gd); // half closed
       else shutter(ctx, wx + ww + 9, wy - 4, sw, wh + 4, g, gd);
       grille(ctx, wx - 12, wy + wh * 0.66, ww + 24, wh * 0.34, iron);
+      if (floor === 0) vnFlag(ctx, x0 + S * 0.04, y0 + S * 0.5, S * 0.32);
     }
     // 1: balcony with an iron grille, glass door, AC; vertical sign over floors 0–1 on the left edge
     {
@@ -887,7 +976,7 @@ function wallCanvas() {
       ctx.fillRect(bx, y0 + S * 0.78 + 12, bw, 9);
       grille(ctx, bx, y0 + S * 0.5, bw, S * 0.28, iron);
       if (floor !== 1) acUnit(ctx, x0 + S * 0.84, y0 + S * 0.2 + (floor % 2) * 20, S * 0.12, S * 0.09);
-      if (floor === 1) sign(ctx, x0 + S * 0.02, y0 + S * 0.08, S * 0.17, 2 * S - S * 0.14, '#c23a2e', '#f6e9b8', true);
+      if (floor === 1) textSign(ctx, x0 + S * 0.02, y0 + S * 0.08, S * 0.17, 2 * S - S * 0.14, '#c23a2e', '#f6e9b8', 'NHÀ NGHỈ', true);
     }
     // 2: chuồng cọp cage (green / grey bars) over a recessed front with laundry, untinted plaster
     {
@@ -932,7 +1021,8 @@ function wallCanvas() {
       if (floor % 2 === 0) paint(ctx, '#d9d2c0', A_GLASS, rect(wx + 6, wy + 6, ww * 0.3, wh - 12));
       sunshade(ctx, wx - 16, wy - 24, ww + 32);
       if (floor !== 3) acUnit(ctx, x0 + S * 0.8, y0 + S * 0.56, S * 0.14, S * 0.1);
-      if (floor === 0) sign(ctx, x0 + S * 0.08, y0 + S * 0.03, S * 0.84, S * 0.17, '#2a5ea6', '#f2d24a', false);
+      if (floor === 0) textSign(ctx, x0 + S * 0.08, y0 + S * 0.03, S * 0.84, S * 0.17, '#2a5ea6', '#f2d24a', 'MAY ĐO');
+      if (floor === 1) bunting(ctx, x0, x0 + S, y0 + S * 0.9);
     }
     // 5: balcony with a solid balustrade and plants, brown-framed window, untinted pale pink plaster
     {
@@ -1005,6 +1095,125 @@ function wallCanvas() {
       paint(ctx, white, A_TRIM, rect(bx, y0 + S * 0.8, bw, 5));
       for (let xx = bx + 6; xx < bx + bw - 4; xx += 14) paint(ctx, white, A_TRIM, (q) => q.ellipse(xx + 4, y0 + S * 0.74, 5, 10, 0, 0, Math.PI * 2));
       if (floor === 2) acUnit(ctx, x0 + S * 0.04, y0 + S * 0.2, S * 0.11, S * 0.08);
+    }
+    // 8: nhà phố Pháp cũ (Bà Triệu 174–176): tall green louvred doors in a moulded surround, a shallow iron balcony with a
+    // green geometric panel, VN flag on a bracket (floor 0), heavy stains (tinted ochre / cream)
+    {
+      const x0 = 8 * S;
+      const [g, gd] = floor % 2 ? ['#2f6450', '#20483a'] : ['#3a6e5a', '#284f40'];
+      louvreDoors(ctx, x0 + S * 0.3, y0 + S * 0.1, S * 0.4, S * 0.74, g, gd, floor === 1, rand);
+      paint(ctx, '#d6d0c2', A_TRIM, rect(x0 + S * 0.18, y0 + S * 0.84, S * 0.64, 10)); // balcony slab
+      ctx.fillStyle = 'rgba(40,35,30,0.3)';
+      ctx.fillRect(x0 + S * 0.18, y0 + S * 0.84 + 10, S * 0.64, 10);
+      grille(ctx, x0 + S * 0.18, y0 + S * 0.58, S * 0.64, S * 0.26, '#2c4a3a', 8);
+      paint(ctx, '#2c4a3a', A_TRIM, (q) => { const [cx, cy] = [x0 + S * 0.5, y0 + S * 0.71]; q.moveTo(cx - 22, cy); q.lineTo(cx, cy - 22); q.lineTo(cx + 22, cy); q.lineTo(cx, cy + 22); q.closePath(); });
+      for (const px of [0.04, 0.9]) paint(ctx, '#ece5d2', A_TRIM, rect(x0 + S * px, y0, S * 0.06, S)); // pilasters
+      if (floor === 0) vnFlag(ctx, x0 + S * 0.05, y0 + S * 0.42, S * 0.3);
+      ctx.fillStyle = 'rgba(45,40,30,0.12)'; // extra streaking under the balcony
+      for (let k = 0; k < 4; k++) ctx.fillRect(x0 + S * (0.2 + 0.18 * k), y0 + S * 0.95, 5, S * 0.3 * rand());
+    }
+    // 9: nhà phố Pháp cũ: curved balcony with a solid cream parapet and a green wrought-iron insert, glazed door with an ornate
+    // grille between two green shutters, potted plants; old timber windows with yellow-green frames on floor 3
+    {
+      const x0 = 9 * S;
+      if (floor === 3) {
+        for (const wx of [0.12, 0.55]) {
+          paint(ctx, '#b8b24a', A_TRIM, rect(x0 + S * wx, y0 + S * 0.25, S * 0.33, S * 0.5));
+          glass(ctx, x0 + S * wx + 6, y0 + S * 0.25 + 6, S * 0.33 - 12, S * 0.5 - 12, rand, [-4, 6, 8]);
+          paint(ctx, '#b8b24a', A_TRIM, rect(x0 + S * (wx + 0.16), y0 + S * 0.25, 4, S * 0.5));
+          paint(ctx, '#b8b24a', A_TRIM, rect(x0 + S * wx, y0 + S * 0.42, S * 0.33, 4));
+        }
+        paint(ctx, '#ece5d2', A_TRIM, rect(x0, y0 + S * 0.08, S, 14)); // deep cornice
+      } else {
+        const [wx, ww, wy, wh] = [x0 + S * 0.38, S * 0.24, y0 + S * 0.1, S * 0.72];
+        paint(ctx, '#ece5d2', A_TRIM, rect(wx - 8, wy - 8, ww + 16, wh + 8));
+        glass(ctx, wx, wy, ww, wh, rand, [-4, 6, 8]);
+        for (let yy = wy + 6; yy < wy + wh * 0.5; yy += 14) paint(ctx, '#2a3a30', A_TRIM, (q) => q.arc(wx + ww / 2, yy + 6, 6, 0, Math.PI * 2)); // ornate grille
+        paint(ctx, '#2a3a30', A_TRIM, rect(wx + ww / 2 - 1, wy, 2, wh));
+        shutter(ctx, x0 + S * 0.12, wy, S * 0.2, wh, '#2f6a58', '#204a3e');
+        shutter(ctx, x0 + S * 0.68, wy, S * 0.2, wh, '#2f6a58', '#204a3e');
+        const by = y0 + S * 0.6;
+        paint(ctx, '#e8e0cc', A_TRIM, (q) => { q.moveTo(x0 + S * 0.06, by); q.quadraticCurveTo(x0 + S * 0.5, by - 18, x0 + S * 0.94, by); q.lineTo(x0 + S * 0.94, y0 + S * 0.86); q.lineTo(x0 + S * 0.06, y0 + S * 0.86); q.closePath(); });
+        grille(ctx, x0 + S * 0.36, by + 4, S * 0.28, S * 0.2, '#2c5a44', 7);
+        ctx.fillStyle = 'rgba(40,35,30,0.3)';
+        ctx.fillRect(x0 + S * 0.06, y0 + S * 0.86, S * 0.88, 10);
+        for (let k = 0; k < 3; k++) paint(ctx, k === 1 ? '#5f9a44' : '#4a7f3a', A_TRIM, (q) => q.ellipse(x0 + S * (0.16 + k * 0.34), by - 10, 14, 11, 0, 0, Math.PI * 2));
+      }
+    }
+    // 10: mặt phố mới (Bà Triệu, right side): dark grey patterned cladding (own colour), a glass ribbon, a big red banner sign
+    // on floor 0, a big flag banner on floor 1
+    {
+      const x0 = 10 * S;
+      paint(ctx, '#3b3d40', A_TRIM, rect(x0, y0, S, S));
+      for (let yy = y0 + 12; yy < y0 + S; yy += 26) for (let xx = x0 + 12 + ((yy / 26) % 2) * 13; xx < x0 + S; xx += 26) paint(ctx, '#55585c', A_TRIM, (q) => q.arc(xx, yy, 8, 0, Math.PI * 2));
+      if (floor === 0) textSign(ctx, x0 + S * 0.04, y0 + S * 0.1, S * 0.92, S * 0.62, '#c8201c', '#fff6e0', 'SALE 50%', false, 'THỜI TRANG');
+      else if (floor === 1) {
+        glass(ctx, x0 + S * 0.06, y0 + S * 0.12, S * 0.88, S * 0.64, rand, [-6, 4, 10]);
+        paint(ctx, '#d42a1e', A_TRIM, rect(x0 + S * 0.1, y0 + S * 0.16, S * 0.36, S * 0.5)); // flag banner in the glass
+        vnFlag(ctx, x0 + S * 0.08, y0 + S * 0.7, S * 0.42);
+      } else {
+        glass(ctx, x0 + S * 0.06, y0 + S * 0.2, S * 0.88, S * 0.5, rand, [-6, 4, 10]);
+        for (const mx of [0.36, 0.64]) paint(ctx, '#2a2c2e', A_TRIM, rect(x0 + S * mx, y0 + S * 0.2, 5, S * 0.5));
+      }
+    }
+    // 11: narrow old house squeezed between the new ones: stacked vertical signs (red / white / blue) on both edges, white
+    // aluminium windows, AC units; floor 3 = under renovation, black construction netting over scaffold poles
+    {
+      const x0 = 11 * S;
+      if (floor === 3) {
+        paint(ctx, '#1d1f21', A_TRIM, rect(x0, y0, S, S));
+        for (let xx = x0 + 6; xx < x0 + S; xx += 10) paint(ctx, '#2a2d30', A_TRIM, rect(xx, y0, 2, S));
+        for (const yy of [0.15, 0.55]) paint(ctx, '#6a6c6e', A_TRIM, rect(x0, y0 + S * yy, S, 4));
+      } else {
+        const [wx, ww, wy, wh] = [x0 + S * 0.3, S * 0.4, y0 + S * 0.22, S * 0.5];
+        paint(ctx, '#e8eaea', A_TRIM, rect(wx - 6, wy - 6, ww + 12, wh + 12));
+        glass(ctx, wx, wy, ww, wh, rand, [0, 8, 16]);
+        paint(ctx, '#e8eaea', A_TRIM, rect(wx + ww / 3, wy, 4, wh));
+        paint(ctx, '#e8eaea', A_TRIM, rect(wx + (2 * ww) / 3, wy, 4, wh));
+        acUnit(ctx, wx + ww * 0.15, wy + wh + 14, S * 0.14, S * 0.1);
+        if (floor === 1) textSign(ctx, x0 + S * 0.03, y0 + S * 0.05, S * 0.18, S * 0.9 + S, '#c8201c', '#ffffff', 'ĐIỆN THOẠI', true); // over floors 1 + 0
+        if (floor === 0) textSign(ctx, x0 + S * 0.79, y0 + S * 0.05, S * 0.18, S * 0.9, '#1f4fa0', '#ffffff', 'SIM SỐ', true);
+        if (floor === 2) textSign(ctx, x0 + S * 0.79, y0 + S * 0.1, S * 0.18, S * 0.8, '#f4f1ea', '#c8201c', 'NHA KHOA', true);
+      }
+    }
+    // 12: nhà mặt phố tân cổ điển (new neo-classical pastiche): white pilasters with capitals, pedimented window heads, a
+    // balustrade balcony, blue-tinted glass in white frames (tinted pastel plaster between)
+    {
+      const x0 = 12 * S;
+      const white = '#f6f3ec';
+      for (const px of [0, S - 18]) {
+        paint(ctx, white, A_TRIM, rect(x0 + px, y0, 18, S));
+        paint(ctx, '#e2ddd0', A_TRIM, rect(x0 + px - 3, y0 + S * 0.06, 24, 10)); // capital
+      }
+      const [wx, ww, wy, wh] = [x0 + S * 0.3, S * 0.4, y0 + S * 0.2, S * 0.58];
+      paint(ctx, white, A_TRIM, rect(wx - 10, wy - 10, ww + 20, wh + 10));
+      paint(ctx, white, A_TRIM, (q) => { q.moveTo(wx - 18, wy - 12); q.lineTo(wx + ww / 2, wy - 40); q.lineTo(wx + ww + 18, wy - 12); q.closePath(); }); // pediment
+      glass(ctx, wx, wy, ww, wh, rand, [-10, 10, 40]);
+      paint(ctx, white, A_TRIM, rect(wx + ww / 2 - 3, wy, 6, wh));
+      paint(ctx, white, A_TRIM, rect(x0 + S * 0.16, y0 + S * 0.66, S * 0.68, 6)); // balustrade
+      paint(ctx, white, A_TRIM, rect(x0 + S * 0.16, y0 + S * 0.86, S * 0.68, 8));
+      for (let xx = x0 + S * 0.18; xx < x0 + S * 0.82; xx += 13) paint(ctx, white, A_TRIM, (q) => q.ellipse(xx + 4, y0 + S * 0.77, 4.5, 10, 0, 0, Math.PI * 2));
+      if (floor === 2) paint(ctx, '#7b4a8a', A_TRIM, rect(x0 + S * 0.34, y0 + S * 0.68, 14, 30)); // a shirt on the rail
+    }
+    // 13: mid-century 5–7 storey block bay (Bà Triệu, left side): small paired windows with grey frames, an external iron
+    // fire-escape stair cage on the left, AC units, laundry on a cage balcony
+    {
+      const x0 = 13 * S;
+      paint(ctx, '#55595c', A_TRIM, rect(x0 + S * 0.02, y0, 4, S)); // stair cage posts + diagonal flight
+      paint(ctx, '#55595c', A_TRIM, rect(x0 + S * 0.24, y0, 4, S));
+      for (let yy = y0 + 10; yy < y0 + S; yy += 22) paint(ctx, '#55595c', A_TRIM, rect(x0 + S * 0.02, yy, S * 0.23, 2));
+      paint(ctx, '#3e4245', A_TRIM, (q) => { q.moveTo(x0 + S * 0.03, y0 + S * 0.92); q.lineTo(x0 + S * 0.24, y0 + S * 0.42); q.lineTo(x0 + S * 0.24, y0 + S * 0.48); q.lineTo(x0 + S * 0.05, y0 + S * 0.96); q.closePath(); });
+      for (const wx of [0.34, 0.66]) {
+        paint(ctx, '#8d9196', A_TRIM, rect(x0 + S * wx - 4, y0 + S * 0.26 - 4, S * 0.24 + 8, S * 0.4 + 8));
+        glass(ctx, x0 + S * wx, y0 + S * 0.26, S * 0.24, S * 0.4, rand, [0, 8, 16]);
+        paint(ctx, '#8d9196', A_TRIM, rect(x0 + S * (wx + 0.12) - 2, y0 + S * 0.26, 4, S * 0.4));
+      }
+      sunshade(ctx, x0 + S * 0.3, y0 + S * 0.18, S * 0.66);
+      acUnit(ctx, x0 + S * (floor % 2 ? 0.36 : 0.7), y0 + S * 0.72, S * 0.14, S * 0.1);
+      if (floor % 2) {
+        paint(ctx, '#777', A_TRIM, rect(x0 + S * 0.32, y0 + S * 0.7, S * 0.6, 2));
+        for (let k = 0; k < 3; k++) paint(ctx, ['#d04a4a', '#f0f0ec', '#4a6fd0'][k]!, A_TRIM, rect(x0 + S * (0.55 + k * 0.12), y0 + S * 0.71, 13, 22));
+      }
     }
   }
   paint(ctx, '#5a5d60', A_TRIM, rect(4 * S + S * 0.955, 0, 6, H)); // drain pipe down column 4
@@ -1101,65 +1310,133 @@ function curtainCanvas() {
   return c;
 }
 
-/** 4 Hà Nội shop fronts, full band height (4.5 m), ground at the bottom: narrow plaster piers (masked tint) with a plinth, a
- *  sign board the full plot width (saturated ground, white / yellow lettering bars, no text) over a rolled-up shutter box,
- *  then the opening: 0 open, shelves of goods inside; 1 open under a striped tarpaulin awning, glass door; 2 closed
- *  corrugated roller shutter (cửa cuốn); 3 open, shutter half down, goods on a table. Interiors are glass alpha (night glow). */
+/** SHOP_COLS Hà Nội shop fronts (one 3 m bay each), full band height (4.5 m), ground at the bottom: narrow plaster piers (masked
+ *  tint) with a plinth, a sign board with real Vietnamese shop words (no brands) over a rolled-up shutter box, then the
+ *  opening: 0 phở (counter, glass cabinet, plastic stools), 1 tạp hoá (goods, striped awning), 2 closed corrugated roller
+ *  shutter (cửa cuốn) with stencilled ads, 3 nhà phố Pháp: tall green timber doors with iron-grille transoms, no board,
+ *  4 modern glass fashion shop (black steel frames, mannequins, sale sticker), 5 cà phê (low stools, open), 6 nhà thuốc
+ *  (green cross, glass doors, bright shelves), 7 sửa xe (tyres, half shutter). Interiors are glass alpha (night glow). */
+const SHOP_COLS = 8;
 function shopCanvas() {
   const W = 256;
   const H = 384;
-  const [c, ctx] = canvas(4 * W, H);
+  const [c, ctx] = canvas(SHOP_COLS * W, H);
   const rand = rng(23);
   ctx.fillStyle = '#efece6';
-  ctx.fillRect(0, 0, 4 * W, H);
-  speckle(ctx, 4 * W, H, 500, rand);
-  const boards = [['#c8322a', '#fbf3dc'], ['#1f5fa8', '#f7f0d4'], ['#e2b52c', '#c0271f'], ['#2a8a4a', '#fbf7e8']]; // red, blue, yellow, green
+  ctx.fillRect(0, 0, SHOP_COLS * W, H);
+  speckle(ctx, SHOP_COLS * W, H, 900, rand);
   const goods = ['#b85a50', '#5a6fa8', '#c9ad58', '#7a9a68', '#d9d6cc', '#c08a5a', '#8a7aa0', '#a09a8a'];
-  for (let k = 0; k < 4; k++) {
+  const boards: [string, string, string, string?][] = [
+    ['#c8201c', '#f8e05a', 'PHỞ BÒ', 'GIA TRUYỀN'], ['#1f5fa8', '#ffffff', 'TẠP HOÁ'], ['#e2b52c', '#b0201a', 'CẮT TÓC', 'GỘI ĐẦU'], ['', '', ''],
+    ['#1b1c1e', '#f2f2f2', 'THỜI TRANG'], ['#5a3a26', '#f4e3c0', 'CÀ PHÊ', 'GIẢI KHÁT'], ['#1f8a4c', '#ffffff', 'NHÀ THUỐC'], ['#f2d22a', '#1d3f8a', 'SỬA XE', 'RỬA XE MÁY'],
+  ];
+  const [oy, oh] = [H * 0.28, H * 0.66];
+  const interior = (fx: number, fw: number, top = '#6e6250', bottom = '#2f2a24') => {
+    const gr = ctx.createLinearGradient(0, oy, 0, oy + oh);
+    gr.addColorStop(0, top);
+    gr.addColorStop(1, bottom);
+    paint(ctx, gr, A_GLASS, rect(fx + 4, oy, fw - 8, oh));
+  };
+  const stool = (x: number, colour: string, hgt = 26) => {
+    paint(ctx, colour, A_TRIM, rect(x, H * 0.94 - hgt, 22, 5));
+    paint(ctx, colour, A_TRIM, (q) => { q.moveTo(x + 2, H * 0.94 - hgt + 5); q.lineTo(x + 20, H * 0.94 - hgt + 5); q.lineTo(x + 22, H * 0.94); q.lineTo(x, H * 0.94); q.closePath(); });
+    paint(ctx, 'rgba(0,0,0,0.25)', A_TRIM, rect(x + 6, H * 0.94 - hgt + 10, 10, hgt - 10));
+  };
+  const rollerShutter = (fx: number, fw: number, y: number, h: number) => {
+    paint(ctx, '#8a949c', A_TRIM, rect(fx + 2, y, fw - 4, h));
+    for (let yy = y + 3; yy < y + h; yy += 7) paint(ctx, '#6f7a84', A_TRIM, rect(fx + 2, yy, fw - 4, 2));
+  };
+  for (let k = 0; k < SHOP_COLS; k++) {
     const x0 = k * W;
     const [fx, fw] = [x0 + W * 0.04, W * 0.92];
-    sign(ctx, fx - 4, H * 0.02, fw + 8, H * 0.2, boards[k]![0]!, boards[k]![1]!, false);
-    paint(ctx, '#6d7175', A_TRIM, rect(fx - 2, H * 0.22, fw + 4, H * 0.06)); // rolled shutter box
-    paint(ctx, '#55595c', A_TRIM, rect(fx - 2, H * 0.27, fw + 4, 3));
-    const [oy, oh] = [H * 0.28, H * 0.66];
-    if (k === 2) { // closed corrugated roller shutter, a wicket door
-      paint(ctx, '#8a949c', A_TRIM, rect(fx + 2, oy, fw - 4, oh));
-      for (let y = oy + 3; y < oy + oh; y += 7) paint(ctx, '#6f7a84', A_TRIM, rect(fx + 2, y, fw - 4, 2));
-      paint(ctx, '#5f6870', A_TRIM, rect(fx + fw * 0.62, oy + oh * 0.3, fw * 0.3, oh * 0.7));
-      ctx.fillStyle = 'rgba(40,35,30,0.25)';
-      ctx.fillRect(fx + 2, oy + oh, fw - 4, 5);
-      continue;
+    const [ground, ink, text, small] = boards[k]!;
+    if (text) textSign(ctx, fx - 4, H * 0.02, fw + 8, H * 0.2, ground, ink, text, false, small);
+    if (k !== 3) {
+      paint(ctx, '#6d7175', A_TRIM, rect(fx - 2, H * 0.22, fw + 4, H * 0.06)); // rolled shutter box
+      paint(ctx, '#55595c', A_TRIM, rect(fx - 2, H * 0.27, fw + 4, 3));
     }
-    // open front: dim interior, shelf lines, goods
-    const gr = ctx.createLinearGradient(0, oy, 0, oy + oh);
-    gr.addColorStop(0, '#6e6250');
-    gr.addColorStop(1, '#2f2a24');
-    paint(ctx, gr, A_GLASS, rect(fx + 4, oy, fw - 8, oh));
-    for (let y = oy + oh * 0.3; y < oy + oh * 0.9; y += oh * 0.2) paint(ctx, '#9a8a6a', A_GLASS, rect(fx + 10, y, fw - 20, 3)); // shelves
-    for (let y = oy + oh * 0.3 - 22; y < oy + oh * 0.9; y += oh * 0.2) { // goods on each shelf
-      for (let x = fx + 14; x < fx + fw - 24; x += 18 + rand() * 14) paint(ctx, goods[Math.floor(rand() * goods.length)]!, A_GLASS, rect(x, y + rand() * 4, 9 + rand() * 10, 14 + rand() * 7));
-    }
-    if (k === 1) { // striped tarpaulin awning + a glass door on the right
+    if (k === 0) { // phở: dim open front, steel counter + glass cabinet, stools out front
+      interior(fx, fw);
+      paint(ctx, '#c9ccd0', A_TRIM, rect(fx + fw * 0.08, oy + oh * 0.55, fw * 0.4, oh * 0.38));
+      paint(ctx, '#9fb8c0', A_GLASS, rect(fx + fw * 0.1, oy + oh * 0.4, fw * 0.36, oh * 0.15));
+      paint(ctx, '#e8e2d0', A_TRIM, rect(fx + fw * 0.13, oy + oh * 0.45, fw * 0.08, oh * 0.08)); // noodles / bowls
+      paint(ctx, '#b02a20', A_TRIM, (q) => q.arc(fx + fw * 0.7, oy + oh * 0.3, 10, 0, Math.PI * 2)); // a lantern
+      for (const [sx, cl] of [[0.55, '#2f6fd0'], [0.72, '#d43a30'], [0.86, '#2f6fd0']] as const) stool(fx + fw * sx, cl);
+    } else if (k === 1) { // tạp hoá: goods on shelves, crates out front, striped awning
+      interior(fx, fw);
+      for (let y = oy + oh * 0.3; y < oy + oh * 0.9; y += oh * 0.2) paint(ctx, '#9a8a6a', A_GLASS, rect(fx + 10, y, fw - 20, 3));
+      for (let y = oy + oh * 0.3 - 22; y < oy + oh * 0.9; y += oh * 0.2) {
+        for (let x = fx + 14; x < fx + fw - 24; x += 16 + rand() * 18) paint(ctx, goods[Math.floor(rand() * goods.length)]!, A_GLASS, rect(x, y + rand() * 4, 8 + rand() * 12, 12 + rand() * 9));
+      }
       for (let i = 0; i < 10; i++) paint(ctx, i % 2 ? '#eef0ee' : '#2f6fb0', A_TRIM, rect(fx + (i * fw) / 10, H * 0.26, fw / 10 + 1, H * 0.09));
-      ctx.fillStyle = 'rgba(20,20,30,0.3)';
-      ctx.fillRect(fx, H * 0.35, fw, 8);
-      paint(ctx, '#c9ccd0', A_TRIM, rect(fx + fw * 0.68, oy + oh * 0.2, 5, oh * 0.8)); // door frame
-      paint(ctx, '#c9ccd0', A_TRIM, rect(fx + fw * 0.68, oy + oh * 0.2, fw * 0.3, 5));
+      paint(ctx, '#c8a050', A_TRIM, rect(fx + fw * 0.05, H * 0.8, fw * 0.3, H * 0.14)); // crates
+      paint(ctx, '#3a8a50', A_TRIM, rect(fx + fw * 0.38, H * 0.84, fw * 0.18, H * 0.1));
+    } else if (k === 2) { // closed roller shutter, wicket door, stencilled ad
+      rollerShutter(fx, fw, oy, oh);
+      paint(ctx, '#5f6870', A_TRIM, rect(fx + fw * 0.62, oy + oh * 0.3, fw * 0.3, oh * 0.7));
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = `bold 15px ${SIGN_FONT}`;
+      ctx.fillText('KHOAN CẮT', fx + 12, oy + oh * 0.3);
+      ctx.fillText('BÊ TÔNG', fx + 18, oy + oh * 0.3 + 18);
+      ctx.restore();
+    } else if (k === 3) { // nhà phố Pháp ground floor: tall green double doors, grille transom, moulded piers, plaque
+      paint(ctx, '#ece5d2', A_TRIM, rect(fx + fw * 0.12, H * 0.08, fw * 0.76, H * 0.86));
+      const [dx, dw, dy, dh] = [fx + fw * 0.18, fw * 0.64, H * 0.14, H * 0.8];
+      glass(ctx, dx, dy, dw, dh * 0.22, rand, [-4, 6, 8]);
+      for (let x = dx + 6; x < dx + dw; x += 12) paint(ctx, '#244a38', A_TRIM, rect(x, dy, 3, dh * 0.22)); // transom grille
+      for (const half of [0, 1]) {
+        const hx = dx + half * (dw / 2) + 2;
+        paint(ctx, '#2f6a50', A_TRIM, rect(hx, dy + dh * 0.24, dw / 2 - 4, dh * 0.76));
+        paint(ctx, '#244a38', A_TRIM, rect(hx + 8, dy + dh * 0.3, dw / 2 - 20, dh * 0.28)); // panels
+        paint(ctx, '#244a38', A_TRIM, rect(hx + 8, dy + dh * 0.64, dw / 2 - 20, dh * 0.28));
+      }
+      paint(ctx, '#d42a1e', A_TRIM, rect(fx + fw * 0.02, H * 0.3, fw * 0.08, H * 0.3)); // red banner at the door
+      paint(ctx, '#f6d824', A_TRIM, (q) => q.arc(fx + fw * 0.06, H * 0.38, 6, 0, Math.PI * 2));
+      paint(ctx, '#d8d0b8', A_TRIM, rect(fx + fw * 0.4, H * 0.02, fw * 0.2, H * 0.05)); // stucco plaque
+    } else if (k === 4) { // modern glass shop: black steel frame, bright interior, mannequins, sale sticker
+      paint(ctx, '#1c1d1f', A_TRIM, rect(fx, oy - 4, fw, oh + 4));
+      interior(fx + 6, fw - 12, '#e8e2d8', '#a8a29a');
+      for (const mx of [0.25, 0.5, 0.75]) {
+        const cx = fx + fw * mx;
+        paint(ctx, '#f0ece6', A_TRIM, (q) => q.arc(cx, oy + oh * 0.2, 7, 0, Math.PI * 2));
+        paint(ctx, mx === 0.5 ? '#b03030' : '#3a3a3a', A_TRIM, rect(cx - 12, oy + oh * 0.26, 24, oh * 0.4));
+        paint(ctx, '#2a2a2a', A_TRIM, rect(cx - 2, oy + oh * 0.66, 4, oh * 0.28));
+      }
+      paint(ctx, '#1c1d1f', A_TRIM, rect(fx + fw * 0.5 - 3, oy, 6, oh));
+      paint(ctx, '#e8261e', A_TRIM, rect(fx + fw * 0.06, oy + oh * 0.05, 40, 22));
+    } else if (k === 5) { // cà phê: open front, menu board, low stools / tables on the pavement
+      interior(fx, fw, '#7a5e44', '#2e241c');
+      paint(ctx, '#2a2a2a', A_TRIM, rect(fx + fw * 0.08, oy + oh * 0.1, fw * 0.26, oh * 0.36)); // menu board
+      for (let y = oy + oh * 0.16; y < oy + oh * 0.42; y += 10) paint(ctx, '#e8e2d0', A_TRIM, rect(fx + fw * 0.1, y, fw * 0.18, 2));
+      paint(ctx, '#f4d58a', A_TRIM, (q) => q.arc(fx + fw * 0.6, oy + 16, 8, 0, Math.PI * 2)); // bulb
+      for (const [sx, cl, hg] of [[0.1, '#2f6fd0', 22], [0.3, '#d43a30', 34], [0.5, '#2f6fd0', 22], [0.72, '#e2b52c', 22]] as const) stool(fx + fw * sx, cl, hg);
+    } else if (k === 6) { // nhà thuốc: green cross, glass doors, bright shelves
+      interior(fx, fw, '#f2f4f0', '#c8ccc4');
+      for (let y = oy + oh * 0.2; y < oy + oh * 0.8; y += oh * 0.15) {
+        paint(ctx, '#9aa4a0', A_GLASS, rect(fx + 10, y, fw - 20, 3));
+        for (let x = fx + 14; x < fx + fw - 20; x += 12 + rand() * 8) paint(ctx, ['#ffffff', '#e04040', '#4a8ad0', '#40a060'][Math.floor(rand() * 4)]!, A_GLASS, rect(x, y - 14, 7, 13));
+      }
+      paint(ctx, '#c9ccd0', A_TRIM, rect(fx + fw * 0.5 - 3, oy, 6, oh));
+      paint(ctx, '#20a050', A_TRIM, rect(fx + fw * 0.82 - 6, H * 0.04, 12, H * 0.16)); // green cross on the board
+      paint(ctx, '#20a050', A_TRIM, rect(fx + fw * 0.82 - 30, H * 0.12 - 6, 60, 12));
+    } else { // sửa xe: half shutter, dark workshop, tyres, a bike stand
+      interior(fx, fw, '#4e4a44', '#1e1c1a');
+      rollerShutter(fx, fw, oy, oh * 0.3);
+      for (const [tx, ty] of [[0.15, 0.5], [0.3, 0.45], [0.82, 0.55]] as const) {
+        paint(ctx, '#151515', A_TRIM, (q) => q.arc(fx + fw * tx, oy + oh * ty, 18, 0, Math.PI * 2));
+        paint(ctx, '#4e4a44', A_GLASS, (q) => q.arc(fx + fw * tx, oy + oh * ty, 9, 0, Math.PI * 2));
+      }
+      paint(ctx, '#c03028', A_TRIM, rect(fx + fw * 0.45, oy + oh * 0.7, fw * 0.3, oh * 0.14)); // a scooter body in the door
+      paint(ctx, '#151515', A_TRIM, (q) => q.arc(fx + fw * 0.48, oy + oh * 0.9, 12, 0, Math.PI * 2));
+      paint(ctx, '#151515', A_TRIM, (q) => q.arc(fx + fw * 0.72, oy + oh * 0.9, 12, 0, Math.PI * 2));
     }
-    if (k === 3) { // shutter half down, a table of goods in front
-      paint(ctx, '#8a949c', A_TRIM, rect(fx + 2, oy, fw - 4, oh * 0.32));
-      for (let y = oy + 3; y < oy + oh * 0.32; y += 7) paint(ctx, '#6f7a84', A_TRIM, rect(fx + 2, y, fw - 4, 2));
-      paint(ctx, '#c9a66a', A_TRIM, rect(fx + fw * 0.1, oy + oh * 0.7, fw * 0.5, 4));
-      for (let x = fx + fw * 0.12; x < fx + fw * 0.58; x += 14) paint(ctx, goods[Math.floor(rand() * goods.length)]!, A_TRIM, rect(x, oy + oh * 0.7 - 16, 10, 16));
-      paint(ctx, '#8a6a46', A_TRIM, rect(fx + fw * 0.12, oy + oh * 0.7 + 4, 4, oh * 0.28));
-      paint(ctx, '#8a6a46', A_TRIM, rect(fx + fw * 0.56, oy + oh * 0.7 + 4, 4, oh * 0.28));
-    }
-    if (k === 0) acUnit(ctx, fx + fw * 0.78, H * 0.3, W * 0.14, W * 0.1);
   }
   ctx.fillStyle = 'rgba(70,60,50,0.45)'; // plinth
-  ctx.fillRect(0, H * 0.94, 4 * W, H * 0.06);
+  ctx.fillRect(0, H * 0.94, SHOP_COLS * W, H * 0.06);
   ctx.fillStyle = 'rgba(60,50,40,0.3)'; // slab shadow over the band
-  ctx.fillRect(0, 0, 4 * W, 6);
+  ctx.fillRect(0, 0, SHOP_COLS * W, 6);
   return c;
 }
 
@@ -1238,10 +1515,10 @@ function facadeMaterial(map: THREE.Texture, masked: boolean, roughness: number, 
 export function createBuildingMaterials(): Partial<Record<MaterialId, THREE.Material>> {
   const { limestone, zinc, iron } = B.colours;
   return {
-    wall: facadeMaterial(texture(wallCanvas(), false, [1 / 8, 0.25]), true, 0.9),
+    wall: facadeMaterial(texture(wallCanvas(), false, [1 / WALL_COLS, 0.25]), true, 0.9),
     tenement: facadeMaterial(texture(tenementCanvas(), false, [0.25, 0.5]), true, 0.85),
     curtain: facadeMaterial(texture(curtainCanvas(), false, [0.5, 0.5]), false, 0.25),
-    shopfront: facadeMaterial(texture(shopCanvas(), true, [0.25, 1]), true, 0.75, true),
+    shopfront: facadeMaterial(texture(shopCanvas(), true, [1 / SHOP_COLS, 1]), true, 0.75, true),
     roof: roofMaterial(zinc, limestone),
     balcony: new THREE.MeshStandardMaterial({
       map: texture(railingCanvas(iron), true),

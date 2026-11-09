@@ -37,11 +37,12 @@ const FIELD: Record<string, string> = {
   transport: 'phương tiện', destination: 'điểm đến', name: 'tên', lat: 'vĩ độ (lat)', lon: 'kinh độ (lon)', radius: 'bán kính',
   bikeParking: 'bãi xe', branches: 'nhánh', task: 'nhiệm vụ', description: 'mô tả', media: 'hình / liên kết', location: 'nơi làm nhiệm vụ',
   kind: 'kiểu nhiệm vụ', verification: 'cách xác nhận', answers: 'đáp án', proofInstruction: 'hướng dẫn gửi bài',
-  timeLimitMinutes: 'giới hạn thời gian (phút)', params: 'tham số mini-game', teaser: 'câu gợi ý', summary: 'mô tả ngắn', afterChoice: 'lời sau khi chọn', yawDeg: 'hướng nhìn (độ)',
+  timeLimitMinutes: 'giới hạn thời gian (phút)', params: 'tham số mini-game', teaser: 'câu gợi ý', summary: 'mô tả ngắn', afterChoice: 'lời sau khi chọn', look: 'kiểu vẽ nửa thẻ (look)', yawDeg: 'hướng nhìn (độ)',
   spreadMeters: 'khoảng rải đội (m)',
+  fixedBikes: 'xe cố định', count: 'số xe', spacing: 'khoảng cách xe (m)', rows: 'số hàng', angleDeg: 'hướng hàng xe (độ)',
   // Phase 8 (docs/plans/phase8.md D2)
   referenceAnswers: 'đáp án tham khảo (chỉ Host)', retryLockMinutes: 'phút khóa sau khi bị phạt', branchSwitchLockMinutes: 'phút khóa khi đổi nhánh',
-  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', pick: 'cách chọn đáp án (chọn ghế)', showMarks: 'tô xanh / đỏ từng ô', room: 'phòng (room)', total: 'tổng số món', penaltyMinutesEach: 'phút phạt mỗi món chưa xong', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
+  scoreOf: 'số phần để báo đúng x/n', scoreFromMinutes: 'phút bắt đầu báo đúng x/n', parts: 'các ô (thử thách nhiều ô)', pick: 'cách chọn đáp án (chọn ghế)', game: 'trò chơi trên thẻ', showMarks: 'tô xanh / đỏ từng ô', room: 'phòng (room)', total: 'tổng số món', penaltyMinutesEach: 'phút phạt mỗi món chưa xong', hostAlerts: 'cảnh báo cho Host', stuckMinutes: 'phút kẹt một thử thách', url: 'liên kết',
   walkOnlyViolationMinutes: 'phút phạt đi xe ở lộ trình đi bộ', quitTaskMinutes: 'phút phạt bỏ thử thách',
   // SPEC §17.22 / §17.23
   announce: 'thông báo về đích', npc: 'lời NPC dẫn chương trình', toast: 'thông báo nhanh', card: 'thẻ về đích', first: 'bản về nhất', out: 'bản bị loại',
@@ -208,6 +209,8 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
       blank(t.title, [...p, 'title'], 'tiêu đề nhiệm vụ');
       blank(t.description, [...p, 'description'], 'mô tả nhiệm vụ');
       if (t.showMarks && !(t.parts && t.parts.every((x) => x.answers))) add('error', [...p, 'showMarks'], 'tô xanh / đỏ từng ô (showMarks) cần thử thách nhiều ô mà MỌI ô có đáp án (máy chủ tự chấm)');
+      if ((t.game === 'sang-com' || t.game === 'nan-gom') && (t.verification !== 'auto' || t.kind !== 'answer' || t.parts || t.pick || t.room)) add('error', [...p, 'game'], `thử thách trò "${t.game}" tự xong khi đội thắng trò: dùng kiểu "answer", cách xác nhận "auto", không dùng parts / pick / room (không cần answers)`);
+      if (t.game === 'bong-goc-tuong' && (t.verification !== 'auto' || t.kind !== 'answer' || t.parts || t.pick || t.room || !t.answers.length)) add('error', [...p, 'game'], 'thử thách có trò chơi (game) do máy chủ tự chấm đáp án gõ trên thẻ: dùng kiểu "answer", cách xác nhận "auto", có "answers", không dùng parts / pick / room');
       if (t.pick) {
         if (t.verification !== 'auto' || t.kind !== 'answer' || t.parts) add('error', [...p, 'pick'], 'thử thách chọn ghế (pick) do máy chủ tự chấm: dùng kiểu "answer", cách xác nhận "auto", không dùng nhiều ô (parts)');
         if (s.type !== 'challenge' || !s.room) add('error', [...p, 'pick'], 'thử thách chọn ghế (pick) phải nằm trong phòng (room "hall") của một thử thách');
@@ -228,7 +231,7 @@ export function checkLeg(leg: Leg, geo?: LegGeo): LegIssue[] {
         if (t.verification !== 'host_approval') add('error', [...p, 'verification'], 'nhánh có phòng (room) do Host duyệt khi đội báo xong: phải dùng cách xác nhận "host_approval"');
         if (t.parts) add('error', [...p, 'room'], 'không dùng phòng (room) cùng thử thách nhiều ô (parts)');
       }
-      if (t.verification === 'auto' && t.kind !== 'free') blank(t.answers, [...p, 'answers'], 'đáp án (cách xác nhận "auto")');
+      if (t.verification === 'auto' && t.kind !== 'free' && t.game !== 'sang-com' && t.game !== 'nan-gom') blank(t.answers, [...p, 'answers'], 'đáp án (cách xác nhận "auto")');
       if (t.verification === 'auto' && t.kind === 'free') add('warning', [...p, 'kind'], 'nhiệm vụ "free" không tự chấm được: nên dùng cách xác nhận "host_approval"');
       // Phase 8 (gap 1): an answer typed in game + Host approval needs no proof instruction; a photo task (free) does. No
       // Host Facebook / Messenger link at all (SPEC §17.17: teams open Messenger outside the game)
@@ -404,6 +407,7 @@ function outsideMap(out: LegIssue[], leg: Leg) {
     if (s.type === 'challenge') pts.push([s.task.location, ['steps', i, 'task', 'location']], [s.task.location?.bikeParking, ['steps', i, 'task', 'location', 'bikeParking']]);
     if (s.type === 'detour') s.branches.forEach((b, k) => pts.push([b.task.location, ['steps', i, 'branches', k, 'task', 'location']], [b.task.location?.bikeParking, ['steps', i, 'branches', k, 'task', 'location', 'bikeParking']]));
   });
+  leg.vehicles.fixedBikes.forEach((f, k) => pts.push([f, ['vehicles', 'fixedBikes', k]]));
   for (const [p, path] of pts)
     if (p && !inBox(p)) out.push({ level: 'error', where: placeOf(leg, path), message: `(${p.lat}, ${p.lon}) nằm ngoài bản đồ đua (vĩ độ ${RACE_BBOX.south}–${RACE_BBOX.north}, kinh độ ${RACE_BBOX.west}–${RACE_BBOX.east})` });
 }

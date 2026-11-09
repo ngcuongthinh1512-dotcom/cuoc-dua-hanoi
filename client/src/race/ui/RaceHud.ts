@@ -13,7 +13,7 @@
 //  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box).
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
-import { FINISH_PENALTY_REASON, finishTexts, NET, type ClueCard, type FinishResult, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
+import { FINISH_PENALTY_REASON, finishTexts, NET, type BranchLook, type ClueCard, type FinishResult, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
 import { toast } from '../../ui/Toasts.ts';
 import { bookEntries, formatDuration, type BookEntry, branchConfirmText, type CardPanel, cardPanel, copyBlocked, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultKey, resultView, richText, splitNote, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
@@ -58,7 +58,7 @@ const ICONS = {
 };
 /** Leg 3 detour halves: inline line art, currentColor strokes (chocolate: bar + praline + cocoa pod; comic: three panels, a
  *  speech bubble, motion lines). Generic shapes only. */
-const ART = {
+const ART: Partial<Record<BranchLook, string>> = {
   choco: `<svg viewBox="0 0 240 90" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 <g transform="translate(12 14) rotate(-8)"><rect x="0" y="0" width="86" height="58" rx="5" fill="rgba(0,0,0,.25)"/>${[0, 1, 2].flatMap((r) => [0, 1, 2, 3].map((c) => `<rect x="${5 + c * 20}" y="${5 + r * 17}" width="16" height="13" rx="2.5" fill="rgba(255,255,255,.08)"/>`)).join('')}<path d="M86 14l6 4-6 10" fill="rgba(0,0,0,.3)"/></g>
 <g transform="translate(126 50)"><path d="M-22 18c-6-18 4-34 22-34s28 16 22 34z" fill="rgba(0,0,0,.25)"/><path d="M-18 18h36M-8-8c6 8 10 8 16 0" /><path d="M0-30c6-4 10-6 14-6" stroke-width="2.2"/><circle cx="2" cy="-22" r="3.5" fill="currentColor" stroke="none"/></g>
@@ -75,6 +75,18 @@ const icon = (k: keyof typeof ICONS, size = 18) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 
 /** Create an element; text goes in as textContent (server strings are never parsed as HTML). */
+/** Hà Nội T1 "Bóng trên góc tường": its password is always this many letters (the game's six found letters). */
+const GAME_LETTERS = 6;
+type Game = NonNullable<TaskView['game']>;
+/** task.game: the card's launch button + the iframe title. */
+const GAME_TITLE: Record<Game, { button: string; title: string }> = {
+  'bong-goc-tuong': { button: 'Chơi trò Bóng trên góc tường', title: 'Bóng trên góc tường' },
+  'sang-com': { button: 'Chơi game làm cốm', title: 'Game làm cốm' },
+  'nan-gom': { button: 'Chơi game làm gốm', title: 'Chơi game làm gốm' },
+};
+/** task.game whose win IS the answer (no box typed): the iframe's postMessage type. */
+const WIN_MSG: Partial<Record<Game, string>> = { 'sang-com': 'com.win', 'nan-gom': 'gom.win' };
+
 function el(tag: string, cls = '', text?: string, ...kids: (Node | null)[]): HTMLElement {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -317,6 +329,7 @@ export class RaceHud {
   update(f: RaceHudFrame): void {
     this.sim = f.simTime;
     this.now = f.serverNow + this.clockOffset;
+    this.tickGame();
     if (this.waitEl && this.waitUntil !== null) setTime(this.waitEl, this.now < this.waitUntil ? `Còn ${formatDuration(Math.ceil((this.waitUntil - this.now) / 1000) * 1000)} để biết thứ hạng` : 'Đang cập nhật thứ hạng…');
     if (this.zoneList.ticking) this.drawZone(); // a gone team's "n phút trước" moves with the clock (and expires), nothing else does
     this.bannerEl.classList.toggle('on', this.banner.text !== '' && this.banner.visible(f.simTime));
@@ -343,6 +356,7 @@ export class RaceHud {
 
   /** DEV, offline only (p7-* / p8-* presets): stand-in data from the URL (?card=route|detour|challenge|pit|teaser|answer|
    *  answer-pending|answer-locked|detour-choose|detour-chosen|detour-locked|branch-task|proof|media|media-off, ?full, ?book[=media],
+   *  ?look=com,gom (a detour card with the Hà Nội skins per branch),
    *  ?lock=<s left of a countdown>, ?startOrder=n, ?finish[=first|out|<n>] (the finish announcement, generic texts; &finishPenalty=<min> its finish-line penalty line), ?zone (two teams here + one that left 2 min 10 s ago),
    *  ?checkin=<s of penalty wait left>). The penalty row: ui/HUD.ts (?penalty). */
   demo(q: URLSearchParams): void {
@@ -351,8 +365,11 @@ export class RaceHud {
       this.clockOffset = this.now = DEMO_NOW; // the offline serverNow stays 0: every demo time is relative to this
       this.demoTeam = 'Đội Xanh';
       this.resolver = (n) => Promise.resolve(n === 'demo-off.jpg' ? null : DEMO_IMG);
-      const base = DEMO_CARDS[kind] ?? DEMO_CARDS.route!;
+      let base = DEMO_CARDS[kind] ?? DEMO_CARDS.route!;
       const lock = Number(q.get('lock') ?? NaN);
+      // ?look=com,gom: the Hà Nội skins on a detour stand-in (names like the Hà Nội leg's, no summary: pattern + name only)
+      const looks = q.get('look')?.split(',') as BranchLook[] | undefined;
+      if (looks && base.branches) base = { ...base, branches: base.branches.map((b, i) => ({ ...b, ...(looks[i] ? { look: looks[i], name: DEMO_LOOK_NAMES[looks[i]] ?? b.name, summary: '' } : {}) })) };
       const card = base.lockedUntil != null && Number.isFinite(lock) ? { ...base, lockedUntil: DEMO_NOW + lock * 1000 } : base;
       this.seenKey = q.has('full') ? '' : `${card.step}@${card.receivedAt}`; // no popup unless asked ('' = not seen: the localStorage mark of an earlier preset of the same run must not hide it)
       const wait = Number(q.get('checkin') ?? NaN);
@@ -399,6 +416,7 @@ export class RaceHud {
   }
 
   private close() {
+    this.closeGame();
     this.bookOpen = this.bookWaiting = this.resultOpen = false;
     this.fullCard = null;
     this.overlay.hidden = true;
@@ -518,7 +536,11 @@ export class RaceHud {
     }
     if (!pair) root.append(...[note, this.timerEl].filter((n) => n != null));
     if (p.accept) root.append((this.hot.primary = this.act('Nhận thử thách [Enter]', () => ((this.focusBox = true), this.actions.accept(card.step))))); // asked for the task: its answer box takes the keys
-    if (p.answerBox) root.append(this.answerRow(card));
+    if (p.answerBox) {
+      const game = card.task?.game ?? card.branches?.find((x) => x.id === card.branch)?.task?.game;
+      if (game && !entry) root.append(this.act(GAME_TITLE[game].button, () => (this.openGame(card, game), false), undefined, 'rc-game-btn')); // false: no lock, nothing sent
+      if (!(game && WIN_MSG[game])) root.append(game ? this.letterRow(card) : this.answerRow(card)); // sang-com / nan-gom: winning the game is the answer, nothing typed
+    }
     if (p.parts) root.append(this.partsRows(card, p.parts));
     if (p.proof) root.append(this.proofBox(card, p.proof));
     if (p.history.length) {
@@ -535,16 +557,18 @@ export class RaceHud {
     return root;
   }
 
-  /** Leg 3 "Mật thư mở ngang": the two branches as two halves of one wide card (left = branch A, chocolate; right = branch B,
-   *  comic strip), each a big click target while the team may choose (the [1] / [2] button inside is the real control:
+  /** Leg 3 "Mật thư mở ngang": the two branches as two halves of one wide card (left = branch A, right = branch B; the skin
+   *  of each half = `look`: Bruxelles chocolate / comic strip by position, Hà Nội cốm / gốm), each a big click target while the team may choose (the [1] / [2] button inside is the real control:
    *  hot.choose, act's lock). Once chosen, the picked half widens and its afterChoice text drops open under the summary
    *  ("sổ ra"), the other half dims. In the Sổ (`book`) the halves stack, nothing animates. */
   private detourPair(card: ClueCard, p: CardPanel, book: boolean): HTMLElement {
     const pair = el('div', `rc-pair${book ? ' book' : ''}${card.branch ? ' picked' : ''}${this.envelope && !book ? ' unfold' : ''}`);
     p.blocks.forEach((b, i) => {
       const dim = card.branch != null && !b.chosen;
-      const half = el('div', `rc-half rc-half-${i ? 'b' : 'a'}${b.chosen ? ' chosen' : dim ? ' dim' : ''}`);
-      half.append(html('div', 'rc-half-art', ART[i ? 'comic' : 'choco']), el('div', 'rc-half-name', b.title, b.chosen ? el('span', 'rc-chosen', 'Đội đã chọn') : null), ...(b.text ? [el('div', 'rc-half-sum', b.text)] : []));
+      const look: BranchLook = b.look ?? (i ? 'comic' : 'choco'); // leg `branches[].look`; by position otherwise (Bruxelles)
+      const half = el('div', `rc-half rc-half-${i ? 'b' : 'a'} rc-half-${look}${b.chosen ? ' chosen' : dim ? ' dim' : ''}`);
+      const art = ART[look]; // com / gom: no line art, the skin is a CSS background (race.css)
+      half.append(...(art ? [html('div', 'rc-half-art', art)] : []), el('div', 'rc-half-name', b.title, b.chosen ? el('span', 'rc-chosen', 'Đội đã chọn') : null), ...(b.text ? [el('div', 'rc-half-sum', b.text)] : []));
       if (b.after) {
         // the drop plays once per chosen branch (a countdown flip redraws the card: no replay)
         const key = `${card.step}:${card.branch}`;
@@ -590,6 +614,114 @@ export class RaceHud {
     input.addEventListener('focus', () => (this.focusBox = true)); // clicked into: a redraw keeps the box focused
     this.answerInput = input;
     return el('div', 'rc-answer', undefined, input, this.act('Gửi câu trả lời [Enter]', () => this.submit(card)));
+  }
+
+  /** Hà Nội T1 (task.game): the answer entry is a row of GAME_LETTERS tall boxes + "Chốt", on the card and docked under the game
+   *  (one shared `letters` state; the other row is mirrored). The count is this game's constant, not derived from the answer. */
+  private letters: string[] = Array(GAME_LETTERS).fill('');
+  private letterRows = new Set<HTMLInputElement[]>();
+  private letterRow(card: ClueCard, dock = false): HTMLElement {
+    const mine: HTMLInputElement[] = [];
+    const row = el('div', 'rc-letters');
+    const boxes = el('div', 'rc-letter-boxes');
+    const sync = () => this.letterRows.forEach((r) => r.forEach((x, k) => x.value !== this.letters[k] && (x.value = this.letters[k]!)));
+    for (let k = 0; k < GAME_LETTERS; k++) {
+      const input = Object.assign(document.createElement('input'), { type: 'text', className: 'rc-letter', maxLength: GAME_LETTERS, autocomplete: 'off', spellcheck: false, value: this.letters[k]! });
+      input.setAttribute('aria-label', `Chữ thứ ${k + 1}`);
+      input.addEventListener('focus', () => ((this.focusBox = true), input.select()));
+      input.addEventListener('input', () => {
+        if ((input as HTMLInputElement & { isComposing?: boolean }).isComposing) return;
+        const raw = input.value, c = raw.replace(/[^A-Za-z]/g, '').toUpperCase();
+        if (c.length < raw.length) toast('Chỉ gõ chữ A–Z không dấu: hãy tắt bộ gõ tiếng Việt.');
+        const take = c.slice(0, GAME_LETTERS - k) || '';
+        for (let n = 0; n < Math.max(1, take.length); n++) this.letters[k + n] = take[n] ?? '';
+        sync();
+        mine[Math.min(k + Math.max(1, take.length), GAME_LETTERS - 1)]?.focus();
+        if (!take) mine[k]!.focus();
+      });
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation(); // typing never reaches the game's / the map's keys
+        if (e.key === 'Backspace' && !input.value && k > 0) (this.letters[k - 1] = ''), sync(), mine[k - 1]!.focus(), e.preventDefault();
+        else if (e.key === 'ArrowLeft' && k > 0) mine[k - 1]!.focus(), e.preventDefault();
+        else if (e.key === 'ArrowRight' && k < GAME_LETTERS - 1) mine[k + 1]!.focus(), e.preventDefault();
+        else if (e.key === 'Enter' && !e.isComposing) send();
+      });
+      mine.push(input);
+      boxes.append(input);
+    }
+    const send = () => {
+      if (this.letters.some((l) => !l)) return void toast('Điền đủ 6 ô');
+      this.actions.answer(card.step, this.letters.join(''));
+      this.letters.fill('');
+      sync();
+    };
+    const btn = el('button', 'rc-btn rc-task-btn', 'Chốt') as HTMLButtonElement;
+    btn.addEventListener('click', send);
+    row.append(boxes, btn);
+    if (dock) this.dock = { inputs: mine, btn };
+    this.letterRows.add(mine);
+    new MutationObserver(() => void (row.isConnected || this.letterRows.delete(mine))).observe(document.body, { childList: true, subtree: true });
+    return row;
+  }
+
+  private gameBox: HTMLElement | null = null;
+  /** Hà Nội T1 mini-game (task.game): a panel over the card with the game in an iframe and the card's answer bar docked under it
+   *  (same draft, same submit), so the player types the answer without closing the game. Closed by Đóng, Esc in the game, or when
+   *  the card changes (answer accepted); it STAYS open while the Phạt runs (tickGame). The game itself knows nothing about the answer. */
+  private openGame(card: ClueCard, game: Game) {
+    this.closeGame();
+    document.exitPointerLock();
+    const frame = Object.assign(document.createElement('iframe'), { src: `/games/${game}.html?team=${encodeURIComponent(this.teamName || this.demoTeam)}&race=${encodeURIComponent(new URLSearchParams(location.search).get('race') ?? '')}`, title: GAME_TITLE[game].title });
+    const close = el('button', 'rc-gameclose', '✕');
+    close.title = 'Đóng (Esc)';
+    close.addEventListener('click', () => this.closeGame());
+    const box = el('div', 'rc-gamebox', undefined, frame, close, ...(WIN_MSG[game] ? [] : [el('div', 'rc-gamebar', undefined, this.letterRow(card, true))]));
+    this.gameBox = box;
+    document.body.append(box);
+    this.gameMsg = (e: MessageEvent) => {
+      if (e.source !== frame.contentWindow || e.origin !== location.origin) return;
+      const d = e.data as { t?: string; time?: unknown; code?: unknown };
+      if (d?.t === 'bong.close') this.closeGame();
+      // sang-com / nan-gom: the win report goes to the server as this card's answer "mm:ss COM-XXXXX" (steps.ts sangComOk / gomOk check it)
+      else if (d?.t && d.t === WIN_MSG[game] && typeof d.time === 'string' && typeof d.code === 'string') this.actions.answer(card.step, `${d.time} ${d.code}`.slice(0, 40));
+    };
+    addEventListener('message', this.gameMsg);
+    this.gameFrame = frame;
+    this.gameStep = card.step;
+    this.gameLockKey = '';
+    frame.addEventListener('load', () => ((this.gameLockKey = ''), this.tickGame())); // the (re)loaded game asks nothing: we push the lock again
+  }
+  private dock: { inputs: HTMLInputElement[]; btn: HTMLButtonElement } | null = null;
+  private gameFrame: HTMLIFrameElement | null = null;
+  private gameStep = '';
+  private gameLockKey = '';
+  /** Every frame while the game is open: the card's Phạt countdown (server clock) -> `bong.lock {until}` to the game (epoch ms of this
+   *  client's clock; 0 = none) whenever it changes, and the docked boxes / Chốt follow it. The game closes when the step is no longer
+   *  this one's active / locked card (answer accepted, next clue). */
+  private tickGame() {
+    const c = this.view?.card;
+    if (!this.gameBox || !this.gameFrame) return;
+    const st = c && c.step === this.gameStep ? liveStatus(c, this.now) : null;
+    if (st !== 'active' && st !== 'locked') return this.closeGame();
+    const left = st === 'locked' && c!.lockedUntil != null ? Math.max(0, c!.lockedUntil - this.now) : 0;
+    const until = left ? Date.now() + left : 0;
+    const key = left ? String(c!.lockedUntil) : '0';
+    if (key !== this.gameLockKey) {
+      this.gameLockKey = key;
+      this.gameFrame.contentWindow?.postMessage({ t: 'bong.lock', until }, location.origin);
+    }
+    if (this.dock) {
+      this.dock.inputs.forEach((i) => (i.disabled = left > 0));
+      this.dock.btn.disabled = left > 0;
+      this.dock.btn.textContent = left > 0 ? `Chốt (${formatDuration(Math.ceil(left / 1000) * 1000)})` : 'Chốt';
+    }
+  }
+  private gameMsg: ((e: MessageEvent) => void) | null = null;
+  private closeGame() {
+    if (this.gameMsg) removeEventListener('message', this.gameMsg);
+    this.gameMsg = null;
+    this.gameBox?.remove();
+    this.gameBox = this.gameFrame = this.dock = null;
   }
 
   /** false = nothing to send. */
@@ -726,6 +858,8 @@ const AFTER = {
   A: 'Đội chơi di chuyển tới bảo tàng sô-cô-la minh họa để hoàn thành thử thách. Hoàn thành đủ 5 loại, đội nhận mật thư để đi tiếp.\nVới mỗi loại không hoàn thành, đội bị phạt 20 phút tại vạch đích.',
   B: 'Đội chơi di chuyển tới cửa hàng truyện tranh minh họa, rồi phác hoạ lại 9 bức tranh với độ chính xác ≥ 85%, tính theo công thức = độ đủ nét × độ đúng nét.\n• Độ đủ nét: tỉ lệ hình mẫu được nét của đội phủ trong bán kính cho phép.\n• Độ đúng nét: tỉ lệ mực của đội nằm đúng trên đường mẫu.\n• Chống vẽ thừa: chỉ trừ điểm khi mực dài hơn hai lần hình mẫu.\nVới mỗi hình không hoàn thành, đội bị phạt 12 phút.',
 };
+/** `?look=` stand-in branch names per skin (invented, not the leg's). */
+const DEMO_LOOK_NAMES: Partial<Record<BranchLook, string>> = { com: 'CỐM', gom: 'GỐM' };
 const branches = (taskA?: TaskView, taskB?: TaskView, after?: 'A' | 'B') => [
   { id: 'A', name: 'Sô-cô-la', summary: 'Làm thử vài loại kẹo sô-cô-la minh họa, xong thì nhận mật thư kế.', ...(after === 'A' ? { afterChoice: AFTER.A } : {}), ...(taskA ? { task: taskA } : {}) },
   { id: 'B', name: 'Vẽ truyện tranh', summary: 'Vẽ lại vài bức tranh minh họa theo mẫu, đủ số bức thì nhận mật thư kế.', ...(after === 'B' ? { afterChoice: AFTER.B } : {}), ...(taskB ? { task: taskB } : {}) },
@@ -753,6 +887,9 @@ const DEMO_CARDS: Record<string, ClueCard> = {
   'media-off': { ...NEW, step: 'L1', type: 'route_info', label: 'Lộ trình 1', text: 'Mật thư minh họa kèm hình: ngoài cuộc đua hình không tải được.', transport: { allowed: 'any' }, media: [{ url: 'r2:demo-off.jpg', label: 'Ảnh gợi ý', kind: 'image' }], status: 'active', receivedAt: T0, completedAt: null },
 };
 const DEMO_TEAMS: TeamInfo[] = ['Xanh', 'Đỏ', 'Vàng'].map((n, i) => ({ slot: i + 1, id: `t${i}`, name: `Đội ${n}`, colour: '#fff', online: true }));
+DEMO_CARDS.game = { ...DEMO_CARDS.answer!, task: { ...DEMO_CARDS.answer!.task!, title: 'Thử thách có trò chơi minh họa', game: 'bong-goc-tuong' } }; // Hà Nội T1: the card with the launch button
+DEMO_CARDS['game-com'] = { ...DEMO_CARDS.answer!, task: { ...DEMO_CARDS.answer!.task!, title: 'Thử thách có game làm cốm', game: 'sang-com' } }; // ?card=game-com: no answer box, the game's win completes it
+DEMO_CARDS['game-gom'] = { ...DEMO_CARDS.answer!, task: { ...DEMO_CARDS.answer!.task!, title: 'Thử thách có game làm gốm', game: 'nan-gom' } }; // ?card=game-gom
 DEMO_CARDS['parts-locked'] = { ...DEMO_CARDS.parts!, status: 'locked', lockedUntil: DEMO_NOW + 160_000, lockKind: 'retry' };
 const DEMO_BOOK: ClueCard[] = [
   { ...DEMO_CARDS.route!, label: 'Lộ trình 1', status: 'done', receivedAt: T0, completedAt: T0 + 1_240_000 },

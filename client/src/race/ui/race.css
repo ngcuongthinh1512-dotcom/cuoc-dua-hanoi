@@ -391,7 +391,7 @@
   border-color: rgba(255, 140, 120, 0.7);
 }
 
-/* ── Leg 3: Lựa chọn kép "mở ngang" — one wide card, two halves (A = chocolate, B = comic strip) with a fold between ──
+/* ── Leg 3: Lựa chọn kép "mở ngang" — one wide card, two halves (skins: A = chocolate, B = comic strip by default; Hà Nội cốm / gốm via `look`) with a fold between ──
    The card rises out of the envelope as a narrow strip, then unfolds sideways (clip-path from the centre). Reopened with
    Enter (.quick) or redrawn in place: no unfold. */
 .rc-full.rc-wide {
@@ -515,8 +515,10 @@
 .rc-after ul { margin: 0; padding-left: 20px; }
 .rc-after li { margin-top: 2px; }
 
-/* A · chocolate: rich brown, gold rule and type */
-.rc-half-a {
+/* Skins (`rc-half-<look>`, leg `branches[].look`; Bruxelles by position: A choco, B comic; Hà Nội com / gom). rc-half-a / -b stay
+   positional (layout, slide, picked columns). */
+/* choco · chocolate: rich brown, gold rule and type */
+.rc-half-choco {
   --ink: #f4dcb0;
   color: #fbeedb;
   background:
@@ -525,17 +527,17 @@
   border: 1.5px solid #c9933f;
   box-shadow: inset 0 0 0 4px #3a2010, inset 0 0 0 5px rgba(217, 164, 65, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
 }
-.rc-half-a .rc-half-art { color: #e2b45c; }
-.rc-half-a .rc-half-name { color: #f2c86a; font-family: Georgia, 'Times New Roman', serif; font-style: italic; letter-spacing: 0.01em; }
-.rc-half-a .rc-half-name::after { content: ''; flex-basis: 100%; height: 2px; margin-top: 2px; background: linear-gradient(90deg, #d9a441, transparent); }
-.rc-half-a .rc-task-btn { background: #e3b25a; color: #2a160a; }
-.rc-half-a .rc-task-btn:hover { background: #f2c86a; }
-.rc-half-a .rc-chosen { background: #e3b25a; color: #2a160a; }
-.rc-half-a .rc-after { background: rgba(0, 0, 0, 0.32); border-left: 3px solid #d9a441; }
-.rc-half-a .rc-task-meta { color: #e9cfa0; }
+.rc-half-choco .rc-half-art { color: #e2b45c; }
+.rc-half-choco .rc-half-name { color: #f2c86a; font-family: Georgia, 'Times New Roman', serif; font-style: italic; letter-spacing: 0.01em; }
+.rc-half-choco .rc-half-name::after { content: ''; flex-basis: 100%; height: 2px; margin-top: 2px; background: linear-gradient(90deg, #d9a441, transparent); }
+.rc-half-choco .rc-task-btn { background: #e3b25a; color: #2a160a; }
+.rc-half-choco .rc-task-btn:hover { background: #f2c86a; }
+.rc-half-choco .rc-chosen { background: #e3b25a; color: #2a160a; }
+.rc-half-choco .rc-after { background: rgba(0, 0, 0, 0.32); border-left: 3px solid #d9a441; }
+.rc-half-choco .rc-task-meta { color: #e9cfa0; }
 
-/* B · comic strip: cream paper, halftone dots, ink border, speech-bubble summary */
-.rc-half-b {
+/* comic · comic strip: cream paper, halftone dots, ink border, speech-bubble summary */
+.rc-half-comic {
   color: #15161a;
   background:
     radial-gradient(circle at 1px 1px, rgba(27, 42, 74, 0.16) 1.2px, transparent 1.6px) 0 0 / 9px 9px,
@@ -545,8 +547,8 @@
   box-shadow: 5px 5px 0 #15161a, 0 6px 18px rgba(0, 0, 0, 0.35);
   text-shadow: none;
 }
-.rc-half-b .rc-half-art { color: #15161a; }
-.rc-half-b .rc-half-name {
+.rc-half-comic .rc-half-art { color: #15161a; }
+.rc-half-comic .rc-half-name {
   text-transform: uppercase;
   font-weight: 900;
   letter-spacing: 0.05em;
@@ -554,7 +556,7 @@
   -webkit-text-stroke: 0.6px #15161a;
   text-shadow: 2px 2px 0 #15161a, 3px 3px 0 #f6c28b;
 }
-.rc-half-b .rc-half-sum {
+.rc-half-comic .rc-half-sum {
   position: relative;
   padding: 10px 14px;
   border: 2.5px solid #15161a;
@@ -562,7 +564,7 @@
   background: #fff;
   font-weight: 500;
 }
-.rc-half-b .rc-half-sum::after {
+.rc-half-comic .rc-half-sum::after {
   content: '';
   position: absolute;
   left: 26px;
@@ -574,14 +576,81 @@
   border-bottom: 2.5px solid #15161a;
   transform: skewX(-20deg) rotate(45deg);
 }
-.rc-half-b .rc-task-btn { background: #f08a24; color: #15161a; border: 2.5px solid #15161a; box-shadow: 3px 3px 0 #15161a; }
-.rc-half-b .rc-task-btn:hover { background: #ffa040; }
-.rc-half-b .rc-task-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #15161a; }
-.rc-half-b .rc-chosen { background: #5fb3e5; color: #15161a; border: 2px solid #15161a; text-transform: none; font-weight: 700; letter-spacing: 0.02em; -webkit-text-stroke: 0; text-shadow: none; }
-.rc-half-b .rc-after { margin-top: 10px; background: #fff; border: 2.5px solid #15161a; box-shadow: 3px 3px 0 #15161a; }
-.rc-half-b .rc-task-meta { color: #3a3d45; }
-.rc-half-b .rc-link { color: #1b4d8a; border-color: #1b4d8a; }
-.rc-half-b .rc-ph { color: #3a3d45; border-color: #3a3d45; }
+.rc-half-comic .rc-task-btn { background: #f08a24; color: #15161a; border: 2.5px solid #15161a; box-shadow: 3px 3px 0 #15161a; }
+.rc-half-comic .rc-task-btn:hover { background: #ffa040; }
+.rc-half-comic .rc-task-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #15161a; }
+.rc-half-comic .rc-chosen { background: #5fb3e5; color: #15161a; border: 2px solid #15161a; text-transform: none; font-weight: 700; letter-spacing: 0.02em; -webkit-text-stroke: 0; text-shadow: none; }
+.rc-half-comic .rc-after { margin-top: 10px; background: #fff; border: 2.5px solid #15161a; box-shadow: 3px 3px 0 #15161a; }
+.rc-half-comic .rc-task-meta { color: #3a3d45; }
+.rc-half-comic .rc-link { color: #1b4d8a; border-color: #1b4d8a; }
+.rc-half-comic .rc-ph { color: #3a3d45; border-color: #3a3d45; }
+
+/* Hà Nội skins (com / gom): no line art, ONE background pattern + a big clean name + the button; the content sits at the
+   bottom of the half so the pattern breathes above it. */
+.rc-half-com, .rc-half-gom {
+  min-height: 200px;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 22px 24px 22px;
+  border-radius: 10px;
+  text-shadow: none;
+}
+.rc-half-com, .rc-half-gom { padding-bottom: 44px; } /* same padding on both so the names + buttons line up; gốm's wave strip sits at the bottom edge */
+.rc-half-com .rc-half-name, .rc-half-gom .rc-half-name {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1.05;
+  padding-left: 0.04em;
+  justify-content: center;
+}
+.rc-half-com .rc-task-btn, .rc-half-gom .rc-task-btn { align-self: center; margin-top: 12px; border-radius: 6px; padding: 6px 14px; font-size: 12px; }
+.rc-half-com .rc-chosen, .rc-half-gom .rc-chosen { letter-spacing: 0.04em; font-size: 12px; }
+.rc-pair.book .rc-half-com, .rc-pair.book .rc-half-gom { min-height: 128px; padding: 16px 18px; }
+.rc-pair.book .rc-half-com .rc-half-name, .rc-pair.book .rc-half-gom .rc-half-name { font-size: 26px; }
+
+/* com · cốm: soft lotus-leaf green, a scatter of young green rice flakes (two tones) as the pattern, a faint lotus leaf with
+   its radial veins in the top-right corner; cream type with a short cream rule */
+.rc-half-com {
+  color: #f3eed8;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300' fill='none' stroke='%23e9f2d0' stroke-opacity='.11' stroke-width='1.4'%3E%3Ccircle cx='150' cy='150' r='140'/%3E%3Ccircle cx='150' cy='150' r='8' fill='%23e9f2d0' fill-opacity='.08'/%3E%3Cpath d='M150 10v134M26 86l118 60M26 214l118-58M150 290V156M274 214l-118-58M274 86l-118 60M62 46l84 100M238 46l-84 100M62 254l84-100M238 254l-84-100'/%3E%3C/svg%3E") right -90px top -120px / 300px 300px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='%23e6f2b4' fill-opacity='.27'%3E%3Cellipse cx='55' cy='30' rx='6.5' ry='2.6' transform='rotate(68 55 30)'/%3E%3Cellipse cx='102' cy='18' rx='6.5' ry='2.6' transform='rotate(10 102 18)'/%3E%3Cellipse cx='85' cy='61' rx='6.5' ry='2.6' transform='rotate(78 85 61)'/%3E%3Cellipse cx='16' cy='81' rx='6.5' ry='2.6' transform='rotate(-71 16 81)'/%3E%3Cellipse cx='18' cy='21' rx='6.5' ry='2.6' transform='rotate(18 18 21)'/%3E%3Cellipse cx='69' cy='127' rx='6.5' ry='2.6' transform='rotate(36 69 127)'/%3E%3Cellipse cx='98' cy='144' rx='6.5' ry='2.6' transform='rotate(-27 98 144)'/%3E%3Cellipse cx='149' cy='15' rx='6.5' ry='2.6' transform='rotate(-65 149 15)'/%3E%3Cellipse cx='132' cy='50' rx='6.5' ry='2.6' transform='rotate(-55 132 50)'/%3E%3Cellipse cx='53' cy='92' rx='6.5' ry='2.6' transform='rotate(-57 53 92)'/%3E%3Cellipse cx='122' cy='109' rx='6.5' ry='2.6' transform='rotate(43 122 109)'/%3E%3Cellipse cx='129' cy='144' rx='6.5' ry='2.6' transform='rotate(-66 129 144)'/%3E%3Cellipse cx='17' cy='109' rx='6.5' ry='2.6' transform='rotate(50 17 109)'/%3E%3Cellipse cx='82' cy='97' rx='6.5' ry='2.6' transform='rotate(-12 82 97)'/%3E%3Cellipse cx='44' cy='58' rx='6.5' ry='2.6' transform='rotate(6 44 58)'/%3E%3C/g%3E%3Cg fill='%23163d22' fill-opacity='.2'%3E%3Cellipse cx='11' cy='145' rx='6.5' ry='2.6' transform='rotate(14 11 145)'/%3E%3Cellipse cx='12' cy='48' rx='6.5' ry='2.6' transform='rotate(9 12 48)'/%3E%3Cellipse cx='146' cy='72' rx='6.5' ry='2.6' transform='rotate(25 146 72)'/%3E%3Cellipse cx='116' cy='77' rx='6.5' ry='2.6' transform='rotate(16 116 77)'/%3E%3Cellipse cx='149' cy='103' rx='6.5' ry='2.6' transform='rotate(-27 149 103)'/%3E%3Cellipse cx='40' cy='145' rx='6.5' ry='2.6' transform='rotate(39 40 145)'/%3E%3Cellipse cx='75' cy='10' rx='6.5' ry='2.6' transform='rotate(-39 75 10)'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 160px 160px,
+    radial-gradient(120% 90% at 100% 0%, rgba(190, 230, 150, 0.22), transparent 55%),
+    linear-gradient(160deg, #5f9b5a, #3e7a48 55%, #2f6338);
+  border: 1px solid rgba(240, 248, 220, 0.28);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+}
+.rc-half-com .rc-half-name { color: #f6f1d6; text-shadow: 0 2px 2px rgba(0, 0, 0, 0.25); }
+.rc-half-com .rc-task-btn { background: #f1e9bf; color: #24502d; }
+.rc-half-com .rc-task-btn:hover { background: #fbf4cf; }
+.rc-half-com .rc-chosen { background: #e9e0a4; color: #24502d; font-weight: 700; letter-spacing: 0.04em; }
+.rc-half-com .rc-after { margin-top: 10px; background: rgba(12, 40, 20, 0.32); border-left: 3px solid #d8ec9c; }
+.rc-half-com .rc-task-meta { color: #dfe8c6; }
+
+/* gom · gốm Bát Tràng: a white "men rạn" glaze (crackle network), a blue-on-white (men lam) wave band along the bottom;
+   blue-ink type and buttons */
+.rc-half-gom {
+  color: #2a2c33;
+  padding-bottom: 44px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='30' viewBox='0 0 48 30' fill='none' stroke='%232b5aa5' stroke-linecap='round'%3E%3Cpath d='M0 15c6-10 12-10 18 0s12 10 18 0 9-7 12 0' stroke-width='2.2'/%3E%3Cpath d='M0 23c6-6 12-6 18 0s12 6 18 0 9-4 12 0' stroke-width='1.3' stroke-opacity='.7'/%3E%3Cpath d='M0 29.2h48' stroke-width='1.6'/%3E%3C/svg%3E") left bottom / 48px 30px repeat-x,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120' fill='none' stroke='%23587091' stroke-opacity='.27' stroke-width='1' stroke-linejoin='round'%3E%3Cpath d='M40 0l6 18-8 22 14 20-8 24 12 20-16 16M95 0l-7 22 12 22-8 26 12 22-9 26M0 25l20 5 18 10M52 60l18-5 18-33M0 80l18-4 26 8M44 84l20 6 28-20M104 92l16-12M100 44l20-19M20 30l-10 25 8 21M70 55l4-25 14-8M64 90l-4 22M74 30l-4-22M38 40l-18-10M92 70l-22-15'/%3E%3C/svg%3E") 0 0 / 120px 120px,
+    radial-gradient(120% 100% at 0% 0%, rgba(43, 90, 165, 0.07), transparent 60%),
+    linear-gradient(170deg, #faf6ec, #efe7d6);
+  border: 1px solid rgba(43, 90, 165, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), 0 8px 22px rgba(0, 0, 0, 0.3);
+}
+.rc-half-gom .rc-half-name { color: #22508f; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; letter-spacing: 0.12em; }
+.rc-half-gom .rc-task-btn { background: #22508f; color: #fbf7ee; }
+.rc-half-gom .rc-task-btn:hover { background: #2d63ad; }
+.rc-half-gom .rc-chosen { background: #22508f; color: #fbf7ee; font-weight: 700; }
+.rc-half-gom .rc-after { margin-top: 10px; background: rgba(43, 90, 165, 0.08); border-left: 3px solid #22508f; color: #2a2c33; }
+.rc-half-gom .rc-task-meta { color: #4a4c55; }
+.rc-half-gom .rc-link { color: #22508f; border-color: #22508f; }
+.rc-half-gom .rc-ph { color: #4a4c55; border-color: #4a4c55; }
+.rc-half-gom.dim { filter: grayscale(0.7) brightness(0.8); }
 
 /* In the Sổ mật thư (fullWidth): the halves stack, the fold becomes a horizontal crease, nothing animates. */
 .rc-pair.book,
@@ -597,7 +666,7 @@
 .rc-pair.book .rc-half-art { height: 56px; }
 .rc-pair.book .rc-half-name { font-size: 20px; }
 .rc-pair.book .rc-half-sum, .rc-pair.book .rc-after { font-size: 14px; }
-.rc-pair.book .rc-half-b { box-shadow: 3px 3px 0 #15161a; }
+.rc-pair.book .rc-half-comic { box-shadow: 3px 3px 0 #15161a; }
 
 @keyframes rc-unfold {
   from { clip-path: inset(0 36% 0 36% round 6px); }
@@ -626,6 +695,8 @@
   .rc-half { padding: 12px 12px 14px; }
   .rc-half-name { font-size: 22px; }
   .rc-half-sum, .rc-detour > .rc-text { font-size: 15px; }
+  .rc-half-com, .rc-half-gom { min-height: 170px; padding: 18px 18px 18px; }
+  .rc-half-com .rc-half-name, .rc-half-gom .rc-half-name { font-size: 32px; }
 }
 
 /* SPEC §17.44: multi-box task */
@@ -864,3 +935,16 @@
 .rc-part-in { margin-left: 10px; }
 
 .rc-result-wait { margin: 10px 0 0; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--rc-accent, #e0a347); }
+
+/* Hà Nội T1 mini-game (RaceHud.openGame): the game iframe fills the screen, the 6 letter boxes + Chốt stay docked under it */
+.rc-gamebox { position: fixed; inset: 0; z-index: 3; display: flex; flex-direction: column; background: #0e141b; }
+.rc-gamebox iframe { flex: 1; min-height: 0; width: 100%; border: 0; }
+.rc-gameclose { position: absolute; top: 8px; right: 10px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 16px; cursor: pointer; }
+.rc-gamebar { padding: 10px 12px; background: rgba(0, 0, 0, 0.85); border-top: 1px solid rgba(255, 255, 255, 0.2); }
+.rc-game-btn { margin-top: 10px; }
+/* the answer entry of a `game` task: six tall boxes side by side + Chốt (card and dock) */
+.rc-letters { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.rc-letter-boxes { display: flex; gap: 6px; }
+.rc-letter { width: 40px; height: 56px; box-sizing: border-box; padding: 0; text-align: center; font: 700 26px/1 inherit; text-transform: uppercase; color: #fff; background: rgba(0, 0, 0, 0.45); border: 1.5px solid rgba(255, 255, 255, 0.4); border-radius: 6px; }
+.rc-letter:focus { outline: none; border-color: #e0703f; }
+.rc-letters .rc-task-btn { margin-top: 0; background: #e0703f; color: #fff; opacity: 1; min-width: 80px; }

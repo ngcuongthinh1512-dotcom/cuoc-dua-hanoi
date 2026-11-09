@@ -1,0 +1,65 @@
+{
+  "id": "bong-goc-tuong",
+  "title": "Thử Bóng trên góc tường (chặng test, Thử thách 1 Hà Nội)",
+  "start": {
+    "name": "Công viên Thống Nhất, trước tượng Bác Hồ – Bác Tôn",
+    "lat": 21.011,
+    "lon": 105.8424821,
+    "yawDeg": 0,
+    "spreadMeters": 0
+  },
+  "steps": [
+    {
+      "id": "L1",
+      "type": "route_info",
+      "label": "Lộ trình 1",
+      "clue": "Mở hòm mật thư cạnh bạn để nhận thử thách đầu tiên.",
+      "destination": {
+        "name": "Tượng Bác Hồ – Bác Tôn, Công viên Thống Nhất",
+        "lat": 21.011087,
+        "lon": 105.8424821,
+        "radius": 30,
+        "yawDeg": 0
+      }
+    },
+    {
+      "id": "T1",
+      "type": "challenge",
+      "label": "Thử thách 1",
+      "task": {
+        "title": "Ánh đèn Thống Nhất",
+        "description": "Đèn công viên chiếu một khối điêu khắc lên bức tường. Tìm 6 chữ cái trong bóng, sắp xếp thành mật mã.",
+        "game": "bong-goc-tuong",
+        "kind": "answer",
+        "verification": "auto",
+        "answers": [
+          "HOGUOM"
+        ],
+        "retryLockMinutes": 5
+      }
+    },
+    {
+      "id": "L2",
+      "type": "route_info",
+      "label": "Lộ trình 2",
+      "clue": "Rùa vàng vẫn đợi người trả gươm. Tới hồ có tòa tháp đứng giữa nước, tìm cây cầu sơn đỏ, đếm số nhịp cầu và báo cho host.",
+      "destination": {
+        "name": "Bờ hồ Hoàn Kiếm (Đinh Tiên Hoàng)",
+        "lat": 21.03046,
+        "lon": 105.8525,
+        "radius": 40
+      }
+    },
+    {
+      "id": "PS",
+      "type": "pit_stop",
+      "label": "Về đích",
+      "destination": {
+        "name": "Bờ hồ Hoàn Kiếm (Đinh Tiên Hoàng)",
+        "lat": 21.03046,
+        "lon": 105.8525,
+        "radius": 40
+      }
+    }
+  ]
+}

@@ -1,14 +1,14 @@
-// Leg 2 night mode (config timeOfDay + lighting). Main thread: main.ts calls initTimeOfDay() before the sky and the
-// materials are made; ?time=day|night only offline (a real race always uses config.timeOfDay). The chunk worker never
-// reads this (its builds stay the same day and night).
+// Leg 2 night mode (config timeOfDay + lighting) + Leg 3 dusk (lighting.dusk). Main thread: main.ts calls initTimeOfDay()
+// before the sky and the materials are made; ?time=day|night|dusk only offline (a real race always uses config.timeOfDay).
+// The chunk worker never reads this (its builds stay the same day, dusk and night).
 import { Color } from 'three';
 import { lighting as L, timeOfDay as DEFAULT } from '../config.ts';
 
-export type TimeOfDay = 'day' | 'night';
+export type TimeOfDay = 'day' | 'night' | 'dusk';
 
 /** Pure: URL ?time= (offline only) > config. */
 export function pickTime(url: string | null, online: boolean, fallback: TimeOfDay = DEFAULT): TimeOfDay {
-  return !online && (url === 'day' || url === 'night') ? url : fallback;
+  return !online && (url === 'day' || url === 'night' || url === 'dusk') ? url : fallback;
 }
 
 let current: TimeOfDay = DEFAULT;
@@ -16,11 +16,16 @@ export function initTimeOfDay(query: URLSearchParams, online: boolean) {
   current = pickTime(query.get('time'), online);
 }
 export const isNight = () => current === 'night';
+export const isDusk = () => current === 'dusk';
+/** The city lights are on (lamps, windows, neon, headlights): dusk and night. Moon / stars / dark-sky things: isNight(). */
+export const glowOn = () => current !== 'day';
+/** × on every unlit glow: lighting.emissiveScale, × lighting.dusk.emissiveScale at dusk (the sky is still bright). */
+export const glowScale = () => L.emissiveScale * (isDusk() ? L.dusk.emissiveScale : 1);
 
-/** Emissive settings for a MeshStandardMaterial (Object.assign(material, nightGlow(c, k))): black by day, at night
- *  colour × intensity × lighting.emissiveScale. Building windows: nightGlow(lighting.windows.colour, lighting.windows.intensity). */
+/** Emissive settings for a MeshStandardMaterial (Object.assign(material, nightGlow(c, k))): black by day, at dusk / night
+ *  colour × intensity × glowScale(). Building windows: nightGlow(lighting.windows.colour, lighting.windows.intensity). */
 export function nightGlow(colour: string, intensity = 1) {
-  return isNight() ? { emissive: new Color(colour), emissiveIntensity: intensity * L.emissiveScale } : { emissive: new Color(0), emissiveIntensity: 0 };
+  return glowOn() ? { emissive: new Color(colour), emissiveIntensity: intensity * glowScale() } : { emissive: new Color(0), emissiveIntensity: 0 };
 }
 
 /** Seconds for the night shaders (TV flicker, neon, aviation lights, stars, water); Sky.update() advances it every frame.
@@ -36,19 +41,22 @@ const vec3 = (hex: string, k = 1) => {
 };
 const f = (n: number) => n.toFixed(4);
 
-/** Night glow GLSL for the facade materials (BuildingBuilder facadeMaterial), null by day (shader unchanged). `rx, ry` =
+/** Night / dusk glow GLSL for the facade materials (BuildingBuilder facadeMaterial), null by day (shader unchanged). `rx, ry` =
  *  map repeat (map uv / repeat = the raw uv: bays × floors, shop band: shops × band). Vertex: the `lit` attribute
  *  (MeshBucket.lit) → vLit. Fragment `glow` runs at <color_fragment> before the tint, while diffuseColor = map texel incl.
  *  its alpha (≤ 0.5 glass, 0.5–0.9 trim / signs), and adds to totalEmissiveRadiance. Facades: in a lit building
  *  (vLit > 0) litShareAt(lighting.hour) of the windows glow (each re-rolled every windows.switchSeconds: the city lives),
  *  palette colour, windows.tv.share of them a flickering blue TV, hash of (window, vLit), brighter towards the ceiling.
  *  `uniforms` (uNightTime) must go into shader.uniforms. Shops (vLit = seed):
- *  shops.openShare of the shops light their signboard (canvas v 0.74–0.96) in its own colour + the shop window. */
+ *  shops.openShare of the shops light their signboard (canvas v 0.74–0.96) in its own colour + the shop window.
+ *  Dusk (lighting.dusk.windows): litShare in a lit building, otherShare in the rest (seed 0: the pattern repeats per cell). */
 export function facadeNightGlsl(shop: boolean, rx: number, ry: number) {
-  if (!isNight()) return null;
+  if (!glowOn()) return null;
   const W = L.windows;
   const T = W.tv;
-  const k = L.emissiveScale;
+  const k = glowScale();
+  const kw = k * (isDusk() ? L.dusk.windows.intensity : 1); // windows only (not the shop signs)
+  const share = isDusk() ? `mix(${f(L.dusk.windows.otherShare)}, ${f(L.dusk.windows.litShare)}, step(0.001, vLit))` : `step(0.001, vLit) * ${f(litShareAt(L.hour))}`;
   const pick = W.palette.map(([c, w], i) => (i === W.palette.length - 1 ? vec3(c) : `h2 < ${f(w)} ? ${vec3(c)} : `)).join('');
   const body = shop
     ? `float fOpen = step(fHash(vec2(fCell.x, 3.0) + fSeed), ${f(L.shops.openShare)});
@@ -57,10 +65,10 @@ export function facadeNightGlsl(shop: boolean, rx: number, ry: number) {
     : `float h0 = fHash(fCell + fSeed);
 \tfloat h = fHash(fCell + fSeed + floor(uNightTime / ${f(W.switchSeconds)} + h0 * 61.0)); // re-rolled every switchSeconds, own phase
 \tfloat h2 = fHash(fCell.yx + fSeed * 0.37 + 5.1);
-\tfloat fOn = step(0.001, vLit) * step(h, ${f(litShareAt(L.hour))}) * fGlass;
+\tfloat fOn = step(h, ${share}) * fGlass;
 \tfloat fTv = step(fract(h0 * 13.7), ${f(T.share)}); // TV: blue, flickering
 \tvec3 fCol = mix((${pick}), ${vec3(T.colour)}, fTv) * (1.0 - fTv * ${f(T.depth)} * fHash(vec2(floor(uNightTime * ${f(T.rate)} + h0 * 91.0), h0 * 37.0)));
-\ttotalEmissiveRadiance += fCol * (fOn * ${f(W.intensity * k)} * (0.6 + 0.6 * fract(h0 * 7.0)) * (0.7 + 0.45 * fract(vMapUv.y * ${f(1 / ry)})));`;
+\ttotalEmissiveRadiance += fCol * (fOn * ${f(W.intensity * kw)} * (0.6 + 0.6 * fract(h0 * 7.0)) * (0.7 + 0.45 * fract(vMapUv.y * ${f(1 / ry)})));`;
   return {
     vertexHead: 'attribute float lit;\nvarying float vLit;',
     vertex: 'vLit = lit;',

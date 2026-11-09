@@ -619,6 +619,7 @@ export class RaceEngine {
         row.answers = JSON.stringify([...parseAnswers(row), e.rec].slice(-ANSWERS_KEPT));
         if (e.verdict === 'pending') (row.submitted_at = now), notice('answerSent');
         if (e.verdict === 'wrong') (row.wrong_answers += 1), notice('answerWrong');
+        if (e.verdict === 'wrong' && e.lockedUntil) row.locked_until = e.lockedUntil; // task.game: a wrong answer = a fixed countdown
         if (e.rec.auto) {
           // Leg 3: graded + applied by the server (the Host's queue lists it until "✓ Đồng ý"); a Phạt counts like the Host's
           Object.assign(row, { submitted_at: now, decided_at: now, decided_by: 'auto' });

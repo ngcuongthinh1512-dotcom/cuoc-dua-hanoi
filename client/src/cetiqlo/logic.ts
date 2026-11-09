@@ -84,8 +84,8 @@ export function resultRows(set: readonly string[], r: CqTeamResult, nameOf: (id:
   return rows;
 }
 
-/** Points (0–100, 1 decimal) as "74,3 điểm" / "100 điểm" (Vietnamese comma, no trailing ,0). */
-export const pointsText = (score: number) => `${(Math.round(score * 10) / 10).toString().replace('.', ',')} điểm`;
+/** Points (≤ 100, may be negative, 1 decimal) as "74,3 điểm" / "100 điểm" / "−23,3 điểm" (Vietnamese comma, Unicode minus, no trailing ,0). */
+export const pointsText = (score: number) => { const r = Math.round(score * 10) / 10; return `${(r === 0 ? '0' : String(r)).replace('.', ',').replace('-', '−')} điểm`; };
 export const mmss = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 /** "Còn chờ tối đa mm:ss – không có đối thủ thì được rời đi" for any team waiting in the lobby (owner: everybody is let go after 10 min); null once the wait is over. */
 export function waitText(waitFrom: number, maxWaitMs: number, serverNow: number): string | null {

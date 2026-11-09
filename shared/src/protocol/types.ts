@@ -1,11 +1,11 @@
 // Phase 6 wire contract (docs/plans/phase6.md §5.1) + Phase 7 race engine (docs/plans/phase7.md §5.1). Hot messages
 // (poses, ticks) are plain number arrays rounded to cm (SPEC §3); everything else is a small JSON object with a `t` tag.
 // Changing a shape = PROTOCOL_VERSION + 1. Leg literals come from the leg schema as types only (no zod in the client).
-import type { StepType, TaskKind, Transport, Verification, VehiclesConfig } from '../leg/schema.ts';
+import type { BranchLook, StepType, TaskKind, Transport, Verification, VehiclesConfig } from '../leg/schema.ts';
 import type { CqClientMessage, CqHostRoom, CqServerMessage } from './cetiqlo.ts';
 import type { FinishKind, FinishTexts } from './finish.ts';
 
-export type { StepType, TaskKind, Transport, Verification, VehiclesConfig };
+export type { BranchLook, StepType, TaskKind, Transport, Verification, VehiclesConfig };
 
 /** Locomotion modes (client/src/player/types.ts MoveMode derives from this); the wire sends the index. */
 export const MOVE_MODES = ['walk', 'swim', 'air', 'bike'] as const; // SPEC §17.29: no 'slow' any more (Shift = sprint)
@@ -132,6 +132,8 @@ export interface TaskView {
   /** SPEC §17.44: input 'parts' — one box per part, in leg order ('' = the client numbers it); the N strings go to the Host. */
   partLabels?: string[];
   proofInstruction: string;
+  /** Hà Nội T1: the card shows a launch button for this mini-game (leg task.game); the answer is still typed in the card. */
+  game?: 'bong-goc-tuong' | 'sang-com' | 'nan-gom';
   timeLimitMinutes: number | null;
   /** Task somewhere else (leg task.location.name); absent = at the point just reached. */
   place?: string;
@@ -156,6 +158,8 @@ export interface BranchView {
   summary: string;
   /** Leg 3: the text that drops open under the branch the team picked (leg `branches[].afterChoice`); ONLY on the chosen branch. */
   afterChoice?: string;
+  /** Skin of this branch's half of the wide card (leg `branches[].look`); absent = by position (A choco, B comic). */
+  look?: BranchLook;
   /** Phase 8 (§17.16): ONLY for the chosen branch once its box is opened (the task is inside the box). */
   task?: TaskView;
 }
@@ -454,7 +458,9 @@ export type ServerNotice =
   | 'roomIgnored'
   // Leg 3: an auto-graded multi-box answer: all right (the step is done) / not all (Phạt countdown; "đúng x/N" on the card,
   // also in `score` / `of`) / the Host changed that number
-  | 'autoCorrect' | 'autoPenalized' | 'scoreUpdated';
+  | 'autoCorrect' | 'autoPenalized' | 'scoreUpdated'
+  // Hà Nội: a task.game "sang-com" / "nan-gom" win report that does not check out (bad code / time): ignored, no Phạt
+  | 'gameIgnored';
 /** 'full' (SPEC §17.40): NET.maxSpectators spectator sockets are already open (CLOSE.full). */
 export type KickReason = 'badToken' | 'otherDevice' | 'raceClosed' | 'protocol' | 'full';
 

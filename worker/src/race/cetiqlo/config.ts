@@ -15,12 +15,17 @@ export const CETIQLO = {
   /** The 5-4-3-2-1 countdown (owner 2026-11-03): the pair stands frozen on the CHECKOUT mat from the pairing until startAt = pairing +
    *  countdownMs; the brief is shown and take / drop / checkout accepted only from startAt (before: 'notRunning'). */
   countdownMs: 5_000,
+  /** Reading time (owner 2026-11-09): a team that JUST entered the room and is up at once (see freshJoinMs) gets this long, on the mat, to read the
+   *  how-to BEFORE the 5-4-3-2-1: startAt = pairing + readMs + countdownMs. Teams paired out of the queue get none. */
+  readMs: 15_000,
+  /** A team is 'just entered' when its arrival is within this of the pairing time AND it never played in this room (no `last` / `lost` entry). */
+  freshJoinMs: 4_000,
   /** The pick phase (3:30, owner 2026-11-03); the client counts it down from endsAt − serverNow. */
   pickMs: 210_000,
   /** The client turns the clock red + beeps this long before the end (client reads it from the same number; server ignores). */
   warnMs: 30_000,
   /** Owner rule (2026-11-02), in POINTS (100 = a perfect bag): each correct item earns pointsPerCorrect (100 / 6 = 16.67); each bag item that is
-   *  NOT an exact id of the set (a wrong variant or an extra) costs penaltyPerWrongOrExtra; missing items just earn nothing. Clamped 0–100. */
+   *  NOT an exact id of the set (a wrong variant or an extra) costs penaltyPerWrongOrExtra; missing items just earn nothing. Capped at 100, NO lower bound (can be negative; an empty bag is 0). */
   pointsPerCorrect: 100 / ITEMS_PER_SET,
   penaltyPerWrongOrExtra: 8,
   /** Teams allowed in one room at a time (queue + match; more `cq.join` are refused 'busy'); also the board's row count. */

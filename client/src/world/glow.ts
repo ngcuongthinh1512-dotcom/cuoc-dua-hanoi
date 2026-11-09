@@ -1,11 +1,11 @@
 // Night gameplay glows (agent N-A): no real lights, unlit HDR colours (bloom) + additive falloff textures. Main thread only.
 import { AdditiveBlending, BackSide, Color, DataTexture, type ColorRepresentation, MeshBasicMaterial } from 'three';
-import { lighting as L } from '../config.ts';
 import { graphics } from './graphics.ts';
+import { glowScale } from './night.ts';
 
-/** colour × k × lighting.emissiveScale; k > 1 (HDR, bloom) only with post-processing, else capped at 1 (it would tone-map to white). */
+/** colour × k × glowScale() (lighting.emissiveScale, dimmer at dusk); k > 1 (HDR, bloom) only with post-processing, else capped at 1 (it would tone-map to white). */
 export const nightHdr = (colour: ColorRepresentation, k: number) =>
-  new Color(colour).multiplyScalar(L.emissiveScale * (graphics().on('post') ? k : Math.min(k, 1)));
+  new Color(colour).multiplyScalar(glowScale() * (graphics().on('post') ? k : Math.min(k, 1)));
 
 /** Pure: texel value 0…1 at (u, v) ∈ [0, 1]². round = (1 − r)² from the centre; cone = a beam from the bottom middle (v = 0)
  *  widening toward v = 1, fading with v and toward its edges. */

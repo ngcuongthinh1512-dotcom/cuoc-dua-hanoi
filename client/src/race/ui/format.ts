@@ -1,6 +1,6 @@
 // Phase 7 track C: pure helpers of the race HUD (no DOM, tested in Node). Everything here works only from what the server
 // sent (ClueCard / RaceView / ZoneMember): never answers, destination names or a later step.
-import { type AnswerStatus, type CardStatus, type ClueCard, finishPenaltyLine, finishTexts, type FinishResult, type FinishTexts, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
+import { type AnswerStatus, type BranchLook, type CardStatus, type ClueCard, finishPenaltyLine, finishTexts, type FinishResult, type FinishTexts, MEDIA, type MediaView, NET, type RaceView, type StepType, submitCode, type TeamInfo, type Transport, type ZoneMember } from '@race/shared/protocol';
 import { raceClient, raceHud as C } from '../../config.ts';
 import { looksLikeIme } from '../../core/Input.ts';
 
@@ -27,7 +27,7 @@ export interface CardSummary {
   clue: string;
   transport: ReturnType<typeof transportLabel>;
   /** `after` (Leg 3): the chosen branch's afterChoice text (the server sends it for that branch only), '' elsewhere. */
-  blocks: { branch: string | null; title: string; text: string; after: string; place: string | null; limit: string | null; chosen: boolean; media: MediaItem[] }[];
+  blocks: { branch: string | null; title: string; text: string; after: string; place: string | null; limit: string | null; chosen: boolean; media: MediaItem[]; look?: BranchLook }[];
   active: boolean;
 }
 
@@ -42,7 +42,7 @@ export function summarize(card: ClueCard): CardSummary {
   for (const b of card.branches ?? []) {
     const t = b.task; // Phase 8: only the chosen branch's, once its box is opened (its description replaces the summary)
     const chosen = b.id === card.branch;
-    blocks.push({ branch: b.id, title: b.name, text: chosen && t ? t.description : b.summary || (t?.description ?? ''), after: chosen ? (b.afterChoice ?? '') : '', place: t?.place ?? null, limit: limitText(t?.timeLimitMinutes ?? null), chosen, media: mediaViews(t?.media) });
+    blocks.push({ branch: b.id, title: b.name, text: chosen && t ? t.description : b.summary || (t?.description ?? ''), after: chosen ? (b.afterChoice ?? '') : '', place: t?.place ?? null, limit: limitText(t?.timeLimitMinutes ?? null), chosen, media: mediaViews(t?.media), ...(b.look ? { look: b.look } : {}) });
   }
   const clue = card.text || (card.type === 'pit_stop' ? 'Hãy về Chặng dừng và đứng trên thảm để về đích.' : '');
   return { type: card.type, label: card.label, clue, transport: transportLabel(card.transport), blocks, active: card.status !== 'done' }; // Phase 8: every state but done is "Đang làm"

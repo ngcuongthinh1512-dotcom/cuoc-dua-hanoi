@@ -13,7 +13,11 @@ import { facing, frontAt, lathe } from './c.ts';
 import type { DetailFn, Helpers, LandmarkCtx } from './index.ts';
 import { wallFrame } from './k.ts';
 import { footprintFrame, loft, triOut } from './kit.ts';
+import { gaHaNoi } from './ga.ts';
+import { nhaThoLon } from './nhatho.ts';
 import { Sink } from './parts.ts';
+import { lucThuy } from './lucthuy.ts';
+import { tranPhu } from './tranphu.ts';
 
 type Buf = Parameters<typeof loft>[0];
 type Head = 'flat' | 'round' | 'pointed';
@@ -169,52 +173,7 @@ const ubnd: DetailFn = (rec, parts, ctx, h) => {
   return s.out();
 };
 
-// ── Nhà thờ Lớn: weathered grey neo-Gothic; the two OSM tower parts (31.5 m, registry) get pointed openings, corner pinnacles and
-// crosses; the façade between them a pointed portal + rose window, a door under each tower. Parts keep their OSM heights. ──
-const nhaThoLon: DetailFn = (rec, parts, ctx, h) => {
-  const s = new Sink();
-  const M = painter(s);
-  const g = ctx.ground;
-  const STONE = '#a7a49d', ROOF = '#66625f', LIGHT = '#b8b5ae';
-  bodyAll(rec, parts, ctx, h, s, { colour: STONE, roofColour: ROOF }, () => ({ colour: STONE, roofColour: ROOF }));
-  const towers = parts.filter((p) => (p.height ?? 0) >= 30);
-  for (const t of towers) {
-    const tf = footprintFrame(t.outer);
-    const top = g + (t.height ?? 31.5);
-    faces(tf, tf.b, (ff, w, d) => {
-      for (const k of [-0.42, 0.42]) opening(M(DARK), ff, k * ff.a - 0.45, k * ff.a + 0.45, w, top - 10, top - 3.5, 'pointed', d); // belfry
-      opening(M(DARK), ff, -0.6, 0.6, w, top - 19, top - 14, 'pointed', d);
-    });
-    for (const [sa, sw] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) lathe(M(LIGHT), tf, sa * (tf.a - 0.5), sw * (tf.b - 0.5), [[0.5, top], [0.4, top + 1.6], [0, top + 3.4]], 4); // pinnacles
-    fbox(M(LIGHT), tf, -0.18, 0.18, -0.18, 0.18, top, top + 3.8); // cross
-    fbox(M(LIGHT), tf, -1, 1, -0.18, 0.18, top + 2.4, top + 2.8);
-  }
-  if (towers.length === 2) { // façade: the wall between the towers, looking away from the nave
-    const [t0, t1] = towers.map((t) => footprintFrame(t.outer)) as [Fr, Fr];
-    const of = footprintFrame(rec.outer);
-    const [mx, mz] = [(t0.cx + t1.cx) / 2, (t0.cz + t1.cz) / 2];
-    const f = facing(rec, (Math.atan2(mx - of.cx, -(mz - of.cz)) * 180) / Math.PI);
-    const [, wm] = loc(f, mx, mz);
-    const af = frontAt(rec, f, wm) + 0.06;
-    const r = turn(f);
-    opening(M(DARK), r, wm - 1.6, wm + 1.6, -af, g + 0.5, g + 7, 'pointed', -1); // portal
-    for (const t of [t0, t1]) { // side doors under the towers
-      const [, wt] = loc(f, t.cx, t.cz);
-      opening(M(DARK), r, wt - 1, wt + 1, -(frontAt(rec, f, wt) + 0.06), g + 0.5, g + 5, 'pointed', -1);
-    }
-    const n = 14;
-    const out: V3 = [f.ux, 0, f.uz];
-    const pt = (k: number, rr: number, lift = 0): V3 => P(f, af + lift, g + 13.5 + rr * Math.sin((2 * Math.PI * k) / n), wm + rr * Math.cos((2 * Math.PI * k) / n));
-    const rose = M('#3a3f4a');
-    for (let k = 1; k + 1 < n; k++) triOut(rose, pt(0, 2.4), pt(k, 2.4), pt(k + 1, 2.4), out);
-    const rim = M(LIGHT);
-    for (let k = 0; k < n; k++) { // stone ring around the rose
-      triOut(rim, pt(k, 2.4, 0.02), pt(k + 1, 2.9, 0.02), pt(k, 2.9, 0.02), out);
-      triOut(rim, pt(k, 2.4, 0.02), pt(k + 1, 2.4, 0.02), pt(k + 1, 2.9, 0.02), out);
-    }
-  }
-  return s.out();
-};
+// ── Nhà thờ Lớn: built entirely in code, landmarks/nhatho.ts (façade atlas, towers, nave, forecourt, garden). ──
 
 // ── Tràng Tiền Plaza: 6-storey mall (OSM 19 m), light stone piers, a glass ribbon per floor, ground-floor shop glass, dark cornice ──
 const trangTien: DetailFn = (rec, parts, ctx, h) => {
@@ -348,38 +307,6 @@ const hoaLo: DetailFn = (rec, parts, ctx, h) => {
   return s.out();
 };
 
-// ── Ga Hà Nội: the OSM parts (yellow wings with gabled roofs) stay; the blue-grey central block becomes the yellow entrance hall
-// with a clock tower (8 m over the hall, ước lượng), arched doors and a long canopy on the Lê Duẩn (east) side. ──
-const gaHaNoi: DetailFn = (rec, parts, ctx, h) => {
-  const s = new Sink();
-  const M = painter(s);
-  const g = ctx.ground;
-  const hall = parts.find((p) => p.levels === 4);
-  bodyAll(rec, parts, ctx, h, s, { colour: YELLOW }, (p) => (p === hall ? { colour: YELLOW, roofColour: TILE } : {}));
-  const IRON = '#3d4448';
-  for (const e of edges(rec.outer, 20, toward(1, 0, 0.8))) { // wings along Lê Duẩn
-    bays(M(DARK), e, [[g + 1, g + 3.6, 'round'], [g + 5, g + 7.4, 'flat']], 4.2, 1.6, 3);
-    band(M(IRON, 'metal'), e, 0, 2.6, g + 3.9, g + 4.1);
-  }
-  if (hall) {
-    const hf = footprintFrame(hall.outer);
-    const top = g + 4 * 3.2;
-    for (const e of edges(hall.outer, 15, toward(1, 0, 0.8))) {
-      for (let k = -2; k <= 2; k++) {
-        opening(M(DARK), e.f, k * 4.6 - 1.5, k * 4.6 + 1.5, 0.06, g + 0.6, g + 6.5, 'round');
-        opening(M(DARK), e.f, k * 4.6 - 1, k * 4.6 + 1, 0.06, g + 8, g + 11, 'flat');
-        fbox(M(IRON, 'metal'), e.f, k * 4.6 - 0.12, k * 4.6 + 0.12, 3.1, 3.34, g, g + 7.2); // canopy posts
-      }
-      band(M(WHITE), e, 0, 0.3, top - 0.5, top + 0.2);
-      band(M(IRON, 'metal'), e, 0, 3.5, g + 7.2, g + 7.45);
-    }
-    stack(M(YELLOW), [ring(hf, 0, 0, 3.2 * SQ2, top - 0.5, 4), ring(hf, 0, 0, 3.2 * SQ2, top + 8, 4)]);
-    faces(hf, 3.2, (ff, w, d) => clock(s, ff, 0, w, top + 5.6, 1.5, d));
-    spire(M(TILE), ring(hf, 0, 0, 3.7 * SQ2, top + 8, 4), P(hf, 0, top + 10.8, 0));
-  }
-  return s.out();
-};
-
 // ── Nhà thờ Hàm Long: small grey-cream Gothic church under a tile gable (walls 10 m + roof 4 m, ước lượng), one square bell
 // tower on the Hàm Long (north) front: 22 m shaft + pyramid spire ≈ 28 m + cross (ước lượng từ ảnh). ──
 const hamLong: DetailFn = (rec, parts, ctx, h) => {
@@ -419,4 +346,6 @@ export const details: Partial<Record<LandmarkId, DetailFn>> = {
   'hoa-lo': hoaLo,
   'ga-ha-noi': gaHaNoi,
   'nha-tho-ham-long': hamLong,
+  'thpt-tran-phu': tranPhu,
+  'luc-thuy': lucThuy,
 };

@@ -1,6 +1,7 @@
 // Minimal Host page, pure part (docs/plans/phase6.md §3.19): host.state → table rows / counter lines. No DOM, so it is
 // testable in Node. Phase 10 replaces the page with SPEC §13; keep the page thin.
 import { latLonToWorld, worldToLatLon } from '@race/shared';
+import { CETIQLO } from '../../../worker/src/race/cetiqlo/config.ts';
 import { FINISH_PENALTY_REASON, MEDIA, NET, normalizeAnswer, submitCode, type AnswerStatus, type ClientMessage, type FlagWhy, type HostReview, type HostState, type LegIssueView, type QuotaCounters, type RaceStatus, type ReviewItem, type StepProgressView, type UndoItem } from '@race/shared/protocol';
 
 /** Durable Object requests as Cloudflare bills them (same formula as worker/src/counters.ts, docs/plans/phase6.md §3.7). */
@@ -101,7 +102,7 @@ export function cetiqloLines(state: HostState, now: number = state.serverMs): st
   const label = (step: string) => state.leg?.steps.find((x) => x.id === step)?.label ?? step;
   return (state.cetiqlo ?? []).map((r) => {
     const m = r.match;
-    const match = m ? `đang đấu: ${m.teams.map((t) => `${t.name}${t.online ? '' : ' (mất mạng)'} ${t.locked ? 'đã chốt' : `${t.bagN} món`}`).join(' – ')} · ${m.startAt !== undefined && now < m.startAt ? `đếm ngược ${Math.ceil((m.startAt - now) / 1000)} s` : `còn ${fmtMinSec(Math.max(0, m.endsAt - now))}`}` : 'không có trận';
+    const match = m ? `đang đấu: ${m.teams.map((t) => `${t.name}${t.online ? '' : ' (mất mạng)'} ${t.locked ? 'đã chốt' : `${t.bagN} món`}`).join(' – ')} · ${m.startAt !== undefined && m.readMs && now < m.startAt - CETIQLO.countdownMs ? `đọc hướng dẫn ${Math.ceil((m.startAt - CETIQLO.countdownMs - now) / 1000)} s` : m.startAt !== undefined && now < m.startAt ? `đếm ngược ${Math.ceil((m.startAt - now) / 1000)} s` : `còn ${fmtMinSec(Math.max(0, m.endsAt - now))}`}` : 'không có trận';
     return `CETIQLO · ${label(r.step)}: ${match} · hàng chờ: ${r.queue.length ? r.queue.map((q) => (q.releaseInS === undefined ? q.name : `${q.name} (rời sau ${fmtMinSec(q.releaseInS * 1000)})`)).join(', ') : 'trống'}`;
   });
 }
@@ -625,7 +626,7 @@ export function demoState(now = 1_000_000): HostState {
         s('T2', 'challenge', 'Thử thách 2', pt(21.0187, 105.8436, 25, 'Hồ Thiền Quang')), // a typed place name (SPEC §17.42)
         s('PS', 'pit_stop', 'Về đích', pt(21.0187, 105.8436, 25, 'Hồ Thiền Quang')),
       ],
-      vehicles: { corridorMeters: 150, minDistanceFromCheckpoint: 100, initialPerSegment: [0, 1], spawnIntervalMinutes: 3, spawnChance: 0.3, maxAvailablePerSegment: 1, decoyRatio: 0.4, noSpawnNearPlayerMeters: 120, abandonMeters: 200, abandonSeconds: 60, bikeParking: { offsetMeters: 20, maxBikes: 6 } },
+      vehicles: { corridorMeters: 150, minDistanceFromCheckpoint: 100, initialPerSegment: [0, 1], spawnIntervalMinutes: 3, spawnChance: 0.3, maxAvailablePerSegment: 1, decoyRatio: 0.4, noSpawnNearPlayerMeters: 120, abandonMeters: 200, abandonSeconds: 60, bikeParking: { offsetMeters: 20, maxBikes: 6 }, fixedBikes: [] },
       bundled: ['hanoi-demo', 'hanoi-demo-filled', 'mini'],
       issues: [{ level: 'blank', where: 'Lộ trình 1', message: 'chưa có mật thư (ô trống)' }],
       media: ['test-gia.jpg', 'test-gia-2.jpg'], penalties: { retryLockMinutes: 3, branchSwitchLockMinutes: 10 }, stuckMinutes: 45,

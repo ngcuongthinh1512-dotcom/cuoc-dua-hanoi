@@ -88,6 +88,12 @@ export const taskSchema = z.strictObject({
   /** Leg 3: the answer is picked in a 3D room instead of typed: `"seat"` = a stalls seat of the BOZAR hall (F on it sends its
    *  label "J-14" as the answer; `answers` = the right seat(s), server only). verification 'auto'; wrong = Phạt (retryLockMinutes). */
   pick: z.enum(['seat']).optional(),
+  /** Hà Nội T1: an external mini-game launched from the card ("Chơi trò …"): `"bong-goc-tuong"` = public/games/bong-goc-tuong.html in a
+   *  panel above the card's answer bar. The game only shows the player the letters; the answer is typed in the card as usual and
+   *  graded by the server (`answers`, verification 'auto').
+   *  `"sang-com"` = public/games/sang-com.html: winning the game IS the task (the page reports time + code, steps.ts checks it; no
+   *  `answers`, nothing typed). `"nan-gom"` = public/games/nan-gom.html, same contract (report "mm:ss GOM-XXXXX"). */
+  game: z.enum(['bong-goc-tuong', 'sang-com', 'nan-gom']).optional(),
   proofInstruction: text().default(''),
   timeLimitMinutes: z.number().positive().nullable().default(null),
   /** Mini-game parameters of kinds other than answer / free (object positions, target photo + heading, gates…: SPEC
@@ -115,7 +121,11 @@ const routeInfo = z.strictObject({
 });
 /** `afterChoice` (Leg 3): the text that "drops open" under the chosen branch once the team picked it (where to go, the Host's
  *  manual penalties…); sent only with the CHOSEN branch (steps.ts cardOf), scanned for leaks like `summary`. */
-const branchSchema = z.strictObject({ id: stepId, name: text().default(''), summary: text().default(''), afterChoice: text().default(''), task: taskSchema.prefault({}) });
+/** `look`: the skin of a branch's half of the "Mật thư mở ngang" card (RaceHud detourPair / race.css `.rc-half-<look>`):
+ *  choco / comic = Bruxelles (default by position: A choco, B comic), com (làm cốm) / gom (làm gốm) = Hà Nội. */
+export const BRANCH_LOOKS = ['choco', 'comic', 'com', 'gom'] as const;
+export type BranchLook = (typeof BRANCH_LOOKS)[number];
+const branchSchema = z.strictObject({ id: stepId, name: text().default(''), summary: text().default(''), afterChoice: text().default(''), look: z.enum(BRANCH_LOOKS).optional(), task: taskSchema.prefault({}) });
 const detour = z.strictObject({
   id: stepId,
   type: z.literal('detour'),
@@ -185,6 +195,23 @@ export const legSchema = z.strictObject({
       abandonMeters: z.number().positive().default(200),
       abandonSeconds: z.number().positive().default(60),
       bikeParking: z.strictObject({ offsetMeters: z.number().min(0).default(20), maxBikes: z.number().int().min(1).default(6) }).prefault({}),
+      /** A fleet of shared bikes standing at a fixed spot from the race's first load (BikeService.seedFixed, zones.ts
+       *  fixedBikeSpots): `rows` rows of bikes `spacing` m apart, rows along `angleDeg` (0 = east–west, + = turned
+       *  left / north), bikes side by side facing across the row. Unclaimed they never go (no spawn / abandon rule touches a
+       *  free bike); taken, they are ordinary bikes. */
+      fixedBikes: z
+        .array(
+          z.strictObject({
+            ...latLon,
+            count: z.number().int().min(1).max(40),
+            spacing: z.number().min(1).max(10).default(1.6),
+            rows: z.number().int().min(1).max(10).default(2),
+            angleDeg: z.number().default(0),
+            label: z.string().max(60).default(''),
+          }),
+        )
+        .max(10)
+        .default([]),
     })
     .prefault({}),
   clueBook: z.strictObject({ showLockedSlots: z.boolean().default(false) }).prefault({}),

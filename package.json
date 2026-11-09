@@ -22,6 +22,8 @@
     "landmark-audit": "tsx scripts/landmark-audit.ts",
     "sim": "tsx scripts/sim.ts",
     "cq-test": "tsx scripts/cq-test-setup.ts",
+    "bong-test": "tsx scripts/bong-test-setup.ts",
+    "hanoi-test": "tsx scripts/hanoi-test-setup.ts",
     "cq-e2e": "tsx scripts/cq-e2e.ts",
     "leg:check": "tsx scripts/leg-check.ts",
     "fetch-map": "tsx scripts/fetch-osm.ts && tsx scripts/fetch-dem.ts --flat",

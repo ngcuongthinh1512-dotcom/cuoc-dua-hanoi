@@ -15,6 +15,10 @@ import { flyCamera } from '../client/src/config.ts';
 import { type ChunkData, type ChunkIndex, ringArea } from '../client/src/geo/chunkData.ts';
 import { ringCentroid } from '../client/src/geo/clip.ts';
 import { LANDMARKS } from '../client/src/geo/landmarks.ts';
+import { BT, BT_BOX, BT_UA, BT_UW } from '../client/src/world/landmarks/batrang.ts';
+import { NT } from '../client/src/world/landmarks/nhatho.ts';
+import { LT } from '../client/src/world/landmarks/lucthuy.ts';
+import { TP, TP_UA, TP_UW } from '../client/src/world/landmarks/tranphu.ts';
 import { flatHeightGrid, heightAt, parseHeightGrid } from '../client/src/geo/heightGrid.ts';
 import { flattenPads } from '../client/src/world/Terrain.ts';
 
@@ -83,9 +87,28 @@ Object.assign(PRESETS, {
   'hn-cafe-lane': '/?cam=-2953.32,1.6,2842.20,-74,2',
   'hn-cafe-left': '/?cam=-2943.77,1.6,2831.84,-169,2',
   'hn-cafe-top': '/?cam=-2955.3,9,2834.3,-116,-30', // from above the yard (the upper floors cover the terrace, so no straight-down view)
+  // Ga Hà Nội (landmarks/ga.ts, hall face at (−1134.4, 878.9), façade faces EAST onto Lê Duẩn): the owner's photo views — front
+  // from the far sidewalk, aerial from the east, oblique from the south-east corner of the forecourt, street level at the clue box
+  'hanoi-ga-front': '/?cam=-1105,1.7,879,90,7', // from the middle of Lê Duẩn (the sidewalk trees hide the hall from the far kerb)
+  'hanoi-ga-aerial': '/?cam=-1052,62,879,90,-24',
+  'hanoi-ga-oblique': '/?cam=-1113,3,932,22,5', // the forecourt's south-east corner (owner photo 3)
+  'hanoi-ga-street-level': '/?cam=-1117.2,1.6,879,90,9', // the zebra gap in the kerb railing, 17 m from the doors
+  'hanoi-ga-wing': '/?cam=-1114,1.7,846,60,5', // the north wing's pergola + the hall's side from the forecourt
   'hn-street': cam(21.0252, 105.8555, 1.7, yawTo(21.0252, 105.8555, 21.0242, 105.8576), 2),
   // Leg 3 building styles (BuildingBuilder): street level on Hàng Gai (Old Quarter), Lý Thái Tổ (French quarter), Xã Đàn (Đống Đa),
   // Bạch Mai / Lò Đúc (Hai Bà Trưng, KTT), and obliques over the Old Quarter / Bạch Mai (road-graph midpoints, 1.7 m eye)
+  // hanoi-houses-* (docs/reports/hanoi-houses.md): before / after pairs of the house styles, eye 1.7 m along the street
+  // (&npc=0 so the pairs compare buildings, not traffic)
+  'hanoi-houses-tnt-w': '/?cam=-768,1.7,1655,92,3&npc=0', // phố Trần Nhân Tông by the Thống Nhất gate, looking west (owner photo 1)
+  'hanoi-houses-tnt-e': '/?cam=-768,1.7,1655,-88,3&npc=0',
+  'hanoi-houses-batrieu': '/?cam=-306,1.7,2150,-2,3&npc=0', // phố Bà Triệu ≈ 174–176, looking north (owner photos 2 + 3)
+  'hanoi-houses-vincom': '/?cam=-308,1.7,2245,178,3&npc=0', // Bà Triệu at Vincom, looking south
+  'hanoi-houses-hangdao': '/?cam=-86,1.7,-36,15,3&npc=0', // Hàng Đào (Old Quarter), looking north
+  'hanoi-houses-hanggai': '/?cam=-95.9,1.7,-14.7,-94,3&npc=0',
+  'hanoi-houses-khuongthuong': '/?cam=-2953.32,1.6,2842.20,-74,2&npc=0', // the café lane, Khương Thượng (Đống Đa)
+  'hanoi-houses-leduan': '/?cam=-1112,1.7,1300,2,3&npc=0', // Lê Duẩn, looking north
+  'hanoi-houses-ktt': '/?cam=-1898.5,1.7,2576.5,-60,6&npc=0', // KTT Kim Liên (5-storey apartments, Lương Định Của)
+  'hanoi-houses-top': '/?cam=-310,180,2200,0,-55&npc=0', // oblique over Bà Triệu
   'hn-hanggai': '/?cam=-95.9,1.7,-14.7,-94,3',
   'hn-lythaito': '/?cam=295.4,1.7,215.7,-161,3',
   'hn-xadan': '/?cam=-2031.1,1.7,1795.6,45,3',
@@ -348,6 +371,100 @@ const worldCam = (x: number, y: number, z: number, tx: number, ty: number, tz: n
   return `/?cam=${[x, y, z, yaw, pitch].map((v) => +v.toFixed(2)).join(',')}`;
 };
 const ground = (x: number, z: number) => heightAt(grid, x, z);
+// Nhà thờ Lớn (landmarks/nhatho.ts): camera at frame (a, w) of NT, `eye` m up, looking at frame point (la, lw) at height ly;
+// the façade faces ENE, a = the viewer's right (north-west), the garden is at (1.5, 28.4), the clue box spot at (0, 17.5).
+const ntCam = (a: number, w: number, eye: number, la: number, lw: number, ly: number, extra = '&npc=0') => {
+  const at = (aa: number, ww: number) => [NT[0] - 0.5223 * aa + 0.8528 * ww, NT[1] - 0.8528 * aa - 0.5223 * ww] as const;
+  const [x, z] = at(a, w);
+  const [tx, tz] = at(la, lw);
+  return worldCam(x, eye, z, tx, ly, tz) + extra;
+};
+Object.assign(PRESETS, {
+  'hanoi-nhatholon-front': ntCam(-7.5, 38, 2.2, 0, 0, 16), // the square, south of the garden (owner photo 2)
+  'hanoi-nhatholon-oblique': ntCam(9.5, 36, 3.5, 0, 0, 14), // from the north-east, over the garden (owner photo 1)
+  'hanoi-nhatholon-street-level': ntCam(0, 17.5, 1.6, 0, 0, 13), // the clue-box spot (owner photo 3)
+  'hanoi-nhatholon-portal': ntCam(0, 9, 1.6, 0, 0, 9),
+  'hanoi-nhatholon-square': ntCam(0, 3, 1.7, 1.5, 28.4, 3), // from the steps out over the square: railing, garden, statue
+  'hanoi-nhatholon-garden': ntCam(-4, 20, 1.7, 1.5, 28.4, 3.5), // the Regina Pacis garden from the square
+  'hanoi-nhatholon-aerial': ntCam(0, 70, 55, 0, -25, 10), // nave, transept bay, apse from the east
+  'hanoi-nhatholon-side': ntCam(13.6, -8, 1.7, 10.45, -40, 8), // the north lane along the aisle buttresses
+  'hanoi-nhatholon-top': ntCam(0, 5, 70, 0, -30, 0), // straight down the nave roof
+});
+// THPT Trần Phú – Hoàn Kiếm (landmarks/tranphu.ts): camera at frame (a, w) of TP (the gate axis on the wall line), `eye` m up,
+// looking at frame point (la, lw) at height ly; a = along Hai Bà Trưng (the viewer's right), w = out towards the street (kerb 5.5,
+// centre line 10.5, the far kerb 15.5), the clue box spot at (0, 3.6).
+const tpCam = (a: number, w: number, eye: number, la: number, lw: number, ly: number, extra = '&npc=0&time=day') => {
+  const at = (aa: number, ww: number) => [TP[0] + TP_UA[0] * aa + TP_UW[0] * ww, TP[1] + TP_UA[1] * aa + TP_UW[1] * ww] as const;
+  const [x, z] = at(a, w);
+  const [tx, tz] = at(la, lw);
+  return worldCam(x, eye, z, tx, ly, tz) + extra;
+};
+Object.assign(PRESETS, {
+  'hanoi-tranphu-front': tpCam(-1, 17.5, 1.7, 0, -4, 6), // from the far pavement across Hai Bà Trưng (owner photo 2)
+  'hanoi-tranphu-gate': tpCam(3.5, 8.5, 1.6, 0, -1, 3.4), // the gate + porch close up (owner photo 1)
+  'hanoi-tranphu-oblique': tpCam(-34, 16, 2.4, 6, -8, 7), // wide along the wall from the west, clock tower over the trees (owner photo 3)
+  'hanoi-tranphu-aerial': tpCam(0, 58, 48, 0, -24, 4), // the E-plan, the annexes and the yard from above the street
+  'hanoi-tranphu-street-level': tpCam(0, 3.6, 1.6, 0, -9, 7), // the clue-box spot: through the open gate to the clock pavilion
+});
+// Authentic Bat Trang (landmarks/batrang.ts): camera at frame (a, w) of BT (middle of the shopfront), `eye` m up, looking at frame
+// point (la, lw) at height ly; a = along Hàng Gai towards Hàng Bông (the viewer's right), w = out to the street (kerb 3.15, axis
+// 6.4, the far kerb 9.65), the clue box spot at (0, 1.7). `&time=day` for the photo comparison; -dusk = the lit sign.
+const btCam = (a: number, w: number, eye: number, la: number, lw: number, ly: number, extra = '&npc=0&time=day') => {
+  const at = (aa: number, ww: number) => [BT[0] + BT_UA[0] * aa + BT_UW[0] * ww, BT[1] + BT_UA[1] * aa + BT_UW[1] * ww] as const;
+  const [x, z] = at(a, w);
+  const [tx, tz] = at(la, lw);
+  return worldCam(x, eye, z, tx, ly, tz) + extra;
+};
+const BT_BOXES = `&boxes=L1,${BT_BOX[0].toFixed(2)},${BT_BOX[1].toFixed(2)},,35`; // the GỐM clue box on its spot, front to the street
+Object.assign(PRESETS, {
+  'hanoi-batrang-front': btCam(0.3, 9.4, 1.7, 0, 0, 2.6), // from the far pavement (the owner's Street View photo)
+  'hanoi-batrang-street-level': btCam(1.2, 5.6, 1.6, 0, 0, 2.2, '&npc=0&time=day' + BT_BOXES), // from the carriageway over the clue box spot
+  'hanoi-batrang-oblique': btCam(-5, 4.2, 1.8, 0.8, 0, 3.4), // from the kerb line east of the shop (past the street tree): the sign band, the pilaster plates, the neighbours
+  'hanoi-batrang-close': btCam(0.6, 2.4, 1.5, -0.4, -4, 1.4), // from the step into the shop: shelves, table, back wall sign
+  'hanoi-batrang-dusk': btCam(0.3, 9.4, 1.7, 0, 0, 2.6, '&npc=0&time=dusk&quality=high'),
+});
+// Lục Thủy (landmarks/lucthuy.ts): camera at frame (a, w) of LT (middle of the villa's façade line), `eye` m up, looking at frame
+// point (la, lw) at height ly; a = north (the viewer's right), w = east towards the street (kerb 6.45, centre line 9.7, the far
+// kerb 13), the terrace at a −13…−36.5, the clue box spot at (0, 3).
+const ltCam = (a: number, w: number, eye: number, la: number, lw: number, ly: number, extra = '&npc=0&time=day') =>
+  worldCam(LT[0] + w, eye, LT[1] - a, LT[0] + lw, ly, LT[1] - la) + extra;
+// the same in the terrace's frame f2 (origin at the villa's south end a −12, turned 10.6° west with the street; the kerb at w2 5.75)
+const lt2 = (a2: number, w2: number) => [LT[0] + 0.184 * a2 + 0.983 * w2, LT[1] + 12 - 0.983 * a2 + 0.184 * w2] as const;
+const lt2Cam = (a2: number, w2: number, eye: number, la: number, lw: number, ly: number, extra = '&npc=0&time=day') => {
+  const [x, z] = lt2(a2, w2);
+  const [tx, tz] = lt2(la, lw);
+  return worldCam(x, eye, z, tx, ly, tz) + extra;
+};
+Object.assign(PRESETS, {
+  'hanoi-lucthuy-front': ltCam(-3, 13, 2.4, 0.5, 0, 4.6), // from the far (lake-side) kerb: the whole façade, portal, board, round sign (owner photo 53)
+  'hanoi-lucthuy-street-level': ltCam(-3.5, 5.8, 1.6, 0.5, 0, 3.2), // beside the clue-box spot (0, 3) on the slate: the portal, the round sign, the board
+  'hanoi-lucthuy-oblique': lt2Cam(-30, 9.5, 1.6, -2, -2, 3.5), // from the south along the carriageway: terrace + villa in a row (owner photo 55)
+  'hanoi-lucthuy-terrace': lt2Cam(3, 5.0, 1.7, -12, -5, 2.8), // along the forecourt from the villa's south corner into the terrace (owner photo 54)
+  'hanoi-lucthuy-aerial': ltCam(-12, 55, 45, -12, -10, 4), // villa, terrace, theatre block from above the lake shore
+  'hanoi-lucthuy-board': lt2Cam(-22, 9.5, 1.5, -11.8, -2.2, 4.5), // the terrace board under the tree crowns, from the carriageway
+  'hanoi-lucthuy-dusk': lt2Cam(-22, 9.5, 1.5, -11.8, -2.2, 4.5, '&npc=0&time=dusk&quality=high'), // the same at dusk: the board and the terrace bulbs lit
+  'hanoi-lucthuy-dusk-villa': ltCam(-9, 9.0, 1.8, -1, 0, 3.6, '&npc=0&time=dusk&quality=high'), // the villa's board, round sign and portal lanterns lit
+});
+// Leg 3 hoàng hôn (config timeOfDay 'dusk', lighting.dusk; `npm run screenshot -- hanoi-dusk`): Bà Triệu at street level, Ga Hà Nội's
+// front (looking west into the sun), Nhà thờ Lớn's front, Hoàn Kiếm from the air looking west (the lake reflects the sky), an
+// oblique over the Old Quarter. `quality=high` explicitly (headless SwiftShader would pick low: no bloom / image-based light);
+// the -low twin checks the weak-GPU path, -day the unchanged daytime look.
+const DUSK = '&time=dusk&quality=high';
+Object.assign(PRESETS, {
+  'hanoi-dusk-street': `/?cam=-306,1.7,2150,-2,3${DUSK}`,
+  'hanoi-dusk-street-west': `/?cam=-306,1.7,2150,-92,4${DUSK}`, // Bà Triệu, looking west down a side street into the sun
+  'hanoi-dusk-street-low': '/?cam=-306,1.7,2150,-2,3&time=dusk&quality=low',
+  'hanoi-dusk-ga': `/?cam=-1105,1.7,879,90,7${DUSK}`,
+  'hanoi-dusk-church': ntCam(-7.5, 38, 2.2, 0, 0, 16, `&npc=0${DUSK}`),
+  'hanoi-dusk-aerial': cam(21.024, 105.854, 120, 50, -22) + DUSK, // 120 m over the south-east of Hoàn Kiếm, looking north-west across the lake
+  'hanoi-dusk-aerial-low': cam(21.024, 105.854, 120, 50, -22) + '&time=dusk&quality=low',
+  'hanoi-dusk-lake': cam(21.0285, 105.8537, 1.7, 100, 6) + DUSK, // the east shore (Đinh Tiên Hoàng) at eye level: the sun over the lake
+  'hanoi-dusk-lake-east': cam(21.0285, 105.8514, 1.7, -90, 10) + DUSK, // the west shore (Lê Thái Tổ) looking east: the sky opposite the sun
+  'hanoi-dusk-oldq': cam(21.0345, 105.8505, 150, 60, -35) + DUSK,
+  'hanoi-dusk-sky': '/?cam=17,3,407,-90,30&time=dusk&quality=low&npc=0', // over Hoàn Kiếm looking east and up: the sky opposite the sun (clouds)
+  'hanoi-dusk-shadows': '/?cam=-310,180,2200,0,-55&npc=0&time=dusk&quality=high', // oblique over Bà Triệu: the long shadows, lit windows, lamps
+  'hanoi-dusk-day': '/?cam=-306,1.7,2150,-2,3&time=day&quality=high', // reference: the day look, unchanged
+});
 const dataDir = join(root, 'client/public/data/chunks');
 if (existsSync(join(dataDir, 'index.json'))) {
   const targets = new Map<string, { x: number; z: number; w: number; top: number }>();
@@ -418,10 +535,15 @@ Object.assign(PRESETS, {
       'p8-card-detour-choose-small': 'card=detour-choose&full',
       'p8-card-detour-chosen-small': 'card=detour-chosen&full',
       'p8-card-detour-locked-1080': 'card=detour-locked&lock=540&full',
+      // Hà Nội: the same card with the cốm / gốm skins (`branches[].look`), no summary: choose, A chosen, B chosen (locked), narrow
+      'p8-card-detour-hanoi-choose': 'card=detour-choose&look=com,gom&full',
+      'p8-card-detour-hanoi-chosen-a': 'card=detour-chosen&look=com,gom&full',
+      'p8-card-detour-hanoi-chosen-b': 'card=detour-locked&lock=540&look=com,gom&full',
+      'p8-card-detour-hanoi-narrow': 'card=detour-choose&look=com,gom&full',
     }).map(([k, q]) => [k, `/?player&npc=0&wait=1&${q}`]),
   ),
 });
-Object.assign(VIEWPORT, { 'p8-card-detour-choose-small': { width: 1024, height: 640 }, 'p8-card-detour-chosen-small': { width: 1024, height: 640 }, 'p8-card-detour-locked-1080': { width: 1920, height: 1080 } });
+Object.assign(VIEWPORT, { 'p8-card-detour-choose-small': { width: 1024, height: 640 }, 'p8-card-detour-chosen-small': { width: 1024, height: 640 }, 'p8-card-detour-locked-1080': { width: 1920, height: 1080 }, 'p8-card-detour-hanoi-narrow': { width: 560, height: 900 } });
 Object.assign(VIEWPORT, { 'p8-card-answer-small': { width: 1024, height: 640 } });
 // Phase 8C (docs/plans/phase8c-graphics.md §6–7): p8c-* presets (`npm run screenshot -- p8c`; not in the default run). The
 // foundation fixed the NAMES with stand-in views; each track only changes the values on its own lines. ?quality=low|high

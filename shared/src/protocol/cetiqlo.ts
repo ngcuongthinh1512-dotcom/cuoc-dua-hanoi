@@ -26,6 +26,8 @@ export interface CqMatchView {
   set: string[];
   startAt: number;
   endsAt: number;
+  /** Reading time before the 5-4-3-2-1 (absent = none): the pair stands on the mat reading the how-to until startAt − countdownMs. */
+  readMs?: number;
   serverNow: number;
   yourBag: string[];
   yourLocked: boolean;
@@ -41,7 +43,7 @@ export interface CqTeamResult {
   correct: number;
   /** Bag items that are not an exact set id (all counted as wrong); missing ones are not counted. */
   errors: number;
-  /** Points, 0–100, 1 decimal (16.67 per correct item, −8 per wrong one). */
+  /** Points, ≤ 100 (no lower bound: can be negative), 1 decimal (16.67 per correct item, −8 per wrong one). */
   score: number;
   /** Server epoch ms of the checkout (ms precision), null = never locked (not completed). */
   lockedAtMs: number | null;
@@ -107,5 +109,5 @@ export interface CqHostRoom {
   /** `releaseInS`: a queued team is released (step done) after this many seconds without an opponent (maxWaitMs). */
   queue: (CqPlayer & { releaseInS?: number })[];
   /** `startAt`: the pick phase starts (the 5-4-3-2-1 countdown runs before it). */
-  match: { id: string; startAt?: number; endsAt: number; teams: (CqPlayer & { locked: boolean; bagN: number; online: boolean })[] } | null;
+  match: { id: string; startAt?: number; readMs?: number; endsAt: number; teams: (CqPlayer & { locked: boolean; bagN: number; online: boolean })[] } | null;
 }

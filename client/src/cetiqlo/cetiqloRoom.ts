@@ -126,7 +126,8 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       // fixtures (tables, rails, shelves, balustrades, the pedestal: low boxes) block the body but NOT the camera's spring-arm cast
       // (ThirdPersonCamera casts with IGNORE_NPC = everything but membership bit 1): the arm being pulled in and out by every shelf
       // the camera brushed past was the "cà giựt" measured on the main aisle (camera speed ±37 % per frame vs ±3 % on the street)
-      if ((b.hy < 1 && b.y < 3) || b.hx < 0.1 || b.hz < 0.1) desc.setCollisionGroups(NPC_GROUPS); // low fixtures + thin panes (glass, balustrades, the stair's side wall)
+      // (never a floor slab (top at y 0): the spawn ray ignores NPC_GROUPS, so a body placed in the room would land on the roof)
+      if (((b.hy < 1 && b.y < 3) || b.hx < 0.1 || b.hz < 0.1) && b.y + b.hy > 0.05) desc.setCollisionGroups(NPC_GROUPS); // low fixtures + thin panes (glass, balustrades, the stair's side wall)
       colliders.push(o.world.createCollider(desc));
     }
     o.autostep?.(C.autostepM); // a flat shop floor: no stepping onto anything (the stair is a ramp); the street's step height is back on dispose
@@ -155,11 +156,14 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
   let locked = false, oppLocked = false;
   let offset = 0; // server clock − local clock
   let result: CqResult | null = null;
+  const noHowto = new URLSearchParams(location.search).has('noHowto'); // DEV: no how-to overlay at all (screenshots)
   let gotState = false, lastSecond = -1, frames = 0;
   let briefFor: string | null = null; // match id whose brief / dressed model are on screen (made at startAt, also after F5 into a running match)
   let countLast = -1; // the 5-4-3-2-1 second on screen
   /** In a match, before startAt: the pair stands frozen on the mat, no brief, no take. */
   const inCountdown = () => phase === 'match' && !!match && Date.now() + offset < match.startAt;
+  /** …and while the fixed READING time (match.readMs, a fresh team paired at once) runs: how-to locked open, no numbers yet. */
+  const readLeft = () => (phase === 'match' && match?.readMs ? match.startAt - CETIQLO.countdownMs - (Date.now() + offset) : 0);
   const startBrief = () => {
     if (!hud || !match || briefFor === match.id) return;
     briefFor = match.id;
@@ -185,6 +189,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     if (!hud) return;
     if (m.t === 'cq.state') {
       offset = clockOffset(m.serverNow, Date.now());
+      if (!gotState && m.phase === 'lobby' && !noHowto) hud.rules(true); // entering the room: the how-to opens once, no timer (closable; not on an F5 into a match / countdown / result)
       gotState = true;
       const before = phase;
       phase = m.phase;
@@ -198,6 +203,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
           closeResult();
           waitFrom = null;
           hud.lobbyWait(null);
+          if (!m.match.readMs) hud.rules(false); // paired out of the queue: the mat + the 5-4-3-2-1, no reading time
           hud.showBrief(false); // the brief (and the dressed model) only from startAt: update() → startBrief()
           if (m.startSpot) moveTo(m.startSpot); // the pair is placed on the CHECKOUT mat for the 5-4-3-2-1
           hud.toast(`Ghép trận · đối thủ: ${oppName()}`);
@@ -354,7 +360,9 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
       // is over the client puts itself in the lobby (no queue numbers until the next cq.state); frame-driven, not a timer (background tabs)
       if (phase === 'result' && Date.now() + offset >= holdEnds) (holdEnds = Infinity), onMessage({ t: 'cq.state', phase: 'lobby', serverNow: Date.now() + offset });
       if (phase === 'lobby' && waitFrom !== null && !released) { const w = waitText(waitFrom, CETIQLO.maxWaitMs, Date.now() + offset); if (w !== waitLine) hud.lobbyWait((waitLine = w)); } // once a second (the text changes per second)
-      if (phase === 'match' && match && inCountdown()) { // 5-4-3-2-1 on the mat (server clock): a beep per second, 'BẮT ĐẦU!' is the first running frame below
+      { const l = readLeft(); hud.reading(l > 0 && !noHowto ? l : null, match?.readMs); }
+      if (phase === 'match' && match && inCountdown() && readLeft() > 0) { if (countLast !== -1) (countLast = -1), hud.countdown(null); if (halo.visible) (halo.visible = false), (pick = NO_PICK); } // reading: still, no numbers
+      else if (phase === 'match' && match && inCountdown()) { // 5-4-3-2-1 on the mat (server clock): a beep per second, 'BẮT ĐẦU!' is the first running frame below
         const s = Math.min(Math.ceil(CETIQLO.countdownMs / 1000), Math.ceil((match.startAt - (Date.now() + offset)) / 1000)); // (the DEV 'countdown' demo holds it: never above 5)
         if (s !== countLast) { countLast = s; hud.countdown(String(s)); beep(); }
         if (halo.visible) (halo.visible = false), (pick = NO_PICK);

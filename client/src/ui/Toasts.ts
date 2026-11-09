@@ -47,6 +47,7 @@ export const NOTICES: Readonly<Record<NoticeCode, string>> = {
   autoCorrect: 'Chính xác! Mật thư mới đã vào Sổ mật thư.',
   autoPenalized: 'Chưa đúng hết: bị phạt, chờ hết đếm ngược rồi trả lời lại',
   scoreUpdated: 'Host đã sửa số ô đúng của câu trả lời: xem trên thẻ',
+  gameIgnored: 'Kết quả trò chơi không được ghi nhận: hãy chơi lại trong game của thẻ này.',
 };
 
 export interface Toast {

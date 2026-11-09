@@ -752,6 +752,8 @@ function render(s: State) {
   bikes.replaceChildren(
     el('div', { className: 'row' },
       `Đặt xe tự động: ${paused ? 'đang tạm dừng' : 'đang chạy'} · ứng viên: ${s.spawning.candidates}`,
+      // vehicles.fixedBikes (BikeService.seedFixed: ids "f<fleet>-<n>"): still standing there, nobody's yet
+      ...(s.bikes.some((b) => /^f\d+-/.test(b.id)) ? [` · xe cố định còn chờ: ${s.bikes.filter((b) => /^f\d+-/.test(b.id) && b.owner === null && !b.parked).length}`] : []),
       el('button', { className: 'small', onclick: () => send({ t: 'host.spawning', paused: !paused }) }, paused ? 'Tiếp tục' : 'Tạm dừng'),
     ),
     el('div', { className: 'row' }, el('button', { disabled: computing, onclick: () => void sendCandidates() }, 'Tính hành lang & gửi ứng viên'), candStatus),

@@ -8,7 +8,7 @@ import { onPitMat } from '@race/shared';
 import { branchZone, type Leg, type MediaItem, type Step, type Task, type Zone } from '@race/shared/leg';
 import { MEDIA, NET, type AnswerView, type BoxInfo, type CardStatus, type ClueCard, type HostReview, type MediaView, type ServerNotice, type TaskView } from '@race/shared/protocol';
 import { parseAnswers, type AnswerRec, type StepProgressRow } from '../db.ts';
-import { gradeParts, PARTS_SEP, partsOf, verifyAuto } from './tasks.ts';
+import { gomOk, gradeParts, PARTS_SEP, partsOf, sangComOk, verifyAuto } from './tasks.ts';
 
 /** What the machine needs about one team (teams.state + the current step's step_progress row). */
 export interface Progress {
@@ -93,7 +93,7 @@ export type RaceEffect =
   | { kind: 'accept'; step: number }
   /** rec = the answer appended to step_progress.answers; verdict pending → submitted_at (the Host's queue); wrong →
    *  wrong_answers + 1; correct → a `complete` follows. */
-  | { kind: 'answer'; step: number; rec: AnswerRec; verdict: 'pending' | 'correct' | 'wrong' | 'penalized'; /** Leg 3: an auto-graded Phạt's countdown end. */ lockedUntil?: number | null }
+  | { kind: 'answer'; step: number; rec: AnswerRec; verdict: 'pending' | 'correct' | 'wrong' | 'penalized'; /** Leg 3: an auto-graded Phạt's countdown end (task.game: also a wrong typed answer). */ lockedUntil?: number | null }
   /** A Host decision (review()): the step's row as edited; approve → a `complete` follows (advance approve). */
   | { kind: 'review'; step: number; row: StepProgressRow; op: HostReview['op']; id: number | null }
   | { kind: 'branch'; step: number; branch: string }
@@ -104,6 +104,9 @@ export type RaceEffect =
   | { kind: 'hideBox'; step: number; branch: string }
   /** Leg 3: TeamRace.rooms[step] = rec; `penalty` = finish-line minutes of a skip (the engine keeps a Host-set one). */
   | { kind: 'room'; step: number; rec: RoomRec; penalty?: number };
+
+/** F on a clue box: within the zone AND NET.boxOpenReach m of the box centre (+ slack). */
+const nearBox = (zn: Zone, x: number, z: number, slack: number) => inside(zn, x, z, slack) && Math.hypot(x - zn.x, z - zn.z) <= NET.boxOpenReach + slack;
 
 /** (x, z) is in zone `zn` (+ slack m): within r — the Pit Stop's: ON the mat (SPEC §17.38, PIT_MAT's own slack). */
 export const inside = (zn: Zone, x: number, z: number, slack: number) => (zn.mat ? onPitMat(x, z, zn) : Math.hypot(x - zn.x, z - zn.z) <= zn.r + slack);
@@ -224,7 +227,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     if (i < p.step || p.branchOpenedAt !== null) return refuse('boxOpened');
     if ((p.lockedUntil ?? 0) > now) return silent; // switchLocked: the team has no box yet
     if (input.riding) return refuse('boxRiding');
-    if (!inside(branchZone(leg, zones, i, p.branch!)!, input.x, input.z, slack)) return refuse('boxFar');
+    if (!nearBox(branchZone(leg, zones, i, p.branch!)!, input.x, input.z, slack)) return refuse('boxFar');
     arrive(input.x, input.z, slack);
     fx.push({ kind: 'openBranch', step: i, branch: p.branch! });
     if (!taskOf(s, p.branch)!.location) fx.push({ kind: 'park', rack: branchZone(leg, zones, i, p.branch!)!.rack }); // the task starts here
@@ -235,7 +238,7 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     if (s.type !== 'route_info' || steps[i + 1]?.type === 'pit_stop') return silent; // no box there (the mat)
     if (i < p.step) return refuse('boxOpened');
     if (input.riding) return refuse('boxRiding');
-    if (!inside(zones[i]!, input.x, input.z, slack)) return refuse('boxFar');
+    if (!nearBox(zones[i]!, input.x, input.z, slack)) return refuse('boxFar');
     arrive(input.x, input.z, slack);
     complete(i, zones[i]!);
     settle(input.x, input.z, input.riding); // the next step may be done right here (a task at the point)
@@ -299,6 +302,8 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
   if (t.parts && (!texts || texts.length !== t.parts.length || texts.some((x) => x === ''))) return silent;
   const text = texts ? texts.join(PARTS_SEP) : input.text;
   if (t.kind !== 'free' && text.trim() === '') return silent; // the client never sends an empty typed answer
+  if (t.game === 'sang-com' && !sangComOk(text, p.startedAt, now)) return refuse('gameIgnored'); // a bad win report: no Phạt, nothing kept
+  if (t.game === 'nan-gom' && !gomOk(text, p.startedAt, now)) return refuse('gameIgnored');
   const rec: AnswerRec = { id: p.lastAnswerId + 1, b: s.type === 'detour' ? p.branch : null, text, at: now, s: 'pending' };
   p.lastAnswerId = rec.id;
   // Leg 3: every box has answers → graded here, applied at once (the Host only looks afterwards: ReviewItem.auto)
@@ -323,8 +328,11 @@ export function advance(leg: Leg, zones: readonly Zone[], p0: Progress, input: R
     p.pendingId = rec.id;
     return { p, effects: [{ kind: 'answer', step: i, rec, verdict: 'pending' }] };
   }
-  const verdict = verifyAuto(t, input.text);
-  fx.push({ kind: 'answer', step: i, rec: { ...rec, s: verdict }, verdict });
+  const verdict = t.game === 'sang-com' || t.game === 'nan-gom' ? 'correct' : verifyAuto(t, input.text); // win reports: checked above
+  // Hà Nội T1 (task.game): a wrong answer is also a fixed Phạt (retryLockMinutes, never escalating) so the game can freeze the block
+  const gameLock = t.game && verdict === 'wrong' && retryLockMinutes(leg, t) > 0 ? now + retryLockMinutes(leg, t) * 60_000 : null;
+  if (gameLock) p.lockedUntil = gameLock;
+  fx.push({ kind: 'answer', step: i, rec: { ...rec, s: verdict }, verdict, ...(gameLock ? { lockedUntil: gameLock } : {}) });
   if (verdict === 'correct') done(input.pose);
   return { p, effects: fx };
 }
@@ -393,6 +401,7 @@ const mediaView = (m: MediaItem): MediaView => ({ url: m.url, label: m.label, ki
 const taskView = (t: Task, room?: RoomRec | null, noInput = false): TaskView => ({
   title: t.title, description: t.description, media: t.media.map(mediaView), kind: t.kind, verification: t.verification,
   input: noInput ? 'none' : t.kind === 'free' ? 'proof' : t.parts ? 'parts' : t.pick ? 'seat' : 'text', proofInstruction: t.proofInstruction,
+  ...(t.game ? { game: t.game } : {}),
   timeLimitMinutes: t.timeLimitMinutes, ...(t.location ? { place: t.location.name } : {}),
   ...(t.parts ? { partLabels: t.parts.map((p) => p.label) } : {}), // SPEC §17.44
   ...(t.room ? { room: { ...t.room, done: room?.done ?? 0, skipped: room?.skipped ?? false } } : {}), // Leg 3: the 3D room + progress
@@ -436,7 +445,7 @@ export function cardOf(leg: Leg, index: number, row: StepProgressRow | undefined
       const opened = !!b && (row?.branch_opened_at != null || row?.completed_at != null);
       return {
         ...base, text: s.clue, media: s.media.map(mediaView),
-        branches: s.branches.map((x) => ({ id: x.id, name: x.name, summary: x.summary, ...(x === b ? { afterChoice: x.afterChoice } : {}), ...(opened && x === b ? { task: taskView(x.task, rooms?.[s.id]?.b === x.id ? rooms[s.id] : null) } : {}) })),
+        branches: s.branches.map((x) => ({ id: x.id, name: x.name, summary: x.summary, ...(x.look ? { look: x.look } : {}), ...(x === b ? { afterChoice: x.afterChoice } : {}), ...(opened && x === b ? { task: taskView(x.task, rooms?.[s.id]?.b === x.id ? rooms[s.id] : null) } : {}) })),
         branch, branchOpened: opened, switches: row?.branch_switches ?? 0, switchPenaltyMinutes: leg.penalties.branchSwitchLockMinutes,
         // Leg 3: after a switch the team stands in the OTHER branch's room (its box was opened) until it walks into the exit ring
         ...(status === 'switchLocked' && row?.branch_switches && s.branches.find((x) => x !== b)?.task.room ? { leftRoom: s.branches.find((x) => x !== b)!.task.room!.kind } : {}),

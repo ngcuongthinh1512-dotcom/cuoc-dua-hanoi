@@ -76,3 +76,26 @@ export function startSpot(leg: Leg, order: number): { x: number; z: number; yaw:
   const a = k * GOLDEN;
   return { x: p.x + r * Math.cos(a), z: p.z + r * Math.sin(a), yaw: (leg.start.yawDeg * Math.PI) / 180 };
 }
+
+/** m between two rows of a fixed fleet: a bike's length (≈ 1.8 m) + room to walk between the rows. */
+export const FIXED_ROW_GAP = 2.5;
+
+/** vehicles.fixedBikes → world spots, per fleet: `rows` rows centred on lat, lon (the last one shorter), bikes `spacing` m
+ *  apart along the row direction angleDeg (0 = east, + = towards north), each facing across the row (yaw like
+ *  PlayerState.yaw: 0 = north, + = west), rounded to cm. */
+export function fixedBikeSpots(fleets: Leg['vehicles']['fixedBikes']): { x: number; z: number; yaw: number }[][] {
+  return fleets.map((f) => {
+    const c = latLonToWorld(f.lat, f.lon);
+    const a = (f.angleDeg * Math.PI) / 180;
+    const [ux, uz, vx, vz] = [Math.cos(a), -Math.sin(a), -Math.sin(a), -Math.cos(a)]; // along the row, then the bikes' facing
+    const per = Math.ceil(f.count / f.rows);
+    const rows = Math.ceil(f.count / per); // 4 bikes in 3 rows = 2 rows of 2
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    return Array.from({ length: f.count }, (_, k) => {
+      const [r, i] = [Math.floor(k / per), k % per];
+      const inRow = Math.min(per, f.count - r * per);
+      const [u, v] = [(i - (inRow - 1) / 2) * f.spacing, (r - (rows - 1) / 2) * FIXED_ROW_GAP];
+      return { x: r2(c.x + ux * u + vx * v), z: r2(c.z + uz * u + vz * v), yaw: a };
+    });
+  });
+}

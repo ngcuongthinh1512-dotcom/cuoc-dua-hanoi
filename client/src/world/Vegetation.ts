@@ -5,18 +5,40 @@
 import * as THREE from 'three';
 import { graphics8c as G8, props as P } from '../config.ts';
 import type { PropLods } from './attach.ts';
+import type { ChunkData } from '../geo/chunkData.ts';
 import type { Builder } from './buildTypes.ts';
 import { hash01 } from './geom.ts';
-import { pushMatrix } from './StreetProps.ts';
+import { roadWidth, sidewalkWidth } from './RoadBuilder.ts';
+import { along, free, pushMatrix } from './StreetProps.ts';
 
-/** One instance per tree point: hashed yaw and scale in props.treeScale, foot 0.2 m into the ground. */
+/** Hà Nội street trees (props.streetTrees): along both kerbs of the streets with a real pavement, every `spacing` m (a hashed
+ *  share left empty), on free pavement only (StreetProps `free`: off every carriageway, out of buildings, clear of OSM trees). */
+export function placeStreetTrees(chunk: ChunkData): [number, number][] {
+  const T = P.streetTrees;
+  const out: [number, number][] = [];
+  if (!T.enabled) return out;
+  for (const r of chunk.roads) {
+    if (!T.kinds.includes(r.kind) || sidewalkWidth(r) < T.minSidewalk) continue;
+    const off = roadWidth(r) / 2 + T.curb;
+    along(r, T.spacing, T.spacing / 2, (x, z, tx, tz) => {
+      for (const side of [1, -1]) {
+        const [px, pz] = [x + tz * side * off, z - tx * side * off];
+        if (hash01(px, pz, 71) < T.gapShare || !free(chunk, px, pz, T.foot, T.curb - 0.3)) continue;
+        out.push([px, pz]);
+      }
+    });
+  }
+  return out;
+}
+
+/** One instance per tree point + planted street tree: hashed yaw and scale in props.treeScale, foot 0.2 m into the ground. */
 export const buildVegetation: Builder = (chunk, ctx) => {
   const m: number[] = [];
   const [s0, s1] = P.treeScale as [number, number];
-  for (const p of chunk.points) {
-    if (p.kind !== 'tree') continue;
-    const s = s0 + (s1 - s0) * hash01(p.x, p.z, 2);
-    pushMatrix(m, p.x, ctx.height(p.x, p.z) - 0.2, p.z, hash01(p.x, p.z, 1) * 2 * Math.PI, s);
+  const pts = chunk.points.filter((p) => p.kind === 'tree').map((p): [number, number] => [p.x, p.z]);
+  for (const [x, z] of [...pts, ...placeStreetTrees(chunk)]) {
+    const s = s0 + (s1 - s0) * hash01(x, z, 2);
+    pushMatrix(m, x, ctx.height(x, z) - 0.2, z, hash01(x, z, 1) * 2 * Math.PI, s);
   }
   return { meshes: [], instances: m.length ? [{ kind: 'tree', matrices: new Float32Array(m) }] : [], colliders: [] };
 };
@@ -52,6 +74,12 @@ function barkColour(i: number, j: number, y0: number): number[] {
   return d.lerp(l, t).multiplyScalar(1 / lum).toArray(); // linear: the map's mean brightness → c (its hue stays)
 }
 
+/** Luminance of the bark map's mean colour (vertex colours are divided by it so the map's dark brown drops out). */
+function mapLum() {
+  const m = new THREE.Color(G8.trees.bark.mapMean);
+  return 0.2126 * m.r + 0.7152 * m.g + 0.0722 * m.b;
+}
+
 /** mulberry32: the same tree on every run. */
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -78,7 +106,7 @@ class Geo {
   }
   /** Tapered tube from a to b, radius ra → rb, `seg` sides, `rings` lengthwise; bark uv: once around (s 0 → 1 over half the
    *  cell), t 0 → 1. Vertex colour: the platane's flaking bark, hashed patches between graphics8c.trees.bark colours. */
-  tube(a: THREE.Vector3, b: THREE.Vector3, ra: number, rb: number, seg: number, rings = 1) {
+  tube(a: THREE.Vector3, b: THREE.Vector3, ra: number, rb: number, seg: number, rings = 1, colour?: readonly number[]) {
     const axis = b.clone().sub(a).normalize();
     const side = Math.abs(axis.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
     const u = side.cross(axis).normalize();
@@ -89,7 +117,7 @@ class Geo {
       const n = u.clone().multiplyScalar(Math.cos(ang)).addScaledVector(w, Math.sin(ang));
       for (let j = 0; j <= rings; j++) {
         const p = a.clone().lerp(b, j / rings).addScaledVector(n, ra + ((rb - ra) * j) / rings);
-        this.vert(p, n, cellUv(TREE_ATLAS.bark, (0.5 * i) / seg, j / rings), barkColour(i % seg, j, a.y));
+        this.vert(p, n, cellUv(TREE_ATLAS.bark, (0.5 * i) / seg, j / rings), colour ?? barkColour(i % seg, j, a.y));
       }
     }
     const r1 = rings + 1;
@@ -163,14 +191,21 @@ export function treeGeometries() {
     }
   };
 
+  // Hà Nội: the lower trunk is whitewashed (quét vôi gốc cây) up to graphics8c.trees.whitewash m (at scale 1)
+  const wash = new THREE.Color(G8.trees.whitewashColour).multiplyScalar(1 / mapLum()).toArray();
+  const W = G8.trees.whitewash;
+  const r0 = 1.3 * S.trunkRadius;
+  const rW = r0 + ((S.trunkRadius - r0) * (W + 0.3)) / (S.forkY * 0.5 + 0.3);
   const lod0 = new Geo();
-  lod0.tube(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3(0, S.forkY * 0.5, 0), 1.3 * S.trunkRadius, S.trunkRadius, 8, 4);
+  lod0.tube(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3(0, W, 0), r0, rW, 8, 1, wash);
+  lod0.tube(new THREE.Vector3(0, W, 0), new THREE.Vector3(0, S.forkY * 0.5, 0), rW, S.trunkRadius, 8, 3);
   lod0.tube(new THREE.Vector3(0, S.forkY * 0.5, 0), new THREE.Vector3(0, S.forkY, 0), S.trunkRadius, 0.85 * S.trunkRadius, 8, 3);
   limbs(lod0, 5, 5, 3);
   crown(lod0, 48, 0.3 * S.height, 7);
 
   const lod1 = new Geo();
-  lod1.tube(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3(0, S.forkY, 0), 1.2 * S.trunkRadius, 0.85 * S.trunkRadius, 5);
+  lod1.tube(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3(0, W, 0), 1.2 * S.trunkRadius, 1.1 * S.trunkRadius, 5, 1, wash);
+  lod1.tube(new THREE.Vector3(0, W, 0), new THREE.Vector3(0, S.forkY, 0), 1.1 * S.trunkRadius, 0.85 * S.trunkRadius, 5);
   crown(lod1, 12, 0.48 * S.height, 11);
 
   // impostor: two crossed upright quads (the side cell) + one horizontal quad (the top cell) at the crown's middle

@@ -3,6 +3,7 @@
 // Pit Stop check-in (D19), the finish (SPEC §17.22 / §17.23 announcement, celebrate; the team keeps walking, §17.39: main.ts).
 import { onPitMat } from '@race/shared';
 import type { BoxInfo, ClientMessage, CqServerMessage, RaceOp, RaceView, ServerMessage, TeamInfo, TickArray, Welcome } from '@race/shared/protocol';
+import { NET } from '@race/shared/protocol';
 import { raceClient as C } from '../config.ts';
 import { roomOf } from '../rooms/roomState.ts';
 import type { RaceHud } from './ui/RaceHud.ts';
@@ -28,7 +29,7 @@ export interface RaceDeps {
 
 /** The current, unopened clue box whose zone holds (x, z): F opens it (D23). Mats are not opened. */
 export const boxInReach = (boxes: readonly BoxInfo[], x: number, z: number): BoxInfo | undefined =>
-  boxes.find((b) => !b.opened && b.kind !== 'mat' && Math.hypot(b.x - x, b.z - z) <= b.r);
+  boxes.find((b) => !b.opened && b.kind !== 'mat' && Math.hypot(b.x - x, b.z - z) <= Math.min(b.r, NET.boxOpenReach));
 
 /** The Pit Stop mat (x, z) stands ON (SPEC §17.38: the PIT_MAT rectangle, not the zone radius). */
 export const matAt = (boxes: readonly BoxInfo[], x: number, z: number): BoxInfo | undefined =>

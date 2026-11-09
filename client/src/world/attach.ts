@@ -2,6 +2,7 @@
 // (src/preview.ts) and by ChunkManager (package F, which may extend it). Colliders are not handled here.
 import * as THREE from 'three';
 import { type BuildOut, type MaterialId, type PropKind, VERTEX_COLOR } from './buildTypes.ts';
+import { glowOn, glowScale } from './night.ts';
 
 export type Materials = Record<MaterialId, THREE.Material>;
 /** One level of detail: drawn for the instances closer to the camera than `distance` (m) and farther than the previous
@@ -143,13 +144,17 @@ export function attachBuildOut(out: BuildOut, materials: Materials, propMeshes: 
   const near: THREE.Mesh[] = [];
   let triangles = 0;
 
-  for (const { material, image } of out.textures ?? []) {
+  for (const { material, image, glow, dayGlow } of out.textures ?? []) {
     const map = new THREE.Texture(image);
     map.colorSpace = THREE.SRGBColorSpace;
     map.flipY = false;
     map.anisotropy = 8; // plaques stay readable at grazing angles
     map.needsUpdate = true;
-    mats[material] = Object.assign(materials[material].clone(), { map });
+    // glow: the atlas lights itself (emissiveMap = the map: bright texels = lit letters / shop interior, dark ones stay dark),
+    // × glowScale at dusk / night, dayGlow (shop lights that are on by day too) else
+    const k = glowOn() ? (glow ?? 0) * glowScale() : (dayGlow ?? 0);
+    const lit = k > 0 ? { emissiveMap: map, emissive: new THREE.Color(0xffffff), emissiveIntensity: k } : {};
+    mats[material] = Object.assign(materials[material].clone(), { map }, lit);
     owned.push(mats[material], { dispose: () => (map.dispose(), image.close()) });
   }
 

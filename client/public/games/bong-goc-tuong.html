@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bóng trên góc tường</title>
+<!-- Mini-game of Thử thách 1 (Hà Nội). Port of the claude.ai artifact "Bóng Góc Tường Thống Nhất" (three r128 -> the repo's three,
+     served from ./vendor, no CDN). Opened by the card (task.game "bong-goc-tuong") in an iframe: ?team=<team name> seeds the start
+     orientations. The server never sees this game: the player arranges the found letters and types the answer in the CARD's answer box (checked by the server). -->
+<style>
+/* Dark UI panels over ONE plaster wall: the page background is the same tan lime-wash as the 3D scene's wall, tiled to cover the whole screen (the tile is painted once by the script below) */
+:root{--ink:#E4E9EE;--muted:#9AA7B3;--panel:#1C242D;--line:#2C3743;--amber:#E9A64B;--ok:#5FBF86;--bad:#F2867D;--lam:#7FAEE0;
+  --display:Georgia,"Times New Roman",serif;--body:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace;color-scheme:dark}
+*{box-sizing:border-box}
+html{background:#b39b6f}
+html,body{margin:0;color:var(--ink);font:15px/1.5 var(--body)}
+body{min-height:100vh;background-color:#b39b6f;background-attachment:fixed;padding:14px max(14px,env(safe-area-inset-right)) 24px max(14px,env(safe-area-inset-left));position:relative}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 50% 40%,rgba(0,0,0,0) 55%,rgba(40,28,10,.35) 100%)}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px;position:relative}
+p{margin:0}
+.top{padding:6px 14px;border-radius:10px;background:rgba(20,26,33,.86);border:1px solid var(--line)}
+.eyebrow{font:600 11px/1.2 var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--lam)}
+h1{margin:4px 0 0;font:700 clamp(26px,7vw,40px)/1.1 var(--display)}
+.plaque,.card,.info,.result,.note{position:relative;border-radius:10px;background:rgba(20,26,33,.9);border:1px solid var(--line)}
+.plaque{padding:6px 14px}
+.card{display:flex;flex-direction:column;gap:10px;align-items:center;padding:16px}
+button{font:inherit;font-weight:600;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,summary:focus-visible{outline:2px solid var(--lam);outline-offset:2px}
+#go{width:100%;border:0;border-radius:8px;padding:11px 16px;background:var(--lam);color:#10202e}
+.hud{display:flex;justify-content:space-between;align-items:stretch;gap:12px}
+.hud .plaque{display:flex;flex-direction:column;justify-content:center;min-width:110px}
+.hud .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hud .v{font:500 20px var(--mono);font-variant-numeric:tabular-nums}
+#nth{font:500 16px var(--body);color:var(--muted)}
+#game{display:flex;flex-direction:column;gap:12px}
+.info{padding:8px 14px;background:rgba(28,36,45,.94)}
+.info summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--muted)}
+.info .lead{margin:8px 0;color:var(--ink)}
+ul.rules{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;color:var(--ink)}
+kbd{font:12px var(--mono);background:var(--panel);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--ink)}
+.result{font:700 17px var(--display);padding:9px 12px;border:1.5px solid var(--line)}
+.result.ok{border-color:var(--ok);color:var(--ok)}.result.bad{border-color:var(--bad);color:var(--bad)}
+.stage{position:relative;width:min(calc(100% - 24px),calc(50vh*4/3));margin:6px auto;aspect-ratio:4/3;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#0E141B;box-shadow:0 8px 22px rgba(30,20,6,.5)}
+.stage canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+.stage.frozen canvas{cursor:not-allowed;filter:grayscale(.6) brightness(.8)}
+.rollbtns{position:absolute;top:8px;left:8px;display:flex;gap:8px;z-index:2}
+.rollbtns button{width:36px;height:36px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.3);color:#fff;font-size:19px;line-height:1;touch-action:none;user-select:none;-webkit-user-select:none;background:rgba(14,20,27,.55)}
+.rollbtns button.held{background:rgba(228,233,238,.9);color:#10202e}
+.lockb{position:absolute;left:8px;right:8px;bottom:8px;z-index:2;background:rgba(179,38,30,.92);border:1px solid #ffb4ab;color:#fff4d6;border-radius:8px;padding:8px 12px;font-weight:700;font-size:13.5px;text-align:center;pointer-events:none}
+.flash{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 55% 45%,rgba(255,214,140,.45),transparent 60%);opacity:0;transition:opacity .5s}
+.flash.on{opacity:1}
+.found{position:absolute;top:8px;right:8px;background:rgba(14,20,27,.78);color:#F3EBDD;border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;gap:4px;pointer-events:none;max-width:60%}
+.found span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#C9B994}
+#found{position:relative;width:132px;height:84px}
+#found b{position:absolute;width:24px;height:28px;display:grid;place-items:center;border:1.5px solid var(--amber);border-radius:5px;font:18px var(--display)}
+#found i{font-style:normal;font-size:12px;color:var(--muted)}
+.note{margin:0 auto;max-width:600px;text-align:center;font-size:13px;line-height:1.5;color:var(--muted);padding:6px 14px}
+.err{color:#fff0c8;background:#b3261e;padding:6px 10px;border-radius:4px;font-size:13px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.flash{transition:none}}
+@media (max-width:480px){.found{transform:scale(.72);transform-origin:top right}.rollbtns button{width:40px;height:40px}}
+</style></head><body>
+<div class="wrap">
+  <header class="top">
+    <div><div class="eyebrow">TAR Hà Nội · Công viên Thống Nhất</div><h1>Bóng trên góc tường</h1></div>
+  </header>
+
+  <section id="start" class="card">
+    <button id="go" type="button">Bật đèn</button>
+    <p id="glerr" class="err" hidden>Trình duyệt này không chạy được đồ hoạ 3D.</p>
+  </section>
+
+  <section id="game" hidden>
+    <div class="hud">
+      <div class="plaque"><span id="nth"></span></div>
+      
+      <div class="plaque"><div class="k">Thời gian</div><div class="v" id="clk">00:00</div></div>
+    </div>
+    <details class="info" open><summary>Luật chơi</summary>
+    <p class="lead">Đèn công viên chiếu một khối điêu khắc lên bức tường vôi. Ở đúng một góc, cái bóng thành một chữ cái. Có 6 khối, mỗi khối giấu 1 chữ; các chữ hiện ra không theo thứ tự. Sắp xếp lại để ra mật mã, rồi tự điền vào ô trả lời của thẻ (6 ô và nút Chốt luôn nằm ở cuối màn hình).</p>
+    <ul class="rules">
+      <li>Kéo chuột hoặc ngón tay để xoay khối (hoặc <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd>). Xoay quanh trục nhìn bằng nút ⟲ ⟳ trên khung hình hoặc <kbd>Q</kbd> <kbd>E</kbd>.</li>
+      <li>Hãy nhìn cái bóng trên tường, đừng nhìn khối. Bóng phải khớp chữ chuẩn từ 97% mới được tính, và chữ phải đứng thẳng (lệch tối đa khoảng 20°); chữ nghiêng nằm ngang hay lật như soi gương thì không tính.</li>
+      <li>Gần đúng rồi thì giữ <kbd>Shift</kbd> để xoay chậm lại.</li>
+      <li><b>Sai mật mã bị phạt 5 phút</b>: khối bị khoá, không xoay được trong thời gian chờ. Tiến trình xoay khối được lưu, tải lại trang không mất.</li>
+    </ul>
+    </details>
+    <div id="result" class="result" hidden></div>
+    <div class="stage" id="stage"><div class="flash" id="flash"></div><div class="lockb" id="lockb" hidden></div><div class="rollbtns"><button id="rL" data-r="-1" type="button" aria-label="Xoay trái">⟲</button><button id="rR" data-r="1" type="button" aria-label="Xoay phải">⟳</button></div><div class="found" aria-live="polite"><span>Chữ đã xoay được</span><div id="found"></div></div></div>
+    <p class="note">Chốt sai đáp án: bị phạt 5 phút, khối bị khoá không xoay được.</p>
+      </section>
+
+  </div>
+
+<script>
+/* The page background = the 3D scene's lime-wash plaster, painted ONCE as a 512 px tile and repeated over the whole screen */
+(()=>{try{const N=512,c=document.createElement('canvas');c.width=c.height=N;const x=c.getContext('2d');
+let seed=11;const R=()=>(seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296;
+x.fillStyle='#b39b6f';x.fillRect(0,0,N,N);
+for(let i=0;i<46;i++){const px=R()*N,py=R()*N,r=40+R()*120,d=R()<.5;const g=x.createRadialGradient(px,py,0,px,py,r);
+  g.addColorStop(0,d?'rgba(90,66,30,.10)':'rgba(255,240,205,.10)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;
+  for(const ox of[-N,0,N])for(const oy of[-N,0,N]){x.save();x.translate(ox,oy);x.fillRect(px-r,py-r,2*r,2*r);x.restore()}}
+for(let i=0;i<5200;i++){x.fillStyle='rgba('+(R()<.5?'96,72,40':'255,246,220')+','+(R()*.14).toFixed(3)+')';x.fillRect(R()*N,R()*N,1+R()*8,1+R()*8)}
+document.body.style.backgroundImage='url('+c.toDataURL()+')';document.body.style.backgroundRepeat='repeat'}catch(e){}})();
+</script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const $=id=>document.getElementById(id);
+const q=new URLSearchParams(location.search);
+const ORDER=["M","U","O","O","H","G"],PIX=0.5,PASS=0.97;
+const FONT={
+A:[".###.","#...#","#...#","#####","#...#","#...#","#...#"],B:["####.","#...#","#...#","####.","#...#","#...#","####."],
+C:[".###.","#...#","#....","#....","#....","#...#",".###."],D:["####.","#...#","#...#","#...#","#...#","#...#","####."],
+E:["#####","#....","#....","####.","#....","#....","#####"],F:["#####","#....","#....","####.","#....","#....","#...."],
+G:[".###.","#...#","#....","#.###","#...#","#...#",".###."],H:["#...#","#...#","#...#","#####","#...#","#...#","#...#"],
+I:[".###.","..#..","..#..","..#..","..#..","..#..",".###."],J:["..###","...#.","...#.","...#.","...#.","#..#.",".##.."],
+K:["#...#","#..#.","#.#..","##...","#.#..","#..#.","#...#"],L:["#....","#....","#....","#....","#....","#....","#####"],
+M:["#...#","##.##","#.#.#","#.#.#","#...#","#...#","#...#"],N:["#...#","##..#","#.#.#","#..##","#...#","#...#","#...#"],
+O:[".###.","#...#","#...#","#...#","#...#","#...#",".###."],P:["####.","#...#","#...#","####.","#....","#....","#...."],
+Q:[".###.","#...#","#...#","#...#","#.#.#","#..#.",".##.#"],R:["####.","#...#","#...#","####.","#.#..","#..#.","#...#"],
+S:[".####","#....","#....",".###.","....#","....#","####."],T:["#####","..#..","..#..","..#..","..#..","..#..","..#.."],
+U:["#...#","#...#","#...#","#...#","#...#","#...#",".###."],V:["#...#","#...#","#...#","#...#","#...#",".#.#.","..#.."],
+W:["#...#","#...#","#...#","#.#.#","#.#.#","#.#.#",".#.#."],X:["#...#","#...#",".#.#.","..#..",".#.#.","#...#","#...#"],
+Y:["#...#","#...#",".#.#.","..#..","..#..","..#..","..#.."],Z:["#####","....#","...#.","..#..",".#...","#....","#####"]};
+function fnv(s){let h=0x811c9dc5;for(const c of s){h^=c.codePointAt(0);h=Math.imul(h,0x01000193)>>>0}return h>>>0}
+function rng(seed){let a=seed||1;return()=>{a^=a<<13;a>>>=0;a^=a>>>17;a^=a<<5;a>>>=0;return a/4294967296}}
+function fmt(sec){sec=Math.max(0,Math.floor(sec));return String(Math.floor(sec/60)).padStart(2,"0")+":"+String(sec%60).padStart(2,"0")}
+const team=(q.get('team')||'TEAM').trim().toUpperCase();
+
+// closing: the card (parent) listens for bong.close / bong.done; Esc also closes
+const post=m=>{try{parent!==window&&parent.postMessage(m,'*')}catch(e){}};
+const close=()=>post({t:'bong.close'});
+
+addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+
+/* ---------- scene ---------- */
+const stage=$("stage");let renderer;
+// keep the artifact's look: three r128 had no colour management and linear output; since r155 lights are physical (x PI)
+THREE.ColorManagement.enabled=false;
+try{renderer=new THREE.WebGLRenderer({antialias:true});renderer.outputColorSpace=THREE.LinearSRGBColorSpace}catch(e){$("go").disabled=true;$("glerr").hidden=false}
+if(renderer){
+renderer.setPixelRatio(Math.min(2,devicePixelRatio||1));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap; // PCFSoftShadowMap is gone in this three
+stage.insertBefore(renderer.domElement,stage.firstChild);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x0E141B);
+const cam=new THREE.PerspectiveCamera(40,4/3,0.1,100);cam.position.set(-1.6,1.2,18.5);cam.lookAt(-1.4,0.8,0);
+scene.add(new THREE.HemisphereLight(0x8fa4c0,0x1a1410,0.32*Math.PI));
+const LDIR=new THREE.Vector3(0.85,-0.22,-1).normalize();
+const OBJ_POS=new THREE.Vector3(-4.6,1.6,5.0);
+const SHADOW_C=OBJ_POS.clone().addScaledVector(LDIR,OBJ_POS.z/-LDIR.z);
+const lamp=new THREE.DirectionalLight(0xffe2b0,0.95*Math.PI);
+lamp.position.copy(SHADOW_C).addScaledVector(LDIR,-24);lamp.target.position.copy(SHADOW_C);
+lamp.castShadow=true;lamp.shadow.mapSize.set(2048,2048);lamp.shadow.bias=-0.0006;lamp.shadow.normalBias=0.02;lamp.shadow.radius=2;
+Object.assign(lamp.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:1,far:60});
+scene.add(lamp);scene.add(lamp.target);
+function plaster(){const c=document.createElement("canvas");c.width=c.height=512;const x=c.getContext("2d");
+  x.fillStyle="#D9D0BA";x.fillRect(0,0,512,512);
+  for(let i=0;i<2600;i++){x.fillStyle="rgba("+(Math.random()<.5?"120,100,70":"255,250,235")+","+(Math.random()*0.07)+")";x.fillRect(Math.random()*512,Math.random()*512,2+Math.random()*10,2+Math.random()*10)}
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(3,2);return t}
+const wall=new THREE.Mesh(new THREE.PlaneGeometry(30,18),new THREE.MeshStandardMaterial({map:plaster(),roughness:0.95}));
+wall.position.set(0,1.5,0);wall.receiveShadow=true;scene.add(wall);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(30,20),new THREE.MeshStandardMaterial({color:0x6E6556,roughness:1}));
+floor.rotation.x=-Math.PI/2;floor.position.set(0,-3.2,8);floor.receiveShadow=true;scene.add(floor);
+const plinth=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,4.9,12),new THREE.MeshStandardMaterial({color:0x3A3128,roughness:0.6,metalness:0.4}));
+plinth.position.set(OBJ_POS.x,OBJ_POS.y+4.2,OBJ_POS.z);scene.add(plinth);
+
+/* ---------- sculpture ---------- */
+const PALS=[[0xA0623A,0x8A5230,0xB57448],[0x8C6A43,0x735536,0xA27C50],[0x6F7C5C,0x5B6749,0x84926C],[0x9B5A4A,0x83483A,0xB06E5C]];
+let obj=null,qT=new THREE.Quaternion();
+{const d=new THREE.Object3D();d.lookAt(LDIR.clone().negate());qT.copy(d.quaternion)}
+function buildObject(ch,rand){
+  const pts=[],outer=new THREE.Group(),g=new THREE.Group(),bm=FONT[ch],pal=PALS[Math.floor(rand()*PALS.length)];
+  const mats=pal.map(c=>new THREE.MeshStandardMaterial({color:c,roughness:0.7,metalness:0.05}));
+  const wireMat=new THREE.LineBasicMaterial({color:0x2A231C,transparent:true,opacity:0.55}),hub=new THREE.Vector3((rand()-.5)*0.6,2.4,(rand()-.5)*0.6);
+  const addCube=(x,y,z,sz,dep)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(sz,sz,dep),mats[Math.floor(rand()*3)]);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;g.add(m);
+    if(rand()<0.55){const wg=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x,y,z),hub]);g.add(new THREE.Line(wg,wireMat))}};
+  for(let r=0;r<7;r++)for(let c=0;c<5;c++){if(bm[r][c]!=="#")continue;
+    const x=(c-2)*PIX,y=(3-r)*PIX,z=(rand()-0.5)*4.6;pts.push(new THREE.Vector3(x,y,z));
+    addCube(x,y,z,PIX,PIX*(0.6+rand()*1.2));
+    const nd=rand()<0.85?1+Math.floor(rand()*2):0;
+    for(let k=0;k<nd;k++){const s2=PIX*(0.35+rand()*0.55),off=(PIX-s2)/2;
+      addCube(x+(rand()*2-1)*off,y+(rand()*2-1)*off,(rand()-0.5)*4.6,s2,s2*(0.6+rand()*1.4))}}
+  outer.add(g);outer.position.copy(OBJ_POS);outer.userData.pts=pts;outer.userData.inner=g;return outer;
+}
+function disposeObj(){if(!obj)return;scene.remove(obj);obj.traverse(o=>{if(o.geometry)o.geometry.dispose()});obj=null}
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+new ResizeObserver(resize).observe(stage);
+
+/* ---------- state ---------- */
+let rand,lv=0,t0=0,running=false,locked=false,roll=0,found=[],keepQ=null,goals=[],targetMask=null,dirty=false,lastCheck=0;
+let slotPos=[],startQ=null,elapsedMs=0,lockPerf=0,flashUntil=0,saveAt=0,saveDirty=false;
+/* found letters sit at random spots (up / down / diagonal, small tilt) of a 3 x 2 grid, never in the order found: the player has to rearrange them */
+function drawSlots(){$("found").innerHTML=found.length?found.map((c,i)=>{const p=slotPos[i]||[0,0,0];return '<b style="left:'+p[0]+'px;top:'+p[1]+'px;transform:rotate('+p[2]+'deg)">'+c+'</b>'}).join(""):"<i>chưa có</i>";
+  $("nth").textContent="Chữ "+Math.min(lv+1,ORDER.length)+"/"+ORDER.length;}
+function randQ(){const u=rand(),v=rand(),w=rand();return new THREE.Quaternion(Math.sqrt(1-u)*Math.sin(2*Math.PI*v),Math.sqrt(1-u)*Math.cos(2*Math.PI*v),Math.sqrt(u)*Math.sin(2*Math.PI*w),Math.sqrt(u)*Math.cos(2*Math.PI*w))}
+const SR=new THREE.Vector3(1,0,0).applyQuaternion(qT),SU=new THREE.Vector3(0,1,0).applyQuaternion(qT),tmp=new THREE.Vector3();
+const FLIPS=[[0,1,0,0],[Math.PI,0,1,0],[Math.PI,1,0,0],[Math.PI,0,0,1]].map(([a,x,y,z])=>new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(x,y,z),a||0));
+const ROLL=Math.PI,UPRIGHT=20*Math.PI/180;
+function startLevel(){
+  rand=rng(fnv("BONG|"+team+"|"+lv)); // one stream per level: a reload rebuilds the same sculpture for the same level
+  const qq=keepQ?keepQ.clone():randQ();startQ=qq.clone();
+  disposeObj();obj=buildObject(ORDER[lv],rand);scene.add(obj);
+  // start each letter at the hardest angle: as far as possible (in rotation) from every orientation that shows the letter
+  let bestR=null,bestD=-1;const inr=obj.userData.inner.quaternion;
+  for(let i=0;i<400;i++){const R=randQ();inr.copy(R).invert();
+    const gs=FLIPS.map(f=>qT.clone().multiply(f).multiply(R)).filter(g=>shadowErr(g)<0.01);
+    const d=Math.min(...gs.map(g=>qq.angleTo(g)));if(d>bestD){bestD=d;bestR=R}}
+  inr.copy(bestR).invert();goals=FLIPS.map(f=>qT.clone().multiply(f).multiply(bestR)).filter(g=>shadowErr(g)<0.01);
+  targetMask=maskAt(goals[0],0);obj.quaternion.copy(qq);locked=false;dirty=false;drawSlots();
+}
+function hausdorff(P,pts){let e=0;
+  for(const p of pts){let m=1e9;for(const a of P)m=Math.min(m,Math.hypot(a[0]-p.x,a[1]-p.y));if(m>e)e=m}
+  for(const a of P){let m=1e9;for(const p of pts)m=Math.min(m,Math.hypot(a[0]-p.x,a[1]-p.y));if(m>e)e=m}
+  return e}
+function shadowErr(qq,rollToo){const pts=obj.userData.pts,P0=pts.map(p=>{tmp.copy(p).applyQuaternion(obj.userData.inner.quaternion).applyQuaternion(qq);return[tmp.dot(SR),tmp.dot(SU)]});
+  if(!rollToo)return hausdorff(P0,pts);
+  let best=1e9;for(let f=-ROLL;f<ROLL;f+=Math.PI/60){const c=Math.cos(f),s=Math.sin(f);
+    const e=hausdorff(P0.map(([x,y])=>[x*c-y*s,x*s+y*c]),pts);if(e<best)best=e}
+  return best}
+/* pixel-accurate shadow mask: render the sculpture alone, straight down the light, into a small target */
+const MS=144,mRT=new THREE.WebGLRenderTarget(MS,MS),mBuf=new Uint8Array(MS*MS*4),mCam=new THREE.OrthographicCamera(-2.7,2.7,2.7,-2.7,0.1,60);
+const mMat=new THREE.MeshBasicMaterial({color:0xffffff}),mScene=new THREE.Scene();mScene.background=new THREE.Color(0);
+function maskAt(qq,twist){
+  const holder=obj.parent;mScene.add(obj);obj.traverse(o=>{if(o.isLine)o.visible=false});const keep=obj.quaternion.clone();obj.quaternion.copy(qq);obj.updateMatrixWorld(true);
+  mCam.position.copy(OBJ_POS).addScaledVector(LDIR,-20);mCam.up.copy(SU).applyAxisAngle(LDIR,twist);mCam.lookAt(OBJ_POS);mCam.updateMatrixWorld();
+  mScene.overrideMaterial=mMat;renderer.setRenderTarget(mRT);renderer.render(mScene,mCam);renderer.readRenderTargetPixels(mRT,0,0,MS,MS,mBuf);renderer.setRenderTarget(null);
+  obj.quaternion.copy(keep);holder.add(obj);obj.traverse(o=>{if(o.isLine)o.visible=true});
+  const m=new Uint8Array(MS*MS);for(let i=0;i<MS*MS;i++)m[i]=mBuf[i*4]>127?1:0;return m}
+function twistSwing(qq,g){const d=qq.clone().multiply(g.clone().invert());if(d.w<0){d.x=-d.x;d.y=-d.y;d.z=-d.z;d.w=-d.w}
+  const p=d.x*LDIR.x+d.y*LDIR.y+d.z*LDIR.z,tw=2*Math.atan2(p,d.w);
+  const tq=new THREE.Quaternion().setFromAxisAngle(LDIR,tw),sw=d.clone().multiply(tq.invert());return{tw,sw:2*Math.acos(Math.min(1,Math.abs(sw.w)))}}
+function matchPct(){
+  let best=null;for(const g of goals){const t=twistSwing(obj.quaternion,g);t.s=t.sw+0.01*Math.abs(t.tw);if(!best||t.s<best.s)best=t}
+  if(!best||best.sw>0.6||Math.abs(best.tw)>UPRIGHT)return 0; // the letter must stand upright (shadow turned at most UPRIGHT in the wall plane)
+  const m=maskAt(obj.quaternion,best.tw);let a=0,b=0;for(let i=0;i<m.length;i++){if(m[i]&&targetMask[i])a++;if(m[i]||targetMask[i])b++}
+  return b?a/b:0}
+const frozen=()=>performance.now()<lockPerf;
+function rotWorld(axis,ang){if(!obj||locked||frozen())return;obj.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis,ang));obj.quaternion.normalize();dirty=true;saveDirty=true}
+function check(now){if(!dirty||locked||now-lastCheck<90)return;lastCheck=now;dirty=false;
+  if(shadowErr(obj.quaternion,true)>0.6)return;const p=matchPct();
+  if(p>=PASS){locked=true;solved(Math.floor(p*1000)/10)}}
+const AX_Y=new THREE.Vector3(0,1,0),AX_X=new THREE.Vector3(1,0,0);
+const viewAxis=()=>OBJ_POS.clone().sub(cam.position).normalize();
+
+/* ---------- input ---------- */
+const cvs=renderer.domElement;let drag=null;
+cvs.addEventListener("pointerdown",e=>{if(!running)return;drag={id:e.pointerId,x:e.clientX,y:e.clientY};cvs.setPointerCapture(e.pointerId)});
+cvs.addEventListener("pointermove",e=>{if(!drag||e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;
+  const k=3.2/Math.max(240,cvs.clientWidth)*((e.shiftKey)?0.2:1);rotWorld(AX_Y,dx*k);rotWorld(AX_X,dy*k)});
+const endDrag=e=>{if(drag&&e.pointerId===drag.id)drag=null};
+cvs.addEventListener("pointerup",endDrag);cvs.addEventListener("pointercancel",endDrag);
+const keys={};
+addEventListener("keydown",e=>{if(!running||e.target.tagName==="INPUT")return;const k=e.code;if(k==="ShiftLeft"||k==="ShiftRight"){keys[k]=true;return}if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","KeyQ","KeyE"].includes(k)){e.preventDefault();keys[k]=true}},true);
+addEventListener("keyup",e=>{keys[e.code]=false});
+addEventListener("blur",()=>{for(const k in keys)keys[k]=false;roll=0});
+document.querySelectorAll("[data-r]").forEach(b=>{const d=+b.dataset.r;
+  b.addEventListener("pointerdown",e=>{e.preventDefault();b.setPointerCapture(e.pointerId);roll=d;b.classList.add("held")});
+  ["pointerup","pointercancel","lostpointercapture"].forEach(t=>b.addEventListener(t,()=>{roll=0;b.classList.remove("held")}));
+  b.addEventListener("contextmenu",e=>e.preventDefault())});
+function showResult(ok,msg){const r=$("result");r.hidden=false;r.className="result "+(ok?"ok":"bad");r.textContent=msg}
+
+function solved(pct){
+  $("flash").classList.add("on");keepQ=obj.quaternion.clone();const ch=ORDER[lv];found.push(ch);lv++;drawSlots();
+  showResult(true,"Bóng hiện chữ "+ch+" · khớp "+pct.toFixed(1).replace(".",",")+"%");save(keepQ,lv<ORDER.length?keepQ:startQ); // the next level starts from this orientation
+  setTimeout(()=>{$("flash").classList.remove("on");if(lv<ORDER.length)startLevel();else{running=false;showResult(true,"Đã tìm đủ 6 chữ. Hãy sắp xếp lại thành mật mã (từ có nghĩa) và điền vào ô trả lời của thẻ.")}},1800)}
+
+const elapsed=()=>elapsedMs/1000;
+/* ---------- progress (localStorage, per team + race; the Phạt itself is the card's / server's business and is re-posted by the card) ---------- */
+const SKEY="bong:"+team+(q.get('race')?":"+q.get('race'):"");
+function save(cq,sq){saveDirty=false;try{if(!obj)return;cq=cq||obj.quaternion;sq=sq||startQ;localStorage.setItem(SKEY,JSON.stringify({lv,found,q:cq.toArray(),s:sq?sq.toArray():null,ms:Math.round(elapsedMs)}))}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem(SKEY)||"null");if(d&&Number.isInteger(d.lv)&&d.lv>=0&&d.lv<=ORDER.length&&Array.isArray(d.found)&&Array.isArray(d.q)&&d.q.length===4)return d}catch(e){}return null}
+addEventListener("pagehide",()=>save());document.addEventListener("visibilitychange",()=>{if(document.hidden)save()});
+/* the card posts {t:'bong.lock', until: epoch ms of ITS clock} = a Phạt running (0 = none): the game counts down from the remaining ms at arrival */
+const lockb=$("lockb");let badUntil=0;
+addEventListener("message",e=>{if(e.origin!==location.origin||e.source!==window.parent)return;const d=e.data;if(!d||d.t!=="bong.lock"||typeof d.until!=="number")return;
+  const left=d.until?Math.max(0,d.until-Date.now()):0,was=performance.now()<lockPerf;lockPerf=left?performance.now()+left:0;
+  if(left&&!was)badUntil=performance.now()+4000;
+  if(left&&roll)roll=0});
+function lockUi(now){const left=lockPerf-now,fz=left>0;$("stage").classList.toggle("frozen",fz);lockb.hidden=!fz;
+  if(fz){const sec=Math.ceil(left/1000),t=String(Math.floor(sec/60)).padStart(2,"0")+":"+String(sec%60).padStart(2,"0");
+    lockb.textContent=(now<badUntil?"Sai mật mã · ":"")+"Bị phạt · còn "+t+" — chưa xoay được khối, hãy giải mật mã bằng các chữ đã có"}}
+/* ---------- loop ---------- */
+let last=0;
+function loop(now){
+  if(!running)return;requestAnimationFrame(loop);const dt=Math.min(0.05,(now-last)/1000);elapsedMs+=Math.min(1000,now-last);last=now;
+  const sp=1.3*dt*((keys.ShiftLeft||keys.ShiftRight)?0.15:1);
+  if(keys.ArrowLeft)rotWorld(AX_Y,-sp);if(keys.ArrowRight)rotWorld(AX_Y,sp);
+  if(keys.ArrowUp)rotWorld(AX_X,-sp);if(keys.ArrowDown)rotWorld(AX_X,sp);
+  const rr=roll+(keys.KeyQ?-1:0)+(keys.KeyE?1:0);if(rr)rotWorld(viewAxis(),-rr*sp);
+  check(now);lockUi(now);if(saveDirty&&now-saveAt>500)saveAt=now,save();
+  $("clk").textContent=fmt(elapsed());
+  renderer.render(scene,cam);
+}
+function begin(d){lv=d?d.lv:0;found=d?d.found.slice(0,ORDER.length):[];keepQ=d&&d.s?new THREE.Quaternion().fromArray(d.s):null;elapsedMs=d?d.ms||0:0;
+  {const r=rng(fnv("SLOT|"+team)),cells=[0,1,2,3,4,5];for(let i=5;i>0;i--){const j=Math.floor(r()*(i+1));[cells[i],cells[j]]=[cells[j],cells[i]]}
+   slotPos=cells.map(c=>[(c%3)*44+Math.round(r()*10),Math.floor(c/3)*46+Math.round(r()*14),Math.round((r()-.5)*36)])}
+  if(document.activeElement)document.activeElement.blur();
+  $("start").hidden=true;$("game").hidden=false;$("result").hidden=true;
+  resize();
+  const all=d&&d.lv>=ORDER.length; // every letter found: show the last block as left, nothing more to rotate
+  if(all)lv=ORDER.length-1;
+  startLevel();
+  if(d&&d.q)obj.quaternion.fromArray(d.q);
+  if(all){lv=ORDER.length;locked=true;drawSlots();showResult(true,"Đã tìm đủ 6 chữ. Hãy sắp xếp lại thành mật mã (từ có nghĩa) và điền vào ô trả lời của thẻ.")}
+  last=performance.now();running=true;requestAnimationFrame(loop)}
+$("go").onclick=()=>begin(null);
+{const d=load();if(d)begin(d)} // progress exists: straight back into the game
+// dev only (localhost): ?debug=1 -> window.__bong.snap() puts the block at a solving orientation
+if(q.get('debug')&&/^(localhost|127\.0\.0\.1)$/.test(location.hostname))window.__bong={snap:()=>{obj.quaternion.copy(goals[0]);dirty=true},level:()=>lv,info:()=>({g:goals.length,err:shadowErr(obj.quaternion,true),pct:matchPct(),locked,running}),go:()=>$("go").click()};
+}
+</script>
+</body></html>

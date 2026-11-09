@@ -48,13 +48,41 @@ export const look = {
 };
 
 // Leg 2 (user 2026-10-06): the Macao leg runs in the evening. 'day' = the look above (render.sun / sky, the 8C HDRI) as
-// before. Offline tests may override it with ?time=day|night (world/night.ts; ignored inside a real race).
-export const timeOfDay: 'day' | 'night' = 'day';
+// before. Leg 3 Hà Nội (owner 2026-11-09): 'dusk' = hoàng hôn (lighting.dusk: low golden sun, canvas sunset sky, lamps /
+// windows / headlights on). Offline tests may override it with ?time=day|night|dusk (world/night.ts; ignored inside a real race).
+export const timeOfDay: 'day' | 'night' | 'dusk' = 'dusk';
 
 // Night look (world/night.ts `isNight()`; Sky.ts, Water.ts, post.ts, StreetProps.ts). No real lights at night (each one
 // recompiles every shader): moon = the one DirectionalLight, lamps / windows / signs = emissive + bloom. Building and
 // landmark agents read `windows` / `emissiveScale` through `nightGlow()` (zero emissive by day).
 export const lighting = {
+  // ── Leg 3 hoàng hôn (timeOfDay 'dusk'; world/night.ts `isDusk()` / `glowOn()`, Sky.ts, post.ts, Water.ts) ──
+  // The day pipeline with the sun low in the west and the canvas sky (no HDRI) as background + image-based light; the night
+  // glows (lamps, windows, neon, headlights) are on at dusk.emissiveScale × lighting.emissiveScale. Same cost as day.
+  dusk: {
+    // the sun: west-south-west (Hà Nội in November sets at azimuth ≈ 250°), ≈ 10° high, orange-gold; m from the shadow target
+    sun: { color: 0xffa048, intensity: 3.0, position: { x: -470, y: 86, z: 170 } },
+    hemi: { sky: 0x8e8ab0, ground: 0x6e4c34, intensity: 1.2 }, // with the image-based light: mauve sky fill, warm ground bounce
+    low: { sunIntensity: 2.8, hemiIntensity: 2.4 }, // without it (low quality / runtime downgrade)
+    environmentIntensity: 0.7, // scene.environment = the dusk sky canvas (high quality): warm light from the west, cool from the east
+    // the low sun grazes the flat ground: a texel's depth step is ≈ 6× the day one, so a bigger bias (world/Sky.ts), else acne stripes
+    shadowBias: -0.0012, shadowNormalBias: 0.08,
+    // canvas sky (Sky.ts skyTexture): zenith → stops (share of the zenith…horizon run) → horizon (= fog colour); a sun disc +
+    // glow (radius px of the 1024 equirect) at the sun's direction; clouds lit from below, warm toward the sun, mauve away
+    sky: {
+      zenith: '#182c66', horizon: '#e49a78', // saturated on purpose: with post-processing ACES tone-maps the canvas (paler, lighter)
+      stops: [[0.3, '#3c468c'], [0.55, '#886097'], [0.75, '#d0726c'], [0.9, '#ee8752']] as [number, string][], // share 0.3 ≈ 63° up, 0.9 ≈ 9°
+      glow: { radius: 120, inner: 45, stretch: 1.5, colour: [255, 192, 128] as const, alpha: 1 }, // stretch: × wider than tall
+      disc: { radius: 5, colour: '#fff4d6' },
+      clouds: 55, cloudAlpha: 0.5, cloudNear: [255, 214, 170] as const, cloudFar: [150, 112, 142] as const, // rgb near the sun (lit underside) / opposite (mauve)
+    },
+    water: { zenith: '#2b3c6c', horizon: '#e89a68' }, // the reflection gradient (Water.skyEnvironment) without the image-based light
+    bloom: { strength: 0.3, radius: 0.5, threshold: 1.7 }, // replaces graphics8c.post.bloom at dusk: sun-lit facades haze, lamps glow
+    emissiveScale: 0.7, // × lighting.emissiveScale on every glow (lamps, windows, neon, headlights): the sky is still bright
+    // lit windows (facade shader): share in a lit building (MeshBucket.lit > 0) / in the others (no seed: a shared pattern);
+    // intensity × windows.intensity (the sky is bright: brighter than at night to read)
+    windows: { litShare: 0.6, otherShare: 0.25, intensity: 1.2 }, // ≈ 0.35 × 0.6 + 0.65 × 0.25 ≈ 37 % of all windows
+  },
   // canvas sky (replaces the daytime HDRI at night): zenith → horizon gradient (horizon = fog colour = city glow), stars
   sky: { zenith: '#02040b', horizon: '#232634', stars: 900, starAlpha: [0.25, 0.9] as const, starBand: 0.85 }, // starBand: share of the upper sky (0…zenith) with stars
   // full night (agent N-B, Sky.ts): a warm city-glow band under the horizon colour (glow from glowFrom of the 0…horizon
@@ -318,13 +346,26 @@ export const buildings = {
       gableShare: 0.5, tileShare: 0.5, rise: 1.5, tumShare: 0.3, tum: [2.2, 2.4], tankShare: 0.5, sideTint: '#cdc5b2',
       parapet: 0.5, // m: concrete lip around every flat roof (terrace), outer + inner face
       // a projecting balcony slab (roof bucket) on plots showing an atlas balcony column, slabUp m above the band on the first floor, depth / thickness m
-      slabCols: [1, 5, 7] as number[], slabUp: 0.7, slabDepth: 0.8, slabThick: 0.15,
+      slabCols: [1, 5, 7, 9, 12] as number[], slabUp: 0.7, slabDepth: 0.8, slabThick: 0.15,
     },
+    // House recipes (docs/reports/hanoi-houses.md): wall atlas columns a plot may take (BuildingBuilder wallCanvas: 0–5 nhà ống,
+    // 6–7 French colonial, 8–9 nhà phố Pháp cũ, 10 mặt phố mới dark cladding, 11 narrow house with stacked signs, 12 tân cổ
+    // điển pastiche, 13 mid-century block); repeats = weight. `tall` for blocks ≥ tallFrom m. A plot never repeats its left
+    // neighbour's column or tint.
+    recipes: {
+      street: [0, 1, 2, 3, 4, 5, 0, 2, 3, 8, 9, 10, 11, 12, 13] as number[],
+      tall: [1, 2, 4, 10, 10, 11, 11, 12, 13, 13, 3, 9] as number[],
+      tallFrom: 15,
+      french: [6, 7, 8, 9, 8, 9, 0, 3, 12] as number[],
+    },
+    // mái hiên: tôn / tile lean-to over the shop opening of a share of street plots (roof bucket + a shaded underside):
+    // fixed y m above the ground at the wall, out `depth` m dropping `drop` m; colours tôn blue / rust / green-rust, tile
+    awning: { share: 0.4, y: 3.3, depth: 1.7, drop: 0.45, colours: ['#6a9ccb', '#b05838', '#6f8a64', '#9a4e34', '#8f9498'] },
     // nhà ống rooftop box (stair head / terrace room, roof bucket): chance per flat-roofed low-rise, size as plantBox
     // ([min side, height, side as a share of √(largest roof triangle area), max side]); a water tank (bồn nước, hex prism)
     // stands on tankShare of the boxes
     roofBox: { chance: 0.55, maxHeight: 30, size: [1.8, 2.4, 0.3, 3.5], tankShare: 0.6, tankRadius: 0.55, tankHeight: 1, tank: '#d4d8dc' },
-    colonial: ['#dcc58a', '#e6d7a6', '#d6bd7a', '#e0cd98', '#e9e4d6', '#f1ede2', '#e4d3b6', '#cfc8b8', '#e8c4ae', '#c3d2d4', '#bfcdb0', '#dccfa6', '#d2cec4', '#e2d3b0', '#d4dccb', '#dcc6cb', '#bdb5a6', '#d8d2c6'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / off-white plaster, dusty pink, blue, green tube-house fronts, grey render
+    colonial: ['#dcc58a', '#e6d7a6', '#d6bd7a', '#e0cd98', '#e9e4d6', '#f1ede2', '#e4d3b6', '#cfc8b8', '#e8c4ae', '#c3d2d4', '#bfcdb0', '#dccfa6', '#d2cec4', '#e2d3b0', '#d4dccb', '#dcc6cb', '#bdb5a6', '#d8d2c6', '#e9dcc0', '#d8b46a', '#e8c3b9', '#b9d6c7', '#a9bfd6', '#bfb8a8'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / off-white plaster, dusty pink, blue, green tube-house fronts, grey render
     tenement: ['#d6c58f', '#cdbd8a', '#c9c0a8', '#bdb6aa', '#d9cc9e', '#b8b5ad', '#c7b995', '#c2b89f'], // KTT: yellowed / grey stucco
     kttRoof: { share: 0.6, maxHeight: 22, rise: 1.6, inset: 2.5, colours: ['#5c8fc0', '#a04a30', '#7aa0c6', '#b05838'] }, // (rust = saturated red: a pink-brown tint goes olive over the blue-grey slate diffuse) // tôn 'mái che' pitched cap over KTT slabs (blue / rust), slope rise m over inset m
     concrete: ['#d8ccb2', '#c9c3b8', '#e1d9c9', '#bdb5a5'], // concrete-grid towers
@@ -430,6 +471,14 @@ export const water = {
 export const props = {
   treeScale: [0.8, 1.2], // hashed per tree
   treeHeight: 15, // m, plane tree (platane) at scale 1
+  // Hà Nội street trees (sấu / xà cừ rows, world/Vegetation.ts placeStreetTrees): planted along both kerbs of these street
+  // kinds where the pavement is ≥ minSidewalk m, every spacing m (gapShare of the slots left empty), curb m in from the kerb,
+  // foot m of clearance from buildings
+  // Hà Nội parked motorbike rows (world/StreetProps.ts placeMotos, instanced 'moto', drawn within drawDistance m): on the
+  // pavements of these kinds (≥ minSidewalk m), a slot every step m, share of slots with a row of count[0]–[1] bikes gap m
+  // apart, fromFacade m off the house front
+  motoRows: { kinds: ['primary', 'secondary', 'tertiary', 'residential', 'unclassified'] as string[], minSidewalk: 2.5, step: 9, share: 0.45, count: [3, 8] as number[], gap: 0.78, fromFacade: 1.0, drawDistance: 110 },
+  streetTrees: { enabled: true, kinds: ['primary', 'secondary', 'tertiary', 'residential', 'unclassified'] as string[], minSidewalk: 2.5, spacing: 14, gapShare: 0.3, curb: 1.0, foot: 1.5 },
   lampSpacing: 30, // m along both sidewalks of car roads
   lampJunctionGap: 10, // m; no lamp this close to a junction
   lampCurbOffset: 0.6, // m from the road edge onto the sidewalk
@@ -1038,7 +1087,8 @@ export const graphics8c = {
     enabled: true, lowOff: false, lod: [60, 240], lowLod: [18, 45], lowShadow: false,
     // trunk / limb vertex colours (world/Vegetation.ts barkColour): the bark map (mean colour mapMean, near black-brown)
     // tinted to olive-grey `dark` with flaked grey-cream `light` patches (up to `patch` of the way)
-    bark: { mapMean: '#454730', dark: '#7a7a72', light: '#d4d2c4', patch: 0.9 },
+    bark: { mapMean: '#454730', dark: '#5c5a52', light: '#9a978a', patch: 0.8 }, // Hà Nội: darker sấu / xà cừ trunks (was #7a7a72 / #d4d2c4 / 0.9 platane)
+    whitewash: 1.3, whitewashColour: '#f6f5f0', // m (scale 1) of whitewashed lower trunk (Hà Nội street trees), its colour
   },
   props: {
     enabled: true, lowOff: false, lowScale: 0.6,

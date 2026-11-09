@@ -27,7 +27,7 @@ import type { BuildCtx, Builder, BuildOut, MaterialId, PropKind, TriMesh } from 
 import { hash01, MeshBuffer } from './geom.ts';
 import { graphics } from './graphics.ts';
 import { buildingHeight } from './BuildingBuilder.ts';
-import { isNight, nightTime } from './night.ts';
+import { glowOn, glowScale, isNight, nightTime } from './night.ts';
 import { quadOut } from './landmarks/kit.ts';
 import { roadWidth, sidewalkWidth } from './RoadBuilder.ts';
 import { createTreeLods } from './Vegetation.ts';
@@ -338,14 +338,14 @@ function toCarriageway(chunk: ChunkData, x: number, z: number) {
 
 /** A spot is free when it is on no carriageway (clear m from every curb), in no building (nor `foot` m around it in
  *  4 directions) and not within Q.treeGap m of a tree. */
-function free(chunk: ChunkData, x: number, z: number, foot: number, clear = Q.curbClear) {
+export function free(chunk: ChunkData, x: number, z: number, foot: number, clear = Q.curbClear) {
   if (toCarriageway(chunk, x, z) < clear) return false;
   for (const [dx, dz] of [[0, 0], [foot, 0], [-foot, 0], [0, foot], [0, -foot]] as const) if (inBuilding(chunk, x + dx, z + dz)) return false;
   return !chunk.points.some((p) => p.kind === 'tree' && Math.hypot(p.x - x, p.z - z) < Q.treeGap);
 }
 
 /** Walks every segment of road r at `step` m (from `start`): f(x, z, tangent, arc length). */
-function along(r: { pts: number[] }, step: number, start: number, f: (x: number, z: number, tx: number, tz: number, s: number) => void) {
+export function along(r: { pts: number[] }, step: number, start: number, f: (x: number, z: number, tx: number, tz: number, s: number) => void) {
   let [next, s] = [start, 0];
   for (let i = 0; i + 1 < r.pts.length / 2; i++) {
     const [x0, z0, x1, z1] = [r.pts[2 * i]!, r.pts[2 * i + 1]!, r.pts[2 * i + 2]!, r.pts[2 * i + 3]!];
@@ -373,6 +373,34 @@ export function placeBenches(chunk: ChunkData, junctionPts: { x: number; z: numb
         const [bx, bz] = [x + nx * off, z + nz * off];
         if (hash01(bx, bz, 21) >= Q.benchShare || !free(chunk, bx, bz, 0.8)) continue;
         out.push({ x: bx, z: bz, yaw: facing(-nx, -nz) });
+      }
+    });
+  }
+  return out;
+}
+
+/** Hà Nội parked motorbike rows (props.motoRows): along the pavement of shop streets, `fromFacade` m off the house fronts,
+ *  side by side `gap` m apart, front wheel to the road; a row only where a facade stands right behind it. */
+export function placeMotos(chunk: ChunkData): Spot[] {
+  const M = P.motoRows;
+  const out: Spot[] = [];
+  for (const r of chunk.roads) {
+    const sw = sidewalkWidth(r);
+    if (!M.kinds.includes(r.kind) || sw < M.minSidewalk) continue;
+    const off = roadWidth(r) / 2 + sw - M.fromFacade;
+    along(r, M.step, M.step / 2, (x, z, tx, tz) => {
+      for (const side of [1, -1]) {
+        const [nx, nz] = [tz * side, -tx * side];
+        const [cx, cz] = [x + nx * off, z + nz * off];
+        const h = hash01(cx, cz, 81);
+        if (h >= M.share || !inBuilding(chunk, cx + nx * (M.fromFacade + 1.2), cz + nz * (M.fromFacade + 1.2))) continue;
+        const n = M.count[0]! + Math.floor((h / M.share) * (M.count[1]! - M.count[0]! + 1));
+        for (let i = 0; i < n; i++) {
+          const a = (i - (n - 1) / 2) * M.gap;
+          const [bx, bz] = [cx + tx * a, cz + tz * a];
+          if (!free(chunk, bx, bz, 0.35, 0.4)) continue;
+          out.push({ x: bx, z: bz, yaw: facing(-nx, -nz) + (hash01(bx, bz, 82) - 0.5) * 0.35 });
+        }
       }
     });
   }
@@ -586,10 +614,12 @@ export const buildStreetProps: Builder = (chunk, ctx) => {
     pushMatrix(metro, p.x, ctx.height(p.x, p.z), p.z, d ? Math.atan2(d[0], d[1]) : hash01(p.x, p.z, 14) * 2 * Math.PI);
   }
 
+  const motos: number[] = [];
+  for (const m of placeMotos(chunk)) pushMatrix(motos, m.x, ctx.height(m.x, m.z) + SIDEWALK, m.z, m.yaw, 0.94 + 0.12 * hash01(m.x, m.z, 83));
   const signs = buildSigns(spots, ctx);
   const sets: [PropKind, number[]][] = [
     ['lamp', lamps], ['morris', morris], ['metro', metro], ['metroMask', metro],
-    ['lantern', placeLanterns(chunk, ctx.height)], ['shopSign', placeShopSigns(chunk, ctx.height)], ['aviation', placeAviation(chunk, ctx.height)],
+    ['lantern', placeLanterns(chunk, ctx.height)], ['shopSign', placeShopSigns(chunk, ctx.height)], ['aviation', placeAviation(chunk, ctx.height)], ['moto', motos],
   ];
   if (G8.props.enabled) {
     // the worker cannot know the quality: placement is the same everywhere, the main thread only picks the levels
@@ -716,6 +746,20 @@ export function createPropMeshes(): PropMeshes {
   // Metro well: the terrain has no hole, so a depth-only lid (drawn right after the railings + well, before everything
   // else) hides the ground inside the railings and the well shows through. ponytail: visual only, the propColliders box
   // still closes it (no tunnels); a real opening needs a terrain hole + a station.
+  // parked motorbike (Wave / Vision-like scooter), ≈ 150 triangles, front wheel at +Z; one shared colour scheme
+  // ponytail: one paint for every bike (InstancedMesh without instance colours); upgrade: instanceColor through attach.ts
+  const wheel = (z: number) => part(cyl(0.27, 0.27, 0.09, 8).rotateZ(Math.PI / 2), '#1b1b1b', 0, 0.27, z);
+  const paint = '#a8262a';
+  const moto = [
+    wheel(0.62), wheel(-0.62),
+    part(new BoxGeometry(0.3, 0.32, 0.9), paint, 0, 0.56, -0.08),
+    part(new BoxGeometry(0.32, 0.06, 0.45), '#2a2a2a', 0, 0.34, 0.08),
+    part(new BoxGeometry(0.28, 0.1, 0.62), '#1c1c1c', 0, 0.78, -0.2),
+    part(new BoxGeometry(0.34, 0.62, 0.12), '#d9d9d4', 0, 0.62, 0.42),
+    part(new BoxGeometry(0.62, 0.05, 0.05), '#2a2a2a', 0, 1.03, 0.5),
+    part(new BoxGeometry(0.22, 0.14, 0.1), '#d8d8d0', 0, 0.97, 0.56),
+    part(new BoxGeometry(0.22, 0.08, 0.25), '#2a2a2a', 0, 0.74, -0.62),
+  ];
   const lid = new PlaneGeometry(2 * W - 0.04, WELL - 0.06).rotateX(-Math.PI / 2).translate(0, LID, -WELL / 2);
   lid.deleteAttribute('uv');
   lid.deleteAttribute('normal');
@@ -731,6 +775,7 @@ export function createPropMeshes(): PropMeshes {
     metro: { ...mesh([...metro, ...metroWell()], 0.6), renderOrder: -2 },
     metroMask: { geometry: lid, material: new MeshBasicMaterial({ colorWrite: false }), renderOrder: -1, castShadow: false },
     bench: lods(1.2), cafe: lods(1.2), shelter: lods(3.1), bouquiniste: lods(4.6),
+    moto: lods(1, [{ parts: [mesh(moto, 0.55)], distance: P.motoRows.drawDistance }]),
     ...nightProps(),
   };
   if (on && typeof document !== 'undefined') void track(loadPropModels(out, g.quality));
@@ -740,12 +785,12 @@ export function createPropMeshes(): PropMeshes {
 const glsl = (n: number) => n.toFixed(4);
 const vec3 = (c: Color) => `vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)})`;
 /** HDR factor for the unlit night lights: × intensity only with post-processing (bloom), else plain (no white blow-out). */
-const hdr = (k: number) => (graphics().on('post') ? k : 1) * LT.emissiveScale;
+const hdr = (k: number) => (graphics().on('post') ? k : 1) * glowScale();
 
 /** An unlit night light material: colour × hdr(intensity); `vertex` = GLSL run per vertex (instanceMatrix, uNightTime and
- *  `position` in scope) that sets `vec3 vTint` (× the colour). Invisible by day (no draw call). */
+ *  `position` in scope) that sets `vec3 vTint` (× the colour). Invisible by day (no draw call); on at dusk and night. */
 function nightLight(colour: string, intensity: number, vertex: string, fog = true) {
-  const m = new MeshBasicMaterial({ color: new Color(colour).multiplyScalar(hdr(intensity)), fog, visible: isNight() });
+  const m = new MeshBasicMaterial({ color: new Color(colour).multiplyScalar(hdr(intensity)), fog, visible: glowOn() });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uNightTime = nightTime;
     sh.vertexShader = sh.vertexShader
@@ -797,9 +842,9 @@ function nightProps(): Pick<PropMeshes, 'lantern' | 'shopSign' | 'aviation'> {
 
 /** Night (world/night.ts, lighting.lamp): every lamp level gets an unlit HDR bulb at `bulbY` (bloom) and an additive light
  *  pool on the pavement (shadowSide BackSide: a horizontal plane seen from the moon casts no shadow); one more level with
- *  the bulb alone out to lamp.farDistance. Day: the levels as they are. */
+ *  the bulb alone out to lamp.farDistance. Dusk too (glowOn). Day: the levels as they are. */
 export function lampGlow(levels: PropLods['levels'], bulbY: number): PropLods['levels'] {
-  if (!isNight()) return levels;
+  if (!glowOn()) return levels;
   const C = LT.lamp;
   // white instead of sodium inside the lampModern areas: × (modern / sodium) per channel, on the instance position
   const [warm, white] = [new Color(C.colour), new Color(LT.lampModern.colour)];

@@ -7,7 +7,8 @@ import type { VehiclesConfig } from './leg.ts';
 
 /** One bike as the server keeps it (bikes.data JSON). */
 export interface ServerBike extends BikeInfo {
-  /** Route segment index it was spawned for, −1 = decoy (SPEC §6.2 (6)), −2 = put there by the Host. */
+  /** Route segment index it was spawned for, −1 = decoy (SPEC §6.2 (6)), −2 = put there by the Host, FIXED = a leg's
+   *  vehicles.fixedBikes fleet. */
   segment: number;
   /** ms when the owner was last within vehicles.abandonMeters (SPEC §6.3: abandonSeconds beyond → gone). Memory only in
    *  effect: reset to "now" when the Durable Object reloads the rows, so a restart never makes a bike vanish at once. */
@@ -46,7 +47,10 @@ export const CLAIM_REACH = 3.5;
 /** m: how far the team's own standing bike may be from its last pose — where a dismount put it (believed within this,
  *  BikeService) or where the last 1 s tick left it when the team dropped offline (≤ 1 s at bikeTopSpeed 5.2 m/s). */
 export const OWN_REACH = 10;
-/** m: no new bike this close to another one. */
+/** ServerBike.segment of a vehicles.fixedBikes bike. */
+export const FIXED = -3;
+/** m: no new bike this close to another one (random spawns and beside-box parking only; a fixed fleet is placed as the
+ *  leg says, its bikes `spacing` m apart: a claim names its bike, so close bikes are still taken one by one). */
 export const MIN_GAP = 3;
 /** mulberry32's increment: draw n of rng(seed) = the first draw of rng(seed + n · K). */
 const K = 0x6d2b79f5;

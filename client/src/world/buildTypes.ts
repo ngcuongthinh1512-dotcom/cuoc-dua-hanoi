@@ -46,7 +46,7 @@ export const VERTEX_COLOR: ReadonlySet<MaterialId> = new Set<MaterialId>(['terra
  *  bouquiniste (a stretch of book stalls on the quay parapet), from models/props.glb.
  *  Leg 2 night (StreetProps, drawn at night only): lantern (red paper lanterns), shopSign (neon blades + LED panels: a unit
  *  box scaled per instance), aviation (red roof lights on towers). */
-export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro' | 'metroMask' | 'bench' | 'cafe' | 'shelter' | 'bouquiniste' | 'lantern' | 'shopSign' | 'aviation';
+export type PropKind = 'tree' | 'lamp' | 'morris' | 'metro' | 'metroMask' | 'bench' | 'cafe' | 'shelter' | 'bouquiniste' | 'lantern' | 'shopSign' | 'aviation' | 'moto';
 
 /** One indexed triangle list for one material. uv in metres unless the material says otherwise. */
 export interface MeshBucket {
@@ -79,7 +79,7 @@ export interface BuildOut {
   meshes: MeshBucket[];
   instances: InstanceSet[];
   colliders: TriMesh[];
-  textures?: { material: MaterialId; image: ImageBitmap }[]; // per-chunk atlas (street signs) → cloned material
+  textures?: { material: MaterialId; image: ImageBitmap; glow?: number; dayGlow?: number }[]; // per-chunk atlas (street signs) → cloned material; glow = emissive × glowScale at dusk / night, dayGlow = the (weaker) emissive by day (lit shop signs / interiors, landmarks/batrang.ts)
   map?: MapVectors; // Phase 5: minimap layers (world/mapVectors.ts) → ChunkManager.onMap → ui/MapTiles.ts
 }
 

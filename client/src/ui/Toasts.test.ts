@@ -44,7 +44,7 @@ describe('notices', () => {
       'raceNotOpen', 'racePaused', 'raceOver', 'boxFar', 'boxRiding', 'boxOpened', 'taskFar', 'clueNew', 'penaltyWait',
       'answerSent', 'answerWrong', 'answerPending', 'answerLocked', 'approved', 'penalized', 'branchChosen', 'branchSwitched', 'branchPending', 'taskNotStarted', // Phase 8
       'reviewUndone', // Phase 10
-      'roomIgnored', 'autoCorrect', 'autoPenalized', 'scoreUpdated', // Leg 3
+      'roomIgnored', 'autoCorrect', 'autoPenalized', 'scoreUpdated', 'gameIgnored', // Leg 3
       'bikeBroken']; // SPEC §17.30 decoy
     expect(Object.keys(NOTICES).sort()).toEqual([...codes].sort());
     expect(new Set(Object.values(NOTICES)).size).toBe(codes.length);

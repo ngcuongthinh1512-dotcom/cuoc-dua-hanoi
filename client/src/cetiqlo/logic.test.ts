@@ -70,6 +70,9 @@ describe('queue / checkout / lock time', () => {
     expect(pointsText(100)).toBe('100 điểm');
     expect(pointsText(74.3)).toBe('74,3 điểm');
     expect(pointsText(57.66)).toBe('57,7 điểm');
+    expect(pointsText(-23.3)).toBe('−23,3 điểm');
+    expect(pointsText(-24)).toBe('−24 điểm');
+    expect(pointsText(-0.02)).toBe('0 điểm');
     expect(waitText(1000, 600_000, 1000 + 61_000)).toBe('Còn chờ tối đa 8:59 – không có đối thủ thì được rời đi');
     expect(waitText(1000, 600_000, 1000 + 600_000)).toBeNull();
   });

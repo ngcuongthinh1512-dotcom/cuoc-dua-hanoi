@@ -9,7 +9,9 @@ import { migrate, setMeta } from '../db.ts';
 import { login, openSocket, raceHarness, TEST_PASSWORD } from '../test/harness.ts';
 import { besideBox, BikeService } from './BikeService.ts';
 import { legRules } from './leg.ts';
-import type { ServerBike } from './VehicleSpawner.ts';
+import { FIXED, type ServerBike } from './VehicleSpawner.ts';
+import { fixedBikeSpots } from '@race/shared/leg';
+import { latLonToWorld } from '@race/shared';
 
 const cfg = legRules().vehicles;
 
@@ -43,6 +45,36 @@ const spot = (team: string, x: number, z: number) => ({ team, x, z });
 const tick = (s: BikeService, now: number, ...players: ReturnType<typeof spot>[]) => s.tick(players, new Set(players.map((p) => p.team)), now);
 
 describe('BikeService (memory SQLite, controlled clock)', () => {
+  it('vehicles.fixedBikes: seeded once (rows 1.6 m apart, segment FIXED), never re-seeded after a restart, untouched by spawning / abandonment while free, claimable one by one', () => {
+    const fleet = { lat: 21.011325, lon: 105.842377, count: 15, rows: 3, spacing: 1.6, angleDeg: 0, label: '' };
+    const sql = memorySql();
+    migrate(sql);
+    const sent: [string, ServerMessage][] = [];
+    const io = { sql, counters: new QuotaCounters(), cfg: { ...cfg, fixedBikes: [fleet] }, send: (team: string, m: ServerMessage) => sent.push([team, m]), setAlarm: () => {} };
+    const s = new BikeService(io);
+    expect(s.list()).toHaveLength(15);
+    const all = rows(sql);
+    expect(all.every((b) => b.segment === FIXED && b.owner === null)).toBe(true);
+    const gaps = all.flatMap((a) => all.filter((b) => b !== a).map((b) => Math.hypot(a.x - b.x, a.z - b.z)));
+    expect(Math.min(...gaps)).toBeCloseTo(1.6, 1);
+    const c = fixedBikeSpots([fleet])[0]!.reduce((m, p) => ({ x: m.x + p.x / 15, z: m.z + p.z / 15 }), { x: 0, z: 0 });
+    const w = latLonToWorld(fleet.lat, fleet.lon);
+    expect(Math.hypot(c.x - w.x, c.z - w.z)).toBeLessThan(0.05); // centred on the point
+    // spawning + abandonment rounds with a player far away: the free fleet stays
+    s.onHost(candidates, 0);
+    s.alarm([{ team: 't1', x: 0, z: 0 }], 1);
+    s.tick([{ team: 't1', x: 0, z: 0 }], new Set(['t1']), 10 * 60_000);
+    expect(rows(sql).filter((b) => b.segment === FIXED)).toHaveLength(15);
+    // two teams take neighbours 1.6 m apart
+    const [a, b] = [all[0]!, all[1]!];
+    s.onTeam('t1', { team: 't1', x: a.x, z: a.z }, { t: 'bike', op: 'claim', id: a.id }, false, 2);
+    s.onTeam('t2', { team: 't2', x: b.x, z: b.z }, { t: 'bike', op: 'claim', id: b.id }, false, 2);
+    expect(sent.filter(([, m]) => !Array.isArray(m) && m.t === 'bike').map(([t, m]) => [t, (m as { ok: boolean }).ok])).toEqual([['t1', true], ['t2', true]]);
+    // restart (new service over the same rows): no second fleet, the taken bikes stay taken
+    const again = new BikeService({ ...io, send: () => {} });
+    expect(again.list()).toHaveLength(rows(sql).length);
+    expect(again.list().filter((x) => x.owner === null && x.id.startsWith('f'))).toHaveLength(13);
+  });
   it('candidates arm one alarm; it spawns the first round (rows + 1 event + the Host told); re-armed only while players are online', () => {
     const sql = memorySql();
     migrate(sql);

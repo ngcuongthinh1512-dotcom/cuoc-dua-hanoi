@@ -9,22 +9,21 @@ import { BOARD_STATUS_TEXT, MARK_TEXT, REASON_TEXT, WINNER_TEXT, lockTimeText, m
 
 const LOGO = `<span class="cq-logo"><b>CETI</b><b>QLO</b></span>`;
 const WAIT_MIN = Math.round(CETIQLO.maxWaitMs / 60_000);
+const mmssWords = (ms: number) => `${Math.floor(ms / 60_000)} phút${ms % 60_000 ? ` ${(ms % 60_000) / 1000} giây` : ''}`;
 const pts = (n: number) => (Math.round(n * 100) / 100).toString().replace('.', ',');
 /** The condensed rules (the H panel; the full text: docs/CETIQLO_RULEBOOK.md). Every number comes from CETIQLO. */
-export const RULES_HTML = `<h2>${LOGO} Luật chơi · Đối đầu CETIQLO</h2>
+export const RULES_HTML = `<h2>${LOGO} Thử thách Head-to-Head · CETIQLO</h2>
+<p class="cq-lead">Hai đội đối đầu trong cửa hàng: ai nhặt đúng bộ ${CETIQLO.itemsPerSet} món trong đề với điểm cao hơn là thắng.</p>
 <ol>
-<li><b>Phòng chờ = sân trước cửa hàng</b>: đến nơi là xếp hàng theo thứ tự đến (bảng LIVE cạnh cửa, tối đa ${CETIQLO.maxTeamsInRoom} đội). Hai đội đầu hàng được đưa vào trong đấu một trận; các đội khác chờ ngoài sân trước cửa kính.</li>
-<li><b>Đề bài</b>: ${CETIQLO.itemsPerSet} món (áo, áo khoác, quần / váy, giày, túi, phụ kiện) hiện bằng ảnh tĩnh góc trên trái — bấm vào ảnh hoặc <kbd>T</kbd> để phóng to. Mỗi món trong cửa hàng là một thiết kế duy nhất: tìm đúng món, đúng màu.</li>
-<li><b>Thời gian</b>: ${mmss(CETIQLO.pickMs)} theo đồng hồ máy chủ; ${CETIQLO.warnMs / 1000} s cuối đồng hồ đỏ + bíp.</li>
-<li><b>Lấy đồ</b>: nhìn vào món (viền đỏ) và bấm <kbd>F</kbd>. <kbd>B</kbd> mở túi, nhấp món để bỏ; <kbd>1</kbd>–<kbd>9</kbd> bỏ món số n.</li>
-<li><b>Chốt</b>: đứng trong ô đỏ CHECKOUT và bấm <kbd>F</kbd> trước khi hết giờ. Đã chốt thì khóa túi và đứng yên. Hết giờ chưa chốt = <b>không hoàn thành</b> (vẫn chấm túi).</li>
-<li><b>Điểm</b>: +${pts(CETIQLO.pointsPerCorrect)} mỗi món đúng, −${CETIQLO.penaltyPerWrongOrExtra} mỗi món sai hoặc thừa, kẹp 0–100, túi rỗng 0.</li>
-<li><b>Thắng</b>: hoàn thành thắng không hoàn thành → điểm cao hơn → chốt sớm hơn. Hòa cả hai → cả hai xuống cuối hàng.</li>
-<li><b>Sau trận</b>: đội thắng nhận mật thư kế + vòng sáng ngoài sân để ra. Đội thua ra lại sân trước cửa hàng, đấu với đội kế tiếp.</li>
-<li><b>Chờ quá ${WAIT_MIN} phút</b> (từ lúc vào hàng, hoặc từ kết quả trận vừa thua) mà không có đối thủ → được rời đi với mật thư kế.</li>
-<li><b>Mất mạng / F5</b>: chỗ trong hàng, trận, túi, kết quả đều giữ nguyên.</li>
+<li><b>Chờ ngoài sân.</b> Bảng thứ tự cho biết đội nào đang chơi. Khi đến lượt, hai đội được đưa lên thảm CHECKOUT và đếm ngược ${Array.from({ length: CETIQLO.countdownMs / 1000 }, (_, i) => CETIQLO.countdownMs / 1000 - i).join('-')}.</li>
+<li><b>Xem đề:</b> ${CETIQLO.itemsPerSet} ảnh món đồ (bấm ảnh hoặc phím <kbd>T</kbd> để phóng to). Mỗi món trong cửa hàng chỉ có một cái duy nhất, giống hệt ảnh về màu và chi tiết.</li>
+<li><b>Nhặt đồ trong ${mmssWords(CETIQLO.pickMs)}:</b> nhìn vào món (sẽ sáng viền) rồi bấm <kbd>F</kbd> để nhặt. Phím <kbd>B</kbd> mở túi để bỏ món đã nhặt.</li>
+<li><b>Chốt:</b> quay lại đứng trong ô CHECKOUT và bấm <kbd>F</kbd>. Đã chốt thì không đổi được. Hết giờ mà một đội không đứng ở thảm CHECKOUT để chốt thì đội đã chốt mặc định thắng, dù điểm thấp hơn.</li>
+<li><b>Điểm:</b> mỗi món đúng +${pts(CETIQLO.pointsPerCorrect)} điểm, mỗi món sai hoặc thừa −${CETIQLO.penaltyPerWrongOrExtra} điểm (tối đa 100, điểm có thể âm). Điểm cao hơn thắng; bằng điểm thì đội chốt sớm hơn thắng.</li>
+<li><b>Đội thắng</b> nhận mật thư tiếp theo và lối ra. <b>Đội thua</b> ở lại đấu với đội đến sau. Đợi quá ${WAIT_MIN} phút mà không có đối thủ thì được rời đi.</li>
 </ol>
-<p>Đóng: <kbd>Esc</kbd> hoặc <kbd>H</kbd></p>`;
+<p class="cq-foot">Nhấn <kbd>H</kbd> để xem lại hướng dẫn.</p>
+<div class="cq-auto" hidden><span></span><i><u></u></i><button type="button">Đã hiểu</button></div>`;
 const BAG = () => `<img class="cq-bagicon" src="${bagIconDataUrl(64)}" alt="">`;
 const CSS = `
 #cq { position: fixed; inset: 0; pointer-events: none; font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.85); z-index: 1; }
@@ -99,11 +98,20 @@ body.cq-room .hud-box, body.cq-room .hud-hand { visibility: hidden; } /* the str
 .cq-board li.playing > em { background: #d8342c; color: #fff; } .cq-board li.waiting > em { background: #e9ecef; color: #333; } .cq-board li.lost > em, .cq-board li.drew > em { background: #f6c343; color: #3a2a00; } .cq-board li.won > em { background: #1d8a3a; color: #fff; } .cq-board li.done > em { background: #8a8f98; color: #fff; }
 .cq-board p { margin: 0; padding: 5px 10px 7px; font-size: 11px; color: rgba(255,255,255,.65); }
 .cq-rules { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
-.cq-rules > div { width: min(760px, 92vw); max-height: 90vh; overflow: auto; background: #faf8f4; color: #1a1a1a; text-shadow: none; border-radius: 12px; padding: 16px 24px 12px; box-shadow: 0 8px 30px rgba(0,0,0,.6); font-size: 15px; line-height: 1.45; }
+.cq-rules > div { width: min(760px, 92vw); max-height: 90vh; overflow: auto; background: #faf8f4; color: #1a1a1a; text-shadow: none; border-radius: 12px; padding: 16px 24px 12px; box-shadow: 0 8px 30px rgba(0,0,0,.6); font-size: 15px; line-height: 1.4; }
+@media (min-width: 600px) { .cq-rules > div { font-size: 16px; } }
 .cq-rules h2 { margin: 0 0 10px; font: 800 22px/1.2 system-ui, sans-serif; display: flex; align-items: center; gap: 10px; }
 .cq-rules ol { margin: 0; padding-left: 22px; } .cq-rules li { margin: 4px 0; }
 .cq-rules kbd { display: inline-block; padding: 0 6px; border: 1px solid #bbb; border-bottom-width: 2px; border-radius: 4px; background: #fff; font: 700 12px/1.6 system-ui, sans-serif; }
-.cq-rules p { margin: 10px 0 0; color: #666; font-size: 13px; text-align: right; }
+.cq-rules p.cq-lead { margin: 0 0 6px; color: #1a1a1a; font-size: 16px; font-weight: 700; text-align: left; }
+.cq-rules p.cq-foot { margin: 8px 0 0; color: #666; font-size: 13px; text-align: right; }
+.cq-rules .cq-auto { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 14px; color: #555; }
+.cq-rules .cq-auto[hidden] { display: none; }
+.cq-rules[data-read="1"] .cq-auto button { display: none; }
+.cq-rules .cq-auto span { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cq-rules .cq-auto i { flex: 1; height: 4px; border-radius: 2px; background: #ddd; overflow: hidden; }
+.cq-rules .cq-auto u { display: block; height: 100%; width: 100%; background: #d4202a; transform-origin: left; }
+.cq-rules .cq-auto button { padding: 6px 16px; border: 0; border-radius: 6px; background: #d4202a; color: #fff; font: 700 15px system-ui, sans-serif; cursor: pointer; }
 `;
 const HTML = `<style>${CSS}</style>
 <div class="cq-pip" hidden>${'<img src="" alt="">'.repeat(6)}</div>
@@ -130,6 +138,7 @@ export class CqHud {
   rulesOpen = false;
   /** The rules panel opened (true: the room frees the pointer) / closed. */
   onRules?: (open: boolean) => void;
+  private readLock = false;
   private readonly bagList: HTMLOListElement;
   private clockText = '';
   private clockWarn = false;
@@ -159,7 +168,7 @@ export class CqHud {
     this.el = { pip: q('.cq-pip'), lookhint: q('.cq-lookhint'), zoom: q('.cq-zoom'), clock: q('.cq-clock'), count: q('.cq-count'), opp: q('.cq-opp'), lobby: q('.cq-lobby'), board: q('.cq-board'), rules: q('.cq-rules'), label: q('.cq-label'), locked: q('.cq-locked'), bag: q('.cq-bag'), toast: q('.cq-toast'), result: q('.cq-result') };
     this.bagList = this.el.bag.querySelector('ol')!;
     this.el.board.querySelector('button')!.addEventListener('click', () => this.rules(true));
-    this.el.rules.addEventListener('click', (e) => { if (e.target === this.el.rules) this.rules(false); }); // a click outside the sheet closes
+    this.el.rules.addEventListener('click', (e) => { if (e.target === this.el.rules || (e.target as HTMLElement).closest('.cq-auto button')) this.rules(false); }); // a click outside the sheet closes
     this.bagList.addEventListener('click', (e) => { const li = (e.target as HTMLElement).closest('li'); if (li?.dataset.id && this.bagOpen) this.onDrop?.(li.dataset.id); });
     this.el.result.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName === 'BUTTON') this.onContinue?.(); });
     // the brief: a cell click (pointer free) zooms that piece; in the lightbox a cell toggles one piece ⇄ the grid, anything else closes
@@ -202,10 +211,24 @@ export class CqHud {
   }
   /** Open / close the rules panel (H / the board's button; Esc closes). */
   rules(open: boolean) {
-    if (open === this.rulesOpen) return;
+    if (open === this.rulesOpen || (!open && this.readLock)) return; // the reading phase is a fixed time: nothing closes the panel
     this.rulesOpen = open;
     this.show('rules', open);
     this.onRules?.(open);
+  }
+  /** The READING phase (a fresh team paired at once): the panel is open and locked with "Đọc hướng dẫn · còn N s" + a draining bar until `leftMs` is
+   *  null (then it closes). Driven per frame by the room from the server clock (F5-safe). */
+  reading(leftMs: number | null, totalMs = 1) {
+    const on = leftMs !== null;
+    if (on !== this.readLock) {
+      this.readLock = on;
+      this.el.rules.dataset.read = on ? '1' : '';
+      this.el.rules.querySelector<HTMLElement>('.cq-auto')!.hidden = !on;
+      if (on) this.rules(true); else this.rules(false);
+    }
+    if (!on) return;
+    this.el.rules.querySelector('.cq-auto span')!.textContent = `Đọc hướng dẫn · còn ${Math.ceil(leftMs / 1000)} s`;
+    this.el.rules.querySelector<HTMLElement>('.cq-auto u')!.style.transform = `scaleX(${Math.max(0, Math.min(1, leftMs / totalMs))})`;
   }
   /** The loser's wait line under the queue text (null = hidden); written once a second at most by the room. */
   lobbyWait(text: string | null) {

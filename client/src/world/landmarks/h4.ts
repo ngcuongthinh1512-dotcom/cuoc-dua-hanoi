@@ -10,6 +10,7 @@ import { hash, lathe } from './d.ts';
 import { BRICK, CREAM, DARK, EMPTY, frameAt, gate3, hall, monument, OCHRE, opening, STONE, TILE, tiledBody } from './h3.ts';
 import type { DetailFn } from './index.ts';
 import { footprintFrame, loft, quadOut, triOut } from './kit.ts';
+import { batTrang, BT } from './batrang.ts';
 import { CAFE, cafeHmm } from './cafe.ts';
 import { bacHoBacTon, STATUE } from './hoton.ts';
 import { Sink } from './parts.ts';
@@ -562,6 +563,7 @@ export const placed: readonly { minX: number; maxX: number; minZ: number; maxZ: 
   { minX: STATUE[0], maxX: STATUE[0], minZ: STATUE[1], maxZ: STATUE[1], build: bacHoBacTon }, // hoton.ts
   { ...PARK, build: thongNhatPark },
   { minX: CAFE[0], maxX: CAFE[0], minZ: CAFE[1], maxZ: CAFE[1], build: cafeHmm }, // cafe.ts (Đống Đa, registry 'cafe-hmm'; chunk −12_11)
+  { minX: BT[0], maxX: BT[0], minZ: BT[1], maxZ: BT[1], build: batTrang }, // batrang.ts (115 Hàng Gai, registry 'bat-trang'; chunk −2_0)
 ];
 
 function pavilion(s: Sink, x: number, z: number, g: number) {

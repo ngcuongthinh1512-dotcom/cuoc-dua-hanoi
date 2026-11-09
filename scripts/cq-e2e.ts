@@ -65,7 +65,8 @@ try {
   const mb = await waitFor(B, stateOf, (s) => !!s && s.phase === 'match' && s.matchId === ma?.matchId, 'B: cùng trận với A');
   check(!!ma && !!mb && ma.set.join() === mb.set.join(), `cùng set: ${ma?.set.join(', ')}`);
   check(!!ma && ma.countdown && Math.abs(ma.feet.x + 5.2) < 1 && Math.abs(ma.feet.z - 7.5) < 1, `A: đếm ngược trên thảm CHECKOUT (${JSON.stringify(ma?.feet)}, countdown ${ma?.countdown})`);
-  await waitFor(A, stateOf, (s) => !!s && !s.countdown, 'A: hết đếm ngược 5-4-3-2-1 (startAt)', 15_000);
+  // B joined just now and completed the pair at once: the reading time (readMs 15 s) runs first, then the 5-4-3-2-1; `countdown` is true for both (before startAt)
+  await waitFor(A, stateOf, (s) => !!s && !s.countdown, 'A: hết thời gian đọc (15 s) + đếm ngược 5-4-3-2-1 (startAt)', 40_000);
   // (b) F5 mid-match after 3 takes: same match / set / endsAt, the bag restored, the body back in the store at the start spot, the opponent drawn
   await A.evaluate(() => (globalThis as unknown as { __GAME__: { cq(): { takeSet(c: number, w?: number): Promise<string[]> } } }).__GAME__.cq().takeSet(3, 0));
   const pre = await waitFor(A, stateOf, (s) => !!s && s.bag.length === 3, 'A: túi 3 món trước F5', 15_000);

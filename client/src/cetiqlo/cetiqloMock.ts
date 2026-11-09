@@ -10,7 +10,7 @@ import { Cetiqlo, type CqIO } from '../../../worker/src/race/cetiqlo/index.ts';
 import type { Cfg } from '../../../worker/src/race/cetiqlo/match.ts';
 import type { CqLink } from './cetiqloNet.ts';
 
-export const CQ_DEMO_STATES = ['match', 'lobby', 'bag', 'label', 'warn', 'checkout', 'result-win', 'result-lose', 'result-draw', 'timeout', 'board', 'countdown'] as const;
+export const CQ_DEMO_STATES = ['match', 'lobby', 'bag', 'label', 'warn', 'checkout', 'result-win', 'result-lose', 'result-draw', 'timeout', 'board', 'countdown', 'reading'] as const;
 export type CqDemoState = (typeof CQ_DEMO_STATES)[number];
 
 const YOU = 'you', BOT = 'bot';
@@ -38,11 +38,11 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
   const extras: TeamInfo[] = state === 'board' ? EXTRAS.map(([name, colour], i) => { let s = 1; while (slots.includes(s)) s++; slots.push(s); return { slot: s, id: `e${i + 1}`, name, colour, online: true, avatar: (i % 2) as 0 | 1 }; }) : [];
   const teams = [botTeam, ...extras];
   const who = (t: string) => (t === YOU ? { slot: you.slot, name: you.name } : { slot: teams.find((x) => x.id === t)?.slot ?? oppSlot, name: teams.find((x) => x.id === t)?.name ?? botTeam.name });
-  const cfg: { -readonly [K in keyof Cfg]: number } = { ...CETIQLO, pickMs: state === 'warn' ? 27_000 : state === 'result-draw' ? 4_000 : state === 'board' ? 3_000 : CETIQLO.pickMs, resultHoldMs: state === 'board' ? 2_000 : 6_000, countdownMs: state === 'countdown' ? 3_600_000 : state === 'board' ? 0 : CETIQLO.countdownMs }; // 'countdown' holds the 5-4-3-2-1 (the number stays huge); 'board' skips it for its quick first match
+  const cfg: { -readonly [K in keyof Cfg]: number } = { ...CETIQLO, pickMs: state === 'warn' ? 27_000 : state === 'result-draw' ? 4_000 : state === 'board' ? 3_000 : CETIQLO.pickMs, resultHoldMs: state === 'board' ? 2_000 : 6_000, readMs: state === 'reading' ? 3_600_000 : state === 'match' ? CETIQLO.readMs : 0, countdownMs: state === 'countdown' ? 3_600_000 : state === 'board' ? 0 : CETIQLO.countdownMs }; // 'countdown' holds the 5-4-3-2-1 (the number stays huge); 'board' skips it for its quick first match
   const offline = new Set<string>(); // board state: the first loser stays offline (never paired again) so a "đã thua · chờ lượt" row stays on the board
   const seen = { state: false, match: false, bag: 0, locked: false, result: false, botMoved: false, advance: false, boardLost: false };
   /** The scripted state is on screen (screenshots wait for it). */
-  const ready = () => state === 'lobby' ? seen.state : state === 'board' ? seen.boardLost : state === 'countdown' ? seen.match : state === 'timeout' ? seen.advance : state.startsWith('result') ? seen.result : state === 'checkout' ? seen.locked : state === 'bag' ? seen.bag >= 3 : state === 'warn' ? seen.match : seen.match && seen.botMoved;
+  const ready = () => state === 'lobby' ? seen.state : state === 'board' ? seen.boardLost : state === 'countdown' || state === 'reading' ? seen.match : state === 'timeout' ? seen.advance : state.startsWith('result') ? seen.result : state === 'checkout' ? seen.locked : state === 'bag' ? seen.bag >= 3 : state === 'warn' ? seen.match : seen.match && seen.botMoved;
   const link: CqLink = { send: (m) => receive(m), onMessage: null, serverNow: () => Date.now(), ready };
   let alarm: ReturnType<typeof setTimeout> | undefined;
   let set: string[] = [];
@@ -128,10 +128,10 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
   }
   /** Right after the pairing: the team's scripted bag / checkout / draw bags. */
   function afterStart() {
-    let t = Date.now() + cfg.countdownMs + 300; // after the 5-4-3-2-1 (takes before startAt are refused)
+    let t = Date.now() + cfg.readMs + cfg.countdownMs + 300; // after the 5-4-3-2-1 (takes before startAt are refused)
     const take = (team: string, id: string) => { const it = ITEM_BY_ID.get(id)!; setTimeout(() => cq.take(team, id, it.shelf.x, it.shelf.z, Date.now()), (t += 160) - Date.now()); };
     if (state === 'bag' || state === 'checkout') for (const id of [set[0]!, set[3]!, CATALOG.find((i) => i.family === ITEM_BY_ID.get(set[1]!)!.family && i.id !== set[1])!.id]) take(YOU, id);
-    if (state === 'checkout') setTimeout(() => cq.checkout(YOU, CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, Date.now()), cfg.countdownMs + 1500);
+    if (state === 'checkout') setTimeout(() => cq.checkout(YOU, CHECKOUT_ZONE.x, CHECKOUT_ZONE.z, Date.now()), cfg.readMs + cfg.countdownMs + 1500);
     if (state === 'result-draw') for (const team of [YOU, BOT]) for (const id of set.slice(0, 3)) take(team, id); // nobody checks out, same bag → time up → draw
   }
 

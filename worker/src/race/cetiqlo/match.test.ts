@@ -9,7 +9,7 @@ const slotOf = (id: string) => byId.get(id)?.slot;
 const ZONE = { x: -4.5, z: 7.5, radius: 2.1 };
 const at = (id: string) => ({ x: byId.get(id)!.shelf.x, z: byId.get(id)!.shelf.z });
 
-const NO_COUNTDOWN = { ...CETIQLO, countdownMs: 0 }; // the action tests act right after the pairing
+const NO_COUNTDOWN = { ...CETIQLO, countdownMs: 0, readMs: 0 }; // the action tests act right after the pairing
 function running(teams = ['A', 'B'], now = 1000): Match {
   const room = startNext({ ...newRoom(), queue: teams }, now, 7, FIXTURE, undefined, NO_COUNTDOWN)!;
   return { ...room.match!, teams, bags: Object.fromEntries(teams.map((t) => [t, []])) }; // (N teams whatever teamsPerMatch is)
@@ -76,6 +76,21 @@ describe('queue / pairing', () => {
     expect(waitSince(r, 'A')).toBe(5000);
     expect(arrivalOrder(leave(r, 'A'))).toEqual(['B']);
     expect(arrivalOrder(release(r, ['A']))).toEqual(['A', 'B']); // released: the board still lists it (done)
+  });
+  it('reading time: a pair with a team that JUST entered (≤ freshJoinMs, never played) gets readMs before the countdown; a queued / returning pair gets none', () => {
+    const q = (a: number, b: number, extra: Partial<ReturnType<typeof newRoom>> = {}) => ({ ...newRoom(), queue: ['A', 'B'], arrived: { A: a, B: b }, ...extra });
+    const T = 10_000, R = CETIQLO.readMs, C = CETIQLO.countdownMs;
+    expect(startNext(q(0, T - 100), T, 1, FIXTURE)!.match).toMatchObject({ readMs: R, startAt: T + R + C, endsAt: T + R + C + CETIQLO.pickMs }); // B just arrived
+    expect(startNext(q(T - CETIQLO.freshJoinMs, 0), T, 1, FIXTURE)!.match).toMatchObject({ readMs: R, startAt: T + R + C }); // A exactly at the edge
+    const waited = startNext(q(0, T - CETIQLO.freshJoinMs - 1), T, 1, FIXTURE)!.match!;
+    expect(waited.startAt).toBe(T + C);
+    expect(waited.readMs).toBeUndefined();
+    expect(startNext(q(T - 10, T - 10, { last: { A: ['X'], B: ['X'] } }), T, 1, FIXTURE)!.match!.startAt).toBe(T + C); // both played before: no reading
+    expect(startNext(q(T - 10, T - 10, { lost: { A: { at: 1, match: 'm1' }, B: { at: 1, match: 'm1' } } }), T, 1, FIXTURE)!.match!.startAt).toBe(T + C);
+    expect(startNext(q(T - 10, 0, { last: { A: ['X'] } }), T, 1, FIXTURE)!.match!.startAt).toBe(T + C); // A returning, B waited long: none
+    const r = q(0, T - 100);
+    const m = startNext(r, T, 1, FIXTURE)!.match!;
+    expect(take(m, 'A', m.set[0]!, at(m.set[0]!), byId, T + R + C - 1)).toEqual({ ok: false, why: 'notRunning' }); // nothing while reading either
   });
   it('startNext: one match at a time, waits for the result hold, stores seed + set + endsAt', () => {
     const r0 = join(join(join(newRoom(), 'A'), 'B'), 'C');
@@ -160,7 +175,8 @@ describe('score', () => {
     expect(pct([])).toBe(0); // an empty bag is 0, not negative
     expect(pct([...SET, decoys[0]!])).toBe(92); // 6 correct + 1 extra: 100 − 8
     expect(pct([...SET, ...decoys.slice(0, 6)])).toBe(52);
-    expect(pct([SET[0]!, ...[1, 2, 3, 4, 5].map((i) => wrongOf(SET[i]!))])).toBe(0); // 16.7 − 40 → clamped
+    expect(pct([SET[0]!, ...[1, 2, 3, 4, 5].map((i) => wrongOf(SET[i]!))])).toBe(-23.3); // 16.67 − 40: no lower bound
+    expect(pct([1, 2, 3].map((i) => wrongOf(SET[i]!)))).toBe(-24);
   });
   it('errors = bag size − correct: 5 correct + 1 wrong = 75.3, + an extra = 67.3, 4 correct + 2 wrong = 50.7', () => {
     const bag = [...SET.slice(0, 5), wrongOf(SET[5]!)];

@@ -3,12 +3,13 @@
 // file. Decisions are the pure functions of VehicleSpawner.ts; this class owns rows, counters and messages. Every change
 // is written to SQLite before anyone hears of it (CLAUDE.md: persist before ack); the bikes live in a RAM cache loaded
 // lazily from the rows (a restart rebuilds it). Teams hear only their own view (VIEW_METERS), the Host pages everything.
+import { fixedBikeSpots } from '@race/shared/leg';
 import type { BikeInfo, ClientMessage, HostMessage, ServerMessage } from '@race/shared/protocol';
 import { HOST } from '../auth.ts';
 import type { QuotaCounters } from '../counters.ts';
 import { addEvent, getMeta, setMeta } from '../db.ts';
 import type { VehiclesConfig } from './leg.ts';
-import { abandoned, claim, initialSpawn, MIN_GAP, newBike, OWN_REACH, periodicSpawn, type PlayerSpot, type ServerBike, type SpawnCandidates, type SpawnerState } from './VehicleSpawner.ts';
+import { abandoned, claim, FIXED, initialSpawn, MIN_GAP, newBike, OWN_REACH, periodicSpawn, type PlayerSpot, type ServerBike, type SpawnCandidates, type SpawnerState } from './VehicleSpawner.ts';
 
 export interface BikeIO {
   sql: SqlStorage;
@@ -223,6 +224,17 @@ export class BikeService {
     this.io.counters.rows += 1;
     if (ids.length) this.event(now, null, 'bikeGone', { ids, why: 'leg' });
     this.toHosts([], ids);
+    this.seedFixed(now);
+  }
+
+  /** vehicles.fixedBikes: the new leg's fleets stand at their spots (resetForLeg; or the first load of the rows, once per
+   *  race: meta 'fixedBikes' remembers it, so a restart never puts back a bike a team took away). Segment FIXED: no spawn
+   *  rule counts them, and a free bike is never removed by abandonment, so they wait there until taken. */
+  private seedFixed(now: number) {
+    setMeta(this.io.sql, 'fixedBikes', '1');
+    this.io.counters.rows += 1;
+    const list = fixedBikeSpots(this.io.cfg.fixedBikes ?? []).flatMap((f, k) => f.map((p, n) => newBike(`f${k}-${n}`, p.x, p.z, p.yaw, FIXED, now)));
+    this.spawned(list, 'fixed', now);
   }
 
   get spawning(): { paused: boolean; candidates: number; nextAt: number | null } {
@@ -237,6 +249,7 @@ export class BikeService {
       const now = Date.now();
       const rows = this.io.sql.exec<{ data: string }>('SELECT data FROM bikes').toArray();
       this.cache = new Map(rows.map((r) => Object.assign(JSON.parse(r.data) as ServerBike, { nearOwnerAt: now })).map((b) => [b.id, b]));
+      if (!getMeta(this.io.sql, 'fixedBikes')) this.seedFixed(now); // a race older than the feature, or a fresh one
     }
     return this.cache;
   }

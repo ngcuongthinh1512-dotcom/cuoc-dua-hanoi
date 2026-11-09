@@ -80,6 +80,8 @@ export const NET = {
   /** Phase 7: m added to a geofence radius when the server judges an op (open / task / checkin) against the last valid
    *  pose: the pose is ≤ 200 ms old (≈ 1 m at bike speed) and the box stands at the zone's centre anyway. */
   geofenceSlack: 2,
+  /** Every clue box: F (and the "Bấm F" prompt) only within this many m of the box, whatever the zone's radius. */
+  boxOpenReach: 10,
   /** Message limits: a player frame (pose 31 B, JSON ops < 200 B) and a Host frame (spawn candidates). Over → closed. */
   maxPlayerBytes: 1_024,
   maxHostBytes: 262_144,

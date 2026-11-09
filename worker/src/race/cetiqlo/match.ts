@@ -17,6 +17,8 @@ export interface Match {
   seed: number;
   startAt: number;
   endsAt: number;
+  /** Reading time before the 5-4-3-2-1 (0 / absent = none): the countdown starts at startAt − countdownMs. */
+  readMs?: number;
   bags: Record<string, string[]>;
   /** team → server epoch ms of its checkout (ms precision). */
   locked: Record<string, number>;
@@ -102,10 +104,13 @@ export function startNext(room: Room, now: number, seed: number, catalog: readon
   if (room.match?.state === 'running' || now < room.holdUntil) return null;
   const teams = pairNext(room.queue, room.last, cfg.teamsPerMatch, eligible);
   if (!teams) return null;
-  const startAt = now + cfg.countdownMs; // the pair is placed on the mat now; the brief + the pick clock start at startAt
+  // fresh = entered within freshJoinMs of now and never played here; one fresh team in the pair (its entry completed it) = reading time for both
+  const fresh = (t: string) => now - (room.arrived?.[t] ?? -Infinity) <= cfg.freshJoinMs && !room.last[t] && !room.lost?.[t];
+  const readMs = teams.some(fresh) ? cfg.readMs : 0;
+  const startAt = now + readMs + cfg.countdownMs; // the pair is placed on the mat now; the brief + the pick clock start at startAt
   const seq = room.seq + 1;
   const match: Match = {
-    id: `m${seq}`, teams, set: makeSet(seed, catalog), seed, startAt, endsAt: startAt + cfg.pickMs,
+    id: `m${seq}`, teams, set: makeSet(seed, catalog), seed, startAt, endsAt: startAt + cfg.pickMs, ...(readMs ? { readMs } : {}),
     bags: Object.fromEntries(teams.map((t) => [t, []])), locked: {}, gone: [], state: 'running',
   };
   return { ...room, seq, match, queue: room.queue.filter((t) => !teams.includes(t)), lost: without(room.lost, teams) }; // playing again resets the clock
@@ -154,7 +159,7 @@ export const finished = (m: Match, now: number): boolean => m.state === 'running
 // ── score / rank ──
 const round1 = (n: number) => Math.round(n * 10) / 10;
 export interface Score { correct: number; errors: number; score: number; marks: CqMark[] }
-/** correct = distinct set items in the bag; errors = bag size − correct (wrong variants + extras); score (points, 1 decimal) = clamp(0, 100, 16.67 × correct − 8 × errors).
+/** correct = distinct set items in the bag; errors = bag size − correct (wrong variants + extras); score (points, 1 decimal) = min(100, 16.67 × correct − 8 × errors) (NO lower bound: can be negative).
  *  marks: one per set position ('ok' / 'wrong' = an item of that slot but not the right one / 'missing'), then 'wrong' for every further bag item (an extra = a wrong item, owner 2026-11-03). */
 export function score(set: readonly string[], bag: readonly string[], slotOf: (id: string) => SlotKind | undefined, cfg: Cfg = CETIQLO): Score {
   const correct = bag.filter((id, i) => set.includes(id) && bag.indexOf(id) === i).length;
@@ -168,7 +173,7 @@ export function score(set: readonly string[], bag: readonly string[], slotOf: (i
     if (j >= 0) marks[j] = 'wrong';
     else extra.push('wrong');
   }
-  return { correct, errors, score: round1(Math.min(100, Math.max(0, cfg.pointsPerCorrect * correct - cfg.penaltyPerWrongOrExtra * errors))), marks: [...marks, ...extra] };
+  return { correct, errors, score: round1(Math.min(100, cfg.pointsPerCorrect * correct - cfg.penaltyPerWrongOrExtra * errors)), marks: [...marks, ...extra] };
 }
 
 export interface TeamScore extends Score { team: string; bag: string[]; lockedAtMs: number | null }

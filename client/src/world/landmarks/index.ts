@@ -4,8 +4,9 @@
 //      landmarks.partCoverage of it (S3DB: an outline with parts is not extruded); no parts → the outline alone.
 // Non-building outlines (bridge decks, fountains, artworks) are drawn by details only. A DetailFn that throws is
 // reported and replaced by the generic renderer. DOM-free except createLandmarkMaterials() (main thread only).
-import { CanvasTexture, DoubleSide, type Material, MeshBasicMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
+import { CanvasTexture, Color, DoubleSide, type Material, MeshBasicMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
 import { landmarks as L } from '../../config.ts';
+import { glowOn, glowScale } from '../night.ts';
 import type { BuildingRec, LandmarkId, PartRec } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID, type LandmarkDef } from '../../geo/landmarks.ts';
 import { buildingHeight } from '../BuildingBuilder.ts';
@@ -166,5 +167,7 @@ export function createLandmarkMaterials(): Partial<Record<MaterialId, Material>>
     bronze: new MeshStandardMaterial({ color: C.bronze, roughness: 0.5, metalness: 0.8, envMap }),
     waterJet: new MeshStandardMaterial({ color: C.waterJet, roughness: 0.2, transparent: true, opacity: 0.6, depthWrite: false }),
     neon: new MeshBasicMaterial({ vertexColors: true, toneMapped: false }), // unlit: reads as light in any sun
+    // dusk / night only (night.glowOn): the lit twin of a landmark's signs / lamps, textured per chunk through BuildOut.textures like 'mural' (landmarks/lucthuy.ts)
+    neonSign: new MeshBasicMaterial({ color: new Color('#fff4de').multiplyScalar(1.8 * glowScale()), toneMapped: false, visible: glowOn() }),
   };
 }

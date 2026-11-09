@@ -9,8 +9,8 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { latLonToWorld, PIT_MAT, RACE_BBOX, worldToLatLon } from '@race/shared';
 import { RoadGraph, type RoadGraphFile, WayFlag, pathPolyline, segPoint, shortestPath } from '@race/shared/graph';
-import { MEDIA } from '@race/shared/protocol';
-import { type Leg, type LegGeo, type LegIssue, checkLeg, jsonProblem, legSchema, mediaItems, normalizeAnswer, parseLeg, placeOf, r2Names, startSpot } from '@race/shared/leg';
+import { MEDIA, NET } from '@race/shared/protocol';
+import { type Leg, type LegGeo, type LegIssue, checkLeg, fixedBikeSpots, jsonProblem, legSchema, mediaItems, normalizeAnswer, parseLeg, placeOf, r2Names, startSpot } from '@race/shared/leg';
 import { roads, traffic } from '../client/src/config.ts';
 import { CHUNK_SIZE, type ChunkData, type WaterData } from '../client/src/geo/chunkData.ts';
 import { districtAt, districtLabel, inRing } from '../client/src/geo/districts.ts';
@@ -443,6 +443,31 @@ function mapReport(leg: Leg, map: MapData) {
       } else lines.push('    Chưa có bãi xe: xe bị bỏ lại đúng chỗ đội đang đứng (không lỗi; nếu muốn, thêm "bikeParking" ở vỉa hè ngay ngoài vùng).');
     }
   }
+  // vehicles.fixedBikes: the centre on dry, open ground (error), every bike too and clear of the clue boxes' F reach (warning)
+  fixedBikeSpots(leg.vehicles.fixedBikes).forEach((spots, k) => {
+    const f = leg.vehicles.fixedBikes[k]!;
+    const path = ['vehicles', 'fixedBikes', k];
+    const c = latLonToWorld(f.lat, f.lon);
+    const b = map.geo.building(c.x, c.z);
+    if (b) add('error', path, `tâm đoàn xe nằm trong một tòa nhà (${b}); dời ra vỉa hè / quảng trường`);
+    const wet = map.waterAt(c.x, c.z);
+    if (wet && !map.onBridge(c.x, c.z)) add('error', path, 'tâm đoàn xe nằm giữa mặt nước; dời ra chỗ đất cạnh đó');
+    const bad = { house: 0, water: 0, road: 0, box: 0 };
+    for (const p of spots) {
+      if (map.geo.building(p.x, p.z)) bad.house++;
+      else if (map.waterAt(p.x, p.z) && !map.onBridge(p.x, p.z)) bad.water++;
+      else if (map.carriageway(p.x, p.z)) bad.road++;
+      if (pts.some((q) => q.step > 0 && Math.hypot(q.x - p.x, q.z - p.z) <= NET.boxOpenReach)) bad.box++;
+    }
+    if (bad.house || bad.water || bad.road)
+      add('warning', path, `${bad.house + bad.water + bad.road}/${spots.length} xe rơi ra ngoài chỗ đứng được (${bad.house} trong nhà, ${bad.water} dưới nước, ${bad.road} giữa lòng đường): dời tâm, giảm "spacing" / "rows" hoặc xoay "angleDeg"`);
+    if (bad.box) add('warning', path, `${bad.box}/${spots.length} xe cách tâm một điểm ≤ ${NET.boxOpenReach} m (tầm bấm F mở hòm): xe chen chỗ hòm, F dễ lấy xe thay vì mở hòm; dời đoàn xe ra xa hơn`);
+    const near = pts.filter((q) => q.step > 0).map((q) => ({ q, d: Math.hypot(q.x - c.x, q.z - c.z) })).sort((a, b) => a.d - b.d)[0];
+    const street = map.street(c.x, c.z);
+    lines.push(`• Xe cố định ${k + 1}${f.label ? ` (${f.label})` : ''}: ${f.count} xe, ${Math.ceil(f.count / Math.ceil(f.count / f.rows))} hàng, cách nhau ${f.spacing} m — ${fmt(f.lat)}, ${fmt(f.lon)}${street ? `, ${street}` : ''}${near ? ` — cách ${near.q.id} ${Math.round(near.d)} m` : ''}`);
+    const xs = spots.map((p) => p.x), zs = spots.map((p) => p.z);
+    lines.push(`    Xem: npm run screenshot -- --path "/?cam=${+c.x.toFixed(1)},${(map.ground(c.x, c.z) + 30).toFixed(1)},${+(c.z + 20).toFixed(1)},0,-55&npc=0" --name leg-fixed-${k + 1} (khung ${Math.round(Math.max(...xs) - Math.min(...xs))} × ${Math.round(Math.max(...zs) - Math.min(...zs))} m)`);
+  });
   return { issues, lines };
 }
 
