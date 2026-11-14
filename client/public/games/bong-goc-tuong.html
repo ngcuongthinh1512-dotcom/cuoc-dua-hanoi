@@ -188,7 +188,7 @@ new ResizeObserver(resize).observe(stage);
 /* ---------- state ---------- */
 let rand,lv=0,t0=0,running=false,locked=false,roll=0,found=[],keepQ=null,goals=[],targetMask=null,dirty=false,lastCheck=0;
 let slotPos=[],startQ=null,elapsedMs=0,lockPerf=0,flashUntil=0,saveAt=0,saveDirty=false;
-/* found letters sit at random spots (up / down / diagonal, small tilt) of a 3 x 2 grid, never in the order found: the player has to rearrange them */
+/* found letters sit in a 3 x 2 grid in the order found (left to right, top to bottom); the player rearranges them in the answer box */
 function drawSlots(){$("found").innerHTML=found.length?found.map((c,i)=>{const p=slotPos[i]||[0,0,0];return '<b style="left:'+p[0]+'px;top:'+p[1]+'px;transform:rotate('+p[2]+'deg)">'+c+'</b>'}).join(""):"<i>chưa có</i>";
   $("nth").textContent="Chữ "+Math.min(lv+1,ORDER.length)+"/"+ORDER.length;}
 function randQ(){const u=rand(),v=rand(),w=rand();return new THREE.Quaternion(Math.sqrt(1-u)*Math.sin(2*Math.PI*v),Math.sqrt(1-u)*Math.cos(2*Math.PI*v),Math.sqrt(u)*Math.sin(2*Math.PI*w),Math.sqrt(u)*Math.cos(2*Math.PI*w))}
@@ -291,8 +291,7 @@ function loop(now){
   renderer.render(scene,cam);
 }
 function begin(d){lv=d?d.lv:0;found=d?d.found.slice(0,ORDER.length):[];keepQ=d&&d.s?new THREE.Quaternion().fromArray(d.s):null;elapsedMs=d?d.ms||0:0;
-  {const r=rng(fnv("SLOT|"+team)),cells=[0,1,2,3,4,5];for(let i=5;i>0;i--){const j=Math.floor(r()*(i+1));[cells[i],cells[j]]=[cells[j],cells[i]]}
-   slotPos=cells.map(c=>[(c%3)*44+Math.round(r()*10),Math.floor(c/3)*46+Math.round(r()*14),Math.round((r()-.5)*36)])}
+  slotPos=[0,1,2,3,4,5].map(c=>[(c%3)*44,Math.floor(c/3)*46,0]); // found letters in the order found: left to right, top to bottom (M U O / O H G)
   if(document.activeElement)document.activeElement.blur();
   $("start").hidden=true;$("game").hidden=false;$("result").hidden=true;
   resize();

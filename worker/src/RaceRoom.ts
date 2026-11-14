@@ -7,7 +7,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { SPRINT_MULTIPLIER } from '@race/shared';
 import { startSpot } from '@race/shared/leg';
-import { avatarOf, boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Avatar, type Role, type RoomAt, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
+import { avatarOf, playerAvatar, boxVisible, CLOSE, decodePose, encodePose, encodeTick, isClientMessage, NET, overSpeed, parseFrame, PROTOCOL_VERSION, SpeedWindow, TrustedPoint, type ClientMessage, type FlagWhy, type HostState, type PoseSample, type QuotaCounters as Counters, type Avatar, type Role, type RoomAt, type ServerMessage, type TeamInfo, type Welcome } from '@race/shared/protocol';
 import { HOST, newClaims, signToken, spectatorClaims, spectatorCodeOf, verifyToken } from './auth.ts';
 import { QuotaCounters } from './counters.ts';
 import { addEvent, getMeta, migrate, readProgress, setMeta, type EventRow, type TeamRow } from './db.ts';
@@ -82,6 +82,8 @@ type Op = 'bike' | 'speed' | 'connect' | 'login' | 'race';
  *  next to its start spot, rounding); faster drifts are the speed window's flag, and the trusted point stays honest. */
 const JUMP_NOISE_M = 5;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
+/** Leg 3: the personal avatar of a team = by its player name, else by its team name (the Host often types the person as the team: "🌽 Hiếu"). */
+const personalAvatar = (t: { player: string; name: string }): Avatar | undefined => playerAvatar(t.player) ?? playerAvatar(t.name);
 const att = (ws: WebSocket) => ws.deserializeAttachment() as Attachment;
 /** SPEC §17.40 TeamInfo.racing: not checked in, not out (the Host's "Kết thúc" marks every unfinished team out). */
 const racing = (s: Pick<TeamRace, 'finishAt' | 'out'>) => s.finishAt === null && !s.out;
@@ -276,6 +278,7 @@ export class RaceRoom extends DurableObject<Env> {
     const specCode = spectatorCodeOf(claims);
     const role: Role = claims?.t === HOST ? HOST : specCode !== null ? SPECTATOR : TEAM;
     const team = role === TEAM && claims ? this.team(claims.t) : undefined;
+    if (team) avatar = personalAvatar(team) ?? avatar; // a personal avatar follows the player's (or team's) name, not the menu
     const now = Date.now();
     // A reconnect loop past NET.maxConnects: closed before any row (the older socket keeps the team). SPEC §17.40: a
     // spectator token of a rotated code is a bad token; past NET.maxSpectators open spectator sockets the room is full.
@@ -815,7 +818,7 @@ export class RaceRoom extends DurableObject<Env> {
 
   private info(t: TeamRow, online: Set<string>): TeamInfo {
     const ws = online.has(t.id) ? this.sockets(t.id).at(-1) : undefined; // the newest socket (an older one is being kicked)
-    return { slot: t.slot, id: t.id, name: t.name, colour: t.colour, online: online.has(t.id), racing: racing(this.teamState(t)), ...(ws ? { avatar: att(ws).avatar ?? 0 } : {}) };
+    return { slot: t.slot, id: t.id, name: t.name, colour: t.colour, online: online.has(t.id), racing: racing(this.teamState(t)), ...(personalAvatar(t) !== undefined ? { avatar: personalAvatar(t)! } : ws ? { avatar: att(ws).avatar ?? 0 } : {}) };
   }
 
   private welcome(role: Role, team: TeamRow | undefined, race: RaceWelcome | null, now: number): Welcome {

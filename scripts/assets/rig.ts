@@ -74,7 +74,7 @@ function worlds(order: readonly RigBone[], pose?: Pose) {
  *  bone (rest) along its src bone (AIM child): an A-pose target follows a T-pose source. `hips` (dst) also moves: its
  *  world offset from rest = the src offset × the hip-height ratio (`legs` = [dst, src] hip joints). Unmapped dst bones keep
  *  their rest locals. Returns the frame function: mapped dst locals (+ the hips translation) and every dst world matrix. */
-export function retargeter(src: readonly RigBone[], dst: readonly RigBone[], pairs: ReadonlyMap<string, string>, hips: string, legs: readonly [string, string]) {
+export function retargeter(src: readonly RigBone[], dst: readonly RigBone[], pairs: ReadonlyMap<string, string>, hips: string, legs: readonly [string, string], level: readonly string[] = []) {
   const [S, D] = [sorted(src), sorted(dst)];
   const [S0, D0] = [worlds(S), worlds(D)];
   const k = pos(D0.get(legs[0])!).y / pos(S0.get(legs[1])!).y;
@@ -86,7 +86,8 @@ export function retargeter(src: readonly RigBone[], dst: readonly RigBone[], pai
     if (!S0.has(s)) throw new Error(`retarget: source bone ${s} (for ${b.name}) missing`);
     const c = AIM[b.name];
     const sc = c && pairs.get(c);
-    if (c && sc && D0.has(c) && S0.has(sc)) {
+    if (level.includes(b.name)) A.set(b.name, new Quaternion()); // `level` bones keep their own rest orientation (a Meshy neck leans forward: the head inherited that tilt)
+    else if (c && sc && D0.has(c) && S0.has(sc)) {
       const dd = pos(D0.get(c)!).sub(pos(D0.get(b.name)!)).normalize();
       const ds = pos(S0.get(sc)!).sub(pos(S0.get(s)!)).normalize();
       A.set(b.name, new Quaternion().setFromUnitVectors(dd, ds));

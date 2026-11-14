@@ -2,8 +2,8 @@ name = "cuoc-dua-hanoi"
 main = "src/index.ts"
 compatibility_date = "2026-09-25"
 
-# Leg 3 Hà Nội: no custom domain yet (the Brussels one stays with cuoc-dua-bi). Add e.g.
-# routes = [{ pattern = "<tên-miền>.ceticeti.com", custom_domain = true }]
+# Leg 3 Hà Nội: custom domain (the Brussels one stays with cuoc-dua-bi). Created by `wrangler deploy` (zone ceticeti.com).
+routes = [{ pattern = "leg3hanoi.ceticeti.com", custom_domain = true }]
 
 # Client build (Vite) served by Workers Static Assets; unmatched paths fall through to the Worker.
 [assets]

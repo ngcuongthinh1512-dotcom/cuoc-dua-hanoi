@@ -15,6 +15,8 @@ import { mapBuffers, mapVectors } from './mapVectors.ts';
 import { buildRoads } from './RoadBuilder.ts';
 import { buildStairs } from './StairBuilder.ts';
 import { buildStreetProps } from './StreetProps.ts';
+import { buildRails } from './RailBuilder.ts';
+import { buildStools } from './StreetStools.ts';
 import { buildTerrain } from './Terrain.ts';
 import { buildVegetation } from './Vegetation.ts';
 
@@ -28,6 +30,8 @@ export const BUILDERS: Record<string, Builder> = {
   props: buildStreetProps,
   landmarks: buildLandmarks,
   powerLines: buildPowerLines, // Leg 3 Hà Nội: utility poles + overhead cables
+  rails: buildRails, // Leg 3 Hà Nội: the railway lines (Lê Duẩn / Ga Hà Nội)
+  stools: buildStools, // Leg 3 Hà Nội: pavement terraces (plastic stools, low tables, parasols)
 };
 
 export const emptyChunk = (key: ChunkKey): ChunkData => ({ v: 2, key, buildings: [], roads: [], bridges: [], areas: [], points: [] });

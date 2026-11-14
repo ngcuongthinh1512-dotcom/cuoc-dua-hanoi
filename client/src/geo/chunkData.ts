@@ -160,6 +160,8 @@ export interface ChunkData {
   points: PointRec[];
   stairs?: StairRec[];
   junctions?: JunctionRec[];
+  /** Leg 3 Hà Nội: surface railways (scripts/build-rails.ts): world m [x, z, …]; `main` = a main line (not a yard / siding track). */
+  rails?: { pts: number[]; main?: 1 }[];
 }
 
 export interface ChunkIndex {

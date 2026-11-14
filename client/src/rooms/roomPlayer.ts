@@ -4,6 +4,7 @@
 // F within `reach` m of the own team's "Bắt đầu" button (any button without ?team=) → onPress(slot) (the overlay game);
 // the mouse never opens a game. V (or ?fly=1 / ?view= / ?cam=) = the rooms' old free-fly camera. Params: avatar=0|1,
 // autoMove=walk|sprint (holds W, screenshots). DEV: window.__ROOM__ = the RoomPlayer.
+import type { Avatar } from '@race/shared/protocol';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { type PerspectiveCamera, type Scene, Vector3 } from 'three';
 import { physics, playerSetup } from '../config.ts';
@@ -63,7 +64,7 @@ export interface RoomPlayerOptions {
   buttons: readonly RoomButton[];
   spawn: { x: number; z: number; yaw: number };
   /** Shirt colour + name tag (+ Leg 2 avatar: 0 Nam / 1 Nữ; omitted = ?avatar / the menu setting); omitted = the test team (playerSetup). */
-  team?: { name: string; colour: string; avatar?: 0 | 1 };
+  team?: { name: string; colour: string; avatar?: Avatar };
   /** The race: the game's own Input (same canvas; main.ts polls it and owns canLock). Omitted = the room makes one (dev pages). */
   input?: Input;
   /** m from a button where F works and the prompt shows. */

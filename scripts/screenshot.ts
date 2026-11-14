@@ -17,6 +17,9 @@ import { ringCentroid } from '../client/src/geo/clip.ts';
 import { LANDMARKS } from '../client/src/geo/landmarks.ts';
 import { BT, BT_BOX, BT_UA, BT_UW } from '../client/src/world/landmarks/batrang.ts';
 import { NT } from '../client/src/world/landmarks/nhatho.ts';
+import { NS_BOX, nsWorld } from '../client/src/world/landmarks/ngocson.ts';
+import { DN, TB, TB_BOX } from '../client/src/world/landmarks/thapbut.ts';
+import { TH_BOX, thAt } from '../client/src/world/landmarks/thehuc.ts';
 import { LT } from '../client/src/world/landmarks/lucthuy.ts';
 import { TP, TP_UA, TP_UW } from '../client/src/world/landmarks/tranphu.ts';
 import { flatHeightGrid, heightAt, parseHeightGrid } from '../client/src/geo/heightGrid.ts';
@@ -107,6 +110,9 @@ Object.assign(PRESETS, {
   'hanoi-houses-hanggai': '/?cam=-95.9,1.7,-14.7,-94,3&npc=0',
   'hanoi-houses-khuongthuong': '/?cam=-2953.32,1.6,2842.20,-74,2&npc=0', // the café lane, Khương Thượng (Đống Đa)
   'hanoi-houses-leduan': '/?cam=-1112,1.7,1300,2,3&npc=0', // Lê Duẩn, looking north
+  'hanoi-pnt-ne': '/?cam=-1880,1.7,2620,-49,6&npc=0', // Phạm Ngọc Thạch looking NE along the boulevard (refs: landmark-refs/pham-ngoc-thach 2, 3)
+  'hanoi-pnt-sw': '/?cam=-1700,1.7,2460,131,6&npc=0', // … looking SW (ref 5)
+  'hanoi-pnt-top': '/?cam=-1890,160,2640,-49,-55&npc=0', // from above
   'hanoi-houses-ktt': '/?cam=-1898.5,1.7,2576.5,-60,6&npc=0', // KTT Kim Liên (5-storey apartments, Lương Định Của)
   'hanoi-houses-top': '/?cam=-310,180,2200,0,-55&npc=0', // oblique over Bà Triệu
   'hn-hanggai': '/?cam=-95.9,1.7,-14.7,-94,3',
@@ -445,6 +451,37 @@ Object.assign(PRESETS, {
   'hanoi-lucthuy-dusk': lt2Cam(-22, 9.5, 1.5, -11.8, -2.2, 4.5, '&npc=0&time=dusk&quality=high'), // the same at dusk: the board and the terrace bulbs lit
   'hanoi-lucthuy-dusk-villa': ltCam(-9, 9.0, 1.8, -1, 0, 3.6, '&npc=0&time=dusk&quality=high'), // the villa's board, round sign and portal lanterns lit
 });
+// Tháp Bút + Đài Nghiên (landmarks/thapbut.ts): camera at frame (a, w) of TB (the tower axis), `eye` m up, looking at frame point
+// (la, lw) at height ly; a = west (the viewer's right on the path), w = north (out to the path: its axis at ≈ 10.5), the clue box at (0, 8.6).
+const tbCam = (a: number, w: number, eye: number, la: number, lw: number, ly: number, extra = '&npc=0&time=day') =>
+  worldCam(TB[0] - a, eye, TB[1] - w, TB[0] - la, ly, TB[1] - lw) + extra;
+const TB_BOXES = `&boxes=L1,${TB_BOX[0].toFixed(2)},${TB_BOX[1].toFixed(2)},,0`;
+Object.assign(PRESETS, {
+  'hanoi-thapbut-front': tbCam(-2.5, 13, 1.5, 0, 0, 6.6), // from the far edge of the path, a little to the left, looking up (owner photo 57)
+  'hanoi-thapbut-close': tbCam(1.5, 9.5, 1.6, 1.2, 0, 5.2), // nearer: the three characters, the leaning trunk, the miếu on the right (owner photo 58)
+  'hanoi-thapbut-oblique': tbCam(11, 12, 6, 0, 0, 5.5), // from the north-west, raised: mound, kerb, shrine, tower
+  'hanoi-thapbut-street': tbCam(-6, 11.5, 1.6, 1, 2, 4.2, '&npc=0&time=day' + TB_BOXES), // along the path past the clue box spot
+  'hanoi-thapbut-gate': worldCam(DN[0] + 12, 1.7, DN[1] + 1.5, DN[0], 3.4, DN[1]) + '&npc=0&time=day', // Đài Nghiên from the path, Thê Húc behind
+  'hanoi-thapbut-dusk': tbCam(-2.5, 13, 1.5, 0, 0, 6.6, '&npc=0&time=dusk&quality=high'), // the game's default light
+  'hanoi-thapbut-dusk-close': tbCam(1.5, 9.5, 1.6, 1.2, 0, 5.2, '&npc=0&time=dusk&quality=high'),
+});
+// Cầu Thê Húc + Đắc Nguyệt Lâu (landmarks/thehuc.ts): camera at frame (a, w) of TH_O (the island end of the bridge), `eye` m up,
+// looking at frame point (la, lw) at height ly; a = along the bridge to the shore (east, the shore end at 46.2), w = south; the gate
+// at a 2.4, the clue box in the yard behind it at (−3.2, 0).
+const thCam = (a: number, w: number, eye: number, la: number, lw: number, ly: number, extra = '&npc=0&time=day') => {
+  const [x, z] = thAt(a, w);
+  const [tx, tz] = thAt(la, lw);
+  return worldCam(x, eye, z, tx, ly, tz) + extra;
+};
+const TH_BOXES = `&boxes=L1,${TH_BOX[0].toFixed(2)},${TH_BOX[1].toFixed(2)},,-90`;
+Object.assign(PRESETS, {
+  'hanoi-thehuc-bridge-side': thCam(40, 26, 2.2, 14, 0, 2.2), // from over the water south-east of the bridge: deck, parapet, piles, the gate at the end (owner photo 59)
+  'hanoi-thehuc-gate-front': thCam(13, 0, 2.9, 2.4, 0, 3.8), // on the deck, the whole gate (owner photo 60)
+  'hanoi-thehuc-gate-close': thCam(6.6, 0.6, 1.7, 2.4, 0, 3.9), // at the bridge head: boards, panels, the passage and its lantern
+  'hanoi-thehuc-aerial': thCam(30, 30, 26, 18, 0, 0), // bridge, gate and the island's edge from above
+  'hanoi-thehuc-yard': thCam(-7.5, 1.2, 1.7, 2.4, 0, 2.6, '&npc=0&time=day' + TH_BOXES), // from the temple side: the clue box spot, the gate's back, the bridge through the passage
+  'hanoi-thehuc-dusk': thCam(13, 0, 2.9, 2.4, 0, 3.8, '&npc=0&time=dusk&quality=high'), // the game's default light: hoành phi and lantern lit
+});
 // Leg 3 hoàng hôn (config timeOfDay 'dusk', lighting.dusk; `npm run screenshot -- hanoi-dusk`): Bà Triệu at street level, Ga Hà Nội's
 // front (looking west into the sun), Nhà thờ Lớn's front, Hoàn Kiếm from the air looking west (the lake reflects the sky), an
 // oblique over the Old Quarter. `quality=high` explicitly (headless SwiftShader would pick low: no bloom / image-based light);
@@ -656,6 +693,23 @@ Object.assign(PRESETS, {
   'choco-skip': '/choco.html?team=3&skip=1&done=3',
   'choco-walk': '/choco.html?team=3', // the avatar at its table from behind, "Bấm F để bắt đầu" (rooms/roomPlayer.ts); minimal graphics
   'choco-walk-hq': '/choco.html?team=3&hq=1', // the full look: shadows, bloom, steam, every lamp
+});
+// Đền Ngọc Sơn + Đình Trấn Ba (landmarks/ngocson.ts): camera at frame (a, w) of NS (a = east, w = south; the temple block
+// a −11.9…12.2 × w −9.5…9.3, the porch out to w 12.1, Trấn Ba around (1.6, 26.6), the gate's back at a ≈ 20.6), `eye` m up,
+// looking at frame point (la, lw) at height ly; the clue box spot NS_BOX = (16.3, −2.2).
+const nsCam = (a: number, w: number, eye: number, la: number, lw: number, ly: number, extra = '&npc=0&time=day') => {
+  const [x, z] = nsWorld(a, w);
+  const [tx, tz] = nsWorld(la, lw);
+  return worldCam(x, eye, z, tx, ly, tz) + extra;
+};
+const NS_BOXES = `&boxes=L1,${NS_BOX[0].toFixed(2)},${NS_BOX[1].toFixed(2)},,-90`;
+Object.assign(PRESETS, {
+  'hanoi-ngocson-court': nsCam(19.8, -3.6, 1.7, 12.2, -4.2, 1.7, '&npc=0&time=day' + NS_BOXES), // just inside the gate: the east wall, side door, couplets, the clue box spot
+  'hanoi-ngocson-front': nsCam(1.2, 21.2, 1.7, 0, 9.3, 3.4), // from the yard by Trấn Ba: Bái đường, porch, steps, burner
+  'hanoi-ngocson-oblique': nsCam(16.5, 17.5, 3.2, 1, 5, 3.2), // from the yard's south-east corner: the roofs in a row
+  'hanoi-ngocson-aerial': nsCam(24, 40, 34, 1, 8, 2), // temple, yard, Trấn Ba from above the lake
+  'hanoi-ngocson-tranba': nsCam(10.5, 15.5, 1.8, 1.6, 26.6, 3.4), // Đình Trấn Ba from the yard
+  'hanoi-ngocson-dusk': nsCam(1.2, 21.2, 1.7, 0, 9.3, 3.4, '&npc=0&time=dusk&quality=high'), // the game's default light: lanterns, lattices lit
 });
 // Leg 3 dev room "Phòng tranh truyện tranh" (client/gallery.html, src/gallery/gallery.ts; `npm run screenshot -- gallery`; not in the
 // default run): the hall from the entrance, team 1's desk, the plan, the Ligne Claire overlay (drawing 1 open, 2–10 locked), the

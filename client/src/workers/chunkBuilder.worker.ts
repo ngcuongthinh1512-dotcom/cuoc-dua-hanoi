@@ -6,6 +6,7 @@ import type { Districts } from '../geo/districts.ts';
 import type { HeightGrid } from '../geo/heightGrid.ts';
 import type { FromWorker, ToWorker } from '../world/buildTypes.ts';
 import { buildChunk, emptyChunk, transferables } from '../world/chunkBuild.ts';
+import { landmarkAssets } from '../world/landmarks/index.ts';
 
 let grid: HeightGrid | undefined;
 let dataUrl = '';
@@ -25,6 +26,7 @@ onmessage = async (e: MessageEvent<ToWorker>) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       chunk = (await res.json()) as ChunkData;
       if (chunk.v !== 2) throw new Error(`unsupported chunk version ${String(chunk.v)}`);
+      await landmarkAssets(key, dataUrl); // image files a placed landmark detail of this chunk paints from (landmarks/thapbut.ts)
     }
     const out = buildChunk(chunk, grid, undefined, districts);
     reply({ type: 'built', key, out, ms: performance.now() - t0 }, transferables(out));

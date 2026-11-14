@@ -115,6 +115,8 @@ const FALLBACK_COLOUR: Record<MaterialId, number> = {
   neon: 0xffffff, // × vertex colour
   neonSign: 0xff2f78,
   mural: 0xffffff, // × the chunk's atlas
+  mural2: 0xffffff,
+  mural3: 0xffffff,
   stairGlow: 0xffe0a8,
 };
 

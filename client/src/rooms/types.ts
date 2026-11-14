@@ -5,6 +5,7 @@
 // Player walking on colliders added to the game's Rapier world, the real team, progress from the server, `race room`
 // reports; loaded with a dynamic import so the room's chunk stays out of the main bundle). Graphics are minimal by
 // default (no shadows / post / steam, few lights, fewer segments); `hq` brings the full look back (dev `?hq=1`).
+import type { Avatar } from '@race/shared/protocol';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Object3D, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { RoomFrame } from './roomFrame.ts';
@@ -31,7 +32,7 @@ export interface RoomMountOptions {
   camera?: PerspectiveCamera;
   /** The race: this team (its table / desk = `slot`, 1..11), + the other teams' placards from the real TeamInfo list. Absent =
    *  the dev page (chocoBuild / galleryBuild TEAMS, `?team=`). */
-  team?: RoomTeam & { avatar?: 0 | 1 };
+  team?: RoomTeam & { avatar?: Avatar };
   teams?: readonly RoomTeam[];
   /** The race: the leg's `task.room` (total, minutes per missing item) — the overlay texts; absent = the game's own numbers. */
   room?: { total: number; penaltyMinutesEach: number };

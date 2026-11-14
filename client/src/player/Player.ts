@@ -17,7 +17,7 @@ import { CharacterController, haltIntent, newIntent, readMoveIntent } from './Ch
 import { type CharacterAsset, CharacterModel, loadCharacterAsset } from './CharacterModel.ts';
 import { type CameraMode, ThirdPersonCamera } from './ThirdPersonCamera.ts';
 import type { CameraTarget, Gesture, PlayerEnv } from './types.ts';
-import type { GestureKind, RespawnHow } from '@race/shared/protocol';
+import type { Avatar, GestureKind, RespawnHow } from '@race/shared/protocol';
 
 const DEG = Math.PI / 180;
 
@@ -27,7 +27,7 @@ export interface PlayerOverrides {
    *  (the server's shared bikes instead, track C). */
   online?: true;
   /** Leg 2 "Nhân vật" (settings.pickAvatar: offline ?avatar=0|1 wins): 0 = Nam, 1 = Nữ. */
-  avatar?: 0 | 1;
+  avatar?: Avatar;
   spawn?: { x: number; z: number; yawDeg: number };
   camMode?: CameraMode;
   /** Camera yaw relative to "behind the body", degrees (180 = in front, looking at the face). */

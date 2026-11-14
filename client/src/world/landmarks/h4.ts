@@ -12,6 +12,8 @@ import type { DetailFn } from './index.ts';
 import { footprintFrame, loft, quadOut, triOut } from './kit.ts';
 import { batTrang, BT } from './batrang.ts';
 import { CAFE, cafeHmm } from './cafe.ts';
+import { preloadThapBut, TB, thapBut } from './thapbut.ts';
+import { preloadTheHuc, TH_O, theHuc } from './thehuc.ts';
 import { bacHoBacTon, STATUE } from './hoton.ts';
 import { Sink } from './parts.ts';
 
@@ -557,7 +559,9 @@ const thongNhatPark = (chunk: ChunkData, ctx: BuildCtx): BuildOut => {
 type InstanceKind = BuildOut['instances'][number]['kind'];
 
 /** Code-only details over a world box, built by every chunk that overlaps it (index.ts buildLandmarks). */
-export const placed: readonly { minX: number; maxX: number; minZ: number; maxZ: number; build: (chunk: ChunkData, ctx: BuildCtx) => BuildOut }[] = [
+export const placed: readonly { minX: number; maxX: number; minZ: number; maxZ: number; build: (chunk: ChunkData, ctx: BuildCtx) => BuildOut; preload?: (dataUrl: string) => Promise<void> }[] = [
+  { minX: TB[0], maxX: TB[0], minZ: TB[1], maxZ: TB[1], build: thapBut, preload: preloadThapBut }, // thapbut.ts (Tháp Bút + Đài Nghiên, registry 'thap-but'; chunk 0_0; `preload` = image files the chunk worker awaits before the build)
+  { minX: TH_O[0], maxX: TH_O[0], minZ: TH_O[1], maxZ: TH_O[1], build: theHuc, preload: preloadTheHuc }, // thehuc.ts (Cầu Thê Húc + Đắc Nguyệt Lâu, registry 'cau-the-huc' / 'dac-nguyet-lau'; chunk 0_0)
   { minX: GATE[0], maxX: GATE[0], minZ: GATE[1], maxZ: GATE[1], build: thongNhatGate },
   { minX: GATE_W[0], maxX: GATE_W[0], minZ: GATE_W[1], maxZ: GATE_W[1], build: leDuanGate },
   { minX: STATUE[0], maxX: STATUE[0], minZ: STATUE[1], maxZ: STATUE[1], build: bacHoBacTon }, // hoton.ts

@@ -7,7 +7,7 @@
 import { CanvasTexture, Color, DoubleSide, type Material, MeshBasicMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
 import { landmarks as L } from '../../config.ts';
 import { glowOn, glowScale } from '../night.ts';
-import type { BuildingRec, LandmarkId, PartRec } from '../../geo/chunkData.ts';
+import { type BuildingRec, chunkBounds, type ChunkKey, type LandmarkId, type PartRec } from '../../geo/chunkData.ts';
 import { LANDMARK_BY_ID, type LandmarkDef } from '../../geo/landmarks.ts';
 import { buildingHeight } from '../BuildingBuilder.ts';
 import { sceneEnvironmentOn, skyEnvironment } from '../Water.ts';
@@ -30,6 +30,7 @@ import { details as hn1 } from './h1.ts';
 import { details as hn2 } from './h2.ts';
 import { details as hn3 } from './h3.ts';
 import { details as hn4, placed } from './h4.ts';
+import { NS_ASSETS } from './ngocson.ts';
 import * as kit from './kit.ts';
 import { parseColour, partHeights, partRings, pickMaterial, recordGround, renderPart, roofShape, Sink } from './parts.ts';
 
@@ -94,6 +95,12 @@ export const helpers = {
 export type Helpers = typeof helpers;
 
 const DETAILS: Partial<Record<LandmarkId, DetailFn>> = { ...b, ...c, ...d, ...e, ...f, ...g, ...h2, ...i, ...j, ...k, ...l, ...m, ...n, ...hn1, ...hn2, ...hn3, ...hn4 };
+
+/** The image files the placed details of chunk `key` paint from (thapbut.ts): the chunk worker awaits this before buildChunk. Never rejects. */
+export function landmarkAssets(key: ChunkKey, dataUrl: string): Promise<unknown> {
+  const b = chunkBounds(key);
+  return Promise.all([...placed, NS_ASSETS].filter((p) => p.preload && p.maxX >= b.minX && p.minX < b.maxX && p.maxZ >= b.minZ && p.minZ < b.maxZ).map((p) => p.preload!(dataUrl)));
+}
 
 export const buildLandmarks: Builder = (chunk, ctx) => {
   const outs: BuildOut[] = [];

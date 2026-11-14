@@ -35,6 +35,8 @@ export type MaterialId =
   | 'neon'
   | 'neonSign'
   | 'mural' // painted wall / lettering: white, textured per chunk through BuildOut.textures (landmarks/m.ts)
+  | 'mural2' // a second per-chunk atlas, for a chunk whose 'mural' is taken by another landmark (landmarks/thapbut.ts)
+  | 'mural3' // a third one (chunk 0_0: landmarks/thehuc.ts, Cầu Thê Húc + Đắc Nguyệt Lâu)
   | 'stairGlow'; // night nosing strips on stair flights (world/stairs.ts createStairMaterials: hidden by day)
 
 /** Buckets of these materials MUST carry a `color` attribute (linear RGB: per-building tint, park green) and their

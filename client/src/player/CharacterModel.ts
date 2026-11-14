@@ -40,7 +40,7 @@ export interface CharacterAsset {
 }
 
 /** Root nodes of player.glb by avatar index (settings "Nhân vật": 0 = Nam, 1 = Nữ) and their clip prefixes. */
-export const AVATARS = [{ node: 'player_m', clips: 'm_' }, { node: 'player_f', clips: 'f_' }] as const;
+export const AVATARS = [{ node: 'player_m', clips: 'm_' }, { node: 'player_f', clips: 'f_' }, { node: 'player_c', clips: 'c_' }, { node: 'player_h', clips: 'h_' }, { node: 'player_x', clips: 'x_' }, { node: 'player_n', clips: 'n_' }, { node: 'player_k', clips: 'k_' }] as const; // 2 Ceti, 3 Hải Long, 4 Chị 6, 5 Nhật Nhật, 6 Hiếu (scripts/ceti-avatar.ts; shared playerAvatar picks by player name)
 
 /** The clips of avatar `i` (player-anims.glb `m_Idle_Loop`…) under their UAL names (Animation.ts UAL_CLIPS); a file
  *  without prefixed clips (old rig, tests) keeps them all. */
@@ -174,6 +174,7 @@ export class CharacterModel {
     body.traverse((o) => {
       if (!(o instanceof Mesh)) return;
       o.castShadow = o.receiveShadow = true;
+      if (asset.scene.userData.selfShadow === false) o.receiveShadow = false; // custom (Meshy) avatars: shadow-map acne stripes on the cloth
       // Fixed culling sphere (mesh-local; the bind-pose bounds miss the animated pose): still culled off screen, which
       // Phase 4B pedestrians / Phase 6 remote players need.
       if (o instanceof SkinnedMesh) {
@@ -181,6 +182,8 @@ export class CharacterModel {
         o.boundingSphere = new Sphere(new Vector3(0, y, 0).applyMatrix4(o.matrixWorld.clone().invert()), radius / s);
       }
       const m = (o.material as Material).clone();
+      const fill = asset.scene.userData.fill as number | undefined; // custom (Meshy) avatars: matte + a flat fill of the albedo (shadowed face / trousers go black otherwise)
+      if (fill && m instanceof MeshStandardMaterial) Object.assign(m, { roughness: 1, metalness: 0, emissiveMap: m.map }), m.emissive.setScalar(fill);
       m.userData.outfit = this.outfit;
       m.onBeforeCompile = outfitShader;
       this.materials.push((o.material = m));

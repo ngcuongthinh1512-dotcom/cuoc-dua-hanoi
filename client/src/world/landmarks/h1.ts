@@ -12,6 +12,7 @@ import { arch, facing } from './c.ts';
 import { bar } from './d.ts';
 import type { DetailFn } from './index.ts';
 import { footprintFrame, quadOut, triOut } from './kit.ts';
+import { ngocSon } from './ngocson.ts'; // Đền Ngọc Sơn + Đình Trấn Ba (Thê Húc / Đắc Nguyệt Lâu: thehuc.ts, Tháp Bút: thapbut.ts)
 import { Sink } from './parts.ts';
 
 type Buf = Parameters<typeof fbox>[0];
@@ -110,64 +111,6 @@ const thapRua: DetailFn = (rec, _parts, ctx, h) => {
   fbox(stone, f, -f.a - 0.35, f.a + 0.35, -f.b - 0.35, f.b + 0.35, g - 0.1, g + 0.35); // plinth
   for (const [a, b, , y1] of tiers) fbox(stone, f, -a - 0.18, a + 0.18, -b - 0.18, b + 0.18, g + y1 - 0.25, g + y1); // cornices
   roof(M(s, C.tileDark), f, -(f.a - 1.25) - 0.4, f.a - 1.25 + 0.4, -(f.b - 0.95) - 0.4, f.b - 0.95 + 0.4, g + 7.5, g + 8.9);
-  return withExtras(base, s);
-};
-
-// ── Đền Ngọc Sơn: three ochre halls front (south, toward Đình Trấn Ba) to back under yellow-brown tiered tile roofs, red
-// lacquer columns on the front; Đắc Nguyệt Lâu (the gate pavilion at the island end of Cầu Thê Húc) and the red wooden
-// parapet of the bridge (its deck comes from BridgeBuilder, which draws no railing on a deck at grade: the posts stand 0.35 m
-// outside the 3 m footway); Đình Trấn Ba = open 8-column pavilion. Heights ≈ 4 m eaves / 8 m ridges (1-storey halls,
-// photos), gate ≈ 7 m. ──
-const THE_HUC: [number, number, number, number] = [90.8, 158.4, 44.8, 153.9]; // way/9566542 (shore end → island end), chunk 0_0
-
-const ngocSon: DetailFn = (rec, _parts, ctx, h) => {
-  const s = new Sink();
-  const g = ctx.ground;
-  if (rec.kind === 'roof') { // Đình Trấn Ba
-    const f = footprintFrame(rec.outer);
-    const red = M(s, C.lacquer);
-    for (const a of [-0.78, -0.3, 0.3, 0.78]) for (const w of [-0.78, 0.78]) col(red, f, a * f.a, w * f.b, 0.17, g, g + 3.4);
-    for (const w of [-0.3, 0.3]) for (const a of [-0.78, 0.78]) col(red, f, a * f.a, w * f.b, 0.17, g, g + 3.4);
-    fbox(M(s, '#b9b2a2'), f, -f.a, f.a, -f.b, f.b, g - 0.1, g + 0.4);
-    roof(M(s, C.tile), f, -f.a - 0.9, f.a + 0.9, -f.b - 0.9, f.b + 0.9, g + 3.4, g + 4.4, f.a - 0.3);
-    fbox(M(s, C.ochre), f, -0.45 * f.a, 0.45 * f.a, -0.45 * f.b, 0.45 * f.b, g + 4.2, g + 5.1);
-    roof(M(s, C.tile), f, -0.7 * f.a, 0.7 * f.a, -0.7 * f.b, 0.7 * f.b, g + 5.1, g + 6.6, 0.7 * f.a - 0.3);
-    fbox(M(s, C.lacquer), f, -0.4, 0.4, -0.25, 0.25, g + 6.5, g + 6.9);
-    return s.out();
-  }
-  const f = facing(rec, 180); // +u = south = the front (Trấn Ba, the lake); a ≈ half depth, b ≈ half width
-  const base = h.generic({ ...rec, height: 3.9, roofShape: 'flat', colour: C.ochre, roofColour: C.ochre }, [], ctx);
-  const t = turn(f); // ridges run along the front (f's w)
-  const spans: [number, number][] = [[f.a - 8.5, f.a - 0.4], [-3.6, 3.8], [-f.a + 0.4, -f.a + 7.8]];
-  spans.forEach(([a0, a1], k) => hall(s, t, -f.b + 1.5, f.b - 1.5, -a1, -a0, g + 3.9, k === 2 ? 2.6 : 2.1));
-  const red = M(s, C.lacquer);
-  for (let k = 0; k < 6; k++) col(red, f, f.a + 0.45, -f.b + 2.5 + ((2 * f.b - 5) * k) / 5, 0.17, g, g + 3.9);
-  for (let k = 0; k < 3; k++) face(red, f, f.a + 0.03, -3.3 + k * 2.4, -2.1 + k * 2.4, g, g + 2.6, 1); // doors
-  // Đắc Nguyệt Lâu at the island end of Thê Húc: passage along the bridge axis, two piers, a pavilion with a tiered roof
-  const [x0, z0, x1, z1] = THE_HUC;
-  const L = Math.hypot(x1 - x0, z1 - z0);
-  const [ux, uz] = [(x0 - x1) / L, (z0 - z1) / L]; // island → shore
-  const fg: Fr = { cx: x1 - 2.6 * ux, cz: z1 - 2.6 * uz, ux, uz, a: 2.2, b: 2.7, area: 0 };
-  const wall = M(s, C.ochre);
-  for (const sg of [1, -1]) fbox(wall, fg, -1.5, 1.5, sg * 1.1, sg * 2.6, g, g + 3.3);
-  fbox(wall, fg, -1.5, 1.5, -1.3, 1.3, g + 2.5, g + 3.3); // lintel
-  roof(M(s, C.tile), fg, -2.4, 2.4, -3.5, 3.5, g + 3.3, g + 4.1, 1.6);
-  fbox(M(s, C.lacquer), fg, -1.3, 1.3, -2.2, 2.2, g + 3.9, g + 5.3);
-  const ct = turn(fg);
-  roof(M(s, C.tile), ct, -2.9, 2.9, -1.9, 1.9, g + 5.3, g + 7.0, 1.2);
-  const red2 = M(s, C.lacquer);
-  fbox(red2, ct, -2.2, 2.2, -0.2, 0.2, g + 6.9, g + 7.3);
-  // Thê Húc parapet: red posts every 2.3 m + two rails
-  const fb: Fr = { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, ux, uz, a: L / 2 - 0.3, b: 1.85, area: 0 };
-  for (const sg of [1, -1]) {
-    const n = Math.round((2 * fb.a) / 2.3);
-    for (let k = 0; k <= n; k++) {
-      const a = -fb.a + ((2 * fb.a) * k) / n;
-      fbox(red2, fb, a - 0.08, a + 0.08, sg * fb.b - 0.08, sg * fb.b + 0.08, g - 0.3, g + 1.3);
-    }
-    fbox(red2, fb, -fb.a, fb.a, sg * fb.b - 0.05, sg * fb.b + 0.05, g + 1.12, g + 1.22);
-    fbox(red2, fb, -fb.a, fb.a, sg * fb.b - 0.04, sg * fb.b + 0.04, g + 0.6, g + 0.68);
-  }
   return withExtras(base, s);
 };
 

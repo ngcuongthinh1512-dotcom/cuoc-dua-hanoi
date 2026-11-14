@@ -14,7 +14,7 @@ const q = new URLSearchParams(location.search);
 const poses = (q.get('poses') ?? 'idle,walk,jog,air,wave,openBox,celebrate,crash').split(',');
 const turn = THREE.MathUtils.degToRad(Number(q.get('turn') ?? 20));
 const T = Number(q.get('t') ?? 1.2);
-const avatarAt = (i: number) => (q.get('avatar') === '0' || q.get('avatar') === '1' ? Number(q.get('avatar')) : i % 2);
+const avatarAt = (i: number) => (/^[0-6]$/.test(q.get('avatar') ?? '') ? Number(q.get('avatar')) : i % 2);
 const TEAMS = [['#d8342c', 'Đội Đỏ'], ['#2c6bd8', 'Đội Xanh']] as const;
 const GAP = 1.3; // m between characters
 const LIFT: Record<string, number> = { air: 0.4 }; // m: the jump loop above the ground

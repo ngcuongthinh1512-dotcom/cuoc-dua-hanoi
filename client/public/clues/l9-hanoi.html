@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Gợi ý địa điểm</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d63c4; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(function () {
+  var cv = document.getElementById('c'), cx = cv.getContext('2d');
+  var W = 0, H = 0, DPR = 1, t0 = 0, startAt = 0, baseSize = 100;
+  var T_WRITE = 9.0, T_LIFTGAP = 0.16, T_HOLD = 3.6, T_FADE = 1.0, T_LIFT = 1.3;
+  var totalDur = 0, inkCv = null, inkX = null, txtCv = null, wbase = 4, fs = 80, base = 0, x0 = 0, x1 = 0;
+  var LINES = ['Hà Nội', 'không vội được đâu'], L = [], FONT = '"Sriracha","Savoye LET","Snell Roundhand","Segoe Script","Brush Script MT","Apple Chancery","Bradley Hand",cursive';
+  var INK = '#c4161c', INK2 = '#13266e';
+
+  // ---- realistic clouds: tileable fractal noise, lit from the sun side, bluish-grey undersides ----
+  var cloudLayers = null, cl = null, clx = null;
+  function hash(ix, iy, sd) { var h = (ix * 374761393 + iy * 668265263 + sd * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; }
+  function vnoise(x, y, per, sd) { // value noise, wraps horizontally with period `per`
+    var ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+    var ux2 = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    function v(i, j) { return hash(((i % per) + per) % per, j, sd); }
+    return (v(ix, iy) * (1 - ux2) + v(ix + 1, iy) * ux2) * (1 - uy) + (v(ix, iy + 1) * (1 - ux2) + v(ix + 1, iy + 1) * ux2) * uy;
+  }
+  function fbm(x, y, per, sd) { var a = 0.5, f = 1, t = 0, n = 0; for (var o = 0; o < 6; o++) { t += a * vnoise(x * f, y * f, per * f, sd + o); n += a; a *= 0.5; f *= 2; } return t / n; }
+  function sm(a, b, x) { x = (x - a) / (b - a); x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }
+  function makeCloud(w, h, sd, cover, soft, per) {
+    var cv2 = document.createElement('canvas'); cv2.width = w; cv2.height = h;
+    var c = cv2.getContext('2d'), im = c.createImageData(w, h), d = im.data;
+    var sx = per / w * 3.2, sy = 3.2 * per / w;
+    for (var y = 0; y < h; y++) {
+      var vy = y / h, band = sm(0.0, 0.18, vy) * (1 - sm(0.70, 1.0, vy));
+      for (var x = 0; x < w; x++) {
+        var nx = x * sx, ny = y * sy;
+        var dens = fbm(nx, ny, per, sd) + 0.10 * (band - 0.5);
+        var a = sm(cover, cover + soft, dens) * band;
+        if (a <= 0.003) continue;
+        var d2 = fbm(nx + 0.7, ny - 0.7, per, sd), lit = 0.62 + (dens - d2) * 5.5;
+        lit = lit < 0 ? 0 : lit > 1 ? 1 : lit;
+        var core = sm(cover + soft * 0.5, cover + soft * 1.6, dens);
+        var shade = 1 - 0.30 * core * (1 - lit);
+        var o = (y * w + x) * 4;
+        d[o] = (250 - 62 * (1 - lit) * (0.5 + core)) * shade;
+        d[o + 1] = (252 - 48 * (1 - lit) * (0.5 + core)) * shade;
+        d[o + 2] = (255 - 20 * (1 - lit) * (0.5 + core)) * shade;
+        d[o + 3] = Math.min(255, a * 255);
+      }
+    }
+    c.putImageData(im, 0, 0); return cv2;
+  }
+  function initClouds() {
+    cloudLayers = [
+      { img: makeCloud(768, 384, 11, 0.58, 0.30, 6), speed: 7, y: 0.0, k: 1.0, a: 1.0 },
+      { img: makeCloud(768, 384, 29, 0.62, 0.28, 12), speed: 3.5, y: 0.04, k: 0.6, a: 0.75 }
+    ];
+  }
+
+  function sky(time) {
+    var g = cx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0b4fc0'); g.addColorStop(0.35, '#2a7fe6'); g.addColorStop(0.72, '#7fbaf3'); g.addColorStop(1, '#d6ecfc');
+    cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+    var sg = cx.createRadialGradient(W * 0.84, H * 0.10, 0, W * 0.84, H * 0.10, H * 0.7);
+    sg.addColorStop(0, 'rgba(255,250,230,0.85)'); sg.addColorStop(0.12, 'rgba(255,244,214,0.35)'); sg.addColorStop(1, 'rgba(255,244,214,0)');
+    cx.fillStyle = sg; cx.fillRect(0, 0, W, H);
+    if (!cloudLayers) initClouds();
+    if (!cl || cl.width !== W || cl.height !== H) { cl = document.createElement('canvas'); cl.width = W; cl.height = H; clx = cl.getContext('2d'); }
+    clx.globalCompositeOperation = 'source-over'; clx.globalAlpha = 1; clx.clearRect(0, 0, W, H);
+    for (var i = cloudLayers.length - 1; i >= 0; i--) {
+      var L = cloudLayers[i], tw = W * 1.25 * L.k * 1.6, th = tw * L.img.height / L.img.width;
+      var off = (time * L.speed * DPR) % tw, y0 = H * L.y;
+      clx.globalAlpha = L.a;
+      for (var x = -off; x < W; x += tw) clx.drawImage(L.img, x, y0, tw + 1, th);
+    }
+    clx.globalAlpha = 1;
+    // keep the writing band clear so the ink stays readable
+    var mk = clx.createLinearGradient(0, H * 0.22, 0, H * 0.72);
+    mk.addColorStop(0, 'rgba(0,0,0,0)'); mk.addColorStop(0.3, 'rgba(0,0,0,0.85)'); mk.addColorStop(0.7, 'rgba(0,0,0,0.85)'); mk.addColorStop(1, 'rgba(0,0,0,0)');
+    clx.globalCompositeOperation = 'destination-out'; clx.fillStyle = mk; clx.fillRect(0, 0, W, H); clx.globalCompositeOperation = 'source-over';
+    cx.drawImage(cl, 0, 0);
+    var hz = cx.createLinearGradient(0, H * 0.72, 0, H);
+    hz.addColorStop(0, 'rgba(214,236,252,0)'); hz.addColorStop(1, 'rgba(226,242,255,0.65)');
+    cx.fillStyle = hz; cx.fillRect(0, H * 0.72, W, H * 0.28);
+  }
+
+  function ease(p) { return p < 0 ? 0 : p > 1 ? 1 : p * p * (3 - 2 * p); }
+
+
+  // ---- fountain pen (bút máy): glossy navy barrel, gold ring + clip, gold nib; tip at (x, y) ----
+  function pen(x, y, lift, wob) {
+    var sc = baseSize * 0.0034;
+    cx.save(); cx.translate(x, y - lift * baseSize * 0.5); cx.rotate(0.62 + wob);
+    cx.scale(sc, sc);
+    cx.shadowColor = 'rgba(0,30,90,0.35)'; cx.shadowBlur = 18; cx.shadowOffsetY = 10;
+    cx.beginPath(); cx.moveTo(0, 0); cx.bezierCurveTo(-9, -24, -13, -56, -9, -86); cx.lineTo(9, -86); cx.bezierCurveTo(13, -56, 9, -24, 0, 0); cx.closePath();
+    var tg = cx.createLinearGradient(-12, 0, 12, 0); tg.addColorStop(0, '#2a1a12'); tg.addColorStop(0.5, '#5a3a26'); tg.addColorStop(1, '#2a1a12');
+    cx.fillStyle = tg; cx.fill();
+    cx.shadowColor = 'transparent';
+    cx.fillStyle = '#d9a93a'; cx.fillRect(-10, -100, 20, 15);
+    cx.fillStyle = '#f5d778'; cx.fillRect(-10, -100, 7, 15);
+    var hg = cx.createLinearGradient(-10, 0, 10, 0); hg.addColorStop(0, '#8e1b14'); hg.addColorStop(0.35, '#e0432f'); hg.addColorStop(1, '#7a130e');
+    cx.fillStyle = hg; cx.fillRect(-10, -420, 20, 322);
+    cx.fillStyle = '#d9a93a'; for (var i = 0; i < 3; i++) cx.fillRect(-11, -150 - i * 96, 22, 7);
+    cx.fillStyle = '#f5d778'; cx.fillRect(-11, -430, 22, 12);
+    cx.restore();
+  }
+
+  var IMG = new Image(), CUT = 371; // hanoi-chu.webp: the generated brush lettering, red ink on transparent; CUT = the row between the two lines
+  function layout() {
+    if (!innerWidth || !innerHeight || !IMG.naturalWidth) return;
+    DPR = Math.min(1.25, window.devicePixelRatio || 1);
+    W = Math.floor(innerWidth * DPR); H = Math.floor(innerHeight * DPR); cv.width = W; cv.height = H;
+    inkCv = document.createElement('canvas'); inkCv.width = W; inkCv.height = H; inkX = inkCv.getContext('2d');
+    txtCv = true;
+    var iw = IMG.naturalWidth, ih = IMG.naturalHeight, k = Math.min(W * 0.86 / iw, H * 0.74 / ih), dw = iw * k, dh = ih * k, ox = (W - dw) / 2, oy = H * 0.5 - dh / 2;
+    fs = dh / 2; L = []; var tot = 0;
+    [[0, CUT], [CUT, ih]].forEach(function (r) {
+      var lc = document.createElement('canvas'); lc.width = W; lc.height = H; var lt = lc.getContext('2d');
+      lt.drawImage(IMG, 0, r[0], iw, r[1] - r[0], ox, oy + r[0] * k, dw, (r[1] - r[0]) * k);
+      var y0 = Math.max(0, oy + r[0] * k) | 0, rows = Math.min(H - y0, Math.ceil((r[1] - r[0]) * k)), d = lt.getImageData(0, y0, W, rows).data;
+      var cum = new Float32Array(W + 1), colY = new Float32Array(W), xx, y, wgt = fs * 0.08, xa = W, xb = 0;
+      for (xx = 0; xx < W; xx++) {
+        var c = 0, sy = 0; for (y = 0; y < rows; y++) if (d[(y * W + xx) * 4 + 3] > 60) { c++; sy += y0 + y; }
+        colY[xx] = c ? sy / c : -1; if (c) { if (xx < xa) xa = xx; xb = xx; }
+      }
+      for (xx = 0; xx < W; xx++) cum[xx + 1] = cum[xx] + (xx >= xa && xx <= xb ? (colY[xx] < 0 ? 0 : 1) * (d.length ? 1 : 0) + wgt : 0);
+      var last = y0 + rows / 2; for (xx = 0; xx < W; xx++) { if (colY[xx] < 0) colY[xx] = last; else last = colY[xx]; }
+      var sm2 = new Float32Array(W), R = Math.max(2, fs * 0.06 | 0); for (xx = 0; xx < W; xx++) { var q2 = 0, n = 0; for (var j = -R; j <= R; j++) { var kk = xx + j; if (kk >= 0 && kk < W) { q2 += colY[kk]; n++; } } sm2[xx] = q2 / n; }
+      L.push({ cv: lc, x1: xb, colY: sm2, cum: cum, tot: cum[W], from: tot }); tot += cum[W];
+    });
+    L.total = tot; baseSize = Math.min(W, H); wbase = Math.max(2, fs * 0.03); totalDur = 0.5 + T_WRITE; restart();
+  }
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!W || !H || !txtCv) return;
+    if (!t0) t0 = now;
+    var time = (now - t0) / 1000, ts = (now - startAt) / 1000;
+    var cycle = totalDur + T_LIFT + T_HOLD + T_FADE;
+    if (ts >= cycle) { restart(); ts = 0; } // GIF-style: loops forever on its own
+    var fade = ts > cycle - T_FADE ? 1 - (ts - (cycle - T_FADE)) / T_FADE : 1;
+    sky(time);
+    var p = Math.min(1, Math.max(0, (ts - 0.5) / T_WRITE)), tg = p * L.total, li = 0;
+    while (li < L.length - 1 && tg > L[li].from + L[li].tot) li++;
+    var ln = L[li], lt = Math.min(ln.tot, tg - ln.from), lo = 0, hi = W, cum = ln.cum;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (cum[mid] < lt) lo = mid + 1; else hi = mid; }
+    var rx = lo + 1, ix = Math.min(W - 1, Math.max(0, lo)), wy = ln.colY[ix];
+    inkX.clearRect(0, 0, W, H);
+    for (var q = 0; q < li; q++) inkX.drawImage(L[q].cv, 0, 0);
+    inkX.drawImage(ln.cv, 0, 0, rx, H, 0, 0, rx, H);
+    cx.save(); cx.globalAlpha = fade; cx.shadowColor = 'rgba(255,255,255,0.55)'; cx.shadowBlur = wbase * 1.4; cx.drawImage(inkCv, 0, 0); cx.restore();
+    if (p < 1) pen(rx, wy, 0, Math.sin(ts * 9) * 0.012);
+    else { var lf = ease((ts - totalDur) / T_LIFT); if (lf < 1) pen(ln.x1 + lf * W * 0.12, wy - lf * H * 0.35, lf * 1.6, 0); }
+  }
+  function restart() {
+    startAt = performance.now();
+  }
+    IMG.onload = function () { layout(); };
+  IMG.src = 'hanoi-chu.webp';
+  requestAnimationFrame(frame);
+  addEventListener('resize', function () { layout(); });
+  cv.addEventListener('click', restart);
+})();
+</script>
+</body>
+</html>

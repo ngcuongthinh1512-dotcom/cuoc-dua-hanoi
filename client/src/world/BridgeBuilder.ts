@@ -17,6 +17,9 @@ import type { Builder, MaterialId } from './buildTypes.ts';
 import { MeshBuffer, mergeTriMeshes } from './geom.ts';
 import { cap, markings, Path, roadWidth, sideGaps, sidewalkWidth, strip, surfaceOf, wall, type YFn } from './RoadBuilder.ts';
 
+/** Named decks a landmark detail builds whole (deck, parapet, collider): nothing is drawn here. Cầu Thê Húc = landmarks/thehuc.ts. */
+const OWN_DECK = new Set(['Cầu Thê Húc']);
+
 export const buildBridges: Builder = (chunk, ctx) => {
   const bufs = new Map<MaterialId, MeshBuffer>();
   const buf = (m: MaterialId) => bufs.get(m) ?? (bufs.set(m, new MeshBuffer(m)), bufs.get(m)!);
@@ -125,7 +128,7 @@ export const buildBridges: Builder = (chunk, ctx) => {
   };
 
   for (const b of chunk.bridges) {
-    if (b.pts.length < 4) continue;
+    if (b.pts.length < 4 || OWN_DECK.has(b.name ?? '')) continue;
     const L0 = new Path(b.pts).length;
     if (L0 < 0.5) continue;
     const [s0, CL] = b.chain ? [b.chain.s0, b.chain.length] : [0, L0];
@@ -136,18 +139,26 @@ export const buildBridges: Builder = (chunk, ctx) => {
     // Layer lift only for rail decks and decks over streets (elevated walkways): a road deck over the river is at quay level.
     const mid = p.at(0, L / 2);
     const overRiver = ctx.height(mid[0], mid[1]) < base(mid[0], mid[1], L / 2) - 3;
-    const up = rail(b) || !overRiver ? Math.max(0, b.layer - 1) * railLayerStep : 0;
+    // a shallow lake (Hà Nội): the bed is only 0.4 m under the bank, so the deck would lie at the water level and vanish in it
+    const lake = !overRiver && !rail(b) && ctx.height(mid[0], mid[1]) < base(mid[0], mid[1], L / 2) - C.bridge.lakeMin;
+    const up = (rail(b) || !(overRiver || lake) ? Math.max(0, b.layer - 1) * railLayerStep : 0) + (lake ? C.bridge.lakeLift : 0);
     // A land deck of layer 1 (the usual OSM tag of an overpass) is not lifted: it lies on the street, path or square under
     // it, where its parapets stood as a 1.1 m wall across (or along) the way. ponytail: no parapets at grade; a real overpass
     // needs its stairs / ramps (other OSM ways) raised with it.
-    const atGrade = !overRiver && !up;
+    const atGrade = !overRiver && !lake && !up;
+    // a footbridge over a shallow lake humps like the real ones: a parabola over the real deck [a, a + L0], 0 at both banks (rise ≤ lakeArch, ≤ lakeArchSlope × length)
+    const rise = lake ? Math.min(C.bridge.lakeArch, C.bridge.lakeArchSlope * L0) : 0;
+    const archAt = (s: number) => {
+      const u = Math.min(1, Math.max(0, (s - a) / L0));
+      return rise * 4 * u * (1 - u);
+    };
     const y: YFn =
-      up && rail(b) ? (x, z) => (lowerAt(x, z) ?? Math.max(ctx.height(x, z), riverDeck)) + up : (x, z, s) => base(x, z, s) + up;
+      up && rail(b) ? (x, z) => (lowerAt(x, z) ?? Math.max(ctx.height(x, z), riverDeck)) + up : (x, z, s) => base(x, z, s) + up + archAt(s);
 
     const way = { ...b, oneway: false };
     const hc = roadWidth(way) / 2;
     const sw = sidewalkWidth(way);
-    const H = hc + sw;
+    const H = Math.max(hc + sw, lake ? C.bridge.lakeHalfWidth : 0); // a lake footbridge is wide like the real ones (config bridge.lakeHalfWidth)
     const isRail = rail(b);
     // Parallel road decks of one bridge (dual carriageways: Pont d'Iéna, Concorde) are joined: each deck reaches the
     // midline to its neighbour and has no parapet on that side. ponytail: neighbours in this chunk only (parallel

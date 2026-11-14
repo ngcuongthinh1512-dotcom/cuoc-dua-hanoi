@@ -204,6 +204,7 @@ async function start() {
   fly.setPose(x, y, z, yawDeg, pitchDeg);
   const env = { heightAt: (x: number, z: number) => heightAt(grid, x, z), waterLevel: water ? riverLevel(grid, water) : null, water, lakeAt: (x: number, z: number) => lakeSurfaceAt(grid, x, z) };
   const overrides = parseOverrides(query, !!session);
+  if (session?.team?.avatar !== undefined) overrides.avatar = session.team.avatar; // Leg 3: a personal avatar follows the player's name (server playerAvatar)
   // Leg 3 rooms (the Louvre room's critic C2): only the Player gets its OWN env (the room floor, no Seine while inside); `env`
   // stays the grid for the NPCs, the boxes, the overlays and the remote players' height filter.
   let roomFloor: number | null = null;
@@ -724,7 +725,7 @@ async function start() {
   const loop = new GameLoop({
     fixedUpdate: (dt) => {
       // Before the player (docs/plans/phase4b.md §5.2): cars → pedestrians → car colliders → shove / crash the body. Leg 3: inside a room the NPCs pause.
-      if (npcs?.started && !room) npcs.fixedUpdate(dt, npcAnchor(), player?.active && !flying && !watching ? player.controller : undefined);
+      if (npcs?.started && !room && !raceHud?.gameOpen) npcs.fixedUpdate(dt, npcAnchor(), player?.active && !flying && !watching ? player.controller : undefined);
       player?.fixedUpdate(dt, flying || watching); // the body stands frozen while its team watches the others (§17.40)
       world.step();
     },
@@ -832,14 +833,14 @@ async function start() {
           if (fullMap?.isOpen) fullMap.update(frame, gps ?? NO_GPS);
         }
       }
-      if (npcs?.started && !room) {
+      if (npcs?.started && !room && !raceHud?.gameOpen) {
         npcs.update(dt, loop.alpha, camera);
         npcFrames++;
         npcs.zoneRings.visible = debug.visible;
       }
       input.endFrame();
       cardClosed = false;
-      if ((room || vroom) && worldReady) return; // Leg 3: the world's streaming / sky / water wait (the room has the camera); a reload inside a room still streams until the world is ready
+      if ((room || vroom || raceHud?.gameOpen) && worldReady) return; // Leg 3: the world's streaming / sky / water wait (the room has the camera; a mini-game covers the screen); a reload inside a room still streams until the world is ready
       const p = bodyCam ? player.position : camera.position; // streaming + colliders follow the body (watching / flying: the camera)
       sky.update();
       waterObj?.update(dt);
@@ -847,6 +848,7 @@ async function start() {
       edge.hidden = edgeDistance(p.x, p.z) >= bounds.warnDistance;
     },
     render: () => {
+      if (raceHud?.gameOpen) return void (lastFrame = performance.now()); // the mini-game's opaque iframe covers the world: no GPU work behind it (net / timers / HUD / card run in update); FpsWatch sees no gap
       if (room || vroom) renderer.render(scene, camera), room?.afterRender?.(); // Leg 3: plain render inside a room (no post / SMAA / bloom); CETIQLO: + the mannequin PiP
       else if (post) post.render();
       else {

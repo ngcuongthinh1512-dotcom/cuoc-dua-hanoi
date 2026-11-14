@@ -62,11 +62,11 @@ export const lighting = {
   dusk: {
     // the sun: west-south-west (Hà Nội in November sets at azimuth ≈ 250°), ≈ 10° high, orange-gold; m from the shadow target
     sun: { color: 0xffa048, intensity: 3.0, position: { x: -470, y: 86, z: 170 } },
-    hemi: { sky: 0x8e8ab0, ground: 0x6e4c34, intensity: 1.2 }, // with the image-based light: mauve sky fill, warm ground bounce
+    hemi: { sky: 0x8e8ab0, ground: 0x6e4c34, intensity: 1.8 }, // with the image-based light: mauve sky fill, warm ground bounce
     low: { sunIntensity: 2.8, hemiIntensity: 2.4 }, // without it (low quality / runtime downgrade)
-    environmentIntensity: 0.7, // scene.environment = the dusk sky canvas (high quality): warm light from the west, cool from the east
+    environmentIntensity: 0.95, // scene.environment = the dusk sky canvas (high quality): warm light from the west, cool from the east
     // the low sun grazes the flat ground: a texel's depth step is ≈ 6× the day one, so a bigger bias (world/Sky.ts), else acne stripes
-    shadowBias: -0.0012, shadowNormalBias: 0.08,
+    shadowBias: -0.0012, shadowNormalBias: 0.08, shadowIntensity: 0.6, // 1 = full black shadow (the shadow box moves with the camera: its edge popped dark patches in while sprinting)
     // canvas sky (Sky.ts skyTexture): zenith → stops (share of the zenith…horizon run) → horizon (= fog colour); a sun disc +
     // glow (radius px of the 1024 equirect) at the sun's direction; clouds lit from below, warm toward the sun, mauve away
     sky: {
@@ -331,7 +331,16 @@ export const buildings = {
     // (ochreShare of buildings take their tint from the first ochreCount `colonial` colours), fewer rooftop boxes
     // plotFlat: share of French plots that keep the block height (villas / colonial blocks are not ragged); the French
     // facade columns of the wall atlas (arched windows, white mouldings, balustrade balconies) are picked by BuildingBuilder
-    french: { boxes: [[-750, 650, 1050, 1800], [250, 100, 1050, 650]] as [number, number, number, number][], hipChance: 0.55, ochreShare: 0.7, ochreCount: 4, roofBoxChance: 0.15, shopShare: 0.5, tenementShare: 0.1, plotFlat: 0.75 },
+    french: { boxes: [[-750, 650, 1050, 1800], [250, 100, 1050, 650]] as [number, number, number, number][], hipChance: 0.55, ochreShare: 0.7, ochreCount: 4, roofBoxChance: 0.6, shopShare: 0.5, tenementShare: 0.1, plotFlat: 0.75 },
+    // Old Quarter (Phố cổ, world m [x0, z0, x1, z1]: Hàng Đào / Hàng Bạc / Đồng Xuân block north of the lake; docs/reports/hanoi-houses.md §Khu): nhà ống
+    // only (recipes.oq), tile (ngói ta) hips on a good share, ochre plaster, almost no KTT slabs, low and ragged (extra storeys), few rooftop boxes.
+    // ponytail: one axis-aligned box like `french`; upgrade: the district polygons of geo/districts.ts
+    // Phạm Ngọc Thạch / Kim Liên / Chùa Bộc (Đống Đa; refs docs/reports/landmark-refs/pham-ngoc-thach): a boulevard lined with 15–25-storey apartment towers
+    // (cream / stained yellow-green / grey concrete, white balcony rows) over shop podiums, 4–6-storey mid-rise shophouses with big sign boards between them,
+    // 5-storey KTT slabs behind, big shade trees + motos on the pavement. ponytail: one axis-aligned box over the whole corridor, upgrade: district polygons
+    pnt: { boxes: [[-2260, 2260, -1500, 2960]] as [number, number, number, number][], towerArea: 350, towerShare: 0.3, towerH: [48, 78] as [number, number], towerKinds: ['apartments', 'residential', 'yes', 'dormitory', 'mixed'] as string[], tenementShare: 0.85, hipChance: 0.03, extra: 2, flatShare: 0.25,
+      tenement: ['#d9d2b6', '#cfc79c', '#b9bb82', '#d7d0bd', '#a9a79d', '#e0dccd', '#c8c18f'] as string[], concrete: ['#d8d0b8', '#b9bb8a', '#a9a79d', '#e2ddcf'] as string[] },
+    oldQuarter: { boxes: [[-585, -921, 558, -35]] as [number, number, number, number][], hipChance: 0.4, ochreShare: 0.55, tenementShare: 0.02, extra: 1, flatShare: 0.15 },
     // Nhà ống plots (BuildingBuilder emit, low-rise 'wall' fronts): every outer edge ≥ minEdge m is cut into plots ≈ width m,
     // each with its own facade column + plaster tint. Untagged footprints (no height / building:levels, kinds below) get a hashed
     // base height of floors[0]–[1] storeys instead of defaultHeight, and each plot may rise `extra` more storeys (flatShare of
@@ -343,7 +352,7 @@ export const buildings = {
     plots: {
       kinds: ['yes', 'house', 'residential', 'detached', 'terrace', 'semidetached_house', 'apartments', 'commercial', 'retail', 'shop'] as string[],
       floors: [2, 4], extra: 3, flatShare: 0.35, width: 4, depth: 7, minEdge: 2.6, maxArea: 2500, minBoxArea: 150,
-      gableShare: 0.5, tileShare: 0.5, rise: 1.5, tumShare: 0.3, tum: [2.2, 2.4], tankShare: 0.5, sideTint: '#cdc5b2',
+      gableShare: 0.5, tileShare: 0.5, rise: 1.5, tumShare: 0.75, tum: [2.2, 2.4], tankShare: 0.75, sideTint: '#cdc5b2',
       parapet: 0.5, // m: concrete lip around every flat roof (terrace), outer + inner face
       // a projecting balcony slab (roof bucket) on plots showing an atlas balcony column, slabUp m above the band on the first floor, depth / thickness m
       slabCols: [1, 5, 7, 9, 12] as number[], slabUp: 0.7, slabDepth: 0.8, slabThick: 0.15,
@@ -357,6 +366,8 @@ export const buildings = {
       tall: [1, 2, 4, 10, 10, 11, 11, 12, 13, 13, 3, 9] as number[],
       tallFrom: 15,
       french: [6, 7, 8, 9, 8, 9, 0, 3, 12] as number[],
+      pnt: [10, 10, 11, 4, 3, 12, 13, 1, 2, 10, 11, 13, 4, 12] as number[], // Phạm Ngọc Thạch: modern 4–6-storey shophouses (dark cladding, stacked signs, mid-century blocks)
+      oq: [0, 1, 2, 3, 4, 5, 11, 0, 2, 3, 8, 9, 11, 1] as number[], // Phố cổ: nhà ống + stacked signs + old French shophouses; no dark cladding / mid-century blocks
     },
     // mái hiên: tôn / tile lean-to over the shop opening of a share of street plots (roof bucket + a shaded underside):
     // fixed y m above the ground at the wall, out `depth` m dropping `drop` m; colours tôn blue / rust / green-rust, tile
@@ -364,7 +375,7 @@ export const buildings = {
     // nhà ống rooftop box (stair head / terrace room, roof bucket): chance per flat-roofed low-rise, size as plantBox
     // ([min side, height, side as a share of √(largest roof triangle area), max side]); a water tank (bồn nước, hex prism)
     // stands on tankShare of the boxes
-    roofBox: { chance: 0.55, maxHeight: 30, size: [1.8, 2.4, 0.3, 3.5], tankShare: 0.6, tankRadius: 0.55, tankHeight: 1, tank: '#d4d8dc' },
+    roofBox: { chance: 0.9, maxHeight: 80, size: [1.8, 2.4, 0.3, 3.5], tankShare: 0.6, tankRadius: 0.55, tankHeight: 1, tank: '#d4d8dc' },
     colonial: ['#dcc58a', '#e6d7a6', '#d6bd7a', '#e0cd98', '#e9e4d6', '#f1ede2', '#e4d3b6', '#cfc8b8', '#e8c4ae', '#c3d2d4', '#bfcdb0', '#dccfa6', '#d2cec4', '#e2d3b0', '#d4dccb', '#dcc6cb', '#bdb5a6', '#d8d2c6', '#e9dcc0', '#d8b46a', '#e8c3b9', '#b9d6c7', '#a9bfd6', '#bfb8a8'], // Hà Nội: French-yellow ochre (first 4 = french.ochreCount), cream / off-white plaster, dusty pink, blue, green tube-house fronts, grey render
     tenement: ['#d6c58f', '#cdbd8a', '#c9c0a8', '#bdb6aa', '#d9cc9e', '#b8b5ad', '#c7b995', '#c2b89f'], // KTT: yellowed / grey stucco
     kttRoof: { share: 0.6, maxHeight: 22, rise: 1.6, inset: 2.5, colours: ['#5c8fc0', '#a04a30', '#7aa0c6', '#b05838'] }, // (rust = saturated red: a pink-brown tint goes olive over the blue-grey slate diffuse) // tôn 'mái che' pitched cap over KTT slabs (blue / rust), slope rise m over inset m
@@ -415,6 +426,7 @@ export const roads = {
   centreLine: { width: 0.15, dash: 3, gap: 5, junctionCut: 8 }, // m; white dashes between lanes, cut before junctions
   // m; mergeGap: parallel same-layer road decks closer than this (centre lines) are joined into one deck, no inner parapets
   bridge: { deckThickness: 1, railingHeight: 1.1, railingThickness: 0.3, endSample: 5, railLayerStep: 6, mergeGap: 30,
+    lakeMin: 0.25, lakeLift: 0.25, lakeHalfWidth: 2.4, lakeArch: 1.4, lakeArchSlope: 0.07, // m: a deck whose middle is lakeMin m above the bed of a shallow lake (Hà Nội: lakes sink only 0.4 m, so the deck stood AT the water) is a water crossing: lifted lakeLift m, with its railings
     riverDeck: 1.3, // m: road deck under an upper rail deck over the river when none is in its chunk (Bir-Hakeim ≈ 1.1–1.5)
     endRamp: 15, // m of slab beyond a real chain end, blending down to the ground: covers the carved trench behind the quay wall
     rampGrade: 0.25, // max rise per m where the deck follows steep ground (the quay band's one-cell face); player.maxSlopeDeg 45
@@ -478,7 +490,8 @@ export const props = {
   // pavements of these kinds (≥ minSidewalk m), a slot every step m, share of slots with a row of count[0]–[1] bikes gap m
   // apart, fromFacade m off the house front
   motoRows: { kinds: ['primary', 'secondary', 'tertiary', 'residential', 'unclassified'] as string[], minSidewalk: 2.5, step: 9, share: 0.45, count: [3, 8] as number[], gap: 0.78, fromFacade: 1.0, drawDistance: 110 },
-  streetTrees: { enabled: true, kinds: ['primary', 'secondary', 'tertiary', 'residential', 'unclassified'] as string[], minSidewalk: 2.5, spacing: 14, gapShare: 0.3, curb: 1.0, foot: 1.5 },
+  streetTrees: { thin: { boxes: [[-2960, 2260, -1500, 3060]] as [number, number, number, number][], keep: 0.35, osmKeep: 0.5 }, // Chùa Bộc / Đông Tác / Phạm Ngọc Thạch / Vincom: only `keep` of the street trees and `osmKeep` of the OSM trees stay
+  enabled: true, kinds: ['primary', 'secondary', 'tertiary', 'residential', 'unclassified'] as string[], minSidewalk: 2.5, spacing: 14, gapShare: 0.3, curb: 1.0, foot: 1.5 },
   lampSpacing: 30, // m along both sidewalks of car roads
   lampJunctionGap: 10, // m; no lamp this close to a junction
   lampCurbOffset: 0.6, // m from the road edge onto the sidewalk
@@ -535,6 +548,36 @@ export const props = {
     bouqStep: 9.4, bouqGapShare: 0.2, // one stretch (≈ 8.6 m) per step; hashed share of empty slots
     wallSearch: [1, 16], riverDrop: 2.5, wallDrop: 0.4, parapetInset: 0.6, bridgeGap: 14, // a river drop within wallSearch of the curb; the quay edge where the ground first falls wallDrop
   },
+};
+
+// ── Leg 3 Hà Nội: railways (world/RailBuilder.ts, chunk `rails` from scripts/build-rails.ts). m unless noted. ──
+export const railways = {
+  enabled: true,
+  gauge: 1.0, // m between the rail centres (Vietnam: metre gauge)
+  bedWidth: 5.4, bedHeight: 0.22, lift: 0.3, // gravel bed (wide like the real line between the houses): width, height above the ground (lift: clear of the pavement slabs the line crosses)
+  railWidth: 0.11, railRise: 0.17, // steel rail: width, height above the bed top
+  sleeperStep: 0.62, sleeperLen: 0.24, sleeperWidth: 2.5, sleeperRise: 0.07, // a concrete slab across the track every sleeperStep m
+  segment: 3, // m: ground-following pieces
+  roadMargin: 0.3, // m: a piece closer than this to a carriageway edge (or on it) is not drawn: the level crossing keeps the road
+  colours: { gravel: '#8d8982', sleeper: '#a09c94', rail: '#5b5e66' },
+  // buildings within `radius` m of a track inside `box` (world m [x0, z0, x1, z1]: along Lê Duẩn opposite Công viên Thống Nhất) are not built, so the line shows
+  clear: { radius: 18, box: [-1300, 1380, -1000, 2740] as [number, number, number, number] },
+};
+
+// ── Leg 3 Hà Nội: pavement terraces (world/StreetStools.ts): low plastic stools round a low table, some under a parasol. m unless noted. ──
+export const streetStools = {
+  enabled: true,
+  kinds: ['primary', 'secondary', 'tertiary', 'residential', 'unclassified'] as string[],
+  minSidewalk: 3, // m of pavement needed
+  step: 12, // m between candidate spots along the street (both pavements)
+  share: 0.5, // share of candidate spots that get a set (in front of a facade only)
+  fromFacade: 2.4, // m from the facade towards the street
+  stools: [3, 5] as [number, number],
+  parasolShare: 0.4,
+  parasol: { radius: 0.9, height: 2.1 },
+  stoolColours: ['#d83a2e', '#2f6fc4', '#2f9b4a', '#f0a020', '#e8d34a', '#d8d4c8'] as string[], // the classic plastic stools: red, blue, green, orange, yellow, cream
+  tableColours: ['#2f6fc4', '#3a8f4a', '#d8d4c8', '#c9472f'] as string[],
+  parasolColours: ['#c8201c', '#2f6fc4', '#e8e4d8', '#e0a030'] as string[],
 };
 
 // ── Leg 3 Hà Nội: utility poles + overhead cables (world/PowerLines.ts, 'masonry' bucket, vertex-coloured). m unless noted. ──
@@ -1331,7 +1374,7 @@ export const raceClient = {
   // offset [side, along] m from the mat centre in the mat's frame (1.4 m outside its long edge); tag: name tag colour (the dark
   // suit colour was unreadable, visual review); tagDistance: m from the camera beyond which its tag hides (screen-size tags:
   // farther away it sat on the team's own, p7-mat)
-  host: { shirt: '#23262d', tag: '#ffd75e', tagDistance: 12, name: 'Người dẫn chương trình', offset: [PIT_MAT.width / 2 + 1.4, 1.5], scale: 1.12, waveEveryS: 6, waveRadius: 25 },
+  host: { shirt: '#23262d', tag: '#ffd75e', tagDistance: 12, name: 'Ceti', offset: [PIT_MAT.width / 2 + 1.4, 1.5], scale: 1.12, waveEveryS: 6, waveRadius: 25 },
 };
 
 // ── Leg 3 · the Lựa chọn kép rooms (rooms/roomState.ts, main.ts: chocolate workshop / comic gallery over the world) ──

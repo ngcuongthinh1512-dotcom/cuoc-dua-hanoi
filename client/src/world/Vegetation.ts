@@ -13,6 +13,9 @@ import { along, free, pushMatrix } from './StreetProps.ts';
 
 /** Hà Nội street trees (props.streetTrees): along both kerbs of the streets with a real pavement, every `spacing` m (a hashed
  *  share left empty), on free pavement only (StreetProps `free`: off every carriageway, out of buildings, clear of OSM trees). */
+/** Inside the thinned corridor (props.streetTrees.thin: Phạm Ngọc Thạch / Vincom, too many trees there). */
+const thinned = (x: number, z: number) => P.streetTrees.thin.boxes.some((b) => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3]);
+
 export function placeStreetTrees(chunk: ChunkData): [number, number][] {
   const T = P.streetTrees;
   const out: [number, number][] = [];
@@ -23,7 +26,7 @@ export function placeStreetTrees(chunk: ChunkData): [number, number][] {
     along(r, T.spacing, T.spacing / 2, (x, z, tx, tz) => {
       for (const side of [1, -1]) {
         const [px, pz] = [x + tz * side * off, z - tx * side * off];
-        if (hash01(px, pz, 71) < T.gapShare || !free(chunk, px, pz, T.foot, T.curb - 0.3)) continue;
+        if (hash01(px, pz, 71) < T.gapShare || (thinned(px, pz) && hash01(px, pz, 72) >= T.thin.keep) || !free(chunk, px, pz, T.foot, T.curb - 0.3)) continue;
         out.push([px, pz]);
       }
     });
@@ -35,7 +38,7 @@ export function placeStreetTrees(chunk: ChunkData): [number, number][] {
 export const buildVegetation: Builder = (chunk, ctx) => {
   const m: number[] = [];
   const [s0, s1] = P.treeScale as [number, number];
-  const pts = chunk.points.filter((p) => p.kind === 'tree').map((p): [number, number] => [p.x, p.z]);
+  const pts = chunk.points.filter((p) => p.kind === 'tree' && !(thinned(p.x, p.z) && hash01(p.x, p.z, 73) >= P.streetTrees.thin.osmKeep)).map((p): [number, number] => [p.x, p.z]);
   for (const [x, z] of [...pts, ...placeStreetTrees(chunk)]) {
     const s = s0 + (s1 - s0) * hash01(x, z, 2);
     pushMatrix(m, x, ctx.height(x, z) - 0.2, z, hash01(x, z, 1) * 2 * Math.PI, s);

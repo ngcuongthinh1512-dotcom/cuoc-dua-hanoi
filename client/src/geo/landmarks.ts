@@ -36,6 +36,9 @@ export const LANDMARKS: readonly LandmarkDef[] = [
   // ── Hoàn Kiếm: hồ Gươm, phố Pháp, Phố Cổ ──
   { id: 'thap-rua', name: 'Tháp Rùa', group: 'h1', osm: ['way/178995269'], near: 25, view: [200, 70] },
   { id: 'den-ngoc-son', name: 'Đền Ngọc Sơn', group: 'h1', osm: ['way/178995262', 'way/178995271'], near: 30, view: [250, 80] }, // way/178995271 = Đình Trấn Ba; cầu Thê Húc (way/9566542) do BridgeBuilder vẽ
+  { id: 'thap-but', name: 'Tháp Bút – Đài Nghiên', group: 'h1', osm: [], placed: [130.72, 170.65], view: [0, 20, 1.7] }, // node/5857310193 only (+ the gate's floating slab way/1220021892): rubble mound, tower, miếu, tree, Đài Nghiên gate built by landmarks/thapbut.ts; presets hanoi-thapbut-*
+  { id: 'cau-the-huc', name: 'Cầu Thê Húc', group: 'h1', osm: [], placed: [67.8, 156.15], view: [160, 45, 3] }, // way/9566542 is a bridge way, no outline: arched red deck, parapet, piles built by landmarks/thehuc.ts (BridgeBuilder OWN_DECK skips the generic deck); presets hanoi-thehuc-*
+  { id: 'dac-nguyet-lau', name: 'Đắc Nguyệt Lâu', group: 'h1', osm: [], placed: [45.99, 154.02], view: [85, 12, 1.7] }, // no OSM outline: the gate pavilion at the island end of Thê Húc (landmarks/thehuc.ts, the same placed detail)
   { id: 'tuong-ly-thai-to', name: 'Tượng đài Lý Thái Tổ', group: 'h1', osm: ['relation/21390321'], near: 30, view: [90, 60] }, // vườn hoa (kind artwork); tượng = node/443033827, cao 10,1 m
   { id: 'den-ba-kieu', name: 'Đền Bà Kiệu', group: 'h1', osm: ['relation/16640104'], near: 20, view: [200, 70] },
   { id: 'buu-dien', name: 'Bưu điện Hà Nội', group: 'h2', osm: ['way/704153620'], near: 20, view: [60, 80] },

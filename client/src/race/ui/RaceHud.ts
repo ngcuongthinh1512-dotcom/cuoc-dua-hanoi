@@ -665,6 +665,10 @@ export class RaceHud {
   }
 
   private gameBox: HTMLElement | null = null;
+  /** A mini-game's opaque full-screen iframe is up: main.ts skips the world's render / streaming / NPCs meanwhile. */
+  get gameOpen(): boolean {
+    return this.gameBox != null;
+  }
   /** Hà Nội T1 mini-game (task.game): a panel over the card with the game in an iframe and the card's answer bar docked under it
    *  (same draft, same submit), so the player types the answer without closing the game. Closed by Đóng, Esc in the game, or when
    *  the card changes (answer accepted); it STAYS open while the Phạt runs (tickGame). The game itself knows nothing about the answer. */

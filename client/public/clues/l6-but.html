@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Gợi ý địa điểm</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d63c4; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(function () {
+  var cv = document.getElementById('c'), cx = cv.getContext('2d');
+  var W, H, DPR, t0 = 0, T_HOLD = 3.4, T_FADE = 1.0, T_LIFT = 1.3, startAt = 0, baseSize = 100;
+  var sparks = [];
+  var inkCv, inkX, haloCv, haloX, strokes = [], totalDur = 0, ux = 0, baseY = 0, X0 = 0;
+
+  // 寫青天 (Tả Thanh Thiên): stroke centre-lines in the standard stroke order (hanzi-writer-data / Make Me a Hanzi medians,
+  // 1024 box, y up, glyph body y 0..900).
+  var HAN = [
+    [[[442,863],[514,831],[546,794]],[[228,744],[240,711],[199,616],[197,570]],[[262,678],[284,694],[311,701],[489,730],[679,751],[735,755],[766,750],[783,735],[794,711],[709,641]],[[371,642],[384,612],[330,567],[320,561],[311,564]],[[260,551],[293,528],[344,374],[361,360]],[[337,486],[354,480],[396,487],[428,482]],[[517,604],[635,610],[657,590],[664,574],[622,420],[611,397],[592,399]],[[504,507],[575,518],[596,517],[604,508]],[[366,395],[377,386],[503,408],[567,413],[583,422]],[[338,353],[354,327],[353,309],[304,255],[228,211]],[[352,264],[423,258],[686,300],[749,304],[765,297],[782,278],[768,181],[741,58],[712,-7],[675,-37],[594,6]],[[179,162],[191,98],[193,3]],[[309,176],[339,118],[343,91]],[[418,200],[448,156],[458,120]],[[534,218],[587,175],[603,139]]],
+    [[[334,710],[358,702],[397,701],[549,724],[632,747],[678,751],[701,746]],[[344,593],[388,587],[625,631],[679,626]],[[469,831],[502,808],[514,789],[509,530],[493,507]],[[127,446],[152,436],[196,432],[424,474],[822,525],[873,522],[929,504]],[[348,388],[370,370],[380,347],[380,286],[365,145],[339,0]],[[402,375],[417,370],[447,374],[600,406],[642,378],[642,290],[656,84],[652,32],[628,-10],[599,-3],[530,31]],[[401,253],[421,262],[517,277],[563,278]],[[394,157],[535,181],[571,178]]],
+    [[[326,698],[350,691],[403,691],[654,741],[700,747],[727,744]],[[179,421],[204,414],[238,414],[519,462],[749,490],[800,484],[839,472]],[[438,664],[485,643],[491,633],[466,401],[450,336],[424,268],[394,216],[340,158],[212,87],[134,63]],[[505,431],[510,408],[533,366],[596,270],[714,122],[771,78],[947,35]]]
+  ];
+
+  function catmull(pts, step) { // sample a Catmull-Rom spline through pts at ~step px spacing
+    var out = [], n = pts.length;
+    for (var i = 0; i < n - 1; i++) {
+      var p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(n - 1, i + 2)];
+      var seg = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]), m = Math.max(2, Math.ceil(seg / step));
+      for (var k = 0; k < m; k++) {
+        var t = k / m, t2 = t * t, t3 = t2 * t;
+        out.push([0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+                  0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)]);
+      }
+    }
+    out.push(pts[n - 1]); return out;
+  }
+
+  function layout() {
+    if (!innerWidth || !innerHeight) return; // hidden / zero-size pane: keep the previous layout
+    DPR = Math.min(1.25, window.devicePixelRatio || 1);
+    W = Math.floor(innerWidth * DPR); H = Math.floor(innerHeight * DPR);
+    cv.width = W; cv.height = H;
+    var em = Math.min(W * 0.29, H * 0.56), gap = em * 1.06;
+    ux = em * 0.36; baseSize = em * 0.38;
+    var topY = H * 0.50 - em * 0.5; X0 = (W - gap * 2 - em) / 2; baseY = topY + em;
+    strokes = []; var speed = em * 1.35 /* px per second */, t = 0.5;
+    HAN.forEach(function (chr, ci) {
+      var xo = X0 + ci * gap;
+      chr.forEach(function (sk) {
+        var pts = catmull(sk.map(function (p) { return [xo + p[0] * em / 1024, topY + (900 - p[1]) * em / 1024]; }), 1.4);
+        var len = 0, cum = [0]; for (var i = 1; i < pts.length; i++) { len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); cum.push(len); }
+        var dur = Math.max(0.2, len / speed);
+        strokes.push({ pts: pts, cum: cum, len: len, t0: t, dur: dur, done: 0, dot: len < em * 0.12 });
+        t += dur + 0.12; // pen lifts and travels to the next stroke
+      });
+      t += 0.25; // pause between characters
+    });
+    totalDur = t;
+    inkCv = document.createElement('canvas'); inkCv.width = W; inkCv.height = H; inkX = inkCv.getContext('2d');
+    haloCv = document.createElement('canvas'); haloCv.width = W; haloCv.height = H; haloX = haloCv.getContext('2d');
+  }
+
+  // flat-nib brush stamp: an ellipse tilted 40deg; width swells with pressure, speckle for a dry-brush edge
+  var INK = ['#cf2418', '#bb1b12', '#d92f20', '#a9150e'];
+  function sstep(a, b, x) { x = (x - a) / (b - a); x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }
+  // flat-nib brush stamp: nib tilted ~35deg; pressure pr swells the blot, speed/dry thins it into "flying white" hairs
+  function stamp(px, py, pr, dx, dy, dry) {
+    var len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
+    var a = Math.atan2(dy, dx), nib = Math.abs(Math.sin(a - 0.6));
+    var w = ux * (0.010 + 0.118 * pr * (0.10 + 0.90 * Math.pow(nib, 1.35))), h = w * (0.50 + 0.25 * (1 - nib));
+    inkX.fillStyle = INK[(Math.random() * 4) | 0];
+    if (dry < 0.5) { inkX.beginPath(); inkX.ellipse(px, py, w, h, 0.6, 0, 6.2832); inkX.fill(); }
+    // bristle hairs across the stroke; more gaps as the brush runs dry (飞白)
+    var hairs = 4;
+    for (var j = -hairs; j <= hairs; j++) {
+      if (Math.random() < dry * 0.8) continue;
+      var off = (j / hairs) * w * 0.9, r = Math.max(0.4, w * 0.13 * (0.6 + Math.random() * 0.6));
+      inkX.beginPath(); inkX.arc(px + nx * off, py + ny * off, r, 0, 6.2832); inkX.fill();
+    }
+    haloX.fillStyle = 'rgba(255,255,255,0.10)'; haloX.beginPath(); haloX.arc(px, py, w * 1.15 + ux * 0.018, 0, 6.2832); haloX.fill();
+  }
+  function advance(sk, frac) { // stamp points up to fraction frac of the stroke
+    var n = sk.pts.length, target = Math.min(n - 1, Math.floor(frac * (n - 1)));
+    for (var i = Math.max(1, sk.done); i <= target; i++) {
+      var p = sk.pts[i], q = sk.pts[i - 1], u = sk.cum[i] / sk.len, pr, dry;
+      if (sk.dot) { pr = 1; dry = 0; }
+      else {
+        var attack = 0.55 + 0.45 * sstep(0, 0.10, u), release = 0.22 + 0.78 * (1 - Math.pow(sstep(0.62, 1.0, u), 1.2));
+        pr = attack * release * (0.88 + 0.12 * Math.sin(u * 11 + sk.len));
+        dry = Math.max(0, (u - 0.70) / 0.30) * 0.9 + (sk.len > ux * 2.4 ? 0.08 : 0);
+      }
+      stamp(p[0], p[1], pr, p[0] - q[0], p[1] - q[1], dry);
+    }
+    if (target > sk.done) sk.done = target;
+  }
+
+  // ---- realistic clouds: tileable fractal noise, lit from the sun side, bluish-grey undersides ----
+  var cloudLayers = null, cl = null, clx = null;
+  function hash(ix, iy, sd) { var h = (ix * 374761393 + iy * 668265263 + sd * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; }
+  function vnoise(x, y, per, sd) { // value noise, wraps horizontally with period `per`
+    var ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+    var ux2 = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    function v(i, j) { return hash(((i % per) + per) % per, j, sd); }
+    return (v(ix, iy) * (1 - ux2) + v(ix + 1, iy) * ux2) * (1 - uy) + (v(ix, iy + 1) * (1 - ux2) + v(ix + 1, iy + 1) * ux2) * uy;
+  }
+  function fbm(x, y, per, sd) { var a = 0.5, f = 1, t = 0, n = 0; for (var o = 0; o < 6; o++) { t += a * vnoise(x * f, y * f, per * f, sd + o); n += a; a *= 0.5; f *= 2; } return t / n; }
+  function sm(a, b, x) { x = (x - a) / (b - a); x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }
+  function makeCloud(w, h, sd, cover, soft, per) {
+    var cv2 = document.createElement('canvas'); cv2.width = w; cv2.height = h;
+    var c = cv2.getContext('2d'), im = c.createImageData(w, h), d = im.data;
+    var sx = per / w * 3.2, sy = 3.2 * per / w;
+    for (var y = 0; y < h; y++) {
+      var vy = y / h, band = sm(0.0, 0.18, vy) * (1 - sm(0.70, 1.0, vy));
+      for (var x = 0; x < w; x++) {
+        var nx = x * sx, ny = y * sy;
+        var dens = fbm(nx, ny, per, sd) + 0.10 * (band - 0.5);
+        var a = sm(cover, cover + soft, dens) * band;
+        if (a <= 0.003) continue;
+        var d2 = fbm(nx + 0.7, ny - 0.7, per, sd), lit = 0.62 + (dens - d2) * 5.5;
+        lit = lit < 0 ? 0 : lit > 1 ? 1 : lit;
+        var core = sm(cover + soft * 0.5, cover + soft * 1.6, dens);
+        var shade = 1 - 0.30 * core * (1 - lit);
+        var o = (y * w + x) * 4;
+        d[o] = (250 - 62 * (1 - lit) * (0.5 + core)) * shade;
+        d[o + 1] = (252 - 48 * (1 - lit) * (0.5 + core)) * shade;
+        d[o + 2] = (255 - 20 * (1 - lit) * (0.5 + core)) * shade;
+        d[o + 3] = Math.min(255, a * 255);
+      }
+    }
+    c.putImageData(im, 0, 0); return cv2;
+  }
+  function initClouds() {
+    cloudLayers = [
+      { img: makeCloud(768, 384, 11, 0.58, 0.30, 6), speed: 7, y: 0.0, k: 1.0, a: 1.0 },
+      { img: makeCloud(768, 384, 29, 0.62, 0.28, 12), speed: 3.5, y: 0.04, k: 0.6, a: 0.75 }
+    ];
+  }
+
+  function sky(time) {
+    var g = cx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0b4fc0'); g.addColorStop(0.35, '#2a7fe6'); g.addColorStop(0.72, '#7fbaf3'); g.addColorStop(1, '#d6ecfc');
+    cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+    var sg = cx.createRadialGradient(W * 0.84, H * 0.10, 0, W * 0.84, H * 0.10, H * 0.7);
+    sg.addColorStop(0, 'rgba(255,250,230,0.85)'); sg.addColorStop(0.12, 'rgba(255,244,214,0.35)'); sg.addColorStop(1, 'rgba(255,244,214,0)');
+    cx.fillStyle = sg; cx.fillRect(0, 0, W, H);
+    if (!cloudLayers) initClouds();
+    if (!cl || cl.width !== W || cl.height !== H) { cl = document.createElement('canvas'); cl.width = W; cl.height = H; clx = cl.getContext('2d'); }
+    clx.globalCompositeOperation = 'source-over'; clx.globalAlpha = 1; clx.clearRect(0, 0, W, H);
+    for (var i = cloudLayers.length - 1; i >= 0; i--) {
+      var L = cloudLayers[i], tw = W * 1.25 * L.k * 1.6, th = tw * L.img.height / L.img.width;
+      var off = (time * L.speed * DPR) % tw, y0 = H * L.y;
+      clx.globalAlpha = L.a;
+      for (var x = -off; x < W; x += tw) clx.drawImage(L.img, x, y0, tw + 1, th);
+    }
+    clx.globalAlpha = 1;
+    // keep the writing band clear so the ink stays readable
+    var mk = clx.createLinearGradient(0, H * 0.22, 0, H * 0.72);
+    mk.addColorStop(0, 'rgba(0,0,0,0)'); mk.addColorStop(0.3, 'rgba(0,0,0,0.85)'); mk.addColorStop(0.7, 'rgba(0,0,0,0.85)'); mk.addColorStop(1, 'rgba(0,0,0,0)');
+    clx.globalCompositeOperation = 'destination-out'; clx.fillStyle = mk; clx.fillRect(0, 0, W, H); clx.globalCompositeOperation = 'source-over';
+    cx.drawImage(cl, 0, 0);
+    var hz = cx.createLinearGradient(0, H * 0.72, 0, H);
+    hz.addColorStop(0, 'rgba(214,236,252,0)'); hz.addColorStop(1, 'rgba(226,242,255,0.65)');
+    cx.fillStyle = hz; cx.fillRect(0, H * 0.72, W, H * 0.28);
+  }
+
+  function ease(p) { return p < 0 ? 0 : p > 1 ? 1 : p * p * (3 - 2 * p); }
+
+  function pen(x, y, lift, wob) {
+    var sc = baseSize * 0.0105;
+    cx.save(); cx.translate(x, y - lift * baseSize * 0.5); cx.rotate(-0.62 + wob);
+    cx.scale(sc, sc);
+    cx.shadowColor = 'rgba(0,30,90,0.35)'; cx.shadowBlur = 18; cx.shadowOffsetY = 10;
+    cx.beginPath(); cx.moveTo(0, 0); cx.bezierCurveTo(-9, -24, -13, -56, -9, -86); cx.lineTo(9, -86); cx.bezierCurveTo(13, -56, 9, -24, 0, 0); cx.closePath();
+    var tg = cx.createLinearGradient(-12, 0, 12, 0); tg.addColorStop(0, '#2a1a12'); tg.addColorStop(0.5, '#5a3a26'); tg.addColorStop(1, '#2a1a12');
+    cx.fillStyle = tg; cx.fill();
+    cx.shadowColor = 'transparent';
+    cx.fillStyle = '#d9a93a'; cx.fillRect(-10, -100, 20, 15);
+    cx.fillStyle = '#f5d778'; cx.fillRect(-10, -100, 7, 15);
+    var hg = cx.createLinearGradient(-10, 0, 10, 0); hg.addColorStop(0, '#8e1b14'); hg.addColorStop(0.35, '#e0432f'); hg.addColorStop(1, '#7a130e');
+    cx.fillStyle = hg; cx.fillRect(-10, -420, 20, 322);
+    cx.fillStyle = '#d9a93a'; for (var i = 0; i < 3; i++) cx.fillRect(-11, -150 - i * 96, 22, 7);
+    cx.fillStyle = '#f5d778'; cx.fillRect(-11, -430, 22, 12);
+    cx.restore();
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!W || !H || !strokes.length) return;
+    if (!t0) t0 = now;
+    var time = (now - t0) / 1000, ts = (now - startAt) / 1000;
+    var cycle = totalDur + T_LIFT + T_HOLD + T_FADE;
+    if (ts >= cycle) { restart(); ts = 0; } // GIF-style: loops forever on its own
+    var fade = ts > cycle - T_FADE ? 1 - (ts - (cycle - T_FADE)) / T_FADE : 1;
+    sky(time);
+
+    // ---- write: stamp new ink for every stroke up to the current time; track the pen tip ----
+    var tipX = null, tipY = null, writing = false, k;
+    for (k = 0; k < strokes.length; k++) {
+      var sk = strokes[k];
+      if (ts >= sk.t0) {
+        var f = Math.min(1, (ts - sk.t0) / sk.dur);
+        advance(sk, f);
+        if (f < 1) { var idx = Math.min(sk.pts.length - 1, Math.floor(f * (sk.pts.length - 1))); tipX = sk.pts[idx][0]; tipY = sk.pts[idx][1]; writing = true; }
+      }
+    }
+    var lastDone = -1; for (k = 0; k < strokes.length; k++) if (ts >= strokes[k].t0 + strokes[k].dur) lastDone = k; else break;
+    var finished = ts >= totalDur - 0.16;
+    if (tipX === null && !finished) { // between strokes: the pen floats from the end of one stroke to the start of the next
+      var a0 = strokes[Math.max(0, lastDone)], b0 = strokes[Math.min(strokes.length - 1, lastDone + 1)];
+      var ea = lastDone >= 0 ? a0.pts[a0.pts.length - 1] : [b0.pts[0][0] - ux, b0.pts[0][1] - ux * 1.4], sb = b0.pts[0];
+      var u = Math.min(1, Math.max(0, (ts - (lastDone >= 0 ? a0.t0 + a0.dur : 0)) / ((b0.t0) - (lastDone >= 0 ? a0.t0 + a0.dur : 0) + 1e-6)));
+      var e = ease(u); tipX = ea[0] + (sb[0] - ea[0]) * e; tipY = ea[1] + (sb[1] - ea[1]) * e - Math.sin(Math.PI * u) * ux * 0.35;
+    }
+
+    // ink (+ soft white halo so the red reads on the blue sky)
+    cx.save(); cx.globalAlpha = fade;
+    cx.drawImage(haloCv, 0, 0);
+    cx.drawImage(inkCv, 0, 0);
+    if (finished) { // a faint breathing glow when the writing is complete
+      var tw = 0.5 + 0.5 * Math.sin((ts - totalDur) * 2.2);
+      cx.globalAlpha = fade * 0.25 * tw; cx.globalCompositeOperation = 'lighter'; cx.drawImage(inkCv, 0, 0);
+    }
+    cx.restore();
+
+    // pen
+    if (!finished && tipX !== null) {
+      pen(tipX, tipY, writing ? 0 : 0.35, Math.sin(ts * 9) * 0.03);
+      if (writing && Math.random() < 0.8) sparks.push({ x: tipX, y: tipY, vx: (Math.random() - 0.5) * 60 * DPR, vy: (Math.random() - 0.8) * 60 * DPR, life: 1 });
+    } else if (finished) {
+      var lf = ease((ts - totalDur) / T_LIFT), last = strokes[strokes.length - 1].pts;
+      if (lf < 1) pen(last[last.length - 1][0] + lf * W * 0.12, last[last.length - 1][1] - lf * H * 0.35, lf * 1.6, 0);
+    }
+    cx.save(); cx.globalCompositeOperation = 'lighter';
+    for (var i = sparks.length - 1; i >= 0; i--) {
+      var sp = sparks[i]; sp.life -= 0.025; sp.x += sp.vx * 0.016; sp.y += sp.vy * 0.016; sp.vy += 40 * DPR * 0.016;
+      if (sp.life <= 0) { sparks.splice(i, 1); continue; }
+      cx.fillStyle = 'rgba(255,200,150,' + sp.life * 0.8 + ')'; cx.beginPath(); cx.arc(sp.x, sp.y, 2 * DPR * sp.life, 0, 6.3); cx.fill();
+    }
+    cx.restore();
+  }
+
+  function restart() {
+    startAt = performance.now(); sparks.length = 0;
+    if (inkX) { inkX.clearRect(0, 0, W, H); haloX.clearRect(0, 0, W, H); }
+    strokes.forEach(function (s) { s.done = 0; });
+  }
+  addEventListener('resize', function () { layout(); restart(); });
+  cv.addEventListener('click', restart);
+  layout(); restart(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

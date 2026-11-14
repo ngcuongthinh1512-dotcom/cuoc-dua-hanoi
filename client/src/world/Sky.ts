@@ -239,6 +239,7 @@ export function createSky(scene: THREE.Scene, camera: THREE.PerspectiveCamera, g
   sun.shadow.radius = R.shadowRadius;
   sun.shadow.bias = dusk ? D.shadowBias : R.shadowBias; // dusk: the grazing sun needs more (lighting.dusk)
   sun.shadow.normalBias = dusk ? D.shadowNormalBias : R.shadowNormalBias;
+  if (dusk) sun.shadow.intensity = D.shadowIntensity; // shadows stay mauve, not black: a shadow that pops in / out at the box edge while sprinting is then hardly seen
   // ponytail: one shadow box around the camera (texel-snapped when graphics8c.sky is on); cascaded shadow maps (SPEC §14) in Phase 12.
   const e = R.shadowHalfExtent;
   Object.assign(sun.shadow.camera, { left: -e, right: e, bottom: -e, top: e, near: 1, far: R.shadowFar });

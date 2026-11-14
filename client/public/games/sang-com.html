@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sàng cốm làng Vòng 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&family=Pacifico&display=swap&subset=vietnamese">
+<style>
+:root{
+  --do:#f4ecda; --do2:#ebdfc4; --ink:#3b2a1a; --muted:#7d6a52; --line:#d6c5a2;
+  --com:#6fa83a; --com2:#4d8a26; --rom:#e2b94f; --tre:#8a5a2b; --tre2:#5e3b19; --bad:#c8452f;
+  --card:#fbf6ea; --glass:#fbf6eadd; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --do:#1d1912; --do2:#28221a; --ink:#f1e7d2; --muted:#b4a385; --line:#4a3e2c;
+  --com:#8cc457; --com2:#6fa83a; --rom:#e8c565; --tre:#b07a43; --tre2:#7a5128; --bad:#ef6b52;
+  --card:#2a241b; --glass:#2a241bdd; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#e9b277;color:var(--ink);font:16px/1.5 "Be Vietnam Pro",system-ui,sans-serif}
+#cv{position:fixed;inset:0;width:100vw;height:100dvh;display:block;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+#cv.held{cursor:grabbing}
+.hud{position:fixed;left:12px;top:10px;width:min(480px,calc(100vw - 24px));background:var(--glass);border:1px solid var(--line);border-radius:14px;
+  padding:8px 14px 10px;display:flex;flex-direction:column;gap:6px;pointer-events:none;box-shadow:0 6px 20px #0003}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 14px}
+h1{font-family:Pacifico,cursive;font-weight:400;font-size:clamp(19px,4.4vw,26px);margin:0;color:var(--com2);line-height:1.35}
+@media (prefers-color-scheme:dark){h1{color:var(--com)}}
+.clock{font-variant-numeric:tabular-nums;font-weight:800;font-size:20px;display:flex;gap:12px;align-items:baseline}
+.clock small{font-weight:600;font-size:13px;color:var(--muted)}
+.meters{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}
+.meter{display:flex;flex-direction:column;gap:2px}
+.meter .lab{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.meter .lab span:last-child{font-variant-numeric:tabular-nums}
+.track{position:relative;height:12px;border-radius:8px;background:var(--do2);border:1px solid var(--line);overflow:hidden}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:8px;width:0}
+.track b{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--ink);opacity:.7}
+#mT i{background:linear-gradient(90deg,#d6a63a,var(--rom))}
+#mC i{background:linear-gradient(90deg,var(--com2),var(--com))}
+.meter.ok .lab span:last-child{color:var(--com2)}
+.meter.bad .lab span:last-child{color:var(--bad)}
+#wind{position:fixed;right:12px;top:10px;background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:4px 10px 2px;
+  display:flex;align-items:center;gap:4px;pointer-events:none;font-weight:800;font-size:14px;color:var(--tre2)}
+@media (prefers-color-scheme:dark){#wind{color:var(--rom)}}
+#banner{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);background:#3b2a1aee;color:#fff4dc;
+  padding:14px 20px;border-radius:14px;font-weight:800;font-size:clamp(15px,3.4vw,21px);text-align:center;
+  max-width:88%;display:none;box-shadow:0 10px 30px #0006;pointer-events:none}
+#tip{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#3b2a1add;color:#fff4dc;
+  padding:9px 16px;border-radius:12px;font-weight:600;font-size:15px;text-align:center;max-width:min(560px,calc(100vw - 32px));
+  pointer-events:none;transition:opacity .8s;opacity:0}
+#err{position:fixed;inset:auto 16px 40% 16px;margin:auto;max-width:520px;background:var(--card);color:var(--bad);border:2px solid var(--bad);
+  border-radius:14px;padding:16px;font-weight:600;display:none;z-index:9;text-align:center}
+button{font:inherit;cursor:pointer}
+.ov{position:fixed;inset:0;background:#2a1d10aa;display:none;align-items:flex-start;justify-content:center;overflow:auto;z-index:5;
+  padding:24px 16px;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.ov.show{display:flex}
+.card{background:var(--card);color:var(--ink);border-radius:20px;max-width:560px;width:100%;padding:22px 22px 24px;margin:auto 0;
+  box-shadow:0 20px 60px #0007;border:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.card h2{font-family:Pacifico,cursive;font-weight:400;font-size:clamp(28px,7vw,38px);margin:0;color:var(--com2);line-height:1.3;text-align:center}
+@media (prefers-color-scheme:dark){.card h2{color:var(--com)}}
+.card p{margin:0}
+.card ul{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
+.card li::marker{color:var(--com2)}
+.eyebrow{text-align:center;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--tre);font-weight:800}
+label{font-weight:600;display:flex;flex-direction:column;gap:6px}
+input{font:inherit;min-width:0;font-size:20px;padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:var(--do);color:var(--ink);text-transform:uppercase}
+.big{min-height:58px;border-radius:16px;border:0;background:var(--com2);color:#fff;font-weight:800;font-size:20px;box-shadow:0 5px 0 #345f18}
+.big:active{transform:translateY(3px);box-shadow:0 2px 0 #345f18}
+.big:disabled{opacity:.5}
+.code{font-size:clamp(34px,10vw,48px);font-weight:800;letter-spacing:3px;text-align:center;color:var(--tre);font-variant-numeric:tabular-nums}
+.stats{display:flex;justify-content:center;gap:26px;font-size:18px}
+.stats b{display:block;font-size:26px;font-variant-numeric:tabular-nums}
+.stats div{text-align:center}
+.host{border:2px dashed var(--tre);border-radius:14px;padding:12px;display:none;flex-direction:column;gap:8px}
+.host.show{display:flex}
+.host .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.host input{font-size:17px;padding:9px 10px;min-width:0;width:100%}
+.host output{font-size:28px;font-weight:800;letter-spacing:2px;text-align:center;color:var(--tre)}
+#bots{position:fixed;left:12px;right:12px;bottom:12px;max-height:45vh;overflow:auto;background:var(--card);color:var(--ink);border:1px solid var(--line);
+  border-radius:12px;padding:10px;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre;display:none;z-index:8}
+@media (max-width:560px){.meters{grid-template-columns:1fr}.clock{font-size:17px}.hud{padding:6px 10px 8px}#wind{top:122px}}
+#rules{position:fixed;right:12px;top:64px;width:min(280px,calc(100vw - 24px));max-height:calc(100dvh - 150px);overflow:auto;display:none;z-index:3;
+  background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:8px 12px;box-shadow:0 6px 20px #0003;font-size:13px;line-height:1.45;color:var(--ink)}
+#rules.show{display:block}
+#rules .rt{font-weight:800;font-size:14px;color:var(--com2)}
+@media (prefers-color-scheme:dark){#rules .rt{color:var(--com)}}
+#rules ul{margin:6px 0 2px;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+#rules li::marker{color:var(--com2)}
+@media (max-width:560px){#rules{top:190px;width:min(250px,62vw);font-size:11.5px;line-height:1.35;padding:6px 9px;max-height:calc(100dvh - 270px)}#rules .rt{font-size:12.5px}#rules ul{padding-left:15px;gap:2px}}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="hud">
+  <header>
+    <h1>Sàng cốm làng Vòng</h1>
+    <div class="clock"><span id="clk">00:00</span><small id="rt">Làm lại: 0</small></div>
+  </header>
+  <div class="meters">
+    <div class="meter" id="mT"><div class="lab"><span>Trấu còn <small>(mục tiêu ≤ 8%)</small></span><span id="vT">100%</span></div><div class="track"><i></i><b style="left:8%"></b></div></div>
+    <div class="meter" id="mC"><div class="lab"><span>Cốm rơi <small>(giới hạn 5%)</small></span><span id="vC">0%</span></div><div class="track"><i></i><b style="left:25%"></b></div></div>
+  </div>
+</div>
+<div id="wind"><span>Gió</span><svg width="120" height="54" viewBox="0 0 120 54" aria-hidden="true">
+  <line x1="7" y1="4" x2="7" y2="52" stroke="#5e3b19" stroke-width="3" stroke-linecap="round"/>
+  <polygon id="sock1" fill="#c8452f"/><polygon id="sock2" fill="#fff4dc"/><polygon id="sock3" fill="#c8452f"/>
+</svg></div>
+<aside id="rules"><div class="rt">Luật chơi</div><ul>
+  <li>Di chuột / touchpad (điện thoại: kéo một ngón): nia đi theo, sang trái phải và lên xuống.</li>
+  <li>Kéo lên thật nhanh rồi dừng: hạt bay lên khỏi nia. Hạ nia xuống để đón hạt.</li>
+  <li>Giữ chuột (hoặc ngón tay) và vẽ vòng tròn: xoay nia, gom cốm vào giữa, đẩy trấu ra vành.</li>
+  <li>Gió thổi từ sau lưng bên trái ra trước bên phải. Trấu nằm yên trong nia thì gió không cuốn được: phải hất lên.</li>
+  <li>Thắng khi <b>trấu còn ≤ 8%</b> và <b>cốm rơi ≤ 5%</b>.</li>
+  <li>Cốm rơi quá 5%: đổ nia ra sàng lại, không cộng giờ, chỉ đếm số lần làm lại.</li>
+</ul></aside>
+<div id="banner"></div>
+<div id="tip">Kéo chuột lên nhanh để hất, hạ xuống để đón. Giữ chuột và vẽ vòng để gom hạt.</div>
+<div id="err"></div>
+<div id="bots"></div>
+
+<div class="ov show" id="start"><div class="card">
+  <div class="eyebrow">The Amazing Race · Vượt rào</div>
+  <h2>Sàng cốm làng Vòng</h2>
+  <p>Cốm làng Vòng giã xong còn lẫn trấu. Người làng sảy cốm bằng nia tre: hai tay cầm vành nia, giật nhẹ lên cho hạt nảy, rồi hạ nia xuống đón. Gió chiều cuốn trấu nhẹ bay qua vành nia, còn hạt cốm nặng rơi lại vào nia.</p>
+  <ul>
+    <li>Di chuột / touchpad (trên điện thoại: kéo một ngón tay): nia đi theo, sang trái phải và lên xuống.</li>
+    <li>Kéo lên thật nhanh rồi dừng: hạt bay lên khỏi nia. Hạ nia xuống để đón hạt. Nia tự chúc về phía trước khi hất.</li>
+    <li>Giữ chuột (hoặc giữ ngón tay) và vẽ vòng tròn: xoay nia, gom cốm vào giữa, đẩy trấu ra vành.</li>
+    <li>Gió thổi từ sau lưng bên trái ra phía trước bên phải, lúc mạnh lúc yếu. Trấu nằm yên trong nia thì gió không cuốn được, phải hất lên.</li>
+    <li>Thắng khi <b>trấu còn ≤ 8%</b> và <b>cốm rơi ≤ 5%</b>.</li>
+    <li>Rơi quá 5% cốm thì phải đổ nia ra sàng lại. Không bị cộng giờ, chỉ đếm số lần làm lại.</li>
+  </ul>
+  <button class="big" id="go">Bắt đầu sàng</button>
+  <div class="host" id="host">
+    <b>Chế độ host: tính mã đối chiếu</b>
+    <div class="row"><input id="ht" placeholder="mm:ss"></div>
+    <output id="ho">COM-·····</output>
+  </div>
+</div></div>
+
+<div class="ov" id="win"><div class="card">
+  <div class="eyebrow">Hoàn thành thử thách</div>
+  <h2>Nia cốm sạch trấu!</h2>
+  <p style="text-align:center" id="wm">Báo mã này cho host:</p>
+  <div class="code" id="wc">COM-XXXXX</div>
+  <div class="stats"><div>Thời gian<b id="wt">00:00</b></div><div>Làm lại<b id="wr">0</b></div></div>
+  <p style="text-align:center;color:var(--muted);font-size:14px" id="wp"></p>
+  <button class="big" id="wsend" style="display:none">Gửi lại kết quả</button>
+</div></div>
+
+<script id="sim">
+/*SIM*/
+// ---------- headless 3D simulation (also loaded by node / a Worker for the bot tests) ----------
+// units: metres, seconds. x = player's LEFT (three.js right-handed, camera looks along +z), y = up, z = forward. Ground y = 0.
+const DT=1/60,TR=.45,BD=.05,RIM=.014,RIM_Y=.004,REST_Y=.72;
+const REACH={x0:-.26,x1:.26,y0:-.12,y1:.26};
+const P={G:5,TG:.55,WS:.18,KT:5,WCA:.08,KC:.3,REST:.01,NOISE:1.5,E:.1,FT:.9,FC:.6,RC:.011,RT:.015,NC:520,NT:260,MT:.35,PD:.3,
+  VMAX:4,VSC:.05,VST:.05,SP:.025,COUP:.7,VREL:.2,SV0:.3,SC:.5,SE:.25,OM:30,PIT0:12,PIT1:20,KP:8,KR:.25,SPMAX:2,SWC:2,SWT:3,SWR:.02,SWF:.15};
+const WD=(()=>{const x=-.55,y=.06,z=1,l=Math.hypot(x,y,z);return[x/l,y/l,z/l]})(); // wind: from left/back to front-right
+const ALPHA='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function fnv(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function xorshift(seed){let x=seed|0||1;return()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return(x>>>0)/4294967296}}
+const normCode=c=>String(c).trim().toUpperCase();
+function subCode(code,time){const h=fnv(normCode(code)+'|'+time+'|COM26');let s='';for(let i=0;i<5;i++)s+=ALPHA[(h>>>(5*i))&31];return'COM-'+s}
+const mmss=s=>{s=Math.floor(s);return String(s/60|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+const windAt=(t,a)=>.55+.25*Math.sin(.9*t+a)+.2*Math.sin(2.3*t+1.7*a);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const R2=TR*TR,hBowl=r=>-BD*(1-r*r/R2);
+const CS=.032,HS=1<<14,HM=HS-1,PG=.04,PGX=150,PGZ=200; // spatial hash cell / size, ground pile grid
+const hkey=(a,b,c)=>(Math.imul(a,73856093)^Math.imul(b,19349663)^Math.imul(c,83492791))&HM;
+
+// tray rotation M = Rx(pitch)·Rz(roll)·Ry(yaw) (row-major 3x3); A = Rx·Rz (no yaw, used for the hands)
+function pose(S){
+  const cp=Math.cos(S.pit),sp=Math.sin(S.pit),cr=Math.cos(S.rol),sr=Math.sin(S.rol),cy=Math.cos(S.yaw),sy=Math.sin(S.yaw),M=S.M,a=S.A;
+  a[0]=cr;a[1]=-sr;a[2]=0;a[3]=cp*sr;a[4]=cp*cr;a[5]=-sp;a[6]=sp*sr;a[7]=sp*cr;a[8]=cp;
+  for(let i=0;i<3;i++){M[3*i]=a[3*i]*cy-a[3*i+2]*sy;M[3*i+1]=a[3*i+1];M[3*i+2]=a[3*i]*sy+a[3*i+2]*cy}
+}
+
+function makeSim(code,opt={}){
+  const R=xorshift(fnv(normCode(code))),N=P.NC+P.NT,F=n=>new Float64Array(n);
+  const S={t:0,a:R()*Math.PI*2,state:'play',N,R,wind:0,om:opt.om||P.OM,
+    cx:0,cy:REST_Y,cz:0,cvx:0,cvy:0,pit:0,rol:0,yaw:0,wy:0,M:F(9),M0:F(9),A:F(9),c0:F(3),
+    x:F(N),y:F(N),z:F(N),vx:F(N),vy:F(N),vz:F(N),pvx:F(N),pvy:F(N),pvz:F(N),x0:F(N),y0:F(N),z0:F(N),rot:F(N),vr:F(N),r:F(N),rv2:F(N).fill(1e9),
+    kind:new Uint8Array(N),alive:new Uint8Array(N),above:new Uint8Array(N),touch:new Uint8Array(N),col:new Uint8Array(N),
+    ix:new Int32Array(N),iy:new Int32Array(N),iz:new Int32Array(N),cell:new Int32Array(N),cnt:new Int32Array(HS+1),fill:new Int32Array(HS),idx:new Int32Array(N),
+    pile:new Uint8Array(PGX*PGZ),lostC:0,lostT:0,onLost:null,trau:1,com:0};
+  for(let i=0;i<N;i++){const k=i<P.NT?1:0;S.kind[i]=k;S.r[i]=k?P.RT:P.RC;S.alive[i]=1;S.above[i]=1;
+    S.col[i]=k?(R()*3|0):(R()*6|0);S.rot[i]=(R()-.5)*.6}
+  pose(S);
+  // fill the nia from the bottom up on a loose 3D lattice -> lens-shaped heap, random mix of cốm/trấu
+  const pts=[],sp=P.SP;
+  for(let ly=-BD+.012,L=0;pts.length<N*1.6&&ly<.2;ly+=sp*.8,L++){const off=L%2?sp/2:0;
+    for(let lx=-TR+off;lx<TR;lx+=sp)for(let lz=-TR+off;lz<TR;lz+=sp){const rr=Math.hypot(lx,lz);if(rr<TR-.035&&ly>hBowl(rr)+.011)pts.push([lx,ly,lz])}}
+  pts.sort((p,q)=>p[1]-q[1]);
+  const ord=Array.from({length:N},(_,i)=>i);for(let i=N-1;i>0;i--){const j=R()*(i+1)|0;[ord[i],ord[j]]=[ord[j],ord[i]]}
+  for(let k=0;k<N;k++){const i=ord[k];S.x[i]=pts[k][0]+(R()-.5)*.003;S.y[i]=REST_Y+pts[k][1];S.z[i]=pts[k][2]+(R()-.5)*.003}
+  for(S.settling=200;S.settling>0;S.settling--)simStep(S);S.t=0; // settle: tray ramps to its resting tilt, heap comes to rest
+  return S;
+}
+
+function buildHash(S){
+  const {N,x,y,z,alive,ix,iy,iz,cell,cnt,fill,idx}=S;
+  cnt.fill(0);
+  for(let i=0;i<N;i++){if(!alive[i]){cell[i]=-1;continue}
+    const a=Math.floor(x[i]/CS),b=Math.floor(y[i]/CS),c=Math.floor(z[i]/CS);ix[i]=a;iy[i]=b;iz[i]=c;
+    const k=hkey(a,b,c);cell[i]=k;cnt[k+1]++}
+  for(let c=1;c<=HS;c++)cnt[c]+=cnt[c-1];
+  fill.set(cnt.subarray(0,HS));
+  for(let i=0;i<N;i++)if(cell[i]>=0)idx[fill[cell[i]]++]=i;
+}
+// visit pairs (i<j) whose cells are neighbours. ponytail: hash collisions may visit a pair twice (rare at 16k buckets), harmless for PBD
+function pairs(S,fn){
+  const {N,cell,ix,iy,iz,cnt,idx}=S;
+  for(let i=0;i<N;i++){if(cell[i]<0)continue;const a=ix[i],b=iy[i],c=iz[i];
+    for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++)for(let oz=-1;oz<=1;oz++){const k=hkey(a+ox,b+oy,c+oz);
+      for(let q=cnt[k],e=cnt[k+1];q<e;q++){const j=idx[q];if(j>i)fn(i,j)}}}
+}
+function collide(S){
+  const {x,y,z,r,kind,touch}=S;
+  pairs(S,(i,j)=>{const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i],rr=r[i]+r[j],d2=dx*dx+dy*dy+dz*dz;
+    if(d2>=rr*rr||d2<1e-12)return;
+    const d=Math.sqrt(d2),k=(rr-d)/d,mi=kind[i]?P.MT:1,mj=kind[j]?P.MT:1,wi=mj/(mi+mj),wj=1-wi;
+    x[i]-=dx*k*wi;y[i]-=dy*k*wi;z[i]-=dz*k*wi;x[j]+=dx*k*wj;y[j]+=dy*k*wj;z[j]+=dz*k*wj;touch[i]=touch[j]=1});
+}
+// contact viscosity: neighbours in contact share velocity, so the heap moves as a block and doesn't slosh
+function viscous(S){
+  const {x,y,z,vx,vy,vz,r,kind}=S,k0=P.PD;
+  pairs(S,(i,j)=>{const dx=x[j]-x[i],dy=y[j]-y[i],dz=z[j]-z[i],rr=r[i]+r[j]+.003;
+    if(dx*dx+dy*dy+dz*dz>=rr*rr)return;
+    const mi=kind[i]?P.MT:1,mj=kind[j]?P.MT:1,wi=mj/(mi+mj)*k0,wj=k0-wi,ax=vx[j]-vx[i],ay=vy[j]-vy[i],az=vz[j]-vz[i];
+    vx[i]+=ax*wi;vy[i]+=ay*wi;vz[i]+=az*wi;vx[j]-=ax*wj;vy[j]-=ay*wj;vz[j]-=az*wj});
+}
+// push particles out of the rim lip and back onto the bowl surface (positions only), in the tray frame
+function project(S){
+  const {N,x,y,z,r,alive,above,M}=S,cx=S.cx,cy=S.cy,cz=S.cz;
+  for(let i=0;i<N;i++){if(!alive[i])continue;
+    const dx=x[i]-cx,dy=y[i]-cy,dz=z[i]-cz;
+    let lx=M[0]*dx+M[3]*dy+M[6]*dz,ly=M[1]*dx+M[4]*dy+M[7]*dz,lz=M[2]*dx+M[5]*dy+M[8]*dz,m=0,rr=Math.hypot(lx,lz);
+    if(rr>1e-6){const qx=lx/rr*TR,qz=lz/rr*TR,ex=lx-qx,ey=ly-RIM_Y,ez=lz-qz,e2=ex*ex+ey*ey+ez*ez,rad=RIM+r[i];
+      if(e2<rad*rad&&e2>1e-12){const k=rad/Math.sqrt(e2);lx=qx+ex*k;ly=RIM_Y+ey*k;lz=qz+ez*k;m=1;rr=Math.hypot(lx,lz)}}
+    if(above[i]&&rr<TR){const gx=2*BD*lx/R2,gz=2*BD*lz/R2,L=Math.sqrt(gx*gx+gz*gz+1),pen=r[i]-(ly-hBowl(rr))/L;
+      if(pen>0){lx-=pen*gx/L;ly+=pen/L;lz-=pen*gz/L;m=1}}
+    if(m){x[i]=M[0]*lx+M[1]*ly+M[2]*lz+cx;y[i]=M[3]*lx+M[4]*ly+M[5]*lz+cy;z[i]=M[6]*lx+M[7]*ly+M[8]*lz+cz}}
+}
+
+// input: {tx,ty} tray target offset from the rest point (metres, clamped to the reach box), spin = target yaw rate (rad/s)
+function simStep(S,inp){
+  if(S.state!=='play')return;
+  const {N,x,y,z,vx,vy,vz,pvx,pvy,pvz,x0,y0,z0,rot,vr,r,rv2,kind,alive,above,touch,R,M,M0}=S;
+  const w=S.settling?0:windAt(S.t,S.a);S.wind=w;
+  // ---- the tray: kinematic, follows its target through a critically damped spring
+  M0.set(M);S.c0[0]=S.cx;S.c0[1]=S.cy;S.c0[2]=S.cz;
+  {
+    const om=S.om,tx=clamp(inp?inp.tx||0:0,REACH.x0,REACH.x1),ty=clamp(inp?inp.ty||0:0,REACH.y0,REACH.y1),spin=clamp(inp?inp.spin||0:0,-P.SPMAX,P.SPMAX);
+    S.cvx+=(om*om*(tx-S.cx)-2*om*S.cvx)*DT;S.cvy+=(om*om*(REST_Y+ty-S.cy)-2*om*S.cvy)*DT;S.cx+=S.cvx*DT;S.cy+=S.cvy*DT;
+    const pt=Math.min(P.PIT1,P.PIT0+P.KP*Math.max(0,S.cvy))*Math.PI/180,rt=clamp(-P.KR*S.cvx,-.15,.15),kk=1-Math.exp(-12*DT);
+    S.pit+=(pt-S.pit)*kk;S.rol+=(rt-S.rol)*kk;S.wy+=(spin-S.wy)*(1-Math.exp(-6*DT));S.yaw+=S.wy*DT;
+    pose(S);
+  }
+  // ---- forces
+  const dT=1-Math.exp(-P.KT*DT),dC=Math.exp(-P.KC*DT),wsx=P.WS*w*WD[0],wsy=P.WS*w*WD[1],wsz=P.WS*w*WD[2],ca=P.WCA*w*DT;
+  for(let i=0;i<N;i++){if(!alive[i])continue;
+    x0[i]=x[i];y0[i]=y[i];z0[i]=z[i];
+    if(kind[i]){
+      if(touch[i]&&rv2[i]<1e8){ // lying in the tray (touching the bowl or the heap): sheltered, almost no wind
+        const k=P.REST*P.KT*DT;vx[i]+=wsx*k;vy[i]+=wsy*k;vz[i]+=wsz*k;vr[i]*=.8;rot[i]*=.92}
+      else{const nz=P.NOISE*DT;vx[i]+=(wsx-vx[i])*dT+(R()-.5)*nz;vy[i]+=(wsy-vy[i])*dT+(R()-.5)*nz;vz[i]+=(wsz-vz[i])*dT+(R()-.5)*nz;vr[i]+=(R()-.5)*60*DT}
+      vy[i]-=P.G*P.TG*DT;rot[i]+=vr[i]*DT;
+    }else{vx[i]+=WD[0]*ca;vy[i]+=WD[1]*ca-P.G*DT;vz[i]+=WD[2]*ca;vx[i]*=dC;vy[i]*=dC;vz[i]*=dC}
+    pvx[i]=vx[i];pvy[i]=vy[i];pvz[i]=vz[i];x[i]+=vx[i]*DT;y[i]+=vy[i]*DT;z[i]+=vz[i]*DT;touch[i]=0;
+  }
+  buildHash(S);
+  for(let it=0;it<2;it++){collide(S);project(S)}
+  const lim=S.settling?.5:P.VMAX;
+  for(let i=0;i<N;i++){if(!alive[i])continue;
+    let ux=(x[i]-x0[i])/DT,uy=(y[i]-y0[i])/DT,uz=(z[i]-z0[i])/DT;const s2=ux*ux+uy*uy+uz*uz;
+    if(s2>lim*lim){const f=lim/Math.sqrt(s2);ux*=f;uy*=f;uz*=f}
+    vx[i]=ux;vy[i]=uy;vz[i]=uz}
+  viscous(S);
+  // ---- moving-frame contact with the bowl: relative velocity -> restitution + friction, heap coupling, swirl segregation
+  const cx=S.cx,cy=S.cy,cz=S.cz,c0=S.c0,sw=Math.min(1,Math.abs(S.wy)/P.SPMAX);
+  for(let i=0;i<N;i++){if(!alive[i])continue;
+    const dx=x[i]-cx,dy=y[i]-cy,dz=z[i]-cz;
+    let lx=M[0]*dx+M[3]*dy+M[6]*dz,ly=M[1]*dx+M[4]*dy+M[7]*dz,lz=M[2]*dx+M[5]*dy+M[8]*dz;
+    const rr=Math.hypot(lx,lz);rv2[i]=1e9;
+    if(above[i]&&rr<TR){
+      const h=hBowl(rr),gx=2*BD*lx/R2,gz=2*BD*lz/R2,L=Math.sqrt(gx*gx+gz*gz+1),nlx=-gx/L,nly=1/L,nlz=-gz/L,gap=(ly-h)/L-r[i];
+      if(gap<.06){
+        const nx=M[0]*nlx+M[1]*nly+M[2]*nlz,ny=M[3]*nlx+M[4]*nly+M[5]*nlz,nz=M[6]*nlx+M[7]*nly+M[8]*nlz;
+        // velocity of the tray material at this point (finite difference of the pose)
+        let tvx=(x[i]-(M0[0]*lx+M0[1]*ly+M0[2]*lz+c0[0]))/DT,tvy=(y[i]-(M0[3]*lx+M0[4]*ly+M0[5]*lz+c0[1]))/DT,tvz=(z[i]-(M0[6]*lx+M0[7]*ly+M0[8]*lz+c0[2]))/DT;
+        if(S.wy){ // the swirling weave slides under the fluidised heap: grains follow only SWF of the yaw spin
+          const ax=M[1],ay=M[4],az=M[7],k=(1-P.SWF)*S.wy;tvx-=k*(ay*dz-az*dy);tvy-=k*(az*dx-ax*dz);tvz-=k*(ax*dy-ay*dx)}
+        let rx=vx[i]-tvx,ry=vy[i]-tvy,rz=vz[i]-tvz;const vn=rx*nx+ry*ny+rz*nz;
+        if(gap<.003){
+          if(gap<0){lx-=gap*nlx;ly-=gap*nly;lz-=gap*nlz;
+            x[i]=M[0]*lx+M[1]*ly+M[2]*lz+cx;y[i]=M[3]*lx+M[4]*ly+M[5]*lz+cy;z[i]=M[6]*lx+M[7]*ly+M[8]*lz+cz}
+          // Coulomb friction: the normal impulse is the approach speed before the position solver pushed the grain out
+          const pn=(pvx[i]-tvx)*nx+(pvy[i]-tvy)*ny+(pvz[i]-tvz)*nz,en=vn<0?-P.E*vn:vn;
+          let tx=rx-vn*nx,ty=ry-vn*ny,tz=rz-vn*nz;const tm=Math.hypot(tx,ty,tz),cap=(kind[i]?P.FT:P.FC)*Math.max(0,-pn,-vn);
+          const f=tm<=cap?0:1-cap/tm;tx*=f;ty*=f;tz*=f;rx=tx+en*nx;ry=ty+en*ny;rz=tz+en*nz;
+          const imp=-pn-P.SV0; // a hard landing on the rough weave: the grain rebounds and scatters (grows with toss height)
+          if(imp>0&&!S.settling){const a=R()*6.2832,k=P.SC*imp,ca=Math.cos(a)*k,sa=Math.sin(a)*k,e=P.SE*imp;
+            rx+=ca*M[0]+sa*M[2]+e*nx;ry+=ca*M[3]+sa*M[5]+e*ny;rz+=ca*M[6]+sa*M[8]+e*nz}
+          touch[i]=1;
+          if(sw>0&&rr>.01){ // swirling agitates the heap: dense cốm slide to the middle, light trấu ride out to the rim
+            const k=(kind[i]?(rr<TR-P.SWR?P.SWT:0):-P.SWC)*sw*DT/rr,ux=M[0]*lx+M[2]*lz,uy=M[3]*lx+M[5]*lz,uz=M[6]*lx+M[8]*lz;rx+=ux*k;ry+=uy*k;rz+=uz*k}
+        }else if(touch[i]&&vn<0){const k=P.COUP*vn;rx-=k*nx;ry-=k*ny;rz-=k*nz} // heap near the floor follows the tray
+        if(touch[i]){ // dense heap is inelastic: the position solver may not shoot a pushed grain out faster than the tray (only its own push is capped)
+          const xs=Math.min(rx*nx+ry*ny+rz*nz-P.VREL,(vx[i]-pvx[i])*nx+(vy[i]-pvy[i])*ny+(vz[i]-pvz[i])*nz);
+          if(xs>0){rx-=xs*nx;ry-=xs*ny;rz-=xs*nz}
+          const vs=S.settling>120||sw>.3?0:kind[i]?P.VST:P.VSC;
+          if(rx*rx+ry*ry+rz*rz<vs*vs){rx=0;ry=0;rz=0;x[i]=x0[i]+tvx*DT;y[i]=y0[i]+tvy*DT;z[i]=z0[i]+tvz*DT}}
+        // static friction (floor and grain-grain): a heap at rest moves with the tray, no creep from the position solver
+        vx[i]=rx+tvx;vy[i]=ry+tvy;vz[i]=rz+tvz;rv2[i]=rx*rx+ry*ry+rz*rz;
+      }
+    }
+    above[i]=ly>(rr<TR?hBowl(rr):0)-.02?1:0;
+    if(y[i]<r[i]||x[i]<-3||x[i]>3||z[i]<-1.9||z[i]>5.9){ // landed on the ground (or left the world): lost
+      alive[i]=0;x[i]=clamp(x[i],-2.99,2.99);z[i]=clamp(z[i],-1.99,5.99);
+      const g=Math.floor((x[i]+3)/PG)+PGX*Math.floor((z[i]+2)/PG),n=S.pile[g];S.pile[g]=Math.min(250,n+1);
+      y[i]=r[i]*.45+Math.min(.05,n*.005);vx[i]=vy[i]=vz[i]=0;
+      if(kind[i])S.lostT++;else S.lostC++;
+      if(S.onLost)S.onLost(i)}
+  }
+  if(S.settling)return;
+  S.t+=DT;
+  S.trau=(P.NT-S.lostT)/P.NT;S.com=S.lostC/P.NC;
+  if(S.com>.05)S.state='fail';else if(S.trau<=.08)S.state='win';
+}
+
+// ---------- bots: they drive the TRAY TARGET (like the cursor would), never the grains ----------
+const BOTS=[
+  {name:'Khéo',A:.1,T:.83,rise:.1,wmin:.45,swirl:1},
+  {name:'Hất bừa',A:.3,T:.45,rise:.07,wmin:-9,lat:.2},
+  {name:'Lười',A:.012,T:.83,rise:.1,wmin:-9},
+  {name:'Đứng yên',A:0},
+  {name:'Hất đều không xoay',A:.1,T:.83,rise:.1,wmin:-9}];
+const ss=u=>u<=0?0:u>=1?1:u*u*(3-2*u);
+function botInput(b,S,st){
+  const t=S.t;
+  if(!b.A)return{tx:0,ty:0,spin:0};
+  const k=Math.floor(t/b.T),ph=t-k*b.T,d=.35;
+  if(k!==st.k){st.k=k;st.on=windAt(t,S.a)>b.wmin;st.lx=b.lat?(st.R()-.5)*2*b.lat:0}
+  if(!st.on)return{tx:0,ty:0,spin:b.swirl?-2.6:0}; // gió yếu: người khéo xoay nia gom hạt thay vì hất
+  const e=ph<b.rise?ss(ph/b.rise):1-ss((ph-b.rise)/d);
+  return{tx:st.lx*e,ty:b.A*e,spin:0};
+}
+function runBot(code,b,T=90){
+  const S=makeSim(code),st={k:-1,R:xorshift(fnv(code+b.name))};
+  while(S.t<T&&S.state==='play')simStep(S,botInput(b,S,st));
+  return{bot:b.name,code,ket_qua:S.state==='win'?'THẮNG':S.state==='fail'?'THUA (rơi cốm)':'hết giờ',
+    giay:+S.t.toFixed(1),trau_con:+(S.trau*100).toFixed(1),com_roi:+(S.com*100).toFixed(1)}
+}
+const BOT_CODES=['AN07','BINH-23','THU99'];
+function botChecks(rows){
+  const g=(n,c)=>rows.find(r=>r.bot===n&&r.code===c);
+  return BOT_CODES.map(c=>{const k=g('Khéo',c),h=g('Hất bừa',c),l=g('Lười',c),s=g('Đứng yên',c),n=g('Hất đều không xoay',c);
+    return{code:c,
+      kheo:k.ket_qua==='THẮNG'&&k.giay>=15&&k.giay<=45&&k.com_roi<=8,
+      hat_bua:h.ket_qua.startsWith('THUA'),
+      luoi:l.ket_qua!=='THẮNG',
+      dung_yen:s.ket_qua!=='THẮNG',
+      deu_khong_xoay:n.ket_qua!=='THẮNG'||n.giay>k.giay}})
+}
+function runAllBots(onRow){const rows=[];for(const c of BOT_CODES)for(const b of BOTS){const r=runBot(c,b);rows.push(r);if(onRow)onRow(r)}return{rows,checks:botChecks(rows)}}
+if(typeof module!=='undefined')module.exports={P,makeSim,simStep,step:simStep,runBot,runAllBots,botInput,BOTS,BOT_CODES,botChecks,subCode,fnv,windAt,DT};
+/*ENDSIM*/
+</script>
+<script type="module">
+// ---------- game / 3D rendering (three.js from the CDN import map) ----------
+const $=id=>document.getElementById(id);
+const fail=msg=>{const e=$('err');e.textContent=msg;e.style.display='block'};
+let THREE;
+try{THREE=await import('three')}catch(e){fail('Không tải được thư viện 3D (three.js) từ mạng. Kiểm tra kết nối Internet rồi tải lại trang.');throw e}
+const cv=$('cv');
+let renderer;
+try{renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true})}
+catch(e){fail('Trình duyệt này không bật được WebGL nên không chạy được bản 3D.');throw e}
+renderer.setPixelRatio(Math.min(1.25,window.devicePixelRatio||1)); // weak laptops: the race page's 3D world shares the GPU
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+const scene=new THREE.Scene();scene.background=new THREE.Color('#e3a46c');scene.fog=new THREE.Fog('#e3a46c',5.5,13);
+const cam=new THREE.PerspectiveCamera(50,1,.05,40);
+const LOOK=new THREE.Vector3(0,.5,.5);
+
+// ---- procedural textures
+const rr=xorshift(20261107);
+function tex(w,h,draw,rx=1,ry=1){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);t.anisotropy=8;return t}
+const brickTex=tex(512,512,(g,w,h)=>{g.fillStyle='#7f4a35';g.fillRect(0,0,w,h);const rows=10,bh=h/rows,bw=w/4;
+  for(let r=0;r<rows;r++)for(let c=-1;c<5;c++){const x=c*bw+(r%2?bw/2:0),y=r*bh,l=36+rr()*12,hu=8+rr()*10;
+    g.fillStyle=`hsl(${hu},${45+rr()*12}%,${l}%)`;g.fillRect(x+3,y+3,bw-6,bh-6);
+    for(let k=0;k<40;k++){g.fillStyle=`rgba(${rr()<.5?'40,20,10':'255,220,190'},${.05+rr()*.1})`;g.fillRect(x+3+rr()*(bw-8),y+3+rr()*(bh-8),2+rr()*5,1+rr()*3)}}
+  g.fillStyle='rgba(60,40,30,.18)';for(let k=0;k<30;k++){g.beginPath();g.ellipse(rr()*w,rr()*h,8+rr()*30,4+rr()*14,rr()*3,0,7);g.fill()}},14,14);
+const weave=(g,w,h,light)=>{g.fillStyle='#4f3218';g.fillRect(0,0,w,h);const n=16,s=w/n;
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){const hor=((i>>1)+(j>>1))%2===0,x=i*s,y=j*s,v=rr()*14;
+    const gr=hor?g.createLinearGradient(0,y,0,y+s):g.createLinearGradient(x,0,x+s,0);
+    gr.addColorStop(0,`hsl(36,48%,${light-14+v}%)`);gr.addColorStop(.5,`hsl(38,55%,${light+v}%)`);gr.addColorStop(1,`hsl(34,45%,${light-18+v}%)`);
+    g.fillStyle=gr;g.fillRect(x+.8,y+.8,s-1.6,s-1.6);g.strokeStyle='rgba(70,40,15,.35)';g.lineWidth=1;g.beginPath();
+    if(hor){g.moveTo(x+1,y+s/2);g.lineTo(x+s-1,y+s/2)}else{g.moveTo(x+s/2,y+1);g.lineTo(x+s/2,y+s-1)}g.stroke()}};
+const weaveTex=tex(256,256,(g,w,h)=>weave(g,w,h,66),7,7);
+const weaveOld=tex(256,256,(g,w,h)=>weave(g,w,h,58),7,7);
+const coilTex=tex(256,32,(g,w,h)=>{g.fillStyle='#7a5226';g.fillRect(0,0,w,h);for(let x=-h;x<w+h;x+=10){g.strokeStyle=`hsl(34,50%,${46+rr()*16}%)`;g.lineWidth=6;g.beginPath();g.moveTo(x,0);g.lineTo(x+h,h);g.stroke()}},14,1);
+const plaster=tex(1024,384,(g,w,h)=>{g.fillStyle='#c79c74';g.fillRect(0,0,w,h);
+  for(let k=0;k<260;k++){g.fillStyle=`rgba(${rr()<.5?'110,70,45':'235,205,170'},${.04+rr()*.08})`;g.beginPath();g.ellipse(rr()*w,rr()*h,10+rr()*70,6+rr()*40,rr()*3,0,7);g.fill()}
+  const dg=g.createLinearGradient(0,h*.7,0,h);dg.addColorStop(0,'rgba(80,50,35,0)');dg.addColorStop(1,'rgba(80,50,35,.45)');g.fillStyle=dg;g.fillRect(0,0,w,h);
+  for(let p=0;p<7;p++){const px=rr()*w,py=h*.15+rr()*h*.6,bw=34,bh=14,cols=2+rr()*3|0,rows=2+rr()*3|0;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){g.fillStyle=`hsl(${10+rr()*8},45%,${36+rr()*8}%)`;g.fillRect(px+c*bw+(r%2?bw/2:0),py+r*bh,bw-3,bh-3)}}},1,1);
+const strawTex=tex(128,128,(g,w,h)=>{g.fillStyle='#c9a24e';g.fillRect(0,0,w,h);for(let k=0;k<240;k++){g.strokeStyle=`hsl(${40+rr()*10},${50+rr()*20}%,${45+rr()*30}%)`;g.lineWidth=1+rr()*1.5;const x=rr()*w;g.beginPath();g.moveTo(x,0);g.lineTo(x+(rr()-.5)*14,h);g.stroke()}},2,2);
+
+// ---- the yard
+const std=(o)=>new THREE.MeshStandardMaterial(Object.assign({roughness:.95,metalness:0},o));
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(14,14),std({map:brickTex,color:'#e0b39a'}));
+ground.rotation.x=-Math.PI/2;ground.position.z=2;ground.receiveShadow=true;scene.add(ground);
+function wallBox(x0,x1,y0,y1){const w=x1-x0,h=y1-y0,t=plaster.clone();t.repeat.set(w/8,h/2.6);t.offset.set((x0+4)/8,y0/2.6);t.needsUpdate=true;
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,.25),std({map:t}));m.position.set((x0+x1)/2,(y0+y1)/2,3.5);m.receiveShadow=true;scene.add(m)}
+wallBox(-4.5,.15,0,2.6);wallBox(1.15,4.5,0,2.6);wallBox(.15,1.15,2.05,2.6);
+const dark=new THREE.Mesh(new THREE.PlaneGeometry(1,2.05),std({color:'#24170f'}));dark.position.set(.65,1.025,3.56);scene.add(dark);
+const wood=std({color:'#5b3a22',roughness:.8});
+for(const [w,h,x,y] of [[.08,2.1,.15,1.05],[.08,2.1,1.15,1.05],[1.08,.08,.65,2.07]]){const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,.3),wood);b.position.set(x,y,3.45);scene.add(b)}
+const step=new THREE.Mesh(new THREE.BoxGeometry(1.3,.08,.35),std({color:'#9c5a40'}));step.position.set(.65,.04,3.25);step.receiveShadow=true;scene.add(step);
+// straw bundles at the side
+const strawM=std({map:strawTex,color:'#f0d28a'});
+for(let k=0;k<6;k++){const b=new THREE.Mesh(new THREE.CylinderGeometry(.1,.13,.95,10),strawM);b.position.set(1.9+rr()*.4,.11+(k>3?.2:0),2.1+k*.17);
+  b.rotation.set(Math.PI/2+(rr()-.5)*.3,(rr()-.5)*.9,Math.PI/2*(k%2?1:.15));b.castShadow=true;b.receiveShadow=true;scene.add(b)}
+const heap=new THREE.Mesh(new THREE.SphereGeometry(1,16,10,0,Math.PI*2,0,Math.PI/2),strawM);heap.scale.set(.55,.32,.5);heap.position.set(2.5,0,2.9);heap.receiveShadow=true;scene.add(heap);
+// two empty trays lying on the floor
+function flatTray(x,z,ry){const g=new THREE.Group(),d=new THREE.Mesh(new THREE.CylinderGeometry(TR,TR,.02,48),[std({map:coilTex}),std({map:weaveOld}),std({map:weaveOld})]);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(TR,RIM,8,64),std({map:coilTex}));rim.rotation.x=Math.PI/2;rim.position.y=.012;
+  d.receiveShadow=true;g.add(d,rim);g.position.set(x,.012,z);g.rotation.set((rr()-.5)*.05,ry,0);scene.add(g)}
+flatTray(-1.35,1.5,.4);flatTray(1.0,2.5,1.3);
+
+// ---- lights: low warm sun from behind-left, soft sky
+scene.add(new THREE.HemisphereLight('#ffe4bf','#8a4a32',1.15));
+const sun=new THREE.DirectionalLight('#ffc480',2.7);sun.position.set(-2.3,2.7,-1.6);sun.target.position.set(.2,.3,.7);scene.add(sun,sun.target);
+sun.castShadow=true;Object.assign(sun.shadow.camera,{left:-1.5,right:1.5,top:1.5,bottom:-1.5,near:.5,far:8});
+sun.shadow.mapSize.set(512,512);sun.shadow.bias=-.0006;sun.shadow.normalBias=.02;
+
+// ---- the player's nia
+const trayG=new THREE.Group();trayG.matrixAutoUpdate=false;scene.add(trayG);
+{const NR=18,NS=72,pos=[],uv=[],idx=[];
+  for(let i=0;i<=NR;i++){const r=TR*i/NR;for(let j=0;j<=NS;j++){const a=j/NS*Math.PI*2,x=r*Math.cos(a),z=r*Math.sin(a);pos.push(x,-BD*(1-r*r/(TR*TR)),z);uv.push(x/(2*TR)+.5,z/(2*TR)+.5)}}
+  for(let i=0;i<NR;i++)for(let j=0;j<NS;j++){const a=i*(NS+1)+j,b=a+NS+1;idx.push(a,b,a+1,b,b+1,a+1)}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+  const bowl=new THREE.Mesh(g,std({map:weaveTex,side:THREE.DoubleSide,roughness:.9}));bowl.castShadow=true;bowl.receiveShadow=true;trayG.add(bowl);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(TR,RIM,10,96),std({map:coilTex,roughness:.75}));rim.rotation.x=Math.PI/2;rim.position.y=RIM_Y;rim.castShadow=true;rim.receiveShadow=true;trayG.add(rim);
+  const rim2=new THREE.Mesh(new THREE.TorusGeometry(TR-.012,.006,6,96),std({color:'#6d4520'}));rim2.rotation.x=Math.PI/2;rim2.position.y=-.002;trayG.add(rim2)}
+
+// ---- hands and grey-lilac sleeves gripping the rim at left and right
+const skin=std({color:'#b9785a',roughness:.7}),sleeve=std({color:'#9a91ab',roughness:1});
+const cyl=new THREE.CylinderGeometry(1,1,1,10),UP=new THREE.Vector3(0,1,0);
+const arms=[-1,1].map(s=>{const o={s,hand:new THREE.Mesh(new THREE.SphereGeometry(1,12,8),skin),thumb:new THREE.Mesh(new THREE.SphereGeometry(1,8,6),skin),
+  fore:new THREE.Mesh(cyl,sleeve),upper:new THREE.Mesh(cyl,sleeve),wrist:new THREE.Mesh(cyl,skin)};
+  o.hand.scale.set(.034,.026,.055);o.thumb.scale.set(.016,.014,.03);for(const k of['hand','thumb','fore','upper','wrist']){o[k].castShadow=true;scene.add(o[k])}return o});
+const _a=new THREE.Vector3(),_b=new THREE.Vector3(),_d=new THREE.Vector3();
+function seg(m,a,b,r0){_d.subVectors(b,a);const L=_d.length();m.position.addVectors(a,b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(UP,_d.normalize());m.scale.set(r0,L,r0)}
+const toWorldA=(S,lx,ly,lz,out)=>{const A=S.A;return out.set(A[0]*lx+A[1]*ly+A[2]*lz+S.cx,A[3]*lx+A[4]*ly+A[5]*lz+S.cy,A[6]*lx+A[7]*ly+A[8]*lz+S.cz)};
+const H=new THREE.Vector3(),TH=new THREE.Vector3(),SH=new THREE.Vector3(),EL=new THREE.Vector3(),WR=new THREE.Vector3();
+function updateArms(S){for(const o of arms){const s=o.s;
+  toWorldA(S,s*(TR+.012),.012,-.07,H);toWorldA(S,s*(TR-.03),.018,-.08,TH);
+  o.hand.position.copy(H);o.hand.quaternion.copy(qA);o.thumb.position.copy(TH);o.thumb.quaternion.copy(qA);
+  SH.set(s*.25,.8,-.95);EL.lerpVectors(SH,H,.55);EL.x+=s*.12;EL.y-=.04;
+  WR.lerpVectors(EL,H,.82);seg(o.upper,SH,EL,.05);seg(o.fore,EL,WR,.043);seg(o.wrist,WR,H,.027)}}
+
+// ---- grains: two instanced meshes driven straight from the typed-array simulation
+const NC=P.NC,NT=P.NT;
+// cốm = jade/yellow-green palette (translucent flattened young rice flakes), trấu = straw-gold papery husks
+const COM_COL=['#d4dc8a','#b2c85e','#93b86e','#79a04a','#c6d378','#a3c060'],TRAU_COL=['#e6c46a','#d9b052','#f0d488'];
+// cốm flake: lens-shaped flattened grain (closed top+bottom sheet), lengthwise crease on top, ends curled up, edges pinched up.
+// vertex colour: pale cream tips, darker crease and underside (multiplied by the per-instance palette colour)
+function flakeGeo(L,W,T,curl,pinch,cr,tip){const NU=6,NV=4,pos=[],colr=[],idx=[];
+  for(const side of[1,-1])for(let i=0;i<=NU;i++){const u=i/NU*2-1,e=Math.max(0,1-u*u),hw=W*Math.pow(e,tip);
+    for(let j=0;j<=NV;j++){const v=j/NV*2-1,th=T*Math.sqrt(Math.max(0,1-v*v))*Math.pow(e,.35),dip=Math.exp(-v*v*6);
+      pos.push(u*L,side*th+curl*u*u*L+pinch*v*v*W-(side>0?cr*dip*e:0),v*hw);
+      const c=.78+.42*Math.pow(Math.abs(u),2)+(side>0?.14*(1-dip):-.14);colr.push(c*1.02,c,c*.86)}} // pale cream tips, darker crease, duller underside
+  const row=NV+1,sheet=(NU+1)*row;
+  for(const s of[0,1])for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){const a=s*sheet+i*row+j,b=a+row;if(s)idx.push(a,a+1,b,b,a+1,b+1);else idx.push(a,b,a+1,b,b+1,a+1)}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(colr,3));g.setIndex(idx);g.computeVertexNormals();
+  if(g.attributes.normal.getY(NU/2*row+NV/2)<0){const a=g.index.array;for(let k=0;k<a.length;k+=3){const t=a[k+1];a[k+1]=a[k+2];a[k+2]=t}g.computeVertexNormals()}
+  return g}
+const comGeos=[flakeGeo(.013,.0074,.0018,.06,.1,.0016,.42),flakeGeo(.0135,.0068,.0017,.22,.16,.0012,.55),flakeGeo(.0145,.006,.0018,.1,.38,.001,.7)]; // squashed oval + crease, curled ends, pinched/narrow pointed
+const comMat=std({roughness:.66,vertexColors:true,emissive:'#7c9a2e',emissiveIntensity:.2});
+comMat.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>',
+  '#include <emissivemap_fragment>\n float rimF=pow(1.0-abs(dot(normalize(vNormal),normalize(vViewPosition))),2.5);totalEmissiveRadiance+=diffuseColor.rgb*rimF*0.55;')}; // fresnel-ish rim: fakes the waxy translucent edge of a flake
+const trauGeo=new THREE.SphereGeometry(1,8,4);trauGeo.scale(.022,.0024,.012);
+const comMeshes=comGeos.map((g,k)=>new THREE.InstancedMesh(g,comMat,Math.floor((NC-1-k)/3)+1)),trauMesh=new THREE.InstancedMesh(trauGeo,std({roughness:.85,side:THREE.DoubleSide}),NT);
+for(const m of[...comMeshes,trauMesh]){m.frustumCulled=false;m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);scene.add(m)}
+const qC=[],scC=[],spC=new Float32Array(NC*2),ya=new Float32Array(NT),col=new THREE.Color();
+for(let j=0;j<NC;j++){qC.push(new THREE.Quaternion().setFromEuler(new THREE.Euler((rr()-.5)*.5,rr()*6.28,(rr()-.5)*.35))); // lying flat: random yaw, slight tilt
+  scC.push(new THREE.Vector3(.8+rr()*.45,1,.85+rr()*.3));spC[2*j]=(rr()-.5)*16;spC[2*j+1]=(rr()-.5)*16} // length/width variation, tumble rates in the air
+for(let i=0;i<NT;i++)ya[i]=rr()*6.28;
+function paintGrains(S){for(let i=0;i<S.N;i++){col.set(S.kind[i]?TRAU_COL[S.col[i]]:COM_COL[S.col[i]]);if(S.kind[i])trauMesh.setColorAt(i,col);else{const j=i-NT;comMeshes[j%3].setColorAt(j/3|0,col)}}
+  for(const m of comMeshes)m.instanceColor.needsUpdate=true;trauMesh.instanceColor.needsUpdate=true}
+const m4=new THREE.Matrix4(),mT=new THREE.Matrix4(),q=new THREE.Quaternion(),qT=new THREE.Quaternion(),qA=new THREE.Quaternion(),eul=new THREE.Euler(),pv=new THREE.Vector3(),ONE=new THREE.Vector3(1,1,1);
+function updateScene(S){
+  const M=S.M,A=S.A;
+  trayG.matrix.set(M[0],M[1],M[2],S.cx,M[3],M[4],M[5],S.cy,M[6],M[7],M[8],S.cz,0,0,0,1);trayG.matrixWorldNeedsUpdate=true;
+  mT.set(M[0],M[1],M[2],0,M[3],M[4],M[5],0,M[6],M[7],M[8],0,0,0,0,1);qT.setFromRotationMatrix(mT);
+  mT.set(A[0],A[1],A[2],0,A[3],A[4],A[5],0,A[6],A[7],A[8],0,0,0,0,1);qA.setFromRotationMatrix(mT);
+  for(let i=0;i<S.N;i++){pv.set(S.x[i],S.y[i],S.z[i]);
+    if(S.kind[i]){const alive=S.alive[i];eul.set(alive?S.rot[i]:0,ya[i],alive?S.rot[i]*.6:0,'YXZ');q.setFromEuler(eul);if(alive&&S.rv2[i]<1e8)q.premultiply(qT);
+      m4.compose(pv,q,ONE);trauMesh.setMatrixAt(i,m4)}
+    else{const j=i-NT;
+      if(S.alive[i]&&S.rv2[i]>=1e8){eul.set(S.t*spC[2*j],0,S.t*spC[2*j+1],'YXZ');q.setFromEuler(eul).multiply(qC[j])} // in the air: tumbling (render-only, from sim time)
+      else{q.copy(qC[j]);if(S.alive[i])q.premultiply(qT)} // lying flat in the tray (follows the tilt) or on the ground
+      m4.compose(pv,q,scC[j]);comMeshes[j%3].setMatrixAt(j/3|0,m4)}}
+  for(const m of comMeshes)m.instanceMatrix.needsUpdate=true;trauMesh.instanceMatrix.needsUpdate=true;
+  updateArms(S);
+}
+
+// ---- wind: drifting leaves and straw bits in the scene + a windsock in the corner
+const leafGeo=new THREE.PlaneGeometry(.05,.024),leaves=[];
+for(let k=0;k<12;k++){const m=new THREE.Mesh(leafGeo,std({color:k%3?'#5f8f2e':'#c9a24e',side:THREE.DoubleSide}));m.userData={ph:rr()*6.28};scene.add(m);leaves.push(m);respawn(m,true)}
+function respawn(m,any){m.position.set(2.2-rr()*(any?4:1.2),.35+rr()*1.3,-.3+rr()*(any?3:1.2))}
+function updateWind(dt,w,t){
+  const sp=.35+1.6*w;
+  for(const m of leaves){const u=m.userData;u.ph+=dt*(3+4*w);
+    m.position.x+=(WD[0]*sp+.15*Math.sin(u.ph))*dt;m.position.z+=WD[2]*sp*dt;m.position.y+=(.25*Math.sin(u.ph*1.3)-.08)*dt;
+    m.rotation.set(u.ph,u.ph*.7,u.ph*.4);if(m.position.x<-2.4||m.position.z>3.3||m.position.y<.05)respawn(m,false)}
+  const L=26+80*Math.max(0,Math.min(1.1,w)),wb=Math.sin(t*(5+5*w))*(5-3*w),x0=9,seg3=L/3;
+  for(let k=0;k<3;k++){const a=x0+seg3*k,b=a+seg3,ha=8-k*1.6,hb=8-(k+1)*1.6,ya1=wb*k/3+(1-w)*k*3,yb=wb*(k+1)/3+(1-w)*(k+1)*3;
+    $('sock'+(k+1)).setAttribute('points',`${a},${12+ya1-ha} ${b},${12+yb-hb} ${b},${12+yb+hb} ${a},${12+ya1+ha}`)}
+}
+
+// ---- layout
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);cam.aspect=w/h;
+  const hf=62*Math.PI/180,vf=2*Math.atan(Math.tan(hf/2)/cam.aspect)*180/Math.PI;cam.fov=Math.min(82,Math.max(48,vf));
+  const port=cam.aspect<.8;cam.position.set(-.14,port?1.62:1.5,port?-1.08:-.92);cam.lookAt(LOOK);cam.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+
+// ---- game state
+let S=null,code='',retries=0,elapsed=0,running=false,banner=0,acc=0,lastT=0,dirty=true,raf=0;
+const sens=1; // fixed sensitivity: no slider, no stored value
+const PERF={step:0,n:0,frames:0,frameMs:0,t0:performance.now()};
+function newSim(c){S=makeSim(c||code||'LANG VONG',{om:P.OM*Math.sqrt(sens)});paintGrains(S);tgt.x=tgt.y=0;acc=0;dirty=true}
+
+// ---- input: pointer position -> tray target on a vertical plane; held button / finger circling -> swirl
+const tgt={x:0,y:0};let ptrIn=false,down=false,touch=false,lock=null,anchor=null,swirlTouch=false,turn=0,turnT=0,lastDir=null,lastP=null,spinHold=0;
+const clampT=o=>({x:Math.max(REACH.x0,Math.min(REACH.x1,o.x)),y:Math.max(REACH.y0,Math.min(REACH.y1,o.y))});
+function gain(){return .7*sens/cv.getBoundingClientRect().height}
+function absTarget(e){const r=cv.getBoundingClientRect(),g=gain();return clampT({x:-(e.clientX-(r.left+r.width/2))*g,y:(r.top+r.height*.62-e.clientY)*g})}
+function trackTurn(e){if(!lastP){lastP={x:e.clientX,y:e.clientY};return}
+  const dx=e.clientX-lastP.x,dy=e.clientY-lastP.y;if(dx*dx+dy*dy<9)return;
+  const a=Math.atan2(dy,dx),t=e.timeStamp;
+  if(lastDir!=null){let d=a-lastDir;d-=Math.round(d/(2*Math.PI))*2*Math.PI;const dt=Math.max(.008,(t-turnT)/1000);turn+=(d/dt-turn)*.35}
+  lastDir=a;turnT=t;lastP={x:e.clientX,y:e.clientY}}
+const swirling=()=>(down&&!touch)||swirlTouch;
+cv.addEventListener('pointerdown',e=>{if(e.button>0)return;e.preventDefault();down=true;touch=e.pointerType==='touch';ptrIn=true;
+  try{cv.setPointerCapture(e.pointerId)}catch(_){}cv.classList.add('held');lastP=null;lastDir=null;turn=0;spinHold=0;swirlTouch=false;
+  if(touch)anchor={x:e.clientX,y:e.clientY,tx:tgt.x,ty:tgt.y};else lock={x:tgt.x,y:tgt.y}});
+cv.addEventListener('pointermove',e=>{ptrIn=true;trackTurn(e);
+  if(touch&&down){if(!swirlTouch){const g=gain();Object.assign(tgt,clampT({x:anchor.tx-(e.clientX-anchor.x)*g,y:anchor.ty+(anchor.y-e.clientY)*g}))}}
+  else if(!down)Object.assign(tgt,absTarget(e));
+  else if(lock)Object.assign(tgt,lock)});
+const up=e=>{down=false;swirlTouch=false;cv.classList.remove('held');lock=null;
+  if(e&&e.pointerType==='touch'){anchor=null}};
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+cv.addEventListener('pointerleave',e=>{if(!down&&e.pointerType!=='touch')ptrIn=false});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('blur',()=>{down=false;swirlTouch=false;ptrIn=false});
+
+// ---- HUD
+const mTel=$('mT'),mCel=$('mC');let hudKey='';
+function hud(){const t=S.trau??1,c=S.com??0,k=Math.round(t*100)+'|'+(c*100).toFixed(1)+'|'+Math.floor(elapsed)+'|'+retries;if(k===hudKey)return;hudKey=k;
+  mTel.querySelector('i').style.width=(t*100)+'%';$('vT').textContent=Math.round(t*100)+'%';
+  mCel.querySelector('i').style.width=Math.min(100,c/.2*100)+'%';$('vC').textContent=(c*100).toFixed(1)+'%';
+  mTel.className='meter '+(t<=.08?'ok':'');mCel.className='meter '+(c>.09?'bad':'ok');
+  $('clk').textContent=mmss(elapsed);$('rt').textContent='Làm lại: '+retries}
+function win(){running=false;const t=mmss(elapsed);$('wc').textContent=subCode(code,t);$('wt').textContent=t;$('wr').textContent=retries;
+  $('wp').textContent='Cốm rơi '+(S.com*100).toFixed(1)+'%';$('win').classList.add('show');
+  if(EMBED){$('win').querySelector('.eyebrow').textContent='Hoàn thành!';$('wm').textContent='Hoàn thành! Kết quả đã tự gửi về thẻ mật thư, không cần chụp màn hình.';$('wsend').style.display='';report()}}
+// embedded in the race card (iframe or ?embed=1): the win is reported to the host page, which sends it to the server
+const EMBED=window.parent!==window||/[?&]embed=1/.test(location.search);
+function report(){window.parent.postMessage({t:'com.win',time:$('wt').textContent,code:$('wc').textContent},location.origin)}
+$('wsend').onclick=report;
+
+function frame(now){raf=0;
+  const dt=Math.max(0,Math.min(.1,(now-lastT)/1000||0));lastT=now;const f0=performance.now();
+  if(!ptrIn&&!down){const k=1-Math.exp(-4*dt);tgt.x-=tgt.x*k;tgt.y-=tgt.y*k} // cursor left the canvas: the tray goes back to rest
+  if(now-turnT>120)turn*=Math.exp(-8*dt);
+  if(touch&&down&&!swirlTouch){spinHold=Math.abs(turn)>5?spinHold+dt:0;if(spinHold>.25){swirlTouch=true}}
+  if(running){
+    elapsed+=dt;
+    if(banner){banner-=dt;if(banner<=0){banner=0;$('banner').style.display='none';newSim()}}
+    else{acc+=dt;let n=0;const s0=performance.now();
+      const inp={tx:tgt.x,ty:tgt.y,spin:swirling()?Math.max(-P.SPMAX,Math.min(P.SPMAX,-turn*.35)):0};
+      while(acc>=DT&&n<4){simStep(S,inp);acc-=DT;n++}
+      if(acc>DT)acc=0;
+      if(n){PERF.step+=(performance.now()-s0)/n;PERF.n++;dirty=true}
+      if(S.state==='fail'){retries++;banner=2.4;const b=$('banner');b.textContent='Đổ mất nhiều cốm quá, đổ nia ra sàng lại';b.style.display='block'}
+      else if(S.state==='win')win()}
+  }
+  $('tip').style.opacity=running&&elapsed<10?1:0;
+  if(dirty){dirty=false;updateScene(S)} // grain matrices only change with a sim step / new sim
+  updateWind(dt,S.wind||windAt(now/1000,S.a),now/1000);renderer.render(scene,cam);hud();
+  PERF.frameMs+=performance.now()-f0;PERF.frames++;
+  if(!document.hidden)raf=requestAnimationFrame(frame); // hidden: loop stops, visibilitychange restarts it
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!raf){lastT=performance.now();raf=requestAnimationFrame(frame)}});
+
+// ---- start screen / host
+$('go').onclick=()=>{code='LANG VONG';retries=0;elapsed=0;newSim();running=true;$('start').classList.remove('show');$('rules').classList.add('show')};
+function hostMode(){$('host').classList.toggle('show',location.hash==='#host')}
+addEventListener('hashchange',hostMode);hostMode();
+const hostCalc=()=>{const t=$('ht').value.trim();$('ho').textContent=/^\d{1,3}:\d{2}$/.test(t)?subCode('LANG VONG',t.padStart(5,'0')):'COM-·····'};
+$('ht').oninput=hostCalc;
+
+newSim('LANG VONG');S.wind=.55;raf=requestAnimationFrame(frame);
+window.PERF=PERF;window.FRAME=frame;window.GAME=()=>({S,running,tgt,elapsed,retries,sens,turn,swirling:swirling(),renderer});
+
+// ---- ?bots=1: run the bot table in a Worker (same SIM source), so the page never freezes
+if(/[?&]bots=1/.test(location.search)){
+  const box=$('bots');box.style.display='block';box.textContent='Đang chạy bot (Worker)…\n';
+  const w=new Worker(URL.createObjectURL(new Blob([$('sim').textContent+'\nonmessage=()=>{const r=runAllBots(row=>postMessage({row}));postMessage({done:r})}'],{type:'text/javascript'})));
+  w.onmessage=e=>{if(e.data.row){const x=e.data.row;box.textContent+=[x.bot,x.code,x.ket_qua,x.giay+'s','trấu còn '+x.trau_con+'%','cốm rơi '+x.com_roi+'%'].join(' | ')+'\n';return}
+    const r=e.data.done,ok=r.checks.every(c=>c.kheo&&c.hat_bua&&c.luoi&&c.dung_yen&&c.deu_khong_xoay);
+    console.table(r.rows);console.table(r.checks);
+    console.log('Bot:\n'+r.rows.map(x=>[x.bot,x.code,x.ket_qua,x.giay+'s','trấu còn '+x.trau_con+'%','cốm rơi '+x.com_roi+'%'].join(' | ')).join('\n'));
+    console.log('Điều kiện đạt:',ok);console.log('Thông số:',JSON.stringify(P));box.textContent+='Điều kiện đạt: '+ok+'\n';window.BOTS_RESULT=r};
+  w.postMessage(0)}
+</script>
+</body>
+</html>

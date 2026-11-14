@@ -1,7 +1,7 @@
 // Phase 6 track B (docs/plans/phase6.md §5.2): online or offline? Online = a race id (URL ?race=<id> from the Host's
 // link, else config net.defaultRace in a PROD build) and a team / Host token from the login screen (ui/Login.ts, SPEC §7,
 // §8.10). Offline (null) = the Phase 1–5 test world: dev server without ?race=, ?offline=1, screenshots, ride-check.
-import { MEDIA, type Role, type Welcome } from '@race/shared/protocol';
+import { type Avatar, MEDIA, type Role, type Welcome } from '@race/shared/protocol';
 import { net } from '../config.ts';
 import { login, previewLogin } from '../ui/Login.ts';
 
@@ -10,7 +10,7 @@ export interface Session {
   token: string;
   role: Role;
   /** From /api/login (team) — the Host has none. */
-  team?: { id: string; slot: number; name: string; colour: string };
+  team?: { id: string; slot: number; name: string; colour: string; avatar?: Avatar };
   /** SPEC §8.10 "Chào mừng trở lại": filled by the login, shown before "Tiếp tục". */
   summary?: {
     reconnects: number;

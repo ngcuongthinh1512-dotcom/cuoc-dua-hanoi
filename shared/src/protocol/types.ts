@@ -56,10 +56,18 @@ export interface TeamInfo {
   avatar?: Avatar;
 }
 
-/** Leg 2 player avatar index (client CharacterModel AVATARS): 0 = Nam, 1 = Nữ. */
-export type Avatar = 0 | 1;
+/** Player avatar index (client CharacterModel AVATARS): 0 = Nam, 1 = Nữ (the menu's choice), 2–6 = the personal avatars of
+ *  Leg 3 Hà Nội (2 Ceti, 3 Hải Long, 4 Chị 6, 5 Nhật Nhật, 6 Hiếu), picked from the team's player name by `playerAvatar`. */
+export type Avatar = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 /** The `avatar` socket URL parameter → an Avatar (anything else = 0). */
-export const avatarOf = (v: unknown): Avatar => (v === 1 || v === '1' ? 1 : 0);
+export const avatarOf = (v: unknown): Avatar => {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && /^[0-6]$/.test(v) ? Number(v) : 0;
+  return (Number.isInteger(n) && n >= 0 && n <= 6 ? n : 0) as Avatar;
+};
+/** Personal avatars by player name (Host's "Tên đội; Tên người chơi"), compared without case / accents / spaces. */
+const PERSONAL: Record<string, Avatar> = { ceti: 2, hailong: 3, chi6: 4, nhatnhat: 5, hieu: 6, ngohieu: 6 };
+export const playerAvatar = (player: unknown): Avatar | undefined =>
+  typeof player === 'string' ? PERSONAL[player.normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]/g, '')] : undefined;
 
 /** One shared bike (SPEC §6.2–6.4) as clients see it. parked = standing at a rack next to a checkpoint. */
 export interface BikeInfo {

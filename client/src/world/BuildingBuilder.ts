@@ -24,9 +24,9 @@
 // ponytail: party walls are found only between buildings of the same chunk and by exact shared edges (not T-joints);
 // a neighbour in another chunk gets a facade + mansard slope there. Upgrade: build-chunks marks shared edges globally.
 import * as THREE from 'three';
-import { type BuildingRec, ringArea, type XZ } from '../geo/chunkData.ts';
+import { type BuildingRec, type ChunkData, ringArea, type XZ } from '../geo/chunkData.ts';
 import { inRing } from '../geo/districts.ts';
-import { buildings as B, graphics8c } from '../config.ts';
+import { buildings as B, graphics8c, railways as RW } from '../config.ts';
 import { pbrMaps } from './textures.ts';
 import { facadeNightGlsl } from './night.ts';
 import type { Builder, MaterialId } from './buildTypes.ts';
@@ -175,6 +175,10 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
     if (!boxes && r21 >= P.flatShare) floors += 1 + Math.floor(((r21 - P.flatShare) / (1 - P.flatShare)) * P.extra);
     h = floors * B.levelHeight;
   }
+  // Phạm Ngọc Thạch: some big untagged apartment footprints rise as 15–25-storey towers (refs show them lining the boulevard; OSM has no levels there)
+  const PT = B.macao.pnt;
+  if (!(b.height! > 0) && !(b.levels! > 0) && area >= PT.towerArea && PT.towerKinds.includes(b.kind) && hash01(outer[0]!, outer[1]!, 41) < PT.towerShare
+    && PT.boxes.some((bx) => outer[0]! >= bx[0]! && outer[0]! <= bx[2]! && outer[1]! >= bx[1]! && outer[1]! <= bx[3]!)) h = PT.towerH[0]! + hash01(outer[0]!, outer[1]!, 42) * (PT.towerH[1]! - PT.towerH[0]!);
   const minH = b.minHeight ?? (b.kind === 'roof' ? Math.max(0, h - B.canopyThickness) : 0);
   const top = g + h;
   const bottom = minH > 0 ? g + minH : gMin - B.baseSink;
@@ -203,10 +207,12 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
   const tower = h >= t1 || (h > t0 && r(5) < (h - t0) / (t1 - t0));
   const F = M.french;
   const french = F.boxes.some((bx) => x0 >= bx[0]! && x0 <= bx[2]! && z0 >= bx[1]! && z0 <= bx[3]!);
-  const tenementShare = french ? F.tenementShare : b.kind === 'yes' ? M.tenementYesShare : M.tenementShare;
+  const O = M.oldQuarter, oq = !french && O.boxes.some((bx) => x0 >= bx[0]! && x0 <= bx[2]! && z0 >= bx[1]! && z0 <= bx[3]!);
+  const Pn = M.pnt, pnt = !french && !oq && Pn.boxes.some((bx) => x0 >= bx[0]! && x0 <= bx[2]! && z0 >= bx[1]! && z0 <= bx[3]!);
+  const tenementShare = french ? F.tenementShare : pnt ? Pn.tenementShare : oq ? O.tenementShare : b.kind === 'yes' ? M.tenementYesShare : M.tenementShare;
   const tenement = !tower && (h > t0 || (M.tenementKinds.includes(b.kind) && h >= M.tenementMin && r(6) < tenementShare));
   const curtain = tower && r(7) < M.curtainShare;
-  const hip = !tower && !tenement && minH === 0 && h <= M.hip.maxHeight && area <= M.hip.maxArea && r(8) < (french ? F.hipChance : untagged && !boxes ? M.hip.smallChance : M.hip.chance);
+  const hip = !tower && !tenement && minH === 0 && h <= M.hip.maxHeight && area <= M.hip.maxArea && r(8) < (french ? F.hipChance : pnt ? Pn.hipChance : oq ? O.hipChance : untagged && !boxes ? M.hip.smallChance : M.hip.chance);
   let minEdge = Infinity;
   for (let i = 0; i < outer.length; i += 2) minEdge = Math.min(minEdge, Math.hypot(outer[(i + 2) % outer.length]! - outer[i]!, outer[(i + 3) % outer.length]! - outer[i + 1]!));
   const inset = Math.min(M.hip.inset, minEdge / 2);
@@ -220,9 +226,9 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
   const ktt = tenement && !tower && minH === 0 && h <= K.maxHeight && r(21) < K.share;
   const kttInset = Math.min(K.inset, minEdge / 2);
   const plots = low && !hipOk && minH === 0 && area <= P.maxArea && windows;
-  const roofBox = low && !hipOk && !(plots && untagged) && minH === 0 && h <= M.roofBox.maxHeight && r(14) < (french ? F.roofBoxChance : M.roofBox.chance);
-  const ochre = french && r(16) < F.ochreShare;
-  const palette = curtain ? M.glass : tower ? M.concrete : tenement ? M.tenement : ochre ? M.colonial.slice(0, F.ochreCount) : M.colonial;
+  const roofBox = (low || (tenement && !tower)) && !hipOk && !ktt && !(plots && untagged) && minH === 0 && h <= M.roofBox.maxHeight && r(14) < (french ? F.roofBoxChance : M.roofBox.chance);
+  const ochre = (french && r(16) < F.ochreShare) || (oq && r(16) < O.ochreShare);
+  const palette = curtain ? M.glass : tower ? (pnt ? Pn.concrete : M.concrete) : tenement ? (pnt ? Pn.tenement : M.tenement) : ochre ? M.colonial.slice(0, F.ochreCount) : M.colonial;
   return {
     rings: [outer, ...holes], g, bottom, top, lit, haussmann: false, shift: french ? 6 + (shift % 4) : shift,
     face: curtain ? 'curtain' : tower || tenement ? 'tenement' : 'wall',
@@ -233,13 +239,35 @@ function prepare(b: BuildingRec, height: (x: number, z: number) => number): Prep
     plant: tower && minH === 0,
     roofBox,
     tank: roofBox && r(15) < M.roofBox.tankShare,
-    ...(plots && { plots: { extra: untagged && boxes ? P.extra : 0, flat: french ? F.plotFlat : P.flatShare, cols: french ? M.recipes.french : h >= M.recipes.tallFrom ? M.recipes.tall : M.recipes.street, palette } }),
+    ...(plots && { plots: { extra: untagged && boxes ? (pnt ? Pn.extra : oq ? O.extra : P.extra) : 0, flat: french ? F.plotFlat : pnt ? Pn.flatShare : oq ? O.flatShare : P.flatShare, cols: french ? M.recipes.french : pnt && h < M.recipes.tallFrom ? M.recipes.pnt : oq && h < M.recipes.tallFrom ? M.recipes.oq : h >= M.recipes.tallFrom ? M.recipes.tall : M.recipes.street, palette } }),
     tint: pick(palette),
-    roofTint: hipOk ? (!french && r(23) < M.hip.tonShare ? pick(M.ton.colours, lift, 24) : linear(M.tileRoof, lift)) : ktt ? pick(K.colours, lift, 22) : pick(M.flatRoofs, lift, 17),
+    roofTint: hipOk ? (!french && !oq && !pnt && r(23) < M.hip.tonShare ? pick(M.ton.colours, lift, 24) : linear(M.tileRoof, lift)) : ktt ? pick(K.colours, lift, 22) : pick(M.flatRoofs, lift, 17),
     // ponytail: flat caps, parapets and roof boxes go to the wall bucket's plain plaster texel (the lifted slate diffuse turns
     // every grey into an olive slab); upgrade: a concrete roof PBR map on its own material (+1 draw call per chunk)
     capTint: pick(low && area <= M.ton.maxArea && r(19) < M.ton.share ? M.ton.colours : M.flatRoofs, 1, 17),
   };
+}
+
+/** Leg 3 Hà Nội: a footprint within railways.clear.radius of a railway in railways.clear.box (the row of houses along the line opposite the park). */
+function clearedByRail(chunk: ChunkData, outer: readonly number[]): boolean {
+  const K = RW.clear;
+  if (!chunk.rails?.length) return false;
+  const [x0, z0, x1, z1] = K.box;
+  const near = (x: number, z: number) => {
+    if (x < x0 || x > x1 || z < z0 || z > z1) return false;
+    for (const r of chunk.rails!) for (let i = 0; i + 3 < r.pts.length; i += 2) {
+      const [ax, az, bx, bz] = [r.pts[i]!, r.pts[i + 1]!, r.pts[i + 2]!, r.pts[i + 3]!];
+      const l2 = (bx - ax) ** 2 + (bz - az) ** 2;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / l2)) : 0;
+      if (Math.hypot(ax + t * (bx - ax) - x, az + t * (bz - az) - z) < K.radius) return true;
+    }
+    return false;
+  };
+  for (let i = 0; i < outer.length; i += 2) {
+    const [x, z, nx, nz] = [outer[i]!, outer[i + 1]!, outer[(i + 2) % outer.length]!, outer[(i + 3) % outer.length]!];
+    if (near(x, z) || near((x + nx) / 2, (z + nz) / 2)) return true;
+  }
+  return false;
 }
 
 export const buildBuildings: Builder = (chunk, ctx) => {
@@ -254,7 +282,7 @@ export const buildBuildings: Builder = (chunk, ctx) => {
   const preps: Prep[] = [];
   let bad = 0;
   for (const b of chunk.buildings) {
-    if (b.landmark) continue;
+    if (b.landmark || clearedByRail(chunk, b.outer)) continue;
     try {
       const p = prepare(b, ctx.height);
       if (p) preps.push(p);

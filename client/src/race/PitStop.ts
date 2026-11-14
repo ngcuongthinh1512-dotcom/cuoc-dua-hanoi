@@ -71,7 +71,7 @@ export class PitHost {
 
   constructor(asset: CharacterAsset) {
     const H = raceClient.host;
-    this.model = new CharacterModel(asset, { shirt: H.shirt, name: H.name, tag: H.tag, tagDistance: H.tagDistance });
+    this.model = new CharacterModel(asset, { shirt: H.shirt, name: H.name, tag: H.tag, tagDistance: H.tagDistance, avatar: 2 }); // Ceti, the host: the personal avatar 2
     this.model.root.visible = false;
     this.model.root.scale.setScalar(H.scale); // a touch taller than a player: seen from afar
     this.animator = new CharacterAnimator(this.model);
