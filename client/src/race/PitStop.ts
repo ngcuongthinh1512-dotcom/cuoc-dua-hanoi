@@ -10,6 +10,8 @@ import { CharacterAnimator } from '../player/Animation.ts';
 import { tickAction, yawOf } from '../player/CharacterController.ts';
 import { type CharacterAsset, CharacterModel } from '../player/CharacterModel.ts';
 import type { PlayerState } from '../player/types.ts';
+import { speechBubble } from './speechBubble.ts';
+import type { Beat } from '@race/shared/protocol';
 import { nightHdr } from '../world/glow.ts';
 import { isNight } from '../world/night.ts';
 
@@ -68,6 +70,9 @@ export class PitHost {
     position: new Vector3(), velocity: new Vector3(), yaw: 0, grounded: true, inWater: false, moveMode: 'walk', jumps: 0, action: 'none', actionTime: 0,
   };
   private since = Infinity; // s since the last wave (first one as soon as the team is near)
+  private readonly bubble: ReturnType<typeof speechBubble>;
+  private script: { beats: readonly Beat[]; t: number; i: number; done: () => void } | null = null;
+  private readonly queue: { beats: readonly Beat[]; done: () => void; from: number }[] = []; // teams that finish while Ceti is still talking: one after the other
 
   constructor(asset: CharacterAsset) {
     const H = raceClient.host;
@@ -75,6 +80,15 @@ export class PitHost {
     this.model.root.visible = false;
     this.model.root.scale.setScalar(H.scale); // a touch taller than a player: seen from afar
     this.animator = new CharacterAnimator(this.model);
+    this.bubble = speechBubble(this.model.tagY);
+    this.model.root.add(this.bubble.lod);
+  }
+
+  /** The finish announcement: Ceti says `beats` in a chat bubble over his head (times in s from now), then `done` (the result card opens). */
+  announce(beats: readonly Beat[], done: () => void, from = 0) {
+    if (this.script) return void (this.queue.length < raceClient.host.bubble.maxQueue && this.queue.push({ beats, done, from }));
+    this.script = { beats, t: from, i: 0, done }; // `from`: DEV stand-ins start part-way
+    this.cheer();
   }
 
   /** The finish (SPEC §8.6): a wave now. */
@@ -85,6 +99,20 @@ export class PitHost {
 
   /** `mat` = the drawn mat (ClueBoxes.mat) or null; `team` = the local player's feet. */
   update(dt: number, mat: Group | null, team: Vector3) {
+    const sc = this.script;
+    if (sc) {
+      sc.t += dt; // runs with or without the mat drawn: `done` always comes
+      while (sc.i < sc.beats.length && sc.beats[sc.i]!.at <= sc.t) {
+        const b = sc.beats[sc.i++]!;
+        this.bubble.set(b.text, b.big);
+      }
+      if (sc.i >= sc.beats.length) {
+        this.script = null;
+        sc.done();
+        const next = this.queue.shift();
+        if (next) this.announce(next.beats, next.done, next.from);
+      }
+    }
     const root = this.model.root;
     if (mat && !root.parent) mat.parent?.add(root);
     root.visible = !!mat;
@@ -92,7 +120,9 @@ export class PitHost {
     const [side, along] = raceClient.host.offset;
     const [c, sn] = [Math.cos(mat.rotation.y), Math.sin(mat.rotation.y)]; // the offset turns with the mat
     const s = this.state;
-    s.position.set(mat.position.x + side! * c + along! * sn, mat.position.y, mat.position.z - side! * sn + along! * c);
+    const at = raceClient.host.at;
+    if (at) s.position.set(at[0], mat.position.y, at[1]); // Leg 3: the middle of the school gate
+    else s.position.set(mat.position.x + side! * c + along! * sn, mat.position.y, mat.position.z - side! * sn + along! * c);
     const near = Math.hypot(team.x - s.position.x, team.z - s.position.z) < raceClient.host.waveRadius;
     s.yaw = yawOf(team.x - s.position.x, team.z - s.position.z); // always faces the arriving team
     tickAction(s, dt);

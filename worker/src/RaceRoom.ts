@@ -187,6 +187,7 @@ export class RaceRoom extends DurableObject<Env> {
         this.counters.rows += 1;
       },
       send: (team, m) => this.sockets(team).forEach((ws) => this.send(ws, m)),
+      watch: (m) => [...this.sockets(HOST), ...this.sockets(SPECTATOR)].forEach((ws) => this.send(ws, m)),
       online: (team) => this.sockets(team).length > 0,
       who: (team) => ({ slot: this.team(team)?.slot ?? -1, name: this.team(team)?.name ?? '' }),
       stepOf: (team) => this.engine.cqStep(team),
@@ -321,6 +322,7 @@ export class RaceRoom extends DurableObject<Env> {
     if (team) this.broadcast({ t: 'team', slot: team.slot, online: true, avatar }, server);
     else if (role === HOST) this.send(server, this.hostState(now));
     if (role === HOST || role === SPECTATOR) for (const [id, r] of this.rooms) this.send(server, { t: 'room', slot: this.team(id)?.slot ?? -1, room: r });
+    if (role === HOST || role === SPECTATOR) this.cq.watchAll(now); // Leg 3 CETIQLO: the live view of every room
     this.soon(now); // ticks for the new set of peers + host.state
     // Bike spawning alarm (SPEC §3: only while a team is online; track C's alarm() re-arms while players remain).
     if (team && (await this.ctx.storage.getAlarm()) === null) this.setAlarm(now + this.engine.rules().vehicles.spawnIntervalMinutes * 60_000);
@@ -451,6 +453,15 @@ export class RaceRoom extends DurableObject<Env> {
   private onMessage(ws: WebSocket, a: Attachment, m: ClientMessage, now: number) {
     if (Array.isArray(m)) return;
     switch (m.t) {
+      case 'host.renameTeam': {
+        const name = m.name.trim().slice(0, 40);
+        if (!name || !this.team(m.team)) return;
+        this.sql.exec('UPDATE teams SET name = ?, player = ? WHERE id = ?', name, (m.player ?? name).trim().slice(0, 40), m.team);
+        this.counters.rows += 1;
+        this.teamRows = null;
+        this.event(now, null, 'host.renameTeam', { team: m.team, name });
+        return this.pushHostState(now);
+      }
       case 'host.createTeams':
         return this.createTeams(m.teams, now);
       case 'host.candidates':

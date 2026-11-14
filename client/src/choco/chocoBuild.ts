@@ -18,7 +18,7 @@ export const vaultA = (): number => Math.asin(R.halfW / vaultR());
 
 export interface Team { slot: number; name: string; color: string }
 export const TEAMS: Team[] = [
-  ['Hai Long', '#b6e08a'], ['Chị 6', '#8eead8'], ['WindyPhon', '#d6249f'], ['V.Hy', '#1a1a1a'], ['Chú Hiệp', '#a31621'],
+  ['Hai Long 🐉', '#b6e08a'], ['Chị 6', '#8eead8'], ['Pha hồn mông', '#d6249f'], ['V.Hy', '#1a1a1a'], ['🦖 Chú Hiệp 🦕', '#a31621'],
   ['Đạt 0️⃣9️⃣', '#e0a800'], ['Nhật Nhật', '#1e56d6'], ['🌽 Hiếu', '#f7a8c4'], ['Mạnh Ka', '#eadcb8'], ['Dừa L', '#6b4a37'], ['Như Chấn', '#6a2fb0'],
 ].map(([name, color], i) => ({ slot: i + 1, name, color }));
 export const TYPES = 5; // chocolate types in the challenge (temper.html levels)

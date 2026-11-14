@@ -17,6 +17,8 @@ export interface CqIO {
   /** Persist (one SQLite row); synchronous, before the caller sends anything. */
   save(json: string): void;
   send(team: string, m: CqServerMessage): void;
+  /** Spectators + the Host (never a team): the room's live view (`cq.watch`). */
+  watch(m: CqServerMessage): void;
   online(team: string): boolean;
   who(team: string): CqPlayer;
   /** The CETIQLO step the team is on right now (its card is a not-done challenge with room 'cetiqlo'), null = none. */
@@ -106,6 +108,7 @@ export class Cetiqlo {
     for (const t of room.queue) this.io.send(t, this.state(step, t, now));
     const b = this.board(step, now);
     for (const t of [...room.queue, ...(room.match?.state === 'running' ? room.match.teams.filter((t) => !room.match!.gone.includes(t)) : [])]) this.io.send(t, b);
+    this.watch(step, now);
   }
 
   // ── client messages ──
@@ -141,7 +144,7 @@ export class Cetiqlo {
     if (!w?.room.match) return this.no(team, 'take', 'notRunning');
     const r = take(w.room.match, team, id, { x, z }, this.byId, now, this.cfg);
     if (!r.ok) return this.no(team, 'take', r.why);
-    this.update(w.step, r.match);
+    this.update(w.step, r.match, now);
     this.io.send(team, { t: 'cq.bag', bag: r.match.bags[team]! });
   }
 
@@ -152,7 +155,7 @@ export class Cetiqlo {
     if (!w?.room.match) return this.no(team, 'drop', 'notRunning');
     const r = drop(w.room.match, team, id, now);
     if (!r.ok) return this.no(team, 'drop', r.why);
-    this.update(w.step, r.match);
+    this.update(w.step, r.match, now);
     this.io.send(team, { t: 'cq.bag', bag: r.match.bags[team]! });
   }
 
@@ -162,7 +165,7 @@ export class Cetiqlo {
     if (!w?.room.match) return this.no(team, 'checkout', 'notRunning');
     const r = checkout(w.room.match, team, { x, z }, CHECKOUT_ZONE, now, this.cfg);
     if (!r.ok) return this.no(team, 'checkout', r.why);
-    this.update(w.step, r.match);
+    this.update(w.step, r.match, now);
     this.io.event(now, team, 'cq.checkout', { step: w.step, match: r.match.id, bag: r.match.bags[team] });
     this.io.send(team, this.state(w.step, team, now));
     for (const t of r.match.teams) if (t !== team && !r.match.gone.includes(t)) this.io.send(t, { t: 'cq.opp', locked: t !== team && r.match.teams.filter((o) => o !== t).every((o) => o in r.match.locked) });
@@ -174,9 +177,24 @@ export class Cetiqlo {
     this.acted.set(team, now);
     return last !== undefined && now - last < this.cfg.actionCooldownMs;
   }
-  private update(step: string, match: Match) {
+  private update(step: string, match: Match, now: number = Date.now()) {
     this.rooms[step] = { ...this.rooms[step]!, match };
     this.save();
+    this.watch(step, now);
+  }
+  /** The room as spectators / the Host see it (what each team carries, who locked, the clock, the board). */
+  private watch(step: string, now: number) {
+    const room = this.rooms[step];
+    if (!room) return;
+    const m = room.match?.state === 'running' ? room.match : null;
+    this.io.watch({
+      t: 'cq.watch', step, serverNow: now, rows: this.board(step, now).rows,
+      match: m ? { id: m.id, ...(m.startAt !== undefined ? { startAt: m.startAt } : {}), ...(m.readMs ? { readMs: m.readMs } : {}), endsAt: m.endsAt, teams: m.teams.filter((t) => !m.gone.includes(t)).map((t) => ({ ...this.io.who(t), locked: t in m.locked, bag: m.bags[t] ?? [] })) } : null,
+    });
+  }
+  /** A Host / spectator socket just opened: every room's live view. */
+  watchAll(now: number) {
+    for (const step of Object.keys(this.rooms)) this.watch(step, now);
   }
 
   // ── presence (owner, 2026-11-03: no 20 s grace rule — being offline never costs the place, the match, the bag or a result) ──

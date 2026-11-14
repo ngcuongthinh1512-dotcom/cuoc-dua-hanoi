@@ -90,7 +90,18 @@ export type CqServerMessage =
    *  room (queue + match) on every queue / match change and to a (re)joining team. The two in the match are 'playing'; 'waiting' never
    *  played yet; 'lost' / 'drew' played without winning (lost / a double draw) and waits for the next team; 'won' = the winner during the
    *  result hold; 'done' = left the room (won / let go / passed by the Host). `waitUntil` only on queued rows (the maxWaitMs clock). */
-  | { t: 'cq.board'; rows: CqBoardRow[]; serverNow: number };
+  | { t: 'cq.board'; rows: CqBoardRow[]; serverNow: number }
+  /** Leg 3 (spectators + Host only, never a team): the room as a viewer sees it, on every change: the board rows and the running match (who plays,
+   *  what each team carries, who locked, the clock). `match` null = no match running. */
+  | CqWatch;
+
+export interface CqWatch {
+  t: 'cq.watch';
+  step: string;
+  serverNow: number;
+  rows: CqBoardRow[];
+  match: { id: string; startAt?: number; readMs?: number; endsAt: number; teams: (CqPlayer & { locked: boolean; bag: string[] })[] } | null;
+}
 
 export type CqBoardStatus = 'playing' | 'waiting' | 'lost' | 'drew' | 'won' | 'done';
 export interface CqBoardRow extends CqPlayer {

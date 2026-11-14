@@ -58,7 +58,7 @@ export function createCqMock(you: { slot: number; name: string }, state: CqDemoS
     win: () => {},
     release: () => {},
     event: () => {},
-    setAlarm: (at) => { clearTimeout(alarm); alarm = setTimeout(() => cq.tick(Date.now()), Math.max(0, at - Date.now()) + 5); },
+    watch: () => undefined, setAlarm: (at) => { clearTimeout(alarm); alarm = setTimeout(() => cq.tick(Date.now()), Math.max(0, at - Date.now()) + 5); },
     send: (team, m) => {
       if (team === YOU) {
         if (m.t === 'cq.state' && m.startSpot && state === 'label') m = { ...m, startSpot: { x: -8.3, z: 8.4, yaw: 0 } }; // beside the tees table, facing it

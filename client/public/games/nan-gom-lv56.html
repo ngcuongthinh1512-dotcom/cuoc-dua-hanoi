@@ -73,6 +73,10 @@ ul.rules{margin:0;padding-left:18px;color:var(--muted);display:flex;flex-directi
 .scores .v2{font-family:var(--font-mono);font-size:13px;color:var(--muted)}
 .scores .k{font-size:12px;color:var(--muted)}
 .err{color:var(--bad);font-size:13px}
+
+/* wide screens: the rules stay visible to the right of the game column while playing */
+#rules{display:none}
+@media (min-width:960px){#game{position:relative}#rules{display:block;position:absolute;left:calc(100% + 24px);top:0;width:290px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.5;color:var(--ink)}#rules h2{margin:0 0 8px;font-family:var(--font-display);font-size:18px}#rules ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;color:var(--muted)}}
 </style>
 </head>
 <body>
@@ -127,6 +131,14 @@ ul.rules{margin:0;padding-left:18px;color:var(--muted);display:flex;flex-directi
       <button id="reset" class="ghost">Nhào lại đất</button>
     </div>
     <p class="hint" id="hint">Giữ SPACE cho bàn quay rồi mới nặn. Không có thanh %, chỉ biết điểm khi đưa vào lò.</p>
+    <aside id="rules" aria-label="Luật chơi"><h2>Luật chơi</h2><ul>
+      <li>Kéo chuột hoặc ngón tay trên khối đất: kéo ra xa trục để phình, kéo vào gần trục để thắt.</li>
+      <li>Phải giữ phím SPACE thì bàn mới quay (điện thoại: giữ nút "Giữ để xoay"). Bàn đứng yên thì không nặn được.</li>
+      <li>Kéo chậm và đều tay. Kéo nhanh thì đất bị méo, lồi lõm.</li>
+      <li>Mỗi mẫu có 90 giây để nặn trước khi đất khô. Đất khô hoặc bình nứt trong lò: nhào lại từ đầu.</li>
+      <li>Mỗi lần bình nứt sẽ có nhận xét bình lỗi ở đâu: phình quá, hẹp quá hay còn lồi lõm.</li>
+      <li>Đồng hồ chạy suốt 2 mẫu và được ghi vào mã.</li>
+    </ul></aside>
   </section>
 
   <section id="done" class="card" hidden>

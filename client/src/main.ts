@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { reviewSound, unlockAudio } from './audio/sfx.ts';
-import { NET, type PoseSample, type RaceView, type RoomAt } from '@race/shared/protocol';
+import { announceBeats, type CqWatch, NET, type PoseSample, type RaceView, type RoomAt } from '@race/shared/protocol';
 import { bounds, chunks as chunkCfg, flyCamera, keys, movement, npc as npcCfg, physics, playerSetup, netClient, remote as remoteCfg, render as R, rooms as roomCfg, ui } from './config.ts';
 import { GameLoop } from './core/GameLoop.ts';
 import { Input } from './core/Input.ts';
@@ -275,6 +275,11 @@ async function start() {
         session?.team?.name ?? '',
       )
     : undefined;
+  if (raceHud && pitHost) raceHud.announce = (beats, done) => pitHost.announce(beats, done); // the finish: Ceti says it in a bubble, then the card opens
+  if (import.meta.env.DEV && !session && pitHost && query.has('announce')) {
+    // DEV offline: ?announce=<rank>&announceAt=<s> — Ceti's bubble announcement, started part-way (screenshots)
+    pitHost.announce(announceBeats('finish', Number(query.get('announce')) || 11, 12, 'Đội Xanh'), () => undefined, Number(query.get('announceAt') ?? 0));
+  }
   if (import.meta.env.DEV && !session) raceHud?.demo(query);
   // Leg 3 (rooms/roomState.ts, the Leg 1 Louvre room's way): a Lựa chọn kép branch whose task has `room` = a 3D room
   // (chocolate workshop / comic gallery) built `rooms.below` m UNDER the branch box in world coordinates (rooms/roomFrame.ts)
@@ -385,6 +390,7 @@ async function start() {
   let vroom: { at: RoomAt; h: RoomHandle; floorY: number } | undefined;
   let vBusy = false;
   const sameRoom = (p: RoomAt | undefined, q: RoomAt | undefined) => !!p && !!q && p.kind === q.kind && p.x === q.x && p.z === q.z && p.yaw === q.yaw;
+  let lastWatch: CqWatch | undefined; // the latest CETIQLO live view (Host / spectators), given to the room once it is drawn
   const syncViewRoom = async () => {
     if (vBusy || room) return;
     const slot = watching ? spectate?.slot ?? null : null;
@@ -403,6 +409,7 @@ async function start() {
         const frame = roomFrame(at, env.heightAt(at.x, at.z), mod.DOOR_Z);
         const h = await mod.mountRoom({ renderer, q: query, scene, frame, camera, viewer: true, feet: () => ({ x: 1e6, z: 1e6 }), team: teams.find((t) => t.slot === slot), teams, room: { total: 0, penaltyMinutesEach: 0 }, characterAsset: assets?.character });
         vroom = { at, h, floorY: frame.floorY };
+        if (lastWatch) h.watch?.(lastWatch);
       }
     } catch (err) {
       console.warn('view room failed:', err);
@@ -522,6 +529,7 @@ async function start() {
       },
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
+        if (m.t === 'cq.watch') return void ((lastWatch = m), vroom?.h.watch?.(m)); // Host / spectators: the CETIQLO match, live
         if (m.t === 'room') return void (m.room ? viewRooms.set(m.slot, m.room) : viewRooms.delete(m.slot)); // Host / spectators: a team entered / left a room
         if (race?.message(m)) return; // race / book / zone (Phase 7) → RaceHud
         if (m.t === 'team') remote?.setOnline(m.slot, m.online, m.avatar), spectate?.team(m.slot, m.online, m.racing);

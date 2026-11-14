@@ -40,7 +40,7 @@ export interface CharacterAsset {
 }
 
 /** Root nodes of player.glb by avatar index (settings "Nhân vật": 0 = Nam, 1 = Nữ) and their clip prefixes. */
-export const AVATARS = [{ node: 'player_m', clips: 'm_' }, { node: 'player_f', clips: 'f_' }, { node: 'player_c', clips: 'c_' }, { node: 'player_h', clips: 'h_' }, { node: 'player_x', clips: 'x_' }, { node: 'player_n', clips: 'n_' }, { node: 'player_k', clips: 'k_' }] as const; // 2 Ceti, 3 Hải Long, 4 Chị 6, 5 Nhật Nhật, 6 Hiếu (scripts/ceti-avatar.ts; shared playerAvatar picks by player name)
+export const AVATARS = [{ node: 'player_m', clips: 'm_' }, { node: 'player_f', clips: 'f_' }, { node: 'player_c', clips: 'c_' }, { node: 'player_h', clips: 'h_' }, { node: 'player_x', clips: 'x_' }, { node: 'player_n', clips: 'n_' }, { node: 'player_k', clips: 'k_' }, { node: 'player_p', clips: 'p_' }] as const; // 2 Ceti, 3 Hải Long, 4 Chị 6, 5 Nhật Nhật, 6 Hiếu (scripts/ceti-avatar.ts; shared playerAvatar picks by player name)
 
 /** The clips of avatar `i` (player-anims.glb `m_Idle_Loop`…) under their UAL names (Animation.ts UAL_CLIPS); a file
  *  without prefixed clips (old rig, tests) keeps them all. */
@@ -155,6 +155,10 @@ export class CharacterModel {
   private readonly outfit: OutfitUniforms = { uShirt: { value: new Color() } };
   private readonly materials: Material[] = []; // per-instance clones
   private readonly height: number;
+  /** Root-local y of the name tag's foot (a chat bubble sits on top of it: race/speechBubble.ts). */
+  get tagY(): number {
+    return this.height + C.nameTag.lift;
+  }
   /** Avatar index drawn (CharacterOptions.avatar, 0 when the asset has no such avatar). */
   readonly avatar: number;
   /** × character.clipSpeed: this avatar's legs are this much longer than avatar 0's (player.glb extras.stride). */

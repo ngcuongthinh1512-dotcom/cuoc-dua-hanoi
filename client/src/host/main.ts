@@ -149,7 +149,7 @@ function mainView() {
     run: el('div', { className: 'tab-panel' }, statsBar, statusBox, el('h2', {}, 'Tiến trình & xếp hạng (theo thứ tự về đích)'), matrixBox, el('h2', {}, 'Phạt vạch đích & thứ tự vào game'), startBox, el('h2', {}, 'Các đội'), teamsBox),
     setup: el('div', { className: 'tab-panel' },
       el('h2', {}, 'Tạo đội'),
-      el('section', {}, el('button', { onclick: createFixedTeams, title: 'Tên và màu đã cố định (Hai Long, Chị 6, WindyPhon…): chỉ sinh mã đội' }, `Tạo ${hostPage.fixedTeams.length} đội cố định & sinh mã`), create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
+      el('section', {}, el('button', { onclick: createFixedTeams, title: 'Tên và màu đã cố định (Hai Long 🐉, Chị 6, Pha hồn mông…): chỉ sinh mã đội' }, `Tạo ${hostPage.fixedTeams.length} đội cố định & sinh mã`), create, el('button', { onclick: createTeams }, 'Tạo đội & sinh mã')),
       el('h2', {}, 'Chặng'), legBox, el('h2', {}, 'Hình mật thư (R2)'), mediaBox, el('h2', {}, 'Xe chung'), bikes),
     sys: el('div', { className: 'tab-panel' }, el('h2', {}, 'Hạn mức Cloudflare (ước tính)'), counters),
   };

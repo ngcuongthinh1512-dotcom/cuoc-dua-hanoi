@@ -13,7 +13,7 @@
 //  - SPEC §17.21: no selecting / copying clue text in the cards and the Sổ (only the submission code + the answer box).
 // What a card shows is the pure `cardPanel` (format.ts, tested in Node); this file only draws it.
 // The module top level touches no DOM (Node tests import the pure parts from ./format.ts).
-import { FINISH_PENALTY_REASON, finishTexts, NET, type BranchLook, type ClueCard, type FinishResult, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
+import { announceBeats, type Beat, penaltyBeats, FINISH_PENALTY_REASON, finishTexts, NET, type BranchLook, type ClueCard, type FinishResult, type RaceView, type TeamInfo, type TaskView, type ZoneMember } from '@race/shared/protocol';
 import { raceHud as C } from '../../config.ts';
 import { toast } from '../../ui/Toasts.ts';
 import { bookEntries, formatDuration, type BookEntry, branchConfirmText, type CardPanel, cardPanel, copyBlocked, hudKey, liveStatus, lockLine, type MediaItem, NO_COPY_EVENTS, penaltyLine, type CardSummary, resultKey, resultView, richText, splitNote, StartOrderBanner, statusLine, summarize, timerLine, TYPE_STYLE, ZoneList } from './format.ts';
@@ -291,9 +291,22 @@ export class RaceHud {
    *  when the Host ended the race still reads "BỊ LOẠI"). */
   result(r: FinishResult, fresh: boolean): void {
     const key = resultKey(r);
-    if (!fresh && store.get(RESULT_KEY) === key) return;
+    if (!fresh && r.waitUntil === undefined && store.get(RESULT_KEY) === key) return; // a team still serving its penalty always gets the countdown back (F5)
     store.set(key, RESULT_KEY);
     const t = resultView(r, this.teamName || this.demoTeam);
+    // Ceti says it first, in a bubble over his head (main.ts wires `announce`); the card / toast / line open when he is done (a team still
+    // waiting out a finish-line penalty, rank 0, gets the card at once; its place is announced when the wait ends)
+    const team = this.teamName || this.demoTeam;
+    if (fresh && this.announce && r.rank > 0) this.announce(announceBeats(r.kind, r.rank, r.total, team), () => this.showResult(r, t));
+    else if (fresh && this.announce && r.waitUntil !== undefined && r.finishPenalty) this.announce(penaltyBeats(team, r.finishPenalty.minutes, r.finishPenalty.reason), () => this.showResult(r, t));
+    else this.showResult(r, t);
+  }
+
+  /** main.ts: Ceti's bubble announcement (PitHost.announce); unset = the card opens at once. */
+  announce?: (beats: Beat[], done: () => void) => void;
+
+  /** The finish card, toast and host line. */
+  private showResult(r: FinishResult, t: ReturnType<typeof resultView>): void {
     this.waitUntil = r.waitUntil ?? null; // Leg 3: the countdown to the place (update() keeps it moving; the server pushes the place at 0)
     this.waitEl = r.waitUntil !== undefined ? el('p', 'rc-result-wait', '') : null;
     setText(this.npcEl, t.npc);
@@ -334,7 +347,8 @@ export class RaceHud {
     if (this.zoneList.ticking) this.drawZone(); // a gone team's "n phút trước" moves with the clock (and expires), nothing else does
     this.bannerEl.classList.toggle('on', this.banner.text !== '' && this.banner.visible(f.simTime));
     const lock = lockLine(this.view, this.now);
-    const pen = lock ?? penaltyLine(this.view, this.now);
+    const wait = this.waitUntil !== null ? (this.now < this.waitUntil ? `Đang chờ hết phạt · còn ${formatDuration(Math.ceil((this.waitUntil - this.now) / 1000) * 1000)} để biết thứ hạng` : 'Đang cập nhật thứ hạng…') : null; // Leg 3: the finish-line penalty countdown stays on screen (also after F5)
+    const pen = lock ?? penaltyLine(this.view, this.now) ?? wait;
     this.penaltyEl.hidden = pen == null || (lock != null && this.timerEl != null); // the open card shows the same countdown (visual#7)
     if (pen) setTime(this.penaltyEl, pen);
     const prompt = f.inZone ? BOX_PROMPT : f.bike ? BIKE_PROMPT[f.bike] : '';
@@ -377,6 +391,11 @@ export class RaceHud {
       if (q.has('book')) (this.bookWaiting = this.bookOpen = true), this.showBook(q.get('book') === 'media' ? DEMO_BOOK_MEDIA : DEMO_BOOK);
     }
     if (q.has('startOrder')) this.startOrder(Number(q.get('startOrder')) || 1, 0);
+    if (q.has('finishWait')) { // Leg 3: the team is serving a finish-line penalty: ?finishWait=<s left>&finishPenalty=<min>
+      const pen = Number(q.get('finishPenalty') ?? 5);
+      this.clockOffset = this.now = DEMO_NOW; // the demo clock (the offline serverNow stays 0)
+      this.result({ rank: 0, total: 5, kind: 'finish', npc: '', toast: '', card: '', finishPenalty: { minutes: pen, reason: FINISH_PENALTY_REASON }, waitUntil: DEMO_NOW + Number(q.get('finishWait')) * 1000 }, q.get('fresh') !== '0');
+    }
     if (q.has('finish')) {
       const f = q.get('finish');
       const [kind, rank] = f === 'out' ? (['out', 5] as const) : f === 'first' ? (['first', 1] as const) : (['finish', Number(f) || 2] as const);

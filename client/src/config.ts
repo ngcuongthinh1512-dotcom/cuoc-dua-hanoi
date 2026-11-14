@@ -1333,8 +1333,8 @@ export const hostPage = {
   // The fixed cast (Leg 3: the 11 teams of the race, same names + colours as the room tables, choco/chocoBuild.ts TEAMS): "Tạo 11 đội cố định"
   // creates these in order (a name already in the race is skipped); the Host only generates the codes. Same button as Leg 2 (Macao).
   fixedTeams: [
-    { name: 'Hai Long', colour: '#b6e08a' }, { name: 'Chị 6', colour: '#8eead8' }, { name: 'WindyPhon', colour: '#d6249f' }, { name: 'V.Hy', colour: '#1a1a1a' },
-    { name: 'Chú Hiệp', colour: '#a31621' }, { name: 'Đạt 0️⃣9️⃣', colour: '#e0a800' }, { name: 'Nhật Nhật', colour: '#1e56d6' }, { name: '🌽 Hiếu', colour: '#f7a8c4' },
+    { name: 'Hai Long 🐉', colour: '#b6e08a' }, { name: 'Chị 6', colour: '#8eead8' }, { name: 'Pha hồn mông', colour: '#d6249f' }, { name: 'V.Hy', colour: '#1a1a1a' },
+    { name: '🦖 Chú Hiệp 🦕', colour: '#a31621' }, { name: 'Đạt 0️⃣9️⃣', colour: '#e0a800' }, { name: 'Nhật Nhật', colour: '#1e56d6' }, { name: '🌽 Hiếu', colour: '#f7a8c4' },
     { name: 'Mạnh Ka', colour: '#eadcb8' }, { name: 'Dừa L', colour: '#6b4a37' }, { name: 'Như Chấn', colour: '#6a2fb0' },
   ] as readonly { name: string; colour: string }[],
   noticeMs: 15_000, // how long a host.notice (a refused / warned Host op) stays on the page
@@ -1374,7 +1374,14 @@ export const raceClient = {
   // offset [side, along] m from the mat centre in the mat's frame (1.4 m outside its long edge); tag: name tag colour (the dark
   // suit colour was unreadable, visual review); tagDistance: m from the camera beyond which its tag hides (screen-size tags:
   // farther away it sat on the team's own, p7-mat)
-  host: { shirt: '#23262d', tag: '#ffd75e', tagDistance: 12, name: 'Ceti', offset: [PIT_MAT.width / 2 + 1.4, 1.5], scale: 1.12, waveEveryS: 6, waveRadius: 25 },
+  host: { shirt: '#23262d', tag: '#ffd75e', tagDistance: 12, name: 'Ceti', offset: [PIT_MAT.width / 2 + 1.4, 1.5], scale: 1.12, waveEveryS: 6, waveRadius: 25,
+    at: [398.72, 965.98] as [number, number] | null, // Leg 3: world (x, z) = the middle of the school gate (THPT Trần Phú gate axis, landmarks/tranphu.ts TP); null = beside the mat (`offset`)
+    // Ceti's chat bubble for the finish announcement (race/speechBubble.ts): m above the feet, on-screen size = pxScale (screen-height fraction) per canvas px
+    bubble: {
+      maxQueue: 4, gap: 0.006, maxDistance: 40, pxScale: 0.0006, fontPx: 36, bigPx: 64, wrapAt: 26, tail: 18, glow: 16, supersample: 2, label: 'CETI',
+      top: '#ffffff', bottom: '#f1ece0', edge: 'rgba(40, 32, 20, 0.16)', ink: '#0f1120', labelInk: '#a06c0c', shadow: 'rgba(0, 0, 0, 0.38)',
+      bigTop: '#ffe9a6', bigBottom: '#f2b93b', bigEdge: 'rgba(120, 72, 0, 0.55)', bigInk: '#1f1503', bigGlow: 'rgba(255, 205, 90, 0.85)',
+    } },
 };
 
 // ── Leg 3 · the Lựa chọn kép rooms (rooms/roomState.ts, main.ts: chocolate workshop / comic gallery over the world) ──

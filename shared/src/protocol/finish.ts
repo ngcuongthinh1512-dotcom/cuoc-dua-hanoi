@@ -33,6 +33,43 @@ export const FINISH_DEFAULTS: Record<FinishKind, FinishTexts> = {
   },
 };
 
+/** Leg 3 Hà Nội: the finish announcement as Ceti says it at the school gate: two speech-bubble beats over his head (`at` in s from the
+ *  finish), then the result card. 1) congratulation + "Tôi xin thông báo…" (3 s), 2) the rank in WORDS (nhất, nhì, ba, tư … mười, mười một). */
+export interface Beat {
+  at: number;
+  text: string;
+  big?: boolean;
+}
+export const ANNOUNCE = { second: 3.5, end: 8 } as const; // s: the second line starts, the bubble goes (the card opens then)
+const ORDINAL = ['', 'nhất', 'nhì', 'ba', 'tư', 'năm', 'sáu', 'bảy', 'tám', 'chín', 'mười'];
+/** The rank spelled out: 1 nhất, 2 nhì, 3 ba, 4 tư, 5 năm … 10 mười, 11 mười một … 19 mười chín, 20 hai mươi; beyond: the digits. */
+export function rankWords(n: number): string {
+  if (n >= 1 && n <= 10) return ORDINAL[n]!;
+  const unit = ['', 'một', 'hai', 'ba', 'bốn', 'lăm', 'sáu', 'bảy', 'tám', 'chín'];
+  if (n > 10 && n < 20) return `mười ${n === 15 ? 'lăm' : unit[n - 10]}`;
+  if (n === 20) return 'hai mươi';
+  return String(n);
+}
+/** A team that finished but still has a finish-line penalty to serve (rank 0, `waitUntil`): Ceti congratulates it and names the penalty;
+ *  the place is told when the countdown ends. `reason` without a final dot. */
+export function penaltyBeats(team: string, minutes: number, reason: string): Beat[] {
+  return [
+    { at: 0, text: `Chúc mừng ${team} đã hoàn thành cuộc đua. Tôi xin thông báo…` },
+    { at: ANNOUNCE.second, text: `Đội bạn bị phạt ${minutes} phút do ${reason.trim().replace(/[.\s]+$/, '')}. Hết thời gian phạt, đội bạn sẽ biết thứ hạng.`, big: true },
+    { at: ANNOUNCE.end + 3, text: '' },
+  ];
+}
+/** `self` = the finishing team's own screen ("Đội bạn"). */
+export function announceBeats(kind: FinishKind, n: number, total: number, team: string, self = true): Beat[] {
+  const A = ANNOUNCE;
+  if (kind === 'out') return [{ at: 0, text: `Rất tiếc, ${team} đã bị loại khỏi cuộc đua.` }, { at: A.second, text: `Hạng cuối: ${n} trên ${total}.` }, { at: A.end, text: '' }];
+  return [
+    { at: 0, text: `Chúc mừng ${team} đã hoàn thành cuộc đua. Tôi xin thông báo…` },
+    { at: A.second, text: `${self ? 'Đội bạn' : team} là đội về đích thứ ${rankWords(n)}.`, big: true },
+    { at: A.end, text: '' },
+  ];
+}
+
 /** "{n}" / "{tổng}" / "{tên đội}" filled (any Unicode form of the leg file: compared in NFC). */
 export const fillFinish = (s: string, n: number, total: number, team: string): string =>
   s.normalize('NFC').replaceAll('{n}', String(n)).replaceAll('{tổng}', String(total)).replaceAll('{tên đội}', team);
@@ -46,8 +83,8 @@ export function finishTexts(kind: FinishKind, leg: Partial<FinishTexts> & { firs
 }
 
 /** Leg 3: the reason of a finish-line penalty when the Host gives none (a Lựa chọn kép room given up with "Bỏ qua"). */
-export const FINISH_PENALTY_REASON = 'bỏ thử thách ở lựa chọn kép';
+export const FINISH_PENALTY_REASON = 'thử thách ở Lộ trình 1';
 
-/** Leg 3: the finish card's extra line, "Bị phạt 20 phút do bỏ thử thách ở lựa chọn kép." (reason without a final dot). */
+/** Leg 3: the finish card's extra line, "Bị phạt 20 phút do thử thách ở Lộ trình 1." (reason without a final dot). */
 export const finishPenaltyLine = (p: { minutes: number; reason: string }): string =>
   `Bị phạt ${p.minutes} phút do ${(p.reason.trim() || FINISH_PENALTY_REASON).replace(/[.\s]+$/, '')}.`;

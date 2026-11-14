@@ -114,6 +114,8 @@ export function isClientMessage(m: unknown, role: 'team' | 'host' | 'spectator')
     case 'bike':
       if (!str(o.id) || (o.op !== 'claim' && o.op !== 'mount' && o.op !== 'dismount')) return false;
       return o.op !== 'dismount' || point(o);
+    case 'host.renameTeam':
+      return role === 'host' && str(o.team, 40) && str(o.name, 40) && (o.player === undefined || typeof o.player === 'string');
     case 'host.createTeams':
       return role === 'host' && Array.isArray(o.teams) && o.teams.length <= 100 && o.teams.every((t: unknown) => {
         const r = t as Record<string, unknown>;

@@ -19,8 +19,8 @@ export const G = {
   mural: { w: 7.6, h: 4.2, y: 3.3 },
 };
 export const TEAMS: Team[] = [
-  { slot: 1, name: 'Hai Long', color: '#b6e08a' }, { slot: 2, name: 'Chị 6', color: '#8eead8' }, { slot: 3, name: 'WindyPhon', color: '#d6249f' },
-  { slot: 4, name: 'V.Hy', color: '#1a1a1a' }, { slot: 5, name: 'Chú Hiệp', color: '#a31621' }, { slot: 6, name: 'Đạt 0️⃣9️⃣', color: '#e0a800' },
+  { slot: 1, name: 'Hai Long 🐉', color: '#b6e08a' }, { slot: 2, name: 'Chị 6', color: '#8eead8' }, { slot: 3, name: 'Pha hồn mông', color: '#d6249f' },
+  { slot: 4, name: 'V.Hy', color: '#1a1a1a' }, { slot: 5, name: '🦖 Chú Hiệp 🦕', color: '#a31621' }, { slot: 6, name: 'Đạt 0️⃣9️⃣', color: '#e0a800' },
   { slot: 7, name: 'Nhật Nhật', color: '#1e56d6' }, { slot: 8, name: '🌽 Hiếu', color: '#f7a8c4' }, { slot: 9, name: 'Mạnh Ka', color: '#eadcb8' },
   { slot: 10, name: 'Dừa L', color: '#6b4a37' }, { slot: 11, name: 'Như Chấn', color: '#6a2fb0' },
 ];

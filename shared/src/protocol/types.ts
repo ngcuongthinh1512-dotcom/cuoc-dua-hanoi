@@ -57,15 +57,15 @@ export interface TeamInfo {
 }
 
 /** Player avatar index (client CharacterModel AVATARS): 0 = Nam, 1 = Nữ (the menu's choice), 2–6 = the personal avatars of
- *  Leg 3 Hà Nội (2 Ceti, 3 Hải Long, 4 Chị 6, 5 Nhật Nhật, 6 Hiếu), picked from the team's player name by `playerAvatar`. */
-export type Avatar = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+ *  Leg 3 Hà Nội (2 Ceti, 3 Hải Long, 4 Chị 6, 5 Nhật Nhật, 6 Hiếu, 7 Pha Hồn Mông), picked from the team's player name by `playerAvatar`. */
+export type Avatar = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 /** The `avatar` socket URL parameter → an Avatar (anything else = 0). */
 export const avatarOf = (v: unknown): Avatar => {
-  const n = typeof v === 'number' ? v : typeof v === 'string' && /^[0-6]$/.test(v) ? Number(v) : 0;
-  return (Number.isInteger(n) && n >= 0 && n <= 6 ? n : 0) as Avatar;
+  const n = typeof v === 'number' ? v : typeof v === 'string' && /^[0-7]$/.test(v) ? Number(v) : 0;
+  return (Number.isInteger(n) && n >= 0 && n <= 7 ? n : 0) as Avatar;
 };
 /** Personal avatars by player name (Host's "Tên đội; Tên người chơi"), compared without case / accents / spaces. */
-const PERSONAL: Record<string, Avatar> = { ceti: 2, hailong: 3, chi6: 4, nhatnhat: 5, hieu: 6, ngohieu: 6 };
+const PERSONAL: Record<string, Avatar> = { ceti: 2, hailong: 3, chi6: 4, nhatnhat: 5, hieu: 6, ngohieu: 6, pha: 7, phahonmong: 7, phahon: 7 };
 export const playerAvatar = (player: unknown): Avatar | undefined =>
   typeof player === 'string' ? PERSONAL[player.normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]/g, '')] : undefined;
 
@@ -431,6 +431,8 @@ export interface UndoItem {
 
 /** Host screen only (Phase 6: minimal Host page; Phase 10: the rest). */
 export type HostMessage =
+  /** Leg 3: change a team's name (and its player label when given) after creation; the code, slot and progress stay. */
+  | { t: 'host.renameTeam'; team: string; name: string; player?: string }
   | { t: 'host.createTeams'; teams: { name: string; colour: string; player?: string }[] }
   /** Spawn candidates computed in the Host browser (SPEC §3, §6.2): per route segment, [x, z, x, z…] m, bicycle
    *  parking first; `decoys` = points anywhere else on the map. The DO only picks randomly from these. */

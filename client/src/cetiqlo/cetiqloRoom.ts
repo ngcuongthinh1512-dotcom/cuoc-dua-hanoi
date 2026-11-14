@@ -27,6 +27,7 @@ import type { Box } from '../rooms/roomPlayer.ts';
 import { CETIQLO } from '../../../worker/src/race/cetiqlo/config.ts'; // the server's rule numbers (maxWaitMs): no client copy to drift
 import { FORECOURT, buildWaitingRoom } from './board.ts';
 import type { CqBoardRow, CqMatchView, CqResult, CqServerMessage } from './contract.ts';
+import type { CqWatch } from '@race/shared/protocol';
 import { CqHud } from './hud.ts';
 import { type Anchor, NO_PICK, type PickState, clockOffset, countdown, insideCheckout, mmss, pickItem, queueText, waitText } from './logic.ts';
 import { shapeGeometry } from './items.ts';
@@ -149,6 +150,29 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
 
   // ---- state (from the server only) ----
   const hud = VIEWER ? null : new CqHud();
+  // viewers (spectators / Host): a small live panel (who plays, what each team carries, locked, the clock) + the wall board filled from `cq.watch`
+  let watchEl: HTMLDivElement | null = null;
+  let watchMatch: CqWatch['match'] = null;
+  let watchSkew = 0; // server clock − this machine's, from the last message
+  const drawWatch = () => {
+    if (!watchEl) return;
+    const m = watchMatch;
+    if (!m) return void (watchEl.hidden = true);
+    const now = Date.now() + watchSkew;
+    const left = m.startAt !== undefined && now < m.startAt ? `bắt đầu sau ${Math.ceil((m.startAt - now) / 1000)} s` : `còn ${Math.max(0, Math.ceil((m.endsAt - now) / 1000))} s`;
+    watchEl.hidden = false;
+    watchEl.replaceChildren(
+      Object.assign(document.createElement('div'), { textContent: `Trận đang diễn ra · ${left}`, style: 'font-weight:700;margin-bottom:6px' }),
+      ...m.teams.map((t) => {
+        const names = t.bag.map((id) => ITEM_BY_ID.get(id)?.name ?? id);
+        return Object.assign(document.createElement('div'), { textContent: `${t.name}: ${t.locked ? 'ĐÃ CHỐT · ' : ''}${t.bag.length} món${names.length ? ' – ' + names.join(', ') : ''}`, style: `margin:3px 0;color:${colourOf(t.slot)};max-width:340px` });
+      }),
+    );
+  };
+  if (VIEWER) {
+    watchEl = Object.assign(document.createElement('div'), { hidden: true, style: 'position:fixed;right:14px;top:70px;z-index:20;background:rgba(15,20,28,.82);color:#fff;font:14px/1.4 system-ui,sans-serif;padding:10px 14px;border-radius:10px;pointer-events:none' });
+    document.body.appendChild(watchEl);
+  }
   const cq = VIEWER ? undefined : o.cq;
   let phase: 'lobby' | 'match' | 'result' = 'lobby';
   let match: CqMatchView | null = null;
@@ -347,6 +371,7 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     update(dt) {
       clock.getDelta();
       const t = clock.elapsedTime, now = performance.now();
+      if (watchMatch) drawWatch(); // the clock moves
       { // the room-local camera for the store's LOD / floor culling (viewer too); inline toLocal: no per-frame allocation
         const dx = camera.position.x - frame.x, dz = camera.position.z - frame.z, sn = Math.sin(frame.yaw), cs = Math.cos(frame.yaw);
         camLocal.set(dx * cs - dz * sn, camera.position.y - frame.floorY, dx * sn + dz * cs + frame.doorZ);
@@ -384,7 +409,15 @@ export async function mountRoom(o: RoomMountOptions): Promise<RoomHandle> {
     frozen: () => locked || !!result || inCountdown(),
     settled: () => frames >= 3 && (VIEWER || (gotState && (cq?.ready?.() ?? true))),
     stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
+    watch(m) {
+      watchSkew = m.serverNow - Date.now();
+      boardRows = m.rows;
+      board.draw(m.rows, null, colourOf);
+      watchMatch = m.match;
+      drawWatch();
+    },
     dispose() {
+      watchEl?.remove();
       if (!VIEWER) removeEventListener('keydown', onKey);
       if (cq) { cq.send({ t: 'cq.leave' }); cq.onMessage = null; }
       hud?.dispose();

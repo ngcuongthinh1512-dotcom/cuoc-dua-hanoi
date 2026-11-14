@@ -98,7 +98,7 @@ export function qualityRow(): HTMLElement {
 }
 
 /** The player's avatar this page load: offline a DEV ?avatar=0|1 wins (screenshots), else the stored choice. */
-export const pickAvatar = (q: URLSearchParams, online: boolean): Avatar => (!online && /^[0-6]$/.test(q.get('avatar') ?? '') ? (Number(q.get('avatar')) as Avatar) : settings.avatar);
+export const pickAvatar = (q: URLSearchParams, online: boolean): Avatar => (!online && /^[0-7]$/.test(q.get('avatar') ?? '') ? (Number(q.get('avatar')) as Avatar) : settings.avatar);
 
 /** The "Nhân vật" row (select Nam / Nữ + hint) for the Esc menu's settings pane: stored at once, applied after a reload
  *  (the body and the server's copy of the choice are made at load). */

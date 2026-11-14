@@ -5,7 +5,7 @@
 // Player walking on colliders added to the game's Rapier world, the real team, progress from the server, `race room`
 // reports; loaded with a dynamic import so the room's chunk stays out of the main bundle). Graphics are minimal by
 // default (no shadows / post / steam, few lights, fewer segments); `hq` brings the full look back (dev `?hq=1`).
-import type { Avatar } from '@race/shared/protocol';
+import type { Avatar, CqWatch } from '@race/shared/protocol';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Object3D, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import type { RoomFrame } from './roomFrame.ts';
@@ -88,6 +88,8 @@ export interface RoomHandle {
   setProgress(done: number, skipped: boolean): void;
   /** The BOZAR hall (T3 `pickup`): light a pick-up spot at the front of the stalls by the stage with this prompt ("Bấm F để nhận mật thư thử thách 3"; F in reach → `onPickup`, `interact()` true); null = off. Other rooms: absent. */
   setPickup?(prompt: string | null): void;
+  /** Leg 3 CETIQLO, viewers only (spectators / Host): the room's live view (`cq.watch`): the board rows + the running match. Other rooms: absent. */
+  watch?(m: CqWatch): void;
   /** The exit ring at the far end: on = the body may leave (the step is done, or the team switched branch). */
   setExit(on: boolean): void;
   /** "Đổi lựa chọn kép" happened: the own button is off (grey prompt), the overlay closed; only the ring is left. */

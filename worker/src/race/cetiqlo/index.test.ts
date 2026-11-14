@@ -23,6 +23,7 @@ function rig(teams = ['A', 'B', 'C', 'D']) {
     load: () => saved,
     save: (j) => ((saved = j), writes++),
     send: (team, m) => void sent.push({ team, m }),
+    watch: () => undefined,
     online: (t) => onlineSet.has(t),
     who: (t) => ({ slot: teams.indexOf(t), name: `Đội ${t}` }),
     stepOf: (t) => (wins.includes(t) || (released.includes(t) && !undone.has(t)) ? null : STEP),
