@@ -390,6 +390,25 @@ async function start() {
   let vroom: { at: RoomAt; h: RoomHandle; floorY: number } | undefined;
   let vBusy = false;
   const sameRoom = (p: RoomAt | undefined, q: RoomAt | undefined) => !!p && !!q && p.kind === q.kind && p.x === q.x && p.z === q.z && p.yaw === q.yaw;
+  // `?auto=1` (spectator / Host window left alone, e.g. for recording): head-to-head pairs first (every team of a running CETIQLO match in turn),
+  // else a random racing team; each is shown DIRECTOR_MS, then the next
+  const AUTO = viewer && !!session && query.has('auto');
+  const DIRECTOR_MS = 15_000;
+  const watchByStep = new Map<string, CqWatch>();
+  let directAt = 0;
+  let directLast: number | null = null;
+  const direct = (nowMs: number) => {
+    if (!spectate || nowMs - directAt < DIRECTOR_MS) return;
+    const live = spectate.candidates();
+    if (!live.length) return;
+    const pairs = [...watchByStep.values()].flatMap((w) => (w.match ? w.match.teams.map((t) => t.slot) : [])).filter((s) => live.includes(s));
+    const pool = pairs.length ? pairs : live;
+    const rest = pool.filter((s) => s !== directLast);
+    const pickFrom = rest.length ? rest : pool;
+    directLast = pairs.length ? pickFrom[0]! : pickFrom[Math.floor(Math.random() * pickFrom.length)]!; // a pair: the next of the match in turn; otherwise random
+    directAt = nowMs;
+    spectate.directTo(directLast);
+  };
   let lastWatch: CqWatch | undefined; // the latest CETIQLO live view (Host / spectators), given to the room once it is drawn
   const syncViewRoom = async () => {
     if (vBusy || room) return;
@@ -529,7 +548,7 @@ async function start() {
       },
       tick: (serverMs, entries) => remote?.apply(serverMs, entries),
       message: (m) => {
-        if (m.t === 'cq.watch') return void ((lastWatch = m), vroom?.h.watch?.(m)); // Host / spectators: the CETIQLO match, live
+        if (m.t === 'cq.watch') return void ((lastWatch = m), watchByStep.set(m.step, m), vroom?.h.watch?.(m)); // Host / spectators: the CETIQLO match, live
         if (m.t === 'room') return void (m.room ? viewRooms.set(m.slot, m.room) : viewRooms.delete(m.slot)); // Host / spectators: a team entered / left a room
         if (race?.message(m)) return; // race / book / zone (Phase 7) → RaceHud
         if (m.t === 'team') remote?.setOnline(m.slot, m.online, m.avatar), spectate?.team(m.slot, m.online, m.racing);
@@ -807,6 +826,7 @@ async function start() {
       remote?.update(dt, net ? net.serverNow() : localMs(), camera.position, bodyCam ? underground(player.position, env.heightAt) : undefined, env.heightAt); // Leg 3: a team in a room is no ghost on the street and the other way round
       if (room && roomSent && net && performance.now() - roomPingAt > 15_000) sendRoomAt(roomSent.t, roomSent.frame);
       if (spectate && worldReady) void syncViewRoom();
+      if (AUTO && worldReady) direct(performance.now());
       if (vroom) {
         vroom.h.update(dt);
         if (!flying) camera.position.y = Math.min(camera.position.y, vroom.floorY + vroom.h.ceiling - 0.3); // no ceiling collider: the camera stays under it

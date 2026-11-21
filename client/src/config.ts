@@ -690,7 +690,7 @@ export const character = {
   cullSphere: { y: 0.9, radius: 2.4 },
   // Canvas sprite, constant size on screen: scale 0.05 ≈ 3.6 % of the view height at fov 70 (≈ 39 px at 1080p, the
   // same at 3 m and 20 m); m above the head; hidden beyond maxDistance (m); canvas font px (texture resolution)
-  nameTag: { lift: 0.2, scale: 0.05, maxDistance: 80, fontPx: 48 },
+  nameTag: { lift: 0.2, scale: 0.05, maxDistance: 80, fontPx: 48, rainbow: ['#e03030', '#f58220', '#f5d90a', '#2fb344', '#1fa3e0', '#3050d0', '#8a3fc9'] as readonly string[] },
   // Locomotion playback = ground speed / the clip's own speed (m/s at timeScale 1), clamped: feet don't slide. Walk / jog:
   // stance-foot speed of the retargeted clip on avatar 0 (process-assets player-anims prints it; avatar 1 × its stride);
   // swim: one stroke cycle ≈ 2.4 m.

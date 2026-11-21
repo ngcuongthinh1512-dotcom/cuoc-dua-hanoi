@@ -122,6 +122,15 @@ export class Spectate {
     return true;
   }
 
+  /** The "director" (main.ts `?auto=1`): follow `slot` (a team that is online + racing) without it counting as the user's choice. */
+  directTo(slot: number) {
+    if (this.slot !== slot && this.list().some((t) => t.slot === slot)) this.pick(slot);
+  }
+  /** Slots one may watch now (online, racing). */
+  candidates(): number[] {
+    return this.list().map((t) => t.slot);
+  }
+
   private list() {
     return watchable(this.teams.values());
   }

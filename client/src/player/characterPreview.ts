@@ -57,6 +57,27 @@ function state(pose: string, t: number): PlayerState {
 }
 
 const asset = await loadCharacterAsset();
+// ?group=1: the group photo of the personal avatars (Ceti in the middle, front; the others in an arc behind, facing the camera)
+if (q.has('group')) {
+  const CAST: [string, number, number, number, string][] = [ // name, avatar, x, z, team colour (the name tag)
+    ['Pha hồn mông', 7, -2.55, -0.7, '#d6249f'], ['Hai Long 🐉', 3, -1.35, -1.0, '#b6e08a'], ['Nhật Nhật', 5, 1.35, -1.0, '#4f86ff'], ['🌽 Hiếu', 6, 2.55, -0.7, '#f7a8c4'], ['Chị 6', 4, -0.65, -1.45, '#8eead8'], ['Ceti', 2, 0.05, 0.3, '#ffd75e'],
+  ];
+  for (const [name, avatar, x, z, colour] of CAST) {
+    const model = new CharacterModel(asset, { shirt: colour, tag: colour, name, avatar, rainbowTag: name === 'Ceti' });
+    model.setPose(new THREE.Vector3(x, 0, z), Math.PI + Math.atan2(x, 8) * -0.3);
+    scene.add(model.root);
+    const anim = new CharacterAnimator(model);
+    for (let t = 0, dt = 1 / 60; t < 1.2; t += dt) anim.update(state('idle', t), dt);
+  }
+  const cam = new THREE.PerspectiveCamera(R.fov, innerWidth / innerHeight, 0.1, 200);
+  cam.position.set(0, 1.25, 3.4);
+  cam.lookAt(0, 0.95, 0);
+  renderer.setAnimationLoop(() => {
+    renderer.render(scene, cam);
+    Object.assign(window, { __READY__: true });
+  });
+} else {
+
 const width = (poses.length - 1) * GAP;
 const cast = poses.map((p, i) => {
   const [pose, at] = p.split('@') as [string, string?];
@@ -80,3 +101,4 @@ renderer.setAnimationLoop(() => {
   const { calls, triangles } = renderer.info.render;
   Object.assign(window, { __STATS__: { calls, triangles, states: cast.map((a) => a.state) }, __READY__: true });
 });
+}

@@ -88,6 +88,8 @@ export interface CharacterOptions {
   tag?: ColorRepresentation;
   /** m from the camera beyond which the tag hides; omitted = character.nameTag.maxDistance. */
   tagDistance?: number;
+  /** The name tag in the seven rainbow colours (Ceti). */
+  rainbowTag?: boolean;
   /** Avatar index in CharacterAsset.avatars (0 = Nam, 1 = Nữ); omitted / unknown = 0. */
   avatar?: number;
 }
@@ -118,7 +120,7 @@ function outfitShader(this: Material, shader: WebGLProgramParametersWithUniforms
 
 /** Canvas sprite, constant size on screen (character.nameTag), hidden beyond maxDistance by an LOD. STYLE_GUIDE:
  *  team-coloured text, no frame: white text × material.color (= the shirt uniform, so setShirt recolours it, or opts.tag). */
-function nameTag(text: string, y: number, colour: Color, maxDistance: number) {
+function nameTag(text: string, y: number, colour: Color, maxDistance: number, rainbow = false) {
   const T = C.nameTag;
   const font = `700 ${T.fontPx}px system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`; // Vietnamese glyphs
   const canvas = document.createElement('canvas');
@@ -129,12 +131,16 @@ function nameTag(text: string, y: number, colour: Color, maxDistance: number) {
   Object.assign(ctx, { font, textAlign: 'center', textBaseline: 'middle', lineJoin: 'round', lineWidth: T.fontPx / 6 }); // reset by the resize
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)'; // dark outline: readable over sky and stone
   ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
-  ctx.fillStyle = '#fff';
+  if (rainbow) { // the seven colours left to right (Ceti's tag)
+    const gr = ctx.createLinearGradient(0, 0, canvas.width, 0);
+    C.nameTag.rainbow.forEach((c, i, a) => gr.addColorStop(i / (a.length - 1), c));
+    ctx.fillStyle = gr;
+  } else ctx.fillStyle = '#fff';
   ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   const map = new CanvasTexture(canvas);
   map.colorSpace = SRGBColorSpace;
   const sprite = new Sprite(new SpriteMaterial({ map, sizeAttenuation: false, depthWrite: false }));
-  sprite.material.color = colour;
+  sprite.material.color = rainbow ? new Color('#fff') : colour;
   sprite.center.set(0.5, 0);
   sprite.scale.set((T.scale * canvas.width) / canvas.height, T.scale, 1);
   const lod = new LOD();
@@ -165,6 +171,7 @@ export class CharacterModel {
   readonly stride: number;
   private tag: ReturnType<typeof nameTag> | undefined;
   private readonly tagColour: Color;
+  private readonly rainbowTag: boolean;
   private readonly tagDistance: number;
 
   constructor(assets: CharacterAsset, opts: CharacterOptions) {
@@ -196,6 +203,7 @@ export class CharacterModel {
     this.mixer = new AnimationMixer(body);
     this.clips = asset.clips;
     this.height = (asset.scene.userData.height as number | undefined) ?? 1.8;
+    this.rainbowTag = !!opts.rainbowTag;
     this.tagColour = opts.tag === undefined ? this.outfit.uShirt.value : new Color(opts.tag);
     this.tagDistance = opts.tagDistance ?? C.nameTag.maxDistance;
     this.setShirt(opts.shirt);
@@ -216,7 +224,7 @@ export class CharacterModel {
       this.tag.sprite.material.map?.dispose();
       this.tag.sprite.material.dispose();
     }
-    this.tag = text ? nameTag(text, this.height + C.nameTag.lift, this.tagColour, this.tagDistance) : undefined;
+    this.tag = text ? nameTag(text, this.height + C.nameTag.lift, this.tagColour, this.tagDistance, this.rainbowTag) : undefined;
     if (this.tag) this.root.add(this.tag.lod);
   }
 
