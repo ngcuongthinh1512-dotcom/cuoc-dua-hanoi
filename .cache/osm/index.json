@@ -1,0 +1,50 @@
+{
+ "generatedAt": "2026-11-01T13:30:55.352Z",
+ "source": "OpenStreetMap via Overpass API",
+ "attribution": "© OpenStreetMap contributors (ODbL)",
+ "bbox": {
+  "south": 20.989,
+  "west": 105.796,
+  "north": 21.044,
+  "east": 105.884
+ },
+ "tileSize": 1500,
+ "global": {
+  "file": "global.json",
+  "bytes": 1867582,
+  "fetchedAt": "2026-11-01T12:10:42.331Z",
+  "total": 1390,
+  "byType": {
+   "way": 1107,
+   "relation": 283
+  },
+  "byKind": {
+   "water": 219,
+   "park": 913,
+   "quay_wall": 35,
+   "building": 122,
+   "tourism": 4,
+   "other": 10,
+   "highway": 75,
+   "building:part": 9,
+   "historic": 3
+  }
+ },
+ "tiles": [],
+ "missing": [],
+ "totals": {
+  "bytes": 1867582,
+  "uniqueElements": 1390,
+  "uniqueByKind": {
+   "water": 219,
+   "park": 913,
+   "quay_wall": 35,
+   "building": 122,
+   "tourism": 4,
+   "other": 10,
+   "highway": 75,
+   "building:part": 9,
+   "historic": 3
+  }
+ }
+}
