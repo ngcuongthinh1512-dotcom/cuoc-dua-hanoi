@@ -1,0 +1,304 @@
+{
+  "id": "hanoi",
+  "title": "Hà Nội – Thử thách khởi đầu (NHÁP)",
+  "start": {
+    "name": "Hmm... Cafe",
+    "lat": 21.006555,
+    "lon": 105.82375,
+    "yawDeg": -116,
+    "spreadMeters": 3
+  },
+  "steps": [
+    {
+      "id": "L1",
+      "type": "route_info",
+      "label": "Lộ trình 1",
+      "clue": "Mở hòm thư trước mặt để nhận mật thư đi tiếp",
+      "destination": {
+        "name": "Quán cà phê hmm… (13 Khương Thượng) – hòm đặt giữa hiên quán",
+        "lat": 21.006527,
+        "lon": 105.82381,
+        "radius": 20,
+        "yawDeg": 64
+      }
+    },
+    {
+      "id": "L2",
+      "type": "route_info",
+      "label": "Lộ trình 2",
+      "clue": "Gần đó, đội chơi tìm đường tới 1 TTTM thuộc chuỗi nổi tiếng để nhận mật thư đi tiếp",
+      "destination": {
+        "name": "Vincom Center Phạm Ngọc Thạch – hòm đặt giữa sân lát trước góc cong màn hình LED",
+        "lat": 21.006128,
+        "lon": 105.831593,
+        "radius": 20,
+        "yawDeg": 128
+      }
+    },
+    {
+      "id": "CQ",
+      "type": "challenge",
+      "label": "Thử thách CETIQLO",
+      "teaser": "",
+      "room": "cetiqlo",
+      "task": {
+        "title": "Thử thách CETIQLO",
+        "description": "Hai đội đối đầu trong cửa hàng CETIQLO. Nhớ bộ 6 món trên người mẫu, nhặt đúng rồi chốt ở ô CHECKOUT trong 3 phút 30 giây. Mỗi món sai hoặc thừa bị trừ 8 điểm. Đội thắng nhận mật thư tiếp theo và lối ra; đội thua ở lại phòng chờ, đấu với đội đến sau. Đội nào chờ quá 10 phút không có đối thủ sẽ được rời đi.",
+        "verification": "host_approval"
+      }
+    },
+    {
+      "id": "L3",
+      "type": "route_info",
+      "label": "Lộ trình 3",
+      "clue": "Chúc mừng đội thắng CETIQLO! Hãy xem video gợi ý bên dưới, tìm đường tới một bức tượng ở địa điểm trong video để nhận mật thư đi tiếp.",
+      "destination": {
+        "name": "Tượng đài (đảo Thống Nhất) – hòm đặt trên sân lát phía trước bệ tượng",
+        "lat": 21.011199,
+        "lon": 105.842428,
+        "radius": 25,
+        "yawDeg": 90
+      },
+      "media": [
+        {
+          "url": "https://leg3hanoi.ceticeti.com/clues/l3-video.html",
+          "label": "Xem video gợi ý"
+        }
+      ]
+    },
+    {
+      "id": "TB",
+      "type": "challenge",
+      "label": "Thử thách 1",
+      "task": {
+        "title": "Ánh đèn Thống Nhất",
+        "description": "Đèn công viên chiếu một khối điêu khắc lên bức tường. Tìm 6 chữ cái trong bóng, sắp xếp thành mật mã.",
+        "game": "bong-goc-tuong",
+        "kind": "answer",
+        "verification": "auto",
+        "answers": [
+          "HOGUOM"
+        ],
+        "retryLockMinutes": 5
+      }
+    },
+    {
+      "id": "L4",
+      "type": "route_info",
+      "label": "Lộ trình 4",
+      "clue": "Từ nơi đội chơi đang đứng, di chuyển quãng đường gần nhất trên Google Map khoảng 2.5km tới 1 địa điểm được gợi ý phía dưới để nhận được mật thư đi tiếp",
+      "destination": {
+        "name": "Ga Hà Nội – hòm đặt dưới mái hiên, ngay trước cửa giữa sảnh",
+        "lat": 21.024242,
+        "lon": 105.841234,
+        "radius": 25,
+        "yawDeg": -90
+      },
+      "media": [
+        {
+          "url": "https://leg3hanoi.ceticeti.com/clues/l4-ghe.html",
+          "label": "Xem gợi ý"
+        }
+      ]
+    },
+    {
+      "id": "L5",
+      "type": "route_info",
+      "label": "Lộ trình 5",
+      "clue": "Đội chơi tìm đường tới 1 địa điểm check-in nổi tiếng tại Hà Nội gần hồ Gươm. Được biết nơi đây mang phong cách kiến trúc Gothic và đã từng gây tranh cãi lớn vì luật lệ gửi xe, chụp ảnh tại khuôn viên nơi này.",
+      "destination": {
+        "name": "Nhà thờ Lớn – hòm đặt trên sân lát ngay trước cổng chính, sau hàng bonsai",
+        "lat": 21.028824,
+        "lon": 105.84917,
+        "radius": 25,
+        "yawDeg": -58
+      }
+    },
+    {
+      "id": "D1",
+      "type": "detour",
+      "label": "Lựa chọn kép",
+      "clue": "Lựa chọn kép: CỐM hay GỐM",
+      "branches": [
+        {
+          "id": "A",
+          "name": "CỐM",
+          "summary": "",
+          "look": "com",
+          "task": {
+            "title": "Lựa chọn kép – CỐM",
+            "description": "Chơi game làm cốm: sàng cốm sao cho trấu còn ít và cốm không rơi quá nhiều. Hoàn thành game là hoàn thành thử thách.",
+            "kind": "answer",
+            "verification": "auto",
+            "game": "sang-com",
+            "location": {
+              "name": "Lục Thủy Restaurant & Lounge (16 Lê Thái Tổ) – hòm đặt trên sân lát trước cổng xanh",
+              "lat": 21.028901,
+              "lon": 105.851336,
+              "radius": 20,
+              "yawDeg": -90
+            },
+            "retryLockMinutes": 0
+          },
+          "afterChoice": "Đối với Cốm; đội chơi di chuyển tới Lục Thủy Restaurant & Lounge để nhận yêu cầu đề bài thử thách làm Cốm\nĐổi lựa chọn kép, đội chơi sẽ bị phạt 15 phút trước khi nhận được mật thư tiếp theo."
+        },
+        {
+          "id": "B",
+          "name": "GỐM",
+          "summary": "",
+          "look": "gom",
+          "task": {
+            "title": "Lựa chọn kép – GỐM",
+            "description": "Nặn gốm: nặn khối đất trên bàn xoay theo bình mẫu, đưa vào lò và hoàn thành đủ các mẫu. Hoàn thành game là hoàn thành thử thách.",
+            "kind": "answer",
+            "verification": "auto",
+            "game": "nan-gom",
+            "location": {
+              "name": "Authentic Bát Tràng (115 Hàng Gai) – hòm đặt trên vỉa hè trước lối vào",
+              "lat": 21.031367,
+              "lon": 105.849303,
+              "radius": 20,
+              "yawDeg": 35
+            },
+            "retryLockMinutes": 0
+          },
+          "afterChoice": "Đối với Gốm, đội chơi di chuyển tới Authentic Bát Tràng để nhận yêu cầu đề bài thử thách làm Gốm\nĐổi lựa chọn kép, đội chơi sẽ bị phạt 15 phút trước khi nhận được mật thư tiếp theo."
+        }
+      ]
+    },
+    {
+      "id": "L6",
+      "type": "route_info",
+      "label": "Lộ trình 6",
+      "clue": "Đội chơi tìm đường tới 1 địa điểm gần đây được gợi ý trong đoạn GIF ngắn sau để nhận được mật thư tiếp theo",
+      "destination": {
+        "name": "Tháp Bút – hòm đặt ở mép lối lát, ngay trước ba chữ 寫青天",
+        "lat": 21.030716,
+        "lon": 105.853388,
+        "radius": 20,
+        "yawDeg": 0
+      },
+      "media": [
+        {
+          "url": "https://leg3hanoi.ceticeti.com/clues/l9-hanoi.html",
+          "label": "Xem gợi ý"
+        }
+      ]
+    },
+    {
+      "id": "L7",
+      "type": "route_info",
+      "label": "Lộ trình 7",
+      "clue": "Đội chơi tìm đường tới địa điểm được gợi ý phía dưới để tìm đường về đích",
+      "destination": {
+        "name": "Thảm về đích – trước cổng trường THPT Trần Phú (Hoàn Kiếm)",
+        "lat": 21.02343,
+        "lon": 105.855957,
+        "radius": 25,
+        "yawDeg": -108
+      },
+      "media": [
+        {
+          "url": "https://leg3hanoi.ceticeti.com/clues/ve-dich.html",
+          "label": "Xem gợi ý"
+        }
+      ]
+    },
+    {
+      "id": "PS",
+      "type": "pit_stop",
+      "label": "Về đích",
+      "destination": {
+        "name": "Thảm về đích – trước cổng trường THPT Trần Phú (Hoàn Kiếm)",
+        "lat": 21.02343,
+        "lon": 105.855957,
+        "radius": 25,
+        "yawDeg": -108
+      },
+      "announce": {
+        "card": "Đội bạn là đội về đích thứ {n}.",
+        "first": {
+          "card": "Đội bạn là đội về đích thứ 1."
+        }
+      }
+    }
+  ],
+  "penalties": {
+    "branchSwitchLockMinutes": 15
+  },
+  "vehicles": {
+    "fixedBikes": [
+      {
+        "lat": 21.011325,
+        "lon": 105.842377,
+        "count": 15,
+        "rows": 3,
+        "label": "Xe chung cạnh Tượng đài Bác Hồ – Bác Tôn (L3)"
+      },
+      {
+        "lat": 21.008861,
+        "lon": 105.82519,
+        "count": 6,
+        "rows": 2,
+        "angleDeg": -22.6,
+        "label": "Xe chung Chùa Bộc (đầu phố)"
+      },
+      {
+        "lat": 21.007991,
+        "lon": 105.827131,
+        "count": 6,
+        "rows": 2,
+        "angleDeg": -25.2,
+        "label": "Xe chung Chùa Bộc"
+      },
+      {
+        "lat": 21.007108,
+        "lon": 105.829071,
+        "count": 6,
+        "rows": 2,
+        "angleDeg": -25.7,
+        "label": "Xe chung Chùa Bộc (gần Phạm Ngọc Thạch)"
+      },
+      {
+        "lat": 21.007855,
+        "lon": 105.833064,
+        "count": 6,
+        "rows": 2,
+        "angleDeg": -138.8,
+        "label": "Xe chung Phạm Ngọc Thạch (Vincom)"
+      },
+      {
+        "lat": 21.009191,
+        "lon": 105.83497,
+        "count": 6,
+        "rows": 2,
+        "angleDeg": 40.8,
+        "label": "Xe chung Phạm Ngọc Thạch"
+      },
+      {
+        "lat": 21.01054,
+        "lon": 105.83641,
+        "count": 6,
+        "rows": 2,
+        "angleDeg": -138.1,
+        "label": "Xe chung Phạm Ngọc Thạch (gần Kim Liên)"
+      },
+      {
+        "lat": 21.011662,
+        "lon": 105.837176,
+        "count": 6,
+        "rows": 2,
+        "angleDeg": 133.6,
+        "label": "Xe chung Kim Hoa"
+      },
+      {
+        "lat": 21.010973,
+        "lon": 105.841684,
+        "count": 6,
+        "rows": 2,
+        "angleDeg": 90,
+        "label": "Xe chung Lê Duẩn (cạnh hồ Bảy Mẫu, đầu cầu)"
+      }
+    ]
+  }
+}
